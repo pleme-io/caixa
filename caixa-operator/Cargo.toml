@@ -1,0 +1,37 @@
+[package]
+name = "caixa-operator"
+description = "Kubernetes operator for Caixa / Lacre / CaixaBuild CRDs — kube-rs reconciler."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "caixa-operator"
+path = "src/main.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+caixa-lacre = { workspace = true }
+caixa-crd = { workspace = true }
+caixa-resolver = { workspace = true }
+kube = { workspace = true }
+k8s-openapi = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,76 @@
+# forge deploy spec — drives the substrate+forge CI/CD pipeline.
+#
+# On every main-branch push, forge:
+#   1. nix-builds every service listed below via the flake output.
+#   2. Pushes the `caixa-operator-image` to GHCR at the declared tag.
+#   3. Bumps the caixa-flux HelmRelease to the new tag.
+#   4. FluxCD reconciles the bump into the target cluster.
+# Staging goes green automatically on every merge; production requires a tag.
+
+apiVersion: forge.pleme.io/v1
+kind: Deployment
+metadata:
+  name: caixa-operator
+  repo: pleme-io/caixa
+
+spec:
+  services:
+    - name: caixa-operator
+      kind: rust-service
+      flakeOutput: caixa-operator-image
+      registry:
+        host: ghcr.io
+        path: pleme-io/caixa-operator
+      platforms:
+        - linux-amd64
+        - linux-arm64
+
+    - name: feira
+      kind: rust-tool
+      flakeOutput: feira
+      platforms:
+        - linux-amd64
+        - linux-arm64
+        - darwin-amd64
+        - darwin-arm64
+      githubRelease: true
+
+    - name: caixa-lsp
+      kind: rust-tool
+      flakeOutput: caixa-lsp
+      platforms:
+        - linux-amd64
+        - linux-arm64
+        - darwin-amd64
+        - darwin-arm64
+      githubRelease: true
+
+  artifacts:
+    - name: caixa-helm
+      kind: helm-chart
+      path: caixa-helm
+      ociRegistry: ghcr.io/pleme-io/charts
+
+  targets:
+    - name: staging
+      cluster: zek
+      namespace: caixa-system
+      onBranch: main
+      autoPromote: true
+      fluxPath: caixa-flux
+
+    - name: production
+      cluster: plo
+      namespace: caixa-system
+      onTag: "v*"
+      autoPromote: false  # requires manual approval
+      fluxPath: caixa-flux
+
+  tests:
+    pre:
+      - cargo test --workspace
+      - cargo clippy --workspace --all-targets -- -D warnings
+      - cargo fmt --all -- --check
+    post:
+      - helm lint caixa-helm
+      - kubeval --strict caixa-flux/*.yaml

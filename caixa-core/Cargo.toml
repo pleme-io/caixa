@@ -1,0 +1,23 @@
+[package]
+name = "caixa-core"
+description = "Manifest types, layout invariants, and version contract for the caixa tatara-lisp package system."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+semver = { workspace = true }
+tatara-lisp = { workspace = true }
+tatara-lisp-derive = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

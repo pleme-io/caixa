@@ -1,0 +1,27 @@
+apiVersion: v2
+name: caixa
+description: |
+  caixa — the tatara-lisp package system, Kubernetes-native. Installs the
+  caixa-operator, the Caixa / Lacre / CaixaBuild CRDs, and RBAC so `Caixa`
+  resources reconcile into `Lacre` closures inside the cluster. Pairs with
+  FluxCD (caixa-flux/) for full GitOps: commit a `caixa.lisp`, the operator
+  materializes the lacre, sekiban attests the root, done.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.28.0-0"
+home: https://github.com/pleme-io/caixa
+sources:
+  - https://github.com/pleme-io/caixa
+keywords:
+  - tatara-lisp
+  - caixa
+  - package-manager
+  - kubernetes-operator
+  - gitops
+maintainers:
+  - name: pleme-io
+    url: https://github.com/pleme-io
+annotations:
+  artifacthub.io/category: "package-manager"
+  artifacthub.io/operator: "true"

@@ -1,0 +1,18 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: caixa
+  namespace: caixa-system
+spec:
+  interval: 5m
+  url: https://github.com/pleme-io/caixa
+  ref:
+    branch: main
+  ignore: |
+    # Exclude everything under /target + all language-specific intermediates.
+    /target
+    /result
+    /result-*
+    **/*.rs.bk
+    Cargo.lock.bak
+    .direnv/

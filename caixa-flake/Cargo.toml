@@ -1,0 +1,23 @@
+[package]
+name = "caixa-flake"
+description = "flake.lisp — tatara-lisp expression of a Nix flake, with transpile-to-flake.nix for full Nix ecosystem interop."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+caixa-core = { workspace = true }
+tatara-lisp = { workspace = true }
+tatara-lisp-derive = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

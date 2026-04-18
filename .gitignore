@@ -1,0 +1,7 @@
+/target
+/result
+/result-*
+**/*.rs.bk
+Cargo.lock.bak
+.direnv/
+.envrc.local

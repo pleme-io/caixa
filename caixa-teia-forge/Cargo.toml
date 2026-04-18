@@ -1,0 +1,23 @@
+[package]
+name = "caixa-teia-forge"
+description = "iac-forge Backend that emits tatara-lisp caixas from IacResource — the Lisp-native peer of pangea-forge."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+caixa-core = { workspace = true }
+caixa-teia = { workspace = true }
+iac-forge = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,37 @@
+[package]
+name = "caixa-feira"
+description = "feira — CLI for the caixa tatara-lisp package system (init, add, lock, build, nix)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "feira"
+path = "src/main.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+caixa-lacre = { workspace = true }
+caixa-fmt = { workspace = true }
+caixa-lint = { workspace = true }
+caixa-resolver = { workspace = true }
+caixa-theme = { workspace = true }
+caixa-teia = { workspace = true }
+caixa-pangea = { workspace = true }
+caixa-arch = { workspace = true }
+tatara-lisp = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = "3"
+
+[lints]
+workspace = true

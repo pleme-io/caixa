@@ -1,0 +1,40 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "caixa.fullname" . }}
+  labels: {{- include "caixa.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["caixa.pleme.io"]
+    resources: ["caixas", "lacres", "caixabuilds"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["caixa.pleme.io"]
+    resources: ["caixas/status", "lacres/status", "caixabuilds/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["caixa.pleme.io"]
+    resources: ["caixas/finalizers", "lacres/finalizers", "caixabuilds/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "caixa.fullname" . }}
+  labels: {{- include "caixa.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "caixa.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "caixa.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -1,0 +1,23 @@
+[package]
+name = "caixa-arch"
+description = "Reasoning layer for caixa — walks TeiaManifest through iac-forge's policy engine to prove invariants BEFORE any cloud API call."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+caixa-teia = { workspace = true }
+caixa-pangea = { workspace = true }
+iac-forge = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

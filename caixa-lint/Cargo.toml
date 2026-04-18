@@ -1,0 +1,24 @@
+[package]
+name = "caixa-lint"
+description = "Linter for tatara-lisp / caixa sources — rule engine + Ruby+Rust best-practice rulebook."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+caixa-ast = { workspace = true }
+caixa-theme = { workspace = true }
+tatara-lisp = { workspace = true }
+tatara-lisp-derive = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

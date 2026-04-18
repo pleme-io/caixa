@@ -1,0 +1,20 @@
+[package]
+name = "caixa-provedor"
+description = "iac-forge Backend that emits ferrite-typed Go OpenTofu provider source — GC-free generated providers from OpenAPI / IacResource specs."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+iac-forge = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+
+[lints]
+workspace = true

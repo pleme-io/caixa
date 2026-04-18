@@ -1,0 +1,35 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: caixa
+  namespace: caixa-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: caixa-helm
+      sourceRef:
+        kind: GitRepository
+        name: caixa
+        namespace: caixa-system
+      # `chart` is the path-inside-repo for the chart directory.
+      reconcileStrategy: ChartVersion
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  values:
+    # Override chart defaults as needed; kept thin here so per-cluster
+    # overlays (staging, prod, drill) can stack via Kustomize.
+    image:
+      repository: ghcr.io/pleme-io/caixa-operator
+      tag: "0.1.0"
+    logFormat: json
+    serviceMonitor:
+      enabled: true
+    networkPolicy:
+      enabled: true

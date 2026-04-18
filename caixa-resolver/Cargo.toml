@@ -1,0 +1,30 @@
+[package]
+name = "caixa-resolver"
+description = "Git-only dependency resolver for caixas — clone, content-hash, transitive walk. Zig-style: no central registry."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+caixa-core = { workspace = true }
+caixa-lacre = { workspace = true }
+tatara-lisp = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+blake3 = { workspace = true }
+hex = { workspace = true }
+dirs = { workspace = true }
+semver = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+pretty_assertions = { workspace = true }
+proptest = { workspace = true }
+
+[lints]
+workspace = true

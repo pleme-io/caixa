@@ -1,0 +1,70 @@
+## caixa-operator values — see Chart.yaml for chart metadata.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/pleme-io/caixa-operator
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+## Namespace to watch. Empty = cluster-scoped.
+watchNamespace: ""
+
+## Log format: text or json.
+logFormat: "json"
+
+## Additional environment.
+env:
+  RUST_LOG: "info,kube=warn,caixa_operator=info"
+
+## Blackmatter hardening defaults.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop: ["ALL"]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+replicaCount: 1
+
+## Install CRDs as part of this chart. Disable when managing CRDs out-of-band.
+installCrds: true
+
+## ServiceMonitor for Prometheus (requires prometheus-operator CRDs).
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  scrapeTimeout: 10s
+
+## NetworkPolicy: allow egress to the cluster git mirror + deny the rest.
+networkPolicy:
+  enabled: true
+  allowedEgressCidrs:
+    - 0.0.0.0/0  # tighten per-cluster
+
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""

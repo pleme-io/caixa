@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: caixa-system
+  labels:
+    app.kubernetes.io/name: caixa
+    app.kubernetes.io/part-of: caixa
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

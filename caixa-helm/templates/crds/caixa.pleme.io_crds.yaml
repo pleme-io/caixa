@@ -1,0 +1,383 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: caixas.caixa.pleme.io
+spec:
+  group: caixa.pleme.io
+  names:
+    categories: []
+    kind: Caixa
+    plural: caixas
+    shortNames:
+    - cxa
+    singular: caixa
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.versao
+      name: Versao
+      type: string
+    - jsonPath: .spec.source.repo
+      name: Source
+      type: string
+    - jsonPath: .spec.source.gitRef
+      name: Ref
+      type: string
+    - jsonPath: .status.fechamentoRoot
+      name: Root
+      type: string
+    - jsonPath: .status.ready
+      name: Ready
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for CaixaSpec via `CustomResource`
+        properties:
+          spec:
+            description: '`Caixa` — desired caixa state. A cluster-friendly mirror of `caixa.lisp` + the reconciliation policy for the operator.'
+            properties:
+              deps:
+                description: Optional — pre-materialized deps. When unset, the operator resolves them via its cached resolver.
+                items:
+                  properties:
+                    nome:
+                      type: string
+                    source:
+                      nullable: true
+                      properties:
+                        gitRef:
+                          description: Git ref — tag / branch / sha. The operator pins `status.resolvedRev`.
+                          type: string
+                        repo:
+                          description: Git URL — may use `github:org/repo` shorthand.
+                          type: string
+                      required:
+                      - gitRef
+                      - repo
+                      type: object
+                    versao:
+                      type: string
+                  required:
+                  - nome
+                  - versao
+                  type: object
+                type: array
+              kind:
+                description: Kind — Biblioteca | Binario | Servico.
+                type: string
+              nome:
+                description: Caixa nome — must equal `spec.source.repo`'s basename by convention.
+                type: string
+              reconcile:
+                description: Optional — reconciliation policy.
+                nullable: true
+                properties:
+                  autoResolve:
+                    default: false
+                    description: Whether the operator should auto-refresh the lacre when the source moves.
+                    type: boolean
+                  includeDev:
+                    default: false
+                    description: Include :deps-dev in resolution.
+                    type: boolean
+                  intervalSeconds:
+                    description: How often the operator re-fetches the source to check for updates. Defaults to 5 minutes at operator-side when unset.
+                    format: int64
+                    nullable: true
+                    type: integer
+                type: object
+              source:
+                description: Authoritative source of the caixa.
+                properties:
+                  gitRef:
+                    description: Git ref — tag / branch / sha. The operator pins `status.resolvedRev`.
+                    type: string
+                  repo:
+                    description: Git URL — may use `github:org/repo` shorthand.
+                    type: string
+                required:
+                - gitRef
+                - repo
+                type: object
+              versao:
+                description: Pinned version.
+                type: string
+            required:
+            - kind
+            - nome
+            - source
+            - versao
+            type: object
+          status:
+            nullable: true
+            properties:
+              conditions:
+                description: Standard K8s conditions.
+                items:
+                  properties:
+                    kind:
+                      type: string
+                    lastTransitionTime:
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                  required:
+                  - kind
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  type: object
+                type: array
+              fechamentoRoot:
+                description: BLAKE3 root of the closure after resolution.
+                nullable: true
+                type: string
+              lacreRef:
+                description: Name of the associated Lacre resource (1:1 with Caixa).
+                nullable: true
+                type: string
+              lastReconciled:
+                description: Last successful reconciliation.
+                nullable: true
+                type: string
+              observedGeneration:
+                description: Observed generation — tracks `.metadata.generation` for consumers.
+                format: int64
+                nullable: true
+                type: integer
+              ready:
+                description: Ready — True | False | Unknown (stored as enum string).
+                nullable: true
+                type: string
+              resolvedRev:
+                description: Concrete Git SHA the operator resolved.
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: Caixa
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: lacres.caixa.pleme.io
+spec:
+  group: caixa.pleme.io
+  names:
+    categories: []
+    kind: Lacre
+    plural: lacres
+    shortNames:
+    - lcr
+    singular: lacre
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.caixaRef
+      name: Caixa
+      type: string
+    - jsonPath: .status.raiz
+      name: Root
+      type: string
+    - jsonPath: .status.entradaCount
+      name: Entries
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for LacreSpec via `CustomResource`
+        properties:
+          spec:
+            description: |-
+              `Lacre` — resolved closure, produced by the operator from a `Caixa`.
+
+              Status-heavy: the spec carries the identity (which caixa + at what rev), the status carries the full BLAKE3 closure.
+            properties:
+              caixaRef:
+                description: Name of the `Caixa` resource this lacre belongs to.
+                type: string
+              resolvedRev:
+                description: The rev (git SHA) the lacre was resolved at.
+                type: string
+            required:
+            - caixaRef
+            - resolvedRev
+            type: object
+          status:
+            nullable: true
+            properties:
+              entradaCount:
+                description: Number of resolved entries — for the printer column.
+                format: int32
+                nullable: true
+                type: integer
+              entradas:
+                description: The per-dep entries. Large-ish; the whole closure lives in status.
+                items:
+                  properties:
+                    conteudo:
+                      type: string
+                    depsDiretas:
+                      items:
+                        type: string
+                      type: array
+                    fechamento:
+                      type: string
+                    fonte:
+                      type: string
+                    nome:
+                      type: string
+                    versao:
+                      type: string
+                  required:
+                  - conteudo
+                  - fechamento
+                  - fonte
+                  - nome
+                  - versao
+                  type: object
+                type: array
+              lastUpdated:
+                description: When the lacre was last updated.
+                nullable: true
+                type: string
+              raiz:
+                description: Blake3 root — `blake3:<hex>`.
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: Lacre
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: caixabuilds.caixa.pleme.io
+spec:
+  group: caixa.pleme.io
+  names:
+    categories: []
+    kind: CaixaBuild
+    plural: caixabuilds
+    shortNames:
+    - cxb
+    singular: caixabuild
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.caixaRef
+      name: Caixa
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.startedAt
+      name: Started
+      type: date
+    - jsonPath: .status.finishedAt
+      name: Finished
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Auto-generated derived type for CaixaBuildSpec via `CustomResource`
+        properties:
+          spec:
+            description: |-
+              `CaixaBuild` — one-shot build of a specific caixa at a specific rev.
+
+              The operator materializes a K8s `Job` from this CR, executes `feira build`, and writes artifact digests + logs to the status.
+            properties:
+              backends:
+                default: []
+                description: Backend to build against — "lisp" | "go-ferrite" | "ruby-pangea" | "nix".
+                items:
+                  type: string
+                type: array
+              caixaRef:
+                description: Target Caixa resource.
+                type: string
+              pushArtifacts:
+                default: false
+                description: When true, push artifacts to the configured OCI registry on success.
+                type: boolean
+              revOverride:
+                description: Override the rev from the Caixa spec.
+                nullable: true
+                type: string
+            required:
+            - caixaRef
+            type: object
+          status:
+            nullable: true
+            properties:
+              artifacts:
+                description: BLAKE3 of each produced artifact, by name.
+                items:
+                  properties:
+                    backend:
+                      type: string
+                    contentHash:
+                      type: string
+                    name:
+                      type: string
+                    pushedUri:
+                      nullable: true
+                      type: string
+                  required:
+                  - backend
+                  - contentHash
+                  - name
+                  type: object
+                type: array
+              finishedAt:
+                nullable: true
+                type: string
+              jobRef:
+                description: The K8s Job owning this build's pod(s).
+                nullable: true
+                type: string
+              logTail:
+                description: Truncated log tail (full logs via `kubectl logs`).
+                nullable: true
+                type: string
+              phase:
+                description: Pending | Running | Succeeded | Failed.
+                nullable: true
+                type: string
+              startedAt:
+                nullable: true
+                type: string
+            type: object
+        required:
+        - spec
+        title: CaixaBuild
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

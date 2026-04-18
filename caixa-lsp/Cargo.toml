@@ -1,0 +1,30 @@
+[package]
+name = "caixa-lsp"
+description = "Language Server for tatara-lisp / caixa — diagnostics via caixa-lint, formatting via caixa-fmt, hover + goto-def + document-symbol."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "caixa-lsp"
+path = "src/main.rs"
+
+[dependencies]
+caixa-ast = { workspace = true }
+caixa-core = { workspace = true }
+caixa-fmt = { workspace = true }
+caixa-lint = { workspace = true }
+tatara-lisp = { workspace = true }
+tokio = { workspace = true }
+tower-lsp = { workspace = true }
+dashmap = { workspace = true }
+ropey = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+
+[lints]
+workspace = true

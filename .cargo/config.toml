@@ -1,0 +1,5 @@
+# Use the system git CLI for fetches — resolves SSH auth + large-repo clone
+# issues that cargo's embedded libgit2 mishandles for private-but-SSH-accessible
+# mirrors of public pleme-io repos.
+[net]
+git-fetch-with-cli = true

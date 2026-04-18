@@ -1,0 +1,93 @@
+{
+  "provider": [
+    {
+      "aws": {
+        "region": "us-east-1"
+      }
+    },
+    {
+      "akeyless": {}
+    }
+  ],
+  "resource": {
+    "akeyless_dynamic_secret_aws": {
+      "readonly-role": {
+        "name": "aws-readonly-role",
+        "tags": {
+          "access_tier": "read-only",
+          "owner": "pleme-io"
+        },
+        "target_name": "${akeyless_target_aws.primary.name}",
+        "user_ttl": "900"
+      }
+    },
+    "akeyless_target_aws": {
+      "primary": {
+        "name": "aws-primary",
+        "region": "us-east-1",
+        "tags": {
+          "managed_by": "caixa",
+          "owner": "pleme-io"
+        },
+        "use_gw_cloud_identity": true
+      }
+    },
+    "aws_internet_gateway": {
+      "main": {
+        "tags": {
+          "name": "pangea-tatara-akeyless-igw",
+          "owner": "pleme-io"
+        },
+        "vpc_id": "${aws_vpc.main.id}"
+      }
+    },
+    "aws_route_table": {
+      "public": {
+        "tags": {
+          "name": "public",
+          "owner": "pleme-io"
+        },
+        "vpc_id": "${aws_vpc.main.id}"
+      }
+    },
+    "aws_subnet": {
+      "public-1a": {
+        "availability_zone": "us-east-1a",
+        "cidr_block": "10.0.1.0/24",
+        "map_public_ip_on_launch": true,
+        "tags": {
+          "name": "public-1a",
+          "owner": "pleme-io",
+          "tier": "public"
+        },
+        "vpc_id": "${aws_vpc.main.id}"
+      }
+    },
+    "aws_vpc": {
+      "main": {
+        "cidr_block": "10.0.0.0/16",
+        "enable_dns_hostnames": true,
+        "enable_dns_support": true,
+        "tags": {
+          "managed_by": "caixa",
+          "name": "pangea-tatara-akeyless",
+          "owner": "pleme-io"
+        }
+      }
+    }
+  },
+  "terraform": [
+    {
+      "required_providers": {
+        "akeyless": {
+          "source": "akeyless-community/akeyless",
+          "version": "~> 1.0"
+        },
+        "aws": {
+          "source": "hashicorp/aws",
+          "version": "~> 5.0"
+        }
+      }
+    }
+  ]
+}
