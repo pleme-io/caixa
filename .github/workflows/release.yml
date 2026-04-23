@@ -25,9 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout tatara dependency
+      - name: Checkout external dependencies
         run: |
           git clone --depth 1 https://github.com/pleme-io/tatara.git ../tatara
+          git clone --depth 1 https://github.com/pleme-io/iac-forge.git ../iac-forge
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
