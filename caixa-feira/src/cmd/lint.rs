@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use caixa_fmt::{FmtConfig, format_source};
 use caixa_lint::{FixSafety, Severity, apply_fixes, lint_source};
 use caixa_theme::Theme;
 use clap::Args;
@@ -75,9 +76,20 @@ impl Lint {
                     src = result.source;
                 }
                 if applied_in_path > 0 {
+                    // Re-fmt after autofix: edits might shift keywords
+                    // around in ways the previous fmt didn't anticipate.
+                    // Running fmt again converges on the canonical layout.
+                    let cfg = FmtConfig::default();
+                    if let Ok(reformatted) = format_source(&src, &cfg) {
+                        src = reformatted;
+                    }
                     if self.fix_dry_run {
-                        println!("=== {} ({} fix{}) ===", path.display(), applied_in_path,
-                                 if applied_in_path == 1 { "" } else { "es" });
+                        println!(
+                            "=== {} ({} fix{}) ===",
+                            path.display(),
+                            applied_in_path,
+                            if applied_in_path == 1 { "" } else { "es" }
+                        );
                         println!("{src}");
                     } else {
                         std::fs::write(path, &src)

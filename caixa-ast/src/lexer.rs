@@ -212,9 +212,41 @@ fn lex_string(bytes: &[u8], start: usize, span_start: u32) -> Result<(Token, usi
                 }
                 i += 2;
             }
-            c => {
+            c if c < 0x80 => {
+                // ASCII fast path.
                 out.push(c as char);
                 i += 1;
+            }
+            _ => {
+                // UTF-8 multi-byte sequence: decode the next char.
+                // The leading byte's high bits encode the length:
+                //   110xxxxx → 2 bytes
+                //   1110xxxx → 3 bytes
+                //   11110xxx → 4 bytes
+                let lead = bytes[i];
+                let width = if lead & 0b1110_0000 == 0b1100_0000 {
+                    2
+                } else if lead & 0b1111_0000 == 0b1110_0000 {
+                    3
+                } else if lead & 0b1111_1000 == 0b1111_0000 {
+                    4
+                } else {
+                    return Err(LexError::BadEscape(
+                        u32::try_from(i).expect("ovf"),
+                        lead as char,
+                    ));
+                };
+                if i + width > bytes.len() {
+                    return Err(LexError::BadEscape(
+                        u32::try_from(i).expect("ovf"),
+                        lead as char,
+                    ));
+                }
+                let chunk = std::str::from_utf8(&bytes[i..i + width]).map_err(|_| {
+                    LexError::BadEscape(u32::try_from(i).expect("ovf"), lead as char)
+                })?;
+                out.push_str(chunk);
+                i += width;
             }
         }
     }
