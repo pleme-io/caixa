@@ -84,15 +84,32 @@ fn check_keyword_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
     walk(node, &mut |n| {
         if let NodeKind::Keyword(k) = &n.kind {
             if !is_kebab(k) {
-                diags.push(
-                    Diagnostic::new(
-                        "keyword-kebab-case",
-                        Severity::Warning,
-                        n.span,
-                        format!(":{k} should be kebab-case"),
-                    )
-                    .with_hint(format!("rename to :{}", to_kebab(k))),
-                );
+                let kebabed = to_kebab(k);
+                // Only attach an autofix if the canonicalized form is
+                // ITSELF valid kebab — guards against pathological
+                // inputs like `__type` whose mechanical to_kebab gives
+                // `--type` (invalid: starts with dash). Those need
+                // human-chosen names.
+                let fixable = kebabed != *k && is_kebab(&kebabed);
+                let hint = if fixable {
+                    format!("rename to :{kebabed}")
+                } else {
+                    "this name has no mechanical kebab equivalent — pick a fresh name".into()
+                };
+                let mut diag = Diagnostic::new(
+                    "keyword-kebab-case",
+                    Severity::Warning,
+                    n.span,
+                    format!(":{k} should be kebab-case"),
+                )
+                .with_hint(hint);
+                if fixable {
+                    diag = diag.with_fix_replace(
+                        format!("rename keyword to :{kebabed}"),
+                        format!(":{kebabed}"),
+                    );
+                }
+                diags.push(diag);
             }
         }
     });
@@ -176,10 +193,29 @@ fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
             Some(NodeKind::Symbol(_))
         ));
         let rest = items.len().saturating_sub(start);
-        // Only flag lists that clearly look kwargs-y (first non-head is keyword).
-        let looks_kwargs = items
+
+        // A bare 1-arg call like `(callable :tag)` is a method-dispatch
+        // pattern (Clojure / OO-style closure-as-object), not a kwargs
+        // call. Skip — kwargs intent only kicks in with at least 2
+        // post-head args.
+        if rest < 2 {
+            return;
+        }
+
+        // Only flag lists that clearly look kwargs-y: the FIRST AND
+        // SECOND post-head args are both keywords. A single-keyword
+        // first arg in a 3-element call is an enum-tag pattern like
+        // `(make-thing :red value)` only when the second post-head
+        // is also a keyword (kwargs cluster). Otherwise it's a
+        // positional call with a keyword literal.
+        let first_is_kw = items
             .get(start)
             .is_some_and(|n| matches!(n.kind, NodeKind::Keyword(_)));
+        let second_is_kw = items
+            .get(start + 2)
+            .is_some_and(|n| matches!(n.kind, NodeKind::Keyword(_)));
+
+        let looks_kwargs = first_is_kw && (rest >= 4) && second_is_kw;
         if looks_kwargs && rest % 2 != 0 {
             let last = items.last().map_or(n.span, |it| it.span);
             diags.push(Diagnostic::new(
@@ -375,11 +411,23 @@ fn span_lines(n: &Node) -> u32 {
 }
 
 fn is_kebab(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        && !s.starts_with('-')
-        && !s.ends_with('-')
+    if s.is_empty() {
+        return false;
+    }
+    // Strip a single trailing Lisp suffix (`?` for predicates, `!`
+    // for mutators) before checking the kebab body. This matches
+    // Scheme/Clojure idiom: `:can?`, `:reset!` are valid kebab.
+    let body = match s.chars().last() {
+        Some('?') | Some('!') => &s[..s.len() - 1],
+        _ => s,
+    };
+    if body.is_empty() {
+        return false;
+    }
+    body.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !body.starts_with('-')
+        && !body.ends_with('-')
 }
 
 fn is_pascal(s: &str) -> bool {
