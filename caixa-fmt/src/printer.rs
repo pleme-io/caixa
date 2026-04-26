@@ -28,7 +28,13 @@ pub fn format_nodes(nodes: &[Node], cfg: &FmtConfig) -> String {
             p.out.push('\n');
         }
         if cfg.preserve_comments {
-            p.emit_leading(&n.leading, 0);
+            // Top-level: the separator above already provides the
+            // single blank line between top-level forms. Skip any
+            // leading BlankLine trivia at the start so the formatter
+            // is idempotent (otherwise each pass would accumulate
+            // an extra blank line).
+            let leading = trim_leading_blanks(&n.leading);
+            p.emit_leading(leading, 0);
         }
         p.emit(n, 0);
     }
@@ -36,6 +42,15 @@ pub fn format_nodes(nodes: &[Node], cfg: &FmtConfig) -> String {
         p.out.push('\n');
     }
     p.out
+}
+
+/// Drop any prefix of [`TriviaKind::BlankLine`] entries.
+fn trim_leading_blanks(trivia: &[Trivia]) -> &[Trivia] {
+    let drop = trivia
+        .iter()
+        .take_while(|t| matches!(t.kind, TriviaKind::BlankLine))
+        .count();
+    &trivia[drop..]
 }
 
 struct Printer<'a> {
