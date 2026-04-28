@@ -326,6 +326,7 @@ dependencies = [
  "caixa-helm",
  "caixa-lacre",
  "caixa-lint",
+ "caixa-mesh",
  "caixa-pangea",
  "caixa-resolver",
  "caixa-teia",

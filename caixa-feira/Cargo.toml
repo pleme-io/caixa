@@ -24,6 +24,7 @@ caixa-pangea = { workspace = true }
 caixa-arch = { workspace = true }
 caixa-helm = { workspace = true }
 caixa-flux = { workspace = true }
+caixa-mesh = { workspace = true }
 tatara-lisp = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }

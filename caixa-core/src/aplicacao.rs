@@ -313,7 +313,8 @@ const fn default_port() -> u16 {
 /// Typed composition view of the flat Aplicacao slots on
 /// [`crate::Caixa`]. Built via [`crate::Caixa::aplicacao_view`] for
 /// validation + downstream renderer consumption.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct AplicacaoSpec {
     pub membros: Vec<Membro>,
     pub contratos: Vec<WitContract>,
