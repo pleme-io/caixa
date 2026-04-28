@@ -74,6 +74,17 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::MissingManifest(manifest));
         }
 
+        // Supervisors don't run code; reject bibliotecas/exe/servicos
+        // declarations BEFORE checking those paths exist (which would
+        // otherwise produce a less-helpful "missing entry" error first).
+        if caixa.kind == CaixaKind::Supervisor
+            && (!caixa.bibliotecas.is_empty()
+                || !caixa.exe.is_empty()
+                || !caixa.servicos.is_empty())
+        {
+            return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
+        }
+
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
@@ -130,6 +141,51 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
+        // ── M2 typed-substrate invariants ────────────────────────────────
+
+        // Behavior callbacks: every declared callback must resolve.
+        if let Some(b) = &caixa.behavior {
+            for p in b.declared_paths() {
+                let full = root.join(p);
+                if !self.exists(&full) {
+                    return Err(LayoutError::MissingEntry {
+                        kind: "behavior-callback",
+                        path: full,
+                    });
+                }
+            }
+        }
+
+        // Upgrade scripts: every state-change instruction must point at
+        // an existing tatara-lisp file.
+        for entry in &caixa.upgrade_from {
+            for instr in &entry.instructions {
+                if let Some(p) = instr.declared_path() {
+                    let full = root.join(p);
+                    if !self.exists(&full) {
+                        return Err(LayoutError::MissingEntry {
+                            kind: "upgrade-script",
+                            path: full,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Supervisor invariants (typed shape — children, restart strategy).
+        // The "supervisor doesn't own code" check is at the top of verify()
+        // so it fires before the existence-check loops.
+        if caixa.kind == CaixaKind::Supervisor {
+            let view = caixa
+                .supervisor_view()
+                .expect("Supervisor kind must have a supervisor_view");
+            view.validate()
+                .map_err(|err| LayoutError::SupervisorViolation {
+                    caixa: caixa.nome.clone(),
+                    issue: err.to_string(),
+                })?;
+        }
+
         Ok(())
     }
 }
@@ -150,6 +206,10 @@ pub enum LayoutError {
     ExeOutsideDir(PathBuf),
     #[error("servico entry outside servicos/ directory: {}", .0.display())]
     ServicoOutsideDir(PathBuf),
+    #[error("supervisor caixa '{caixa}' violates typed shape: {issue}")]
+    SupervisorViolation { caixa: String, issue: String },
+    #[error("supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas")]
+    SupervisorOwnsCode(String),
 }
 
 #[cfg(test)]
@@ -174,6 +234,14 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec![],
+            // M2 typed-substrate slots default to absent.
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
         }
     }
 
@@ -230,5 +298,129 @@ mod tests {
         c.exe = vec!["../sibling/tool".into()];
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::ExeOutsideDir(_)));
+    }
+
+    // ── M2 typed-substrate invariants ────────────────────────────────────
+
+    #[test]
+    fn behavior_callback_path_must_exist() {
+        use crate::BehaviorSpec;
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..Default::default()
+        });
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(
+            err,
+            LayoutError::MissingEntry {
+                kind: "behavior-callback",
+                ..
+            }
+        ));
+
+        // Now declare the path exists — passes.
+        let init = root.join("lib/init.lisp");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == svc || p == init);
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn upgrade_script_path_must_exist() {
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+            }],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(
+            err,
+            LayoutError::MissingEntry {
+                kind: "upgrade-script",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn supervisor_must_have_children() {
+        use crate::RestartStrategy;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        // No children → should fail
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::SupervisorViolation { .. }));
+    }
+
+    #[test]
+    fn supervisor_must_not_have_bibliotecas() {
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.bibliotecas = vec!["lib/code.lisp".into()];
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::SupervisorOwnsCode(_)));
+    }
+
+    #[test]
+    fn supervisor_with_valid_children_passes() {
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.children = vec![
+            ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+            ChildSpec {
+                caixa: "cache".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Transient,
+            },
+        ];
+        layout.verify(&c, &root).unwrap();
     }
 }

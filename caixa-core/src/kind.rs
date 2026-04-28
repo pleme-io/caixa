@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// :kind Biblioteca   ; library (lib/<nome>.lisp entry)
 /// :kind Binario      ; executable(s) under exe/
 /// :kind Servico      ; long-running service under servicos/
+/// :kind Supervisor   ; OTP-style typed supervisor tree (see supervisor.rs)
 /// ```
 ///
 /// Authored as bare symbols (`Biblioteca` not `:biblioteca`) to match the
@@ -21,6 +22,10 @@ pub enum CaixaKind {
     Binario,
     /// Service — long-running daemon under `servicos/`.
     Servico,
+    /// OTP-shaped supervisor — does not run any code itself; its
+    /// children are other caixas, restarted under a typed strategy.
+    /// See `supervisor.rs` for the full shape (`SupervisorSpec`).
+    Supervisor,
 }
 
 impl CaixaKind {
@@ -42,13 +47,21 @@ impl CaixaKind {
         matches!(self, Self::Servico)
     }
 
-    /// The canonical human-readable name (`"biblioteca"`, `"binario"`, `"servico"`).
+    /// A `Supervisor` is expected to have at least one `:children` entry
+    /// (or a `SimpleOneForOne` strategy that spawns children dynamically).
+    #[must_use]
+    pub const fn requires_children(self) -> bool {
+        matches!(self, Self::Supervisor)
+    }
+
+    /// The canonical human-readable name.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Biblioteca => "biblioteca",
             Self::Binario => "binario",
             Self::Servico => "servico",
+            Self::Supervisor => "supervisor",
         }
     }
 }
@@ -63,11 +76,20 @@ mod tests {
         assert!(!CaixaKind::Biblioteca.requires_exe());
         assert!(CaixaKind::Binario.requires_exe());
         assert!(CaixaKind::Servico.requires_servicos());
+        assert!(CaixaKind::Supervisor.requires_children());
+        assert!(!CaixaKind::Servico.requires_children());
     }
 
     #[test]
     fn kind_deserializes_from_pascal_symbol() {
         let v: CaixaKind = serde_json::from_str("\"Biblioteca\"").unwrap();
         assert_eq!(v, CaixaKind::Biblioteca);
+        let v: CaixaKind = serde_json::from_str("\"Supervisor\"").unwrap();
+        assert_eq!(v, CaixaKind::Supervisor);
+    }
+
+    #[test]
+    fn supervisor_kind_has_canonical_name() {
+        assert_eq!(CaixaKind::Supervisor.as_str(), "supervisor");
     }
 }
