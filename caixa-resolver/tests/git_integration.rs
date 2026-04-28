@@ -96,6 +96,13 @@ fn resolve_single_dep_against_local_bare_remote() {
         exe: vec![],
         bibliotecas: vec![],
         servicos: vec![],
+        limits: None,
+        behavior: None,
+        upgrade_from: vec![],
+        estrategia: None,
+        max_restarts: None,
+        restart_window: None,
+        children: vec![],
     };
 
     let cache = CacheDir::at(root.join("cache"));
@@ -160,6 +167,13 @@ fn resolve_transitive_two_level() {
         exe: vec![],
         bibliotecas: vec![],
         servicos: vec![],
+        limits: None,
+        behavior: None,
+        upgrade_from: vec![],
+        estrategia: None,
+        max_restarts: None,
+        restart_window: None,
+        children: vec![],
     };
 
     let cache = CacheDir::at(root.join("cache"));
@@ -210,6 +224,13 @@ fn lacre_round_trips_through_lisp_after_resolution() {
         exe: vec![],
         bibliotecas: vec![],
         servicos: vec![],
+        limits: None,
+        behavior: None,
+        upgrade_from: vec![],
+        estrategia: None,
+        max_restarts: None,
+        restart_window: None,
+        children: vec![],
     };
 
     let cache = CacheDir::at(root.join("cache"));

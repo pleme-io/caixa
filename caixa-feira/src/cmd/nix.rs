@@ -47,6 +47,7 @@ fn render_flake(c: &Caixa) -> String {
         CaixaKind::Biblioteca => "library (loaded via tatara-lisp importar)",
         CaixaKind::Binario => "binary (exe/ entries)",
         CaixaKind::Servico => "service (servicos/ entries)",
+        CaixaKind::Supervisor => "supervisor (typed children only; runs no code itself)",
     };
     format!(
         r##"{{

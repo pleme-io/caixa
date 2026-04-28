@@ -433,6 +433,13 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec!["servicos/hello-rio.computeunit.yaml".into()],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
         }
     }
 

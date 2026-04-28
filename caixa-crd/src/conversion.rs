@@ -52,6 +52,13 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
         exe: vec![],
         bibliotecas: vec![],
         servicos: vec![],
+        limits: None,
+        behavior: None,
+        upgrade_from: vec![],
+        estrategia: None,
+        max_restarts: None,
+        restart_window: None,
+        children: vec![],
     }
 }
 
@@ -129,6 +136,13 @@ mod tests {
             exe: vec![],
             bibliotecas: vec![],
             servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
         };
         let cr = caixa_into_cr(
             &c,
