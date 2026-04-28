@@ -1,0 +1,24 @@
+[package]
+name = "caixa-helm"
+description = "caixa-helm — typed renderer that emits a per-program lareira-* Helm chart from a Caixa manifest. Mirrors the helmworks/charts/lareira-<name> shape (Chart.yaml + values.yaml depending on the pleme-computeunit library chart)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "caixa_helm"
+path = "src/lib.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+tempfile = { workspace = true }

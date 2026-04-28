@@ -18,6 +18,7 @@ members = [
     "caixa-operator",
     "caixa-pangea",
     "caixa-arch",
+    "caixa-helm",
 ]
 
 [workspace.package]
@@ -44,6 +45,7 @@ caixa-flake = { path = "caixa-flake", version = "0.1.0" }
 caixa-crd = { path = "caixa-crd", version = "0.1.0" }
 caixa-pangea = { path = "caixa-pangea", version = "0.1.0" }
 caixa-arch = { path = "caixa-arch", version = "0.1.0" }
+caixa-helm = { path = "caixa-helm", version = "0.1.0" }
 
 # Third-party.
 serde = { version = "1", features = ["derive"] }
