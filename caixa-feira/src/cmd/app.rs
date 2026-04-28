@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
-use caixa_core::{Caixa, CaixaKind};
+use anyhow::{Context, Result, bail};
+use caixa_core::{Caixa, CaixaKind, WitTarget};
 use clap::{Args, Subcommand};
 
 /// `feira app …` — composition verbs for `:kind Aplicacao` caixas.
@@ -71,22 +71,23 @@ impl GraphArgs {
                 "  placement: {:?} on clusters {:?}",
                 spec.placement.estrategia, spec.placement.clusters
             );
-            println!(
-                "  membros ({}):",
-                spec.membros.len(),
-            );
+            println!("  membros ({}):", spec.membros.len(),);
             for m in &spec.membros {
                 println!("    - {} {}", m.caixa, m.versao);
             }
             println!("  contratos ({}):", spec.contratos.len());
             for c in &spec.contratos {
-                let extra = c
-                    .endpoint
-                    .as_deref()
-                    .or(c.subject.as_deref())
-                    .or(c.slot.as_deref())
-                    .unwrap_or("(no specific endpoint)");
-                println!("    - {} → {}  via {}  [{}]", c.de, c.para, c.wit, extra);
+                // Typed view: each WIT shape has exactly one payload
+                // field (validated upstream). The label tells the
+                // reader *what* field they're looking at, not just
+                // its value.
+                let label = match c.target().expect("validated by typed_view") {
+                    WitTarget::Http { endpoint } => format!("endpoint={endpoint}"),
+                    WitTarget::PubSub { subject } => format!("subject={subject}"),
+                    WitTarget::Store { slot } => format!("slot={slot}"),
+                    WitTarget::Capability => "(capability-only)".to_string(),
+                };
+                println!("    - {} → {}  via {}  [{}]", c.de, c.para, c.wit, label);
             }
             if let Some(e) = &spec.entrada {
                 println!(
@@ -157,7 +158,8 @@ impl DeployArgs {
             .join("manifests.yaml");
         let abs = k8s_repo.join(&rel);
         if let Some(parent) = abs.parent() {
-            std::fs::create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("creating {}", parent.display()))?;
         }
         std::fs::write(&abs, &serialized).with_context(|| format!("writing {}", abs.display()))?;
 
@@ -190,8 +192,8 @@ fn load_aplicacao(path: Option<&std::path::Path>) -> Result<Caixa> {
     let manifest = root.join("caixa.lisp");
     let src = std::fs::read_to_string(&manifest)
         .with_context(|| format!("reading {}", manifest.display()))?;
-    let caixa = Caixa::from_lisp(&src)
-        .with_context(|| format!("parsing {}", manifest.display()))?;
+    let caixa =
+        Caixa::from_lisp(&src).with_context(|| format!("parsing {}", manifest.display()))?;
     if caixa.kind != CaixaKind::Aplicacao {
         bail!(
             "feira app: caixa :kind must be Aplicacao for app verbs, got {:?}",
