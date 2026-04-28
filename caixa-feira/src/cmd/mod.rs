@@ -3,6 +3,8 @@ use clap::Subcommand;
 
 pub mod add;
 pub mod build;
+pub mod chart;
+pub mod deploy;
 pub mod fmt;
 pub mod init;
 pub mod lint;
@@ -31,6 +33,11 @@ pub enum Command {
     Lint(lint::Lint),
     /// Emit a flake.nix for the caixa.
     Nix(nix::Nix),
+    /// Render a per-program lareira-<name> Helm chart (via caixa-helm).
+    Chart(chart::Chart),
+    /// Deploy a caixa Servico to a target cluster (upserts the entry into
+    /// k8s/clusters/<cluster>/programs.yaml; FluxCD picks it up).
+    Deploy(deploy::Deploy),
     /// Tag + push the current caixa's versao to its Git origin.
     Publish(publish::Publish),
     /// End-to-end: Lisp → teia → arch proof → HCL → tofu plan/apply/destroy.
@@ -48,6 +55,8 @@ impl Command {
             Self::Fmt(c) => c.run(),
             Self::Lint(c) => c.run(),
             Self::Nix(c) => c.run(),
+            Self::Chart(c) => c.run(),
+            Self::Deploy(c) => c.run(),
             Self::Publish(c) => c.run(),
             Self::Tofu(c) => c.run(),
         }

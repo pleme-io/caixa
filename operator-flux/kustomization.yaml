@@ -5,7 +5,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 10m
-  path: ./caixa-flux
+  path: ./operator-flux
   prune: true
   sourceRef:
     kind: GitRepository

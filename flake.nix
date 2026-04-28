@@ -73,7 +73,7 @@
           '';
         };
 
-        # OCI image for the operator — consumed by caixa-flux HelmRelease.
+        # OCI image for the operator — consumed by the operator-flux/ HelmRelease.
         caixa-operator-image = pkgs.dockerTools.buildLayeredImage {
           name = "caixa-operator";
           tag = "0.1.0";
