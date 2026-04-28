@@ -1,19 +1,30 @@
-//! Lisp lexer — scans source bytes into tokens with spans.
+//! Lisp lexer — scans source into tokens with byte spans.
 //!
-//! Token alphabet:
+//! Implementation: thin wrapper over [`logos`](https://docs.rs/logos)
+//! 0.14. The hand-rolled byte-level lexer that lived here previously
+//! shipped two latent bugs (UTF-8 mishandling, unterminated-string
+//! detection) and was not maintainable as the syntax grew. logos
+//! delegates regex/UTF-8 to its DFA engine and exposes byte spans
+//! directly, so this file shrinks to atoms + a few callbacks while
+//! getting strictly better correctness.
+//!
+//! Token alphabet (unchanged — parser.rs needs no edits):
 //!   - `(` `)` — list delimiters
-//!   - `'` `` ` `` `,` `,@` — reader macros (quote / quasiquote / unquote / splice)
+//!   - `'` `` ` `` `,` `,@` — reader macros
 //!   - `"…"` — strings, with `\"` `\\` `\n` `\t` `\r` escapes
 //!   - `#t` / `#f` — booleans
 //!   - `nil` — the nil atom
-//!   - integers: `[+-]?[0-9]+` — integer literal
-//!   - floats: decimal with `.` or scientific with `e|E`
+//!   - integers / floats with optional sign
 //!   - `:name-like` — keywords
-//!   - `; …\n` — line comments
-//!   - otherwise: symbols — `[^ \t\r\n()'`,"]+`
+//!   - `; …` — line comments
+//!   - `\n+` (with surrounding spaces/`\r`/`\t`) — newline runs (carries
+//!     the line count so the parser can decide blank-line trivia)
+//!   - ` `/`\t` — whitespace (no count needed)
+//!   - everything else is a symbol
 
 use std::num::{ParseFloatError, ParseIntError};
 
+use logos::{Lexer, Logos};
 use thiserror::Error;
 
 use crate::span::Span;
@@ -44,8 +55,11 @@ pub struct Token {
     pub span: Span,
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Default, Error, PartialEq, Eq, Clone)]
 pub enum LexError {
+    #[default]
+    #[error("unrecognized token")]
+    Unrecognized,
     #[error("unterminated string at offset {0}")]
     UnterminatedString(u32),
     #[error("invalid escape sequence \\{1} at offset {0}")]
@@ -70,306 +84,206 @@ impl From<(u32, ParseFloatError)> for LexError {
     }
 }
 
+// ── logos token enum ──────────────────────────────────────────────
+//
+// Internal to the module. We translate to the public `TokenKind` /
+// `Token` types in `tokenize` so the parser keeps its existing API.
+
+#[derive(Logos, Debug, PartialEq)]
+#[logos(error = LexError)]
+enum LogosKind {
+    #[token("(")]
+    LParen,
+
+    #[token(")")]
+    RParen,
+
+    #[token("'")]
+    Quote,
+
+    #[token("`")]
+    Quasiquote,
+
+    // `,@` MUST come before `,` so it wins on the longest-match.
+    #[token(",@")]
+    UnquoteSplice,
+
+    #[token(",")]
+    Unquote,
+
+    #[token("#t", |_| true)]
+    #[token("#f", |_| false)]
+    Bool(bool),
+
+    // Strings: opening `"`, then repeated non-`\`/non-`"` chars OR
+    // backslash-something escapes, then closing `"`. The callback
+    // unescapes the body. UTF-8 is delegated to logos / regex.
+    #[regex(r#""(?:[^"\\]|\\.)*""#, lex_string_body)]
+    Str(String),
+
+    // Numbers: integer first (priority 3 so it doesn't lose to symbol).
+    // Float separately — has a `.` or `e/E`.
+    #[regex(r"[+-]?[0-9]+", priority = 3, callback = parse_int)]
+    Int(i64),
+
+    #[regex(
+        r"[+-]?(?:[0-9]+\.[0-9]*|\.[0-9]+|[0-9]+[eE][+-]?[0-9]+|[0-9]+\.[0-9]*[eE][+-]?[0-9]+|\.[0-9]+[eE][+-]?[0-9]+)",
+        priority = 3,
+        callback = parse_float
+    )]
+    Float(f64),
+
+    // Keyword: `:` followed by atom chars.
+    #[regex(":[^\\s()'`,\";]+", |lex| lex.slice()[1..].to_string())]
+    Keyword(String),
+
+    // Line comment: `;` to end of line. The leading `;` is NOT
+    // included in the captured body, matching the prior behavior.
+    #[regex(r";[^\n]*", |lex| {
+        let s = lex.slice();
+        // strip the leading ';'
+        s[1..].to_string()
+    })]
+    LineComment(String),
+
+    // Newline runs: any \n followed by whitespace including more \n's.
+    // The callback counts \n bytes so blank-line detection works
+    // exactly as before (count >= 2 means a blank line).
+    #[regex(r"[\n][ \t\r\n]*", count_newlines)]
+    Newlines(u32),
+
+    // Pure-space whitespace (no newline). Intentional and separate
+    // from Newlines so the parser can skip both without losing
+    // line-count info.
+    #[regex(r"[ \t\r]+")]
+    Whitespace,
+
+    // Anything else is a symbol or `nil`. The atom-terminator set
+    // matches the prior is_atom_terminator (space/tab/cr/lf/parens/
+    // single-quote/backtick/comma/double-quote/semicolon) PLUS `#`,
+    // which is the boolean / reader-macro dispatch prefix and never
+    // appears inside a tatara-lisp symbol. Excluding `#` here lets
+    // adjacent forms like `#t#f` tokenize as two booleans rather
+    // than a single `#t#f` symbol.
+    #[regex("[^\\s()'`,\";#][^\\s()'`,\";#]*", |lex| lex.slice().to_string())]
+    Symbol(String),
+}
+
+// ── callbacks ─────────────────────────────────────────────────────
+
+fn lex_string_body(lex: &mut Lexer<LogosKind>) -> Result<String, LexError> {
+    let raw = lex.slice();
+    debug_assert!(raw.starts_with('"') && raw.ends_with('"'));
+    let inner = &raw[1..raw.len() - 1];
+    let span_start = u32::try_from(lex.span().start).unwrap_or(u32::MAX);
+
+    let mut out = String::with_capacity(inner.len());
+    let mut chars = inner.char_indices();
+    while let Some((i, c)) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some((_, 'n')) => out.push('\n'),
+                Some((_, 't')) => out.push('\t'),
+                Some((_, 'r')) => out.push('\r'),
+                Some((_, '"')) => out.push('"'),
+                Some((_, '\\')) => out.push('\\'),
+                Some((_, other)) => {
+                    return Err(LexError::BadEscape(
+                        span_start + 1 + u32::try_from(i).unwrap_or(0),
+                        other,
+                    ));
+                }
+                None => {
+                    return Err(LexError::BadEscape(
+                        span_start + 1 + u32::try_from(i).unwrap_or(0),
+                        '\\',
+                    ));
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    Ok(out)
+}
+
+fn parse_int(lex: &mut Lexer<LogosKind>) -> Result<i64, LexError> {
+    let span_start = u32::try_from(lex.span().start).unwrap_or(u32::MAX);
+    lex.slice()
+        .parse::<i64>()
+        .map_err(|e| LexError::BadInt(span_start, e.to_string()))
+}
+
+fn parse_float(lex: &mut Lexer<LogosKind>) -> Result<f64, LexError> {
+    let span_start = u32::try_from(lex.span().start).unwrap_or(u32::MAX);
+    lex.slice()
+        .parse::<f64>()
+        .map_err(|e| LexError::BadFloat(span_start, e.to_string()))
+}
+
+fn count_newlines(lex: &mut Lexer<LogosKind>) -> u32 {
+    let s = lex.slice();
+    let n = s.bytes().filter(|&b| b == b'\n').count();
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+// ── public entry point ────────────────────────────────────────────
+
 /// Scan a source string into tokens. Trivia (whitespace, comments) is
 /// preserved — the parser filters what it doesn't need.
 pub fn tokenize(src: &str) -> Result<Vec<Token>, LexError> {
-    let bytes = src.as_bytes();
     let mut out = Vec::new();
-    let mut i = 0usize;
+    let mut lex = LogosKind::lexer(src);
 
-    while i < bytes.len() {
-        let start = u32::try_from(i).expect("source too large");
-        let b = bytes[i];
+    while let Some(result) = lex.next() {
+        let span = lex.span();
+        let span_start = u32::try_from(span.start).unwrap_or(u32::MAX);
+        let span_end = u32::try_from(span.end).unwrap_or(u32::MAX);
+        let span = Span::new(span_start, span_end);
 
-        if b == b'(' {
-            out.push(Token {
-                kind: TokenKind::LParen,
-                span: Span::new(start, start + 1),
-            });
-            i += 1;
-        } else if b == b')' {
-            out.push(Token {
-                kind: TokenKind::RParen,
-                span: Span::new(start, start + 1),
-            });
-            i += 1;
-        } else if b == b'\'' {
-            out.push(Token {
-                kind: TokenKind::Quote,
-                span: Span::new(start, start + 1),
-            });
-            i += 1;
-        } else if b == b'`' {
-            out.push(Token {
-                kind: TokenKind::Quasiquote,
-                span: Span::new(start, start + 1),
-            });
-            i += 1;
-        } else if b == b',' {
-            if i + 1 < bytes.len() && bytes[i + 1] == b'@' {
-                out.push(Token {
-                    kind: TokenKind::UnquoteSplice,
-                    span: Span::new(start, start + 2),
-                });
-                i += 2;
-            } else {
-                out.push(Token {
-                    kind: TokenKind::Unquote,
-                    span: Span::new(start, start + 1),
-                });
-                i += 1;
+        match result {
+            Ok(kind) => {
+                let public = match kind {
+                    LogosKind::LParen => TokenKind::LParen,
+                    LogosKind::RParen => TokenKind::RParen,
+                    LogosKind::Quote => TokenKind::Quote,
+                    LogosKind::Quasiquote => TokenKind::Quasiquote,
+                    LogosKind::Unquote => TokenKind::Unquote,
+                    LogosKind::UnquoteSplice => TokenKind::UnquoteSplice,
+                    LogosKind::Bool(b) => TokenKind::Bool(b),
+                    LogosKind::Str(s) => TokenKind::Str(s),
+                    LogosKind::Int(i) => TokenKind::Int(i),
+                    LogosKind::Float(f) => TokenKind::Float(f),
+                    LogosKind::Keyword(s) => TokenKind::Keyword(s),
+                    LogosKind::LineComment(s) => TokenKind::LineComment(s),
+                    LogosKind::Newlines(n) => TokenKind::Newlines(n),
+                    LogosKind::Whitespace => TokenKind::Whitespace,
+                    LogosKind::Symbol(s) => {
+                        if s == "nil" {
+                            TokenKind::Nil
+                        } else {
+                            TokenKind::Symbol(s)
+                        }
+                    }
+                };
+                out.push(Token { kind: public, span });
             }
-        } else if b == b'"' {
-            let (tok, new_i) = lex_string(bytes, i, start)?;
-            out.push(tok);
-            i = new_i;
-        } else if b == b';' {
-            let (tok, new_i) = lex_line_comment(bytes, i, start);
-            out.push(tok);
-            i = new_i;
-        } else if b == b'\n' || b == b'\r' {
-            let (tok, new_i) = lex_newlines(bytes, i, start);
-            out.push(tok);
-            i = new_i;
-        } else if b.is_ascii_whitespace() {
-            let (tok, new_i) = lex_whitespace(bytes, i, start);
-            out.push(tok);
-            i = new_i;
-        } else if b == b'#' {
-            // #t / #f — booleans; anything else is an error we punt on.
-            if i + 1 < bytes.len() {
-                match bytes[i + 1] {
-                    b't' => {
-                        out.push(Token {
-                            kind: TokenKind::Bool(true),
-                            span: Span::new(start, start + 2),
-                        });
-                        i += 2;
-                        continue;
-                    }
-                    b'f' => {
-                        out.push(Token {
-                            kind: TokenKind::Bool(false),
-                            span: Span::new(start, start + 2),
-                        });
-                        i += 2;
-                        continue;
-                    }
-                    _ => {}
+            Err(_) => {
+                // Unrecognized byte — most likely an unterminated
+                // string (since strings are the only multi-byte form
+                // that can fail to close). Distinguish them by source
+                // shape so the LexError carries the right variant.
+                let slice = lex.slice();
+                if slice.starts_with('"') {
+                    return Err(LexError::UnterminatedString(span_start));
                 }
+                let ch = slice.chars().next().unwrap_or(' ');
+                return Err(LexError::UnexpectedChar(span_start, ch));
             }
-            return Err(LexError::UnexpectedChar(start, b as char));
-        } else if b == b':' {
-            let (tok, new_i) = lex_keyword(bytes, i, start);
-            out.push(tok);
-            i = new_i;
-        } else if b.is_ascii_digit()
-            || ((b == b'-' || b == b'+')
-                && i + 1 < bytes.len()
-                && (bytes[i + 1].is_ascii_digit() || bytes[i + 1] == b'.'))
-        {
-            let (tok, new_i) = lex_number(bytes, i, start)?;
-            out.push(tok);
-            i = new_i;
-        } else {
-            let (tok, new_i) = lex_symbol(bytes, i, start);
-            out.push(tok);
-            i = new_i;
         }
     }
 
     Ok(out)
-}
-
-fn lex_string(bytes: &[u8], start: usize, span_start: u32) -> Result<(Token, usize), LexError> {
-    let mut out = String::new();
-    let mut i = start + 1;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'"' => {
-                let span = Span::new(span_start, u32::try_from(i + 1).expect("ovf"));
-                return Ok((
-                    Token {
-                        kind: TokenKind::Str(out),
-                        span,
-                    },
-                    i + 1,
-                ));
-            }
-            b'\\' if i + 1 < bytes.len() => {
-                match bytes[i + 1] {
-                    b'n' => out.push('\n'),
-                    b't' => out.push('\t'),
-                    b'r' => out.push('\r'),
-                    b'"' => out.push('"'),
-                    b'\\' => out.push('\\'),
-                    other => {
-                        return Err(LexError::BadEscape(
-                            u32::try_from(i).expect("ovf"),
-                            other as char,
-                        ));
-                    }
-                }
-                i += 2;
-            }
-            c => {
-                out.push(c as char);
-                i += 1;
-            }
-        }
-    }
-    Err(LexError::UnterminatedString(span_start))
-}
-
-fn lex_line_comment(bytes: &[u8], start: usize, span_start: u32) -> (Token, usize) {
-    let mut i = start + 1; // past the ;
-    while i < bytes.len() && bytes[i] != b'\n' {
-        i += 1;
-    }
-    let text = String::from_utf8_lossy(&bytes[start + 1..i]).into_owned();
-    (
-        Token {
-            kind: TokenKind::LineComment(text),
-            span: Span::new(span_start, u32::try_from(i).expect("ovf")),
-        },
-        i,
-    )
-}
-
-fn lex_newlines(bytes: &[u8], start: usize, span_start: u32) -> (Token, usize) {
-    let mut count = 0u32;
-    let mut i = start;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\n' => {
-                count += 1;
-                i += 1;
-            }
-            b'\r' => {
-                i += 1;
-            }
-            b' ' | b'\t' => {
-                i += 1;
-            }
-            _ => break,
-        }
-    }
-    (
-        Token {
-            kind: TokenKind::Newlines(count),
-            span: Span::new(span_start, u32::try_from(i).expect("ovf")),
-        },
-        i,
-    )
-}
-
-fn lex_whitespace(bytes: &[u8], start: usize, span_start: u32) -> (Token, usize) {
-    let mut i = start;
-    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
-        i += 1;
-    }
-    (
-        Token {
-            kind: TokenKind::Whitespace,
-            span: Span::new(span_start, u32::try_from(i).expect("ovf")),
-        },
-        i,
-    )
-}
-
-fn lex_keyword(bytes: &[u8], start: usize, span_start: u32) -> (Token, usize) {
-    let mut i = start + 1;
-    while i < bytes.len() && !is_atom_terminator(bytes[i]) {
-        i += 1;
-    }
-    let text = String::from_utf8_lossy(&bytes[start + 1..i]).into_owned();
-    (
-        Token {
-            kind: TokenKind::Keyword(text),
-            span: Span::new(span_start, u32::try_from(i).expect("ovf")),
-        },
-        i,
-    )
-}
-
-fn lex_number(bytes: &[u8], start: usize, span_start: u32) -> Result<(Token, usize), LexError> {
-    let mut i = start;
-    let mut saw_dot = false;
-    let mut saw_exp = false;
-
-    if bytes[i] == b'-' || bytes[i] == b'+' {
-        i += 1;
-    }
-    while i < bytes.len() {
-        match bytes[i] {
-            b'0'..=b'9' => i += 1,
-            b'.' if !saw_dot && !saw_exp => {
-                saw_dot = true;
-                i += 1;
-            }
-            b'e' | b'E' if !saw_exp => {
-                saw_exp = true;
-                saw_dot = true; // exponential is float by nature
-                i += 1;
-                if i < bytes.len() && (bytes[i] == b'+' || bytes[i] == b'-') {
-                    i += 1;
-                }
-            }
-            c if is_atom_terminator(c) => break,
-            _ => break,
-        }
-    }
-    let text = std::str::from_utf8(&bytes[start..i]).unwrap_or("");
-    let span = Span::new(span_start, u32::try_from(i).expect("ovf"));
-    if saw_dot || saw_exp {
-        let v = text
-            .parse::<f64>()
-            .map_err(|e| LexError::BadFloat(span_start, e.to_string()))?;
-        Ok((
-            Token {
-                kind: TokenKind::Float(v),
-                span,
-            },
-            i,
-        ))
-    } else {
-        let v = text
-            .parse::<i64>()
-            .map_err(|e| LexError::BadInt(span_start, e.to_string()))?;
-        Ok((
-            Token {
-                kind: TokenKind::Int(v),
-                span,
-            },
-            i,
-        ))
-    }
-}
-
-fn lex_symbol(bytes: &[u8], start: usize, span_start: u32) -> (Token, usize) {
-    let mut i = start;
-    while i < bytes.len() && !is_atom_terminator(bytes[i]) {
-        i += 1;
-    }
-    let text = String::from_utf8_lossy(&bytes[start..i]).into_owned();
-    let kind = match text.as_str() {
-        "nil" => TokenKind::Nil,
-        _ => TokenKind::Symbol(text),
-    };
-    (
-        Token {
-            kind,
-            span: Span::new(span_start, u32::try_from(i).expect("ovf")),
-        },
-        i,
-    )
-}
-
-const fn is_atom_terminator(b: u8) -> bool {
-    matches!(
-        b,
-        b' ' | b'\t' | b'\r' | b'\n' | b'(' | b')' | b'\'' | b'`' | b',' | b'"' | b';'
-    )
 }
 
 #[cfg(test)]
@@ -436,5 +350,46 @@ mod tests {
             tokenize(r#""oops"#),
             Err(LexError::UnterminatedString(_))
         ));
+    }
+
+    #[test]
+    fn utf8_in_string_round_trip() {
+        // Multi-byte chars (Greek, emoji, accented) must come back
+        // exactly — the previous byte-as-Latin-1 lexer mangled these.
+        let src = r#""π — émoji 🎉""#;
+        let toks = tokenize(src).unwrap();
+        match &toks[0].kind {
+            TokenKind::Str(s) => assert_eq!(s, "π — émoji 🎉"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn newline_run_preserves_count() {
+        let toks = tokenize("a\n\n\nb").unwrap();
+        // a, newlines(3), b
+        assert!(matches!(toks[0].kind, TokenKind::Symbol(ref s) if s == "a"));
+        match toks[1].kind {
+            TokenKind::Newlines(n) => assert_eq!(n, 3),
+            ref other => panic!("{other:?}"),
+        }
+        assert!(matches!(toks[2].kind, TokenKind::Symbol(ref s) if s == "b"));
+    }
+
+    #[test]
+    fn float_with_exponent() {
+        assert_eq!(kinds("1.5e10"), vec![TokenKind::Float(1.5e10)]);
+        assert_eq!(kinds("1e-3"), vec![TokenKind::Float(1e-3)]);
+        assert_eq!(kinds("-2.5E2"), vec![TokenKind::Float(-2.5e2)]);
+    }
+
+    #[test]
+    fn bool_keyword_clash_handled() {
+        // `#t#f` should tokenize as two booleans (no separator
+        // required). Logos' longest-match handles this for free.
+        assert_eq!(
+            kinds("#t#f"),
+            vec![TokenKind::Bool(true), TokenKind::Bool(false)]
+        );
     }
 }
