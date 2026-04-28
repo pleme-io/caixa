@@ -98,6 +98,127 @@ impl WitContract {
     pub fn is_store(&self) -> bool {
         self.wit.starts_with("wasi:keyvalue/") || self.wit.starts_with("kv:")
     }
+
+    /// Typed view of the contract's payload target. Enforces that the
+    /// `:wit` shape and the carried `:endpoint`/`:subject`/`:slot`
+    /// fields agree:
+    ///
+    ///   - HTTP world (`wasi:http/*`, `http:*`) ⇒ exactly `:endpoint`
+    ///   - `PubSub` world (`nats:*`, `kafka:*`) ⇒ exactly `:subject`
+    ///   - Store world (`wasi:keyvalue/*`, `kv:*`) ⇒ exactly `:slot`
+    ///   - Anything else ⇒ none of the three; the contract is a pure
+    ///     typed capability edge with no payload selector.
+    ///
+    /// Translates the Apollo Federation discipline ("conflicts are
+    /// errors at compile time, not warnings at runtime";
+    /// MESH-COMPOSITION §II.3) onto pleme-io's typed Aplicacao surface:
+    /// a contract whose WIT shape disagrees with its target field is
+    /// a build error, not a silent renderer drop.
+    pub fn target(&self) -> Result<WitTarget<'_>, AplicacaoError> {
+        let endpoint = self.endpoint.as_deref();
+        let subject = self.subject.as_deref();
+        let slot = self.slot.as_deref();
+        let edge = || (self.de.clone(), self.para.clone(), self.wit.clone());
+
+        if self.is_http() {
+            if subject.is_some() || slot.is_some() {
+                let (de, para, wit) = edge();
+                return Err(AplicacaoError::ContratoWrongTarget {
+                    de,
+                    para,
+                    wit,
+                    expected: "endpoint",
+                });
+            }
+            return endpoint
+                .map(|e| WitTarget::Http { endpoint: e })
+                .ok_or_else(|| {
+                    let (de, para, wit) = edge();
+                    AplicacaoError::ContratoMissingTarget {
+                        de,
+                        para,
+                        wit,
+                        expected: "endpoint",
+                    }
+                });
+        }
+        if self.is_pubsub() {
+            if endpoint.is_some() || slot.is_some() {
+                let (de, para, wit) = edge();
+                return Err(AplicacaoError::ContratoWrongTarget {
+                    de,
+                    para,
+                    wit,
+                    expected: "subject",
+                });
+            }
+            return subject
+                .map(|s| WitTarget::PubSub { subject: s })
+                .ok_or_else(|| {
+                    let (de, para, wit) = edge();
+                    AplicacaoError::ContratoMissingTarget {
+                        de,
+                        para,
+                        wit,
+                        expected: "subject",
+                    }
+                });
+        }
+        if self.is_store() {
+            if endpoint.is_some() || subject.is_some() {
+                let (de, para, wit) = edge();
+                return Err(AplicacaoError::ContratoWrongTarget {
+                    de,
+                    para,
+                    wit,
+                    expected: "slot",
+                });
+            }
+            return slot.map(|s| WitTarget::Store { slot: s }).ok_or_else(|| {
+                let (de, para, wit) = edge();
+                AplicacaoError::ContratoMissingTarget {
+                    de,
+                    para,
+                    wit,
+                    expected: "slot",
+                }
+            });
+        }
+
+        // Unrecognized WIT world — must not carry any payload target.
+        if endpoint.is_some() || subject.is_some() || slot.is_some() {
+            let (de, para, wit) = edge();
+            return Err(AplicacaoError::ContratoWrongTarget {
+                de,
+                para,
+                wit,
+                expected: "none",
+            });
+        }
+        Ok(WitTarget::Capability)
+    }
+}
+
+/// Typed view of a [`WitContract`]'s payload target. Each variant
+/// carries the field its WIT shape requires; constructing a `Http`
+/// view without an endpoint is impossible by the type system.
+///
+/// Renderers (caixa-mesh L7 rules, feira app graph) match on this
+/// instead of probing `Option<String>` fields one by one — the
+/// "which payload field is set?" question is answered once, at
+/// validation time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WitTarget<'a> {
+    /// HTTP-shaped WIT world. Carries the configured request path.
+    Http { endpoint: &'a str },
+    /// Pub-sub-shaped WIT world. Carries the event-stream subject.
+    PubSub { subject: &'a str },
+    /// Key-value-shaped WIT world. Carries the slot template.
+    Store { slot: &'a str },
+    /// A typed capability edge with no payload selector — the WIT
+    /// world stands on its own (rare; reserved for plain capability
+    /// imports or M4-and-later WIT worlds we haven't shaped yet).
+    Capability,
 }
 
 // ── one Aplicacao member ─────────────────────────────────────────────
@@ -353,6 +474,10 @@ impl AplicacaoSpec {
                     para: c.para.clone(),
                 });
             }
+            // Shape ↔ target consistency — surfaces "HTTP wit without
+            // :endpoint", "NATS wit with :endpoint set", etc. as named
+            // build errors instead of silent renderer drops.
+            c.target()?;
         }
 
         if let Some(e) = &self.entrada {
@@ -401,6 +526,23 @@ pub enum AplicacaoError {
     PlacementWithoutClusters { estrategia: PlacementStrategy },
     #[error(":placement Sharded requires :shard-key")]
     ShardedWithoutKey,
+    #[error("contrato {de:?} → {para:?} (:wit {wit:?}) is missing required `:{expected}` field")]
+    ContratoMissingTarget {
+        de: String,
+        para: String,
+        wit: String,
+        expected: &'static str,
+    },
+    #[error(
+        "contrato {de:?} → {para:?} (:wit {wit:?}) carries the wrong target field — \
+         expected `:{expected}` only"
+    )]
+    ContratoWrongTarget {
+        de: String,
+        para: String,
+        wit: String,
+        expected: &'static str,
+    },
 }
 
 #[cfg(test)]
@@ -472,10 +614,11 @@ mod tests {
     #[test]
     fn rejects_contrato_with_unknown_de() {
         let mut s = three_member_spec();
-        s.contratos
-            .push(contract_http("phantom", "catalog", "/x"));
+        s.contratos.push(contract_http("phantom", "catalog", "/x"));
         let err = s.validate().unwrap_err();
-        assert!(matches!(err, AplicacaoError::ContratoMemberMissing { caixa } if caixa == "phantom"));
+        assert!(
+            matches!(err, AplicacaoError::ContratoMemberMissing { caixa } if caixa == "phantom")
+        );
     }
 
     #[test]
@@ -483,7 +626,9 @@ mod tests {
         let mut s = three_member_spec();
         s.contratos.push(contract_http("cart", "phantom", "/x"));
         let err = s.validate().unwrap_err();
-        assert!(matches!(err, AplicacaoError::ContratoMemberMissing { caixa } if caixa == "phantom"));
+        assert!(
+            matches!(err, AplicacaoError::ContratoMemberMissing { caixa } if caixa == "phantom")
+        );
     }
 
     #[test]
@@ -527,10 +672,7 @@ mod tests {
         s.placement.estrategia = PlacementStrategy::Sharded;
         s.placement.shard_key = None;
         s.placement.clusters = vec!["rio".into()];
-        assert_eq!(
-            s.validate().unwrap_err(),
-            AplicacaoError::ShardedWithoutKey
-        );
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::ShardedWithoutKey);
     }
 
     #[test]
@@ -605,6 +747,188 @@ mod tests {
         assert_eq!(
             back.circuit_breaker.unwrap().window,
             Duration::from_secs(60)
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_without_endpoint() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            AplicacaoError::ContratoMissingTarget {
+                expected: "endpoint",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_http_contrato_with_subject() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: Some("not.allowed.here".into()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            AplicacaoError::ContratoWrongTarget {
+                expected: "endpoint",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_without_subject() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            AplicacaoError::ContratoMissingTarget {
+                expected: "subject",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_with_endpoint() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "kafka:topic".into(),
+            endpoint: Some("/wrong".into()),
+            subject: Some("topic.x".into()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            AplicacaoError::ContratoWrongTarget {
+                expected: "subject",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_store_contrato_without_slot() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            AplicacaoError::ContratoMissingTarget {
+                expected: "slot",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_wit_with_target_set() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "custom:exchange".into(),
+            endpoint: Some("/leaked".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            AplicacaoError::ContratoWrongTarget {
+                expected: "none",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn unknown_wit_capability_only_validates() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            // A WIT world we haven't yet shaped — accept it as a typed
+            // capability edge so authors aren't blocked while the WIT
+            // registry catches up. No payload field may be carried.
+            wit: "custom:exchange".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        s.validate().unwrap();
+        let added = s.contratos.last().unwrap();
+        assert_eq!(added.target().unwrap(), WitTarget::Capability);
+    }
+
+    #[test]
+    fn target_typed_view_round_trips_each_shape() {
+        let http = contract_http("cart", "catalog", "/products/:id");
+        assert_eq!(
+            http.target().unwrap(),
+            WitTarget::Http {
+                endpoint: "/products/:id"
+            }
+        );
+        let nats = WitContract {
+            de: "a".into(),
+            para: "b".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("topic.x".into()),
+            slot: None,
+        };
+        assert_eq!(
+            nats.target().unwrap(),
+            WitTarget::PubSub { subject: "topic.x" }
+        );
+        let kv = WitContract {
+            de: "a".into(),
+            para: "b".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("checkout/$orderId".into()),
+        };
+        assert_eq!(
+            kv.target().unwrap(),
+            WitTarget::Store {
+                slot: "checkout/$orderId"
+            }
         );
     }
 

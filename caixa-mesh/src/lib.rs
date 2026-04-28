@@ -31,7 +31,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{aplicacao::AplicacaoSpec, Caixa, CaixaKind};
+use caixa_core::{Caixa, CaixaKind, WitTarget, aplicacao::AplicacaoSpec};
 use thiserror::Error;
 
 /// Errors caixa-mesh can raise.
@@ -225,23 +225,26 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(port_entry)]),
         );
 
-        if c.is_http() {
-            if let Some(endpoint) = c.endpoint.as_ref() {
-                let mut http_rule = serde_yaml::Mapping::new();
-                http_rule.insert(
-                    serde_yaml::Value::String("path".into()),
-                    serde_yaml::Value::String(endpoint.clone()),
-                );
-                let mut rules = serde_yaml::Mapping::new();
-                rules.insert(
-                    serde_yaml::Value::String("http".into()),
-                    serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
-                );
-                to_port.insert(
-                    serde_yaml::Value::String("rules".into()),
-                    serde_yaml::Value::Mapping(rules),
-                );
-            }
+        // L7 introspection only fires for HTTP-shaped contracts; the
+        // typed view (validated upstream by AplicacaoSpec::validate)
+        // makes the "wit world ↔ payload field" link impossible to
+        // get wrong silently. PubSub / Store / Capability edges stay
+        // L4-only — Cilium can't introspect those protocols.
+        if let WitTarget::Http { endpoint } = c.target().expect("validated by typed_view") {
+            let mut http_rule = serde_yaml::Mapping::new();
+            http_rule.insert(
+                serde_yaml::Value::String("path".into()),
+                serde_yaml::Value::String(endpoint.to_string()),
+            );
+            let mut rules = serde_yaml::Mapping::new();
+            rules.insert(
+                serde_yaml::Value::String("http".into()),
+                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
+            );
+            to_port.insert(
+                serde_yaml::Value::String("rules".into()),
+                serde_yaml::Value::Mapping(rules),
+            );
         }
         ingress_rule.insert(
             serde_yaml::Value::String("toPorts".into()),
@@ -760,10 +763,7 @@ mod tests {
             .and_then(|b| b.as_sequence())
             .and_then(|s| s.first())
             .unwrap();
-        assert_eq!(
-            backend.get("name").and_then(|n| n.as_str()),
-            Some("cart")
-        );
+        assert_eq!(backend.get("name").and_then(|n| n.as_str()), Some("cart"));
         assert_eq!(backend.get("port").and_then(|p| p.as_u64()), Some(8080));
     }
 
