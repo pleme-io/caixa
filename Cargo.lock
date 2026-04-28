@@ -321,7 +321,9 @@ dependencies = [
  "anyhow",
  "caixa-arch",
  "caixa-core",
+ "caixa-flux",
  "caixa-fmt",
+ "caixa-helm",
  "caixa-lacre",
  "caixa-lint",
  "caixa-pangea",
@@ -329,9 +331,11 @@ dependencies = [
  "caixa-teia",
  "caixa-theme",
  "clap",
+ "dirs",
  "pretty_assertions",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tatara-lisp",
  "tempfile",
  "thiserror 2.0.18",
@@ -347,6 +351,18 @@ dependencies = [
  "serde_json",
  "tatara-lisp",
  "tatara-lisp-derive",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "caixa-flux"
+version = "0.1.0"
+dependencies = [
+ "caixa-core",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "serde_yaml",
  "thiserror 2.0.18",
 ]
 

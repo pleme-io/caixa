@@ -1,0 +1,23 @@
+[package]
+name = "caixa-flux"
+description = "caixa-flux — typed renderer that emits FluxCD GitOps fragments from a Caixa manifest. Aggregator path: a single entry for the cluster's programs.yaml (consumed by lareira-fleet-programs). Cluster-bundle path: GitRepository + HelmRelease + Kustomization for one-time per-cluster wiring."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "caixa_flux"
+path = "src/lib.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
