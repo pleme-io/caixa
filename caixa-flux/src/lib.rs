@@ -123,6 +123,38 @@ pub fn programs_yaml_entry(
         }
     }
 
+    // M2 typed-substrate slots — propagate from caixa.lisp into the
+    // programs.yaml entry so lareira-fleet-programs renders a
+    // ComputeUnit that carries the typed `:limits`, `:behavior`, and
+    // `:upgrade-from` fields all the way to the cluster operator.
+    // Spec values from computeunit.yaml take precedence (entry already
+    // populated above); slots only on the Caixa flow through here.
+    if let Some(limits) = &caixa.limits {
+        if !limits.is_empty() {
+            entry
+                .entry(serde_yaml::Value::String("limits".into()))
+                .or_insert_with(|| {
+                    serde_yaml::to_value(limits).unwrap_or(serde_yaml::Value::Null)
+                });
+        }
+    }
+    if let Some(behavior) = &caixa.behavior {
+        if !behavior.is_empty() {
+            entry
+                .entry(serde_yaml::Value::String("behavior".into()))
+                .or_insert_with(|| {
+                    serde_yaml::to_value(behavior).unwrap_or(serde_yaml::Value::Null)
+                });
+        }
+    }
+    if !caixa.upgrade_from.is_empty() {
+        entry
+            .entry(serde_yaml::Value::String("upgradeFrom".into()))
+            .or_insert_with(|| {
+                serde_yaml::to_value(&caixa.upgrade_from).unwrap_or(serde_yaml::Value::Null)
+            });
+    }
+
     Ok(serde_yaml::Value::Mapping(entry))
 }
 
@@ -618,6 +650,74 @@ spec:
         assert_eq!(arr.len(), 2);
         let updated = arr[0].get("module").unwrap().get("source").and_then(|s| s.as_str());
         assert_eq!(updated, Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0"));
+    }
+
+    #[test]
+    fn limits_slot_propagates_into_programs_yaml_entry() {
+        use caixa_core::LimitsSpec;
+        use std::time::Duration;
+        let mut c = sample_caixa();
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: Some(1_000_000),
+            wall_clock: Some(Duration::from_secs(30)),
+            cpu: Some(500),
+        });
+        let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
+        let limits = entry.get("limits").expect("limits propagates");
+        assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
+        assert_eq!(limits.get("cpu").and_then(|m| m.as_str()), Some("500m"));
+    }
+
+    #[test]
+    fn behavior_slot_propagates_into_programs_yaml_entry() {
+        use caixa_core::BehaviorSpec;
+        use std::path::PathBuf;
+        let mut c = sample_caixa();
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..Default::default()
+        });
+        let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
+        let behavior = entry.get("behavior").expect("behavior propagates");
+        assert_eq!(
+            behavior.get("onInit").and_then(|v| v.as_str()),
+            Some("lib/init.lisp")
+        );
+    }
+
+    #[test]
+    fn upgrade_from_slot_propagates_into_programs_yaml_entry() {
+        use caixa_core::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = sample_caixa();
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.0.9".into(),
+            instructions: vec![UpgradeInstruction::SoftPurge {
+                module: "hello-rio-old".into(),
+            }],
+        }];
+        let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
+        let upgrade_from = entry
+            .get("upgradeFrom")
+            .and_then(|u| u.as_sequence())
+            .expect("upgradeFrom propagates as a sequence");
+        assert_eq!(upgrade_from.len(), 1);
+        assert_eq!(
+            upgrade_from[0].get("from").and_then(|f| f.as_str()),
+            Some("0.0.9")
+        );
+    }
+
+    #[test]
+    fn empty_m2_slots_do_not_appear_in_programs_yaml_entry() {
+        // Forward-compat invariant: a Servico with no M2 slots emits a
+        // programs.yaml entry that's structurally identical to V0
+        // (no extra keys).
+        let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        assert!(entry.get("limits").is_none());
+        assert!(entry.get("behavior").is_none());
+        assert!(entry.get("upgradeFrom").is_none());
     }
 
     #[test]
