@@ -2,6 +2,7 @@ use anyhow::Result;
 use clap::Subcommand;
 
 pub mod add;
+pub mod app;
 pub mod build;
 pub mod chart;
 pub mod deploy;
@@ -38,6 +39,9 @@ pub enum Command {
     /// Deploy a caixa Servico to a target cluster (upserts the entry into
     /// k8s/clusters/<cluster>/programs.yaml; FluxCD picks it up).
     Deploy(deploy::Deploy),
+    /// `feira app …` — composition verbs for `:kind Aplicacao` caixas
+    /// (graph, deploy). See `theory/MESH-COMPOSITION.md`.
+    App(app::App),
     /// Tag + push the current caixa's versao to its Git origin.
     Publish(publish::Publish),
     /// End-to-end: Lisp → teia → arch proof → HCL → tofu plan/apply/destroy.
@@ -57,6 +61,7 @@ impl Command {
             Self::Nix(c) => c.run(),
             Self::Chart(c) => c.run(),
             Self::Deploy(c) => c.run(),
+            Self::App(c) => c.run(),
             Self::Publish(c) => c.run(),
             Self::Tofu(c) => c.run(),
         }
