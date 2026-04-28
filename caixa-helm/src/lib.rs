@@ -303,6 +303,32 @@ fn build_values_yaml(
         }
     }
 
+    // M2 typed-substrate slots — propagate from caixa.lisp into the
+    // rendered values block so the library chart (and the operator
+    // reading the rendered ComputeUnit) sees them. Spec values from
+    // computeunit.yaml win over duplicates in caixa.lisp.
+    if let Some(limits) = &caixa.limits {
+        if !limits.is_empty() {
+            block
+                .entry("limits".to_string())
+                .or_insert_with(|| serde_yaml::to_value(limits).unwrap_or(serde_yaml::Value::Null));
+        }
+    }
+    if let Some(behavior) = &caixa.behavior {
+        if !behavior.is_empty() {
+            block.entry("behavior".to_string()).or_insert_with(|| {
+                serde_yaml::to_value(behavior).unwrap_or(serde_yaml::Value::Null)
+            });
+        }
+    }
+    if !caixa.upgrade_from.is_empty() {
+        block
+            .entry("upgradeFrom".to_string())
+            .or_insert_with(|| {
+                serde_yaml::to_value(&caixa.upgrade_from).unwrap_or(serde_yaml::Value::Null)
+            });
+    }
+
     let mut wrapped = serde_yaml::Mapping::new();
     wrapped.insert(
         serde_yaml::Value::String("pleme-computeunit".into()),
@@ -448,6 +474,98 @@ spec:
         c.servicos = vec![];
         let err = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap_err();
         assert!(matches!(err, Error::NotAServico(_)));
+    }
+
+    #[test]
+    fn limits_slot_propagates_into_values_block() {
+        use caixa_core::LimitsSpec;
+        use std::time::Duration;
+        let mut c = sample_caixa();
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: Some(1_000_000),
+            wall_clock: Some(Duration::from_secs(30)),
+            cpu: Some(500),
+        });
+        let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
+        let values = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .unwrap();
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        let limits = cu_block.get("limits").expect("limits must propagate");
+        assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
+        assert_eq!(limits.get("fuel").and_then(|m| m.as_u64()), Some(1_000_000));
+        assert_eq!(limits.get("wallClock").and_then(|m| m.as_str()), Some("30s"));
+        assert_eq!(limits.get("cpu").and_then(|m| m.as_str()), Some("500m"));
+    }
+
+    #[test]
+    fn behavior_slot_propagates_into_values_block() {
+        use caixa_core::BehaviorSpec;
+        let mut c = sample_caixa();
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            ..Default::default()
+        });
+        let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
+        let values = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .unwrap();
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        let behavior = cu_block.get("behavior").expect("behavior must propagate");
+        assert_eq!(
+            behavior.get("onInit").and_then(|v| v.as_str()),
+            Some("lib/init.lisp")
+        );
+        assert_eq!(
+            behavior.get("onCall").and_then(|v| v.as_str()),
+            Some("lib/handlers.lisp")
+        );
+    }
+
+    #[test]
+    fn upgrade_from_slot_propagates_into_values_block() {
+        use caixa_core::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = sample_caixa();
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.0.9".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "hello-rio".into(),
+            }],
+        }];
+        let dir = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap();
+        let values = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .unwrap();
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        assert!(cu_block.get("upgradeFrom").is_some());
+    }
+
+    #[test]
+    fn empty_m2_slots_do_not_appear() {
+        // Existing caixa with no M2 slots → values.yaml carries no
+        // limits/behavior/upgradeFrom keys (forward-compat invariant).
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let values = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .unwrap();
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        assert!(cu_block.get("limits").is_none());
+        assert!(cu_block.get("behavior").is_none());
+        assert!(cu_block.get("upgradeFrom").is_none());
     }
 
     #[test]
