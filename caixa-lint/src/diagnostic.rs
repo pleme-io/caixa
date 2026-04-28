@@ -32,6 +32,38 @@ impl Severity {
     }
 }
 
+/// A textual edit — replace `span` with `replacement` in the source.
+/// Edits never overlap; the autofix driver sorts them by `span.start`
+/// descending and applies in reverse order so earlier offsets stay
+/// stable.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Edit {
+    pub span: Span,
+    pub replacement: String,
+}
+
+/// Auto-applicable correction for a [`Diagnostic`]. A single fix may
+/// involve multiple edits (e.g. rename a name + every reference);
+/// all edits apply atomically.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Fix {
+    pub description: String,
+    pub edits: Vec<Edit>,
+    pub safety: FixSafety,
+}
+
+/// How safe is a fix to apply automatically?
+///
+/// * `Safe` — mechanical, semantics-preserving for pure round-trips.
+///   `feira lint --fix` applies these by default.
+/// * `Unsafe` — heuristic; may change runtime behavior in edge cases.
+///   Requires explicit `--fix-unsafe` opt-in.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FixSafety {
+    Safe,
+    Unsafe,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub rule_id: &'static str,
@@ -39,6 +71,9 @@ pub struct Diagnostic {
     pub message: String,
     pub span: Span,
     pub hint: Option<String>,
+    /// Optional autofix. When present, `feira lint --fix` applies it
+    /// (subject to the requested safety threshold).
+    pub fix: Option<Fix>,
 }
 
 impl Diagnostic {
@@ -55,6 +90,7 @@ impl Diagnostic {
             span,
             message: message.into(),
             hint: None,
+            fix: None,
         }
     }
 
@@ -62,6 +98,28 @@ impl Diagnostic {
     pub fn with_hint(mut self, hint: impl Into<String>) -> Self {
         self.hint = Some(hint.into());
         self
+    }
+
+    /// Attach an auto-applicable correction.
+    #[must_use]
+    pub fn with_fix(mut self, fix: Fix) -> Self {
+        self.fix = Some(fix);
+        self
+    }
+
+    /// Convenience: attach a single-edit safe fix that replaces this
+    /// diagnostic's own span with `replacement`.
+    #[must_use]
+    pub fn with_fix_replace(self, description: impl Into<String>, replacement: impl Into<String>) -> Self {
+        let span = self.span;
+        self.with_fix(Fix {
+            description: description.into(),
+            edits: vec![Edit {
+                span,
+                replacement: replacement.into(),
+            }],
+            safety: FixSafety::Safe,
+        })
     }
 
     /// Render this diagnostic against a source string, Nord-themed.

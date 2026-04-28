@@ -84,15 +84,32 @@ fn check_keyword_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
     walk(node, &mut |n| {
         if let NodeKind::Keyword(k) = &n.kind {
             if !is_kebab(k) {
-                diags.push(
-                    Diagnostic::new(
-                        "keyword-kebab-case",
-                        Severity::Warning,
-                        n.span,
-                        format!(":{k} should be kebab-case"),
-                    )
-                    .with_hint(format!("rename to :{}", to_kebab(k))),
-                );
+                let kebabed = to_kebab(k);
+                // Only attach an autofix if the canonicalized form is
+                // ITSELF valid kebab — guards against pathological
+                // inputs like `__type` whose mechanical to_kebab gives
+                // `--type` (invalid: starts with dash). Those need
+                // human-chosen names.
+                let fixable = kebabed != *k && is_kebab(&kebabed);
+                let hint = if fixable {
+                    format!("rename to :{kebabed}")
+                } else {
+                    "this name has no mechanical kebab equivalent — pick a fresh name".into()
+                };
+                let mut diag = Diagnostic::new(
+                    "keyword-kebab-case",
+                    Severity::Warning,
+                    n.span,
+                    format!(":{k} should be kebab-case"),
+                )
+                .with_hint(hint);
+                if fixable {
+                    diag = diag.with_fix_replace(
+                        format!("rename keyword to :{kebabed}"),
+                        format!(":{kebabed}"),
+                    );
+                }
+                diags.push(diag);
             }
         }
     });
@@ -165,6 +182,24 @@ fn check_nome_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
 // Kwargs integrity
 // ─────────────────────────────────────────────────────────────────────
 
+/// Forms that take positional keyword args — `(enum :A :B :C)` style,
+/// not kwargs-by-pair. Skipping these prevents false-positives from
+/// `paired-kwargs` on legitimate Lisp idioms.
+const POSITIONAL_KW_HEADS: &[&str] = &[
+    // Type / pattern-matching forms — keywords are tag values, not pairs.
+    "enum",
+    "list-of",
+    "set-of",
+    "case",
+    "cond",
+    "match",
+    "is?",
+    // Type-system tags that take keyword type names directly.
+    "the",
+    "type-of",
+    "declare",
+];
+
 fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
     walk(node, &mut |n| {
         let NodeKind::List(items) = &n.kind else {
@@ -176,10 +211,39 @@ fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
             Some(NodeKind::Symbol(_))
         ));
         let rest = items.len().saturating_sub(start);
-        // Only flag lists that clearly look kwargs-y (first non-head is keyword).
-        let looks_kwargs = items
+
+        // A bare 1-arg call like `(callable :tag)` is a method-dispatch
+        // pattern (Clojure / OO-style closure-as-object), not a kwargs
+        // call. Skip — kwargs intent only kicks in with at least 2
+        // post-head args.
+        if rest < 2 {
+            return;
+        }
+
+        // Skip forms whose head is a known positional-keyword form.
+        // `(enum :a :b :c)` etc — keywords here are tag values, not
+        // (key, value) pairs. Without this the rule mis-fires on
+        // every odd-length enum / case / cond.
+        if let Some(NodeKind::Symbol(name)) = items.first().map(|n| &n.kind) {
+            if POSITIONAL_KW_HEADS.contains(&name.as_str()) {
+                return;
+            }
+        }
+
+        // Only flag lists that clearly look kwargs-y: the FIRST AND
+        // SECOND post-head args are both keywords. A single-keyword
+        // first arg in a 3-element call is an enum-tag pattern like
+        // `(make-thing :red value)` only when the second post-head
+        // is also a keyword (kwargs cluster). Otherwise it's a
+        // positional call with a keyword literal.
+        let first_is_kw = items
             .get(start)
             .is_some_and(|n| matches!(n.kind, NodeKind::Keyword(_)));
+        let second_is_kw = items
+            .get(start + 2)
+            .is_some_and(|n| matches!(n.kind, NodeKind::Keyword(_)));
+
+        let looks_kwargs = first_is_kw && (rest >= 4) && second_is_kw;
         if looks_kwargs && rest % 2 != 0 {
             let last = items.last().map_or(n.span, |it| it.span);
             diags.push(Diagnostic::new(
@@ -375,11 +439,23 @@ fn span_lines(n: &Node) -> u32 {
 }
 
 fn is_kebab(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-        && !s.starts_with('-')
-        && !s.ends_with('-')
+    if s.is_empty() {
+        return false;
+    }
+    // Strip a single trailing Lisp suffix (`?` for predicates, `!`
+    // for mutators) before checking the kebab body. This matches
+    // Scheme/Clojure idiom: `:can?`, `:reset!` are valid kebab.
+    let body = match s.chars().last() {
+        Some('?') | Some('!') => &s[..s.len() - 1],
+        _ => s,
+    };
+    if body.is_empty() {
+        return false;
+    }
+    body.chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        && !body.starts_with('-')
+        && !body.ends_with('-')
 }
 
 fn is_pascal(s: &str) -> bool {
@@ -485,6 +561,43 @@ mod tests {
         let src = r#"(defcaixa :nomeCaixa "x")"#; // camelCase keyword — bad
         let d = lint(src);
         assert!(d.iter().any(|d| d.rule_id == "keyword-kebab-case"));
+    }
+
+    #[test]
+    fn enum_with_odd_keyword_count_is_not_flagged_as_kwargs() {
+        // Regression: `(enum :A :B :C :D :E)` is a positional list of
+        // keyword tag values, NOT a kwargs cluster. Earlier the
+        // paired-kwargs heuristic mis-fired on every odd-arity enum.
+        let src = r#"(defschema P :framework (enum :NIST-800-53 :OSCAL :FedRAMP :CIS :Armo))"#;
+        let d = lint(src);
+        assert!(
+            d.iter().all(|d| d.rule_id != "paired-kwargs"),
+            "should not flag paired-kwargs on enum: {d:?}"
+        );
+    }
+
+    #[test]
+    fn case_with_keyword_dispatch_is_not_flagged_as_kwargs() {
+        // `(case x :a 1 :b 2 :c)` — the trailing :c is a fall-through
+        // tag, not a dangling kwarg. Skip via POSITIONAL_KW_HEADS.
+        let src = r#"(defn f (x) (case x :a 1 :b 2 :c))"#;
+        let d = lint(src);
+        assert!(
+            d.iter().all(|d| d.rule_id != "paired-kwargs"),
+            "should not flag paired-kwargs on case: {d:?}"
+        );
+    }
+
+    #[test]
+    fn real_dangling_kwarg_still_flagged() {
+        // Confirm the rule still fires on legitimate dangling kwargs
+        // — `(make :a 1 :b 2 :c)` has 5 post-head with :c trailing.
+        let src = r#"(make-thing :a 1 :b 2 :c)"#;
+        let d = lint(src);
+        assert!(
+            d.iter().any(|d| d.rule_id == "paired-kwargs"),
+            "should still flag dangling kwarg: {d:?}"
+        );
     }
 
     #[test]

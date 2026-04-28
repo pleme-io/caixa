@@ -34,8 +34,8 @@ pub mod rule;
 pub mod rules;
 pub mod runner;
 
-pub use diagnostic::{Diagnostic, Severity};
+pub use diagnostic::{Diagnostic, Edit, Fix, FixSafety, Severity};
 pub use lisp_config::{CustomRule, LintConfigLisp, RuleOverride};
 pub use rule::{Rule, RuleCheck};
 pub use rules::all_rules;
-pub use runner::{LintError, lint_nodes, lint_source};
+pub use runner::{FixResult, LintError, apply_fixes, lint_nodes, lint_source};
