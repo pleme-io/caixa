@@ -194,9 +194,11 @@ pub enum SupervisorError {
     EmptyChildVersion { caixa: String },
 }
 
-/// Tiny bridge so the limits crate's duration codec stays in one place
-/// without having to expose it publicly. Mirrors the limits.rs shape.
-mod duration_codec {
+/// Shared duration string codec for the typed slots that take a
+/// duration (`restart_window`, `MeshPolicy::timeout`,
+/// `CircuitBreaker::window`, …). Public so [`crate::aplicacao`] can
+/// reuse it without duplicating the parser.
+pub mod duration_codec {
     use super::Duration;
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -215,7 +217,7 @@ mod duration_codec {
         }
     }
 
-    fn parse(s: &str) -> Result<Duration, String> {
+    pub(crate) fn parse(s: &str) -> Result<Duration, String> {
         let s = s.trim();
         let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
         let (num, unit) = s.split_at(split);
@@ -235,7 +237,7 @@ mod duration_codec {
         })
     }
 
-    fn render(d: Duration) -> String {
+    pub(crate) fn render(d: Duration) -> String {
         let total_ms = d.as_millis();
         if total_ms == 0 {
             return "0s".into();
@@ -250,6 +252,21 @@ mod duration_codec {
             return format!("{}s", total_ms / 1000);
         }
         format!("{total_ms}ms")
+    }
+}
+
+/// Required-Duration variant for fields that aren't Option<Duration>.
+pub mod duration_codec_required {
+    use super::Duration;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &Duration, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(&super::duration_codec::render(*v))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
+        let s = String::deserialize(d)?;
+        super::duration_codec::parse(&s).map_err(serde::de::Error::custom)
     }
 }
 

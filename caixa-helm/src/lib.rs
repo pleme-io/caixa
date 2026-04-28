@@ -399,6 +399,11 @@ mod tests {
             max_restarts: None,
             restart_window: None,
             children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
         }
     }
 

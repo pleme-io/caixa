@@ -169,6 +169,37 @@ pub struct Caixa {
     /// OneForAll / RestForOne; must be empty for SimpleOneForOne.
     #[serde(default)]
     pub children: Vec<crate::supervisor::ChildSpec>,
+
+    // ── M3 Aplicacao slots (theory/MESH-COMPOSITION.md) ─────────────────
+    //
+    // Required when :kind Aplicacao; ignored otherwise.
+    // Composed into a typed AplicacaoSpec via Caixa::aplicacao_view().
+
+    /// Member Servicos that make up this Aplicacao. Each is a
+    /// caixa-name + version-constraint pair. Required for Aplicacao.
+    #[serde(default)]
+    pub membros: Vec<crate::aplicacao::Membro>,
+
+    /// WIT-typed inter-Servico contracts. Each `:de` and `:para`
+    /// must reference a name in `:membros`.
+    #[serde(default)]
+    pub contratos: Vec<crate::aplicacao::WitContract>,
+
+    /// Mesh-level policies (timeout, retries, circuit-breaker, mTLS,
+    /// rate-limit). Apply to every contrato unless overridden per-edge
+    /// in M4.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub politicas: Option<crate::aplicacao::MeshPolicy>,
+
+    /// Placement strategy across the cluster fleet
+    /// (single-node | replicated | sharded).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement: Option<crate::aplicacao::Placement>,
+
+    /// External entry point — gateway / ingress shape. Optional;
+    /// only for public Aplicacaos.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entrada: Option<crate::aplicacao::Entrada>,
 }
 
 impl Caixa {
@@ -193,6 +224,24 @@ impl Caixa {
     /// the registry (e.g. `tatara-check`).
     pub fn register() {
         tatara_lisp::domain::register::<Self>();
+    }
+
+    /// Compose the Aplicacao-related flat slots into a single typed
+    /// [`crate::aplicacao::AplicacaoSpec`] for validation +
+    /// downstream renderer consumption. Returns `None` when the
+    /// caixa isn't a `:kind Aplicacao`.
+    #[must_use]
+    pub fn aplicacao_view(&self) -> Option<crate::aplicacao::AplicacaoSpec> {
+        if self.kind != CaixaKind::Aplicacao {
+            return None;
+        }
+        Some(crate::aplicacao::AplicacaoSpec {
+            membros: self.membros.clone(),
+            contratos: self.contratos.clone(),
+            politicas: self.politicas.clone().unwrap_or_default(),
+            placement: self.placement.clone().unwrap_or_default(),
+            entrada: self.entrada.clone(),
+        })
     }
 
     /// Compose the supervisor-related flat slots into a single

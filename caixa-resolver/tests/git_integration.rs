@@ -103,6 +103,11 @@ fn resolve_single_dep_against_local_bare_remote() {
         max_restarts: None,
         restart_window: None,
         children: vec![],
+        membros: vec![],
+        contratos: vec![],
+        politicas: None,
+        placement: None,
+        entrada: None,
     };
 
     let cache = CacheDir::at(root.join("cache"));
@@ -174,6 +179,11 @@ fn resolve_transitive_two_level() {
         max_restarts: None,
         restart_window: None,
         children: vec![],
+        membros: vec![],
+        contratos: vec![],
+        politicas: None,
+        placement: None,
+        entrada: None,
     };
 
     let cache = CacheDir::at(root.join("cache"));
@@ -231,6 +241,11 @@ fn lacre_round_trips_through_lisp_after_resolution() {
         max_restarts: None,
         restart_window: None,
         children: vec![],
+        membros: vec![],
+        contratos: vec![],
+        politicas: None,
+        placement: None,
+        entrada: None,
     };
 
     let cache = CacheDir::at(root.join("cache"));

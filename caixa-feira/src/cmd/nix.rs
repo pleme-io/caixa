@@ -48,6 +48,7 @@ fn render_flake(c: &Caixa) -> String {
         CaixaKind::Binario => "binary (exe/ entries)",
         CaixaKind::Servico => "service (servicos/ entries)",
         CaixaKind::Supervisor => "supervisor (typed children only; runs no code itself)",
+        CaixaKind::Aplicacao => "aplicacao (typed mesh of Servicos; runs no code itself)",
     };
     format!(
         r##"{{

@@ -1,0 +1,23 @@
+[package]
+name = "caixa-mesh"
+description = "caixa-mesh — typed renderer that emits cluster mesh primitives (programs.yaml fan-out, Cilium NetworkPolicies, Gateway/HTTPRoute) from an Aplicacao manifest."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "caixa_mesh"
+path = "src/lib.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

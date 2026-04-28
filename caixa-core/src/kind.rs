@@ -26,6 +26,12 @@ pub enum CaixaKind {
     /// children are other caixas, restarted under a typed strategy.
     /// See `supervisor.rs` for the full shape (`SupervisorSpec`).
     Supervisor,
+    /// Typed application — composes multiple Servicos into a single
+    /// declarative mesh with WIT-typed `:contratos`, mesh-level
+    /// `:politicas`, and explicit `:placement`. See `aplicacao.rs`
+    /// (`AplicacaoSpec`) and `theory/MESH-COMPOSITION.md` for the
+    /// design frame.
+    Aplicacao,
 }
 
 impl CaixaKind {
@@ -54,6 +60,12 @@ impl CaixaKind {
         matches!(self, Self::Supervisor)
     }
 
+    /// An `Aplicacao` is expected to have at least one `:membros` entry.
+    #[must_use]
+    pub const fn requires_membros(self) -> bool {
+        matches!(self, Self::Aplicacao)
+    }
+
     /// The canonical human-readable name.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -62,6 +74,7 @@ impl CaixaKind {
             Self::Binario => "binario",
             Self::Servico => "servico",
             Self::Supervisor => "supervisor",
+            Self::Aplicacao => "aplicacao",
         }
     }
 }

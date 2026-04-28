@@ -74,15 +74,18 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::MissingManifest(manifest));
         }
 
-        // Supervisors don't run code; reject bibliotecas/exe/servicos
-        // declarations BEFORE checking those paths exist (which would
-        // otherwise produce a less-helpful "missing entry" error first).
-        if caixa.kind == CaixaKind::Supervisor
-            && (!caixa.bibliotecas.is_empty()
-                || !caixa.exe.is_empty()
-                || !caixa.servicos.is_empty())
-        {
+        // Supervisors and Aplicacaos don't run code; reject
+        // bibliotecas/exe/servicos declarations BEFORE checking those
+        // paths exist (which would otherwise produce a less-helpful
+        // "missing entry" error first).
+        let has_code = !caixa.bibliotecas.is_empty()
+            || !caixa.exe.is_empty()
+            || !caixa.servicos.is_empty();
+        if caixa.kind == CaixaKind::Supervisor && has_code {
             return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
+        }
+        if caixa.kind == CaixaKind::Aplicacao && has_code {
+            return Err(LayoutError::AplicacaoOwnsCode(caixa.nome.clone()));
         }
 
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
@@ -186,6 +189,19 @@ impl LayoutInvariants for StandardLayout {
                 })?;
         }
 
+        // Aplicacao invariants — typed graph composition. Like
+        // Supervisor, an Aplicacao runs no code itself.
+        if caixa.kind == CaixaKind::Aplicacao {
+            let view = caixa
+                .aplicacao_view()
+                .expect("Aplicacao kind must have an aplicacao_view");
+            view.validate()
+                .map_err(|err| LayoutError::AplicacaoViolation {
+                    caixa: caixa.nome.clone(),
+                    issue: err.to_string(),
+                })?;
+        }
+
         Ok(())
     }
 }
@@ -210,6 +226,10 @@ pub enum LayoutError {
     SupervisorViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas")]
     SupervisorOwnsCode(String),
+    #[error("aplicacao caixa '{caixa}' violates typed shape: {issue}")]
+    AplicacaoViolation { caixa: String, issue: String },
+    #[error("aplicacao caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — aplicacaos compose Servicos, they don't run code themselves")]
+    AplicacaoOwnsCode(String),
 }
 
 #[cfg(test)]
@@ -242,6 +262,12 @@ mod tests {
             max_restarts: None,
             restart_window: None,
             children: vec![],
+            // M3 Aplicacao slots default to absent.
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
         }
     }
 
@@ -397,6 +423,87 @@ mod tests {
         }];
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::SupervisorOwnsCode(_)));
+    }
+
+    // ── Aplicacao layout tests ──────────────────────────────────────────
+
+    #[test]
+    fn aplicacao_must_have_membros() {
+        use crate::{Membro, Placement, PlacementStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        // No membros → fails
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::AplicacaoViolation { .. }));
+
+        // With membros → passes
+        c.membros = vec![Membro {
+            caixa: "service-a".into(),
+            versao: "^0.1".into(),
+        }];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn aplicacao_must_not_have_bibliotecas() {
+        use crate::{Membro, Placement, PlacementStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.bibliotecas = vec!["lib/code.lisp".into()];
+        c.membros = vec![Membro {
+            caixa: "x".into(),
+            versao: "^0.1".into(),
+        }];
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::AplicacaoOwnsCode(_)));
+    }
+
+    #[test]
+    fn aplicacao_with_unknown_contrato_member_fails() {
+        use crate::{Membro, Placement, PlacementStrategy, WitContract};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.membros = vec![Membro {
+            caixa: "service-a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "service-a".into(),
+            para: "phantom".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::AplicacaoViolation { .. }));
     }
 
     #[test]
