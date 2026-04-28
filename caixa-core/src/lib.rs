@@ -12,6 +12,7 @@
 
 extern crate self as caixa_core;
 
+pub mod aplicacao;
 pub mod behavior;
 pub mod dep;
 pub mod kind;
@@ -22,6 +23,10 @@ pub mod supervisor;
 pub mod upgrade;
 pub mod version;
 
+pub use aplicacao::{
+    AplicacaoError, AplicacaoSpec, CircuitBreaker, Entrada, Membro, MeshPolicy, Placement,
+    PlacementStrategy, RateLimit, WitContract,
+};
 pub use behavior::BehaviorSpec;
 pub use dep::{Dep, DepSource};
 pub use kind::CaixaKind;

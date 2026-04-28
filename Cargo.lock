@@ -440,6 +440,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "caixa-mesh"
+version = "0.1.0"
+dependencies = [
+ "caixa-core",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "caixa-operator"
 version = "0.1.0"
 dependencies = [

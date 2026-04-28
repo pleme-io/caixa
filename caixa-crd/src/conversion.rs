@@ -39,6 +39,8 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
             "Biblioteca" => CaixaKind::Biblioteca,
             "Binario" => CaixaKind::Binario,
             "Servico" => CaixaKind::Servico,
+            "Supervisor" => CaixaKind::Supervisor,
+            "Aplicacao" => CaixaKind::Aplicacao,
             _ => CaixaKind::Biblioteca,
         },
         edicao: None,
@@ -59,6 +61,11 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
         max_restarts: None,
         restart_window: None,
         children: vec![],
+        membros: vec![],
+        contratos: vec![],
+        politicas: None,
+        placement: None,
+        entrada: None,
     }
 }
 
@@ -143,6 +150,11 @@ mod tests {
             max_restarts: None,
             restart_window: None,
             children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
         };
         let cr = caixa_into_cr(
             &c,
