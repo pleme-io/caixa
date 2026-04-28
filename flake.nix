@@ -59,14 +59,17 @@
           };
         };
 
-        caixa-helm = pkgs.stdenvNoCC.mkDerivation {
-          pname = "caixa-helm";
+        # The caixa-operator's own Helm deploy chart (CRDs + RBAC +
+        # operator Deployment). Lives under `operator-chart/` because the
+        # `caixa-helm` name belongs to the typed Rust renderer crate.
+        caixa-operator-chart = pkgs.stdenvNoCC.mkDerivation {
+          pname = "caixa-operator-chart";
           version = "0.1.0";
-          src = ./caixa-helm;
+          src = ./operator-chart;
           dontBuild = true;
           installPhase = ''
             mkdir -p $out/share/caixa
-            cp -r . $out/share/caixa/helm
+            cp -r . $out/share/caixa/operator-chart
           '';
         };
 
@@ -84,7 +87,7 @@
         };
       in {
         packages = {
-          inherit feira caixa-lsp caixa-operator caixa-nvim caixa-helm caixa-operator-image;
+          inherit feira caixa-lsp caixa-operator caixa-nvim caixa-operator-chart caixa-operator-image;
           default = feira;
         };
 
