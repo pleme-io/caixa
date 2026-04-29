@@ -450,6 +450,8 @@ impl AplicacaoSpec {
     ///   - `:entrada :para` must be in `:membros`
     ///   - `:placement Sharded` must declare `:shard-key`
     ///   - `:placement Replicated` / `SingleNode` must declare ≥1 cluster
+    ///   - the synchronous-`:contratos` subgraph is acyclic
+    ///     (MESH-COMPOSITION §III.3)
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         if self.membros.is_empty() {
             return Err(AplicacaoError::NoMembros);
@@ -480,6 +482,13 @@ impl AplicacaoSpec {
             c.target()?;
         }
 
+        // Cycles in the synchronous-edge subgraph are build errors
+        // (MESH-COMPOSITION §III.3). Pub-sub edges are excluded — they
+        // are "acyclic by construction" because the publisher fires
+        // and forgets, so no caller blocks on a downstream that loops
+        // back to it.
+        self.detect_sync_cycles()?;
+
         if let Some(e) = &self.entrada {
             if !names.contains(e.para.as_str()) {
                 return Err(AplicacaoError::EntradaMemberMissing {
@@ -506,6 +515,121 @@ impl AplicacaoSpec {
             }
         }
 
+        Ok(())
+    }
+
+    /// Detect cycles in the synchronous-edge subgraph of `:contratos`.
+    /// A synchronous edge is any contract whose typed [`WitTarget`] is
+    /// `Http`, `Store`, or `Capability` — the caller blocks on the
+    /// callee, so a cycle would deadlock at runtime. Pub-sub edges
+    /// (`WitTarget::PubSub`) are skipped: an event publisher does not
+    /// block on its subscribers, so they can never close a sync loop.
+    ///
+    /// Iterative DFS with three-coloring; the reported cycle is the
+    /// path of caixa names traversed from the back-edge target around
+    /// to itself, in declaration order. Adjacency lists and DFS roots
+    /// are visited in `BTreeMap` key order so the diagnostic is
+    /// deterministic across runs.
+    fn detect_sync_cycles(&self) -> Result<(), AplicacaoError> {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Mark {
+            White,
+            Gray,
+            Black,
+        }
+
+        let mut adj: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for m in &self.membros {
+            adj.entry(m.caixa.as_str()).or_default();
+        }
+        for c in &self.contratos {
+            // target() was already called by validate(); re-running here
+            // keeps detect_sync_cycles self-contained for callers that
+            // reuse it (M4 per-edge policy resolver) without revalidating.
+            if matches!(c.target()?, WitTarget::PubSub { .. }) {
+                continue;
+            }
+            adj.entry(c.de.as_str())
+                .or_default()
+                .insert(c.para.as_str());
+        }
+
+        let mut color: BTreeMap<&str, Mark> =
+            adj.keys().map(|k| (*k, Mark::White)).collect();
+        let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
+
+        // Stable DFS root order — BTreeMap iteration is sorted by key.
+        let roots: Vec<&str> = adj.keys().copied().collect();
+
+        // Frame: (node, sorted-neighbours snapshot, next-edge index).
+        for root in roots {
+            if color.get(root).copied().unwrap_or(Mark::White) != Mark::White {
+                continue;
+            }
+            let root_neighbors: Vec<&str> = adj
+                .get(root)
+                .map(|s| s.iter().copied().collect())
+                .unwrap_or_default();
+            let mut stack: Vec<(&str, Vec<&str>, usize)> =
+                vec![(root, root_neighbors, 0)];
+            color.insert(root, Mark::Gray);
+
+            loop {
+                // Read+advance the top frame in one borrow scope so we
+                // can later mutate the stack (push/pop) without holding
+                // a borrow across.
+                let step: Option<(&str, Option<&str>)> = stack.last_mut().map(|top| {
+                    let node = top.0;
+                    if top.2 >= top.1.len() {
+                        (node, None)
+                    } else {
+                        let nxt = top.1[top.2];
+                        top.2 += 1;
+                        (node, Some(nxt))
+                    }
+                });
+                let Some((node, nxt_opt)) = step else { break };
+                let Some(nxt) = nxt_opt else {
+                    color.insert(node, Mark::Black);
+                    stack.pop();
+                    continue;
+                };
+                let nxt_color = color.get(nxt).copied().unwrap_or(Mark::White);
+                match nxt_color {
+                    Mark::Gray => {
+                        // Reconstruct the cycle from `node` back through
+                        // the parent chain to `nxt`, then close.
+                        let mut cycle = Vec::new();
+                        let mut cur = node;
+                        cycle.push(cur.to_string());
+                        while cur != nxt {
+                            match parent.get(cur).copied() {
+                                Some(p) => {
+                                    cur = p;
+                                    cycle.push(cur.to_string());
+                                }
+                                None => break,
+                            }
+                        }
+                        cycle.reverse();
+                        cycle.push(nxt.to_string());
+                        return Err(AplicacaoError::ContratoCycle { cycle });
+                    }
+                    Mark::White => {
+                        parent.insert(nxt, node);
+                        color.insert(nxt, Mark::Gray);
+                        let nxt_neighbors: Vec<&str> = adj
+                            .get(nxt)
+                            .map(|s| s.iter().copied().collect())
+                            .unwrap_or_default();
+                        stack.push((nxt, nxt_neighbors, 0));
+                    }
+                    Mark::Black => {}
+                }
+            }
+        }
         Ok(())
     }
 }
@@ -543,6 +667,12 @@ pub enum AplicacaoError {
         wit: String,
         expected: &'static str,
     },
+    #[error(
+        "synchronous :contratos form a cycle ({}); break with a NATS pub-sub edge \
+         or an event-sourced indirection (MESH-COMPOSITION §III.3)",
+        cycle.join(" → ")
+    )]
+    ContratoCycle { cycle: Vec<String> },
 }
 
 #[cfg(test)]
@@ -960,6 +1090,170 @@ mod tests {
         };
         assert!(kv.is_store());
         assert!(!kv.is_http());
+    }
+
+    #[test]
+    fn rejects_self_loop_in_synchronous_contratos() {
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "cart", "/loop"));
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoCycle { cycle } => {
+                assert_eq!(cycle, vec!["cart".to_string(), "cart".to_string()]);
+            }
+            other => panic!("expected ContratoCycle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_two_node_synchronous_cycle() {
+        let mut s = three_member_spec();
+        // existing edges: cart → catalog, cart → payment
+        // adding catalog → cart closes a 2-cycle on the HTTP subgraph
+        s.contratos
+            .push(contract_http("catalog", "cart", "/refresh"));
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoCycle { cycle } => {
+                // Cycle traversal should mention both endpoints, with
+                // the back-edge target appearing as both first and last
+                // element to close the loop.
+                assert!(cycle.len() >= 3);
+                assert_eq!(cycle.first(), cycle.last());
+                let body: std::collections::HashSet<_> = cycle.iter().cloned().collect();
+                assert!(body.contains("cart"));
+                assert!(body.contains("catalog"));
+            }
+            other => panic!("expected ContratoCycle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_three_node_synchronous_cycle() {
+        let mut s = three_member_spec();
+        // Reset to a clean 3-cycle: catalog → cart → payment → catalog
+        s.contratos = vec![
+            contract_http("catalog", "cart", "/x"),
+            contract_http("cart", "payment", "/y"),
+            contract_http("payment", "catalog", "/z"),
+        ];
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoCycle { cycle } => {
+                assert_eq!(cycle.first(), cycle.last());
+                let body: std::collections::HashSet<_> = cycle.iter().cloned().collect();
+                assert_eq!(body.len(), 3);
+                assert!(body.contains("cart"));
+                assert!(body.contains("catalog"));
+                assert!(body.contains("payment"));
+            }
+            other => panic!("expected ContratoCycle, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn pubsub_edge_breaks_cycle_per_mesh_composition_iii_3() {
+        // MESH-COMPOSITION §III.3 explicitly says NATS pub-sub is
+        // "acyclic by construction" — so a cycle whose closing edge
+        // is pub-sub should NOT raise ContratoCycle.
+        let mut s = three_member_spec();
+        s.contratos = vec![
+            contract_http("catalog", "cart", "/x"),
+            contract_http("cart", "payment", "/y"),
+            // Closing edge is pub-sub — async; not a sync deadlock.
+            WitContract {
+                de: "payment".into(),
+                para: "catalog".into(),
+                wit: "nats:pub-sub".into(),
+                endpoint: None,
+                subject: Some("checkout.events.charge.completed".into()),
+                slot: None,
+            },
+        ];
+        s.validate().expect("pub-sub edge breaks the sync cycle");
+    }
+
+    #[test]
+    fn store_edge_counts_as_synchronous_for_cycle_detection() {
+        // wasi:keyvalue/store is request/response; a cycle through one
+        // *is* a sync deadlock, just like HTTP.
+        let mut s = three_member_spec();
+        s.contratos = vec![
+            contract_http("catalog", "cart", "/x"),
+            WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: "wasi:keyvalue/store".into(),
+                endpoint: None,
+                subject: None,
+                slot: Some("session/$id".into()),
+            },
+        ];
+        let err = s.validate().unwrap_err();
+        assert!(matches!(err, AplicacaoError::ContratoCycle { .. }));
+    }
+
+    #[test]
+    fn capability_edge_counts_as_synchronous_for_cycle_detection() {
+        // Capability-only edges (unknown WIT shape, no payload) default
+        // to synchronous — safer; authors with truly async capability
+        // semantics can model them as pub-sub explicitly.
+        let mut s = three_member_spec();
+        s.contratos = vec![
+            contract_http("catalog", "cart", "/x"),
+            WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: "custom:exchange".into(),
+                endpoint: None,
+                subject: None,
+                slot: None,
+            },
+        ];
+        let err = s.validate().unwrap_err();
+        assert!(matches!(err, AplicacaoError::ContratoCycle { .. }));
+    }
+
+    #[test]
+    fn long_acyclic_chain_validates() {
+        // A long sync chain (no back-edges) must validate even when
+        // every node is reachable from the first.
+        let mut s = three_member_spec();
+        s.membros = vec![
+            membro("a", "^0.1"),
+            membro("b", "^0.1"),
+            membro("c", "^0.1"),
+            membro("d", "^0.1"),
+            membro("e", "^0.1"),
+        ];
+        s.contratos = vec![
+            contract_http("a", "b", "/1"),
+            contract_http("b", "c", "/2"),
+            contract_http("c", "d", "/3"),
+            contract_http("d", "e", "/4"),
+        ];
+        s.entrada.as_mut().unwrap().para = "a".into();
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn diamond_acyclic_validates() {
+        // a → b, a → c, b → d, c → d. Two paths to d, no cycle.
+        let mut s = three_member_spec();
+        s.membros = vec![
+            membro("a", "^0.1"),
+            membro("b", "^0.1"),
+            membro("c", "^0.1"),
+            membro("d", "^0.1"),
+        ];
+        s.contratos = vec![
+            contract_http("a", "b", "/1"),
+            contract_http("a", "c", "/2"),
+            contract_http("b", "d", "/3"),
+            contract_http("c", "d", "/4"),
+        ];
+        s.entrada.as_mut().unwrap().para = "a".into();
+        s.validate().unwrap();
     }
 
     #[test]
