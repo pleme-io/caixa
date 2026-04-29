@@ -498,6 +498,28 @@ impl AplicacaoSpec {
             if e.host.is_empty() {
                 return Err(AplicacaoError::EmptyEntradaHost);
             }
+            if e.port == 0 {
+                return Err(AplicacaoError::EntradaPortZero);
+            }
+            // Each `:entrada :paths` entry becomes a K8s Gateway API
+            // HTTPRoute `matches[].path.value`. The Gateway API rejects
+            // values that don't start with `/` for `type: PathPrefix`,
+            // and an empty value is meaningless. Surface those as build
+            // errors (MESH-COMPOSITION §III.3) rather than apply-time
+            // failures. Empty `:paths` itself is fine — caixa-mesh
+            // falls back to a single `/` catch-all.
+            let mut seen = std::collections::HashSet::new();
+            for p in &e.paths {
+                if p.is_empty() {
+                    return Err(AplicacaoError::EntradaPathEmpty);
+                }
+                if !p.starts_with('/') {
+                    return Err(AplicacaoError::EntradaPathNotAbsolute { path: p.clone() });
+                }
+                if !seen.insert(p.as_str()) {
+                    return Err(AplicacaoError::EntradaPathDuplicate { path: p.clone() });
+                }
+            }
         }
 
         match self.placement.estrategia {
@@ -646,6 +668,16 @@ pub enum AplicacaoError {
     EntradaMemberMissing { para: String },
     #[error(":entrada must declare a non-empty :host")]
     EmptyEntradaHost,
+    #[error(":entrada :port must be in 1..=65535, got 0")]
+    EntradaPortZero,
+    #[error(":entrada :paths entry is empty (use the empty list to match all)")]
+    EntradaPathEmpty,
+    #[error(
+        ":entrada :paths entry {path:?} must start with `/` (Gateway API PathPrefix invariant)"
+    )]
+    EntradaPathNotAbsolute { path: String },
+    #[error(":entrada :paths entry {path:?} appears more than once")]
+    EntradaPathDuplicate { path: String },
     #[error(":placement {estrategia:?} requires at least one :clusters entry")]
     PlacementWithoutClusters { estrategia: PlacementStrategy },
     #[error(":placement Sharded requires :shard-key")]
@@ -1253,6 +1285,62 @@ mod tests {
             contract_http("c", "d", "/4"),
         ];
         s.entrada.as_mut().unwrap().para = "a".into();
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_entrada_path_without_leading_slash() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart".into(), "api/products".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathNotAbsolute { ref path } if path == "api/products"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_empty_entrada_path() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart".into(), "".into()];
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPathEmpty);
+    }
+
+    #[test]
+    fn rejects_duplicate_entrada_paths() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec![
+            "/api/cart".into(),
+            "/api/products".into(),
+            "/api/cart".into(),
+        ];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathDuplicate { ref path } if path == "/api/cart"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_zero_entrada_port() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().port = 0;
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPortZero);
+    }
+
+    #[test]
+    fn entrada_with_empty_paths_validates() {
+        // Empty `:paths` is the documented "match every path" form;
+        // caixa-mesh's gateway_routes synthesizes a `/` catch-all.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec![];
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn entrada_root_path_validates() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/".into()];
         s.validate().unwrap();
     }
 
