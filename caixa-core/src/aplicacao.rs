@@ -448,8 +448,12 @@ impl AplicacaoSpec {
     /// Validate the typed shape:
     ///   - every `:contratos` :de + :para must be in `:membros`
     ///   - `:entrada :para` must be in `:membros`
-    ///   - `:placement Sharded` must declare `:shard-key`
-    ///   - `:placement Replicated` / `SingleNode` must declare ≥1 cluster
+    ///   - `:placement Sharded` must declare `:shard-key` (non-empty)
+    ///   - every `:placement` strategy must declare ≥1 `:clusters` entry —
+    ///     `Replicated`/`SingleNode` need hosting clusters, `Sharded` needs
+    ///     the shard pool (MESH-COMPOSITION §III.1)
+    ///   - every `:clusters` entry is non-empty and unique
+    ///   - `:placement :affinity`, when set, is non-empty
     ///   - the synchronous-`:contratos` subgraph is acyclic
     ///     (MESH-COMPOSITION §III.3)
     ///   - every declared `:politicas` value is operationally meaningful
@@ -526,23 +530,63 @@ impl AplicacaoSpec {
             }
         }
 
-        match self.placement.estrategia {
-            PlacementStrategy::Sharded => {
-                if self.placement.shard_key.is_none() {
-                    return Err(AplicacaoError::ShardedWithoutKey);
-                }
-            }
-            PlacementStrategy::Replicated | PlacementStrategy::SingleNode => {
-                if self.placement.clusters.is_empty() {
-                    return Err(AplicacaoError::PlacementWithoutClusters {
-                        estrategia: self.placement.estrategia,
-                    });
-                }
-            }
-        }
+        self.validate_placement()?;
 
         self.validate_politicas()?;
 
+        Ok(())
+    }
+
+    /// Reject `:placement` values that are operationally meaningless or
+    /// internally contradictory. Each strategy variant has the same
+    /// invariants on `:clusters` (non-empty list, non-empty unique
+    /// entries) — the §III.1 author surface is uniform on this axis,
+    /// even though the *meaning* of the list differs by strategy
+    /// (`Replicated`/`SingleNode` host the app; `Sharded` defines the
+    /// shard pool).
+    ///
+    /// Empty cluster names or a `Some("")` `:shard-key`/`:affinity`
+    /// are the same authoring footgun closed for `:politicas` zero
+    /// values and `:entrada` empty paths: the field is *declared* but
+    /// carries no meaning, so downstream renderers either skip it
+    /// silently (cluster-fanout drops the empty entry, no diagnostic)
+    /// or apply it literally and fail at admission time. Lifting both
+    /// to build errors mirrors MESH-COMPOSITION §III.3's "placement
+    /// violation is a build error" promise.
+    fn validate_placement(&self) -> Result<(), AplicacaoError> {
+        // Every strategy needs at least one named cluster: `Replicated`
+        // and `SingleNode` use the list as hosting/takeover candidates
+        // (Erlang/OTP distributed-app convention — see MESH-COMPOSITION
+        // §II.1), while `Sharded` uses it as the shard pool
+        // (Akka cluster-sharding convention — §II.4). An empty list is
+        // meaningless under any of the three.
+        if self.placement.clusters.is_empty() {
+            return Err(AplicacaoError::PlacementWithoutClusters {
+                estrategia: self.placement.estrategia,
+            });
+        }
+        let mut seen = std::collections::HashSet::new();
+        for c in &self.placement.clusters {
+            if c.is_empty() {
+                return Err(AplicacaoError::PlacementClusterEmpty);
+            }
+            if !seen.insert(c.as_str()) {
+                return Err(AplicacaoError::PlacementClusterDuplicate { cluster: c.clone() });
+            }
+        }
+        if let Some(a) = &self.placement.affinity {
+            if a.is_empty() {
+                return Err(AplicacaoError::PlacementAffinityEmpty);
+            }
+        }
+        match self.placement.estrategia {
+            PlacementStrategy::Sharded => match &self.placement.shard_key {
+                None => return Err(AplicacaoError::ShardedWithoutKey),
+                Some(k) if k.is_empty() => return Err(AplicacaoError::ShardedKeyEmpty),
+                Some(_) => {}
+            },
+            PlacementStrategy::Replicated | PlacementStrategy::SingleNode => {}
+        }
         Ok(())
     }
 
@@ -729,10 +773,27 @@ pub enum AplicacaoError {
     EntradaPathNotAbsolute { path: String },
     #[error(":entrada :paths entry {path:?} appears more than once")]
     EntradaPathDuplicate { path: String },
-    #[error(":placement {estrategia:?} requires at least one :clusters entry")]
+    #[error(
+        ":placement {estrategia:?} requires at least one :clusters entry \
+         (Replicated/SingleNode: hosting/takeover candidates; Sharded: shard pool)"
+    )]
     PlacementWithoutClusters { estrategia: PlacementStrategy },
+    #[error(":placement :clusters entry is empty (cluster names must be non-empty)")]
+    PlacementClusterEmpty,
+    #[error(":placement :clusters entry {cluster:?} appears more than once")]
+    PlacementClusterDuplicate { cluster: String },
+    #[error(
+        ":placement :affinity must be non-empty when set (omit :affinity to express \
+         `no placement hint`)"
+    )]
+    PlacementAffinityEmpty,
     #[error(":placement Sharded requires :shard-key")]
     ShardedWithoutKey,
+    #[error(
+        ":placement Sharded :shard-key must be non-empty (a `Some(\"\")` shard key \
+         hashes every entity onto the same shard, defeating sharding entirely)"
+    )]
+    ShardedKeyEmpty,
     #[error("contrato {de:?} → {para:?} (:wit {wit:?}) is missing required `:{expected}` field")]
     ContratoMissingTarget {
         de: String,
@@ -1527,6 +1588,84 @@ mod tests {
                 window: Duration::from_secs(1),
             }),
         };
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_empty_cluster_name() {
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["rio".into(), "".into()];
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PlacementClusterEmpty
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_cluster_names() {
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["rio".into(), "mar".into(), "rio".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::PlacementClusterDuplicate { ref cluster } if cluster == "rio"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_sharded_with_empty_clusters() {
+        // §III.1: Sharded uses :clusters as the shard pool. An empty
+        // pool means "shard across no clusters" — meaningless, same as
+        // Replicated with no hosts.
+        let mut s = three_member_spec();
+        s.placement.estrategia = PlacementStrategy::Sharded;
+        s.placement.shard_key = Some("$tenantId".into());
+        s.placement.clusters = vec![];
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PlacementWithoutClusters {
+                estrategia: PlacementStrategy::Sharded
+            }
+        ));
+    }
+
+    #[test]
+    fn rejects_sharded_with_empty_shard_key() {
+        let mut s = three_member_spec();
+        s.placement.estrategia = PlacementStrategy::Sharded;
+        s.placement.shard_key = Some("".into());
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::ShardedKeyEmpty);
+    }
+
+    #[test]
+    fn rejects_empty_affinity_hint() {
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("".into());
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PlacementAffinityEmpty
+        );
+    }
+
+    #[test]
+    fn placement_without_affinity_validates() {
+        // Omitting :affinity is fine — the placement engine falls back
+        // to the default heuristic. Pin the no-hint case so the
+        // affinity-empty rejection doesn't accidentally fire on `None`.
+        let mut s = three_member_spec();
+        s.placement.affinity = None;
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn singlenode_with_takeover_candidates_validates() {
+        // OTP distributed-application convention (MESH-COMPOSITION
+        // §II.1): SingleNode runs on one cluster at a time but the
+        // :clusters list enumerates the takeover candidates. Multiple
+        // entries are not a contradiction — they are the failover pool.
+        let mut s = three_member_spec();
+        s.placement.estrategia = PlacementStrategy::SingleNode;
+        s.placement.clusters = vec!["rio".into(), "mar".into(), "plo".into()];
         s.validate().unwrap();
     }
 }
