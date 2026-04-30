@@ -452,6 +452,10 @@ impl AplicacaoSpec {
     ///   - `:placement Replicated` / `SingleNode` must declare ≥1 cluster
     ///   - the synchronous-`:contratos` subgraph is acyclic
     ///     (MESH-COMPOSITION §III.3)
+    ///   - every declared `:politicas` value is operationally meaningful
+    ///     (zero timeout, zero retries, zero breaker thresholds, zero rate
+    ///     limit are all build errors — MESH-COMPOSITION §V CSE invariants;
+    ///     omit the field instead to express "no policy on this axis")
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         if self.membros.is_empty() {
             return Err(AplicacaoError::NoMembros);
@@ -537,6 +541,53 @@ impl AplicacaoSpec {
             }
         }
 
+        self.validate_politicas()?;
+
+        Ok(())
+    }
+
+    /// Reject `:politicas` values that are operationally meaningless.
+    /// Each axis is optional — omitting it expresses "no policy on this
+    /// axis". Carrying a *zero* value for a declared axis is the bug
+    /// this function rejects: zero is either
+    ///
+    ///   - re-interpreted as "infinite" by downstream proxies (Envoy's
+    ///     `RouteAction.timeout = 0s` disables the timeout entirely),
+    ///     directly contradicting MESH-COMPOSITION §V CSE invariant
+    ///     "every Aplicacao declares :politicas :timeout (no infinite
+    ///     blocking)", or
+    ///   - a renderer footgun (a 0-failure circuit breaker trips on the
+    ///     first call; a 0-rate rate-limit denies every request).
+    ///
+    /// Lifting these "0 means the opposite of what you think" idioms to
+    /// the typed Aplicacao surface as build errors mirrors the §III.3
+    /// promise that contract drift, capability leaks, and cycles are all
+    /// build errors — not runtime surprises.
+    fn validate_politicas(&self) -> Result<(), AplicacaoError> {
+        let p = &self.politicas;
+        if let Some(t) = p.timeout {
+            if t.is_zero() {
+                return Err(AplicacaoError::PolicyTimeoutZero);
+            }
+        }
+        if let Some(r) = p.retries {
+            if r == 0 {
+                return Err(AplicacaoError::PolicyRetriesZero);
+            }
+        }
+        if let Some(cb) = &p.circuit_breaker {
+            if cb.max_failures == 0 {
+                return Err(AplicacaoError::PolicyBreakerZeroFailures);
+            }
+            if cb.window.is_zero() {
+                return Err(AplicacaoError::PolicyBreakerZeroWindow);
+            }
+        }
+        if let Some(rl) = &p.rate_limit {
+            if rl.rate == 0 {
+                return Err(AplicacaoError::PolicyRateLimitZero);
+            }
+        }
         Ok(())
     }
 
@@ -705,6 +756,32 @@ pub enum AplicacaoError {
         cycle.join(" → ")
     )]
     ContratoCycle { cycle: Vec<String> },
+    #[error(
+        ":politicas :timeout must be > 0 (Envoy interprets a zero timeout as `infinite`, \
+         contradicting MESH-COMPOSITION §V `no infinite blocking`); omit :timeout to \
+         express `no per-call deadline on this axis`"
+    )]
+    PolicyTimeoutZero,
+    #[error(
+        ":politicas :retries must be > 0 when set; omit :retries to express \
+         `no retries on transient failure`"
+    )]
+    PolicyRetriesZero,
+    #[error(
+        ":politicas :circuit-breaker :max-failures must be > 0 (a zero-threshold \
+         breaker trips on the first call); omit :circuit-breaker to disable it"
+    )]
+    PolicyBreakerZeroFailures,
+    #[error(
+        ":politicas :circuit-breaker :window must be > 0 (a zero-window breaker \
+         tracks no failures); omit :circuit-breaker to disable it"
+    )]
+    PolicyBreakerZeroWindow,
+    #[error(
+        ":politicas :rate-limit rate must be > 0 (a zero-rate limit denies every \
+         request); omit :rate-limit to disable rate limiting"
+    )]
+    PolicyRateLimitZero,
 }
 
 #[cfg(test)]
@@ -1365,5 +1442,91 @@ mod tests {
             let back: Placement = serde_json::from_str(&json).unwrap();
             assert_eq!(back, p);
         }
+    }
+
+    #[test]
+    fn rejects_zero_policy_timeout() {
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::ZERO);
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::PolicyTimeoutZero);
+    }
+
+    #[test]
+    fn rejects_zero_policy_retries() {
+        let mut s = three_member_spec();
+        s.politicas.retries = Some(0);
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::PolicyRetriesZero);
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_zero_max_failures() {
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 0,
+            window: Duration::from_secs(60),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroFailures
+        );
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_zero_window() {
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::ZERO,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroWindow
+        );
+    }
+
+    #[test]
+    fn rejects_zero_rate_limit() {
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 0,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitZero
+        );
+    }
+
+    #[test]
+    fn empty_politicas_validates() {
+        // Omitting every policy axis is fine — defaults express "no
+        // policy on this axis", not "policy = 0". The fixture's typical
+        // values continue to validate; this test pins that
+        // MeshPolicy::default() is a clean pass through validate().
+        let mut s = three_member_spec();
+        s.politicas = MeshPolicy::default();
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn typical_politicas_validates_with_every_axis_set() {
+        // The full §III.1 example block (timeout + retries + breaker +
+        // mtls + rate-limit) — every axis nonzero — must remain a
+        // clean pass.
+        let mut s = three_member_spec();
+        s.politicas = MeshPolicy {
+            timeout: Some(Duration::from_secs(30)),
+            retries: Some(3),
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 5,
+                window: Duration::from_secs(60),
+            }),
+            mtls_required: Some(true),
+            rate_limit: Some(RateLimit {
+                rate: 100,
+                window: Duration::from_secs(1),
+            }),
+        };
+        s.validate().unwrap();
     }
 }
