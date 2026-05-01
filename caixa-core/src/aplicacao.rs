@@ -446,6 +446,10 @@ pub struct AplicacaoSpec {
 
 impl AplicacaoSpec {
     /// Validate the typed shape:
+    ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
+    ///     and a non-empty `:versao`; no two entries share the same
+    ///     `:caixa` (MESH-COMPOSITION §III.1 — the graph nodes are a set,
+    ///     not a multiset)
     ///   - every `:contratos` :de + :para must be in `:membros`
     ///   - `:entrada :para` must be in `:membros`
     ///   - `:placement Sharded` must declare `:shard-key` (non-empty)
@@ -461,9 +465,7 @@ impl AplicacaoSpec {
     ///     limit are all build errors — MESH-COMPOSITION §V CSE invariants;
     ///     omit the field instead to express "no policy on this axis")
     pub fn validate(&self) -> Result<(), AplicacaoError> {
-        if self.membros.is_empty() {
-            return Err(AplicacaoError::NoMembros);
-        }
+        self.validate_membros()?;
         let names: std::collections::HashSet<&str> =
             self.membros.iter().map(|m| m.caixa.as_str()).collect();
 
@@ -534,6 +536,54 @@ impl AplicacaoSpec {
 
         self.validate_politicas()?;
 
+        Ok(())
+    }
+
+    /// Reject `:membros` values that are operationally meaningless. The
+    /// `:membros` slot is the graph node set (MESH-COMPOSITION §III.1):
+    /// every entry names a Servico that participates in the Aplicacao,
+    /// and the rendered programs.yaml fan-out emits one entry per
+    /// `:membros`. Three authoring footguns are closed here:
+    ///
+    ///   - `:caixa ""` — caixa-mesh's `programs_for_aplicacao` would emit
+    ///     a `programs:` entry whose `name:` is the empty string, which
+    ///     downstream `lareira-fleet-programs` rejects at template time
+    ///     with a non-localized error;
+    ///   - `:versao ""` — caixa-resolver's lacre pipeline can't resolve
+    ///     an empty semver constraint, so the failure surfaces far from
+    ///     the source caixa.lisp;
+    ///   - duplicate `:caixa` names — two entries with the same name
+    ///     produce duplicate programs.yaml entries (one silently
+    ///     overwrites the other in the cluster's HelmRelease values), and
+    ///     contract membership lookups against `:contratos` collapse the
+    ///     two onto one node, masking authoring mistakes.
+    ///
+    /// Same value-shape discipline as `:placement :clusters` (where empty
+    /// + duplicate cluster names are rejected) and `:entrada :paths`
+    /// (where empty + duplicate path entries are rejected). Lifting these
+    /// invariants to the typed surface mirrors the MESH-COMPOSITION
+    /// §III.3 promise that the `:membros` set — the load-bearing identity
+    /// of the application graph — is well-formed by construction.
+    fn validate_membros(&self) -> Result<(), AplicacaoError> {
+        if self.membros.is_empty() {
+            return Err(AplicacaoError::NoMembros);
+        }
+        let mut seen = std::collections::HashSet::new();
+        for m in &self.membros {
+            if m.caixa.is_empty() {
+                return Err(AplicacaoError::MembroCaixaEmpty);
+            }
+            if m.versao.is_empty() {
+                return Err(AplicacaoError::MembroVersaoEmpty {
+                    caixa: m.caixa.clone(),
+                });
+            }
+            if !seen.insert(m.caixa.as_str()) {
+                return Err(AplicacaoError::MembroDuplicate {
+                    caixa: m.caixa.clone(),
+                });
+            }
+        }
         Ok(())
     }
 
@@ -755,6 +805,22 @@ impl AplicacaoSpec {
 pub enum AplicacaoError {
     #[error("Aplicacao must declare at least one :membros entry")]
     NoMembros,
+    #[error(
+        ":membros entry has empty :caixa (every member must name a Servico; \
+         omit the entry instead of carrying an empty name)"
+    )]
+    MembroCaixaEmpty,
+    #[error(
+        ":membros entry {caixa:?} has empty :versao (every member must pin a \
+         semver constraint that resolves through the lacre pipeline)"
+    )]
+    MembroVersaoEmpty { caixa: String },
+    #[error(
+        ":membros entry {caixa:?} appears more than once (the graph node set \
+         is a set, not a multiset; duplicate members produce duplicate \
+         programs.yaml entries and ambiguous :contratos membership lookups)"
+    )]
+    MembroDuplicate { caixa: String },
     #[error("contrato references caixa {caixa:?} not declared in :membros")]
     ContratoMemberMissing { caixa: String },
     #[error("contrato {de:?} → {para:?} has empty :wit")]
@@ -909,6 +975,73 @@ mod tests {
         let mut s = three_member_spec();
         s.membros = vec![];
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::NoMembros);
+    }
+
+    #[test]
+    fn rejects_empty_membro_caixa() {
+        // A `:caixa ""` entry has no name to render into programs.yaml
+        // and no caixa.lisp to resolve at lacre time.
+        let mut s = three_member_spec();
+        s.membros[1].caixa = String::new();
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::MembroCaixaEmpty);
+    }
+
+    #[test]
+    fn rejects_empty_membro_versao() {
+        // A `:versao ""` entry can't pin a semver constraint, so the
+        // lacre pipeline fails far from the source.
+        let mut s = three_member_spec();
+        s.membros[2].versao = String::new();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::MembroVersaoEmpty { ref caixa } if caixa == "payment"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_membro_caixa() {
+        // Two `:membros` entries with the same `:caixa` collapse to one
+        // node in the membership HashSet, which masks `:contratos`
+        // membership errors and produces duplicate programs.yaml entries.
+        let mut s = three_member_spec();
+        s.membros.push(membro("cart", "^0.2"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::MembroDuplicate { ref caixa } if caixa == "cart"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn membros_validation_runs_before_contratos_membership_check() {
+        // If `:membros` carries a duplicate, the membership-collapse
+        // would silently accept a `:contratos :para "phantom"` so long
+        // as some entry hashes to "phantom". Pinning order: the
+        // duplicate-membros error fires first, regardless of whether
+        // contratos reference real members.
+        let mut s = three_member_spec();
+        s.membros = vec![
+            membro("cart", "^0.1"),
+            membro("cart", "^0.2"),
+            membro("catalog", "^0.1"),
+            membro("payment", "^0.1"),
+        ];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::MembroDuplicate { ref caixa } if caixa == "cart"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn distinct_membros_validate() {
+        // Pin the happy-path: every `:membros` entry has a non-empty
+        // `:caixa`, a non-empty `:versao`, and the set is duplicate-free.
+        // The fixture already satisfies this; this test makes the
+        // invariant explicit so a future refactor of the fixture can't
+        // silently break the guarantee.
+        three_member_spec().validate().unwrap();
     }
 
     #[test]
