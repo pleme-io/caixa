@@ -159,8 +159,18 @@ impl LayoutInvariants for StandardLayout {
             })?;
         }
 
-        // Behavior callbacks: every declared callback must resolve.
+        // Behavior callbacks: every declared callback must (a) be
+        // value-shape valid (no empty / absolute / parent-escaping
+        // path values that would silently subvert the layout
+        // checker's `root.join(p)` sandbox), then (b) resolve on disk.
+        // The shape pass runs first so the diagnostic names *which
+        // :behavior slot* is malformed before the existence check
+        // would otherwise surface a less-helpful "missing entry".
         if let Some(b) = &caixa.behavior {
+            b.validate().map_err(|err| LayoutError::BehaviorViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
             for p in b.declared_paths() {
                 let full = root.join(p);
                 if !self.exists(&full) {
@@ -237,6 +247,8 @@ pub enum LayoutError {
     ServicoOutsideDir(PathBuf),
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
     LimitsViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :behavior callback: {issue}")]
+    BehaviorViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{caixa}' violates typed shape: {issue}")]
     SupervisorViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas")]
@@ -374,6 +386,52 @@ mod tests {
         let layout = StandardLayout::new()
             .with_path_exists(move |p| p == manifest || p == svc || p == init);
         layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn behavior_absolute_callback_is_violation_not_missing() {
+        // An absolute path silently subverts `root.join(p)` (Path::join
+        // replaces the base when the right side is absolute). Before
+        // BehaviorSpec::validate ran, an `:on-init "/etc/passwd"` would
+        // surface as a confusing "missing behavior-callback /etc/passwd"
+        // — or, worse, pass when /etc/passwd happens to exist. Now it's
+        // a value-shape error naming the slot.
+        use crate::BehaviorSpec;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("/etc/passwd")),
+            ..Default::default()
+        });
+        // Path exists check would *succeed* on /etc/passwd (proving the
+        // sandbox bypass) — value-shape pass must fire first.
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == svc || p == Path::new("/etc/passwd"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::BehaviorViolation { ref caixa, .. } if caixa == "demo"),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn behavior_empty_callback_is_violation() {
+        use crate::BehaviorSpec;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.behavior = Some(BehaviorSpec {
+            on_call: Some(PathBuf::new()),
+            ..Default::default()
+        });
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::BehaviorViolation { .. }));
     }
 
     #[test]
