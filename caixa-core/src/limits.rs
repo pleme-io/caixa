@@ -80,6 +80,33 @@ impl LimitsSpec {
             && self.wall_clock.is_none()
             && self.cpu.is_none()
     }
+
+    /// Reject operationally-meaningless zero values on every declared
+    /// axis. Each axis remains optional — omitting a field expresses
+    /// "no bound on this axis"; the bug being closed is *carrying* a
+    /// zero value, which the wasm-engine consumes as "trap the first
+    /// instruction" / "instantiation refused" / "immediate timeout"
+    /// rather than the author's intended "an unspecified bound".
+    ///
+    /// Mirrors the discipline applied to `:politicas` axes in
+    /// `AplicacaoSpec::validate` and to `SupervisorSpec::max_restarts`
+    /// — every typed value carried by a slot is either absent or
+    /// meaningfully non-zero.
+    pub fn validate(&self) -> Result<(), LimitsError> {
+        if self.memory == Some(0) {
+            return Err(LimitsError::MemoryZero);
+        }
+        if self.fuel == Some(0) {
+            return Err(LimitsError::FuelZero);
+        }
+        if matches!(self.wall_clock, Some(d) if d.is_zero()) {
+            return Err(LimitsError::WallClockZero);
+        }
+        if self.cpu == Some(0) {
+            return Err(LimitsError::CpuZero);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -98,6 +125,22 @@ pub enum LimitsError {
     BadDurationMagnitude(String),
     #[error("millicores: bad value {0:?} (expected `<int>m` or `<int>`)")]
     BadMillicores(String),
+    #[error(
+        ":limits :memory must be > 0 — wasmtime StoreLimits refuses a zero memory cap; omit the field for unbounded"
+    )]
+    MemoryZero,
+    #[error(
+        ":limits :fuel must be > 0 — wasmtime traps the first instruction at fuel=0; omit the field for unbounded"
+    )]
+    FuelZero,
+    #[error(
+        ":limits :wall-clock must be > 0 — a zero deadline expires before the call starts; omit the field for unbounded"
+    )]
+    WallClockZero,
+    #[error(
+        ":limits :cpu must be > 0m — a zero cgroup share starves the process; omit the field for unbounded"
+    )]
+    CpuZero,
 }
 
 // ── byte-size codec ────────────────────────────────────────────────────
@@ -341,5 +384,75 @@ mod tests {
         assert!(limits.is_empty());
         let json = serde_json::to_string(&limits).unwrap();
         assert_eq!(json, "{}");
+    }
+
+    // ── value-shape: zero on any declared axis is rejected ────────────────
+
+    #[test]
+    fn validate_accepts_default_unbounded_limits() {
+        // Every axis None → "no bound declared" is the omit-the-slot
+        // shape and stays valid. This is the pre-M2 default behaviour.
+        LimitsSpec::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_full_nonzero_limits() {
+        let l = LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: Some(1_000_000),
+            wall_clock: Some(Duration::from_secs(30)),
+            cpu: Some(500),
+        };
+        l.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_zero_memory() {
+        let l = LimitsSpec {
+            memory: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::MemoryZero);
+    }
+
+    #[test]
+    fn validate_rejects_zero_fuel() {
+        let l = LimitsSpec {
+            fuel: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::FuelZero);
+    }
+
+    #[test]
+    fn validate_rejects_zero_wall_clock() {
+        let l = LimitsSpec {
+            wall_clock: Some(Duration::ZERO),
+            ..Default::default()
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::WallClockZero);
+    }
+
+    #[test]
+    fn validate_rejects_zero_cpu() {
+        let l = LimitsSpec {
+            cpu: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::CpuZero);
+    }
+
+    #[test]
+    fn validate_rejects_first_zero_axis_deterministically() {
+        // Memory is checked first; with multiple zero axes, the
+        // diagnostic names :memory rather than reporting some other
+        // axis non-deterministically.
+        let l = LimitsSpec {
+            memory: Some(0),
+            fuel: Some(0),
+            wall_clock: Some(Duration::ZERO),
+            cpu: Some(0),
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::MemoryZero);
     }
 }

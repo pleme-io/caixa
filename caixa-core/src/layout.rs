@@ -146,6 +146,19 @@ impl LayoutInvariants for StandardLayout {
 
         // ── M2 typed-substrate invariants ────────────────────────────────
 
+        // Lunatic-style per-process limits: every declared axis must
+        // be meaningfully non-zero. A zero on any axis is the same
+        // authorial-intent footgun as a 0-failure circuit-breaker or
+        // a 0-port :entrada — wasmtime would consume the value as
+        // "trap immediately" rather than the author's "an unspecified
+        // bound". See `LimitsSpec::validate` for the full rationale.
+        if let Some(l) = &caixa.limits {
+            l.validate().map_err(|err| LayoutError::LimitsViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+        }
+
         // Behavior callbacks: every declared callback must resolve.
         if let Some(b) = &caixa.behavior {
             for p in b.declared_paths() {
@@ -222,6 +235,8 @@ pub enum LayoutError {
     ExeOutsideDir(PathBuf),
     #[error("servico entry outside servicos/ directory: {}", .0.display())]
     ServicoOutsideDir(PathBuf),
+    #[error("caixa '{caixa}' has invalid :limits: {issue}")]
+    LimitsViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{caixa}' violates typed shape: {issue}")]
     SupervisorViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas")]
@@ -504,6 +519,52 @@ mod tests {
         });
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::AplicacaoViolation { .. }));
+    }
+
+    #[test]
+    fn limits_zero_axis_surfaces_as_layout_violation() {
+        use crate::LimitsSpec;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.limits = Some(LimitsSpec {
+            fuel: Some(0),
+            ..Default::default()
+        });
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::LimitsViolation { caixa, issue } = err else {
+            panic!("expected LimitsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(issue.contains(":fuel"), "issue must name the axis: {issue}");
+    }
+
+    #[test]
+    fn limits_well_formed_passes_layout() {
+        use crate::LimitsSpec;
+        use std::time::Duration;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: Some(1_000_000),
+            wall_clock: Some(Duration::from_secs(30)),
+            cpu: Some(500),
+        });
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        layout.verify(&c, &root).unwrap();
     }
 
     #[test]
