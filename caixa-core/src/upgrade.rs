@@ -25,7 +25,7 @@
 //! succeed (transactional upgrade). On any failure, the current
 //! version stays load-bearing — a typed atomic upgrade.
 
-use std::path::PathBuf;
+use std::path::{Component, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -105,10 +105,22 @@ impl UpgradeInstruction {
             }
             Self::StateChange { script } => {
                 if script.as_os_str().is_empty() {
-                    Err(UpgradeError::EmptyScript)
-                } else {
-                    Ok(())
+                    return Err(UpgradeError::EmptyScript);
                 }
+                if script.is_absolute() {
+                    return Err(UpgradeError::AbsoluteScript {
+                        script: script.clone(),
+                    });
+                }
+                if script
+                    .components()
+                    .any(|c| matches!(c, Component::ParentDir))
+                {
+                    return Err(UpgradeError::ParentEscapeScript {
+                        script: script.clone(),
+                    });
+                }
+                Ok(())
             }
             Self::Restart => Ok(()),
         }
@@ -133,6 +145,18 @@ pub enum UpgradeError {
     EmptyModule,
     #[error("instruction's :script is empty")]
     EmptyScript,
+    #[error(
+        "instruction's :script {} is absolute — upgrade scripts must be relative to the caixa \
+         root (Path::join would otherwise escape the project sandbox)",
+        script.display()
+    )]
+    AbsoluteScript { script: PathBuf },
+    #[error(
+        "instruction's :script {} contains a `..` component — upgrade scripts must not traverse \
+         above the caixa root",
+        script.display()
+    )]
+    ParentEscapeScript { script: PathBuf },
 }
 
 #[cfg(test)]
@@ -219,6 +243,36 @@ mod tests {
             script: PathBuf::new(),
         };
         assert_eq!(i.validate().unwrap_err(), UpgradeError::EmptyScript);
+    }
+
+    #[test]
+    fn validate_rejects_absolute_script() {
+        let i = UpgradeInstruction::StateChange {
+            script: PathBuf::from("/etc/migrations.lisp"),
+        };
+        assert!(matches!(
+            i.validate().unwrap_err(),
+            UpgradeError::AbsoluteScript { .. }
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_parent_escape_script() {
+        let i = UpgradeInstruction::StateChange {
+            script: PathBuf::from("../sibling/migrations.lisp"),
+        };
+        assert!(matches!(
+            i.validate().unwrap_err(),
+            UpgradeError::ParentEscapeScript { .. }
+        ));
+        // mid-path `..` is also caught
+        let i2 = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/../../escaped.lisp"),
+        };
+        assert!(matches!(
+            i2.validate().unwrap_err(),
+            UpgradeError::ParentEscapeScript { .. }
+        ));
     }
 
     #[test]

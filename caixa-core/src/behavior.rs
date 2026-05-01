@@ -24,9 +24,10 @@
 //! noop terminate). The `StandardLayout` invariant in `layout.rs`
 //! verifies every declared path exists on disk before the build.
 
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Path-to-callback bindings for an OTP-shaped Servico.
 ///
@@ -74,19 +75,27 @@ pub struct BehaviorSpec {
 }
 
 impl BehaviorSpec {
+    /// Iterate over every declared callback path tagged with the
+    /// kebab-case `:on-*` slot it came from. Used by the layout
+    /// checker (existence) and by [`BehaviorSpec::validate`]
+    /// (value-shape) so diagnostics can name the offending slot.
+    pub fn declared_slots(&self) -> impl Iterator<Item = (&'static str, &PathBuf)> {
+        [
+            (":on-init", self.on_init.as_ref()),
+            (":on-call", self.on_call.as_ref()),
+            (":on-cast", self.on_cast.as_ref()),
+            (":on-info", self.on_info.as_ref()),
+            (":on-state-change", self.on_state_change.as_ref()),
+            (":on-terminate", self.on_terminate.as_ref()),
+        ]
+        .into_iter()
+        .filter_map(|(slot, opt)| opt.map(|p| (slot, p)))
+    }
+
     /// Iterate over every declared callback path. Used by the
     /// layout checker.
     pub fn declared_paths(&self) -> impl Iterator<Item = &PathBuf> {
-        [
-            &self.on_init,
-            &self.on_call,
-            &self.on_cast,
-            &self.on_info,
-            &self.on_state_change,
-            &self.on_terminate,
-        ]
-        .into_iter()
-        .filter_map(Option::as_ref)
+        self.declared_slots().map(|(_slot, p)| p)
     }
 
     /// True when no callback is declared.
@@ -94,6 +103,78 @@ impl BehaviorSpec {
     pub fn is_empty(&self) -> bool {
         self.declared_paths().next().is_none()
     }
+
+    /// Reject operationally-meaningless callback path values on every
+    /// declared slot. Each slot remains optional — omitting a field
+    /// expresses "fall back to the runtime default callback"; the bug
+    /// being closed is *carrying* a foot-shaped path value, which the
+    /// layout checker's `root.join(p)` would either silently treat as
+    /// the project root (`PathBuf::new()`), escape the project root
+    /// (absolute path replaces `root` per `Path::join` semantics), or
+    /// traverse out of the root via `..` components.
+    ///
+    /// Three invariants per slot, evaluated in declaration order
+    /// (`:on-init` → `:on-call` → `:on-cast` → `:on-info` →
+    /// `:on-state-change` → `:on-terminate`) so the diagnostic for
+    /// multi-malformed manifests is deterministic:
+    ///
+    ///   - non-empty path string,
+    ///   - relative path (Lunatic-style sandbox: callbacks live under
+    ///     the caixa root, never in `/etc/...`),
+    ///   - no `..` components (relative paths must not escape the
+    ///     caixa root via parent-directory traversal).
+    ///
+    /// Mirrors the discipline applied to `:limits` axes
+    /// (`LimitsSpec::validate`) and to the M3 mesh `:entrada :paths`
+    /// invariants (`AplicacaoSpec::validate`) — every typed value
+    /// carried by a slot is either absent or value-shape valid.
+    pub fn validate(&self) -> Result<(), BehaviorError> {
+        for (slot, path) in self.declared_slots() {
+            validate_callback_path(slot, path.as_path())?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), BehaviorError> {
+    if path.as_os_str().is_empty() {
+        return Err(BehaviorError::EmptyPath { slot });
+    }
+    if path.is_absolute() {
+        return Err(BehaviorError::AbsolutePath {
+            slot,
+            path: path.to_path_buf(),
+        });
+    }
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err(BehaviorError::ParentEscape {
+            slot,
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum BehaviorError {
+    #[error(
+        ":behavior {slot} path is empty (omit the slot to fall back to the runtime default \
+         callback; do not declare an empty path)"
+    )]
+    EmptyPath { slot: &'static str },
+    #[error(
+        ":behavior {slot} path {} is absolute — callbacks must be relative to the caixa root, \
+         since the layout checker's `root.join(p)` would otherwise escape the project sandbox \
+         (Path::join replaces the base with an absolute right-hand side)",
+        path.display()
+    )]
+    AbsolutePath { slot: &'static str, path: PathBuf },
+    #[error(
+        ":behavior {slot} path {} contains a `..` component — callbacks must not traverse \
+         above the caixa root",
+        path.display()
+    )]
+    ParentEscape { slot: &'static str, path: PathBuf },
 }
 
 #[cfg(test)]
@@ -179,5 +260,126 @@ mod tests {
         let b: BehaviorSpec = serde_json::from_str(json).unwrap();
         assert_eq!(b.on_init, Some(PathBuf::from("a.lisp")));
         assert!(b.on_call.is_none());
+    }
+
+    // ── value-shape invariants on declared callback paths ──────────
+
+    #[test]
+    fn validate_default_is_ok() {
+        BehaviorSpec::default().validate().unwrap();
+    }
+
+    #[test]
+    fn validate_every_slot_relative_is_ok() {
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+        };
+        b.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_empty_path_per_slot() {
+        let cases: [(&'static str, fn(PathBuf) -> BehaviorSpec); 6] = [
+            (":on-init", |p| BehaviorSpec {
+                on_init: Some(p),
+                ..Default::default()
+            }),
+            (":on-call", |p| BehaviorSpec {
+                on_call: Some(p),
+                ..Default::default()
+            }),
+            (":on-cast", |p| BehaviorSpec {
+                on_cast: Some(p),
+                ..Default::default()
+            }),
+            (":on-info", |p| BehaviorSpec {
+                on_info: Some(p),
+                ..Default::default()
+            }),
+            (":on-state-change", |p| BehaviorSpec {
+                on_state_change: Some(p),
+                ..Default::default()
+            }),
+            (":on-terminate", |p| BehaviorSpec {
+                on_terminate: Some(p),
+                ..Default::default()
+            }),
+        ];
+        for (expected_slot, build) in cases {
+            let err = build(PathBuf::new()).validate().unwrap_err();
+            assert!(
+                matches!(err, BehaviorError::EmptyPath { slot } if slot == expected_slot),
+                "slot {expected_slot}: got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_absolute_path() {
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("/etc/passwd")),
+            ..Default::default()
+        };
+        let err = b.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            BehaviorError::AbsolutePath {
+                slot: ":on-init",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_parent_escape() {
+        let b = BehaviorSpec {
+            on_state_change: Some(PathBuf::from("../sibling/migrations.lisp")),
+            ..Default::default()
+        };
+        let err = b.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            BehaviorError::ParentEscape {
+                slot: ":on-state-change",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_parent_escape_mid_path() {
+        // `lib/../../escaped.lisp` is still a parent-traversal — must
+        // be caught regardless of where the `..` component sits.
+        let b = BehaviorSpec {
+            on_terminate: Some(PathBuf::from("lib/../../escaped.lisp")),
+            ..Default::default()
+        };
+        let err = b.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            BehaviorError::ParentEscape {
+                slot: ":on-terminate",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_diagnostic_order_is_deterministic() {
+        // Multiple bad slots — the first declared (`:on-init`) wins
+        // so authors see a stable, single-slot diagnostic.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::new()),
+            on_call: Some(PathBuf::from("/etc/passwd")),
+            on_terminate: Some(PathBuf::from("../escape.lisp")),
+            ..Default::default()
+        };
+        let err = b.validate().unwrap_err();
+        assert!(matches!(err, BehaviorError::EmptyPath { slot: ":on-init" }));
     }
 }

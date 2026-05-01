@@ -27,7 +27,7 @@ pub use aplicacao::{
     AplicacaoError, AplicacaoSpec, CircuitBreaker, Entrada, Membro, MeshPolicy, Placement,
     PlacementStrategy, RateLimit, WitContract, WitTarget,
 };
-pub use behavior::BehaviorSpec;
+pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepSource};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
