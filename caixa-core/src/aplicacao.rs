@@ -101,19 +101,33 @@ impl WitContract {
 
     /// Typed view of the contract's payload target. Enforces that the
     /// `:wit` shape and the carried `:endpoint`/`:subject`/`:slot`
-    /// fields agree:
+    /// fields agree, and that each carried value is itself
+    /// value-shape valid:
     ///
-    ///   - HTTP world (`wasi:http/*`, `http:*`) ⇒ exactly `:endpoint`
-    ///   - `PubSub` world (`nats:*`, `kafka:*`) ⇒ exactly `:subject`
-    ///   - Store world (`wasi:keyvalue/*`, `kv:*`) ⇒ exactly `:slot`
+    ///   - HTTP world (`wasi:http/*`, `http:*`) ⇒ exactly `:endpoint`,
+    ///     non-empty, leading-`/` (Cilium L7 `path` + Gateway API
+    ///     `PathPrefix` invariant — same shape required of `:entrada
+    ///     :paths`)
+    ///   - `PubSub` world (`nats:*`, `kafka:*`) ⇒ exactly `:subject`,
+    ///     non-empty (NATS / Kafka publish without a subject is a
+    ///     no-op subscribe, never the author's intent)
+    ///   - Store world (`wasi:keyvalue/*`, `kv:*`) ⇒ exactly `:slot`,
+    ///     non-empty (an empty slot template addresses the bucket
+    ///     root, defeating the per-key isolation the slot exists for)
     ///   - Anything else ⇒ none of the three; the contract is a pure
     ///     typed capability edge with no payload selector.
     ///
     /// Translates the Apollo Federation discipline ("conflicts are
     /// errors at compile time, not warnings at runtime";
     /// MESH-COMPOSITION §II.3) onto pleme-io's typed Aplicacao surface:
-    /// a contract whose WIT shape disagrees with its target field is
-    /// a build error, not a silent renderer drop.
+    /// a contract whose WIT shape disagrees with its target field, or
+    /// whose target field carries a value-shape-invalid string, is a
+    /// build error — not a silent renderer drop. The returned
+    /// [`WitTarget`] view's `&str` payload is therefore guaranteed
+    /// non-empty (and absolute, for `Http`); every downstream consumer
+    /// (caixa-mesh's L7 emission, the M3 Gateway/HTTPRoute renderer,
+    /// the M4 per-edge policy resolver) can rely on that without
+    /// re-checking.
     pub fn target(&self) -> Result<WitTarget<'_>, AplicacaoError> {
         let endpoint = self.endpoint.as_deref();
         let subject = self.subject.as_deref();
@@ -130,17 +144,29 @@ impl WitContract {
                     expected: "endpoint",
                 });
             }
-            return endpoint
-                .map(|e| WitTarget::Http { endpoint: e })
-                .ok_or_else(|| {
-                    let (de, para, wit) = edge();
-                    AplicacaoError::ContratoMissingTarget {
-                        de,
-                        para,
-                        wit,
-                        expected: "endpoint",
-                    }
+            let ep = endpoint.ok_or_else(|| {
+                let (de, para, wit) = edge();
+                AplicacaoError::ContratoMissingTarget {
+                    de,
+                    para,
+                    wit,
+                    expected: "endpoint",
+                }
+            })?;
+            if ep.is_empty() {
+                return Err(AplicacaoError::ContratoEndpointEmpty {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
                 });
+            }
+            if !ep.starts_with('/') {
+                return Err(AplicacaoError::ContratoEndpointNotAbsolute {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
+                    endpoint: ep.to_string(),
+                });
+            }
+            return Ok(WitTarget::Http { endpoint: ep });
         }
         if self.is_pubsub() {
             if endpoint.is_some() || slot.is_some() {
@@ -152,17 +178,22 @@ impl WitContract {
                     expected: "subject",
                 });
             }
-            return subject
-                .map(|s| WitTarget::PubSub { subject: s })
-                .ok_or_else(|| {
-                    let (de, para, wit) = edge();
-                    AplicacaoError::ContratoMissingTarget {
-                        de,
-                        para,
-                        wit,
-                        expected: "subject",
-                    }
+            let s = subject.ok_or_else(|| {
+                let (de, para, wit) = edge();
+                AplicacaoError::ContratoMissingTarget {
+                    de,
+                    para,
+                    wit,
+                    expected: "subject",
+                }
+            })?;
+            if s.is_empty() {
+                return Err(AplicacaoError::ContratoSubjectEmpty {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
                 });
+            }
+            return Ok(WitTarget::PubSub { subject: s });
         }
         if self.is_store() {
             if endpoint.is_some() || subject.is_some() {
@@ -174,7 +205,7 @@ impl WitContract {
                     expected: "slot",
                 });
             }
-            return slot.map(|s| WitTarget::Store { slot: s }).ok_or_else(|| {
+            let sl = slot.ok_or_else(|| {
                 let (de, para, wit) = edge();
                 AplicacaoError::ContratoMissingTarget {
                     de,
@@ -182,7 +213,14 @@ impl WitContract {
                     wit,
                     expected: "slot",
                 }
-            });
+            })?;
+            if sl.is_empty() {
+                return Err(AplicacaoError::ContratoSlotEmpty {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
+                });
+            }
+            return Ok(WitTarget::Store { slot: sl });
         }
 
         // Unrecognized WIT world — must not carry any payload target.
@@ -878,6 +916,34 @@ pub enum AplicacaoError {
         expected: &'static str,
     },
     #[error(
+        "HTTP contrato {de:?} → {para:?} :endpoint is empty (use a non-empty path \
+         like `/charge`; an empty endpoint renders as a `path: \"\"` Cilium L7 rule \
+         that matches no traffic and silently drops every request)"
+    )]
+    ContratoEndpointEmpty { de: String, para: String },
+    #[error(
+        "HTTP contrato {de:?} → {para:?} :endpoint {endpoint:?} must start with `/` \
+         (Cilium L7 :path + Gateway API PathPrefix invariant — same shape required of \
+         :entrada :paths)"
+    )]
+    ContratoEndpointNotAbsolute {
+        de: String,
+        para: String,
+        endpoint: String,
+    },
+    #[error(
+        "pub-sub contrato {de:?} → {para:?} :subject is empty (publish without a \
+         subject is a no-op subscribe; omit :subject only if the WIT world is not \
+         pub-sub-shaped)"
+    )]
+    ContratoSubjectEmpty { de: String, para: String },
+    #[error(
+        "store contrato {de:?} → {para:?} :slot is empty (an empty slot template \
+         addresses the bucket root, defeating the per-key isolation the slot exists \
+         for; omit :slot only if the WIT world is not store-shaped)"
+    )]
+    ContratoSlotEmpty { de: String, para: String },
+    #[error(
         "synchronous :contratos form a cycle ({}); break with a NATS pub-sub edge \
          or an event-sourced indirection (MESH-COMPOSITION §III.3)",
         cycle.join(" → ")
@@ -1286,6 +1352,176 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    // ── value-shape on WitTarget payload (endpoint / subject / slot) ──────
+
+    #[test]
+    fn rejects_http_contrato_with_empty_endpoint() {
+        // `Some("")` for an HTTP endpoint passes the presence check
+        // (target() previously returned WitTarget::Http { endpoint: "" })
+        // but renders as a `path: ""` Cilium L7 rule that matches no
+        // traffic. Same value-shape footgun closed for :entrada :paths
+        // entries (eb3456d).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some(String::new()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointEmpty { ref de, ref para }
+                if de == "cart" && para == "catalog"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_with_relative_endpoint() {
+        // Cilium L7 :path + Gateway API PathPrefix both require a
+        // leading `/`. Same shape required of :entrada :paths
+        // (eb3456d). Lifted into target() so every consumer of the
+        // typed WitTarget view inherits the guarantee.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("products/:id".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointNotAbsolute { ref endpoint, .. }
+                if endpoint == "products/:id"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_with_empty_subject() {
+        // NATS / Kafka publish without a subject is a no-op subscribe;
+        // never the author's intent. Same empty-string rejection as
+        // :membros :caixa, :placement :clusters entries, :entrada
+        // :paths entries — every value carried by every typed slot is
+        // value-shape-checked at validate().
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(String::new()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectEmpty { ref de, ref para }
+                if de == "cart" && para == "catalog"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_store_contrato_with_empty_slot() {
+        // An empty slot template addresses the bucket root, defeating
+        // the per-key isolation the slot exists for — a footgun on
+        // `wasi:keyvalue/store` whose closest analog is the empty
+        // shard-key rejected on :placement Sharded (c7c7799).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some(String::new()),
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotEmpty { ref de, ref para }
+                if de == "cart" && para == "catalog"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn http_contrato_root_endpoint_validates() {
+        // Pin the boundary case: a single-`/` endpoint is the catch-all
+        // form the Gateway HTTPRoute renderer falls back to when
+        // :entrada :paths is empty (caixa-mesh::gateway_routes), so it
+        // must remain a valid contrato endpoint too.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "catalog", "/"));
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn target_view_payload_is_guaranteed_nonempty_after_target_call() {
+        // The compounding theorem: every &str inside a WitTarget
+        // returned by target() is non-empty (and absolute, for Http).
+        // Renderers downstream of typed_view() can rely on this
+        // without re-checking — the type system carries the proof.
+        let http = contract_http("cart", "catalog", "/x");
+        match http.target().unwrap() {
+            WitTarget::Http { endpoint } => {
+                assert!(!endpoint.is_empty());
+                assert!(endpoint.starts_with('/'));
+            }
+            other => panic!("expected Http, got {other:?}"),
+        }
+        let nats = WitContract {
+            de: "a".into(),
+            para: "b".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("topic.x".into()),
+            slot: None,
+        };
+        match nats.target().unwrap() {
+            WitTarget::PubSub { subject } => assert!(!subject.is_empty()),
+            other => panic!("expected PubSub, got {other:?}"),
+        }
+        let kv = WitContract {
+            de: "a".into(),
+            para: "b".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("checkout/$orderId".into()),
+        };
+        match kv.target().unwrap() {
+            WitTarget::Store { slot } => assert!(!slot.is_empty()),
+            other => panic!("expected Store, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn target_diagnostic_names_offending_endpoint_value() {
+        // When the malformed endpoint string is non-trivial, the
+        // diagnostic carries the actual value back to the author —
+        // not a generic "endpoint malformed" error.
+        let bad = WitContract {
+            de: "src".into(),
+            para: "dst".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("api/v1/charge".into()),
+            subject: None,
+            slot: None,
+        };
+        match bad.target().unwrap_err() {
+            AplicacaoError::ContratoEndpointNotAbsolute { de, para, endpoint } => {
+                assert_eq!(de, "src");
+                assert_eq!(para, "dst");
+                assert_eq!(endpoint, "api/v1/charge");
+            }
+            other => panic!("expected ContratoEndpointNotAbsolute, got {other:?}"),
+        }
     }
 
     #[test]
