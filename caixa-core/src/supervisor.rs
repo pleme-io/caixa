@@ -114,7 +114,13 @@ pub struct SupervisorSpec {
     pub max_restarts: u32,
 
     /// Sliding window for `max_restarts`. Authored as a duration
-    /// string (`"60s"`, `"5m"`); zero or absent = "never reset".
+    /// string (`"60s"`, `"5m"`); absent = "never reset". A `Some(0s)`
+    /// is rejected by [`Self::validate`] — Erlang/OTP's
+    /// `MaxIntensity / Period` invariant requires a positive window
+    /// (a zero-period supervisor either trips on the first failure or
+    /// never trips, depending on operator interpretation, neither of
+    /// which is the author's intent). Omit the slot to express "no
+    /// reset"; carry a positive duration to express the sliding window.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -145,7 +151,33 @@ impl Default for SupervisorSpec {
 
 impl SupervisorSpec {
     /// Validate the supervisor's typed shape — strategy ↔ children
-    /// invariants, max_restarts > 0, etc.
+    /// invariants, max_restarts > 0, restart_window > 0 when set,
+    /// per-child non-empty + duplicate-free names.
+    ///
+    /// Mirrors the value-shape discipline applied to every other
+    /// typed slot:
+    ///
+    ///   - `Some(Duration::ZERO)` on a Duration-bearing axis is the
+    ///     same "0 means the opposite of what you think" footgun
+    ///     closed for `:politicas :timeout` (Envoy interprets a zero
+    ///     timeout as `infinite`), `:politicas :circuit-breaker
+    ///     :window`, and `:limits :wall-clock`. The
+    ///     `MaxIntensity / Period` ratio in Erlang/OTP's
+    ///     `supervisor` requires `Period > 0`; a zero period either
+    ///     trips on the first failure or never trips depending on
+    ///     operator interpretation, neither of which is the
+    ///     author's intent. Omit `:restart-window` to express "no
+    ///     reset"; carry a positive duration to express the window.
+    ///   - duplicate `:children` `:caixa` names are the same
+    ///     graph-node-set / multiset distinction closed for
+    ///     `:membros` (4bb3f3d), `:placement :clusters` (c7c7799),
+    ///     and `:entrada :paths` (eb3456d). Two children with the
+    ///     same `:caixa` materialize as two ComputeUnits with the
+    ///     same name in the cluster's HelmRelease values, one
+    ///     silently overwriting the other. Erlang/OTP's
+    ///     `child_spec.id` is required-unique per supervisor;
+    ///     pleme-io enforces the same set-not-multiset shape on
+    ///     `:caixa` (the load-bearing identity in our renderer).
     pub fn validate(&self) -> Result<(), SupervisorError> {
         match self.estrategia {
             RestartStrategy::SimpleOneForOne => {
@@ -166,12 +198,21 @@ impl SupervisorSpec {
         if self.max_restarts == 0 {
             return Err(SupervisorError::ZeroMaxRestarts);
         }
+        if matches!(self.restart_window, Some(d) if d.is_zero()) {
+            return Err(SupervisorError::RestartWindowZero);
+        }
+        let mut seen = std::collections::HashSet::new();
         for child in &self.children {
             if child.caixa.is_empty() {
                 return Err(SupervisorError::EmptyChildName);
             }
             if child.versao.is_empty() {
                 return Err(SupervisorError::EmptyChildVersion {
+                    caixa: child.caixa.clone(),
+                });
+            }
+            if !seen.insert(child.caixa.as_str()) {
+                return Err(SupervisorError::DuplicateChildCaixa {
                     caixa: child.caixa.clone(),
                 });
             }
@@ -188,10 +229,23 @@ pub enum SupervisorError {
     SimpleOneForOneWithStaticChildren,
     #[error(":max-restarts must be > 0")]
     ZeroMaxRestarts,
+    #[error(
+        ":restart-window must be > 0 when set — Erlang/OTP's MaxIntensity/Period \
+         requires Period > 0; a zero window either trips on the first failure or \
+         never trips depending on operator interpretation. Omit :restart-window to \
+         express `never reset`; carry a positive duration to express the window."
+    )]
+    RestartWindowZero,
     #[error("child entry has empty :caixa name")]
     EmptyChildName,
     #[error("child {caixa:?} has empty :versao constraint")]
     EmptyChildVersion { caixa: String },
+    #[error(
+        "child {caixa:?} appears more than once (Erlang/OTP requires unique \
+         child_spec.id per supervisor; duplicate children materialize as duplicate \
+         ComputeUnits in the rendered chart, one silently overwriting the other)"
+    )]
+    DuplicateChildCaixa { caixa: String },
 }
 
 /// Shared duration string codec for the typed slots that take a
@@ -347,6 +401,121 @@ mod tests {
             s.validate().unwrap_err(),
             SupervisorError::EmptyChildVersion { .. }
         ));
+    }
+
+    // ── value-shape: zero restart_window + duplicate child names ──────────
+
+    #[test]
+    fn validate_accepts_none_restart_window() {
+        // Omitted `:restart-window` is the "never reset" sentinel —
+        // valid by design. Mirrors :limits axes where None = unbounded.
+        let s = SupervisorSpec {
+            restart_window: None,
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_zero_restart_window() {
+        // Same "0 means the opposite of what you think" footgun closed
+        // for :politicas :timeout (Envoy treats 0s as infinite) and
+        // :limits :wall-clock (wasmtime traps before the call starts).
+        // Erlang/OTP's MaxIntensity/Period requires Period > 0.
+        let s = SupervisorSpec {
+            restart_window: Some(Duration::ZERO),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowZero
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_child_caixa() {
+        // Two children with the same :caixa render to two ComputeUnits
+        // with the same name in the cluster's HelmRelease values —
+        // one silently overwrites the other. Erlang/OTP's child_spec.id
+        // is required-unique per supervisor; same set-not-multiset
+        // discipline applied here as for :membros / :placement
+        // :clusters / :entrada :paths.
+        let s = SupervisorSpec {
+            children: vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("cache", "^0.1", RestartPolicy::Transient),
+                child("worker", "^0.2", RestartPolicy::Permanent),
+            ],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, SupervisorError::DuplicateChildCaixa { ref caixa } if caixa == "worker"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_duplicate_child_diagnostic_names_first_collision() {
+        // Iteration walks the :children list in declaration order —
+        // the diagnostic names the first repeat, deterministically,
+        // even when multiple names duplicate.
+        let s = SupervisorSpec {
+            children: vec![
+                child("a", "^0.1", RestartPolicy::Permanent),
+                child("b", "^0.1", RestartPolicy::Permanent),
+                child("a", "^0.1", RestartPolicy::Permanent),
+                child("b", "^0.1", RestartPolicy::Permanent),
+            ],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, SupervisorError::DuplicateChildCaixa { ref caixa } if caixa == "a"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_simple_one_for_one_skips_uniqueness_check() {
+        // SimpleOneForOne supervisors carry no static children — the
+        // duplicate-child loop never runs. A zero-window declaration
+        // on a SimpleOneForOne supervisor still trips the window check
+        // (window applies to dynamic children too).
+        let s = SupervisorSpec {
+            estrategia: RestartStrategy::SimpleOneForOne,
+            restart_window: None,
+            children: vec![],
+            ..SupervisorSpec::default()
+        };
+        s.validate().unwrap();
+        let s_zero = SupervisorSpec {
+            estrategia: RestartStrategy::SimpleOneForOne,
+            restart_window: Some(Duration::ZERO),
+            children: vec![],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s_zero.validate().unwrap_err(),
+            SupervisorError::RestartWindowZero
+        );
+    }
+
+    #[test]
+    fn validate_zero_window_runs_after_max_restarts_check() {
+        // Pin the order: max_restarts == 0 fires before
+        // restart_window == 0s, so an author with both wrong sees the
+        // counter-axis diagnostic first (matches the order in the
+        // struct and in the doc comment).
+        let s = SupervisorSpec {
+            max_restarts: 0,
+            restart_window: Some(Duration::ZERO),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(s.validate().unwrap_err(), SupervisorError::ZeroMaxRestarts);
     }
 
     #[test]
