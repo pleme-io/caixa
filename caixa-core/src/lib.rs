@@ -35,7 +35,9 @@ pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{LimitsError, LimitsSpec};
 pub use manifest::Caixa;
 pub use render::{
-    M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, RenderError, servico_m2_overlay,
+    LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
+    M2_KEY_UPGRADE_FROM, PLEME_LABEL_PREFIX, RenderError, pleme_program_in_aplicacao_selector,
+    pleme_program_selector, servico_m2_overlay,
 };
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction};

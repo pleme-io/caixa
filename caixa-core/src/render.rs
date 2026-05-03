@@ -61,6 +61,96 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical pleme-io label namespace prefix. Every cluster object
+/// emitted by any caixa-side renderer that needs to carry the
+/// pleme-io workload identity uses this prefix; runtime label
+/// injectors (`lareira-fleet-programs` chart's pod template,
+/// `pleme-computeunit` library chart's identity sidecar, the
+/// caixa-operator's pod-mutating webhook) and runtime label
+/// consumers (Cilium identity-based policy, Hubble flow attribution,
+/// `caixa-mesh`'s policy / Gateway emission, future
+/// observability/tracing renderers) all spell the same prefix
+/// exactly the same way — drift between *any* of those = a
+/// CiliumNetworkPolicy that matches no pods, a Hubble flow that
+/// can't be correlated to its workload, an OpenTelemetry resource
+/// attribute that doesn't join to its caixa lacre.
+///
+/// Lifted to a const so a future top-level rebrand or multi-tenant
+/// label-namespace migration is a one-line edit, not a search-and-
+/// replace across every renderer crate.
+pub const PLEME_LABEL_PREFIX: &str = "pleme.pleme.io";
+
+/// Canonical pleme-io label key naming the **Aplicacao** the workload
+/// belongs to. Together with [`LABEL_PROGRAM`] this is the load-bearing
+/// identity tuple every per-Aplicacao mesh renderer (Cilium, Gateway,
+/// future caixa-otel) keys off — `(LABEL_APLICACAO, LABEL_PROGRAM)` =
+/// the unique workload selector inside one cluster.
+pub const LABEL_APLICACAO: &str = "pleme.pleme.io/aplicacao";
+
+/// Canonical pleme-io label key naming the **program** (i.e. the
+/// caixa Servico's `:nome`) a pod runs. `LABEL_APLICACAO` +
+/// `LABEL_PROGRAM` together pick exactly one workload identity in one
+/// cluster. Used as the `matchLabels` axis on every Cilium
+/// `endpointSelector` / `fromEndpoints` rule and on Gateway API
+/// `backendRefs` selectors emitted by [`crate`]'s downstream
+/// renderers.
+pub const LABEL_PROGRAM: &str = "pleme.pleme.io/program";
+
+/// Canonical pleme-io label key naming the **contrato** (the M3
+/// `:contratos` edge: `<de>-to-<para>`) a CiliumNetworkPolicy enforces.
+/// Carried on the policy's *own* labels (not on workload pods) so
+/// Hubble + cluster operators can group flows by typed contrato edge,
+/// not just by source/destination pod identity.
+pub const LABEL_CONTRATO: &str = "pleme.pleme.io/contrato";
+
+/// Build the canonical Cilium `matchLabels` selector for a single
+/// pleme-io program **scoped to its Aplicacao** — the safe default
+/// every per-Aplicacao mesh renderer (caixa-mesh's
+/// `cilium_network_policies` `fromEndpoints`, future per-edge policy
+/// emission, Gateway API `backendRefs` filters) should use, since
+/// two different Aplicacaos can carry programs with the same `:nome`
+/// in the same cluster (e.g. two `cart` Servicos under different
+/// applications) and a `LABEL_PROGRAM`-only selector would match
+/// pods belonging to the wrong Aplicacao.
+///
+/// Returned as a [`BTreeMap`] keyed by `&'static str` so iteration is
+/// alphabetical (THEORY.md §V.2.7 render determinism: the rendered
+/// YAML's `matchLabels:` block appears in a deterministic order
+/// independent of source-code declaration order). The two keys
+/// alphabetize as [`LABEL_APLICACAO`] before [`LABEL_PROGRAM`], the
+/// same order the renderer's `serde_yaml::Mapping` iteration will
+/// preserve through to the rendered YAML.
+#[must_use]
+pub fn pleme_program_in_aplicacao_selector(
+    program: &str,
+    aplicacao: &str,
+) -> BTreeMap<&'static str, String> {
+    let mut out = BTreeMap::new();
+    out.insert(LABEL_APLICACAO, aplicacao.to_string());
+    out.insert(LABEL_PROGRAM, program.to_string());
+    out
+}
+
+/// Build the canonical Cilium `matchLabels` selector for a single
+/// pleme-io program **without** the Aplicacao constraint —
+/// deliberately broader than [`pleme_program_in_aplicacao_selector`]
+/// for the cases where matching a program across every Aplicacao that
+/// hosts it is the *intent* (cluster-wide rate limits, breakglass
+/// observability, the per-cluster operator identity scope).
+///
+/// **Prefer [`pleme_program_in_aplicacao_selector`]** for typed
+/// per-Aplicacao mesh emission — using `pleme_program_selector` there
+/// would let a policy unintentionally match a same-named program in
+/// a different Aplicacao. Both helpers exist so the caller's *intent*
+/// (Aplicacao-scoped vs. cluster-wide) is named at the call site,
+/// not buried in inline label-key string literals.
+#[must_use]
+pub fn pleme_program_selector(program: &str) -> BTreeMap<&'static str, String> {
+    let mut out = BTreeMap::new();
+    out.insert(LABEL_PROGRAM, program.to_string());
+    out
+}
+
 /// Render the M2 typed-slot YAML overlay for a Caixa: the camelCase
 /// `(key, value)` fragments every per-Servico renderer
 /// ([`caixa-helm`]'s values block, [`caixa-flux`]'s programs.yaml
@@ -268,6 +358,98 @@ mod tests {
         assert_eq!(
             keys,
             vec![M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM]
+        );
+    }
+
+    #[test]
+    fn pleme_label_consts_share_canonical_prefix() {
+        // Single-source-of-truth invariant: every pleme-io label key
+        // is `<PLEME_LABEL_PREFIX>/<axis>`. A future label-namespace
+        // rebrand is a one-line PLEME_LABEL_PREFIX edit + this test
+        // pins the contract that no other label leaks past the lift.
+        for k in [LABEL_APLICACAO, LABEL_PROGRAM, LABEL_CONTRATO] {
+            assert!(
+                k.starts_with(PLEME_LABEL_PREFIX),
+                "label key {k:?} must share the {PLEME_LABEL_PREFIX:?} prefix"
+            );
+            // Each label is `<prefix>/<axis>` — the suffix is non-empty
+            // (the `/` separator is followed by the axis name).
+            let suffix = k.strip_prefix(PLEME_LABEL_PREFIX).unwrap();
+            assert!(suffix.starts_with('/'));
+            assert!(suffix.len() > 1, "axis name must be non-empty for {k:?}");
+        }
+    }
+
+    #[test]
+    fn pleme_label_consts_have_expected_canonical_values() {
+        // Pin the actual string values so a typo in the lift can't
+        // silently rebrand the whole pleme-io label namespace. These
+        // strings are part of the cluster-side contract with the
+        // lareira-fleet-programs chart + Cilium identity layer + Hubble
+        // flow attribution; changing any of them is a coordinated
+        // multi-repo migration, not an incidental edit.
+        assert_eq!(PLEME_LABEL_PREFIX, "pleme.pleme.io");
+        assert_eq!(LABEL_APLICACAO, "pleme.pleme.io/aplicacao");
+        assert_eq!(LABEL_PROGRAM, "pleme.pleme.io/program");
+        assert_eq!(LABEL_CONTRATO, "pleme.pleme.io/contrato");
+    }
+
+    #[test]
+    fn pleme_program_selector_carries_only_program() {
+        let sel = pleme_program_selector("cart");
+        assert_eq!(sel.len(), 1);
+        assert_eq!(sel.get(LABEL_PROGRAM).map(String::as_str), Some("cart"));
+        assert!(sel.get(LABEL_APLICACAO).is_none());
+    }
+
+    #[test]
+    fn pleme_program_in_aplicacao_selector_carries_both_axes() {
+        let sel = pleme_program_in_aplicacao_selector("cart", "checkout");
+        assert_eq!(sel.len(), 2);
+        assert_eq!(sel.get(LABEL_PROGRAM).map(String::as_str), Some("cart"));
+        assert_eq!(
+            sel.get(LABEL_APLICACAO).map(String::as_str),
+            Some("checkout")
+        );
+    }
+
+    #[test]
+    fn pleme_program_in_aplicacao_selector_iterates_alphabetically() {
+        // BTreeMap iteration is sorted by key — pin that the renderer
+        // (which translates the selector into a serde_yaml::Mapping
+        // by iteration) gets a deterministic key order. `aplicacao`
+        // sorts before `program`, so the rendered YAML's
+        // `matchLabels:` block appears in that order regardless of
+        // call-site arg order. Mirrors the M2 overlay helper's
+        // alphabetical-iteration determinism property
+        // (THEORY.md §V.2.7 render determinism).
+        let sel = pleme_program_in_aplicacao_selector("cart", "checkout");
+        let keys: Vec<_> = sel.keys().copied().collect();
+        assert_eq!(keys, vec![LABEL_APLICACAO, LABEL_PROGRAM]);
+    }
+
+    #[test]
+    fn pleme_program_in_aplicacao_selector_arg_order_independent() {
+        // Renaming the program vs. the aplicacao must each only affect
+        // its own axis — pin that the helper doesn't transpose its
+        // args silently (a footgun the prior inline-string approach
+        // had: `program: <de>` and `aplicacao: <name>` were two
+        // adjacent insert() calls with structurally identical arms,
+        // trivially swappable in a refactor).
+        let sel = pleme_program_in_aplicacao_selector("cart", "checkout");
+        assert_eq!(sel.get(LABEL_PROGRAM).map(String::as_str), Some("cart"));
+        assert_eq!(
+            sel.get(LABEL_APLICACAO).map(String::as_str),
+            Some("checkout")
+        );
+        let swapped = pleme_program_in_aplicacao_selector("checkout", "cart");
+        assert_eq!(
+            swapped.get(LABEL_PROGRAM).map(String::as_str),
+            Some("checkout")
+        );
+        assert_eq!(
+            swapped.get(LABEL_APLICACAO).map(String::as_str),
+            Some("cart")
         );
     }
 

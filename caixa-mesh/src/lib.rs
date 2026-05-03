@@ -31,7 +31,10 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, WitTarget, aplicacao::AplicacaoSpec};
+use caixa_core::{
+    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, WitTarget,
+    aplicacao::AplicacaoSpec, pleme_program_in_aplicacao_selector, pleme_program_selector,
+};
 use thiserror::Error;
 
 /// Errors caixa-mesh can raise.
@@ -111,6 +114,30 @@ pub fn typed_view(caixa: &Caixa) -> Result<AplicacaoSpec, Error> {
 /// doesn't pin one. Mirrors `caixa_flux::DEFAULT_NAMESPACE`.
 pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 
+/// Convert a typed string-valued label/annotation map (e.g. one of
+/// the canonical [`caixa_core::pleme_program_selector`] /
+/// [`caixa_core::pleme_program_in_aplicacao_selector`] selectors)
+/// into a `serde_yaml::Mapping` with `String → String` shape, the
+/// surface every Cilium / Gateway / HTTPRoute selector field expects.
+/// Iteration is alphabetical (the input is a `BTreeMap`), so the
+/// rendered YAML's key order is deterministic regardless of source-
+/// code declaration order.
+fn yaml_string_mapping<K, V, M>(m: M) -> serde_yaml::Value
+where
+    M: IntoIterator<Item = (K, V)>,
+    K: Into<String>,
+    V: Into<String>,
+{
+    let mut out = serde_yaml::Mapping::new();
+    for (k, v) in m {
+        out.insert(
+            serde_yaml::Value::String(k.into()),
+            serde_yaml::Value::String(v.into()),
+        );
+    }
+    serde_yaml::Value::Mapping(out)
+}
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per `:contratos`
@@ -151,13 +178,17 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             serde_yaml::Value::String("namespace".into()),
             serde_yaml::Value::String(namespace.into()),
         );
+        // Policy's own labels — `aplicacao` (which graph) and
+        // `contrato` (which typed edge). Keys come from
+        // caixa_core::render so a future label-namespace rebrand is a
+        // one-line edit, not a search-and-replace across renderers.
         let mut labels = serde_yaml::Mapping::new();
         labels.insert(
-            serde_yaml::Value::String("pleme.pleme.io/aplicacao".into()),
+            serde_yaml::Value::String(LABEL_APLICACAO.into()),
             serde_yaml::Value::String(caixa.nome.clone()),
         );
         labels.insert(
-            serde_yaml::Value::String("pleme.pleme.io/contrato".into()),
+            serde_yaml::Value::String(LABEL_CONTRATO.into()),
             serde_yaml::Value::String(format!("{}-to-{}", c.de, c.para)),
         );
         metadata.insert(
@@ -169,32 +200,25 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             serde_yaml::Value::Mapping(metadata),
         );
 
-        // spec.endpointSelector — match the destination Servico
+        // spec.endpointSelector — match the destination Servico's
+        // identity. Single-axis (program-only) selector; see
+        // caixa_core::render::pleme_program_selector for the deliberate
+        // intent / safety tradeoff vs. the in-aplicacao variant.
         let mut endpoint_selector = serde_yaml::Mapping::new();
-        let mut match_labels = serde_yaml::Mapping::new();
-        match_labels.insert(
-            serde_yaml::Value::String("pleme.pleme.io/program".into()),
-            serde_yaml::Value::String(c.para.clone()),
-        );
         endpoint_selector.insert(
             serde_yaml::Value::String("matchLabels".into()),
-            serde_yaml::Value::Mapping(match_labels),
+            yaml_string_mapping(pleme_program_selector(&c.para)),
         );
 
-        // ingress[0]: from the source Servico in the same Aplicacao
-        let mut from_match = serde_yaml::Mapping::new();
-        from_match.insert(
-            serde_yaml::Value::String("pleme.pleme.io/program".into()),
-            serde_yaml::Value::String(c.de.clone()),
-        );
-        from_match.insert(
-            serde_yaml::Value::String("pleme.pleme.io/aplicacao".into()),
-            serde_yaml::Value::String(caixa.nome.clone()),
-        );
+        // ingress[0]: from the source Servico, scoped to this
+        // Aplicacao (so a same-named program in a different Aplicacao
+        // can't satisfy the rule). Two-axis selector via the
+        // canonical helper — call-site reads as intent, not as five
+        // hand-written insert() calls.
         let mut from_endpoint = serde_yaml::Mapping::new();
         from_endpoint.insert(
             serde_yaml::Value::String("matchLabels".into()),
-            serde_yaml::Value::Mapping(from_match),
+            yaml_string_mapping(pleme_program_in_aplicacao_selector(&c.de, &caixa.nome)),
         );
         let mut ingress_rule = serde_yaml::Mapping::new();
         ingress_rule.insert(
@@ -626,7 +650,7 @@ mod tests {
                 .and_then(|s| s.get("endpointSelector"))
                 .and_then(|e| e.get("matchLabels"))
                 .unwrap();
-            assert!(endpoint.get("pleme.pleme.io/program").is_some());
+            assert!(endpoint.get(LABEL_PROGRAM).is_some());
             // Source endpoint must include both program + aplicacao labels
             let from = p
                 .get("spec")
@@ -639,9 +663,133 @@ mod tests {
                 .and_then(|e| e.get("matchLabels"))
                 .unwrap();
             assert_eq!(
-                from.get("pleme.pleme.io/aplicacao")
+                from.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
+                Some("checkout")
+            );
+            let from_program = from.get(LABEL_PROGRAM).and_then(|v| v.as_str()).unwrap();
+            assert!(
+                from_program == "cart" || from_program == "payment",
+                "fromEndpoints.matchLabels.{LABEL_PROGRAM} = {from_program:?} \
+                 must name the source caixa of one of the fixture's two contratos"
+            );
+        }
+    }
+
+    #[test]
+    fn cilium_policy_metadata_labels_use_lifted_consts() {
+        // The policy's own labels (carried at metadata.labels, not on
+        // workload pods) must come through caixa_core::render's typed
+        // constants. Pinning the keys via the lifted consts (instead
+        // of inline `"pleme.pleme.io/aplicacao"` strings) makes drift
+        // between render-side emission and consumer-side selection
+        // (Hubble flow grouping, operator policy filters) a build
+        // error: a future label-namespace rename is one PLEME_LABEL_PREFIX
+        // edit, and this test pins that the rename actually flows
+        // through to the policy metadata.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        for p in &policies {
+            let labels = p
+                .get("metadata")
+                .and_then(|m| m.get("labels"))
+                .and_then(|l| l.as_mapping())
+                .expect("policy metadata.labels mapping");
+            assert_eq!(
+                labels
+                    .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
                     .and_then(|v| v.as_str()),
                 Some("checkout")
+            );
+            // The contrato label is `<de>-to-<para>`; both fixture
+            // edges have :de = "cart".
+            let contrato_val = labels
+                .get(serde_yaml::Value::String(LABEL_CONTRATO.into()))
+                .and_then(|v| v.as_str())
+                .expect("contrato label present");
+            assert!(
+                contrato_val.starts_with("cart-to-"),
+                "contrato label {contrato_val:?} must follow `<de>-to-<para>` shape"
+            );
+            // No leaked stale labels — every pleme-prefixed key on the
+            // policy's own metadata must come from the lifted const set.
+            // (Workload-identity labels live elsewhere — this only
+            // checks the policy's *own* metadata.labels block.)
+            for (k, _) in labels {
+                if let Some(s) = k.as_str() {
+                    if s.starts_with(caixa_core::PLEME_LABEL_PREFIX) {
+                        assert!(
+                            s == LABEL_APLICACAO || s == LABEL_CONTRATO,
+                            "policy metadata.labels carries unexpected pleme-prefixed key {s:?} \
+                             (only LABEL_APLICACAO + LABEL_CONTRATO are canonical here)"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cilium_endpoint_selector_is_program_only() {
+        // The destination matchLabels must be the single-axis
+        // (program-only) selector — pinning that the lift to the
+        // typed helper preserves the existing one-key semantic
+        // (caixa-mesh deliberately matches every pod with the
+        // destination program name in this cluster, regardless of
+        // Aplicacao). If a future change wants to scope the
+        // destination by Aplicacao too, that's an intentional
+        // semantic shift, not an accidental drift.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        for p in &policies {
+            let selector = p
+                .get("spec")
+                .and_then(|s| s.get("endpointSelector"))
+                .and_then(|e| e.get("matchLabels"))
+                .and_then(|m| m.as_mapping())
+                .expect("endpointSelector.matchLabels mapping");
+            assert_eq!(
+                selector.len(),
+                1,
+                "destination endpointSelector must be the program-only selector"
+            );
+            assert!(
+                selector
+                    .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
+                    .is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn cilium_from_endpoints_carries_aplicacao_scoped_selector() {
+        // The source fromEndpoints.matchLabels must be the two-axis
+        // selector (program + aplicacao) — pinning that the lift to
+        // pleme_program_in_aplicacao_selector preserves the safety
+        // property that a same-named program in a different Aplicacao
+        // cannot satisfy the rule.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        for p in &policies {
+            let from = p
+                .get("spec")
+                .and_then(|s| s.get("ingress"))
+                .and_then(|i| i.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|i| i.get("fromEndpoints"))
+                .and_then(|e| e.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|e| e.get("matchLabels"))
+                .and_then(|m| m.as_mapping())
+                .expect("fromEndpoints[0].matchLabels mapping");
+            assert_eq!(
+                from.len(),
+                2,
+                "source fromEndpoints must be the program-in-aplicacao selector (2 axes)"
+            );
+            assert!(
+                from.get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
+                    .is_some()
+            );
+            assert!(
+                from.get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
+                    .is_some()
             );
         }
     }
