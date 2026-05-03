@@ -61,6 +61,8 @@ pub enum Error {
     MissingField(&'static str),
     #[error("yaml: {0}")]
     Yaml(#[from] serde_yaml::Error),
+    #[error("render: {0}")]
+    Render(#[from] caixa_core::RenderError),
 }
 
 /// Default cluster-wide namespace for caixa Servicos when the
@@ -129,30 +131,13 @@ pub fn programs_yaml_entry(
     // `:upgrade-from` fields all the way to the cluster operator.
     // Spec values from computeunit.yaml take precedence (entry already
     // populated above); slots only on the Caixa flow through here.
-    if let Some(limits) = &caixa.limits {
-        if !limits.is_empty() {
-            entry
-                .entry(serde_yaml::Value::String("limits".into()))
-                .or_insert_with(|| {
-                    serde_yaml::to_value(limits).unwrap_or(serde_yaml::Value::Null)
-                });
-        }
-    }
-    if let Some(behavior) = &caixa.behavior {
-        if !behavior.is_empty() {
-            entry
-                .entry(serde_yaml::Value::String("behavior".into()))
-                .or_insert_with(|| {
-                    serde_yaml::to_value(behavior).unwrap_or(serde_yaml::Value::Null)
-                });
-        }
-    }
-    if !caixa.upgrade_from.is_empty() {
+    // Shared with caixa-helm::build_values_yaml via
+    // caixa_core::render::servico_m2_overlay so both renderers agree
+    // on key naming + emptiness rules + serialization-error handling.
+    for (key, value) in caixa_core::servico_m2_overlay(caixa)? {
         entry
-            .entry(serde_yaml::Value::String("upgradeFrom".into()))
-            .or_insert_with(|| {
-                serde_yaml::to_value(&caixa.upgrade_from).unwrap_or(serde_yaml::Value::Null)
-            });
+            .entry(serde_yaml::Value::String(key.to_string()))
+            .or_insert(value);
     }
 
     Ok(serde_yaml::Value::Mapping(entry))
