@@ -31,9 +31,12 @@
 
 #![allow(clippy::module_name_repetitions)]
 
+use std::collections::BTreeMap;
+
 use caixa_core::{
-    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, WitTarget,
-    aplicacao::AplicacaoSpec, pleme_program_in_aplicacao_selector, pleme_program_selector,
+    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, WitTarget, aplicacao::AplicacaoSpec,
+    kube_resource_skeleton, pleme_program_in_aplicacao_selector, pleme_program_selector,
+    yaml_string_mapping,
 };
 use thiserror::Error;
 
@@ -114,30 +117,6 @@ pub fn typed_view(caixa: &Caixa) -> Result<AplicacaoSpec, Error> {
 /// doesn't pin one. Mirrors `caixa_flux::DEFAULT_NAMESPACE`.
 pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 
-/// Convert a typed string-valued label/annotation map (e.g. one of
-/// the canonical [`caixa_core::pleme_program_selector`] /
-/// [`caixa_core::pleme_program_in_aplicacao_selector`] selectors)
-/// into a `serde_yaml::Mapping` with `String → String` shape, the
-/// surface every Cilium / Gateway / HTTPRoute selector field expects.
-/// Iteration is alphabetical (the input is a `BTreeMap`), so the
-/// rendered YAML's key order is deterministic regardless of source-
-/// code declaration order.
-fn yaml_string_mapping<K, V, M>(m: M) -> serde_yaml::Value
-where
-    M: IntoIterator<Item = (K, V)>,
-    K: Into<String>,
-    V: Into<String>,
-{
-    let mut out = serde_yaml::Mapping::new();
-    for (k, v) in m {
-        out.insert(
-            serde_yaml::Value::String(k.into()),
-            serde_yaml::Value::String(v.into()),
-        );
-    }
-    serde_yaml::Value::Mapping(out)
-}
-
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per `:contratos`
@@ -160,44 +139,23 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     let namespace = DEFAULT_NAMESPACE; // operators scope per-cluster manifests
     let mut out = Vec::with_capacity(spec.contratos.len());
     for c in &spec.contratos {
-        let mut policy = serde_yaml::Mapping::new();
-        policy.insert(
-            serde_yaml::Value::String("apiVersion".into()),
-            serde_yaml::Value::String("cilium.io/v2".into()),
-        );
-        policy.insert(
-            serde_yaml::Value::String("kind".into()),
-            serde_yaml::Value::String("CiliumNetworkPolicy".into()),
-        );
-        let mut metadata = serde_yaml::Mapping::new();
-        metadata.insert(
-            serde_yaml::Value::String("name".into()),
-            serde_yaml::Value::String(format!("{}-{}-to-{}", caixa.nome, c.de, c.para)),
-        );
-        metadata.insert(
-            serde_yaml::Value::String("namespace".into()),
-            serde_yaml::Value::String(namespace.into()),
-        );
         // Policy's own labels — `aplicacao` (which graph) and
         // `contrato` (which typed edge). Keys come from
         // caixa_core::render so a future label-namespace rebrand is a
         // one-line edit, not a search-and-replace across renderers.
-        let mut labels = serde_yaml::Mapping::new();
-        labels.insert(
-            serde_yaml::Value::String(LABEL_APLICACAO.into()),
-            serde_yaml::Value::String(caixa.nome.clone()),
-        );
-        labels.insert(
-            serde_yaml::Value::String(LABEL_CONTRATO.into()),
-            serde_yaml::Value::String(format!("{}-to-{}", c.de, c.para)),
-        );
-        metadata.insert(
-            serde_yaml::Value::String("labels".into()),
-            serde_yaml::Value::Mapping(labels),
-        );
-        policy.insert(
-            serde_yaml::Value::String("metadata".into()),
-            serde_yaml::Value::Mapping(metadata),
+        let mut labels = BTreeMap::new();
+        labels.insert(LABEL_APLICACAO, caixa.nome.clone());
+        labels.insert(LABEL_CONTRATO, format!("{}-to-{}", c.de, c.para));
+        // The apiVersion + kind + metadata.{name, namespace, labels}
+        // skeleton comes from caixa_core::render::kube_resource_skeleton
+        // — same lift as pleme_program_*_selector applied to the K8s-
+        // resource axis. Caller adds spec below.
+        let mut policy = kube_resource_skeleton(
+            "cilium.io/v2",
+            "CiliumNetworkPolicy",
+            &format!("{}-{}-to-{}", caixa.nome, c.de, c.para),
+            namespace,
+            labels,
         );
 
         // spec.endpointSelector — match the destination Servico's
@@ -315,28 +273,17 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     };
     let namespace = DEFAULT_NAMESPACE;
 
-    // Gateway
-    let mut gateway = serde_yaml::Mapping::new();
-    gateway.insert(
-        serde_yaml::Value::String("apiVersion".into()),
-        serde_yaml::Value::String("gateway.networking.k8s.io/v1".into()),
-    );
-    gateway.insert(
-        serde_yaml::Value::String("kind".into()),
-        serde_yaml::Value::String("Gateway".into()),
-    );
-    let mut g_meta = serde_yaml::Mapping::new();
-    g_meta.insert(
-        serde_yaml::Value::String("name".into()),
-        serde_yaml::Value::String(caixa.nome.clone()),
-    );
-    g_meta.insert(
-        serde_yaml::Value::String("namespace".into()),
-        serde_yaml::Value::String(namespace.into()),
-    );
-    gateway.insert(
-        serde_yaml::Value::String("metadata".into()),
-        serde_yaml::Value::Mapping(g_meta),
+    // Gateway — apiVersion + kind + metadata.{name, namespace} skeleton
+    // comes from caixa_core::render::kube_resource_skeleton; caller adds
+    // spec below. No metadata.labels on Gateway today (the gateway is
+    // identified by its own name + namespace; per-Aplicacao label
+    // grouping happens at the HTTPRoute / route-attached-policy axis).
+    let mut gateway = kube_resource_skeleton(
+        "gateway.networking.k8s.io/v1",
+        "Gateway",
+        &caixa.nome,
+        namespace,
+        BTreeMap::new(),
     );
     let mut listener = serde_yaml::Mapping::new();
     listener.insert(
@@ -370,28 +317,14 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Mapping(g_spec),
     );
 
-    // HTTPRoute — all paths route to the entrada.para Servico.
-    let mut route = serde_yaml::Mapping::new();
-    route.insert(
-        serde_yaml::Value::String("apiVersion".into()),
-        serde_yaml::Value::String("gateway.networking.k8s.io/v1".into()),
-    );
-    route.insert(
-        serde_yaml::Value::String("kind".into()),
-        serde_yaml::Value::String("HTTPRoute".into()),
-    );
-    let mut r_meta = serde_yaml::Mapping::new();
-    r_meta.insert(
-        serde_yaml::Value::String("name".into()),
-        serde_yaml::Value::String(format!("{}-{}", caixa.nome, entrada.para)),
-    );
-    r_meta.insert(
-        serde_yaml::Value::String("namespace".into()),
-        serde_yaml::Value::String(namespace.into()),
-    );
-    route.insert(
-        serde_yaml::Value::String("metadata".into()),
-        serde_yaml::Value::Mapping(r_meta),
+    // HTTPRoute — all paths route to the entrada.para Servico. Same
+    // skeleton lift as Gateway above; caller adds spec.
+    let mut route = kube_resource_skeleton(
+        "gateway.networking.k8s.io/v1",
+        "HTTPRoute",
+        &format!("{}-{}", caixa.nome, entrada.para),
+        namespace,
+        BTreeMap::new(),
     );
 
     let mut parent_ref = serde_yaml::Mapping::new();
@@ -487,7 +420,8 @@ pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, Entrada, Membro, MeshPolicy, Placement, PlacementStrategy, WitContract,
+        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, Membro, MeshPolicy, Placement, PlacementStrategy,
+        WitContract,
     };
     use std::time::Duration;
 
@@ -921,6 +855,152 @@ mod tests {
         c.entrada = None;
         let docs = gateway_routes(&c).unwrap();
         assert!(docs.is_empty());
+    }
+
+    #[test]
+    fn cilium_policy_carries_canonical_kube_skeleton() {
+        // Pin that the kube_resource_skeleton lift preserves the exact
+        // apiVersion + kind + metadata.{name, namespace, labels} shape
+        // every CNP carried before the lift. Drift here is invisible at
+        // runtime (Cilium tolerates extra/missing keys quietly), so
+        // structural pinning is the only signal a refactor would
+        // accidentally drop apiVersion or shift the metadata block.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        for p in &policies {
+            assert_eq!(
+                p.get("apiVersion").and_then(|v| v.as_str()),
+                Some("cilium.io/v2")
+            );
+            assert_eq!(
+                p.get("kind").and_then(|v| v.as_str()),
+                Some("CiliumNetworkPolicy")
+            );
+            let metadata = p
+                .get("metadata")
+                .and_then(|m| m.as_mapping())
+                .expect("metadata mapping");
+            // metadata carries name + namespace + labels (3 keys) — no
+            // accidental extras leak past the skeleton lift.
+            assert_eq!(metadata.len(), 3);
+            assert!(
+                metadata
+                    .get(serde_yaml::Value::String("name".into()))
+                    .and_then(|v| v.as_str())
+                    .is_some()
+            );
+            assert_eq!(
+                metadata
+                    .get(serde_yaml::Value::String("namespace".into()))
+                    .and_then(|v| v.as_str()),
+                Some(DEFAULT_NAMESPACE)
+            );
+            assert!(
+                metadata
+                    .get(serde_yaml::Value::String("labels".into()))
+                    .is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_carries_canonical_kube_skeleton_without_labels() {
+        // Pin that Gateway emits apiVersion + kind + metadata.{name,
+        // namespace} — and *not* metadata.labels (the empty-labels-skip
+        // semantic of kube_resource_skeleton; Gateway does not need
+        // per-Aplicacao label grouping at the K8s-resource axis today).
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("Gateway"))
+            .expect("Gateway present");
+        assert_eq!(
+            gateway.get("apiVersion").and_then(|v| v.as_str()),
+            Some("gateway.networking.k8s.io/v1")
+        );
+        let metadata = gateway
+            .get("metadata")
+            .and_then(|m| m.as_mapping())
+            .expect("metadata mapping");
+        // Exactly 2 metadata keys (name + namespace) — labels absent.
+        assert_eq!(metadata.len(), 2);
+        assert_eq!(
+            metadata
+                .get(serde_yaml::Value::String("name".into()))
+                .and_then(|v| v.as_str()),
+            Some("checkout")
+        );
+        assert_eq!(
+            metadata
+                .get(serde_yaml::Value::String("namespace".into()))
+                .and_then(|v| v.as_str()),
+            Some(DEFAULT_NAMESPACE)
+        );
+        assert!(
+            metadata
+                .get(serde_yaml::Value::String("labels".into()))
+                .is_none(),
+            "Gateway must not carry metadata.labels (empty-labels-skip \
+             contract from kube_resource_skeleton)"
+        );
+    }
+
+    #[test]
+    fn httproute_carries_canonical_kube_skeleton_without_labels() {
+        // Same shape pin for HTTPRoute (the second lift site in
+        // gateway_routes). Same empty-labels-skip semantic — the
+        // route's parent-Gateway-association lives at spec.parentRefs,
+        // not at metadata.labels.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let route = docs
+            .iter()
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .expect("HTTPRoute present");
+        assert_eq!(
+            route.get("apiVersion").and_then(|v| v.as_str()),
+            Some("gateway.networking.k8s.io/v1")
+        );
+        let metadata = route
+            .get("metadata")
+            .and_then(|m| m.as_mapping())
+            .expect("metadata mapping");
+        assert_eq!(metadata.len(), 2);
+        assert_eq!(
+            metadata
+                .get(serde_yaml::Value::String("name".into()))
+                .and_then(|v| v.as_str()),
+            Some("checkout-cart")
+        );
+        assert!(
+            metadata
+                .get(serde_yaml::Value::String("labels".into()))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn cilium_policy_metadata_block_iterates_alphabetically() {
+        // The kube_resource_skeleton's render-determinism contract:
+        // metadata: block keys appear in alphabetical order (labels,
+        // name, namespace) regardless of source-code declaration order.
+        // Pinning this at the renderer's exit so a future
+        // pretty-printer / round-trip / diff-friendly format depends
+        // on the determinism property (mirrors the M2 overlay helper's
+        // alphabetical-iteration determinism property — THEORY.md
+        // §V.2.7).
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        for p in &policies {
+            let metadata = p
+                .get("metadata")
+                .and_then(|m| m.as_mapping())
+                .expect("metadata mapping");
+            let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
+            assert_eq!(
+                keys,
+                vec!["labels", "name", "namespace"],
+                "metadata block must iterate alphabetically (the kube \
+                 skeleton's render-determinism contract)"
+            );
+        }
     }
 
     #[test]

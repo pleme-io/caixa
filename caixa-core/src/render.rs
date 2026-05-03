@@ -103,6 +103,24 @@ pub const LABEL_PROGRAM: &str = "pleme.pleme.io/program";
 /// not just by source/destination pod identity.
 pub const LABEL_CONTRATO: &str = "pleme.pleme.io/contrato";
 
+/// Canonical K8s API key naming the resource's API-version selector
+/// (e.g. `cilium.io/v2`, `gateway.networking.k8s.io/v1`,
+/// `wasm.pleme.io/v1alpha1`). Lifted to a const so a future API-server
+/// rename or a multi-version-skew migration is a one-line edit, not a
+/// search-and-replace across every per-target renderer.
+pub const KUBE_KEY_API_VERSION: &str = "apiVersion";
+/// Canonical K8s API key naming the resource's kind discriminator
+/// (e.g. `CiliumNetworkPolicy`, `Gateway`, `HTTPRoute`, `ComputeUnit`).
+pub const KUBE_KEY_KIND: &str = "kind";
+/// Canonical K8s API key naming the resource's metadata block.
+pub const KUBE_KEY_METADATA: &str = "metadata";
+/// Canonical K8s API key naming the resource's name (under metadata).
+pub const KUBE_KEY_NAME: &str = "name";
+/// Canonical K8s API key naming the resource's namespace (under metadata).
+pub const KUBE_KEY_NAMESPACE: &str = "namespace";
+/// Canonical K8s API key naming the resource's labels (under metadata).
+pub const KUBE_KEY_LABELS: &str = "labels";
+
 /// Build the canonical Cilium `matchLabels` selector for a single
 /// pleme-io program **scoped to its Aplicacao** — the safe default
 /// every per-Aplicacao mesh renderer (caixa-mesh's
@@ -148,6 +166,118 @@ pub fn pleme_program_in_aplicacao_selector(
 pub fn pleme_program_selector(program: &str) -> BTreeMap<&'static str, String> {
     let mut out = BTreeMap::new();
     out.insert(LABEL_PROGRAM, program.to_string());
+    out
+}
+
+/// Convert a typed string-valued mapping (e.g. one of the canonical
+/// [`pleme_program_selector`] / [`pleme_program_in_aplicacao_selector`]
+/// selectors, or any caller-built `BTreeMap<&'static str, String>`)
+/// into a [`serde_yaml::Value::Mapping`] with `String → String` shape —
+/// the surface every Cilium / Gateway / HTTPRoute / ComputeUnit
+/// `matchLabels` / `metadata.labels` / `selector` field expects.
+///
+/// Iteration order is whatever the input iterator yields; pass a
+/// [`BTreeMap`] for alphabetical determinism (THEORY.md §V.2.7 render
+/// determinism: rendered YAML key order is independent of source-code
+/// declaration order). The two pleme-io selector helpers above already
+/// return `BTreeMap`s for exactly this reason.
+///
+/// Lifted from `caixa-mesh`'s prior `yaml_string_mapping` private
+/// helper to make the same primitive available to every other
+/// `caixa-<target>` renderer that needs to emit a string→string YAML
+/// mapping (the future per-Aplicacao Gateway-API filter rules, the
+/// caixa-otel resource-attribute emitter, the `app-operator`'s typed
+/// CR materializer, the per-cluster CiliumClusterwideEnvoyConfig
+/// renderer for `:politicas` defaults). Without the lift each new
+/// renderer would re-inline the same five-line `for (k, v)` body and
+/// inherit the same drift footguns.
+#[must_use]
+pub fn yaml_string_mapping<K, V, M>(m: M) -> serde_yaml::Value
+where
+    M: IntoIterator<Item = (K, V)>,
+    K: Into<String>,
+    V: Into<String>,
+{
+    let mut out = serde_yaml::Mapping::new();
+    for (k, v) in m {
+        out.insert(
+            serde_yaml::Value::String(k.into()),
+            serde_yaml::Value::String(v.into()),
+        );
+    }
+    serde_yaml::Value::Mapping(out)
+}
+
+/// Build the canonical K8s-resource skeleton — the
+/// `apiVersion` + `kind` + `metadata.{name, namespace, labels?}`
+/// block every cluster artifact emitted by every caixa-side renderer
+/// carries — and return it as a fresh [`serde_yaml::Mapping`] the
+/// caller adds its `spec:` (and any other top-level keys) to.
+///
+/// `labels` is inserted under `metadata.labels` only when non-empty.
+/// An empty `labels` map leaves the labels key absent — the K8s API
+/// server's interpretation of "no labels declared" is "labels key
+/// missing", not `labels: {}` (which serializes differently in some
+/// YAML libraries and is a sharp tool for label-based selectors that
+/// match the empty set silently).
+///
+/// Iteration order under `metadata` is alphabetical (the inner
+/// projection is a [`BTreeMap`] keyed by `&'static str`), so the
+/// rendered YAML's `metadata:` block appears in
+/// `labels?, name, namespace` order regardless of source-code
+/// declaration order. Same render-determinism contract the M2 overlay
+/// helper and the pleme-io selector helpers enshrine.
+///
+/// Lifted from three inline `serde_yaml::Mapping::new()` blocks in
+/// `caixa-mesh` ([`cilium_network_policies`][cnp] CNP construction,
+/// [`gateway_routes`][gw] Gateway construction, the same fn's
+/// HTTPRoute construction) so the next renderer to land — the
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter, the
+/// `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer, the M4 cross-cluster fan-out's per-cluster Kustomization
+/// and HelmRelease emission, the future `caixa-otel`
+/// OpenTelemetry-Collector pipeline emitter — gets the canonical
+/// skeleton for free with one function call, instead of re-inlining
+/// the same five-key insert() boilerplate.
+///
+/// [cnp]: https://docs.cilium.io/en/stable/security/policy/index.html
+/// [gw]: https://gateway-api.sigs.k8s.io/
+#[must_use]
+pub fn kube_resource_skeleton(
+    api_version: &str,
+    kind: &str,
+    name: &str,
+    namespace: &str,
+    labels: BTreeMap<&'static str, String>,
+) -> serde_yaml::Mapping {
+    let mut metadata: BTreeMap<&'static str, serde_yaml::Value> = BTreeMap::new();
+    metadata.insert(KUBE_KEY_NAME, serde_yaml::Value::String(name.to_string()));
+    metadata.insert(
+        KUBE_KEY_NAMESPACE,
+        serde_yaml::Value::String(namespace.to_string()),
+    );
+    if !labels.is_empty() {
+        metadata.insert(KUBE_KEY_LABELS, yaml_string_mapping(labels));
+    }
+
+    let mut metadata_map = serde_yaml::Mapping::new();
+    for (k, v) in metadata {
+        metadata_map.insert(serde_yaml::Value::String(k.to_string()), v);
+    }
+
+    let mut out = serde_yaml::Mapping::new();
+    out.insert(
+        serde_yaml::Value::String(KUBE_KEY_API_VERSION.to_string()),
+        serde_yaml::Value::String(api_version.to_string()),
+    );
+    out.insert(
+        serde_yaml::Value::String(KUBE_KEY_KIND.to_string()),
+        serde_yaml::Value::String(kind.to_string()),
+    );
+    out.insert(
+        serde_yaml::Value::String(KUBE_KEY_METADATA.to_string()),
+        serde_yaml::Value::Mapping(metadata_map),
+    );
     out
 }
 
@@ -450,6 +580,276 @@ mod tests {
         assert_eq!(
             swapped.get(LABEL_APLICACAO).map(String::as_str),
             Some("cart")
+        );
+    }
+
+    #[test]
+    fn yaml_string_mapping_empty_input_returns_empty_mapping() {
+        // Empty input → empty Mapping. Pinned because the caller's
+        // emptiness contract (e.g. caixa-mesh's CNP labels block: the
+        // policy's metadata.labels exists iff there are pleme-prefixed
+        // labels to carry) depends on this being faithful.
+        let v: serde_yaml::Value = yaml_string_mapping(BTreeMap::<&'static str, String>::new());
+        let m = v.as_mapping().expect("mapping shape");
+        assert!(m.is_empty());
+    }
+
+    #[test]
+    fn yaml_string_mapping_round_trips_string_values() {
+        let mut input = BTreeMap::new();
+        input.insert("foo", "1".to_string());
+        input.insert("bar", "2".to_string());
+        let v = yaml_string_mapping(input);
+        let m = v.as_mapping().expect("mapping shape");
+        assert_eq!(m.len(), 2);
+        assert_eq!(
+            m.get(serde_yaml::Value::String("foo".into()))
+                .and_then(|x| x.as_str()),
+            Some("1")
+        );
+        assert_eq!(
+            m.get(serde_yaml::Value::String("bar".into()))
+                .and_then(|x| x.as_str()),
+            Some("2")
+        );
+    }
+
+    #[test]
+    fn yaml_string_mapping_iterates_alphabetically_on_btreemap() {
+        // Pin that BTreeMap input → alphabetical iteration → alphabetical
+        // YAML key order. THEORY.md §V.2.7 render determinism.
+        let mut input = BTreeMap::new();
+        input.insert("zebra", "z".to_string());
+        input.insert("apple", "a".to_string());
+        input.insert("mango", "m".to_string());
+        let v = yaml_string_mapping(input);
+        let m = v.as_mapping().expect("mapping shape");
+        let keys: Vec<&str> = m.iter().filter_map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["apple", "mango", "zebra"]);
+    }
+
+    #[test]
+    fn yaml_string_mapping_accepts_pleme_selector_helpers() {
+        // The lift's load-bearing use case: passing the typed pleme-io
+        // selectors directly into yaml_string_mapping yields the K8s
+        // matchLabels surface every Cilium / Gateway selector field
+        // expects, with the alphabetical key order the pleme helpers'
+        // own determinism contract guarantees. Pinning end-to-end
+        // composition so a future refactor of either helper can't
+        // silently break the integration.
+        let v = yaml_string_mapping(pleme_program_in_aplicacao_selector("cart", "checkout"));
+        let m = v.as_mapping().expect("mapping shape");
+        assert_eq!(m.len(), 2);
+        assert_eq!(
+            m.get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
+                .and_then(|x| x.as_str()),
+            Some("cart")
+        );
+        assert_eq!(
+            m.get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
+                .and_then(|x| x.as_str()),
+            Some("checkout")
+        );
+    }
+
+    #[test]
+    fn kube_key_consts_have_expected_values() {
+        // Pin the actual string values — these are part of the K8s API
+        // surface that every emitted artifact's apiserver-side parser
+        // (Cilium, Gateway API, wasm-operator) depends on. Changing any
+        // of them is a coordinated multi-renderer migration, not an
+        // incidental edit.
+        assert_eq!(KUBE_KEY_API_VERSION, "apiVersion");
+        assert_eq!(KUBE_KEY_KIND, "kind");
+        assert_eq!(KUBE_KEY_METADATA, "metadata");
+        assert_eq!(KUBE_KEY_NAME, "name");
+        assert_eq!(KUBE_KEY_NAMESPACE, "namespace");
+        assert_eq!(KUBE_KEY_LABELS, "labels");
+    }
+
+    #[test]
+    fn kube_resource_skeleton_carries_three_top_level_keys_no_spec() {
+        // The skeleton emits exactly apiVersion + kind + metadata; the
+        // caller adds spec (and any other top-level keys) themselves.
+        // Pin that contract so a future caller doesn't accidentally
+        // double-insert apiVersion / kind / metadata after the
+        // skeleton call.
+        let skel = kube_resource_skeleton(
+            "cilium.io/v2",
+            "CiliumNetworkPolicy",
+            "p-1",
+            "tatara-system",
+            BTreeMap::new(),
+        );
+        assert_eq!(skel.len(), 3);
+        assert_eq!(
+            skel.get(serde_yaml::Value::String(KUBE_KEY_API_VERSION.into()))
+                .and_then(|v| v.as_str()),
+            Some("cilium.io/v2")
+        );
+        assert_eq!(
+            skel.get(serde_yaml::Value::String(KUBE_KEY_KIND.into()))
+                .and_then(|v| v.as_str()),
+            Some("CiliumNetworkPolicy")
+        );
+        assert!(
+            skel.get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn kube_resource_skeleton_metadata_carries_name_and_namespace() {
+        let skel = kube_resource_skeleton(
+            "gateway.networking.k8s.io/v1",
+            "Gateway",
+            "checkout",
+            "tatara-system",
+            BTreeMap::new(),
+        );
+        let metadata = skel
+            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .and_then(|v| v.as_mapping())
+            .expect("metadata mapping");
+        assert_eq!(
+            metadata
+                .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
+                .and_then(|v| v.as_str()),
+            Some("checkout")
+        );
+        assert_eq!(
+            metadata
+                .get(serde_yaml::Value::String(KUBE_KEY_NAMESPACE.into()))
+                .and_then(|v| v.as_str()),
+            Some("tatara-system")
+        );
+    }
+
+    #[test]
+    fn kube_resource_skeleton_omits_labels_when_empty() {
+        // Empty labels → metadata.labels key absent (NOT present-as-empty).
+        // K8s API server treats a missing labels key as "no labels
+        // declared"; an empty-mapping `labels: {}` serializes
+        // differently in some YAML libraries and is a sharp tool for
+        // label-based selectors that match the empty set silently.
+        let skel = kube_resource_skeleton(
+            "gateway.networking.k8s.io/v1",
+            "HTTPRoute",
+            "r-1",
+            "tatara-system",
+            BTreeMap::new(),
+        );
+        let metadata = skel
+            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        assert!(
+            metadata
+                .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
+                .is_none(),
+            "metadata.labels must be absent when no labels passed"
+        );
+        // metadata then has exactly 2 keys: name, namespace.
+        assert_eq!(metadata.len(), 2);
+    }
+
+    #[test]
+    fn kube_resource_skeleton_includes_labels_when_present() {
+        let mut labels = BTreeMap::new();
+        labels.insert(LABEL_APLICACAO, "checkout".to_string());
+        labels.insert(LABEL_CONTRATO, "cart-to-catalog".to_string());
+        let skel = kube_resource_skeleton(
+            "cilium.io/v2",
+            "CiliumNetworkPolicy",
+            "p-1",
+            "tatara-system",
+            labels,
+        );
+        let metadata = skel
+            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        let labels_block = metadata
+            .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
+            .and_then(|v| v.as_mapping())
+            .expect("metadata.labels mapping present");
+        assert_eq!(
+            labels_block
+                .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
+                .and_then(|v| v.as_str()),
+            Some("checkout")
+        );
+        assert_eq!(
+            labels_block
+                .get(serde_yaml::Value::String(LABEL_CONTRATO.into()))
+                .and_then(|v| v.as_str()),
+            Some("cart-to-catalog")
+        );
+    }
+
+    #[test]
+    fn kube_resource_skeleton_metadata_iterates_alphabetically() {
+        // Pin that the inner BTreeMap projection makes the rendered
+        // YAML's metadata: block alphabetical (labels, name, namespace),
+        // regardless of insert order. THEORY.md §V.2.7 render determinism.
+        let mut labels = BTreeMap::new();
+        labels.insert(LABEL_APLICACAO, "checkout".to_string());
+        let skel = kube_resource_skeleton(
+            "cilium.io/v2",
+            "CiliumNetworkPolicy",
+            "p-1",
+            "tatara-system",
+            labels,
+        );
+        let metadata = skel
+            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec![KUBE_KEY_LABELS, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE]
+        );
+    }
+
+    #[test]
+    fn kube_resource_skeleton_top_level_iterates_in_insert_order() {
+        // The top-level Mapping is a plain serde_yaml::Mapping (insert-
+        // ordered), and the skeleton inserts apiVersion → kind →
+        // metadata in that order. Pin so a future refactor doesn't
+        // silently shift the rendered YAML's top-level key order
+        // (which K8s tooling tolerates but humans + diff readability
+        // care about — apiVersion-first is the K8s convention).
+        let skel = kube_resource_skeleton(
+            "cilium.io/v2",
+            "CiliumNetworkPolicy",
+            "p-1",
+            "tatara-system",
+            BTreeMap::new(),
+        );
+        let keys: Vec<&str> = skel.iter().filter_map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec![KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_METADATA]
+        );
+    }
+
+    #[test]
+    fn kube_resource_skeleton_does_not_introduce_spec_key() {
+        // Sanity: the skeleton is metadata-only — `spec` is the caller's
+        // responsibility. Pinning so a future "be helpful" refactor
+        // doesn't auto-insert an empty `spec: {}` (which would silently
+        // shadow caller-side spec construction).
+        let skel = kube_resource_skeleton(
+            "cilium.io/v2",
+            "CiliumNetworkPolicy",
+            "p-1",
+            "tatara-system",
+            BTreeMap::new(),
+        );
+        assert!(
+            skel.get(serde_yaml::Value::String("spec".into())).is_none(),
+            "skeleton must not pre-insert a spec key"
         );
     }
 

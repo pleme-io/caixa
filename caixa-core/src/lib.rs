@@ -35,9 +35,11 @@ pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{LimitsError, LimitsSpec};
 pub use manifest::Caixa;
 pub use render::{
-    LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
-    M2_KEY_UPGRADE_FROM, PLEME_LABEL_PREFIX, RenderError, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, servico_m2_overlay,
+    KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_LABELS, KUBE_KEY_METADATA, KUBE_KEY_NAME,
+    KUBE_KEY_NAMESPACE, LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, M2_KEY_BEHAVIOR,
+    M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, PLEME_LABEL_PREFIX, RenderError, kube_resource_skeleton,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, servico_m2_overlay,
+    yaml_string_mapping,
 };
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction};
