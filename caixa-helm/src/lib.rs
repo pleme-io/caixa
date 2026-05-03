@@ -65,6 +65,8 @@ pub enum Error {
     MissingField(&'static str),
     #[error("yaml: {0}")]
     Yaml(#[from] serde_yaml::Error),
+    #[error("render: {0}")]
+    Render(#[from] caixa_core::RenderError),
     #[error("io: {0}")]
     Io(#[from] std::io::Error),
 }
@@ -306,27 +308,12 @@ fn build_values_yaml(
     // M2 typed-substrate slots — propagate from caixa.lisp into the
     // rendered values block so the library chart (and the operator
     // reading the rendered ComputeUnit) sees them. Spec values from
-    // computeunit.yaml win over duplicates in caixa.lisp.
-    if let Some(limits) = &caixa.limits {
-        if !limits.is_empty() {
-            block
-                .entry("limits".to_string())
-                .or_insert_with(|| serde_yaml::to_value(limits).unwrap_or(serde_yaml::Value::Null));
-        }
-    }
-    if let Some(behavior) = &caixa.behavior {
-        if !behavior.is_empty() {
-            block.entry("behavior".to_string()).or_insert_with(|| {
-                serde_yaml::to_value(behavior).unwrap_or(serde_yaml::Value::Null)
-            });
-        }
-    }
-    if !caixa.upgrade_from.is_empty() {
-        block
-            .entry("upgradeFrom".to_string())
-            .or_insert_with(|| {
-                serde_yaml::to_value(&caixa.upgrade_from).unwrap_or(serde_yaml::Value::Null)
-            });
+    // computeunit.yaml win over duplicates in caixa.lisp (or_insert
+    // semantics). Shared with caixa-flux::programs_yaml_entry via
+    // caixa_core::render::servico_m2_overlay so both renderers agree
+    // on key naming + emptiness rules + serialization-error handling.
+    for (key, value) in caixa_core::servico_m2_overlay(caixa)? {
+        block.entry(key.to_string()).or_insert(value);
     }
 
     let mut wrapped = serde_yaml::Mapping::new();

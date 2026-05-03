@@ -19,6 +19,7 @@ pub mod kind;
 pub mod layout;
 pub mod limits;
 pub mod manifest;
+pub mod render;
 pub mod supervisor;
 pub mod upgrade;
 pub mod version;
@@ -33,6 +34,9 @@ pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{LimitsError, LimitsSpec};
 pub use manifest::Caixa;
+pub use render::{
+    M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, RenderError, servico_m2_overlay,
+};
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction};
 pub use version::{CaixaVersion, VersionError, parse_requirement};
