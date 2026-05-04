@@ -57,8 +57,14 @@ use thiserror::Error;
 /// Errors caixa-helm can raise.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("caixa :kind must be Servico for caixa-helm rendering, got {0:?}")]
-    NotAServico(CaixaKind),
+    /// The caixa's `:kind` doesn't match what `caixa-helm` targets
+    /// (this renderer only emits per-program `lareira-<nome>` charts
+    /// for `:kind Servico`). Lifted from a prior `NotAServico(CaixaKind)`
+    /// arm to wrap [`caixa_core::KindMismatch`] so the diagnostic
+    /// names the offending caixa's `:nome` (not just its kind),
+    /// shared verbatim with `caixa-flux` and `caixa-mesh`.
+    #[error("{0}")]
+    NotAServico(#[from] caixa_core::KindMismatch),
     #[error("caixa :servicos must declare exactly one entry for V0 (got {0})")]
     UnsupportedServicoCount(usize),
     #[error("computeunit yaml missing required field: {0}")]
@@ -193,9 +199,7 @@ pub fn render_chart_for_servico_with(
     computeunit_yaml: &serde_yaml::Value,
     opts: &RenderOpts,
 ) -> Result<ChartDir, Error> {
-    if caixa.kind != CaixaKind::Servico {
-        return Err(Error::NotAServico(caixa.kind));
-    }
+    caixa_core::require_kind(caixa, CaixaKind::Servico)?;
     if caixa.servicos.len() != 1 {
         return Err(Error::UnsupportedServicoCount(caixa.servicos.len()));
     }
@@ -466,6 +470,62 @@ spec:
         c.servicos = vec![];
         let err = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap_err();
         assert!(matches!(err, Error::NotAServico(_)));
+    }
+
+    #[test]
+    fn kind_mismatch_error_names_offending_caixa_nome() {
+        // Pinning the lifted [`caixa_core::KindMismatch`] view's
+        // load-bearing property: a kind-mismatched caixa surfaces a
+        // diagnostic that *names the offending caixa* (`hello-rio`),
+        // not just the rejected kind. Before the lift the renderer
+        // raised `Error::NotAServico(CaixaKind::Biblioteca)` whose
+        // Display said "caixa :kind must be Servico for caixa-helm
+        // rendering, got Biblioteca" — the user had to grep their
+        // source tree for which caixa.lisp triggered it. After the
+        // lift the wrapped KindMismatch carries the `:nome`, the
+        // renderer's `#[error("{0}")]` arm prints it through, and
+        // the diagnostic is self-locating.
+        let mut c = sample_caixa();
+        c.kind = CaixaKind::Biblioteca;
+        c.servicos = vec![];
+        let err = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-rio"),
+            "kind-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Servico"),
+            "diagnostic must name the expected kind (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Biblioteca"),
+            "diagnostic must name the actual kind (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn kind_mismatch_carries_typed_view_via_from_conversion() {
+        // The renderer's `Error::NotAServico` variant wraps the typed
+        // [`caixa_core::KindMismatch`] view via `#[from]`, so the `?`
+        // operator at the call site converts without manual glue.
+        // Pinning the typed payload (not just the variant) so a
+        // future refactor can't silently switch the variant to a
+        // raw-`CaixaKind` payload (which would regress the lift's
+        // shared-shape contract with caixa-flux + caixa-mesh).
+        let mut c = sample_caixa();
+        c.kind = CaixaKind::Aplicacao;
+        c.servicos = vec![];
+        let err = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap_err();
+        match err {
+            Error::NotAServico(km) => {
+                assert_eq!(km.nome, "hello-rio");
+                assert_eq!(km.expected, CaixaKind::Servico);
+                assert_eq!(km.actual, CaixaKind::Aplicacao);
+            }
+            other => panic!("expected Error::NotAServico, got {other:?}"),
+        }
     }
 
     #[test]
