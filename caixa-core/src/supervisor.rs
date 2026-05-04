@@ -291,7 +291,21 @@ pub mod duration_codec {
         })
     }
 
-    pub(crate) fn render(d: Duration) -> String {
+    /// Render a [`Duration`] in the canonical pleme-io duration string
+    /// form (`"30s"`, `"1m"`, `"1h"`, `"500ms"`). The same form every
+    /// caixa typed-duration slot serializes to and the same form K8s
+    /// Gateway API HTTPRoute `timeouts` / `backendRequest` and Cilium
+    /// EnvoyConfig per-route timeouts both expect (an integer
+    /// followed by `s`/`m`/`h`/`ms`, no fractional values, no leading
+    /// `+`). Lifted to `pub` so caixa-side renderers
+    /// (`caixa-mesh::gateway_routes`'s :politicas :timeout overlay,
+    /// the future per-:politicas `CiliumClusterwideEnvoyConfig`
+    /// emitter, the future caixa-otel collector pipeline emitter) can
+    /// consume the same canonical formatter without re-inlining the
+    /// magnitude/unit decision tree (and inheriting the same drift
+    /// footguns: a subtly different `300ms` vs `0.3s` rendering breaks
+    /// downstream apply-time parsing in non-obvious ways).
+    pub fn render(d: Duration) -> String {
         let total_ms = d.as_millis();
         if total_ms == 0 {
             return "0s".into();

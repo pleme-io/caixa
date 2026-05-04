@@ -338,6 +338,36 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     } else {
         entrada.paths.iter().map(String::as_str).collect()
     };
+    // `:politicas :timeout` overlay — when the typed slot carries a
+    // value it surfaces as a per-rule `timeouts: { request: <K8s
+    // duration> }` block on every HTTPRoute rule, the canonical
+    // Gateway API v1.x request-deadline shape:
+    // https://gateway-api.sigs.k8s.io/api-types/httproute/#timeouts
+    //
+    // Until this overlay landed the typed `:politicas :timeout` slot
+    // was inert at the cluster boundary — `AplicacaoSpec::validate`
+    // refused zero values (PolicyTimeoutZero), but a non-zero timeout
+    // never reached an emitted artifact. Wiring it through the
+    // HTTPRoute renderer turns the MESH-COMPOSITION §V CSE invariant
+    // ("every Aplicacao declares :politicas :timeout — no infinite
+    // blocking") from a validate-time gate into a runtime-enforced
+    // contract: the cluster's apiserver-side Gateway API parser will
+    // refuse a malformed timeouts block, and the data plane (Envoy /
+    // Cilium L7) will trip the per-call deadline at exactly the
+    // configured duration.
+    //
+    // Duration → string formatting comes from the canonical
+    // caixa_core::supervisor::duration_codec::render so a `30s`
+    // typed-slot value renders to the same `"30s"` string K8s
+    // tooling parses — no per-renderer ad-hoc duration formatting.
+    let timeout_overlay: Option<serde_yaml::Value> = spec.politicas.timeout.map(|d| {
+        let mut t = serde_yaml::Mapping::new();
+        t.insert(
+            serde_yaml::Value::String("request".into()),
+            serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d)),
+        );
+        serde_yaml::Value::Mapping(t)
+    });
     let mut rules = Vec::with_capacity(paths.len());
     for path in paths {
         let mut path_match = serde_yaml::Mapping::new();
@@ -372,6 +402,9 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::String("backendRefs".into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_ref)]),
         );
+        if let Some(t) = &timeout_overlay {
+            rule.insert(serde_yaml::Value::String("timeouts".into()), t.clone());
+        }
         rules.push(serde_yaml::Value::Mapping(rule));
     }
 
@@ -1020,5 +1053,167 @@ mod tests {
         assert!(kinds.contains(&"CiliumNetworkPolicy".to_string()));
         assert!(kinds.contains(&"Gateway".to_string()));
         assert!(kinds.contains(&"HTTPRoute".to_string()));
+    }
+
+    // ── HTTPRoute :politicas :timeout overlay ────────────────────────────
+
+    fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
+        docs.iter()
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .and_then(|d| d.get("spec"))
+            .and_then(|s| s.get("rules"))
+            .and_then(|r| r.as_sequence())
+            .cloned()
+            .expect("HTTPRoute spec.rules sequence")
+    }
+
+    #[test]
+    fn httproute_carries_politicas_timeout_on_every_rule() {
+        // The fixture sets `:politicas :timeout 30s`. Every emitted
+        // HTTPRoute rule must carry `timeouts: { request: "30s" }`,
+        // wiring the typed `:politicas :timeout` slot through to the
+        // canonical Gateway API per-rule request-deadline shape:
+        // https://gateway-api.sigs.k8s.io/api-types/httproute/#timeouts
+        // Before this overlay landed the typed slot was inert past
+        // validate() — the rendered HTTPRoute carried no timeouts:
+        // block, so MESH-COMPOSITION §V "no infinite blocking" was
+        // a build-time gate without runtime teeth. This test is the
+        // pinned proof that the slot now reaches the cluster artifact.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let rules = httproute_rules(&docs);
+        assert!(!rules.is_empty(), "HTTPRoute must carry at least one rule");
+        for rule in &rules {
+            let timeouts = rule
+                .get("timeouts")
+                .and_then(|t| t.as_mapping())
+                .expect("rule must carry timeouts mapping when :politicas :timeout is set");
+            assert_eq!(
+                timeouts
+                    .get(serde_yaml::Value::String("request".into()))
+                    .and_then(|v| v.as_str()),
+                Some("30s")
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_omits_timeouts_when_politicas_timeout_unset() {
+        // Empty-axis-skip semantic: an Aplicacao that doesn't declare
+        // `:politicas :timeout` (politicas = MeshPolicy::default()
+        // here) emits an HTTPRoute with no timeouts: key on any rule
+        // — the K8s "no per-rule deadline declared" semantic, which
+        // matches the prior pre-overlay behavior bit-for-bit. Pinning
+        // so a future refactor of the overlay can't accidentally
+        // emit `timeouts: {}` (the empty-mapping form, which some
+        // Gateway API conformance suites reject as malformed).
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy::default());
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        assert!(!rules.is_empty());
+        for rule in &rules {
+            assert!(
+                rule.get("timeouts").is_none(),
+                "rule must omit `timeouts:` when :politicas :timeout is None"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_timeout_renders_every_rule_independently() {
+        // Multiple `:entrada :paths` entries → multiple HTTPRoute
+        // rules. The overlay must apply to every rule, not just the
+        // first one — pin so a future refactor that hoists the
+        // overlay out of the loop without re-cloning into each rule
+        // can't accidentally drop the policy from the tail rules.
+        let mut c = aplicacao_caixa();
+        if let Some(e) = c.entrada.as_mut() {
+            e.paths = vec![
+                "/api/cart".into(),
+                "/api/products".into(),
+                "/healthz".into(),
+            ];
+        }
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        assert_eq!(rules.len(), 3);
+        for rule in &rules {
+            let req = rule
+                .get("timeouts")
+                .and_then(|t| t.get("request"))
+                .and_then(|v| v.as_str())
+                .expect("each of the 3 rules carries timeouts.request");
+            assert_eq!(req, "30s");
+        }
+    }
+
+    #[test]
+    fn httproute_timeout_uses_canonical_kube_duration_format() {
+        // The duration formatter is shared with every other
+        // typed-duration slot (caixa_core::supervisor::duration_codec
+        // ::render). Pin that a 90-second timeout renders as `"90s"`
+        // (the canonical form K8s tooling parses), not `"1m30s"`
+        // (the ad-hoc multi-unit form some Go time.Duration formatters
+        // produce, which the Gateway API parser rejects).
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy {
+            timeout: Some(Duration::from_secs(90)),
+            ..Default::default()
+        });
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            assert_eq!(
+                rule.get("timeouts")
+                    .and_then(|t| t.get("request"))
+                    .and_then(|v| v.as_str()),
+                Some("90s")
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_timeout_renders_minute_window_canonically() {
+        // A 1-minute timeout must render as `"1m"` (canonical), not
+        // `"60s"` (numerically equivalent but not the canonical form
+        // duration_codec::render emits). Pinning the formatter's
+        // round-trip contract through the renderer end-to-end so a
+        // future change to the formatter that picks a non-canonical
+        // unit surfaces here.
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy {
+            timeout: Some(Duration::from_secs(60)),
+            ..Default::default()
+        });
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            assert_eq!(
+                rule.get("timeouts")
+                    .and_then(|t| t.get("request"))
+                    .and_then(|v| v.as_str()),
+                Some("1m")
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_rule_keys_pin_overlay_position() {
+        // Pin that timeouts: appears alongside matches: and
+        // backendRefs: at the rule level, not nested inside either.
+        // Gateway API v1.x defines timeouts as a top-level rule field
+        // — a misplaced `matches[].timeouts` would silently be
+        // ignored by the apiserver, which matches no traffic visibly
+        // but disables the per-call deadline.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            let m = rule.as_mapping().expect("rule mapping");
+            // matches + backendRefs + timeouts (3 top-level keys).
+            assert_eq!(m.len(), 3);
+            assert!(m.contains_key(serde_yaml::Value::String("matches".into())));
+            assert!(m.contains_key(serde_yaml::Value::String("backendRefs".into())));
+            assert!(m.contains_key(serde_yaml::Value::String("timeouts".into())));
+        }
     }
 }

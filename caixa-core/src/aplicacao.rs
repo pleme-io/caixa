@@ -315,6 +315,32 @@ pub struct MeshPolicy {
     pub rate_limit: Option<RateLimit>,
 }
 
+impl MeshPolicy {
+    /// True when no `:politicas` axis carries a value — every field is
+    /// `None`. The same emptiness contract every other M2/M3 typed
+    /// surface carries ([`crate::LimitsSpec::is_empty`],
+    /// [`crate::BehaviorSpec::is_empty`]): renderers that overlay the
+    /// typed slot onto a cluster artifact key off this predicate to
+    /// decide "emit the slot" vs "skip the slot entirely", so an
+    /// authored-but-unset `:politicas (())` round-trips to a rendered
+    /// artifact that's structurally identical to one that omits the
+    /// slot. Lifted as a typed predicate (rather than per-renderer
+    /// inline `politicas.timeout.is_none() && politicas.retries.is_none()
+    /// && …` chains) so a future axis added to `MeshPolicy` (per-edge
+    /// :politicas overlay in M4, per-Aplicacao traffic-shaping in M5)
+    /// is one struct-field edit + one `&& self.<axis>.is_none()` here,
+    /// not a coordinated rewrite of every consumer that's reaching
+    /// for the emptiness semantic.
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.timeout.is_none()
+            && self.retries.is_none()
+            && self.circuit_breaker.is_none()
+            && self.mtls_required.is_none()
+            && self.rate_limit.is_none()
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CircuitBreaker {
@@ -2036,5 +2062,84 @@ mod tests {
         s.placement.estrategia = PlacementStrategy::SingleNode;
         s.placement.clusters = vec!["rio".into(), "mar".into(), "plo".into()];
         s.validate().unwrap();
+    }
+
+    // ── MeshPolicy::is_empty() — typed emptiness predicate ────────────────
+
+    #[test]
+    fn mesh_policy_default_is_empty() {
+        // The Default impl carries None on every axis — the typed
+        // analog of an unset `:politicas (())` slot. Renderers that
+        // overlay the policy onto a cluster artifact key off this
+        // predicate to skip the slot entirely; pinning so a future
+        // axis added to MeshPolicy can't silently break the contract
+        // (a new field whose Default is non-None would flip is_empty
+        // to false on every existing caixa, surfacing here).
+        assert!(MeshPolicy::default().is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_with_only_timeout_is_not_empty() {
+        let p = MeshPolicy {
+            timeout: Some(Duration::from_secs(30)),
+            ..Default::default()
+        };
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_with_only_retries_is_not_empty() {
+        let p = MeshPolicy {
+            retries: Some(3),
+            ..Default::default()
+        };
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_with_only_circuit_breaker_is_not_empty() {
+        let p = MeshPolicy {
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 5,
+                window: Duration::from_secs(60),
+            }),
+            ..Default::default()
+        };
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_with_only_mtls_required_is_not_empty() {
+        // Even `mtls_required: Some(false)` (an explicit opt-out) is
+        // not empty — the author *named* the axis, the renderer needs
+        // to honor that vs. fall back to the cluster default.
+        let p = MeshPolicy {
+            mtls_required: Some(false),
+            ..Default::default()
+        };
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_with_only_rate_limit_is_not_empty() {
+        let p = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 100,
+                window: Duration::from_secs(1),
+            }),
+            ..Default::default()
+        };
+        assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn mesh_policy_is_empty_round_trips_through_three_member_fixture() {
+        // The three-member happy-path fixture sets timeout + retries +
+        // mtls_required — every populated axis must read non-empty.
+        // Pin the round-trip so the M3.x per-:politicas emitter (the
+        // M3.x roadmap CiliumClusterwideEnvoyConfig artifact) can rely
+        // on is_empty() to decide whether to emit at all without
+        // re-deriving the contract from inline field probes.
+        assert!(!three_member_spec().politicas.is_empty());
     }
 }
