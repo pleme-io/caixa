@@ -43,8 +43,16 @@ use thiserror::Error;
 /// Errors caixa-mesh can raise.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("caixa :kind must be Aplicacao for caixa-mesh rendering, got {0:?}")]
-    NotAnAplicacao(CaixaKind),
+    /// The caixa's `:kind` doesn't match what `caixa-mesh` targets
+    /// (this renderer only emits the per-Aplicacao mesh artifact set
+    /// — programs.yaml fan-out + Cilium NetworkPolicies + Gateway/
+    /// HTTPRoute — for `:kind Aplicacao`). Lifted from a prior
+    /// `NotAnAplicacao(CaixaKind)` arm to wrap [`caixa_core::KindMismatch`]
+    /// so the diagnostic names the offending caixa's `:nome` (not
+    /// just its kind), shared verbatim with `caixa-helm` and
+    /// `caixa-flux`.
+    #[error("{0}")]
+    NotAnAplicacao(#[from] caixa_core::KindMismatch),
     #[error("aplicacao typed shape violation: {0}")]
     InvalidAplicacao(#[from] caixa_core::AplicacaoError),
     #[error("yaml: {0}")]
@@ -69,9 +77,7 @@ pub enum Error {
 ///   - Mesh-level concerns (Cilium NetworkPolicy, Gateway) are
 ///     deferred to follow-up rendering verbs in this crate (M3.x).
 pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
-    if caixa.kind != CaixaKind::Aplicacao {
-        return Err(Error::NotAnAplicacao(caixa.kind));
-    }
+    caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
     let spec = caixa
         .aplicacao_view()
         .expect("Aplicacao kind has an aplicacao_view");
@@ -103,9 +109,7 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
 /// renderers (Cilium, Gateway, observability). Convenience wrapper that
 /// validates first.
 pub fn typed_view(caixa: &Caixa) -> Result<AplicacaoSpec, Error> {
-    if caixa.kind != CaixaKind::Aplicacao {
-        return Err(Error::NotAnAplicacao(caixa.kind));
-    }
+    caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
     let spec = caixa
         .aplicacao_view()
         .expect("Aplicacao kind has an aplicacao_view");
@@ -563,6 +567,72 @@ mod tests {
         c.servicos = vec!["servicos/x.computeunit.yaml".into()];
         let err = programs_for_aplicacao(&c).unwrap_err();
         assert!(matches!(err, Error::NotAnAplicacao(_)));
+    }
+
+    #[test]
+    fn kind_mismatch_error_names_offending_caixa_nome() {
+        // Pinning the lifted [`caixa_core::KindMismatch`] view's
+        // load-bearing property: a kind-mismatched caixa surfaces a
+        // diagnostic that *names the offending caixa* (`checkout`),
+        // not just the rejected kind. Before the lift the renderer
+        // raised `Error::NotAnAplicacao(CaixaKind::Servico)` whose
+        // Display said "caixa :kind must be Aplicacao for caixa-mesh
+        // rendering, got Servico" — the user had to grep their
+        // source tree for which caixa.lisp triggered it. After the
+        // lift the wrapped KindMismatch carries the `:nome`, the
+        // renderer's `#[error("{0}")]` arm prints it through, and
+        // the diagnostic is self-locating.
+        let mut c = aplicacao_caixa();
+        c.kind = CaixaKind::Servico;
+        c.servicos = vec!["servicos/x.computeunit.yaml".into()];
+        let err = programs_for_aplicacao(&c).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("checkout"),
+            "kind-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Aplicacao"),
+            "diagnostic must name the expected kind (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Servico"),
+            "diagnostic must name the actual kind (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn typed_view_kind_mismatch_names_offending_caixa_nome() {
+        // The second kind-checking call site in caixa-mesh —
+        // [`typed_view`] (consumed by every downstream renderer:
+        // `cilium_network_policies`, `gateway_routes`, the future
+        // per-:politicas `CiliumClusterwideEnvoyConfig` emitter) —
+        // must surface the same lifted diagnostic shape. Pinning so
+        // a future divergence between `programs_for_aplicacao` and
+        // `typed_view` (e.g. one re-inlines the kind check, the other
+        // uses `require_kind`) surfaces here as a test failure rather
+        // than as a silent diagnostic regression on the per-Aplicacao
+        // mesh-emission path.
+        let mut c = aplicacao_caixa();
+        c.kind = CaixaKind::Supervisor;
+        c.servicos = vec![];
+        c.children = vec![];
+        let err = typed_view(&c).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("checkout"),
+            "typed_view's kind-mismatch must also name the caixa nome \
+             (got: {msg:?})"
+        );
+        match err {
+            Error::NotAnAplicacao(km) => {
+                assert_eq!(km.nome, "checkout");
+                assert_eq!(km.expected, CaixaKind::Aplicacao);
+                assert_eq!(km.actual, CaixaKind::Supervisor);
+            }
+            other => panic!("expected Error::NotAnAplicacao, got {other:?}"),
+        }
     }
 
     #[test]

@@ -33,7 +33,7 @@
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-use crate::Caixa;
+use crate::{Caixa, CaixaKind};
 
 /// Errors the render helpers can raise.
 #[derive(Debug, Error)]
@@ -52,6 +52,78 @@ pub enum RenderError {
         #[source]
         source: serde_yaml::Error,
     },
+}
+
+/// Typed kind-mismatch view: the canonical surface every per-kind
+/// `caixa-<target>` renderer raises when it's handed a [`Caixa`] whose
+/// `:kind` doesn't match the kind that renderer is targeting. Carries
+/// the offending caixa's `:nome` alongside the expected/actual kinds,
+/// so the diagnostic reads `caixa "<nome>": expected :kind <expected>,
+/// got <actual>` — naming which caixa needs author attention, not just
+/// which kind the renderer rejected.
+///
+/// Lifted from three identical-shape per-renderer arms in
+/// `caixa-helm` ([`Error::NotAServico`][helm-err]), `caixa-flux`
+/// ([`Error::NotAServico`][flux-err]) and `caixa-mesh`
+/// ([`Error::NotAnAplicacao`][mesh-err]). The prior arms each carried
+/// only the actual [`CaixaKind`], leaving the user to grep for which
+/// `caixa.lisp` triggered the mismatch — exactly the
+/// "feira verb whose error path doesn't name the offending caixa"
+/// punch-list item the compounding-mandate protocol calls out.
+///
+/// Renderers wrap this view in their own [`thiserror`] `Error` enum
+/// via `#[from]`; the `?` operator at every kind-checking call site
+/// turns the [`require_kind`] result into the renderer's local error
+/// type with no manual conversion.
+///
+/// [helm-err]: https://docs.rs/caixa-helm
+/// [flux-err]: https://docs.rs/caixa-flux
+/// [mesh-err]: https://docs.rs/caixa-mesh
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("caixa {nome:?}: expected :kind {expected:?}, got {actual:?}")]
+pub struct KindMismatch {
+    /// The offending caixa's `:nome` — names which `caixa.lisp` the
+    /// renderer was handed, so the diagnostic doesn't require the
+    /// user to grep for it.
+    pub nome: String,
+    /// The `:kind` this renderer targets.
+    pub expected: CaixaKind,
+    /// The `:kind` the offending caixa actually carries.
+    pub actual: CaixaKind,
+}
+
+/// Predicate: assert that `caixa.kind == expected`, returning a typed
+/// [`KindMismatch`] view (carrying [`Caixa::nome`]) on rejection. The
+/// canonical entry-point every per-kind renderer wraps in its own
+/// [`thiserror`] `Error` variant via `#[from]` — the call site
+/// becomes a single `caixa_core::require_kind(caixa, CaixaKind::X)?;`
+/// in place of the prior inline `if caixa.kind != CaixaKind::X {
+/// return Err(Error::NotAnX(caixa.kind)); }` block.
+///
+/// Lifted to a single helper so a future per-kind renderer
+/// (`caixa-otel`, the future per-Aplicacao CR materializer the M3.x
+/// roadmap acknowledges, the future per-Supervisor reconciler
+/// renderer) gets the same naming-the-offending-caixa diagnostic for
+/// free, and a future change to the diagnostic format (e.g. adding
+/// a [`Caixa::versao`] suffix once multi-version-skew authoring lands)
+/// is one edit here, not a coordinated rewrite of every renderer.
+///
+/// # Errors
+///
+/// Returns [`KindMismatch`] when `caixa.kind != expected`. The error
+/// carries the caixa's `:nome` so the diagnostic names the offending
+/// `caixa.lisp` — same shape every renderer's `Error::From<KindMismatch>`
+/// converts into the renderer's local error type.
+pub fn require_kind(caixa: &Caixa, expected: CaixaKind) -> Result<(), KindMismatch> {
+    if caixa.kind == expected {
+        Ok(())
+    } else {
+        Err(KindMismatch {
+            nome: caixa.nome.clone(),
+            expected,
+            actual: caixa.kind,
+        })
+    }
 }
 
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
@@ -851,6 +923,82 @@ mod tests {
             skel.get(serde_yaml::Value::String("spec".into())).is_none(),
             "skeleton must not pre-insert a spec key"
         );
+    }
+
+    // ── require_kind / KindMismatch — typed kind-check predicate ─────
+
+    #[test]
+    fn require_kind_accepts_matching_kind() {
+        // A Servico-kind caixa passes a `require_kind(_, Servico)`
+        // check — the happy path every renderer sees on a correctly-
+        // authored caixa.lisp, surfaced as `Ok(())` so the renderer's
+        // call site reads as a one-liner gate rather than a typed
+        // pattern match.
+        let c = bare_servico();
+        require_kind(&c, CaixaKind::Servico).unwrap();
+    }
+
+    #[test]
+    fn require_kind_rejects_with_typed_mismatch() {
+        // A Biblioteca-kind caixa fails a `require_kind(_, Servico)`
+        // check with a typed [`KindMismatch`] view that names the
+        // offending caixa's `:nome` plus both the expected and actual
+        // kinds. Pinning the typed shape so a future Display-format
+        // tweak can't silently drop any of the three load-bearing
+        // fields (which would regress the "feira verb whose error
+        // path doesn't name the offending caixa" punch-list item the
+        // protocol calls out).
+        let mut c = bare_servico();
+        c.kind = CaixaKind::Biblioteca;
+        c.servicos = vec![];
+        let err = require_kind(&c, CaixaKind::Servico).unwrap_err();
+        assert_eq!(err.nome, "hello-rio");
+        assert_eq!(err.expected, CaixaKind::Servico);
+        assert_eq!(err.actual, CaixaKind::Biblioteca);
+    }
+
+    #[test]
+    fn kind_mismatch_display_names_offending_caixa_nome() {
+        // The Display impl is the load-bearing surface every renderer's
+        // `#[error("{0}")] NotAXKind(#[from] KindMismatch)` arm prints
+        // through. Pinning the exact rendered form so a future format
+        // change is a one-line edit + a one-line test update, not a
+        // silent regression of the diagnostic clarity.
+        let err = KindMismatch {
+            nome: "checkout".into(),
+            expected: CaixaKind::Aplicacao,
+            actual: CaixaKind::Servico,
+        };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("checkout"),
+            "Display must name the offending caixa nome (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Aplicacao"),
+            "Display must name the expected kind (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Servico"),
+            "Display must name the actual kind (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn require_kind_distinguishes_every_pair_of_kinds() {
+        // Sanity: the predicate is kind-axis-agnostic — it works for
+        // every kind / expected pair, not just Servico/Biblioteca.
+        // Pinning that the caller can use `require_kind` for any of
+        // the five typed kinds (Biblioteca, Binario, Servico,
+        // Supervisor, Aplicacao) without a special-cased helper per
+        // kind. Same idiom every per-target renderer key off.
+        let mut c = bare_servico();
+        c.kind = CaixaKind::Aplicacao;
+        c.servicos = vec![];
+        let err = require_kind(&c, CaixaKind::Supervisor).unwrap_err();
+        assert_eq!(err.expected, CaixaKind::Supervisor);
+        assert_eq!(err.actual, CaixaKind::Aplicacao);
+        require_kind(&c, CaixaKind::Aplicacao).unwrap();
     }
 
     #[test]

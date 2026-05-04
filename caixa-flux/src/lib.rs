@@ -53,8 +53,15 @@ use thiserror::Error;
 /// Errors caixa-flux can raise.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("caixa :kind must be Servico for caixa-flux rendering, got {0:?}")]
-    NotAServico(CaixaKind),
+    /// The caixa's `:kind` doesn't match what `caixa-flux` targets
+    /// (this renderer only emits `programs.yaml` entries +
+    /// `GitRepository`/`HelmRelease`/`Kustomization` bundles for
+    /// `:kind Servico`). Lifted from a prior `NotAServico(CaixaKind)`
+    /// arm to wrap [`caixa_core::KindMismatch`] so the diagnostic
+    /// names the offending caixa's `:nome` (not just its kind),
+    /// shared verbatim with `caixa-helm` and `caixa-mesh`.
+    #[error("{0}")]
+    NotAServico(#[from] caixa_core::KindMismatch),
     #[error("caixa :servicos must declare exactly one entry for V0 (got {0})")]
     UnsupportedServicoCount(usize),
     #[error("computeunit yaml missing required field: {0}")]
@@ -86,9 +93,7 @@ pub fn programs_yaml_entry(
     caixa: &Caixa,
     computeunit_yaml: &serde_yaml::Value,
 ) -> Result<serde_yaml::Value, Error> {
-    if caixa.kind != CaixaKind::Servico {
-        return Err(Error::NotAServico(caixa.kind));
-    }
+    caixa_core::require_kind(caixa, CaixaKind::Servico)?;
     if caixa.servicos.len() != 1 {
         return Err(Error::UnsupportedServicoCount(caixa.servicos.len()));
     }
@@ -309,9 +314,7 @@ pub struct BundleFile {
 ///
 /// Written under `<cluster>/services/<caixa-name>/` by `feira deploy`.
 pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<BundleFile>, Error> {
-    if caixa.kind != CaixaKind::Servico {
-        return Err(Error::NotAServico(caixa.kind));
-    }
+    caixa_core::require_kind(caixa, CaixaKind::Servico)?;
 
     let name = caixa.nome.clone();
     let chart_name = format!("lareira-{name}");
@@ -531,6 +534,69 @@ spec:
         c.servicos = vec![];
         let err = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap_err();
         assert!(matches!(err, Error::NotAServico(_)));
+    }
+
+    #[test]
+    fn kind_mismatch_error_names_offending_caixa_nome() {
+        // Pinning the lifted [`caixa_core::KindMismatch`] view's
+        // load-bearing property: a kind-mismatched caixa surfaces a
+        // diagnostic that *names the offending caixa* (`hello-rio`),
+        // not just the rejected kind. Before the lift the renderer
+        // raised `Error::NotAServico(CaixaKind::Biblioteca)` whose
+        // Display said "caixa :kind must be Servico for caixa-flux
+        // rendering, got Biblioteca" — the user had to grep their
+        // source tree for which caixa.lisp triggered it. After the
+        // lift the wrapped KindMismatch carries the `:nome`, the
+        // renderer's `#[error("{0}")]` arm prints it through, and
+        // the diagnostic is self-locating.
+        let mut c = sample_caixa();
+        c.kind = CaixaKind::Biblioteca;
+        c.servicos = vec![];
+        let err = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-rio"),
+            "kind-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Servico"),
+            "diagnostic must name the expected kind (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Biblioteca"),
+            "diagnostic must name the actual kind (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kind_mismatch_names_offending_caixa_nome() {
+        // The second kind-checking call site in caixa-flux —
+        // [`cluster_bundle`] — must surface the same lifted diagnostic
+        // shape. Pinning so a future divergence between
+        // `programs_yaml_entry` and `cluster_bundle` (e.g. one
+        // re-inlines the kind check, the other uses `require_kind`)
+        // surfaces here as a test failure rather than as a silent
+        // diagnostic regression on the deploy path.
+        let mut c = sample_caixa();
+        c.kind = CaixaKind::Aplicacao;
+        c.servicos = vec![];
+        let opts = ClusterBundleOpts::for_caixa(&c, "rio");
+        let err = cluster_bundle(&c, &opts).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-rio"),
+            "cluster_bundle's kind-mismatch must also name the caixa \
+             nome (got: {msg:?})"
+        );
+        match err {
+            Error::NotAServico(km) => {
+                assert_eq!(km.nome, "hello-rio");
+                assert_eq!(km.expected, CaixaKind::Servico);
+                assert_eq!(km.actual, CaixaKind::Aplicacao);
+            }
+            other => panic!("expected Error::NotAServico, got {other:?}"),
+        }
     }
 
     #[test]
