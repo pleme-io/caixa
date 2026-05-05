@@ -372,6 +372,38 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         );
         serde_yaml::Value::Mapping(t)
     });
+    // `:politicas :retries` overlay — when the typed slot carries a
+    // value it surfaces as a per-rule `retry: { attempts: <N> }` block
+    // on every HTTPRoute rule, the canonical Gateway API v1.2+
+    // per-rule retry-policy shape:
+    // https://gateway-api.sigs.k8s.io/api-types/httproute/#retry
+    //
+    // Same trajectory as the `:politicas :timeout` overlay above:
+    // until this landed the typed `:retries` slot was inert past
+    // [`AplicacaoSpec::validate`] (which refuses zero via
+    // [`AplicacaoError::PolicyRetriesZero`]) — a non-zero attempt
+    // count never reached an emitted artifact. Wiring it through the
+    // HTTPRoute renderer turns the MESH-COMPOSITION §V CSE invariant
+    // ("no infinite retrying without bound") into a runtime-enforced
+    // contract: the cluster's data plane (Envoy / Cilium L7) caps
+    // the retry budget at exactly the typed slot's value, so a
+    // transient failure can't loop unbounded against a downstream.
+    //
+    // The overlay carries `attempts:` only — the typed slot is a
+    // single-axis `Option<u32>`. Future axes the Gateway API exposes
+    // (`codes:` for retryable status codes, `backoff:` for the
+    // backoff window) are future `MeshPolicy` field additions + a
+    // future `&& self.<axis>.is_none()` arm in
+    // [`MeshPolicy::is_empty`] + a parallel arm here, not a
+    // coordinated rewrite of this site.
+    let retry_overlay: Option<serde_yaml::Value> = spec.politicas.retries.map(|attempts| {
+        let mut r = serde_yaml::Mapping::new();
+        r.insert(
+            serde_yaml::Value::String("attempts".into()),
+            serde_yaml::Value::Number(attempts.into()),
+        );
+        serde_yaml::Value::Mapping(r)
+    });
     let mut rules = Vec::with_capacity(paths.len());
     for path in paths {
         let mut path_match = serde_yaml::Mapping::new();
@@ -408,6 +440,9 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         );
         if let Some(t) = &timeout_overlay {
             rule.insert(serde_yaml::Value::String("timeouts".into()), t.clone());
+        }
+        if let Some(r) = &retry_overlay {
+            rule.insert(serde_yaml::Value::String("retry".into()), r.clone());
         }
         rules.push(serde_yaml::Value::Mapping(rule));
     }
@@ -1269,21 +1304,212 @@ mod tests {
 
     #[test]
     fn httproute_rule_keys_pin_overlay_position() {
-        // Pin that timeouts: appears alongside matches: and
+        // Pin that timeouts: + retry: appear alongside matches: and
         // backendRefs: at the rule level, not nested inside either.
-        // Gateway API v1.x defines timeouts as a top-level rule field
-        // — a misplaced `matches[].timeouts` would silently be
-        // ignored by the apiserver, which matches no traffic visibly
-        // but disables the per-call deadline.
+        // Gateway API v1.x defines both as top-level rule fields — a
+        // misplaced `matches[].timeouts` or `matches[].retry` would
+        // silently be ignored by the apiserver, which matches no
+        // traffic visibly but disables the per-call deadline / retry
+        // budget. The fixture sets both `:politicas :timeout` and
+        // `:politicas :retries`, so every rule carries all 4 keys.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let rules = httproute_rules(&docs);
         for rule in &rules {
             let m = rule.as_mapping().expect("rule mapping");
-            // matches + backendRefs + timeouts (3 top-level keys).
-            assert_eq!(m.len(), 3);
+            // matches + backendRefs + timeouts + retry (4 top-level keys).
+            assert_eq!(m.len(), 4);
             assert!(m.contains_key(serde_yaml::Value::String("matches".into())));
             assert!(m.contains_key(serde_yaml::Value::String("backendRefs".into())));
             assert!(m.contains_key(serde_yaml::Value::String("timeouts".into())));
+            assert!(m.contains_key(serde_yaml::Value::String("retry".into())));
+        }
+    }
+
+    // ── HTTPRoute :politicas :retries overlay ────────────────────────────
+
+    #[test]
+    fn httproute_carries_politicas_retries_on_every_rule() {
+        // The fixture sets `:politicas :retries 3`. Every emitted
+        // HTTPRoute rule must carry `retry: { attempts: 3 }`, wiring
+        // the typed `:politicas :retries` slot through to the
+        // canonical Gateway API per-rule retry-policy shape:
+        // https://gateway-api.sigs.k8s.io/api-types/httproute/#retry
+        // Before this overlay landed the typed slot was inert past
+        // validate() — `AplicacaoSpec::validate` refused zero via
+        // PolicyRetriesZero, but a non-zero attempt count never
+        // reached an emitted artifact. This test is the pinned proof
+        // that the slot now reaches the cluster artifact (the
+        // fail-before-pass-after pin: the assertion below fails on
+        // any pre-overlay codebase, since the rule had no `retry:` key
+        // at all).
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let rules = httproute_rules(&docs);
+        assert!(!rules.is_empty(), "HTTPRoute must carry at least one rule");
+        for rule in &rules {
+            let retry = rule
+                .get("retry")
+                .and_then(|r| r.as_mapping())
+                .expect("rule must carry retry mapping when :politicas :retries is set");
+            assert_eq!(
+                retry
+                    .get(serde_yaml::Value::String("attempts".into()))
+                    .and_then(|v| v.as_u64()),
+                Some(3),
+                "retry.attempts must round-trip the typed :retries value"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_omits_retry_when_politicas_retries_unset() {
+        // Empty-axis-skip semantic (mirrors the `:timeout` overlay's
+        // omit-when-unset contract): an Aplicacao that doesn't declare
+        // `:politicas :retries` (politicas = MeshPolicy::default()
+        // here) emits an HTTPRoute with no `retry:` key on any rule
+        // — the K8s "no per-rule retry policy declared" semantic,
+        // which lets the cluster default policy take effect. Pinning
+        // so a future refactor of the overlay can't accidentally emit
+        // `retry: {}` (the empty-mapping form, which is structurally
+        // distinct from "no retry policy" and may be rejected by the
+        // Gateway API parser).
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy::default());
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        assert!(!rules.is_empty());
+        for rule in &rules {
+            assert!(
+                rule.get("retry").is_none(),
+                "rule must omit `retry:` when :politicas :retries is None"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_retry_renders_every_rule_independently() {
+        // Multiple `:entrada :paths` entries → multiple HTTPRoute
+        // rules. The retry overlay must apply to every rule, not just
+        // the first one — pin so a future refactor that hoists the
+        // overlay out of the loop without re-cloning into each rule
+        // can't accidentally drop the policy from the tail rules.
+        // Same hoist-out-of-loop guard the parallel `:timeout`
+        // overlay test enshrines.
+        let mut c = aplicacao_caixa();
+        if let Some(e) = c.entrada.as_mut() {
+            e.paths = vec![
+                "/api/cart".into(),
+                "/api/products".into(),
+                "/healthz".into(),
+            ];
+        }
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        assert_eq!(rules.len(), 3);
+        for rule in &rules {
+            let attempts = rule
+                .get("retry")
+                .and_then(|r| r.get("attempts"))
+                .and_then(|v| v.as_u64())
+                .expect("each of the 3 rules carries retry.attempts");
+            assert_eq!(attempts, 3);
+        }
+    }
+
+    #[test]
+    fn httproute_retry_round_trips_typed_attempt_count() {
+        // The overlay must round-trip whatever value the typed
+        // `:retries` slot carries — pin a non-fixture value (5) so a
+        // future change to the formatter / overlay shape (e.g.
+        // accidentally clamping attempts to a constant, mis-mapping
+        // the typed `u32` to a string) surfaces here.
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy {
+            retries: Some(5),
+            ..Default::default()
+        });
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            assert_eq!(
+                rule.get("retry")
+                    .and_then(|r| r.get("attempts"))
+                    .and_then(|v| v.as_u64()),
+                Some(5),
+                "retry.attempts must round-trip the typed :retries value verbatim"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_retry_attempts_serialized_as_yaml_number() {
+        // Pin the YAML scalar shape: `attempts:` is an *integer* in
+        // the Gateway API schema (HTTPRouteRetry.attempts: integer),
+        // not a string. A renderer that accidentally emits
+        // `attempts: "3"` would round-trip past serde_yaml but be
+        // rejected by the apiserver-side OpenAPI schema validation
+        // — pin the scalar kind here so a regression surfaces at
+        // build time, not at apply time.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            let attempts = rule
+                .get("retry")
+                .and_then(|r| r.get("attempts"))
+                .expect("retry.attempts present");
+            assert!(
+                attempts.is_u64() || attempts.is_i64(),
+                "retry.attempts must be a YAML integer (got: {attempts:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_timeouts_and_retry_coexist_independently() {
+        // The two `:politicas` axes (`:timeout` + `:retries`) emit
+        // independently — one set, the other unset, must surface
+        // exactly the expected single overlay. Pin both directions
+        // (timeout-only and retries-only) so a future refactor can't
+        // accidentally couple the two emission gates.
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy {
+            timeout: Some(Duration::from_secs(15)),
+            retries: None,
+            ..Default::default()
+        });
+        let docs = gateway_routes(&c).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            assert_eq!(
+                rule.get("timeouts")
+                    .and_then(|t| t.get("request"))
+                    .and_then(|v| v.as_str()),
+                Some("15s")
+            );
+            assert!(
+                rule.get("retry").is_none(),
+                "retry: must be absent when only :timeout is set"
+            );
+        }
+
+        let mut c2 = aplicacao_caixa();
+        c2.politicas = Some(MeshPolicy {
+            timeout: None,
+            retries: Some(2),
+            ..Default::default()
+        });
+        let docs = gateway_routes(&c2).unwrap();
+        let rules = httproute_rules(&docs);
+        for rule in &rules {
+            assert!(
+                rule.get("timeouts").is_none(),
+                "timeouts: must be absent when only :retries is set"
+            );
+            assert_eq!(
+                rule.get("retry")
+                    .and_then(|r| r.get("attempts"))
+                    .and_then(|v| v.as_u64()),
+                Some(2)
+            );
         }
     }
 }
