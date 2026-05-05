@@ -141,6 +141,47 @@ pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let spec = typed_view(caixa)?;
     let namespace = DEFAULT_NAMESPACE; // operators scope per-cluster manifests
+    // `:politicas :mtls-required` overlay — when the typed slot
+    // carries a value it surfaces as a per-ingress-rule
+    // `authentication: { mode: <mode> }` block on every emitted
+    // CiliumNetworkPolicy, the canonical Cilium per-rule mutual-
+    // authentication shape:
+    // https://docs.cilium.io/en/stable/network/servicemesh/mutual-authentication/
+    //
+    // Same trajectory as the `:timeout`/`:retries` overlays in
+    // [`gateway_routes`]: until this landed the typed
+    // `:mtls-required` slot was inert past
+    // [`AplicacaoSpec::validate`] — the slot round-tripped through
+    // serde and read non-empty for `MeshPolicy::is_empty`, but no
+    // caixa-side renderer surfaced it as a cluster artifact. Wiring
+    // it through the CiliumNetworkPolicy renderer turns the
+    // MESH-COMPOSITION §V CSE invariant ("every Aplicacao declares
+    // `:politicas :mtls-required t` — no plaintext intra-mesh") from
+    // a validate-time gate into a runtime-enforced contract: Cilium's
+    // identity-aware data plane refuses every ingress edge that
+    // doesn't carry a peer SPIFFE-identity-bound mTLS handshake, so
+    // a same-namespace pod that doesn't satisfy the typed identity
+    // contract can't satisfy the rule even from inside the cluster.
+    //
+    // The author-facing `:mtls-required` slot is a `Option<bool>`
+    // tristate (Some(true) | Some(false) | None) — the explicit
+    // Some(false) opt-out reads non-empty for `MeshPolicy::is_empty`
+    // (the author *named* the axis, the renderer needs to honor that
+    // vs. fall back to the cluster default). The two non-None arms
+    // map to the two valid Cilium authentication modes:
+    //   - Some(true)  → `mode: "required"`  (mTLS handshake mandatory)
+    //   - Some(false) → `mode: "disabled"`  (mTLS handshake skipped —
+    //                    explicit opt-out, e.g. for a debug edge)
+    //   - None        → omit the block entirely (cluster default
+    //                    applies — typically "disabled" cluster-wide).
+    let mtls_overlay: Option<serde_yaml::Value> = spec.politicas.mtls_required.map(|required| {
+        let mut a = serde_yaml::Mapping::new();
+        a.insert(
+            serde_yaml::Value::String("mode".into()),
+            serde_yaml::Value::String(if required { "required" } else { "disabled" }.into()),
+        );
+        serde_yaml::Value::Mapping(a)
+    });
     let mut out = Vec::with_capacity(spec.contratos.len());
     for c in &spec.contratos {
         // Policy's own labels — `aplicacao` (which graph) and
@@ -236,6 +277,12 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             serde_yaml::Value::String("toPorts".into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(to_port)]),
         );
+        if let Some(a) = &mtls_overlay {
+            ingress_rule.insert(
+                serde_yaml::Value::String("authentication".into()),
+                a.clone(),
+            );
+        }
 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert(
@@ -1509,6 +1556,265 @@ mod tests {
                     .and_then(|r| r.get("attempts"))
                     .and_then(|v| v.as_u64()),
                 Some(2)
+            );
+        }
+    }
+
+    // ── CiliumNetworkPolicy :politicas :mtls-required overlay ────────────
+
+    fn cnp_ingress_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
+        docs.iter()
+            .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some("CiliumNetworkPolicy"))
+            .filter_map(|d| {
+                d.get("spec")
+                    .and_then(|s| s.get("ingress"))
+                    .and_then(|i| i.as_sequence())
+                    .and_then(|s| s.first())
+                    .cloned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn cnp_carries_politicas_mtls_required_on_every_rule() {
+        // The fixture sets `:politicas :mtls-required t`. Every
+        // emitted CiliumNetworkPolicy ingress rule must carry
+        // `authentication: { mode: "required" }`, wiring the typed
+        // `:politicas :mtls-required` slot through to the canonical
+        // Cilium per-rule mutual-authentication shape:
+        // https://docs.cilium.io/en/stable/network/servicemesh/mutual-authentication/
+        // Before this overlay landed the typed slot was inert past
+        // validate() — the rendered CNP carried no authentication:
+        // block, so MESH-COMPOSITION §V "no plaintext intra-mesh"
+        // was a build-time gate without runtime teeth. This test is
+        // the pinned proof that the slot now reaches the cluster
+        // artifact (the fail-before-pass-after pin: the assertion
+        // below fails on any pre-overlay codebase, since the rule
+        // had no `authentication:` key at all).
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let rules = cnp_ingress_rules(&policies);
+        assert!(
+            !rules.is_empty(),
+            "CNPs must carry at least one ingress rule"
+        );
+        for rule in &rules {
+            let auth = rule
+                .get("authentication")
+                .and_then(|a| a.as_mapping())
+                .expect("rule must carry authentication mapping when :mtls-required is set");
+            assert_eq!(
+                auth.get(serde_yaml::Value::String("mode".into()))
+                    .and_then(|v| v.as_str()),
+                Some("required")
+            );
+        }
+    }
+
+    #[test]
+    fn cnp_omits_authentication_when_mtls_required_unset() {
+        // Empty-axis-skip semantic (mirrors the `:timeout`/`:retries`
+        // overlays' omit-when-unset contract): an Aplicacao that
+        // doesn't declare `:politicas :mtls-required` (politicas =
+        // MeshPolicy::default() here) emits CNPs with no
+        // `authentication:` key on any ingress rule — the Cilium
+        // "no per-rule auth mode declared" semantic, which lets the
+        // cluster default policy take effect (typically "disabled").
+        // Pinning so a future refactor of the overlay can't
+        // accidentally emit `authentication: {}` (the empty-mapping
+        // form, which the Cilium agent rejects as malformed since
+        // the `mode:` field is required when the block is present).
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy::default());
+        let policies = cilium_network_policies(&c).unwrap();
+        let rules = cnp_ingress_rules(&policies);
+        assert!(!rules.is_empty());
+        for rule in &rules {
+            assert!(
+                rule.get("authentication").is_none(),
+                "rule must omit `authentication:` when :mtls-required is None"
+            );
+        }
+    }
+
+    #[test]
+    fn cnp_explicit_mtls_required_false_emits_disabled_mode() {
+        // The author-facing `:mtls-required` slot is a tristate. The
+        // `Some(false)` arm is *not* the same as `None` — the author
+        // explicitly named the axis and asked for the mTLS handshake
+        // to be skipped on this Aplicacao's edges (e.g. a debug or
+        // legacy-bridge Aplicacao that needs to talk to non-mesh
+        // peers). The renderer must surface that explicit opt-out as
+        // `mode: "disabled"`, *not* fall back to omitting the block
+        // (which would let the cluster default — typically also
+        // "disabled" today, but environment-divergent — take effect).
+        // Pinning so a future refactor that collapses the tristate
+        // into a bool can't silently lose the authored intent.
+        let mut c = aplicacao_caixa();
+        c.politicas = Some(MeshPolicy {
+            mtls_required: Some(false),
+            ..Default::default()
+        });
+        let policies = cilium_network_policies(&c).unwrap();
+        let rules = cnp_ingress_rules(&policies);
+        assert!(!rules.is_empty());
+        for rule in &rules {
+            let auth = rule
+                .get("authentication")
+                .and_then(|a| a.as_mapping())
+                .expect("rule must carry authentication mapping for explicit :mtls-required nil");
+            assert_eq!(
+                auth.get(serde_yaml::Value::String("mode".into()))
+                    .and_then(|v| v.as_str()),
+                Some("disabled")
+            );
+        }
+    }
+
+    #[test]
+    fn cnp_authentication_renders_every_policy_independently() {
+        // Multiple `:contratos` → multiple CiliumNetworkPolicies.
+        // The auth overlay must apply to every policy's ingress
+        // rule, not just the first one — pin so a future refactor
+        // that hoists the overlay out of the loop without re-cloning
+        // into each rule can't accidentally drop the policy from the
+        // tail CNPs. Same hoist-out-of-loop guard the parallel
+        // `:timeout`/`:retries` overlay tests enshrine for HTTPRoute.
+        let mut c = aplicacao_caixa();
+        // Three `:contratos` → three CNPs.
+        c.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/inventory".into()),
+            subject: None,
+            slot: None,
+        });
+        let policies = cilium_network_policies(&c).unwrap();
+        assert_eq!(policies.len(), 3);
+        let rules = cnp_ingress_rules(&policies);
+        assert_eq!(rules.len(), 3);
+        for rule in &rules {
+            assert_eq!(
+                rule.get("authentication")
+                    .and_then(|a| a.get("mode"))
+                    .and_then(|v| v.as_str()),
+                Some("required"),
+                "every CNP's ingress rule must carry the authentication overlay"
+            );
+        }
+    }
+
+    #[test]
+    fn cnp_authentication_position_is_rule_level_not_nested() {
+        // Pin that `authentication:` appears at the ingress-rule
+        // level (alongside `fromEndpoints` + `toPorts`), not nested
+        // inside either. Cilium's per-rule mutual-auth schema places
+        // the field at the IngressRule axis — a misplaced
+        // `fromEndpoints[].authentication` or
+        // `toPorts[].authentication` would silently be ignored by
+        // the Cilium agent (matches no traffic visibly but disables
+        // the per-edge mTLS contract). The fixture sets
+        // `:mtls-required t`, so every rule carries fromEndpoints +
+        // toPorts + authentication (3 top-level rule keys).
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let rules = cnp_ingress_rules(&policies);
+        for rule in &rules {
+            let m = rule.as_mapping().expect("rule mapping");
+            assert_eq!(m.len(), 3);
+            assert!(m.contains_key(serde_yaml::Value::String("fromEndpoints".into())));
+            assert!(m.contains_key(serde_yaml::Value::String("toPorts".into())));
+            assert!(m.contains_key(serde_yaml::Value::String("authentication".into())));
+            // The auth block must not leak inside fromEndpoints[] or
+            // toPorts[] — guards the Cilium-side schema contract that
+            // mutual-auth is an ingress-rule-level concern.
+            let from = m
+                .get(serde_yaml::Value::String("fromEndpoints".into()))
+                .and_then(|f| f.as_sequence())
+                .expect("fromEndpoints sequence");
+            for fe in from {
+                assert!(
+                    fe.get("authentication").is_none(),
+                    "authentication must not nest inside fromEndpoints[]"
+                );
+            }
+            let to = m
+                .get(serde_yaml::Value::String("toPorts".into()))
+                .and_then(|t| t.as_sequence())
+                .expect("toPorts sequence");
+            for tp in to {
+                assert!(
+                    tp.get("authentication").is_none(),
+                    "authentication must not nest inside toPorts[]"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn cnp_authentication_pubsub_contracts_carry_overlay_too() {
+        // The auth overlay applies to every `:contratos` edge,
+        // regardless of WIT shape. Cilium's mutual-auth happens at
+        // L4 (per the SPIFFE-identity handshake) — same as the
+        // identity-bound fromEndpoints selector — so a `nats:pub-sub`
+        // contrato (which the existing `cilium_pubsub_contracts_skip_l7_rules`
+        // test pins as L4-only) still carries the auth block. Pin
+        // here so a future overlay refactor that mistakenly couples
+        // the auth overlay to L7-shape (e.g. only adds it when
+        // `target() == WitTarget::Http`) surfaces.
+        let mut c = aplicacao_caixa();
+        c.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "cart".into(), // back-edge for testing only
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("checkout.events.charge.failed".into()),
+            slot: None,
+        });
+        let policies = cilium_network_policies(&c).unwrap();
+        let nats_policy = policies
+            .iter()
+            .find(|p| {
+                p.get("metadata")
+                    .and_then(|m| m.get("name"))
+                    .and_then(|n| n.as_str())
+                    == Some("checkout-payment-to-cart")
+            })
+            .expect("pubsub CNP present");
+        let rule = nats_policy
+            .get("spec")
+            .and_then(|s| s.get("ingress"))
+            .and_then(|i| i.as_sequence())
+            .and_then(|s| s.first())
+            .expect("ingress[0]");
+        assert_eq!(
+            rule.get("authentication")
+                .and_then(|a| a.get("mode"))
+                .and_then(|v| v.as_str()),
+            Some("required")
+        );
+    }
+
+    #[test]
+    fn cnp_authentication_mode_serialized_as_yaml_string() {
+        // Pin the YAML scalar shape: `mode:` is a *string* in the
+        // Cilium CRD schema (CiliumNetworkPolicy.spec.ingress[]
+        // .authentication.mode: string enum {required, disabled,
+        // test-always-fail}), not a bool. A renderer that
+        // accidentally emits `mode: true` (the raw typed slot's
+        // bool) would round-trip past serde_yaml but be rejected by
+        // the apiserver-side OpenAPI schema validation — pin the
+        // scalar kind here so a regression surfaces at build time,
+        // not at apply time.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let rules = cnp_ingress_rules(&policies);
+        for rule in &rules {
+            let mode = rule
+                .get("authentication")
+                .and_then(|a| a.get("mode"))
+                .expect("authentication.mode present");
+            assert!(
+                mode.is_string(),
+                "authentication.mode must be a YAML string (got: {mode:?})"
             );
         }
     }
