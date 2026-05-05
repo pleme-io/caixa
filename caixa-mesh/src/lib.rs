@@ -36,7 +36,7 @@ use std::collections::BTreeMap;
 use caixa_core::{
     Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, WitTarget, aplicacao::AplicacaoSpec,
     kube_resource_skeleton, pleme_program_in_aplicacao_selector, pleme_program_selector,
-    yaml_string_mapping,
+    single_field_overlay, yaml_string_mapping,
 };
 use thiserror::Error;
 
@@ -174,13 +174,12 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     //                    explicit opt-out, e.g. for a debug edge)
     //   - None        → omit the block entirely (cluster default
     //                    applies — typically "disabled" cluster-wide).
-    let mtls_overlay: Option<serde_yaml::Value> = spec.politicas.mtls_required.map(|required| {
-        let mut a = serde_yaml::Mapping::new();
-        a.insert(
-            serde_yaml::Value::String("mode".into()),
-            serde_yaml::Value::String(if required { "required" } else { "disabled" }.into()),
-        );
-        serde_yaml::Value::Mapping(a)
+    // Single-axis overlay built once per renderer call and cloned into
+    // each ingress rule. Same lifted-typed-primitive shape the
+    // gateway_routes overlays (timeout, retry) consume — see
+    // [`caixa_core::render::single_field_overlay`].
+    let mtls_overlay = single_field_overlay(spec.politicas.mtls_required, "mode", |required| {
+        serde_yaml::Value::String(if required { "required" } else { "disabled" }.into())
     });
     let mut out = Vec::with_capacity(spec.contratos.len());
     for c in &spec.contratos {
@@ -411,13 +410,8 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // caixa_core::supervisor::duration_codec::render so a `30s`
     // typed-slot value renders to the same `"30s"` string K8s
     // tooling parses — no per-renderer ad-hoc duration formatting.
-    let timeout_overlay: Option<serde_yaml::Value> = spec.politicas.timeout.map(|d| {
-        let mut t = serde_yaml::Mapping::new();
-        t.insert(
-            serde_yaml::Value::String("request".into()),
-            serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d)),
-        );
-        serde_yaml::Value::Mapping(t)
+    let timeout_overlay = single_field_overlay(spec.politicas.timeout, "request", |d| {
+        serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d))
     });
     // `:politicas :retries` overlay — when the typed slot carries a
     // value it surfaces as a per-rule `retry: { attempts: <N> }` block
@@ -443,13 +437,8 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // future `&& self.<axis>.is_none()` arm in
     // [`MeshPolicy::is_empty`] + a parallel arm here, not a
     // coordinated rewrite of this site.
-    let retry_overlay: Option<serde_yaml::Value> = spec.politicas.retries.map(|attempts| {
-        let mut r = serde_yaml::Mapping::new();
-        r.insert(
-            serde_yaml::Value::String("attempts".into()),
-            serde_yaml::Value::Number(attempts.into()),
-        );
-        serde_yaml::Value::Mapping(r)
+    let retry_overlay = single_field_overlay(spec.politicas.retries, "attempts", |attempts| {
+        serde_yaml::Value::Number(attempts.into())
     });
     let mut rules = Vec::with_capacity(paths.len());
     for path in paths {

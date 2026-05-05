@@ -39,7 +39,7 @@ pub use render::{
     KUBE_KEY_NAMESPACE, KindMismatch, LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM,
     M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, PLEME_LABEL_PREFIX, RenderError,
     kube_resource_skeleton, pleme_program_in_aplicacao_selector, pleme_program_selector,
-    require_kind, servico_m2_overlay, yaml_string_mapping,
+    require_kind, servico_m2_overlay, single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction};
