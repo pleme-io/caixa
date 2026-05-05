@@ -353,6 +353,72 @@ pub fn kube_resource_skeleton(
     out
 }
 
+/// Build a single-field [`serde_yaml::Value::Mapping`] from a typed
+/// `Option<T>` slot — `None` when the slot is unset, `Some(Mapping {
+/// inner_key: f(t) })` otherwise.
+///
+/// The canonical shape every per-`:politicas` overlay across `caixa-mesh`
+/// uses to wire a typed `MeshPolicy` axis through to its single-key
+/// cluster artifact:
+///
+///   * `:politicas :timeout`        → `timeouts: { request: <duration> }`
+///     (Gateway API `HTTPRoute.spec.rules[].timeouts`, wired in 5f477a6)
+///   * `:politicas :retries`        → `retry: { attempts: <number> }`
+///     (Gateway API `HTTPRoute.spec.rules[].retry`, wired in 23b7f00)
+///   * `:politicas :mtls-required`  → `authentication: { mode: <enum> }`
+///     (Cilium `CiliumNetworkPolicy.spec.ingress[].authentication`,
+///     wired in 878bf81)
+///
+/// Until this lift the three call sites each carried a verbatim copy
+/// of the same six-line block — `let mut m = serde_yaml::Mapping::new();
+/// m.insert(Value::String(<key>.into()), <value>); Value::Mapping(m)` —
+/// wrapped in `spec.politicas.<axis>.map(|v| { … })`. Three-of-the-pattern
+/// across one emit-site (and now structurally one-of-the-pattern in each
+/// of the next two emit-sites the M3.x roadmap acknowledges: the
+/// `:circuit-breaker` and `:rate-limit` axes' `CiliumClusterwideEnvoyConfig`
+/// emitter, MESH-COMPOSITION §III.2 #3) overflows the duplication
+/// budget; this helper is the lifted typed primitive.
+///
+/// The caller passes:
+///   * the typed `Option<T>` slot,
+///   * the inner YAML key the artifact's per-axis schema names
+///     (`request` / `attempts` / `mode` for the three landed overlays;
+///     `consecutiveErrors` / `requestsPerUnit` for the two roadmap
+///     axes), and
+///   * a closure converting the typed `T` into the inner field's
+///     [`serde_yaml::Value`] (typically a `String` for canonical
+///     duration / enum scalars or a `Number` for typed integer
+///     attempt counts).
+///
+/// Returns `Some(Mapping)` when the slot is `Some`, `None` otherwise —
+/// the caller's `if let Some(overlay) = … { rule.insert(<outer_key>,
+/// overlay.clone()) }` guard for the *outer* key (`timeouts` / `retry`
+/// / `authentication` — which the per-rule iteration applies to every
+/// emitted item) becomes the single emission gate, and the *inner*
+/// shape is built once by the closure.
+///
+/// Pairs with the `MeshPolicy::is_empty` predicate at the typed-axis
+/// emptiness layer: `is_empty()` short-circuits the whole `:politicas`
+/// block when every axis is `None`; this helper short-circuits the
+/// per-axis overlay when its single axis is `None`. Two layers, same
+/// "named-axis-with-None-means-skip-emit" contract THEORY.md §V.2.7
+/// render determinism extends to.
+#[must_use]
+pub fn single_field_overlay<T, F>(
+    slot: Option<T>,
+    inner_key: &'static str,
+    f: F,
+) -> Option<serde_yaml::Value>
+where
+    F: FnOnce(T) -> serde_yaml::Value,
+{
+    slot.map(|v| {
+        let mut m = serde_yaml::Mapping::new();
+        m.insert(serde_yaml::Value::String(inner_key.into()), f(v));
+        serde_yaml::Value::Mapping(m)
+    })
+}
+
 /// Render the M2 typed-slot YAML overlay for a Caixa: the camelCase
 /// `(key, value)` fragments every per-Servico renderer
 /// ([`caixa-helm`]'s values block, [`caixa-flux`]'s programs.yaml
@@ -1019,5 +1085,116 @@ mod tests {
         });
         let overlay = servico_m2_overlay(&c).unwrap();
         assert!(overlay.contains_key(M2_KEY_LIMITS));
+    }
+
+    // ── single_field_overlay — typed per-axis overlay primitive ──────────
+
+    #[test]
+    fn single_field_overlay_none_yields_none() {
+        // Empty-axis-skip semantic at the typed-primitive layer: a
+        // `None` slot returns `None`, not `Some(empty Mapping)`. The
+        // caller's `if let Some(overlay) = …` guard then becomes the
+        // single emission gate, and a malformed `outer: {}` (the
+        // empty-mapping form some K8s parsers reject) is structurally
+        // impossible by construction.
+        let v: Option<serde_yaml::Value> = single_field_overlay::<u32, _>(None, "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        });
+        assert!(v.is_none());
+    }
+
+    #[test]
+    fn single_field_overlay_some_yields_single_field_mapping() {
+        // The Some arm builds exactly one inner key/value pair, no
+        // more, no less. Pinning the shape so a future refactor can't
+        // accidentally introduce a second field (which would render
+        // as a malformed `timeouts: { request: "30s", <leak>: ... }`
+        // overlay block).
+        let v = single_field_overlay(Some(30u32), "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        })
+        .expect("Some arm yields Some(...)");
+        let m = v.as_mapping().expect("mapping shape");
+        assert_eq!(m.len(), 1);
+        assert_eq!(
+            m.get(serde_yaml::Value::String("attempts".into()))
+                .and_then(|x| x.as_u64()),
+            Some(30)
+        );
+    }
+
+    #[test]
+    fn single_field_overlay_threads_typed_value_through_closure() {
+        // The closure receives the unwrapped typed `T` (not the
+        // wrapping `Option<T>`), so the per-overlay value-shaping
+        // logic stays at the call site. Three different Value shapes
+        // pin the closure's type-flow: a `String` (for canonical
+        // duration / enum scalars), a `Number` (for typed integer
+        // attempt counts), and a derived `Bool` (for tristate enums).
+        // Mirrors the three landed overlays' shapes letter-for-letter.
+        let dur = single_field_overlay(Some("30s".to_string()), "request", |s| {
+            serde_yaml::Value::String(s)
+        })
+        .unwrap();
+        assert_eq!(dur.get("request").and_then(|v| v.as_str()), Some("30s"));
+
+        let num = single_field_overlay(Some(3u32), "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        })
+        .unwrap();
+        assert_eq!(num.get("attempts").and_then(|v| v.as_u64()), Some(3));
+
+        // The mtls tristate's two non-None arms map to enum strings,
+        // not raw bools (the Cilium CRD's `mode: required|disabled`
+        // shape — pinned end-to-end at every emit site by the
+        // `cnp_authentication_mode_serialized_as_yaml_string` test).
+        let mode = single_field_overlay(Some(true), "mode", |b| {
+            serde_yaml::Value::String(if b { "required" } else { "disabled" }.into())
+        })
+        .unwrap();
+        assert_eq!(mode.get("mode").and_then(|v| v.as_str()), Some("required"));
+    }
+
+    #[test]
+    fn single_field_overlay_outer_key_is_callers_concern() {
+        // The helper builds the *inner* (single-field) Mapping; the
+        // *outer* key (`timeouts` / `retry` / `authentication`) is
+        // the caller's `if let Some(overlay) = … { rule.insert(<outer>,
+        // overlay.clone()) }` insertion. Pinning that the helper's
+        // returned Value carries no outer-key wrapping — emitting the
+        // outer-key-wrapped form here would silently double-wrap
+        // every overlay (`timeouts: { timeouts: { request: "30s" } }`
+        // post-insertion).
+        let v = single_field_overlay(Some(30u32), "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        })
+        .unwrap();
+        let m = v.as_mapping().unwrap();
+        // Only the inner key — no `timeouts:` / `retry:` /
+        // `authentication:` wrapper at this layer.
+        for k in ["timeouts", "retry", "authentication"] {
+            assert!(
+                m.get(serde_yaml::Value::String(k.into())).is_none(),
+                "single_field_overlay must not pre-insert the outer key {k:?} \
+                 (the caller's per-rule insert is the canonical insertion site)"
+            );
+        }
+    }
+
+    #[test]
+    fn single_field_overlay_value_is_clonable_for_per_rule_dispatch() {
+        // The build-once-clone-many idiom every emit-site uses: the
+        // overlay is computed once per renderer call (so the closure
+        // runs exactly once) and `.clone()`d into each rule of the
+        // emitted sequence. Pin that the returned Value is in fact
+        // cloneable (a `serde_yaml::Value` always is, but the test
+        // pins the contract end-to-end so a future refactor that
+        // returns a non-Cloneable wrapper surfaces here).
+        let v = single_field_overlay(Some(30u32), "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        })
+        .unwrap();
+        let v_clone = v.clone();
+        assert_eq!(v, v_clone);
     }
 }
