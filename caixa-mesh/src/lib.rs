@@ -35,8 +35,8 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, WitTarget, aplicacao::AplicacaoSpec,
-    kube_resource_skeleton, pleme_program_in_aplicacao_selector, pleme_program_selector,
-    single_field_overlay, yaml_string_mapping,
+    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
+    pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -205,27 +205,25 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // spec.endpointSelector — match the destination Servico's
         // identity. Single-axis (program-only) selector; see
         // caixa_core::render::pleme_program_selector for the deliberate
-        // intent / safety tradeoff vs. the in-aplicacao variant.
-        let mut endpoint_selector = serde_yaml::Mapping::new();
-        endpoint_selector.insert(
-            serde_yaml::Value::String("matchLabels".into()),
-            yaml_string_mapping(pleme_program_selector(&c.para)),
-        );
+        // intent / safety tradeoff vs. the in-aplicacao variant. The
+        // `{matchLabels: <selector>}` envelope comes from
+        // caixa_core::render::label_selector — same lift as
+        // yaml_string_mapping / kube_resource_skeleton applied to the
+        // K8s LabelSelector axis.
+        let endpoint_selector = label_selector(pleme_program_selector(&c.para));
 
         // ingress[0]: from the source Servico, scoped to this
         // Aplicacao (so a same-named program in a different Aplicacao
         // can't satisfy the rule). Two-axis selector via the
         // canonical helper — call-site reads as intent, not as five
-        // hand-written insert() calls.
-        let mut from_endpoint = serde_yaml::Mapping::new();
-        from_endpoint.insert(
-            serde_yaml::Value::String("matchLabels".into()),
-            yaml_string_mapping(pleme_program_in_aplicacao_selector(&c.de, &caixa.nome)),
-        );
+        // hand-written insert() calls. Wrapped in label_selector so
+        // the `matchLabels` envelope is the typed primitive's
+        // responsibility, not this site's.
+        let from_endpoint = label_selector(pleme_program_in_aplicacao_selector(&c.de, &caixa.nome));
         let mut ingress_rule = serde_yaml::Mapping::new();
         ingress_rule.insert(
             serde_yaml::Value::String("fromEndpoints".into()),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(from_endpoint)]),
+            serde_yaml::Value::Sequence(vec![from_endpoint]),
         );
 
         // toPorts — wit-shape-aware. HTTP gets L7 rules; pubsub +
@@ -286,7 +284,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert(
             serde_yaml::Value::String("endpointSelector".into()),
-            serde_yaml::Value::Mapping(endpoint_selector),
+            endpoint_selector,
         );
         policy_spec.insert(
             serde_yaml::Value::String("ingress".into()),

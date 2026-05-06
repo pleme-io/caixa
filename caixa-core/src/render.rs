@@ -192,6 +192,19 @@ pub const KUBE_KEY_NAME: &str = "name";
 pub const KUBE_KEY_NAMESPACE: &str = "namespace";
 /// Canonical K8s API key naming the resource's labels (under metadata).
 pub const KUBE_KEY_LABELS: &str = "labels";
+/// Canonical K8s API key naming the `matchLabels` axis of a
+/// [`LabelSelector`][k8s-ls] — the equality-based projection of the
+/// selector schema (the other axis, `matchExpressions`, is set-based
+/// and intentionally out-of-scope for the V0 [`label_selector`]
+/// helper). Spelled exactly as the K8s apiserver expects (camelCase
+/// `matchLabels`, not `match_labels` / `MatchLabels` / `match-labels`)
+/// so the rendered YAML round-trips through every K8s schema parser
+/// (Cilium CRDs, Gateway API, `ComputeUnit`, future
+/// `mesh.pleme.io/v1alpha1/Aplicacao`) without per-renderer string
+/// drift.
+///
+/// [k8s-ls]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta
+pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 
 /// Build the canonical Cilium `matchLabels` selector for a single
 /// pleme-io program **scoped to its Aplicacao** — the safe default
@@ -277,6 +290,64 @@ where
             serde_yaml::Value::String(v.into()),
         );
     }
+    serde_yaml::Value::Mapping(out)
+}
+
+/// Wrap a typed string-valued label mapping in the canonical K8s
+/// [`LabelSelector`][k8s-ls] shape — `{matchLabels: <string-string-map>}`
+/// — and return it as a [`serde_yaml::Value::Mapping`] ready to drop
+/// directly under any K8s field that takes a label selector
+/// (Cilium `endpointSelector` / `fromEndpoints[].matchLabels`, Gateway
+/// API `BackendRef` filters, ComputeUnit `selector`, Service
+/// `spec.selector`, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// `spec.selector`).
+///
+/// Lifted from two inline `serde_yaml::Mapping::new() +
+/// insert(Value::String("matchLabels".into()), yaml_string_mapping(_))`
+/// blocks in `caixa-mesh::cilium_network_policies` (the destination
+/// `endpointSelector` and the source `fromEndpoints[0]` selector) so
+/// the next renderer to land — the per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` emitter (MESH-COMPOSITION §III.2 #3),
+/// the `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer (§III.2 #5), the M4 cross-cluster fan-out's per-cluster
+/// `Service`/`HTTPRoute backendRefs` selectors, the future `caixa-otel`
+/// OpenTelemetry-Collector resource-selector pipeline — gets the
+/// canonical K8s label-selector shape for free with one function call,
+/// instead of re-inlining the same four-line `Mapping::new() +
+/// insert("matchLabels", yaml_string_mapping(_))` boilerplate.
+///
+/// V0 emits the equality-based selector axis only (`matchLabels`); the
+/// set-based axis ([`matchExpressions`][k8s-ls]) is deliberately out
+/// of scope. A future `:contratos` axis whose selector needs
+/// `matchExpressions` (e.g. `In`, `NotIn`, `Exists`, `DoesNotExist`
+/// operators against a label key) is a future struct-shaped extension
+/// of this helper —
+/// e.g. a richer [`LabelSelector`] view type with `match_labels` +
+/// `match_expressions` fields — not a per-renderer rewrite of
+/// every selector emission site.
+///
+/// Iteration order is whatever the input iterator yields; pass a
+/// [`BTreeMap`] for alphabetical determinism (THEORY.md §V.2.7 render
+/// determinism: rendered YAML key order is independent of source-code
+/// declaration order). The two pleme-io selector helpers
+/// ([`pleme_program_selector`] / [`pleme_program_in_aplicacao_selector`])
+/// already return `BTreeMap`s for exactly this reason, so a
+/// `label_selector(pleme_program_in_aplicacao_selector(_, _))` call
+/// renders deterministically end-to-end.
+///
+/// [k8s-ls]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta
+#[must_use]
+pub fn label_selector<K, V, M>(labels: M) -> serde_yaml::Value
+where
+    M: IntoIterator<Item = (K, V)>,
+    K: Into<String>,
+    V: Into<String>,
+{
+    let mut out = serde_yaml::Mapping::new();
+    out.insert(
+        serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.to_string()),
+        yaml_string_mapping(labels),
+    );
     serde_yaml::Value::Mapping(out)
 }
 
@@ -803,6 +874,145 @@ mod tests {
         assert_eq!(KUBE_KEY_NAME, "name");
         assert_eq!(KUBE_KEY_NAMESPACE, "namespace");
         assert_eq!(KUBE_KEY_LABELS, "labels");
+        assert_eq!(KUBE_KEY_MATCH_LABELS, "matchLabels");
+    }
+
+    // ── label_selector — typed K8s LabelSelector wrapper ─────────────────
+
+    #[test]
+    fn label_selector_wraps_in_match_labels_envelope() {
+        // The lift's contract: input labels appear under the canonical
+        // `matchLabels` key, and the outer Value is a Mapping with
+        // exactly that one key. Pinning the shape so a future
+        // refactor can't silently drop the wrapper (which would emit
+        // bare `aplicacao: …, program: …` directly under the K8s
+        // selector field — a structurally invalid LabelSelector that
+        // some apiserver-side parsers tolerate by matching the empty
+        // set, a sharp footgun).
+        let mut labels = BTreeMap::new();
+        labels.insert(LABEL_APLICACAO, "checkout".to_string());
+        labels.insert(LABEL_PROGRAM, "cart".to_string());
+        let sel = label_selector(labels);
+        let m = sel.as_mapping().expect("mapping shape");
+        assert_eq!(m.len(), 1);
+        let inner = m
+            .get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into()))
+            .and_then(|v| v.as_mapping())
+            .expect("matchLabels inner mapping");
+        assert_eq!(inner.len(), 2);
+        assert_eq!(
+            inner
+                .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
+                .and_then(|x| x.as_str()),
+            Some("checkout")
+        );
+        assert_eq!(
+            inner
+                .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
+                .and_then(|x| x.as_str()),
+            Some("cart")
+        );
+    }
+
+    #[test]
+    fn label_selector_empty_input_yields_empty_match_labels() {
+        // Empty input → `{matchLabels: {}}`. The outer wrapper is
+        // present (the K8s LabelSelector schema requires it as a
+        // structural anchor, and apiserver-side parsers that see a
+        // bare `{}` selector match-everything; pinning the wrapper
+        // means an empty pleme-io selector at the call site renders
+        // as the canonical "no labels declared, match nothing
+        // specific" shape rather than an outright missing key).
+        let v: serde_yaml::Value = label_selector(BTreeMap::<&'static str, String>::new());
+        let m = v.as_mapping().expect("mapping shape");
+        assert_eq!(m.len(), 1);
+        let inner = m
+            .get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into()))
+            .and_then(|v| v.as_mapping())
+            .expect("matchLabels inner mapping");
+        assert!(inner.is_empty());
+    }
+
+    #[test]
+    fn label_selector_accepts_pleme_selector_helpers() {
+        // The lift's load-bearing use case: passing the typed pleme-io
+        // selectors directly into `label_selector` yields the K8s
+        // LabelSelector shape every Cilium / Gateway / future
+        // app-operator selector field expects. Pinning end-to-end
+        // composition so a future refactor of either helper can't
+        // silently break the integration.
+        let v = label_selector(pleme_program_in_aplicacao_selector("cart", "checkout"));
+        let inner = v
+            .as_mapping()
+            .and_then(|m| m.get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into())))
+            .and_then(|v| v.as_mapping())
+            .expect("matchLabels inner mapping");
+        assert_eq!(inner.len(), 2);
+        assert_eq!(
+            inner
+                .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
+                .and_then(|x| x.as_str()),
+            Some("cart")
+        );
+        assert_eq!(
+            inner
+                .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
+                .and_then(|x| x.as_str()),
+            Some("checkout")
+        );
+
+        // Single-axis variant — only LABEL_PROGRAM under matchLabels.
+        let v = label_selector(pleme_program_selector("cart"));
+        let inner = v
+            .as_mapping()
+            .and_then(|m| m.get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into())))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        assert_eq!(inner.len(), 1);
+        assert_eq!(
+            inner
+                .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
+                .and_then(|x| x.as_str()),
+            Some("cart")
+        );
+    }
+
+    #[test]
+    fn label_selector_inner_iterates_alphabetically_on_btreemap() {
+        // BTreeMap input → alphabetical iteration → alphabetical YAML
+        // key order under `matchLabels`. THEORY.md §V.2.7 render
+        // determinism: the rendered YAML's matchLabels: block appears
+        // in a deterministic order independent of source-code
+        // declaration order.
+        let mut input = BTreeMap::new();
+        input.insert("zebra", "z".to_string());
+        input.insert("apple", "a".to_string());
+        input.insert("mango", "m".to_string());
+        let v = label_selector(input);
+        let inner = v
+            .as_mapping()
+            .and_then(|m| m.get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into())))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+        let keys: Vec<&str> = inner.iter().filter_map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["apple", "mango", "zebra"]);
+    }
+
+    #[test]
+    fn label_selector_does_not_introduce_match_expressions_axis() {
+        // V0 emits matchLabels only — pinning that the helper doesn't
+        // pre-insert an empty `matchExpressions: []` block (which some
+        // apiserver-side parsers tolerate but renders noisily and
+        // shifts the per-rule diff). A future set-based selector
+        // extension is a deliberate API change to this helper, not an
+        // incidental shape leak.
+        let v = label_selector(pleme_program_selector("cart"));
+        let m = v.as_mapping().unwrap();
+        assert!(
+            m.get(serde_yaml::Value::String("matchExpressions".into()))
+                .is_none(),
+            "label_selector must not pre-insert a matchExpressions key (V0 is matchLabels-only)"
+        );
     }
 
     #[test]
