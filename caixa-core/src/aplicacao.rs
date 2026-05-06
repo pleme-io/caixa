@@ -357,6 +357,24 @@ pub struct RateLimit {
     pub window: Duration,
 }
 
+/// True when `window` is exactly one of the three canonical rate-limit
+/// windows the [`rate_limit_codec`] round-trips losslessly: 1 second
+/// (`"<n>/s"`), 1 minute (`"<n>/m"`), or 1 hour (`"<n>/h"`). Lifted
+/// to a typed predicate (rather than an inline disjunction at the
+/// [`AplicacaoSpec::validate_politicas`] call site) so the
+/// canonical-window set lives in exactly one place — drift between
+/// the codec's accepted unit set and the validate gate's accepted
+/// window set is a build error visible at this predicate, not a
+/// silent round-trip break at the codec layer. Same shape every other
+/// predicate-on-the-typed-slot helper carries
+/// ([`MeshPolicy::is_empty`], [`crate::LimitsSpec::is_empty`],
+/// [`crate::BehaviorSpec::is_empty`]).
+#[must_use]
+fn is_canonical_rate_limit_window(window: Duration) -> bool {
+    let secs = window.as_secs();
+    window.subsec_nanos() == 0 && (secs == 1 || secs == 60 || secs == 3600)
+}
+
 mod rate_limit_codec {
     use super::{Duration, RateLimit};
     use serde::{Deserialize, Deserializer, Serializer};
@@ -402,7 +420,17 @@ mod rate_limit_codec {
         } else if rl.window.as_secs() == 3600 {
             "h"
         } else {
-            // Round-trip unit-agnostic: fall through to seconds.
+            // Defensive fallback for non-canonical windows. Note:
+            // [`AplicacaoSpec::validate_politicas`] rejects any
+            // non-canonical `:rate-limit :window` via
+            // [`AplicacaoError::PolicyRateLimitWindowNotCanonical`], so
+            // a validated `RateLimit` never reaches this branch. The
+            // emitted `<n>/<k>s` form is *not* round-trippable through
+            // [`parse`] (which accepts only `s`/`m`/`h` unit strings,
+            // not `<k>s` with an explicit count) — the validate gate
+            // is what makes the round-trip a structural property; this
+            // branch exists only so a programmatic non-validated
+            // serialize doesn't panic.
             return format!("{}/{}s", rl.rate, rl.window.as_secs());
         };
         format!("{}/{unit}", rl.rate)
@@ -745,6 +773,37 @@ impl AplicacaoSpec {
             if rl.rate == 0 {
                 return Err(AplicacaoError::PolicyRateLimitZero);
             }
+            // The `:rate-limit` author surface is the canonical
+            // `"<n>/<s|m|h>"` form, and the [`rate_limit_codec`] parser
+            // accepts exactly the three-unit set (1s/60s/3600s) the
+            // [`rate_limit_codec::render`] formatter emits the canonical
+            // unit suffix for. A `RateLimit` whose `:window` is anything
+            // else (zero, 30s, 45s, 120s, 86400s, …) is constructible
+            // programmatically (struct literals in Rust + the typed
+            // `Duration` field) but renders to a `<n>/<k>s` fragment
+            // (the codec's fall-through) the parser then rejects on
+            // round-trip — silently breaking the THEORY.md §V.2.7
+            // render-determinism contract for any consumer that
+            // serializes-then-deserializes the typed slot. Lifting the
+            // canonical-window invariant to a build-time gate at
+            // `validate_politicas` makes the codec's round-trip property
+            // a structural property of the validated typed value:
+            // every `RateLimit` past `AplicacaoSpec::validate` has a
+            // window the codec round-trips losslessly, so the next
+            // typed-slot wiring (the future `CiliumClusterwideEnvoyConfig`
+            // emitter for `:politicas :rate-limit`, MESH-COMPOSITION
+            // §III.2 #3) reaches for `rate_limit.window` knowing the
+            // value is in the codec's accepted set without re-validating
+            // at the renderer layer. Same trajectory as c4213a4 (typed
+            // WitContract endpoint/subject/slot value-shape gates) and
+            // the b0c8389 :behavior + :upgrade-from script-path lifts:
+            // the typed slot's valid set matches its codec's accepted
+            // set, structurally.
+            if !is_canonical_rate_limit_window(rl.window) {
+                return Err(AplicacaoError::PolicyRateLimitWindowNotCanonical {
+                    window: rl.window,
+                });
+            }
         }
         Ok(())
     }
@@ -1001,6 +1060,14 @@ pub enum AplicacaoError {
          request); omit :rate-limit to disable rate limiting"
     )]
     PolicyRateLimitZero,
+    #[error(
+        ":politicas :rate-limit :window must be exactly 1s, 1m (60s), or 1h (3600s) — \
+         the canonical authoring forms `\"<n>/s\"`, `\"<n>/m\"`, `\"<n>/h\"` the \
+         rate-limit codec round-trips losslessly; got {window:?} which renders to a \
+         non-round-trippable form (omit :rate-limit to disable, or pick one of the \
+         three canonical windows)"
+    )]
+    PolicyRateLimitWindowNotCanonical { window: Duration },
 }
 
 #[cfg(test)]
@@ -1951,6 +2018,225 @@ mod tests {
             s.validate().unwrap_err(),
             AplicacaoError::PolicyRateLimitZero
         );
+    }
+
+    #[test]
+    fn rejects_rate_limit_zero_window() {
+        // `RateLimit { rate: 100, window: Duration::ZERO }` is
+        // constructible programmatically (the typed `Duration` field
+        // imposes no nonzero invariant) but renders through
+        // `rate_limit_codec::render` as `"100/0s"` — a fragment the
+        // codec's `parse` rejects as `unknown rate-limit window unit
+        // "0s"`. Until this validate-time gate landed the typed slot
+        // accepted the value silently and the round-trip break only
+        // surfaced at deserialize time (potentially in a downstream
+        // consumer that never re-validates). Pin the rejection at
+        // `AplicacaoSpec::validate` so the typed slot's valid set
+        // matches the codec's round-trippable set structurally.
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 100,
+            window: Duration::ZERO,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitWindowNotCanonical {
+                window: Duration::ZERO
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_rate_limit_arbitrary_seconds_window() {
+        // 45 seconds is a valid `Duration` but not one of the three
+        // canonical rate-limit windows the codec round-trips
+        // (1s / 60s / 3600s). Renders as `"100/45s"`, which the parser
+        // refuses on round-trip — same round-trip-break shape the
+        // zero-window arm above pins, with a non-zero magnitude to
+        // guard against a future "reject only zero" half-measure.
+        let mut s = three_member_spec();
+        let window = Duration::from_secs(45);
+        s.politicas.rate_limit = Some(RateLimit { rate: 100, window });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitWindowNotCanonical { window }
+        );
+    }
+
+    #[test]
+    fn rejects_rate_limit_two_minute_window() {
+        // 120 seconds = 2 minutes is a "looks-canonical" but
+        // not-canonical window: it's a clean integer multiple of the
+        // minute unit, but the codec only round-trips the
+        // unit-magnitude-1 forms (`"<n>/m"` ≡ 60s, *not* `"<n>/2m"`).
+        // A `Duration::from_secs(120)` window renders as `"100/120s"`
+        // which the parser rejects. Pinning this case rules out a
+        // future "accept any clean multiple of s/m/h" relaxation
+        // that would silently break the codec contract.
+        let mut s = three_member_spec();
+        let window = Duration::from_secs(120);
+        s.politicas.rate_limit = Some(RateLimit { rate: 50, window });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitWindowNotCanonical { window }
+        );
+    }
+
+    #[test]
+    fn rejects_rate_limit_subsecond_window() {
+        // A sub-second window (e.g. 500ms) is a valid `Duration` but
+        // unrepresentable in the codec's `<n>/<s|m|h>` author surface.
+        // Pin the rejection so a future relaxation can't silently
+        // admit fractional-second windows that the codec can't
+        // round-trip.
+        let mut s = three_member_spec();
+        let window = Duration::from_millis(500);
+        s.politicas.rate_limit = Some(RateLimit { rate: 200, window });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitWindowNotCanonical { window }
+        );
+    }
+
+    #[test]
+    fn rate_limit_zero_rate_takes_precedence_over_non_canonical_window() {
+        // Both axes are invalid here: rate == 0 *and* window is
+        // non-canonical. The validate gate must fire on rate first
+        // (matching the existing `rejects_zero_rate_limit` ordering),
+        // so the existing diagnostic continues to lead with the
+        // simpler "zero rate" framing. Pinning the order of checks
+        // so a future refactor that reorders the arms surfaces here
+        // as a test failure rather than a silent diagnostic
+        // regression.
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 0,
+            window: Duration::from_secs(45),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitZero
+        );
+    }
+
+    #[test]
+    fn rate_limit_canonical_windows_validate() {
+        // The three canonical windows the codec round-trips
+        // losslessly — 1s / 60s / 3600s — must all pass `validate()`
+        // unchanged. Pin the full canonical set as a positive case
+        // (the existing `rate_limit_round_trip_seconds` /
+        // `rate_limit_round_trip_minutes` tests pin the
+        // serialize-then-deserialize property at the codec layer; this
+        // test pins the validate-side complement so a future tightening
+        // of the canonical set — e.g. dropping `:hour` — surfaces here
+        // as a test failure rather than a silent contract narrowing).
+        for secs in [1u64, 60, 3600] {
+            let mut s = three_member_spec();
+            s.politicas.rate_limit = Some(RateLimit {
+                rate: 100,
+                window: Duration::from_secs(secs),
+            });
+            s.validate().expect("canonical window must validate");
+        }
+    }
+
+    #[test]
+    fn rate_limit_validated_value_round_trips_through_codec() {
+        // The structural property the validate gate enforces:
+        // every `RateLimit` past `AplicacaoSpec::validate` round-trips
+        // losslessly through the `rate_limit_codec` (serialize → string
+        // → deserialize → equal value). Pin this end-to-end so a future
+        // change to either side (the validate gate's accepted window
+        // set, the codec's parse/render unit set) that breaks the
+        // alignment surfaces here. The previous-state shape (typed
+        // slot accepts arbitrary `Duration`, codec only round-trips
+        // 1s/60s/3600s) would fail this test for a `Duration::from_secs(45)`
+        // window — the validate gate now forecloses that.
+        for secs in [1u64, 60, 3600] {
+            let mut s = three_member_spec();
+            s.politicas.rate_limit = Some(RateLimit {
+                rate: 250,
+                window: Duration::from_secs(secs),
+            });
+            s.validate().unwrap();
+            let json = serde_json::to_string(&s.politicas).unwrap();
+            let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                back.rate_limit, s.politicas.rate_limit,
+                "every validated :rate-limit must round-trip losslessly through the codec"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_canonical_per_hour_renders_with_h_suffix() {
+        // The hour-window canonical form (`"<n>/h"`) was missing from
+        // the prior `rate_limit_round_trip_seconds` / `_minutes` test
+        // pair. Now that the validate gate pins 3600s as part of the
+        // canonical set, pin its serialize-side render shape too so
+        // the third leg of the s/m/h tripod is explicitly tested.
+        let policy = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 10000,
+                window: Duration::from_secs(3600),
+            }),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&policy).unwrap();
+        assert!(
+            json.contains("\"10000/h\""),
+            "hour-window canonical form must render with `h` suffix (got: {json})"
+        );
+        let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.rate_limit.unwrap().window, Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn is_canonical_rate_limit_window_predicate_tracks_codec() {
+        // Pin the predicate's accepted set against the codec's
+        // accepted set explicitly. A future addition to the codec
+        // (e.g. accepting `:day`/`:week` as authoring units) must be
+        // accompanied by a parallel addition here, and a regression
+        // that drops one of the three canonical units from either
+        // side surfaces as a test failure. The predicate is the
+        // single source of truth for the canonical-window set; this
+        // test enshrines that the codec's parse arms and the
+        // predicate's accept arms agree exactly.
+        assert!(super::is_canonical_rate_limit_window(Duration::from_secs(
+            1
+        )));
+        assert!(super::is_canonical_rate_limit_window(Duration::from_secs(
+            60
+        )));
+        assert!(super::is_canonical_rate_limit_window(Duration::from_secs(
+            3600
+        )));
+        // Non-canonical windows the predicate rejects.
+        assert!(!super::is_canonical_rate_limit_window(Duration::ZERO));
+        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
+            2
+        )));
+        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
+            30
+        )));
+        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
+            120
+        )));
+        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
+            86400
+        )));
+        // Sub-second windows: even `Duration::from_millis(1000)` is
+        // exactly 1s and accepted; `Duration::from_millis(500)` is
+        // sub-second and rejected.
+        assert!(super::is_canonical_rate_limit_window(
+            Duration::from_millis(1000)
+        ));
+        assert!(!super::is_canonical_rate_limit_window(
+            Duration::from_millis(500)
+        ));
+        assert!(!super::is_canonical_rate_limit_window(
+            Duration::from_millis(1500)
+        ));
     }
 
     #[test]
