@@ -292,6 +292,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tatara-lisp",
  "tatara-lisp-derive",
  "thiserror 2.0.18",
