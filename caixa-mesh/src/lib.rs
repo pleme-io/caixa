@@ -34,9 +34,9 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, WitTarget, aplicacao::AplicacaoSpec,
-    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay,
+    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitTarget,
+    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -83,6 +83,48 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
         .expect("Aplicacao kind has an aplicacao_view");
     spec.validate()?;
 
+    // `:placement` overlay — surfaces the typed Aplicacao-level
+    // distribution strategy + cluster list (validated upstream by
+    // [`AplicacaoSpec::validate_placement`]: non-empty `:clusters`,
+    // unique entries, `Sharded` carries `:shard-key`) onto every
+    // emitted programs.yaml entry under the canonical
+    // [`M3_KEY_PLACEMENT`] key. Until this wiring landed the typed
+    // `:placement` slot was inert past validate() — `AplicacaoSpec`
+    // refused empty/duplicate clusters, missing shard-keys, and
+    // empty affinity hints (the c7c7799 + 4bb3f3d + 2d71a9a +
+    // c4213a4 typed-shape lifts), but the rendered programs.yaml
+    // entries carried only `name + versao + aplicacao`, so the
+    // lareira-fleet-programs aggregator and the future M4
+    // cross-cluster fanout / `app-operator` reconciler had no way
+    // to scope each entry by its parent Aplicacao's distribution
+    // strategy.
+    //
+    // Wiring it through turns MESH-COMPOSITION §III.4 ("the
+    // application graph is a compile-time typed value … rendered
+    // through to whatever runtime layer makes sense") + §V
+    // ("cross-cluster federation: `:placement :replicated
+    // :clusters (\"rio\" \"mar\")` deploys the Aplicacao to every
+    // named cluster") from a typed-author-side promise into a
+    // typed-renderer-side artifact: each cluster's local
+    // lareira-fleet-programs HelmRelease can filter
+    // `programs[]` by `placement.clusters.contains(<self>)`,
+    // dispatch on `placement.estrategia`, and (for `Sharded`)
+    // route by `placement.shardKey`. Same trajectory as the
+    // 5f477a6 / 23b7f00 / 878bf81 `:politicas` axis overlays:
+    // typed slot → cluster artifact in one wiring step, no new
+    // primitive needed.
+    //
+    // The serialized fragment uses the [`Placement`] struct's
+    // serde shape verbatim — `estrategia` + `clusters` always
+    // present (validated non-empty), `affinity` + `shardKey`
+    // present iff `Some` (skip_serializing_if). One entry per
+    // member carries the same placement block; redundant in
+    // bytes, but each programs.yaml entry is self-describing for
+    // the aggregator (which has no Aplicacao-level context),
+    // mirroring the existing `aplicacao:` annotation's per-entry
+    // emission.
+    let placement_value = serde_yaml::to_value(&spec.placement)?;
+
     let mut out = Vec::with_capacity(spec.membros.len());
     for m in &spec.membros {
         let mut entry = serde_yaml::Mapping::new();
@@ -99,6 +141,14 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
         entry.insert(
             serde_yaml::Value::String("aplicacao".into()),
             serde_yaml::Value::String(caixa.nome.clone()),
+        );
+        // M3 `:placement` overlay — see the per-call rationale
+        // above. Cloned per entry so each programs.yaml row is
+        // self-describing for downstream filters that have no
+        // Aplicacao-level context.
+        entry.insert(
+            serde_yaml::Value::String(M3_KEY_PLACEMENT.into()),
+            placement_value.clone(),
         );
         out.push(serde_yaml::Value::Mapping(entry));
     }
@@ -718,6 +768,227 @@ mod tests {
         });
         let err = programs_for_aplicacao(&c).unwrap_err();
         assert!(matches!(err, Error::InvalidAplicacao(_)));
+    }
+
+    // ── programs.yaml :placement overlay ─────────────────────────────────
+
+    fn placement_blocks(entries: &[serde_yaml::Value]) -> Vec<&serde_yaml::Mapping> {
+        entries
+            .iter()
+            .map(|e| {
+                e.get(M3_KEY_PLACEMENT)
+                    .and_then(|p| p.as_mapping())
+                    .expect("every member entry must carry a placement mapping")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn programs_entry_carries_placement_block() {
+        // The fixture sets `:placement :estrategia Replicated
+        // :clusters ("rio" "mar") :affinity "data-locality"`. Every
+        // emitted programs.yaml entry must carry a `placement:` block
+        // wiring the typed `:placement` slot through to the rendered
+        // artifact under the canonical [`M3_KEY_PLACEMENT`] key. Before
+        // this overlay landed the typed slot was inert past
+        // `AplicacaoSpec::validate_placement` — the rendered entry
+        // carried only `name + versao + aplicacao`, so the
+        // lareira-fleet-programs aggregator and the future
+        // `app-operator` had no way to scope each entry by its parent
+        // Aplicacao's distribution strategy. This test is the pinned
+        // proof that the slot now reaches the cluster artifact (the
+        // fail-before-pass-after pin: the assertion below fails on any
+        // pre-overlay codebase, since the entry had no `placement:`
+        // key at all).
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        assert!(!entries.is_empty());
+        for e in &entries {
+            assert!(
+                e.get(M3_KEY_PLACEMENT).is_some(),
+                "every member entry must carry a `placement:` block"
+            );
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_carries_strategy() {
+        // Pin that the `placement.estrategia` axis round-trips the
+        // typed [`PlacementStrategy`] enum verbatim — the fixture sets
+        // `Replicated`, the serde Serialize impl emits the variant name
+        // exactly. A future refactor that adds a `#[serde(rename_all =
+        // …)]` attribute on the enum (e.g. shifting to lowercase to
+        // match the lisp authoring spelling) is an intentional break
+        // this test surfaces — coordinated with the consumer-side
+        // (lareira-fleet-programs aggregator's strategy dispatcher,
+        // future `app-operator` reconciler) to keep the contract
+        // round-tripping end-to-end.
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        for p in placement_blocks(&entries) {
+            assert_eq!(
+                p.get(serde_yaml::Value::String("estrategia".into()))
+                    .and_then(|v| v.as_str()),
+                Some("Replicated"),
+                "placement.estrategia must round-trip the typed PlacementStrategy variant"
+            );
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_carries_clusters_list() {
+        // Pin that the `placement.clusters` list round-trips the
+        // validated cluster-pool list (non-empty + duplicate-free per
+        // [`AplicacaoSpec::validate_placement`]) verbatim. The
+        // downstream aggregator's per-cluster filter
+        // (`programs.filter(|p| p.placement.clusters.contains(<self>))`)
+        // depends on this round-tripping bit-for-bit — drift here
+        // silently drops workloads from clusters that should run them.
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        for p in placement_blocks(&entries) {
+            let clusters = p
+                .get(serde_yaml::Value::String("clusters".into()))
+                .and_then(|c| c.as_sequence())
+                .expect("placement.clusters sequence");
+            let names: Vec<&str> = clusters.iter().filter_map(|v| v.as_str()).collect();
+            assert_eq!(names, vec!["rio", "mar"]);
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_carries_affinity_when_set() {
+        // The fixture's `:affinity "data-locality"` (Some) round-trips
+        // through. Pin both the key spelling and the value to guard
+        // against future rename / placement-engine semantic drift —
+        // the `affinity:` value flows into the M3 Adaptive compression
+        // weighting (MESH-COMPOSITION §V) and the wasm-operator's pod
+        // affinity overlay.
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        for p in placement_blocks(&entries) {
+            assert_eq!(
+                p.get(serde_yaml::Value::String("affinity".into()))
+                    .and_then(|v| v.as_str()),
+                Some("data-locality")
+            );
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_omits_affinity_and_shard_key_when_unset() {
+        // Empty-axis-skip semantic (mirrors the `:politicas`
+        // `:timeout`/`:retries`/`:mtls-required` overlays' omit-when-
+        // unset contract): an Aplicacao that doesn't declare
+        // `:placement :affinity` and uses a non-Sharded strategy
+        // (`shardKey` always None) emits a `placement:` block with
+        // exactly `estrategia` + `clusters` and no `affinity:` /
+        // `shardKey:` keys. The Placement struct's
+        // `skip_serializing_if = "Option::is_none"` semantic is what
+        // delivers this; pin it at the renderer's exit so a future
+        // refactor that drops the attribute (e.g. forcing every axis
+        // to round-trip) silently bloating downstream programs.yaml
+        // surfaces here.
+        let mut c = aplicacao_caixa();
+        if let Some(p) = c.placement.as_mut() {
+            p.affinity = None;
+            p.shard_key = None;
+        }
+        let entries = programs_for_aplicacao(&c).unwrap();
+        for p in placement_blocks(&entries) {
+            assert!(
+                p.get(serde_yaml::Value::String("affinity".into())).is_none(),
+                "placement.affinity must be absent when :affinity is None"
+            );
+            assert!(
+                p.get(serde_yaml::Value::String("shardKey".into())).is_none(),
+                "placement.shardKey must be absent when :shard-key is None"
+            );
+            // Exactly 2 keys remain — estrategia + clusters.
+            assert_eq!(p.len(), 2);
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_carries_shard_key_when_sharded() {
+        // The `Sharded` strategy carries a `:shard-key` (validated
+        // non-empty by [`AplicacaoSpec::validate_placement`] — the
+        // ShardedKeyEmpty arm). Pin that the typed slot's value
+        // round-trips through to `placement.shardKey` under the
+        // canonical camelCase key — the future Akka-style cluster-
+        // sharding reconciler (MESH-COMPOSITION §II.4) keys off this
+        // exact spelling to compute hash-based entity placement.
+        let mut c = aplicacao_caixa();
+        if let Some(p) = c.placement.as_mut() {
+            p.estrategia = PlacementStrategy::Sharded;
+            p.shard_key = Some("$tenantId".into());
+        }
+        let entries = programs_for_aplicacao(&c).unwrap();
+        for p in placement_blocks(&entries) {
+            assert_eq!(
+                p.get(serde_yaml::Value::String("estrategia".into()))
+                    .and_then(|v| v.as_str()),
+                Some("Sharded")
+            );
+            assert_eq!(
+                p.get(serde_yaml::Value::String("shardKey".into()))
+                    .and_then(|v| v.as_str()),
+                Some("$tenantId")
+            );
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_appears_on_every_member() {
+        // Multiple `:membros` entries → multiple programs.yaml rows.
+        // The placement overlay must apply to every entry, not just
+        // the first one — pin so a future refactor that hoists the
+        // overlay out of the loop without re-cloning into each row
+        // can't accidentally drop the placement from the tail
+        // entries. Same hoist-out-of-loop guard the `:politicas`
+        // overlay tests enshrine for HTTPRoute / CNP rules. The
+        // fixture has 3 members; the assertion catches any regression
+        // that drops the block from the 2nd or 3rd entry.
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        assert_eq!(entries.len(), 3);
+        let placements = placement_blocks(&entries);
+        assert_eq!(placements.len(), 3);
+        // Every placement block must carry the same estrategia +
+        // clusters — the placement is graph-level (one per
+        // Aplicacao), so it's identical across members by
+        // construction.
+        let first = placements[0];
+        for p in &placements[1..] {
+            assert_eq!(
+                p.get(serde_yaml::Value::String("estrategia".into())),
+                first.get(serde_yaml::Value::String("estrategia".into())),
+                "placement.estrategia must be identical across all members"
+            );
+            assert_eq!(
+                p.get(serde_yaml::Value::String("clusters".into())),
+                first.get(serde_yaml::Value::String("clusters".into())),
+                "placement.clusters must be identical across all members"
+            );
+        }
+    }
+
+    #[test]
+    fn programs_entry_placement_uses_lifted_canonical_key() {
+        // Pin the key spelling via the lifted [`M3_KEY_PLACEMENT`]
+        // const (instead of an inline `"placement"` literal). Drift
+        // between the renderer-side emission and the consumer-side
+        // (lareira-fleet-programs aggregator's filter, future
+        // `app-operator` dispatcher) is a programs.yaml entry whose
+        // placement is silently dropped at the consumer's filter
+        // step. Lifting the key to a const + pinning the const here
+        // makes a future top-level rename a one-line edit + this
+        // test's verification, not a search-and-replace across every
+        // consumer crate.
+        assert_eq!(M3_KEY_PLACEMENT, "placement");
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        for e in &entries {
+            let m = e.as_mapping().expect("entry mapping");
+            assert!(
+                m.contains_key(serde_yaml::Value::String(M3_KEY_PLACEMENT.into())),
+                "entry must carry the M3_KEY_PLACEMENT key exactly"
+            );
+        }
     }
 
     #[test]

@@ -133,6 +133,24 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical YAML key for the M3 `:placement` slot's overlay on a
+/// rendered programs.yaml entry. The lareira-fleet-programs aggregator
+/// (and the future `app-operator` per-Aplicacao reconciler) both key
+/// off this exact spelling to filter entries by `placement.clusters`
+/// for cross-cluster fanout (MESH-COMPOSITION §III.4) and to dispatch
+/// on `placement.estrategia` for distributed-app takeover semantics
+/// (§II.1, §V cross-cluster federation). Lifted as a const alongside
+/// the M2 keys so the Aplicacao-side renderer
+/// ([`crate::aplicacao::Placement`] → caixa-mesh
+/// `programs_for_aplicacao`) and every consumer (the M4 cluster-fanout
+/// renderer, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer, the `app-operator`'s placement-strategy dispatcher)
+/// spell the same key exactly the same way — drift here = a
+/// programs.yaml entry whose placement is silently dropped at the
+/// aggregator's filter step (visible only as "the workload doesn't
+/// land where the typed slot said it should").
+pub const M3_KEY_PLACEMENT: &str = "placement";
+
 /// Canonical pleme-io label namespace prefix. Every cluster object
 /// emitted by any caixa-side renderer that needs to carry the
 /// pleme-io workload identity uses this prefix; runtime label
