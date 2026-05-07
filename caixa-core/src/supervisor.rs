@@ -211,6 +211,32 @@ impl SupervisorSpec {
                     caixa: child.caixa.clone(),
                 });
             }
+            // The author surface for `:children :versao` is the same
+            // Cargo-shaped semver requirement string `:deps :versao` and
+            // `:membros :versao` carry — and the lacre pipeline resolves
+            // all three axes through the same
+            // [`crate::version::parse_requirement`] entry-point. Until
+            // this gate landed `validate` only refused the empty string
+            // (`EmptyChildVersion`); a malformed-but-non-empty
+            // requirement (`"^bad-version"`, `"^^0.1"`, the canonical
+            // git-tag-shape-leaking-into-:versao `"v0.1"` typo, `">="`,
+            // the accidental `"abc"`) silently passed validate and the
+            // `semver::Error` surfaced at lacre-resolve time, far from
+            // the source caixa.lisp, with no field naming which
+            // `:children` entry carried the typo. Mirroring 9888b13's
+            // `:membros :versao` lift onto the third `:versao` typed
+            // axis: every `ChildSpec::versao` past validate is
+            // round-trippable through [`crate::parse_requirement`]
+            // without re-checking at the resolver layer, and the three
+            // `:versao` typed surfaces (`:deps`, `:membros`, `:children`)
+            // are now structurally equivalent.
+            if let Err(e) = crate::parse_requirement(&child.versao) {
+                return Err(SupervisorError::ChildVersaoInvalid {
+                    caixa: child.caixa.clone(),
+                    versao: child.versao.clone(),
+                    reason: e.to_string(),
+                });
+            }
             if !seen.insert(child.caixa.as_str()) {
                 return Err(SupervisorError::DuplicateChildCaixa {
                     caixa: child.caixa.clone(),
@@ -240,6 +266,18 @@ pub enum SupervisorError {
     EmptyChildName,
     #[error("child {caixa:?} has empty :versao constraint")]
     EmptyChildVersion { caixa: String },
+    #[error(
+        "child {caixa:?} :versao {versao:?} is not a valid semver requirement: \
+         {reason} (use Cargo-shaped forms like `\"^0.1\"`, `\"~0.1.2\"`, \
+         `\"0.1.0\"`, or `\"*\"` — the same shape `:deps :versao` and \
+         `:membros :versao` carry; the lacre pipeline resolves all three \
+         through the same parser)"
+    )]
+    ChildVersaoInvalid {
+        caixa: String,
+        versao: String,
+        reason: String,
+    },
     #[error(
         "child {caixa:?} appears more than once (Erlang/OTP requires unique \
          child_spec.id per supervisor; duplicate children materialize as duplicate \
@@ -415,6 +453,184 @@ mod tests {
             s.validate().unwrap_err(),
             SupervisorError::EmptyChildVersion { .. }
         ));
+    }
+
+    // ── value-shape: parse-as-VersionReq on :children :versao ─────────────
+
+    #[test]
+    fn validate_rejects_invalid_child_versao_requirement() {
+        // The fail-before-pass-after pin: a non-empty but malformed
+        // semver requirement (`"^bad-version"`) silently passed
+        // `validate()` on every pre-gate codebase because the prior
+        // shape only refused the empty string. The parse failure
+        // surfaced far downstream at lacre-resolve time with a
+        // `semver::Error` that didn't name which `:children` entry
+        // carried the typo. The new gate moves the check to caixa-build
+        // time at the source caixa.lisp — the third `:versao` typed
+        // axis (`:children`) joins `:deps` and `:membros` (9888b13) at
+        // structural parity.
+        let s = SupervisorSpec {
+            children: vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("cache", "^bad-version", RestartPolicy::Transient),
+            ],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildVersaoInvalid { ref caixa, ref versao, .. }
+                    if caixa == "cache" && versao == "^bad-version"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_versao_with_double_caret_typo() {
+        // `"^^0.1"` is the canonical doubled-caret typo — looks
+        // Cargo-shaped on first glance but fails the parser because
+        // semver doesn't accept stacked operators. Pin this
+        // adjacent-shape footgun explicitly so a future relaxation that
+        // accepts "looks-canonical-but-isn't" forms surfaces here.
+        let s = SupervisorSpec {
+            children: vec![child("worker", "^^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildVersaoInvalid { ref caixa, ref versao, .. }
+                    if caixa == "worker" && versao == "^^0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_versao_with_v_prefixed_tag() {
+        // `"v0.1"` is the canonical "git-tag-shape leaking into the
+        // semver requirement slot" typo — an author copies the
+        // publish-side git-tag string verbatim into `:versao`, but
+        // Cargo's semver parser rejects the leading `v`. Same
+        // adjacent-shape footgun pinned for `:membros :versao`
+        // (9888b13).
+        let s = SupervisorSpec {
+            children: vec![child("worker", "v0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildVersaoInvalid { ref caixa, ref versao, .. }
+                    if caixa == "worker" && versao == "v0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_canonical_child_versao_forms() {
+        // The Cargo-shaped requirement forms `:deps :versao` and
+        // `:membros :versao` already accept via
+        // `crate::parse_requirement` must pass the children gate
+        // without re-validating at the resolver layer. Pin every leg so
+        // a future tightening of the canonical set surfaces here as a
+        // test failure.
+        for form in [
+            "^0.1",      // caret — minor-range pin (the most common shape)
+            "~0.1.2",    // tilde — patch-range pin
+            "0.1.0",     // exact — single-version pin
+            "*",         // wildcard — any version (semver::VersionReq::STAR)
+            ">=0.1, <2", // multi-range — comma-separated comparators
+        ] {
+            let s = SupervisorSpec {
+                children: vec![child("worker", form, RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            s.validate()
+                .unwrap_or_else(|e| panic!("canonical form {form:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn child_versao_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `EmptyChildVersion` diagnostic (which
+        // doesn't try to parse) fires before the new
+        // `ChildVersaoInvalid` parse-side diagnostic, so an empty
+        // `:versao` keeps its narrower error message —
+        // `parse_requirement` would also reject `""`, but the
+        // empty-string arm is the more self-locating diagnostic for the
+        // author. Same ordering discipline as
+        // `membro_versao_empty_takes_precedence_over_invalid` in
+        // aplicacao.rs.
+        let s = SupervisorSpec {
+            children: vec![child("worker", "", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, SupervisorError::EmptyChildVersion { ref caixa } if caixa == "worker"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn child_versao_invalid_fires_before_duplicate_check() {
+        // Order pin: a malformed requirement on a non-duplicate entry
+        // surfaces *its own* diagnostic (which names the offending
+        // `:versao` string), even when a later entry would otherwise
+        // collapse onto an earlier name. The per-entry shape gate runs
+        // inline before the duplicate-key insert — parallel to
+        // `membro_versao_invalid_fires_before_duplicate_check` in
+        // aplicacao.rs and the b0c8389 / c4213a4 ordering discipline.
+        let s = SupervisorSpec {
+            children: vec![
+                child("worker", "^bad", RestartPolicy::Permanent),
+                child("cache", "^0.1", RestartPolicy::Transient),
+                child("worker", "^0.2", RestartPolicy::Permanent), // would otherwise raise DuplicateChildCaixa
+            ],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildVersaoInvalid { ref caixa, .. } if caixa == "worker"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn child_versao_invalid_diagnostic_carries_offending_versao() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:versao` value verbatim so the author can grep their
+        // caixa.lisp without re-running the build, and carries a
+        // non-empty `reason` from `semver::VersionReq::parse` so the
+        // parser's own wording flows through to the diagnostic.
+        let s = SupervisorSpec {
+            children: vec![child("worker", "not-a-req", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        let SupervisorError::ChildVersaoInvalid {
+            caixa,
+            versao,
+            reason,
+        } = err
+        else {
+            panic!("expected ChildVersaoInvalid, got other variant");
+        };
+        assert_eq!(caixa, "worker");
+        assert_eq!(versao, "not-a-req");
+        assert!(
+            !reason.is_empty(),
+            "ChildVersaoInvalid `reason` must carry the parser's wording verbatim"
+        );
     }
 
     // ── value-shape: zero restart_window + duplicate child names ──────────
