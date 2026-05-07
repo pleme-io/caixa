@@ -237,6 +237,50 @@ impl WitContract {
     }
 }
 
+/// Borrowed identity key for the typed-graph duplicate-`:contratos`
+/// gate (see [`AplicacaoSpec::validate`]): every field that
+/// distinguishes one contract from another, in declaration order
+/// (`(de, para, wit, endpoint, subject, slot)`). Two [`WitContract`]s
+/// with equal [`ContratoIdentity`]s are the same typed edge declared
+/// twice — the graph-edge analogue of duplicate `:membros` /
+/// `:placement :clusters` / `:entrada :paths` entries. Lifted as a
+/// type alias so the duplicate-gate's `HashSet<…>` type doesn't trip
+/// clippy's `type_complexity` lint (and so a future axis added to
+/// `WitContract` is one alias edit, not a coordinated rewrite of
+/// every set instantiation).
+type ContratoIdentity<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    Option<&'a str>,
+    Option<&'a str>,
+    Option<&'a str>,
+);
+
+/// Render the target payload field of a [`WitContract`] as a stable
+/// human-readable label (`:endpoint "/charge"`, `:subject "events.x"`,
+/// `:slot "checkout/$order"`, or `(capability — no payload)` when the
+/// WIT world is a pure capability edge).
+///
+/// Used by the [`AplicacaoSpec::validate`] duplicate-`:contratos` gate
+/// so the diagnostic names *which* identical edge was declared twice
+/// (not just which `(de, para, wit)` triple). Lifted to a typed
+/// helper so the format is the single source of truth — every future
+/// duplicate-edge diagnostic (per-edge policy resolver in M4, the
+/// `feira app graph` view) reaches for the same label shape rather
+/// than rolling its own.
+fn contrato_target_label(c: &WitContract) -> String {
+    if let Some(e) = &c.endpoint {
+        format!(":endpoint {e:?}")
+    } else if let Some(s) = &c.subject {
+        format!(":subject {s:?}")
+    } else if let Some(s) = &c.slot {
+        format!(":slot {s:?}")
+    } else {
+        "(capability — no payload)".to_string()
+    }
+}
+
 /// Typed view of a [`WitContract`]'s payload target. Each variant
 /// carries the field its WIT shape requires; constructing a `Http`
 /// view without an endpoint is impossible by the type system.
@@ -543,6 +587,10 @@ impl AplicacaoSpec {
     ///     `:caixa` (MESH-COMPOSITION §III.1 — the graph nodes are a set,
     ///     not a multiset)
     ///   - every `:contratos` :de + :para must be in `:membros`
+    ///   - no two `:contratos` entries agree on
+    ///     `(de, para, wit, endpoint, subject, slot)` — the typed-graph
+    ///     edges are a set, not a multiset (peer of the `:membros` /
+    ///     `:placement :clusters` / `:entrada :paths` duplicate gates)
     ///   - `:entrada :para` must be in `:membros`
     ///   - `:placement Sharded` must declare `:shard-key` (non-empty)
     ///   - every `:placement` strategy must declare ≥1 `:clusters` entry —
@@ -561,6 +609,20 @@ impl AplicacaoSpec {
         let names: std::collections::HashSet<&str> =
             self.membros.iter().map(|m| m.caixa.as_str()).collect();
 
+        // Identity key for the typed-edge duplicate gate below: every
+        // field that distinguishes one contract from another. Two
+        // entries that agree on all six are *the same edge declared
+        // twice*, the typed-graph analogue of duplicate `:membros` /
+        // `:placement :clusters` / `:entrada :paths` entries (which
+        // are already build errors at this layer). Rejecting it at the
+        // validate gate closes a renderer-side footgun: caixa-mesh's
+        // `cilium_network_policies` keys each emitted policy by
+        // `<aplicacao>-<de>-to-<para>`, so two contracts with identical
+        // (de, para) and identical payload would land as two K8s
+        // objects with colliding `metadata.name`, rejected at apply
+        // time far from the source caixa.lisp.
+        let mut seen_contracts: std::collections::HashSet<ContratoIdentity<'_>> =
+            std::collections::HashSet::new();
         for c in &self.contratos {
             if !names.contains(c.de.as_str()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
@@ -582,6 +644,28 @@ impl AplicacaoSpec {
             // :endpoint", "NATS wit with :endpoint set", etc. as named
             // build errors instead of silent renderer drops.
             c.target()?;
+            // Contract identity: (de, para, wit, endpoint, subject, slot).
+            // Two contracts that match on all six are the same typed edge
+            // declared twice — author error, not a legitimate variant of
+            // "same caller-callee pair, different payload" (e.g.
+            // cart→catalog at /products vs /search), which keeps distinct
+            // identity keys via the differing endpoint payloads.
+            let key = (
+                c.de.as_str(),
+                c.para.as_str(),
+                c.wit.as_str(),
+                c.endpoint.as_deref(),
+                c.subject.as_deref(),
+                c.slot.as_deref(),
+            );
+            if !seen_contracts.insert(key) {
+                return Err(AplicacaoError::ContratoDuplicate {
+                    de: c.de.clone(),
+                    para: c.para.clone(),
+                    wit: c.wit.clone(),
+                    target: contrato_target_label(c),
+                });
+            }
         }
 
         // Cycles in the synchronous-edge subgraph are build errors
@@ -1034,6 +1118,18 @@ pub enum AplicacaoError {
         cycle.join(" → ")
     )]
     ContratoCycle { cycle: Vec<String> },
+    #[error(
+        ":contratos entry {de:?} → {para:?} (:wit {wit:?} {target}) appears more \
+         than once (the typed graph edges are a set, not a multiset; duplicate \
+         contracts would render as colliding CiliumNetworkPolicy `metadata.name` \
+         values that K8s admission rejects far from the source caixa.lisp)"
+    )]
+    ContratoDuplicate {
+        de: String,
+        para: String,
+        wit: String,
+        target: String,
+    },
     #[error(
         ":politicas :timeout must be > 0 (Envoy interprets a zero timeout as `infinite`, \
          contradicting MESH-COMPOSITION §V `no infinite blocking`); omit :timeout to \
@@ -1886,6 +1982,229 @@ mod tests {
         ];
         s.entrada.as_mut().unwrap().para = "a".into();
         s.validate().unwrap();
+    }
+
+    // ── duplicate-`:contratos` build-error gate ──────────────────────────
+
+    #[test]
+    fn rejects_duplicate_http_contrato() {
+        // Fail-before-pass-after pin: the fixture's `cart → catalog`
+        // HTTP edge appears once. Push an identical entry — same
+        // (de, para, wit, endpoint) — and validate() must reject it.
+        // Until this gate landed the typed surface accepted the
+        // duplicate silently and caixa-mesh's `cilium_network_policies`
+        // emitted two `CiliumNetworkPolicy` objects with identical
+        // `metadata.name` (`<aplicacao>-<de>-to-<para>`), which K8s
+        // admission rejects on `kubectl apply` far from the source.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("cart", "catalog", "/products/:id"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoDuplicate { ref de, ref para, ref wit, .. }
+                    if de == "cart" && para == "catalog" && wit == "wasi:http/proxy"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_pubsub_contrato() {
+        // Same gate on the pub-sub edge axis. Two `nats:pub-sub`
+        // edges with identical (de, para, subject) are degenerate;
+        // pin that the typed surface refuses both at validate time.
+        let mut s = three_member_spec();
+        let pubsub = WitContract {
+            de: "payment".into(),
+            para: "cart".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("checkout.events.charge.failed".into()),
+            slot: None,
+        };
+        s.contratos.push(pubsub.clone());
+        s.contratos.push(pubsub);
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoDuplicate { ref de, ref para, ref wit, .. }
+                    if de == "payment" && para == "cart" && wit == "nats:pub-sub"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_store_contrato() {
+        // Same gate on the key-value edge axis. Two `wasi:keyvalue/store`
+        // edges with identical (de, para, slot) collapse to one mesh-
+        // policy edge; pin the build error.
+        let mut s = three_member_spec();
+        let store = WitContract {
+            de: "cart".into(),
+            para: "payment".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("checkout/$orderId".into()),
+        };
+        // Drop the conflicting HTTP `cart → payment` edge from the
+        // fixture so the duplicate-store pair is the only one
+        // distinguishable on this pair.
+        s.contratos
+            .retain(|c| !(c.de == "cart" && c.para == "payment"));
+        s.contratos.push(store.clone());
+        s.contratos.push(store);
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoDuplicate { ref de, ref para, ref wit, .. }
+                    if de == "cart" && para == "payment" && wit == "wasi:keyvalue/store"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_capability_contrato() {
+        // Same gate on the pure-capability axis (no payload selector).
+        // Two contracts with identical (de, para, wit) and no
+        // endpoint/subject/slot are duplicate edges; pin so a future
+        // `target_label` change can't accidentally collapse the
+        // capability arm into a None-shaped key that compares equal
+        // to a populated one.
+        let mut s = three_member_spec();
+        let capability = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "pleme:cap/audit".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        };
+        s.contratos.push(capability.clone());
+        s.contratos.push(capability);
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoDuplicate {
+                de,
+                para,
+                wit,
+                target,
+            } => {
+                assert_eq!(de, "cart");
+                assert_eq!(para, "catalog");
+                assert_eq!(wit, "pleme:cap/audit");
+                assert!(
+                    target.contains("capability"),
+                    "capability-edge duplicate diagnostic must surface the \
+                     no-payload shape (got target = {target:?})"
+                );
+            }
+            other => panic!("expected ContratoDuplicate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn accepts_distinct_http_paths_between_same_pair() {
+        // Negative pin: two HTTP contracts cart → catalog at distinct
+        // endpoints (`/products/:id` and `/search`) are *not*
+        // duplicates — they're distinct typed edges differing on the
+        // payload axis. The duplicate-gate must not over-match here,
+        // since the cart-calls-catalog-on-multiple-paths shape is the
+        // canonical multi-endpoint pattern (MESH-COMPOSITION §III.1
+        // example: cart calls catalog at /products/:id, payment at
+        // /charge — same shape extends to two paths on one para).
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("cart", "catalog", "/search"));
+        s.validate()
+            .expect("distinct endpoints between same (de, para) must validate");
+    }
+
+    #[test]
+    fn accepts_same_endpoint_on_different_pairs() {
+        // Negative pin: the same `/charge` endpoint reused on two
+        // different (de, para) pairs is two distinct edges, not a
+        // duplicate. Pinning this shape so the gate's identity key
+        // includes both `de` and `para` (not just `(wit, endpoint)`).
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("payment", "catalog", "/charge"));
+        s.validate()
+            .expect("same endpoint reused on distinct (de, para) must validate");
+    }
+
+    #[test]
+    fn rejects_duplicate_contrato_diagnostic_names_offending_target() {
+        // Pin the diagnostic shape: the duplicate-edge error names
+        // *which* target field carried the conflict, so the author
+        // doesn't have to re-grep the source caixa.lisp to find it.
+        // Same self-locating diagnostic discipline as
+        // ContratoEndpointEmpty / ContratoSubjectEmpty / etc.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("cart", "catalog", "/products/:id"));
+        let err = s.validate().unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("\"/products/:id\""),
+            "duplicate-contrato diagnostic must name the offending \
+             :endpoint payload (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("cart") && msg.contains("catalog"),
+            "diagnostic must name both endpoints of the duplicate edge \
+             (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn duplicate_contrato_gate_runs_after_membership_check() {
+        // Order pin: a duplicate contract whose `:de` is *also* not in
+        // `:membros` surfaces the membership error first — the
+        // missing-member diagnostic is more locating than the
+        // duplicate-edge one (the author has to fix the membership
+        // before the duplicate is meaningful). Same ordering
+        // discipline as `membros_validation_runs_before_contratos_membership_check`.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("phantom", "catalog", "/x"));
+        s.contratos.push(contract_http("phantom", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoMemberMissing { ref caixa } if caixa == "phantom"),
+            "membership-missing must fire before duplicate-edge (got {err:?})"
+        );
+    }
+
+    #[test]
+    fn duplicate_contrato_gate_runs_after_target_shape_check() {
+        // Order pin: a contract with a malformed target (e.g. an HTTP
+        // wit world with an empty :endpoint) surfaces the target-shape
+        // error first, not the duplicate one. Even when two such
+        // malformed entries are identical, the per-contract `target()`
+        // check fires inside the loop *before* the duplicate-key
+        // insert, so the diagnostic remains the most-locating one.
+        let mut s = three_member_spec();
+        let malformed = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some(String::new()),
+            subject: None,
+            slot: None,
+        };
+        s.contratos.push(malformed.clone());
+        s.contratos.push(malformed);
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointEmpty { .. }),
+            "endpoint-empty must fire before duplicate-edge (got {err:?})"
+        );
     }
 
     #[test]
