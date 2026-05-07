@@ -754,6 +754,31 @@ impl AplicacaoSpec {
                     caixa: m.caixa.clone(),
                 });
             }
+            // The author surface for `:versao` is the same Cargo-shaped
+            // semver requirement string (`"^0.1"`, `"~0.1.2"`, `"0.1.0"`,
+            // `"*"`) every `:deps` entry carries — and the lacre pipeline
+            // resolves both axes through the same
+            // [`crate::version::parse_requirement`] entry-point. Until
+            // this gate landed `validate_membros` only refused the empty
+            // string (`MembroVersaoEmpty`); a malformed-but-non-empty
+            // requirement (`"^bad-version"`, `"~~"`, `">= "`, the
+            // accidental Cargo-vs-npm `"^0.1.x"` typo) silently passed
+            // validate and the parse failure surfaced at lacre-resolve
+            // time — far from the source caixa.lisp, with a
+            // `semver::Error` not naming which `:membros` entry carried
+            // the typo. Mirroring the c4213a4 / b0c8389 / 808017c
+            // typed-shape gate trajectory: the typed slot's valid set
+            // matches its codec's accepted set, structurally — every
+            // `Membro::versao` past validate is round-trippable through
+            // [`crate::parse_requirement`] without re-checking at the
+            // resolver layer.
+            if let Err(e) = crate::parse_requirement(&m.versao) {
+                return Err(AplicacaoError::MembroVersaoInvalid {
+                    caixa: m.caixa.clone(),
+                    versao: m.versao.clone(),
+                    reason: e.to_string(),
+                });
+            }
             if !seen.insert(m.caixa.as_str()) {
                 return Err(AplicacaoError::MembroDuplicate {
                     caixa: m.caixa.clone(),
@@ -1023,6 +1048,17 @@ pub enum AplicacaoError {
     )]
     MembroVersaoEmpty { caixa: String },
     #[error(
+        ":membros entry {caixa:?} :versao {versao:?} is not a valid semver \
+         requirement: {reason} (use Cargo-shaped forms like `\"^0.1\"`, \
+         `\"~0.1.2\"`, `\"0.1.0\"`, or `\"*\"` — the same shape `:deps :versao` \
+         carries; the lacre pipeline resolves both through the same parser)"
+    )]
+    MembroVersaoInvalid {
+        caixa: String,
+        versao: String,
+        reason: String,
+    },
+    #[error(
         ":membros entry {caixa:?} appears more than once (the graph node set \
          is a set, not a multiset; duplicate members produce duplicate \
          programs.yaml entries and ambiguous :contratos membership lookups)"
@@ -1265,6 +1301,186 @@ mod tests {
         assert!(
             matches!(err, AplicacaoError::MembroDuplicate { ref caixa } if caixa == "cart"),
             "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_membro_versao_requirement() {
+        // The fail-before-pass-after pin: a non-empty but malformed
+        // semver requirement (`"^bad-version"`) silently passed
+        // `validate()` on every pre-gate codebase because the prior
+        // shape only refused the empty string. The parse failure
+        // surfaced far downstream at lacre-resolve time with a
+        // `semver::Error` that didn't name which `:membros` entry
+        // carried the typo. The new gate moves the check to caixa-build
+        // time at the source caixa.lisp.
+        let mut s = three_member_spec();
+        s.membros[2].versao = "^bad-version".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroVersaoInvalid { ref caixa, ref versao, .. }
+                    if caixa == "payment" && versao == "^bad-version"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_versao_with_double_caret_typo() {
+        // `"^^0.1"` is the canonical doubled-caret typo — looks like a
+        // Cargo-shaped requirement on first glance but fails the parser
+        // because semver doesn't accept stacked operators. Pin this
+        // adjacent-shape footgun explicitly so a future relaxation that
+        // accepts "looks-canonical-but-isn't" forms surfaces here.
+        let mut s = three_member_spec();
+        s.membros[0].versao = "^^0.1".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroVersaoInvalid { ref caixa, ref versao, .. }
+                    if caixa == "catalog" && versao == "^^0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_versao_with_v_prefixed_tag() {
+        // `"v0.1"` is the canonical "git-tag-shape leaking into the
+        // semver requirement slot" typo — an author copies the
+        // publish-side git-tag string verbatim into `:versao`, but
+        // Cargo's semver parser rejects the leading `v` (only digits +
+        // canonical operators are valid in the major-version
+        // position). The gate's diagnostic names which member entry
+        // carried the v-prefix so the fix is one edit, not a grep
+        // through every member's `:versao`. (Note: bare `x`-glob
+        // shorthands like `^0.1.x` are *accepted* by the semver crate
+        // as an `*` wildcard on the patch axis — they're a Cargo-side
+        // valid shape, not a typo, so the gate intentionally lets them
+        // through.)
+        let mut s = three_member_spec();
+        s.membros[1].versao = "v0.1".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroVersaoInvalid { ref caixa, ref versao, .. }
+                    if caixa == "cart" && versao == "v0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn accepts_canonical_membro_versao_forms() {
+        // The four Cargo-shaped requirement forms `:deps :versao`
+        // already accepts via `crate::parse_requirement` must pass the
+        // membros gate without re-validating at the resolver layer.
+        // Pin every leg so a future tightening of the canonical set
+        // surfaces here as a test failure.
+        for form in [
+            "^0.1",      // caret — minor-range pin (the most common shape)
+            "~0.1.2",    // tilde — patch-range pin
+            "0.1.0",     // exact — single-version pin
+            "*",         // wildcard — explicitly any-version (semver::VersionReq::STAR)
+            ">=0.1, <2", // multi-range — comma-separated comparators
+        ] {
+            let mut s = three_member_spec();
+            for m in &mut s.membros {
+                m.versao = form.into();
+            }
+            s.validate()
+                .unwrap_or_else(|e| panic!("canonical form {form:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn membro_versao_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `MembroVersaoEmpty` diagnostic
+        // (which doesn't try to parse) fires before the new
+        // `MembroVersaoInvalid` parse-side diagnostic, so an empty
+        // `:versao` keeps its narrower error message — `parse_requirement`
+        // would also reject `""`, but the empty-string arm is the more
+        // self-locating diagnostic for the author.
+        let mut s = three_member_spec();
+        s.membros[1].versao = String::new();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::MembroVersaoEmpty { ref caixa } if caixa == "cart"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn membro_versao_invalid_fires_before_duplicate_check() {
+        // Order pin: a malformed requirement on a non-duplicate entry
+        // surfaces *its own* diagnostic (which names the offending
+        // `:versao` string), even when a later entry would otherwise
+        // collapse onto an earlier name. The per-entry shape gate runs
+        // inline before the duplicate-key insert, parallel to
+        // `membros_validation_runs_before_contratos_membership_check`
+        // and `duplicate_contrato_gate_runs_after_target_shape_check`.
+        let mut s = three_member_spec();
+        s.membros[0].versao = "^bad".into();
+        s.membros.push(membro("cart", "^0.2")); // would otherwise raise MembroDuplicate
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroVersaoInvalid { ref caixa, .. } if caixa == "catalog"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn membro_versao_invalid_diagnostic_carries_offending_versao() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:versao` value verbatim so the author can grep their
+        // caixa.lisp without re-running the build, and carries a
+        // non-empty `reason` from `semver::VersionReq::parse` so the
+        // parser's own wording flows through to the diagnostic.
+        let mut s = three_member_spec();
+        s.membros[2].versao = "not-a-req".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::MembroVersaoInvalid {
+            caixa,
+            versao,
+            reason,
+        } = err
+        else {
+            panic!("expected MembroVersaoInvalid, got other variant");
+        };
+        assert_eq!(caixa, "payment");
+        assert_eq!(versao, "not-a-req");
+        assert!(
+            !reason.is_empty(),
+            "MembroVersaoInvalid `reason` must carry the parser's wording verbatim"
+        );
+    }
+
+    #[test]
+    fn membro_versao_invalid_runs_before_contratos_check() {
+        // A malformed `:versao` on any member must surface its own
+        // diagnostic (which names *which* member to fix) before any
+        // `:contratos` membership lookup raises `ContratoMemberMissing`.
+        // The `:contratos` gate runs after `validate_membros`, so this
+        // is structurally guaranteed — pin it explicitly so a future
+        // refactor that reorders the gates surfaces here.
+        let mut s = three_member_spec();
+        s.membros[1].versao = "^^0.1".into();
+        // Add a contrato whose `:para` doesn't exist — would normally
+        // raise ContratoMemberMissing at the membership lookup, but
+        // the membros gate must fire first.
+        s.contratos
+            .push(contract_http("cart", "phantom", "/never-reached"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::MembroVersaoInvalid { .. }),
+            "expected MembroVersaoInvalid to fire before ContratoMemberMissing, got {err:?}"
         );
     }
 
