@@ -419,6 +419,203 @@ fn is_canonical_rate_limit_window(window: Duration) -> bool {
     window.subsec_nanos() == 0 && (secs == 1 || secs == 60 || secs == 3600)
 }
 
+/// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
+/// max length, in bytes — same value the apiserver-side OpenAPI
+/// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
+/// 1123 DNS-name limit). Lifted as a typed const so a future M4 axis
+/// reaching for the same bound (the `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR materializer's per-host validation) reads from one place.
+const ENTRADA_HOST_MAX_LEN: usize = 253;
+
+/// Per-label max length for a DNS-1123 host label — same value the
+/// Gateway API regex `[a-z0-9]([-a-z0-9]*[a-z0-9])?` bounds via the
+/// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
+const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
+
+/// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
+/// would refuse at admission time. The contract — exactly the regex
+/// the Gateway API CRD's OpenAPI schema enforces on `Listener.hostname`
+/// and `HTTPRoute.spec.hostnames[]`,
+/// `^(\*\.)?[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+/// (max length 253; per-label max length 63):
+///
+///   - lowercase RFC 1123 DNS subdomain (`[a-z0-9-]` only; no
+///     uppercase, no underscore, no Unicode/IDN — IDN must be
+///     pre-encoded as Punycode `xn--…` by the author);
+///   - exactly one optional leading wildcard label (`*.`); a wildcard
+///     in any non-leading label position is rejected;
+///   - each `.`-separated label is 1..=63 bytes, with non-hyphen
+///     alphanumeric at both boundaries (no `-foo`, no `foo-`);
+///   - total length 1..=253 bytes;
+///   - no IPv4 literal (Gateway API forbids IP literals);
+///   - no scheme (`https://`, `http://`), no port (`:8080`), no
+///     whitespace, no path (`/`).
+///
+/// Lifted as a typed gate (rather than an inline cascade in
+/// `validate()`) so the contract lives in one place — every future
+/// per-host axis (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's host validator, the future per-`:entrada` SAN
+/// emission for cert-manager Certificates, the multi-`:entrada`
+/// host-collision gate when M4 lands `:entrada` as a `Vec`) reaches
+/// for the same predicate, not its own. Same compounding shape as
+/// `is_canonical_rate_limit_window` (808017c) and
+/// `contrato_target_label` (5dbcfaf).
+///
+/// The diagnostic carries the offending `host:` verbatim plus a
+/// parser-shaped `reason:` naming the specific violation, so the
+/// author can grep their caixa.lisp for `:host "<host>"` and fix it
+/// in one edit. Same diagnostic shape as `MembroVersaoInvalid`
+/// (9888b13).
+fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
+    // Empty is already gated by `EmptyEntradaHost` at the call site;
+    // re-checking here keeps the predicate usable from any future
+    // call site (M4 CR materializer) without an empty-check footgun.
+    if host.is_empty() {
+        return Err(AplicacaoError::EmptyEntradaHost);
+    }
+    if host.len() > ENTRADA_HOST_MAX_LEN {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: format!(
+                "exceeds Gateway API v1 Hostname max length of {ENTRADA_HOST_MAX_LEN} bytes \
+                 (got {} bytes; the K8s apiserver rejects longer hostnames at admission time)",
+                host.len()
+            ),
+        });
+    }
+    if host.contains("://") {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "must not carry a scheme (drop the `https://` or `http://` prefix; \
+                     Gateway API takes the bare hostname)"
+                .to_string(),
+        });
+    }
+    if host.contains('/') {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "must not carry a path (drop the `/…` suffix; Gateway API path \
+                     matching is in `:entrada :paths`)"
+                .to_string(),
+        });
+    }
+    if host.bytes().any(|b| b.is_ascii_whitespace()) {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "must not contain whitespace".to_string(),
+        });
+    }
+
+    // Strip the optional single leading wildcard label *before* the
+    // trailing-dot check so the bare `"*."` form surfaces the more
+    // self-locating "wildcard without domain" diagnostic instead of
+    // the generic "trailing dot" one.
+    let (had_wildcard, rest) = match host.strip_prefix("*.") {
+        Some(r) => (true, r),
+        None => (false, host),
+    };
+    if had_wildcard && rest.is_empty() {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "wildcard `*.` must be followed by a domain (e.g. `*.example.com`)".to_string(),
+        });
+    }
+    if rest.contains('*') {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "wildcard `*` is allowed only as the first label (`*.example.com`); \
+                     no inner or trailing `*` labels"
+                .to_string(),
+        });
+    }
+    if rest.ends_with('.') {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "must not have a trailing `.` (Gateway API hostnames are not \
+                     fully-qualified with a root dot; the apiserver regex rejects \
+                     trailing dots)"
+                .to_string(),
+        });
+    }
+
+    // Reject pure IPv4 literals: four dot-separated labels, every
+    // label all-ASCII-digits. Gateway API v1 explicitly forbids IP
+    // literals as Hostnames.
+    let labels: Vec<&str> = rest.split('.').collect();
+    if labels.len() == 4
+        && labels
+            .iter()
+            .all(|l| !l.is_empty() && l.bytes().all(|b| b.is_ascii_digit()))
+    {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "must not be an IPv4 literal (Gateway API v1 Hostname forbids IP \
+                     literals; use a DNS name)"
+                .to_string(),
+        });
+    }
+
+    // Per-label shape: 1..=63 bytes, lowercase ASCII alphanumeric +
+    // hyphen, with non-hyphen at both boundaries.
+    for label in &labels {
+        if label.is_empty() {
+            return Err(AplicacaoError::EntradaHostInvalid {
+                host: host.to_string(),
+                reason: "has an empty label (consecutive `..` or a leading `.`)".to_string(),
+            });
+        }
+        if label.len() > ENTRADA_HOST_LABEL_MAX_LEN {
+            return Err(AplicacaoError::EntradaHostInvalid {
+                host: host.to_string(),
+                reason: format!(
+                    "label {label:?} exceeds DNS-1123 label max length of \
+                     {ENTRADA_HOST_LABEL_MAX_LEN} bytes (got {} bytes)",
+                    label.len()
+                ),
+            });
+        }
+        let bytes = label.as_bytes();
+        if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
+            return Err(AplicacaoError::EntradaHostInvalid {
+                host: host.to_string(),
+                reason: format!(
+                    "label {label:?} must start and end with an alphanumeric \
+                     (no leading or trailing `-`)"
+                ),
+            });
+        }
+        for &b in bytes {
+            let valid = b.is_ascii_digit() || b.is_ascii_lowercase() || b == b'-';
+            if !valid {
+                let msg = if b.is_ascii_uppercase() {
+                    format!(
+                        "label {label:?} contains uppercase character {ch:?} \
+                         (Gateway API hostnames are lowercase-only; use {lower:?})",
+                        ch = b as char,
+                        lower = label.to_ascii_lowercase()
+                    )
+                } else if b == b'_' {
+                    format!(
+                        "label {label:?} contains `_` (Gateway API hostnames \
+                         allow only `[a-z0-9-]`; use `-` instead)"
+                    )
+                } else {
+                    format!(
+                        "label {label:?} contains invalid character {ch:?} \
+                         (Gateway API hostnames allow only `[a-z0-9-]`)",
+                        ch = b as char
+                    )
+                };
+                return Err(AplicacaoError::EntradaHostInvalid {
+                    host: host.to_string(),
+                    reason: msg,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 mod rate_limit_codec {
     use super::{Duration, RateLimit};
     use serde::{Deserialize, Deserializer, Serializer};
@@ -684,6 +881,24 @@ impl AplicacaoSpec {
             if e.host.is_empty() {
                 return Err(AplicacaoError::EmptyEntradaHost);
             }
+            // The `:host` lands verbatim as a K8s Gateway API v1
+            // `Listener.hostname` *and* `HTTPRoute.spec.hostnames[0]` —
+            // both apiserver-validated against the same restrictive
+            // pattern: lowercase RFC 1123 DNS subdomain, optional
+            // single leading wildcard label (`*.`), max length 253,
+            // per-label max length 63, no IP literals, no scheme,
+            // no port. Until this gate landed `validate()` only
+            // refused the empty string (`EmptyEntradaHost`); a
+            // structurally invalid hostname (`"https://example.com"`,
+            // `"checkout.quero.cloud:8080"`, `"1.2.3.4"`,
+            // `"_underscored.example.com"`, `"FOO.example.com"`,
+            // `"checkout.quero.cloud."`) silently passed validate
+            // and the apiserver `field is invalid` error surfaced at
+            // `kubectl apply` time, far from the source caixa.lisp.
+            // Lifting the gate to caixa-build time mirrors the
+            // `:entrada :paths` value-shape trajectory (eb3456d) and
+            // closes the last unstructured `:entrada` axis.
+            validate_entrada_host(&e.host)?;
             if e.port == 0 {
                 return Err(AplicacaoError::EntradaPortZero);
             }
@@ -1072,6 +1287,13 @@ pub enum AplicacaoError {
     EntradaMemberMissing { para: String },
     #[error(":entrada must declare a non-empty :host")]
     EmptyEntradaHost,
+    #[error(
+        ":entrada :host {host:?} is not a valid Gateway API v1 Hostname: {reason} \
+         (the K8s apiserver enforces the same shape on Gateway `Listener.hostname` and \
+         `HTTPRoute.spec.hostnames` at admission time; use a lowercase RFC 1123 DNS name \
+         like `\"checkout.quero.cloud\"` or `\"*.quero.cloud\"`)"
+    )]
+    EntradaHostInvalid { host: String, reason: String },
     #[error(":entrada :port must be in 1..=65535, got 0")]
     EntradaPortZero,
     #[error(":entrada :paths entry is empty (use the empty list to match all)")]
@@ -2461,6 +2683,335 @@ mod tests {
         let mut s = three_member_spec();
         s.entrada.as_mut().unwrap().port = 0;
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPortZero);
+    }
+
+    // ── :entrada :host value-shape gate ──────────────────────────────
+    //
+    // Mirrors the `:entrada :paths` value-shape suite (eb3456d) on
+    // the sibling `:host` axis. Every authoring footgun the K8s
+    // Gateway API v1 apiserver would catch at admission time becomes
+    // a caixa-build-time `EntradaHostInvalid` with the offending
+    // `:host` named verbatim. Same diagnostic shape as
+    // `MembroVersaoInvalid` (9888b13).
+
+    #[test]
+    fn rejects_entrada_host_with_scheme() {
+        // Fail-before-pass-after pin — pre-gate codebases silently
+        // accepted `https://…` and the apiserver rejected it at apply
+        // time with no source citation.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "https://checkout.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, .. }
+                if host == "https://checkout.quero.cloud"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_port() {
+        // The `:8080` port suffix is the canonical "I forgot the port
+        // belongs in `:entrada :port`" footgun.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.quero.cloud:8080".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, .. }
+                if host == "checkout.quero.cloud:8080"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_path() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.quero.cloud/api".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, .. }
+                if host == "checkout.quero.cloud/api"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_uppercase() {
+        // Gateway API regex is `[a-z0-9]…` strictly — uppercase is
+        // rejected, not silently lower-cased.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "Checkout.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("uppercase")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_underscore() {
+        // RFC 1123 allows `[a-z0-9-]` only; underscore is the
+        // canonical "I'm thinking of HTTP cookies / SRV records" leak.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout_app.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains('_')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_ipv4_literal() {
+        // Gateway API v1 explicitly forbids IP literals as Hostnames.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "10.0.0.1".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("IPv4")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_trailing_dot() {
+        // The Gateway API regex anchors at end-of-string with no
+        // trailing `.` allowance — the FQDN root-dot form is rejected.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.quero.cloud.".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, .. }
+                if host == "checkout.quero.cloud."),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_leading_dot() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = ".checkout.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("empty label")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_consecutive_dots() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout..quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("empty label")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_leading_hyphen_label() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "-checkout.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("alphanumeric")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_trailing_hyphen_label() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout-.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("alphanumeric")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_inner_wildcard() {
+        // Gateway API allows `*` only as the first label (`*.foo`);
+        // any inner or trailing `*` is rejected.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.*.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("wildcard")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_bare_wildcard() {
+        // `*.` with no domain is meaningless; Gateway API rejects it.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "*.".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("wildcard")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_whitespace() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout .quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_too_long() {
+        // Total length cap = 253; build a 254-byte host out of two
+        // 63-byte labels + one 62-byte label + dots.
+        let mut s = three_member_spec();
+        let big = format!(
+            "{}.{}.{}.{}",
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(254 - 63 * 3 - 3)
+        );
+        assert_eq!(big.len(), 254);
+        s.entrada.as_mut().unwrap().host = big;
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("max length of 253")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_label_too_long() {
+        let mut s = three_member_spec();
+        // 64-byte label — one over the per-label cap.
+        s.entrada.as_mut().unwrap().host = format!("{}.quero.cloud", "x".repeat(64));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
+                if reason.contains("label max length of 63")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_host_diagnostic_carries_offending_host() {
+        // Diagnostic-shape pin — the offending host + a non-empty
+        // reason flow through verbatim so the author can grep their
+        // caixa.lisp for `:host "<host>"` and fix it in one edit.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.quero.cloud:8080".into();
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::EntradaHostInvalid { host, reason } => {
+                assert_eq!(host, "checkout.quero.cloud:8080");
+                assert!(!reason.is_empty(), "reason field must be non-empty");
+            }
+            other => panic!("expected EntradaHostInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entrada_host_empty_takes_precedence_over_invalid() {
+        // Ordering pin: `EmptyEntradaHost` is the more self-locating
+        // diagnostic on `""` and must lead — `validate_entrada_host`
+        // is only reached after the empty-check fires at the call
+        // site. (The predicate itself defends against direct
+        // invocation by returning the same error on `""`.)
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = String::new();
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::EmptyEntradaHost);
+    }
+
+    #[test]
+    fn entrada_host_member_missing_takes_precedence_over_host_invalid() {
+        // Ordering pin: a missing :para member is the more
+        // self-locating diagnostic and fires before the host gate.
+        let mut s = three_member_spec();
+        let e = s.entrada.as_mut().unwrap();
+        e.para = "ghost".into();
+        e.host = "BAD HOST".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaMemberMissing { ref para } if para == "ghost"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_host_invalid_fires_before_port_zero() {
+        // Ordering pin: the host gate fires before the port gate so
+        // a malformed host is named even when the port is also wrong.
+        let mut s = three_member_spec();
+        let e = s.entrada.as_mut().unwrap();
+        e.host = "Checkout.quero.cloud".into();
+        e.port = 0;
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, .. }
+                if host == "Checkout.quero.cloud"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_accepts_canonical_hosts() {
+        // Positive-control sweep — every form the Gateway API
+        // apiserver accepts must round-trip through validate. Covers
+        // a plain DNS subdomain, a leading wildcard, a single-label
+        // host (cluster-internal), a max-length-edge label, a
+        // hyphen-bearing label, and a Punycode IDN label.
+        for host in [
+            "checkout.quero.cloud",
+            "*.quero.cloud",
+            "checkout",
+            // 63-byte label — exactly the per-label cap.
+            "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0.quero.cloud",
+            "foo-bar.quero.cloud",
+            // Punycode IDN — valid because the author pre-encoded.
+            "xn--bcher-kva.example.com",
+        ] {
+            let mut s = three_member_spec();
+            s.entrada.as_mut().unwrap().host = host.into();
+            s.validate()
+                .unwrap_or_else(|e| panic!("expected {host:?} to validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn entrada_host_max_length_validates() {
+        // 253-byte host is the cap exactly — must validate. Build a
+        // 253-byte host out of three 63-byte labels + one 61-byte
+        // label + 3 dots = 252 bytes, then pad one byte to 253.
+        let mut s = three_member_spec();
+        let host = format!(
+            "{}.{}.{}.{}",
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(253 - 63 * 3 - 3)
+        );
+        assert_eq!(host.len(), 253);
+        s.entrada.as_mut().unwrap().host = host;
+        s.validate().unwrap();
     }
 
     #[test]
