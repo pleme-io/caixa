@@ -4,8 +4,8 @@ use tatara_lisp::DeriveTataraDomain;
 use std::time::Duration;
 
 use crate::{
-    behavior::BehaviorSpec, limits::LimitsSpec, supervisor::SupervisorSpec, upgrade::UpgradeFromEntry,
-    CaixaKind, Dep,
+    behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec, supervisor::SupervisorSpec,
+    upgrade::UpgradeFromEntry, CaixaKind, Dep,
 };
 
 /// Inline duration parser for `restart_window`. Mirrors
@@ -244,6 +244,41 @@ impl Caixa {
         })
     }
 
+    /// Validate every entry of `:deps` and `:deps-dev` through
+    /// [`Dep::validate`] — closing the parity loop with the per-axis
+    /// `:versao` gates already wired into the typed-graph
+    /// ([`crate::AplicacaoSpec::validate_membros`] for `:membros`,
+    /// 9888b13) and typed supervisor tree
+    /// ([`crate::SupervisorSpec::validate`] for `:children`, b38ff3a).
+    ///
+    /// Until this gate landed `:deps :versao` and `:deps-dev :versao`
+    /// were the only `:versao` axes still untyped past
+    /// [`Caixa::from_lisp`]: the derive macro stored the requirement
+    /// as a String without parsing it, so a malformed-but-non-empty
+    /// requirement (`"^bad-version"`, `"^^0.1"`, `"v0.1"`, `"not-a-req"`)
+    /// silently passed parse and the `semver::Error` surfaced at
+    /// lacre-resolve time, far from the source caixa.lisp, with no
+    /// field naming which `:deps` entry carried the typo. Lifting the
+    /// gate here makes the four `:versao` typed surfaces (`:deps`,
+    /// `:deps-dev`, `:membros`, `:children`) structurally equivalent —
+    /// every requirement string past `validate_deps` is round-trippable
+    /// through [`crate::parse_requirement`] without re-checking at the
+    /// resolver layer.
+    ///
+    /// Both lists run through the same per-entry validator so a typo
+    /// in `:deps-dev` surfaces with the same diagnostic as one in
+    /// `:deps` — neither axis is a second-class citizen of the typed
+    /// surface.
+    pub fn validate_deps(&self) -> Result<(), DepError> {
+        for dep in &self.deps {
+            dep.validate()?;
+        }
+        for dep in &self.deps_dev {
+            dep.validate()?;
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -453,6 +488,125 @@ mod tests {
         let emitted = c.to_lisp();
         let back = Caixa::from_lisp(&emitted).unwrap();
         assert_eq!(c, back);
+    }
+
+    #[test]
+    fn validate_deps_accepts_canonical_caixa() {
+        // Positive control: the bare template — zero deps, zero
+        // deps_dev — passes the gate trivially. A future axis added to
+        // `Dep::validate` mustn't regress an empty-deps caixa to a
+        // build error.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_deps().unwrap();
+    }
+
+    #[test]
+    fn validate_deps_rejects_invalid_versao_in_deps() {
+        // Fail-before-pass-after pin: a malformed `:deps :versao`
+        // surfaces at validate_deps() time, not at lacre-resolve time.
+        // Mirrors `rejects_invalid_membro_versao_requirement` and
+        // `validate_rejects_invalid_child_versao_requirement` on the
+        // other two `:versao` axes.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("caixa-teia", "^bad-version")];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::VersaoInvalid { ref nome, ref versao, .. }
+                    if nome == "caixa-teia" && versao == "^bad-version"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_rejects_invalid_versao_in_deps_dev() {
+        // Parity pin: `:deps-dev` must run through the same per-entry
+        // validator as `:deps` — a typo in either axis surfaces the
+        // same diagnostic. Without this leg, `:deps-dev` would be a
+        // second-class citizen of the typed surface and an author
+        // could land a build that passes validate_deps but fails at
+        // `feira lock`-time when the dev-dep is resolved for a test
+        // build.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![Dep::simple("tatara-check", "^^0.1")];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::VersaoInvalid { ref nome, ref versao, .. }
+                    if nome == "tatara-check" && versao == "^^0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_runs_deps_before_deps_dev() {
+        // Order pin: when both lists carry typos, the `:deps`
+        // diagnostic surfaces first. The author's mental model is
+        // "runtime deps are load-bearing; dev deps are scaffolding";
+        // surfacing the runtime axis first matches that hierarchy.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("runtime-dep", "^bad-runtime")];
+        c.deps_dev = vec![Dep::simple("dev-dep", "^bad-dev")];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::VersaoInvalid { ref nome, .. }
+                    if nome == "runtime-dep"
+            ),
+            "expected `:deps` typo to surface first, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_accepts_canonical_versao_forms_in_both_lists() {
+        // Positive control sweep across both lists. Pin every
+        // canonical Cargo-shaped form so a future tightening of the
+        // accepted set surfaces here as a test failure (parity with
+        // `accepts_canonical_membro_versao_forms` and
+        // `validate_accepts_canonical_child_versao_forms`).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("caret", "^0.1"),
+            Dep::simple("tilde", "~0.1.2"),
+            Dep::simple("exact", "0.1.0"),
+            Dep::simple("wildcard", "*"),
+            Dep::simple("multi-range", ">=0.1, <2"),
+        ];
+        c.deps_dev = vec![
+            Dep::simple("dev-caret", "^0.1"),
+            Dep::simple("dev-wildcard", "*"),
+        ];
+        c.validate_deps().unwrap();
+    }
+
+    #[test]
+    fn validate_deps_diagnostic_carries_offending_dep() {
+        // Diagnostic-shape pin: the error names the offending entry's
+        // `:nome` + `:versao` verbatim and carries a non-empty
+        // `reason` from `semver::VersionReq::parse`, so a `feira lint`
+        // run can render the diagnostic without re-parsing.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("caixa-teia", "not-a-req")];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::VersaoInvalid {
+            nome,
+            versao,
+            reason,
+        } = err
+        else {
+            panic!("expected VersaoInvalid, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(versao, "not-a-req");
+        assert!(
+            !reason.is_empty(),
+            "VersaoInvalid `reason` must carry the parser's wording verbatim"
+        );
     }
 
     #[test]

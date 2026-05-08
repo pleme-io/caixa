@@ -29,7 +29,7 @@ pub use aplicacao::{
     PlacementStrategy, RateLimit, WitContract, WitTarget,
 };
 pub use behavior::{BehaviorError, BehaviorSpec};
-pub use dep::{Dep, DepSource};
+pub use dep::{Dep, DepError, DepSource};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{LimitsError, LimitsSpec};
