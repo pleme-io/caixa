@@ -187,12 +187,11 @@ impl WitContract {
                     expected: "subject",
                 }
             })?;
-            if s.is_empty() {
-                return Err(AplicacaoError::ContratoSubjectEmpty {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
-                });
-            }
+            // Full NATS-subject grammar gate (empty string + every
+            // structural violation). See `validate_contrato_subject` —
+            // same build-time-gate trajectory as `validate_entrada_host`
+            // (c7d05ec) on the sibling external-ingress axis.
+            validate_contrato_subject(&self.de, &self.para, s)?;
             return Ok(WitTarget::PubSub { subject: s });
         }
         if self.is_store() {
@@ -419,6 +418,22 @@ fn is_canonical_rate_limit_window(window: Duration) -> bool {
     window.subsec_nanos() == 0 && (secs == 1 || secs == 60 || secs == 3600)
 }
 
+/// NATS subject max length, in bytes — the practical cap NATS clients
+/// honor on a publish subject. NATS protocol-level subject limits sit
+/// well above this (subjects flow through a 1 MiB protocol payload),
+/// but [the canonical NATS Sound Naming Strategy](https://docs.nats.io/nats-concepts/subjects)
+/// caps "reasonable" subject lengths an order of magnitude below the
+/// protocol maximum — anything longer is structurally a leak (a
+/// keyspace-shaped opaque blob masquerading as a subject token). The
+/// 256-byte ceiling matches the DNS-style identifier discipline every
+/// other typed-graph identifier carries (`:entrada :host` 253 bytes,
+/// `:children :nome` DNS-1123 63 bytes per label) and gives the codec
+/// (and the downstream cilium L7 emitter) a single fixed bound. Lifted
+/// as a typed const so a future per-subject axis (the M4 tameshi
+/// pub-sub event-chain replayer's per-subject capacity bound, the M4
+/// `NATS-JetStream` stream-filter materializer) reads from one place.
+const CONTRATO_SUBJECT_MAX_LEN: usize = 256;
+
 /// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
 /// max length, in bytes — same value the apiserver-side OpenAPI
 /// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
@@ -431,6 +446,169 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// Gateway API regex `[a-z0-9]([-a-z0-9]*[a-z0-9])?` bounds via the
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
+
+/// Reject `:contratos :subject` values that would either fail the
+/// NATS publish-protocol check at runtime or quietly mean something
+/// other than the author intended. The contract — the strict subset
+/// of [the NATS subject grammar](https://docs.nats.io/nats-concepts/subjects)
+/// every publish edge in an Aplicacao must satisfy:
+///
+///   - dot-separated tokens; each token is 1+ bytes (no leading,
+///     trailing, or consecutive `.`);
+///   - per-token character set is ASCII alphanumeric + `_` and `-`
+///     — the canonical "Sound Naming Strategy" subset NATS docs
+///     recommend, and the cleanest superset of what every Cilium L7
+///     event-stream emitter accepts without re-encoding;
+///   - no `*` or `>` token (publish-side wildcards are subscribe-only;
+///     a `:contratos` edge is a publish, so a wildcard token is
+///     always an authoring error — `:wit "nats:pub-sub" :subject
+///     "events.*"` does not fan out to "every event token", it
+///     publishes a literal `*` token NATS rejects);
+///   - no whitespace (NATS protocol rejects `\s`-bearing subjects at
+///     the parser level: `PUB <subject> ...\r\n` is line-oriented and
+///     space is a delimiter);
+///   - no control characters (CR, LF, NUL — same protocol-parse
+///     concern, plus the broader "subjects are printable ASCII"
+///     discipline);
+///   - total length 1..=256 bytes (see `CONTRATO_SUBJECT_MAX_LEN`).
+///
+/// Lifted as a typed gate (rather than an inline cascade in
+/// `target()`) so the contract lives in one place — every future
+/// per-subject axis (the M4 tameshi pub-sub event-chain replayer's
+/// per-subject capacity bound, the future per-subject NATS-JetStream
+/// stream-filter materializer, the future M4 per-edge `:politicas`
+/// overlay's per-subject rate-limit emission) reaches for the same
+/// predicate, not its own. Same compounding shape as
+/// `validate_entrada_host` (c7d05ec) on the sibling external-ingress
+/// axis: each closes the last unstructured authoring axis on its
+/// typed surface.
+///
+/// The diagnostic carries the offending `subject:` verbatim plus the
+/// offending `de:`/`para:` pair plus a parser-shaped `reason:` naming
+/// the specific violation, so the author can grep their caixa.lisp
+/// for `:subject "<subject>"` and fix it in one edit. Same diagnostic
+/// shape as `EntradaHostInvalid` (c7d05ec) and `MembroVersaoInvalid`
+/// (9888b13).
+fn validate_contrato_subject(de: &str, para: &str, subject: &str) -> Result<(), AplicacaoError> {
+    let invalid = |reason: String| AplicacaoError::ContratoSubjectInvalid {
+        de: de.to_string(),
+        para: para.to_string(),
+        subject: subject.to_string(),
+        reason,
+    };
+    // Empty is already gated by `ContratoSubjectEmpty` at the call
+    // site; re-checking here keeps the predicate usable from any
+    // future call site (M4 NATS-JetStream materializer) without an
+    // empty-check footgun.
+    if subject.is_empty() {
+        return Err(AplicacaoError::ContratoSubjectEmpty {
+            de: de.to_string(),
+            para: para.to_string(),
+        });
+    }
+    if subject.len() > CONTRATO_SUBJECT_MAX_LEN {
+        return Err(invalid(format!(
+            "exceeds NATS subject max length of {CONTRATO_SUBJECT_MAX_LEN} bytes \
+             (got {} bytes; see the NATS Sound Naming Strategy)",
+            subject.len()
+        )));
+    }
+    if subject.starts_with('.') {
+        return Err(invalid(
+            "must not start with `.` (NATS subjects are dot-separated tokens; \
+             a leading `.` denotes an empty first token)"
+                .to_string(),
+        ));
+    }
+    if subject.ends_with('.') {
+        return Err(invalid(
+            "must not end with `.` (a trailing `.` denotes an empty last token)".to_string(),
+        ));
+    }
+    for token in subject.split('.') {
+        if let Some(reason) = subject_token_violation(token) {
+            return Err(invalid(reason));
+        }
+    }
+    Ok(())
+}
+
+/// Per-token grammar check for [`validate_contrato_subject`]. Returns
+/// `Some(reason)` when `token` violates the NATS subject grammar (empty
+/// token; whole-token `*`/`>` wildcard; per-byte invalid character),
+/// or `None` when the token is well-formed. Lifted as a helper so the
+/// top-level subject gate stays under the function-length lint while
+/// the per-byte diagnostic family lives in one place — the only call
+/// site is the `subject.split('.')` loop, but a future per-token axis
+/// (the M4 NATS-JetStream stream-filter token validator) reaches for
+/// this helper without re-rolling its grammar.
+fn subject_token_violation(token: &str) -> Option<String> {
+    if token.is_empty() {
+        return Some("has an empty token (consecutive `..` in subject)".to_string());
+    }
+    if token == "*" {
+        return Some(
+            "contains a `*` wildcard token — wildcards are subscribe-only; \
+             a `:contratos` edge is a publish edge, so a `*` token publishes \
+             a literal `*` (almost never the author's intent). Use a concrete \
+             token instead."
+                .to_string(),
+        );
+    }
+    if token == ">" {
+        return Some(
+            "contains a `>` wildcard token — wildcards are subscribe-only; \
+             a `:contratos` edge is a publish edge, so a `>` token publishes \
+             a literal `>` (almost never the author's intent). Use a concrete \
+             token instead."
+                .to_string(),
+        );
+    }
+    for &b in token.as_bytes() {
+        if b.is_ascii_alphanumeric() || b == b'_' || b == b'-' {
+            continue;
+        }
+        return Some(subject_byte_violation_reason(token, b));
+    }
+    None
+}
+
+/// Render the per-byte diagnostic for a token-grammar violation. Picks
+/// the most self-locating arm for the offending byte (wildcard char vs
+/// whitespace vs control char vs non-ASCII vs other-printable-ASCII).
+fn subject_byte_violation_reason(token: &str, b: u8) -> String {
+    if b == b'*' || b == b'>' {
+        format!(
+            "token {token:?} contains the wildcard character `{ch}` inside a \
+             token (NATS wildcards are whole-token only — `*` matches one token, \
+             `>` matches the rest — and are subscribe-only besides; a publish \
+             subject must not carry either character)",
+            ch = b as char
+        )
+    } else if b.is_ascii_whitespace() {
+        format!(
+            "token {token:?} contains whitespace (the NATS line-oriented \
+             `PUB <subject> ...\\r\\n` protocol uses whitespace as a delimiter)"
+        )
+    } else if b.is_ascii_control() {
+        format!(
+            "token {token:?} contains a control character (byte {b:#x}); NATS \
+             subjects are printable-ASCII"
+        )
+    } else if !b.is_ascii() {
+        format!(
+            "token {token:?} contains the non-ASCII byte {b:#x} (NATS subjects \
+             are ASCII; pre-encode any Unicode-bearing identifier as \
+             alphanumeric/`-`/`_`)"
+        )
+    } else {
+        format!(
+            "token {token:?} contains invalid character {ch:?} (NATS subjects \
+             allow only `[A-Za-z0-9_-]` per token under the Sound Naming Strategy)",
+            ch = b as char
+        )
+    }
+}
 
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
 /// would refuse at admission time. The contract — exactly the regex
@@ -1365,6 +1543,19 @@ pub enum AplicacaoError {
     )]
     ContratoSubjectEmpty { de: String, para: String },
     #[error(
+        "pub-sub contrato {de:?} → {para:?} :subject {subject:?} is not a valid NATS \
+         publish subject: {reason} (the NATS line-oriented protocol enforces the same \
+         shape on `PUB <subject> ...\\r\\n` at parse time; use dot-separated \
+         `[A-Za-z0-9_-]` tokens like `\"checkout.events.order.shipped\"` — no \
+         wildcards, no whitespace, no empty tokens)"
+    )]
+    ContratoSubjectInvalid {
+        de: String,
+        para: String,
+        subject: String,
+        reason: String,
+    },
+    #[error(
         "store contrato {de:?} → {para:?} :slot is empty (an empty slot template \
          addresses the bucket root, defeating the per-key isolation the slot exists \
          for; omit :slot only if the WIT world is not store-shaped)"
@@ -2075,6 +2266,321 @@ mod tests {
                 if de == "cart" && para == "catalog"),
             "got {err:?}"
         );
+    }
+
+    // ── value-shape on `:contratos :subject` (NATS subject grammar) ──────
+    //
+    // The peer of `validate_entrada_host` (c7d05ec) on the sibling
+    // pub-sub axis: until the gate landed `target()` only refused the
+    // empty `:subject`, leaving every NATS subject-grammar violation
+    // (consecutive dots, leading/trailing dot, whitespace, control
+    // chars, non-ASCII bytes, the publish-side `*`/`>` wildcard
+    // footguns) as a runtime publish failure with no field naming the
+    // offending caixa. The tests below pin every arm.
+
+    fn pubsub_contract(subject: &str) -> WitContract {
+        WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(subject.into()),
+            slot: None,
+        }
+    }
+
+    fn assert_subject_invalid_with_reason(subject: &str, needle: &str) {
+        let mut s = three_member_spec();
+        s.contratos.push(pubsub_contract(subject));
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoSubjectInvalid {
+                de,
+                para,
+                subject: sub,
+                reason,
+            } => {
+                assert_eq!(de, "cart", "diagnostic must name :de verbatim");
+                assert_eq!(para, "catalog", "diagnostic must name :para verbatim");
+                assert_eq!(sub, subject, "diagnostic must name :subject verbatim");
+                assert!(
+                    reason.contains(needle),
+                    "reason {reason:?} must mention {needle:?}"
+                );
+            }
+            other => panic!("expected ContratoSubjectInvalid for {subject:?}, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_subject_with_consecutive_dots() {
+        // `"a..b"` denotes an empty middle token — NATS-illegal, and
+        // never the author's intent (omit the empty token instead).
+        assert_subject_invalid_with_reason("checkout..events", "empty token");
+    }
+
+    #[test]
+    fn rejects_subject_with_leading_dot() {
+        // A leading `.` is an empty first token — NATS-illegal.
+        assert_subject_invalid_with_reason(".events.shipped", "must not start with `.`");
+    }
+
+    #[test]
+    fn rejects_subject_with_trailing_dot() {
+        // A trailing `.` is an empty last token — NATS-illegal.
+        assert_subject_invalid_with_reason("events.shipped.", "must not end with `.`");
+    }
+
+    #[test]
+    fn rejects_subject_with_space() {
+        // The NATS line-oriented `PUB <subject> ...\r\n` protocol
+        // uses whitespace as a delimiter; a space inside a subject
+        // breaks the line at parse time.
+        assert_subject_invalid_with_reason("checkout events", "whitespace");
+    }
+
+    #[test]
+    fn rejects_subject_with_tab() {
+        // Same protocol concern as space — `\t` is a publish-line
+        // delimiter.
+        assert_subject_invalid_with_reason("checkout\tevents", "whitespace");
+    }
+
+    #[test]
+    fn rejects_subject_with_control_char() {
+        // NUL inside a subject is a printable-ASCII discipline
+        // violation; surfaces as the explicit "control character"
+        // diagnostic, not the generic "invalid character" one.
+        assert_subject_invalid_with_reason("checkout\u{0}events", "control character");
+    }
+
+    #[test]
+    fn rejects_subject_with_carriage_return() {
+        // CR is the first half of the NATS protocol's `\r\n` line
+        // terminator and is classified by `is_ascii_whitespace`, so
+        // it surfaces the whitespace diagnostic — whose error message
+        // already cites the `\r\n` protocol-line concern verbatim.
+        assert_subject_invalid_with_reason("checkout\revents", "whitespace");
+    }
+
+    #[test]
+    fn rejects_subject_with_newline() {
+        // LF is the closing half of the NATS `\r\n` terminator and
+        // is also `is_ascii_whitespace`-classified — same diagnostic
+        // path as CR for the same protocol-parse reason.
+        assert_subject_invalid_with_reason("checkout\nevents", "whitespace");
+    }
+
+    #[test]
+    fn rejects_subject_with_star_wildcard_token() {
+        // `*` is a NATS subscribe-side single-token wildcard; on
+        // the publish side it would publish a literal `*` token,
+        // never the author's intent for a `:contratos` edge.
+        // The dedicated whole-token wildcard arm fires (more
+        // self-locating diagnostic than the per-byte arm).
+        assert_subject_invalid_with_reason("checkout.*", "wildcard");
+    }
+
+    #[test]
+    fn rejects_subject_with_gt_wildcard_token() {
+        // `>` is the multi-token tail wildcard; same publish-side
+        // rejection as `*`.
+        assert_subject_invalid_with_reason("checkout.>", "wildcard");
+    }
+
+    #[test]
+    fn rejects_subject_with_inner_star_character() {
+        // `*` *inside* a token (not the whole token) hits the
+        // per-byte arm and surfaces the dedicated wildcard-character
+        // diagnostic naming the offending character + the more
+        // self-locating "wildcards are whole-token only" rule.
+        assert_subject_invalid_with_reason("checkout.foo*bar", "wildcard character");
+    }
+
+    #[test]
+    fn rejects_subject_with_inner_gt_character() {
+        // Same per-byte arm for `>` inside a token.
+        assert_subject_invalid_with_reason("checkout.foo>bar", "wildcard character");
+    }
+
+    #[test]
+    fn rejects_subject_with_non_ascii_byte() {
+        // Subjects are ASCII; a Unicode-bearing token (the canonical
+        // "I forgot to pre-encode the identifier" footgun) surfaces
+        // the dedicated non-ASCII diagnostic.
+        assert_subject_invalid_with_reason("checkout.€vents", "non-ASCII");
+    }
+
+    #[test]
+    fn rejects_subject_with_dollar_token_byte() {
+        // The remaining canonical author footgun: punctuation chars
+        // outside the `[A-Za-z0-9_-]` set (`$`, `,`, `:`, `@`, …)
+        // surface the generic "invalid character" diagnostic so the
+        // author sees the offending byte verbatim.
+        assert_subject_invalid_with_reason("checkout.$events", "invalid character");
+    }
+
+    #[test]
+    fn rejects_subject_too_long() {
+        // Exactly 1 byte over the cap — the boundary case.
+        let too_long = "a".repeat(CONTRATO_SUBJECT_MAX_LEN + 1);
+        assert_subject_invalid_with_reason(&too_long, "exceeds NATS subject max length");
+    }
+
+    #[test]
+    fn subject_max_length_validates() {
+        // Boundary case on the other side: exactly the cap is fine.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(pubsub_contract(&"a".repeat(CONTRATO_SUBJECT_MAX_LEN)));
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn subject_invalid_diagnostic_carries_offending_value() {
+        // The shape pin: every field in the diagnostic is the
+        // offending value verbatim, so the author can grep the
+        // caixa.lisp for `:subject "<subject>"` and fix in one edit.
+        // Same shape as `EntradaHostInvalid` (c7d05ec) and
+        // `MembroVersaoInvalid` (9888b13).
+        let mut s = three_member_spec();
+        s.contratos.push(pubsub_contract("checkout..events"));
+        match s.validate().unwrap_err() {
+            AplicacaoError::ContratoSubjectInvalid {
+                de,
+                para,
+                subject,
+                reason,
+            } => {
+                assert_eq!(de, "cart");
+                assert_eq!(para, "catalog");
+                assert_eq!(subject, "checkout..events");
+                assert!(!reason.is_empty());
+            }
+            other => panic!("expected ContratoSubjectInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn subject_empty_takes_precedence_over_invalid() {
+        // Ordering pin: the dedicated empty-:subject diagnostic
+        // (`ContratoSubjectEmpty`) is more self-locating than the
+        // general grammar diagnostic, so the empty case must continue
+        // to surface its own variant — same precedence discipline
+        // `EmptyEntradaHost`/`EntradaHostInvalid` carry on the host
+        // axis (c7d05ec).
+        let mut s = three_member_spec();
+        s.contratos.push(pubsub_contract(""));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectEmpty { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn subject_member_missing_takes_precedence_over_subject_invalid() {
+        // Ordering pin: the more-self-locating "contract names a
+        // missing :membros entry" diagnostic must still fire before
+        // the per-subject grammar gate, since fixing the subject on a
+        // dangling-edge contract leaves the contract still broken.
+        // Same discipline `entrada_host_member_missing_takes_precedence_over_host_invalid`
+        // pins on the entrada axis (c7d05ec).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "ghost".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("checkout..events".into()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoMemberMissing { ref caixa } if caixa == "ghost"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn accepts_canonical_subject_forms() {
+        // Positive-control sweep over the canonical NATS
+        // subject shapes the gate must continue to accept:
+        // single token, dot-separated tokens, tokens carrying
+        // hyphens/underscores/digits, and the canonical Cilium
+        // event-stream shape used in the example checkout
+        // Aplicacao (`checkout.events.charge.failed`).
+        for subject in [
+            "events",
+            "checkout.events",
+            "checkout.events.charge.failed",
+            "rio.events.order.shipped",
+            "with-hyphen.with_underscore.123",
+            "a",
+            "a.b.c.d.e.f.g.h",
+        ] {
+            let mut s = three_member_spec();
+            s.contratos.push(pubsub_contract(subject));
+            s.validate()
+                .unwrap_or_else(|e| panic!("subject {subject:?} should validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn kafka_pubsub_subject_validates_through_same_gate() {
+        // The pub-sub predicate (`is_pubsub`) accepts both `nats:`
+        // and `kafka:` prefixes, and both share the dot-token
+        // discipline (NATS subjects + Kafka topic naming both
+        // disallow whitespace + control chars + the wildcard chars).
+        // Pin both ends so a future Kafka-specific renderer can
+        // assume validated subjects across both prefixes.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "kafka:topic".into(),
+            endpoint: None,
+            subject: Some("checkout..events".into()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, .. }
+                if subject == "checkout..events"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn target_view_pubsub_payload_is_grammar_validated() {
+        // The compounding theorem: every `&str` inside a `WitTarget::PubSub`
+        // returned by `target()` is non-empty *and* satisfies the
+        // NATS subject grammar — every renderer downstream of
+        // `typed_view()` (caixa-mesh's pub-sub policy emission, the
+        // future M4 NATS-JetStream stream-filter materializer, the
+        // future tameshi pub-sub event-chain replayer) reads the
+        // value knowing it parses as a NATS publish subject without
+        // re-validating. Same shape pin as
+        // `target_view_payload_is_guaranteed_nonempty_after_target_call`
+        // extended to the new gate.
+        let bad = pubsub_contract("checkout..events");
+        assert!(matches!(
+            bad.target().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+        let good = pubsub_contract("checkout.events.shipped");
+        match good.target().unwrap() {
+            WitTarget::PubSub { subject } => {
+                assert!(!subject.is_empty());
+                assert!(!subject.starts_with('.') && !subject.ends_with('.'));
+                assert!(subject.split('.').all(|t| {
+                    !t.is_empty()
+                        && t.bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                }));
+            }
+            other => panic!("expected PubSub, got {other:?}"),
+        }
     }
 
     #[test]
