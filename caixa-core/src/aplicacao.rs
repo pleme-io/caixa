@@ -616,6 +616,189 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
     Ok(())
 }
 
+/// Reject `:contratos :wit` values that don't match the WIT Component
+/// Model identifier shape — `<namespace>:<package>(/<interface>)?`,
+/// each name segment a kebab-case identifier
+/// (`[a-z][a-z0-9]*(-[a-z0-9]+)*` — start with a lowercase letter,
+/// body of lowercase letters / digits / non-leading / non-trailing /
+/// non-consecutive hyphens, no underscores, no uppercase, no
+/// Unicode).
+///
+/// Until this gate landed `validate()` only refused the empty string
+/// (`EmptyWit`); a malformed-but-non-empty world string
+/// (`"wasi-http/proxy"` — the canonical hyphen-instead-of-colon
+/// typo, `"WASI:http/proxy"` — uppercase, `"wasi:http_proxy"` —
+/// underscore, `"wasi:http/proxy/extra"` — too many slashes,
+/// `"wasi:"` — empty package, `":http/proxy"` — empty namespace,
+/// `"wasi:http/"` — trailing slash) silently passed validate, fell
+/// through every `WitContract::is_http`/`is_pubsub`/`is_store`
+/// prefix recognizer, and resolved to [`WitTarget::Capability`] at
+/// the `c.target()` call site — losing the L7 rendering on a typo,
+/// the SPIFFE-style identity binding on a wrong-case namespace, and
+/// the typed Cilium policy emission on a stray slash. The `:de` and
+/// `:para` axes were already validated against `:membros`, the
+/// `:endpoint`/`:subject`/`:slot` axes against the WIT shape and
+/// per-payload value (c4213a4); this gate closes the last
+/// unstructured `:contratos` axis.
+///
+/// Lifted as a typed predicate (rather than an inline cascade in
+/// `validate()`) so the WIT-identifier contract lives in one place —
+/// every future WIT-aware consumer (the M4 WIT-registry resolver in
+/// caixa-resolver, the bindgen pipeline in wasm-operator, the
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-edge
+/// WIT-shape lookup, the future `:contratos :wit` typed-enum
+/// promotion the M4 roadmap acknowledges) reaches for the same
+/// predicate, not its own. Same compounding shape as
+/// `validate_entrada_host` (c7d05ec) and
+/// `is_canonical_rate_limit_window` (808017c).
+///
+/// V0 accepts only the bare `<namespace>:<package>(/<interface>)?`
+/// shape — the WIT `@<semver>` version-pin suffix is a future axis
+/// (parallel to the `:versao` parse-as-VersionReq lift in 9888b13);
+/// surfacing it as a distinct error reason rather than silently
+/// truncating keeps the codec's accepted set matching the validator's
+/// (THEORY.md §V.2).
+fn validate_wit_world(wit: &str) -> Result<(), String> {
+    if wit.is_empty() {
+        // Empty already gated by `EmptyWit` at the call site;
+        // re-checking here keeps the predicate usable from any
+        // future call site (the M4 CR materializer, the
+        // `:contratos :wit` typed-enum promotion) without an
+        // empty-check footgun.
+        return Err("must not be empty".to_string());
+    }
+    if wit.bytes().any(|b| b.is_ascii_whitespace()) {
+        return Err("must not contain whitespace".to_string());
+    }
+    if wit.contains('@') {
+        return Err(
+            "`@<version>` suffix is not yet supported (V0 accepts the bare \
+             `<namespace>:<package>(/<interface>)?` shape; track a future \
+             tightening to admit `@<semver>` pins)"
+                .to_string(),
+        );
+    }
+
+    // Exactly one `:` between namespace and package; multiple `:` is
+    // structurally incoherent (two namespaces on one identifier).
+    let (ns, pkg_iface) = wit.split_once(':').ok_or_else(|| {
+        "must carry a `<namespace>:<package>` separator (canonical forms: \
+         `wasi:http/proxy`, `nats:pub-sub`, `wasi:keyvalue/store`)"
+            .to_string()
+    })?;
+    if ns.is_empty() {
+        return Err("namespace must not be empty (text before `:`)".to_string());
+    }
+    if pkg_iface.is_empty() {
+        return Err("package must not be empty (text after `:`)".to_string());
+    }
+    if pkg_iface.contains(':') {
+        return Err("must contain exactly one `:` between namespace and package".to_string());
+    }
+
+    // Optional `/interface`. A trailing `/` (empty iface) and a
+    // multi-slash path are both invalid.
+    let (pkg, iface) = match pkg_iface.split_once('/') {
+        Some((p, i)) => (p, Some(i)),
+        None => (pkg_iface, None),
+    };
+    if pkg.is_empty() {
+        return Err("package must not be empty (text between `:` and `/`)".to_string());
+    }
+    if let Some(i) = iface {
+        if i.is_empty() {
+            return Err(
+                "interface must not be empty (drop the trailing `/` if there is no interface)"
+                    .to_string(),
+            );
+        }
+        if i.contains('/') {
+            return Err(
+                "must contain at most one `/` separator (no nested interface paths)".to_string(),
+            );
+        }
+        validate_wit_kebab_segment(i, "interface")?;
+    }
+    validate_wit_kebab_segment(ns, "namespace")?;
+    validate_wit_kebab_segment(pkg, "package")?;
+    Ok(())
+}
+
+/// Reject a WIT name segment that isn't kebab-case. The contract
+/// matches the WIT Component Model identifier grammar:
+/// `[a-z][a-z0-9]*(-[a-z0-9]+)*` — starts with a lowercase letter,
+/// body of lowercase letters / digits / single hyphens, ends with
+/// an alphanumeric (no leading or trailing `-`, no consecutive
+/// hyphens, no underscores, no uppercase, no Unicode).
+fn validate_wit_kebab_segment(segment: &str, role: &str) -> Result<(), String> {
+    if segment.is_empty() {
+        return Err(format!("{role} segment must not be empty"));
+    }
+    let bytes = segment.as_bytes();
+    let first = bytes[0];
+    if !first.is_ascii_lowercase() {
+        let detail = if first == b'-' {
+            "must start with a letter (no leading `-`)".to_string()
+        } else if first == b'_' {
+            "contains `_` (kebab identifiers use `-`)".to_string()
+        } else if first.is_ascii_uppercase() {
+            format!(
+                "must start with a lowercase letter (kebab identifiers are \
+                 lowercase; got uppercase {ch:?})",
+                ch = first as char
+            )
+        } else if first.is_ascii_digit() {
+            "must start with a letter (kebab identifiers can't start with a digit)".to_string()
+        } else {
+            format!(
+                "must start with a lowercase letter (got invalid character {ch:?})",
+                ch = first as char
+            )
+        };
+        return Err(format!("{role} segment {segment:?} {detail}"));
+    }
+    if bytes[bytes.len() - 1] == b'-' {
+        return Err(format!(
+            "{role} segment {segment:?} must end with an alphanumeric (no trailing `-`)"
+        ));
+    }
+    let mut prev_hyphen = false;
+    for &b in bytes {
+        if b == b'-' {
+            if prev_hyphen {
+                return Err(format!(
+                    "{role} segment {segment:?} has consecutive hyphens \
+                     (kebab identifiers use single hyphens)"
+                ));
+            }
+            prev_hyphen = true;
+            continue;
+        }
+        prev_hyphen = false;
+        if b == b'_' {
+            return Err(format!(
+                "{role} segment {segment:?} contains `_` \
+                 (kebab identifiers use `-`)"
+            ));
+        }
+        if b.is_ascii_uppercase() {
+            return Err(format!(
+                "{role} segment {segment:?} contains uppercase {ch:?} \
+                 (kebab identifiers are lowercase)",
+                ch = b as char
+            ));
+        }
+        if !b.is_ascii_alphanumeric() {
+            return Err(format!(
+                "{role} segment {segment:?} contains invalid character {ch:?} \
+                 (kebab identifiers use `[a-z0-9-]` only)",
+                ch = b as char
+            ));
+        }
+    }
+    Ok(())
+}
+
 mod rate_limit_codec {
     use super::{Duration, RateLimit};
     use serde::{Deserialize, Deserializer, Serializer};
@@ -835,6 +1018,35 @@ impl AplicacaoSpec {
                 return Err(AplicacaoError::EmptyWit {
                     de: c.de.clone(),
                     para: c.para.clone(),
+                });
+            }
+            // `:wit` value-shape gate — rejects malformed WIT
+            // identifiers (the canonical typos: hyphen-instead-of-
+            // colon `"wasi-http/proxy"`, uppercase `"WASI:http/
+            // proxy"`, underscore `"wasi:http_proxy"`, deep path
+            // `"wasi:http/proxy/extra"`, empty namespace
+            // `":http/proxy"`, empty package `"wasi:"`, trailing
+            // slash `"wasi:http/"`) at caixa-build time on the
+            // source caixa.lisp. Until this gate landed every such
+            // typo silently passed validate, fell through every
+            // `WitContract::is_http`/`is_pubsub`/`is_store` prefix
+            // recognizer, and resolved to `WitTarget::Capability`
+            // at the next line — losing the L7 rendering, the
+            // SPIFFE-style identity binding, and the typed Cilium
+            // policy emission for an authoring mistake. Runs after
+            // the empty-string gate (so `EmptyWit` keeps its more
+            // self-locating diagnostic on `""`) and before
+            // `c.target()` (so a malformed `:wit` surfaces its own
+            // diagnostic rather than `target()`'s shape-vs-payload
+            // mismatch — the wit-shape gate names *which* identifier
+            // is wrong, the target gate would report a derived
+            // mismatch).
+            if let Err(reason) = validate_wit_world(&c.wit) {
+                return Err(AplicacaoError::ContratoWitInvalid {
+                    de: c.de.clone(),
+                    para: c.para.clone(),
+                    wit: c.wit.clone(),
+                    reason,
                 });
             }
             // Shape ↔ target consistency — surfaces "HTTP wit without
@@ -1283,6 +1495,17 @@ pub enum AplicacaoError {
     ContratoMemberMissing { caixa: String },
     #[error("contrato {de:?} → {para:?} has empty :wit")]
     EmptyWit { de: String, para: String },
+    #[error(
+        "contrato {de:?} → {para:?} :wit {wit:?} is not a valid WIT identifier: {reason} \
+         (canonical forms: `wasi:http/proxy`, `nats:pub-sub`, `wasi:keyvalue/store`; \
+         each name segment is kebab-case `[a-z][a-z0-9]*(-[a-z0-9]+)*`)"
+    )]
+    ContratoWitInvalid {
+        de: String,
+        para: String,
+        wit: String,
+        reason: String,
+    },
     #[error(":entrada routes to caixa {para:?} not declared in :membros")]
     EntradaMemberMissing { para: String },
     #[error(":entrada must declare a non-empty :host")]
@@ -1770,6 +1993,382 @@ mod tests {
         });
         let err = s.validate().unwrap_err();
         assert!(matches!(err, AplicacaoError::EmptyWit { .. }));
+    }
+
+    // ── :contratos :wit value-shape gate ─────────────────────────────
+    //
+    // Mirrors the c4213a4 `:endpoint`/`:subject`/`:slot` value-shape
+    // suite on the sibling `:wit` axis. Every authoring footgun the
+    // WIT Component Model identifier grammar would catch becomes a
+    // caixa-build-time `ContratoWitInvalid` with the offending
+    // `:wit` named verbatim. Same diagnostic shape as
+    // `MembroVersaoInvalid` (9888b13) and `EntradaHostInvalid` (c7d05ec).
+
+    fn contract_wit(de: &str, para: &str, wit: &str) -> WitContract {
+        WitContract {
+            de: de.into(),
+            para: para.into(),
+            wit: wit.into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        }
+    }
+
+    #[test]
+    fn rejects_contrato_wit_without_colon() {
+        // The canonical hyphen-instead-of-colon typo:
+        // `"wasi-http/proxy"` looks like a kebab-case identifier on
+        // first glance but lacks the `:` separating namespace from
+        // package. Pre-gate codebases silently accepted it and fell
+        // through to `WitTarget::Capability` — losing the L7
+        // rendering for what's structurally an HTTP edge.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi-http/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, .. }
+                if wit == "wasi-http/proxy"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_uppercase() {
+        // `"WASI:http/proxy"` — wrong case on the namespace. The WIT
+        // Component Model identifier grammar is lowercase-only; an
+        // uppercase namespace is rejected, not silently lower-cased.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "WASI:http/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("uppercase") || reason.contains("lowercase")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_underscore() {
+        // `"wasi:http_proxy"` — the canonical "I'm thinking of
+        // snake_case" leak. Kebab identifiers use `-`, never `_`.
+        let mut s = three_member_spec();
+        // The HTTP-shape recognizer keys on `wasi:http/`; this
+        // malformed identifier won't reach `c.target()` so the
+        // missing endpoint axis is irrelevant.
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http_proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains('_')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_double_slash() {
+        // `"wasi:http/proxy/extra"` — too many path components. The
+        // WIT identifier shape is `<ns>:<pkg>(/<iface>)?` with at most
+        // one `/`; nested paths are a structural error.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http/proxy/extra"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains('/') || reason.contains("nested")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_empty_namespace() {
+        // `":http/proxy"` — leading colon, empty namespace.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", ":http/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("namespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_empty_package() {
+        // `"wasi:"` — trailing colon, empty package.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_wit("cart", "catalog", "wasi:"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("package")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_trailing_slash() {
+        // `"wasi:http/"` — trailing slash, empty interface. The
+        // optional interface axis exists or it doesn't; an empty one
+        // is meaningless.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http/"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("interface")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_double_colon() {
+        // `"wasi:http:proxy"` — two namespaces. WIT identifiers carry
+        // exactly one `:`.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http:proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains(':') || reason.contains("exactly one")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_whitespace() {
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http /proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_leading_hyphen_segment() {
+        // `"-wasi:http/proxy"` — leading `-` on the namespace. Kebab
+        // identifiers can't start with a hyphen.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "-wasi:http/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("letter") || reason.contains('-')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_trailing_hyphen_segment() {
+        // `"wasi:http-/proxy"` — trailing `-` on the package.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http-/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("trailing") || reason.contains("alphanumeric")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_consecutive_hyphens() {
+        // `"wasi:http--proxy"` — `--` is rejected; kebab identifiers
+        // use single hyphens between segments.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http--proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("consecutive")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_leading_digit_segment() {
+        // `"wasi:0http/proxy"` — kebab segments must start with a
+        // letter, not a digit.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:0http/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains("digit") || reason.contains("letter")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_wit_with_version_suffix() {
+        // V0 reserves `@<version>` for a future axis; surface it with
+        // a distinct reason rather than silently accepting half a
+        // syntax. Parallel to the `:versao` parse-as-VersionReq lift
+        // (9888b13): the typed slot's accepted set matches the codec's
+        // structurally — `@` arrives when a `@semver`-aware codec
+        // arrives.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi:http/proxy@0.2.0"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref reason, .. }
+                if reason.contains('@') || reason.contains("version")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_wit_diagnostic_carries_offending_wit() {
+        // Diagnostic-shape pin — the offending `:wit` value flows
+        // through verbatim alongside both `:de` / `:para` and a
+        // non-empty parser-shaped `reason`, so the author can grep
+        // their caixa.lisp for the offending edge and fix it in one
+        // edit. Same shape as `EntradaHostInvalid` (c7d05ec) and
+        // `MembroVersaoInvalid` (9888b13).
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("cart", "catalog", "wasi-http/proxy"));
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoWitInvalid {
+                de,
+                para,
+                wit,
+                reason,
+            } => {
+                assert_eq!(de, "cart");
+                assert_eq!(para, "catalog");
+                assert_eq!(wit, "wasi-http/proxy");
+                assert!(!reason.is_empty(), "reason must be non-empty");
+            }
+            other => panic!("expected ContratoWitInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn contrato_wit_empty_takes_precedence_over_invalid() {
+        // Ordering pin: the existing `EmptyWit` diagnostic
+        // (which doesn't try to parse) fires before the new
+        // `ContratoWitInvalid` parse-side diagnostic, so an empty
+        // `:wit` keeps its narrower error message — `validate_wit_world`
+        // would also reject `""`, but the empty-string arm is the
+        // more self-locating diagnostic for the author.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_wit("cart", "catalog", ""));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EmptyWit { ref de, ref para }
+                if de == "cart" && para == "catalog"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_wit_invalid_fires_before_target_check() {
+        // Ordering pin: a malformed `:wit` value surfaces its own
+        // `ContratoWitInvalid` diagnostic *before* `c.target()`'s
+        // shape-vs-payload mismatch arms (`ContratoMissingTarget`,
+        // `ContratoWrongTarget`). The wit-shape gate names which
+        // identifier is wrong; the target gate would report a
+        // derived mismatch on a malformed identifier (e.g. a typo'd
+        // `wasi:http_proxy` would silently match neither HTTP nor
+        // pubsub nor store recognizers, fall through to
+        // `WitTarget::Capability`, and demand no payload — the
+        // self-locating error is the wit-shape diagnostic).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "WASI:http/proxy".into(),
+            // Carry an HTTP-shaped endpoint to confirm the wit-shape
+            // gate fires first; the existing `target()`-side gates
+            // would also reject this if they ran (the "wrong-case
+            // namespace" identifier doesn't match any prefix
+            // recognizer, so target() would fall through to
+            // Capability and reject the present endpoint).
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { .. }),
+            "wit-shape gate must fire before target() shape check (got {err:?})"
+        );
+    }
+
+    #[test]
+    fn contrato_wit_member_missing_takes_precedence_over_wit_invalid() {
+        // Ordering pin: a missing `:de` or `:para` member is the more
+        // self-locating diagnostic and fires before the wit-shape gate
+        // (the structural-graph error names which member to add to
+        // `:membros`; the wit-shape error is meaningless on a phantom
+        // edge). Same ordering discipline as
+        // `entrada_host_member_missing_takes_precedence_over_host_invalid`
+        // (c7d05ec).
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_wit("phantom", "catalog", "WASI:http/proxy"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoMemberMissing { ref caixa }
+                if caixa == "phantom"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_accepts_canonical_wit_worlds() {
+        // Positive-control sweep — every WIT identifier the substrate
+        // currently catalogs (the `is_http`/`is_pubsub`/`is_store`
+        // prefix recognizers + the canonical pure-capability shape)
+        // must round-trip through validate. Pin every leg so a future
+        // tightening of the canonical set surfaces here as a test
+        // failure.
+        for (wit, ep, sub, slot) in [
+            ("wasi:http/proxy", Some("/x"), None, None),
+            ("http:client", Some("/x"), None, None),
+            ("nats:pub-sub", None, Some("topic.x"), None),
+            ("kafka:topic", None, Some("topic.x"), None),
+            ("wasi:keyvalue/store", None, None, Some("k/v")),
+            ("kv:store", None, None, Some("k/v")),
+            // Pure capability edge — rare but documented as the
+            // canonical `Capability` arm of `WitTarget`.
+            ("custom:thing", None, None, None),
+            // Multi-hyphen kebab segments (every existing canonical
+            // shape is single-segment; pin a multi-hyphen package to
+            // keep the gate honest about kebab body bytes).
+            ("nats:event-bus-v2", None, Some("topic.x"), None),
+        ] {
+            let mut s = three_member_spec();
+            s.contratos.clear();
+            s.contratos.push(WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint: ep.map(Into::into),
+                subject: sub.map(Into::into),
+                slot: slot.map(Into::into),
+            });
+            s.validate()
+                .unwrap_or_else(|e| panic!("canonical {wit:?} must validate, got {e:?}"));
+        }
     }
 
     #[test]
