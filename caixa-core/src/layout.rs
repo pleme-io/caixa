@@ -74,6 +74,27 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::MissingManifest(manifest));
         }
 
+        // `:nome` value-shape gate runs first among the struct-level
+        // checks: every downstream invariant that references the nome
+        // (the `lib/<nome>.lisp` default-path resolution below, every
+        // `LayoutError::*Violation` arm whose payload carries
+        // `caixa.nome.clone()`, every K8s `metadata.name` the M3
+        // renderers emit) reads a value the apiserver accepts without
+        // re-validating. A malformed `:nome` here would otherwise
+        // surface as a less-helpful "missing biblioteca lib/<bad>.lisp"
+        // — or, worse, pass layout verify and fail at `kubectl apply`
+        // time when the apiserver rejects the rendered metadata.name
+        // far from the source caixa.lisp.
+        caixa.validate_nome().map_err(|err| match err {
+            crate::manifest::CaixaNomeError::Empty => LayoutError::NomeInvalid {
+                nome: caixa.nome.clone(),
+                reason: "must be non-empty (every caixa names itself)".to_string(),
+            },
+            crate::manifest::CaixaNomeError::Invalid { nome, reason } => {
+                LayoutError::NomeInvalid { nome, reason }
+            }
+        })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -233,6 +254,13 @@ impl LayoutInvariants for StandardLayout {
 pub enum LayoutError {
     #[error("manifest missing: {}", .0.display())]
     MissingManifest(PathBuf),
+    #[error(
+        "caixa :nome {nome:?} is not a valid DNS-1123 label: {reason} (the K8s apiserver \
+         enforces this rule on every metadata.name the renderers emit; use a name like \
+         \"checkout\" or \"hello-rio\" — lowercase RFC 1123 alphanumeric + hyphen, max 63 \
+         bytes)"
+    )]
+    NomeInvalid { nome: String, reason: String },
     #[error("caixa '{caixa}' is a Biblioteca but has no lib entry — expected {}", expected.display())]
     MissingLib { caixa: String, expected: PathBuf },
     #[error("caixa '{0}' is a Binario but has no :exe entries")]
@@ -622,6 +650,110 @@ mod tests {
         let svc_clone = svc.clone();
         let layout =
             StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        layout.verify(&c, &root).unwrap();
+    }
+
+    // ── Caixa nome value-shape (DNS-1123 label) ─────────────────────────
+
+    #[test]
+    fn nome_invalid_surfaces_as_layout_violation() {
+        // Fail-before-pass-after pin: a malformed `:nome` (uppercase)
+        // surfaces at layout-verify time as `LayoutError::NomeInvalid`,
+        // not as a downstream "missing biblioteca lib/<bad>.lisp"
+        // diagnostic or — worse — a `kubectl apply` admission failure
+        // far from the source caixa.lisp. The c7d05ec `:entrada :host`
+        // gate's peer on the rootmost identity axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "FooBar".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::NomeInvalid { nome, reason } = err else {
+            panic!("expected NomeInvalid, got {err:?}");
+        };
+        assert_eq!(nome, "FooBar");
+        assert!(reason.contains("uppercase"), "got reason: {reason}");
+    }
+
+    #[test]
+    fn nome_invalid_fires_before_missing_lib_check() {
+        // Order pin: the `:nome` value-shape gate runs *before* the
+        // biblioteca-default-lib path-existence check, so a malformed
+        // `:nome` doesn't surface as a confusing "missing
+        // lib/FooBar.lisp" — the more self-locating diagnostic
+        // ("nome is not a valid DNS-1123 label") leads. Without this
+        // ordering an author with a typoed `:nome` would chase the
+        // wrong fix (creating the lib file) instead of the actual one
+        // (correcting the name).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "FooBar".into();
+        // Even though no `lib/FooBar.lisp` exists (would normally raise
+        // MissingLib), the nome gate fires first.
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeInvalid { .. }),
+            "expected NomeInvalid before MissingLib, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn nome_empty_surfaces_as_layout_violation() {
+        // The empty `:nome` arm — distinct diagnostic from the generic
+        // Invalid arm. Same self-locating split as
+        // `MembroVersaoEmpty` / `MembroVersaoInvalid` (9888b13) and
+        // `EmptyEntradaHost` / `EntradaHostInvalid` (c7d05ec).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = String::new();
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeInvalid { ref reason, .. }
+                if reason.contains("non-empty")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn nome_invalid_fires_before_aplicacao_validate() {
+        // A malformed `:nome` on an Aplicacao-kind caixa must surface
+        // before the typed `AplicacaoSpec::validate` runs (which would
+        // otherwise raise `AplicacaoViolation` for empty :membros). The
+        // nome gate runs at the top of verify, before any kind-specific
+        // dispatch — pin it explicitly so a future refactor that
+        // reorders the gates surfaces here.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.nome = "FOO_BAR".into();
+        // No :membros set — would normally raise AplicacaoViolation (NoMembros).
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeInvalid { .. }),
+            "expected NomeInvalid before AplicacaoViolation, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn nome_valid_passes_layout_verify_through_to_kind_specific_checks() {
+        // Positive control: a canonical `:nome "hello-rio"` (the most
+        // common author-surface shape) passes the nome gate and reaches
+        // the kind-specific checks below. Pin the happy-path so a
+        // future tightening of the nome gate that accidentally rejects
+        // a canonical form surfaces here.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("hello-rio.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "hello-rio".into();
         layout.verify(&c, &root).unwrap();
     }
 
