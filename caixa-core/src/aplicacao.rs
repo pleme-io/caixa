@@ -166,6 +166,26 @@ impl WitContract {
                     endpoint: ep.to_string(),
                 });
             }
+            // Apply the same Gateway API HTTPPathMatch / Cilium L7
+            // path-shape gate `:entrada :paths` runs through (the two
+            // axes share the contract — see MESH-COMPOSITION §III.2 #2
+            // Cilium NetworkPolicy + #4 Gateway/HTTPRoute). Until this
+            // gate landed an HTTP `:endpoint` carrying a `?` query
+            // suffix, a `#` fragment, `//`, whitespace, or a `..`
+            // path-traversal segment passed `target()` and rendered
+            // into a Cilium L7 rule the cluster either rejects at
+            // admission or silently routes to a different prefix than
+            // the author intended. The gate makes the contract
+            // structural across both HTTP-path axes — `:entrada
+            // :paths` and `:contratos :endpoint` agree on one source.
+            if let Err(reason) = validate_http_path_value(ep) {
+                return Err(AplicacaoError::ContratoEndpointInvalid {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
+                    endpoint: ep.to_string(),
+                    reason,
+                });
+            }
             return Ok(WitTarget::Http { endpoint: ep });
         }
         if self.is_pubsub() {
@@ -616,6 +636,129 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
     Ok(())
 }
 
+/// K8s Gateway API v1 `HTTPRoute.spec.rules[].matches[].path.value`
+/// max length, in bytes — same value the apiserver-side OpenAPI
+/// schema enforces (`maxLength: 1024` on `HTTPPathMatch.value`). The
+/// same bound applies to Cilium L7 `path:` rules (Envoy upstream
+/// sets the same limit). Lifted as a typed const so the
+/// `:entrada :paths` and `:contratos :endpoint` value-shape gates
+/// agree on one source — drift across the two HTTP-path axes is a
+/// build error at this constant, not a silent admission failure on
+/// one axis with the other still passing.
+const HTTP_PATH_VALUE_MAX_LEN: usize = 1024;
+
+/// Reject HTTP-path values the K8s Gateway API v1 apiserver would
+/// refuse at admission time on `HTTPRoute.spec.rules[].matches[]
+/// .path.value` (same rules Cilium L7 enforces on its `path:`
+/// matcher). Caller is expected to have already checked that
+/// `path` is non-empty and starts with `/` — those two gates carry
+/// the more self-locating diagnostics (`EntradaPathEmpty` /
+/// `EntradaPathNotAbsolute` on `:entrada :paths`,
+/// `ContratoEndpointEmpty` / `ContratoEndpointNotAbsolute` on
+/// `:contratos :endpoint`); this gate refuses the structural-shape
+/// footguns the leading-`/` check cannot catch:
+///
+///   - total length > 1024 bytes (apiserver `maxLength`);
+///   - `?` query separator (the canonical "I pasted the URL with
+///     the query string" leak — Gateway API `HTTPPathMatch` is a
+///     path matcher, not a URL parser; query matching belongs in
+///     `HTTPQueryParamMatch`);
+///   - `#` fragment separator (fragments are client-side only and
+///     never reach the server, so the server-side path matcher
+///     ignores them — a `#…` suffix in the authored path is always
+///     a typo);
+///   - consecutive `//` slashes (Gateway API path-matching is
+///     literal — `//foo` and `/foo` are distinct prefixes; the
+///     `//` form is almost always a typo);
+///   - any whitespace byte (`\t`, ` `, `\n`, `\r`, …) — copy-paste
+///     trailing-space footgun the apiserver rejects;
+///   - any `..` segment (path traversal — Gateway API normalizes
+///     `..` differently across implementations, so authoring it
+///     literally produces a different routing decision per cluster
+///     fabric and is never the author's intent);
+///   - any `.` self-reference segment (the empty segment is
+///     meaningless in a path-prefix matcher; Gateway API normalizes
+///     it away on some implementations and not others).
+///
+/// Lifted as a typed gate (rather than two parallel inline cascades
+/// in `validate()` and `WitContract::target`) so the contract lives
+/// in one place — every future per-HTTP-path axis (the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's path
+/// validator, the per-edge policy resolver's path key, the future
+/// rewrite-target emission) reaches for the same predicate, not its
+/// own. Same compounding shape as `validate_entrada_host` (c7d05ec),
+/// `is_canonical_rate_limit_window` (808017c), and
+/// `contrato_target_label` (5dbcfaf).
+///
+/// The returned `String` is a parser-shaped reason naming the
+/// specific violation; each call site wraps it in its axis-specific
+/// error variant (`EntradaPathInvalid` /
+/// `ContratoEndpointInvalid`) so the diagnostic surface mirrors
+/// `EntradaHostInvalid` (c7d05ec) and the
+/// `MembroVersaoInvalid` / `ChildVersaoInvalid` /
+/// `DepError::VersaoInvalid` family (9888b13 / b38ff3a / 2420c44).
+fn validate_http_path_value(path: &str) -> Result<(), String> {
+    if path.len() > HTTP_PATH_VALUE_MAX_LEN {
+        return Err(format!(
+            "exceeds Gateway API v1 HTTPRoute HTTPPathMatch max length of \
+             {HTTP_PATH_VALUE_MAX_LEN} bytes (got {} bytes; the K8s apiserver \
+             rejects longer path values at admission time)",
+            path.len()
+        ));
+    }
+    if let Some(idx) = path.find('?') {
+        return Err(format!(
+            "must not carry a `?` query separator (found at byte {idx}); drop \
+             the `?…` query string — Gateway API HTTPPathMatch is a path \
+             matcher, not a URL parser; query matching belongs in \
+             `HTTPQueryParamMatch`"
+        ));
+    }
+    if let Some(idx) = path.find('#') {
+        return Err(format!(
+            "must not carry a `#` fragment separator (found at byte {idx}); \
+             drop the `#…` fragment — fragments are client-side only and \
+             never reach the server, so HTTPPathMatch ignores them"
+        ));
+    }
+    if path.contains("//") {
+        return Err(
+            "must not contain consecutive slashes `//` (Gateway API path \
+             matching is literal — `//foo` and `/foo` are distinct prefixes; \
+             the `//` form is almost always a copy-paste typo)"
+                .to_string(),
+        );
+    }
+    if path.bytes().any(|b| b.is_ascii_whitespace()) {
+        return Err(
+            "must not contain whitespace (the K8s apiserver rejects whitespace \
+             in HTTPPathMatch values at admission time; drop trailing spaces \
+             or newlines from the authored path)"
+                .to_string(),
+        );
+    }
+    for segment in path.split('/') {
+        if segment == ".." {
+            return Err(
+                "must not contain a `..` path-traversal segment (Gateway API \
+                 normalizes `..` differently across implementations, so \
+                 authoring it literally produces a different routing decision \
+                 per cluster fabric — use the resolved path directly)"
+                    .to_string(),
+            );
+        }
+        if segment == "." {
+            return Err(
+                "must not contain a `.` self-reference segment (the segment \
+                 is meaningless in a path-prefix matcher and is normalized \
+                 away on some implementations and not others)"
+                    .to_string(),
+            );
+        }
+    }
+    Ok(())
+}
+
 mod rate_limit_codec {
     use super::{Duration, RateLimit};
     use serde::{Deserialize, Deserializer, Serializer};
@@ -916,6 +1059,24 @@ impl AplicacaoSpec {
                 }
                 if !p.starts_with('/') {
                     return Err(AplicacaoError::EntradaPathNotAbsolute { path: p.clone() });
+                }
+                // Each path lands verbatim as a K8s Gateway API v1
+                // `HTTPRoute.spec.rules[].matches[].path.value`. The
+                // apiserver enforces `maxLength: 1024` plus structural
+                // bans on `?`, `#`, `//`, whitespace, and `..` / `.`
+                // segments at admission time — all silently passed by
+                // the leading-`/` check until this gate landed. Lifting
+                // the gate to caixa-build time mirrors the
+                // `validate_entrada_host` (c7d05ec) trajectory on the
+                // sibling `:host` axis: every `:entrada` value-shape
+                // footgun surfaces with the offending value named at
+                // the source caixa.lisp, not as an apply-time admission
+                // failure.
+                if let Err(reason) = validate_http_path_value(p) {
+                    return Err(AplicacaoError::EntradaPathInvalid {
+                        path: p.clone(),
+                        reason,
+                    });
                 }
                 if !seen.insert(p.as_str()) {
                     return Err(AplicacaoError::EntradaPathDuplicate { path: p.clone() });
@@ -1302,6 +1463,13 @@ pub enum AplicacaoError {
         ":entrada :paths entry {path:?} must start with `/` (Gateway API PathPrefix invariant)"
     )]
     EntradaPathNotAbsolute { path: String },
+    #[error(
+        ":entrada :paths entry {path:?} is not a valid Gateway API v1 HTTPRoute \
+         HTTPPathMatch value: {reason} (the K8s apiserver enforces the same shape \
+         on `HTTPRoute.spec.rules[].matches[].path.value` at admission time; \
+         use a literal absolute path like `\"/api/cart\"`)"
+    )]
+    EntradaPathInvalid { path: String, reason: String },
     #[error(":entrada :paths entry {path:?} appears more than once")]
     EntradaPathDuplicate { path: String },
     #[error(
@@ -1357,6 +1525,17 @@ pub enum AplicacaoError {
         de: String,
         para: String,
         endpoint: String,
+    },
+    #[error(
+        "HTTP contrato {de:?} → {para:?} :endpoint {endpoint:?} is not a valid Cilium \
+         L7 + Gateway API HTTPPathMatch value: {reason} (the same shape `:entrada \
+         :paths` is held to — see MESH-COMPOSITION §III.2 #2/#4)"
+    )]
+    ContratoEndpointInvalid {
+        de: String,
+        para: String,
+        endpoint: String,
+        reason: String,
     },
     #[error(
         "pub-sub contrato {de:?} → {para:?} :subject is empty (publish without a \
@@ -2683,6 +2862,410 @@ mod tests {
         let mut s = three_member_spec();
         s.entrada.as_mut().unwrap().port = 0;
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPortZero);
+    }
+
+    // ── :entrada :paths Gateway API HTTPPathMatch value-shape gate ────
+    //
+    // Mirrors the `:entrada :host` value-shape suite (c7d05ec) on the
+    // sibling `:paths` axis. Every authoring footgun the K8s Gateway
+    // API v1 apiserver would catch on `HTTPRoute.spec.rules[]
+    // .matches[].path.value` (and Cilium L7 on `path:`) becomes a
+    // caixa-build-time `EntradaPathInvalid` with the offending entry
+    // named verbatim. Same diagnostic shape as `EntradaHostInvalid`
+    // (c7d05ec).
+
+    #[test]
+    fn rejects_entrada_path_with_query_string() {
+        // Fail-before-pass-after pin — pre-gate codebases silently
+        // accepted `/api/products?limit=10` (the canonical "I pasted
+        // the URL with the query string" leak).
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/products?limit=10".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/products?limit=10" && reason.contains('?')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_fragment() {
+        // `#…` fragments never reach the server; HTTPPathMatch ignores
+        // them, so a `#step-2` suffix is always an authoring typo.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/checkout#step-2".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/checkout#step-2" && reason.contains('#')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_consecutive_slashes() {
+        // `//foo` and `/foo` are distinct prefixes under Gateway API
+        // literal matching; the `//` form is almost always a typo.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api//cart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api//cart" && reason.contains("consecutive slashes")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_whitespace() {
+        // Trailing-space copy-paste footgun the apiserver rejects.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart ".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/cart " && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_dotdot_segment() {
+        // `..` segments produce different routing per cluster fabric;
+        // Gateway API normalizes inconsistently.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart/../admin".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/cart/../admin" && reason.contains("path-traversal")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_dot_segment() {
+        // `.` self-reference segments are normalized away on some
+        // implementations and not others.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/./cart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/./cart" && reason.contains("self-reference")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_too_long() {
+        // 1025 bytes — one past the Gateway API HTTPPathMatch
+        // `maxLength: 1024` apiserver bound.
+        let too_long = format!("/{}", "a".repeat(HTTP_PATH_VALUE_MAX_LEN));
+        assert_eq!(too_long.len(), HTTP_PATH_VALUE_MAX_LEN + 1);
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec![too_long.clone()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == &too_long && reason.contains("max length")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_path_max_length_validates() {
+        // 1024 bytes exactly — at the apiserver bound, must accept.
+        let max = format!("/{}", "a".repeat(HTTP_PATH_VALUE_MAX_LEN - 1));
+        assert_eq!(max.len(), HTTP_PATH_VALUE_MAX_LEN);
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec![max];
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn entrada_accepts_canonical_path_forms() {
+        // Positive-control sweep: root, single segment, multi-segment,
+        // hyphen, digit, `:`-prefixed wildcard segment (HTTPPathMatch
+        // accepts literally — the `:id` is just a literal segment to
+        // the path matcher; templating happens at the application
+        // layer). Each must round-trip through validate cleanly.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec![
+            "/".into(),
+            "/api".into(),
+            "/api/cart".into(),
+            "/api-v2/cart".into(),
+            "/api/products/123".into(),
+            "/api/products/:id".into(),
+        ];
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn entrada_path_not_absolute_takes_precedence_over_invalid() {
+        // Order pin: a path that is *both* relative and carries a
+        // query string surfaces the `NotAbsolute` diagnostic first
+        // (the more self-locating one — the missing leading `/` is
+        // the simpler typo, and the value-shape gate would otherwise
+        // dominate). Same ordering discipline as
+        // `entrada_host_empty_takes_precedence_over_invalid`.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["api/cart?x=1".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathNotAbsolute { ref path }
+                if path == "api/cart?x=1"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_path_invalid_diagnostic_carries_offending_path() {
+        // Diagnostic-shape pin: the offending value + a parser-shaped
+        // reason flow through verbatim, so the author can grep their
+        // caixa.lisp for the exact `:paths` entry and fix it in one
+        // edit. Mirrors `entrada_host_diagnostic_carries_offending_host`
+        // (c7d05ec).
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart?limit=10".into()];
+        let err = s.validate().unwrap_err();
+        if let AplicacaoError::EntradaPathInvalid { path, reason } = err {
+            assert_eq!(path, "/api/cart?limit=10");
+            assert!(reason.contains('?'));
+            assert!(reason.contains("HTTPPathMatch") || reason.contains("query"));
+        } else {
+            panic!("got {err:?}");
+        }
+    }
+
+    // ── :contratos :endpoint Gateway API HTTPPathMatch value-shape gate ──
+    //
+    // Mirrors the `:entrada :paths` value-shape suite on the sibling
+    // `:endpoint` axis — the contract MESH-COMPOSITION §III.2 #2/#4
+    // shares between Cilium L7 path-matching and Gateway API
+    // HTTPPathMatch. Every authoring footgun the cluster's L7 rule
+    // emitter would silently route differently than the author
+    // intended becomes a caixa-build-time `ContratoEndpointInvalid`
+    // with the offending edge + endpoint named verbatim.
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_query_string() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/products?id=123".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/products?id=123" && reason.contains('?')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_fragment() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/products#section".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/products#section" && reason.contains('#')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_consecutive_slashes() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/api//products".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/api//products" && reason.contains("consecutive slashes")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_whitespace() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/products /list".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/products /list" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_dotdot_segment() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/api/../admin".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/api/../admin" && reason.contains("path-traversal")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_dot_segment() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/api/./products".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/api/./products" && reason.contains("self-reference")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_too_long() {
+        let too_long = format!("/{}", "a".repeat(HTTP_PATH_VALUE_MAX_LEN));
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some(too_long.clone()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == &too_long && reason.contains("max length")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_endpoint_not_absolute_takes_precedence_over_invalid() {
+        // Order pin: a relative endpoint that *also* carries a query
+        // string surfaces `ContratoEndpointNotAbsolute` first — the
+        // missing leading `/` is the simpler typo. Same discipline as
+        // `entrada_path_not_absolute_takes_precedence_over_invalid`.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("products?x=1".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointNotAbsolute { ref endpoint, .. }
+                if endpoint == "products?x=1"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_endpoint_invalid_diagnostic_carries_offending_endpoint() {
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/products?id=123".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        if let AplicacaoError::ContratoEndpointInvalid {
+            de,
+            para,
+            endpoint,
+            reason,
+        } = err
+        {
+            assert_eq!(de, "cart");
+            assert_eq!(para, "catalog");
+            assert_eq!(endpoint, "/products?id=123");
+            assert!(reason.contains('?'));
+        } else {
+            panic!("got {err:?}");
+        }
+    }
+
+    #[test]
+    fn contrato_accepts_canonical_endpoint_forms() {
+        // Positive-control sweep mirroring `entrada_accepts_canonical_path_forms`.
+        let mut s = three_member_spec();
+        s.contratos = vec![
+            WitContract {
+                de: "cart".into(),
+                para: "catalog".into(),
+                wit: "wasi:http/proxy".into(),
+                endpoint: Some("/".into()),
+                subject: None,
+                slot: None,
+            },
+            WitContract {
+                de: "cart".into(),
+                para: "payment".into(),
+                wit: "wasi:http/proxy".into(),
+                endpoint: Some("/api/cart".into()),
+                subject: None,
+                slot: None,
+            },
+            WitContract {
+                de: "payment".into(),
+                para: "catalog".into(),
+                wit: "wasi:http/proxy".into(),
+                endpoint: Some("/products/:id".into()),
+                subject: None,
+                slot: None,
+            },
+        ];
+        s.validate().unwrap();
     }
 
     // ── :entrada :host value-shape gate ──────────────────────────────
