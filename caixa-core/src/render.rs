@@ -508,6 +508,67 @@ where
     })
 }
 
+/// Apply a [`single_field_overlay`]-shaped optional overlay to a
+/// [`serde_yaml::Mapping`] under the canonical outer key — the *apply
+/// half* of the per-axis overlay shape every `caixa-mesh` per-rule emit
+/// site keys off (`build the overlay once per renderer call`, then
+/// `clone-insert it into every emitted rule`).
+///
+/// `None` overlays are silently skipped; the target mapping is left
+/// untouched and no key is inserted. `Some` overlays are inserted under
+/// `outer_key` with a single [`Value::clone`][serde_yaml::Value::clone],
+/// preserving the build-once-clone-many idiom every `caixa-mesh`
+/// emit-site uses (the overlay is computed once outside the per-rule
+/// loop, then cloned into each rule of the emitted sequence — same
+/// rule emits the same overlay value, byte-identical across rules).
+///
+/// Companion to [`single_field_overlay`]: the build half returns the
+/// `Option<Value>` overlay, the apply half consumes it. Together they
+/// collapse the per-axis overlay shape every emit-site duplicates into
+/// two typed primitives — the closure-shaped inner builder and the
+/// outer-key-shaped applier — so a future per-axis overlay is one
+/// `let <axis>_overlay = single_field_overlay(slot, <inner>, |v| …);`
+/// build call plus one
+/// `caixa_core::insert_overlay(rule, <outer>, <axis>_overlay.as_ref());`
+/// apply call inside the per-rule loop, with no inline
+/// `if let Some(v) = &overlay { rule.insert(Value::String(<outer>.into()),
+/// v.clone()) }` block to drift or regress across emit-sites.
+///
+/// Lifted from three identical-shape per-rule apply blocks in
+/// `caixa-mesh`: `cilium_network_policies`' `:mtls-required` →
+/// `authentication` apply (wired in 878bf81), `gateway_routes`'
+/// `:timeout` → `timeouts` apply (wired in 5f477a6), and
+/// `gateway_routes`' `:retries` → `retry` apply (wired in 23b7f00).
+/// The build half lifted in 9d09cfb explicitly named this apply half
+/// as "the natural sibling lift when its duplication budget overflows":
+/// three-of-the-pattern overflows, this lift is that sibling.
+///
+/// Render-determinism contract (THEORY.md §V.2.7 + §V.1 construction
+/// guarantees): the function is total over its inputs, performs no
+/// hashing, and the inserted value is a byte-identical clone of the
+/// overlay's inner [`serde_yaml::Value`]. Two renderer calls with the
+/// same `(target shape, outer_key, overlay)` triple produce the same
+/// mapping mutation — pin-tested by the
+/// `insert_overlay_some_inserts_byte_identical_clone` test below.
+///
+/// The `outer_key` parameter is `&'static str` to match the
+/// canonical-key constants every emit-site keys off
+/// ([`KUBE_KEY_METADATA`], [`M2_KEY_LIMITS`], etc.); future per-axis
+/// outer keys (`circuitBreaker` for the M3.x `:circuit-breaker`
+/// CCEC overlay, `rateLimit` for the M3.x `:rate-limit` CCEC
+/// overlay — MESH-COMPOSITION §III.2 #3) land as additional `pub const`
+/// declarations in this module and reach the apply half through this
+/// helper directly.
+pub fn insert_overlay(
+    target: &mut serde_yaml::Mapping,
+    outer_key: &'static str,
+    overlay: Option<&serde_yaml::Value>,
+) {
+    if let Some(v) = overlay {
+        target.insert(serde_yaml::Value::String(outer_key.into()), v.clone());
+    }
+}
+
 /// Render the M2 typed-slot YAML overlay for a Caixa: the camelCase
 /// `(key, value)` fragments every per-Servico renderer
 /// ([`caixa-helm`]'s values block, [`caixa-flux`]'s programs.yaml
@@ -1424,5 +1485,186 @@ mod tests {
         .unwrap();
         let v_clone = v.clone();
         assert_eq!(v, v_clone);
+    }
+
+    // ── insert_overlay — apply-half typed-primitive ──────────────────
+
+    #[test]
+    fn insert_overlay_none_leaves_target_untouched() {
+        // Empty-axis-skip at the apply layer: a `None` overlay must
+        // leave the target mapping byte-identical to its pre-call
+        // state. Pin the no-op semantic so a future "be helpful"
+        // refactor can't accidentally insert `outer_key: null`
+        // (which renders as `authentication: null` / `timeouts: null`
+        // — a malformed K8s parser shape distinct from "no field
+        // declared", same footgun the build half's None arm closes).
+        let mut target = serde_yaml::Mapping::new();
+        target.insert(
+            serde_yaml::Value::String("preexisting".into()),
+            serde_yaml::Value::Bool(true),
+        );
+        let before = target.clone();
+        insert_overlay(&mut target, "timeouts", None);
+        assert_eq!(target, before);
+    }
+
+    #[test]
+    fn insert_overlay_some_inserts_under_outer_key() {
+        // Happy path: a `Some` overlay surfaces under the outer key
+        // verbatim. Pin the canonical apply semantic the three
+        // caixa-mesh emit-sites (mtls/timeout/retry) currently
+        // duplicate inline.
+        let overlay = single_field_overlay(Some(30u32), "request", |n| {
+            serde_yaml::Value::Number(n.into())
+        });
+        let mut target = serde_yaml::Mapping::new();
+        insert_overlay(&mut target, "timeouts", overlay.as_ref());
+        let timeouts = target
+            .get(serde_yaml::Value::String("timeouts".into()))
+            .expect("outer key present");
+        assert_eq!(
+            timeouts.get("request").and_then(|v| v.as_u64()),
+            Some(30),
+            "inner key/value survives the apply"
+        );
+    }
+
+    #[test]
+    fn insert_overlay_some_inserts_byte_identical_clone() {
+        // Render-determinism pin (THEORY.md §V.2.7): the inserted
+        // value is a byte-identical clone of the overlay's Value, no
+        // re-shaping or normalization at the apply layer. Pin the
+        // contract end-to-end so a future refactor that, e.g.,
+        // re-serializes-and-re-parses the Value at the apply step
+        // (and accidentally renormalizes the YAML scalar form)
+        // surfaces here.
+        let overlay = single_field_overlay(Some(true), "mode", |b| {
+            serde_yaml::Value::String(if b { "required" } else { "disabled" }.into())
+        });
+        let mut target = serde_yaml::Mapping::new();
+        insert_overlay(&mut target, "authentication", overlay.as_ref());
+        let inserted = target
+            .get(serde_yaml::Value::String("authentication".into()))
+            .unwrap();
+        assert_eq!(inserted, overlay.as_ref().unwrap());
+    }
+
+    #[test]
+    fn insert_overlay_build_once_apply_many_clones_into_each_rule() {
+        // The load-bearing idiom every caixa-mesh emit-site uses: the
+        // overlay is built ONCE per renderer call (so any side effect
+        // in the closure runs exactly once), then applied INTO N
+        // emitted rules with a per-rule clone. Pin that N parallel
+        // apply calls produce N byte-identical insertions, and that
+        // the overlay itself is never mutated by the apply step (so
+        // the build-once contract is preserved end-to-end).
+        let overlay = single_field_overlay(Some(3u32), "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        });
+        let mut rule_a = serde_yaml::Mapping::new();
+        let mut rule_b = serde_yaml::Mapping::new();
+        let mut rule_c = serde_yaml::Mapping::new();
+        insert_overlay(&mut rule_a, "retry", overlay.as_ref());
+        insert_overlay(&mut rule_b, "retry", overlay.as_ref());
+        insert_overlay(&mut rule_c, "retry", overlay.as_ref());
+        for r in [&rule_a, &rule_b, &rule_c] {
+            assert_eq!(
+                r.get(serde_yaml::Value::String("retry".into()))
+                    .and_then(|v| v.get("attempts"))
+                    .and_then(|v| v.as_u64()),
+                Some(3)
+            );
+        }
+        // The overlay itself is unchanged — the build-once contract
+        // depends on the apply step being a non-consuming read.
+        assert_eq!(
+            overlay
+                .as_ref()
+                .unwrap()
+                .get("attempts")
+                .and_then(|v| v.as_u64()),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn insert_overlay_pairs_with_single_field_overlay_end_to_end() {
+        // The two halves of the per-axis overlay shape compose: the
+        // build half (`single_field_overlay`) returns the typed
+        // `Option<Value>`; the apply half (`insert_overlay`) consumes
+        // it. Pin the end-to-end composition so a future refactor of
+        // either half (e.g. the build half changing its return type
+        // to `Result<Option<Value>, _>` for fallible inner builders)
+        // surfaces here as a test failure rather than as a silent
+        // emit-site type drift.
+        let mut target = serde_yaml::Mapping::new();
+        insert_overlay(
+            &mut target,
+            "retry",
+            single_field_overlay(Some(3u32), "attempts", |n| {
+                serde_yaml::Value::Number(n.into())
+            })
+            .as_ref(),
+        );
+        let retry = target
+            .get(serde_yaml::Value::String("retry".into()))
+            .unwrap();
+        assert_eq!(retry.get("attempts").and_then(|v| v.as_u64()), Some(3));
+    }
+
+    #[test]
+    fn insert_overlay_replaces_existing_outer_key() {
+        // K8s API parsers reject duplicate keys at the YAML lex
+        // layer, so a Mapping with two entries under the same key is
+        // a malformed render. `serde_yaml::Mapping::insert`'s
+        // replace-on-existing semantic is the right shape for the
+        // apply step: the second `insert_overlay` under the same
+        // outer key replaces the first, matching the build-once-
+        // apply-many idiom (which never overlaps outer keys in
+        // practice, but pinning the contract prevents a future
+        // refactor that lifts two parallel per-axis overlays under
+        // the same outer key from silently producing a malformed
+        // shape).
+        let first = single_field_overlay(Some("30s".to_string()), "request", |s| {
+            serde_yaml::Value::String(s)
+        });
+        let second = single_field_overlay(Some("60s".to_string()), "request", |s| {
+            serde_yaml::Value::String(s)
+        });
+        let mut target = serde_yaml::Mapping::new();
+        insert_overlay(&mut target, "timeouts", first.as_ref());
+        insert_overlay(&mut target, "timeouts", second.as_ref());
+        // Exactly one outer key, carrying the second overlay's value.
+        assert_eq!(target.len(), 1);
+        let timeouts = target
+            .get(serde_yaml::Value::String("timeouts".into()))
+            .unwrap();
+        assert_eq!(
+            timeouts.get("request").and_then(|v| v.as_str()),
+            Some("60s")
+        );
+    }
+
+    #[test]
+    fn insert_overlay_outer_key_is_serialized_as_yaml_string() {
+        // Pin the YAML scalar shape of the outer key: a String scalar,
+        // not a bool / number / typed-enum projection. The K8s API
+        // server's apiserver-side parser keys mappings by string-
+        // shaped key, so an accidental `outer_key.parse::<bool>()`
+        // refactor would silently produce a YAML doc the parser
+        // rejects at admission time. Same shape contract every
+        // canonical K8s API-key const in this module
+        // ([`KUBE_KEY_API_VERSION`] etc.) carries.
+        let overlay = single_field_overlay(Some(3u32), "attempts", |n| {
+            serde_yaml::Value::Number(n.into())
+        });
+        let mut target = serde_yaml::Mapping::new();
+        insert_overlay(&mut target, "retry", overlay.as_ref());
+        let (k, _) = target.iter().next().unwrap();
+        assert!(
+            matches!(k, serde_yaml::Value::String(_)),
+            "outer key must serialize as a YAML string scalar"
+        );
+        assert_eq!(k.as_str(), Some("retry"));
     }
 }

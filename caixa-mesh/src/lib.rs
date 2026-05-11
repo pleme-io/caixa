@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitTarget,
-    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    aplicacao::AplicacaoSpec, insert_overlay, kube_resource_skeleton, label_selector,
     pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
@@ -324,12 +324,11 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             serde_yaml::Value::String("toPorts".into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(to_port)]),
         );
-        if let Some(a) = &mtls_overlay {
-            ingress_rule.insert(
-                serde_yaml::Value::String("authentication".into()),
-                a.clone(),
-            );
-        }
+        // The per-rule apply of the `:mtls-required` overlay — same
+        // typed primitive every per-axis-overlay site keys off.
+        // `mtls_overlay` is built once outside the loop; the helper
+        // clones it into each emitted rule (no-op when None).
+        insert_overlay(&mut ingress_rule, "authentication", mtls_overlay.as_ref());
 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert(
@@ -522,12 +521,13 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::String("backendRefs".into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_ref)]),
         );
-        if let Some(t) = &timeout_overlay {
-            rule.insert(serde_yaml::Value::String("timeouts".into()), t.clone());
-        }
-        if let Some(r) = &retry_overlay {
-            rule.insert(serde_yaml::Value::String("retry".into()), r.clone());
-        }
+        // Per-rule apply of the `:timeout` and `:retries` overlays —
+        // same typed primitive (`caixa_core::insert_overlay`) every
+        // per-axis-overlay site keys off; the helper is the apply
+        // sibling of `single_field_overlay` (build half), no-op when
+        // the overlay is None.
+        insert_overlay(&mut rule, "timeouts", timeout_overlay.as_ref());
+        insert_overlay(&mut rule, "retry", retry_overlay.as_ref());
         rules.push(serde_yaml::Value::Mapping(rule));
     }
 
