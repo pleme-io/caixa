@@ -187,12 +187,11 @@ impl WitContract {
                     expected: "subject",
                 }
             })?;
-            if s.is_empty() {
-                return Err(AplicacaoError::ContratoSubjectEmpty {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
-                });
-            }
+            // Joint empty + NATS/Kafka shape gate; `validate_contrato_subject`
+            // raises `ContratoSubjectEmpty` on `""` (preserving the narrower
+            // empty-shape diagnostic) and `ContratoSubjectInvalid` on every
+            // other broker-side-rejected value-shape.
+            validate_contrato_subject(&self.de, &self.para, s)?;
             return Ok(WitTarget::PubSub { subject: s });
         }
         if self.is_store() {
@@ -432,6 +431,25 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
 
+/// Max byte length of a `:contratos :subject` value — the joint upper
+/// bound for the two pub-sub-shaped `:wit` worlds [`WitContract`]
+/// recognizes today: NATS subjects (server default cap is configurable
+/// but conventionally bounded around 256 bytes) and Kafka topic names
+/// (strictly capped at 249 by the broker — see Kafka's `Topic` class:
+/// the legacy Linux filesystem `NAME_MAX` 255 minus the `-<6-digit
+/// partition>` suffix the broker appends to log directory names).
+/// 249 is the tighter joint constraint, so the gate refuses any value
+/// either broker would reject at admission time.
+///
+/// Lifted as a typed const (rather than an inline literal at the
+/// [`validate_contrato_subject`] call site) so a future per-`:wit`
+/// upper-bound split (a relaxed cap for `:wit "nats:*"` once we
+/// register a typed NATS world; a strictly-broker-matched cap for
+/// `:wit "kafka:*"`) is one const edit per shape — same shape every
+/// other typed-shape const carries
+/// ([`ENTRADA_HOST_MAX_LEN`] / [`ENTRADA_HOST_LABEL_MAX_LEN`]).
+const CONTRATO_SUBJECT_MAX_LEN: usize = 249;
+
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
 /// would refuse at admission time. The contract — exactly the regex
 /// the Gateway API CRD's OpenAPI schema enforces on `Listener.hostname`
@@ -614,6 +632,176 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
         }
     }
     Ok(())
+}
+
+/// Reject `:contratos :subject` values either pub-sub broker would
+/// refuse at publish time. The contract is the byte-level intersection
+/// of the two pub-sub-shaped `:wit` worlds [`WitContract`] recognizes
+/// today — NATS subjects and Kafka topic names:
+///
+///   - lowercase or uppercase ASCII alphanumeric + `.` + `-` + `_` are
+///     the only allowed bytes. NATS forbids spaces, tabs, and any
+///     character outside its token charset; Kafka topic names accept
+///     only `[A-Za-z0-9._-]`. Any non-ASCII / Unicode / control byte
+///     is rejected on both sides.
+///   - no leading `.`, trailing `.`, or consecutive `..`. NATS treats
+///     `.` as the token delimiter, so an empty token (`""` between
+///     two dots) is an authoring error the server rejects at publish;
+///     Kafka explicitly reserves the names `.` and `..` (filesystem-
+///     conflict in the log-directory naming convention).
+///   - no NATS subscribe wildcards (`*` for a single token, `>` for
+///     the rest of the subject). Wildcards are valid only on the
+///     subscriber's subscription pattern, not on the publisher's emit
+///     subject — and `:contratos :subject` is by construction the
+///     publish-side subject the `:de` Servico emits to (the subscriber
+///     `:para` derives its own subscription pattern at deploy time).
+///   - total length 1..=`CONTRATO_SUBJECT_MAX_LEN` (249) bytes — the
+///     tighter of the two broker caps (Kafka's 249-char topic-name
+///     limit; NATS's typical 256-byte subject cap is wider).
+///
+/// The diagnostic carries the offending `subject:` verbatim plus a
+/// parser-shaped `reason:` naming the specific violation, so the
+/// author can grep their caixa.lisp for `:subject "<subject>"` and
+/// fix it in one edit. Same diagnostic shape as `EntradaHostInvalid`
+/// (c7d05ec) and `MembroVersaoInvalid` (9888b13).
+///
+/// Lifted as a typed gate (rather than an inline cascade in
+/// [`WitContract::target`]) so the contract lives in one place — every
+/// future per-subject axis (the M4 NATS `Stream`/`Consumer` CR
+/// materializer, the future Kafka `Topic` CR emitter, the per-edge
+/// pub-sub policy resolver that pre-computes broker-side ACL bindings)
+/// reaches for the same predicate, not its own. Same compounding shape
+/// as [`validate_entrada_host`] (c7d05ec),
+/// [`is_canonical_rate_limit_window`] (808017c), and
+/// [`contrato_target_label`] (5dbcfaf).
+fn validate_contrato_subject(de: &str, para: &str, subject: &str) -> Result<(), AplicacaoError> {
+    // Empty is gated by `ContratoSubjectEmpty` at the call site;
+    // re-checking here keeps the predicate usable from any future
+    // call site (M4 NATS/Kafka CR materializer) without an empty-check
+    // footgun.
+    if subject.is_empty() {
+        return Err(AplicacaoError::ContratoSubjectEmpty {
+            de: de.to_string(),
+            para: para.to_string(),
+        });
+    }
+    if subject.len() > CONTRATO_SUBJECT_MAX_LEN {
+        return Err(AplicacaoError::ContratoSubjectInvalid {
+            de: de.to_string(),
+            para: para.to_string(),
+            subject: subject.to_string(),
+            reason: format!(
+                "exceeds joint NATS/Kafka subject max length of \
+                 {CONTRATO_SUBJECT_MAX_LEN} bytes (got {} bytes; Kafka rejects topic \
+                 names longer than 249 chars at broker admission)",
+                subject.len()
+            ),
+        });
+    }
+    // Token-shape pre-check: leading / trailing / consecutive `.`.
+    // NATS server treats every `.`-separated segment as a token and
+    // rejects an empty token; Kafka reserves the topic names `.` and
+    // `..` (the single-`.` case is caught here as a leading dot on a
+    // length-1 subject, the `..` case is caught as consecutive dots).
+    if subject.starts_with('.') {
+        return Err(AplicacaoError::ContratoSubjectInvalid {
+            de: de.to_string(),
+            para: para.to_string(),
+            subject: subject.to_string(),
+            reason: "must not start with `.` (NATS treats `.` as the token delimiter; \
+                     a leading `.` is an empty leading token)"
+                .to_string(),
+        });
+    }
+    if subject.ends_with('.') {
+        return Err(AplicacaoError::ContratoSubjectInvalid {
+            de: de.to_string(),
+            para: para.to_string(),
+            subject: subject.to_string(),
+            reason: "must not end with `.` (NATS treats `.` as the token delimiter; \
+                     a trailing `.` is an empty trailing token)"
+                .to_string(),
+        });
+    }
+    if subject.contains("..") {
+        return Err(AplicacaoError::ContratoSubjectInvalid {
+            de: de.to_string(),
+            para: para.to_string(),
+            subject: subject.to_string(),
+            reason: "must not contain consecutive `..` (NATS treats `.` as the token \
+                     delimiter; an empty token between two dots is rejected at publish)"
+                .to_string(),
+        });
+    }
+    // Byte-level charset: ASCII alphanumeric + `.` + `-` + `_`. Any
+    // other byte routes through `contrato_subject_byte_reason` for the
+    // narrower per-shape diagnostic.
+    for b in subject.bytes() {
+        let valid = b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_';
+        if valid {
+            continue;
+        }
+        return Err(AplicacaoError::ContratoSubjectInvalid {
+            de: de.to_string(),
+            para: para.to_string(),
+            subject: subject.to_string(),
+            reason: contrato_subject_byte_reason(b, subject),
+        });
+    }
+    Ok(())
+}
+
+/// Per-byte rejection reason for [`validate_contrato_subject`]. Lifted
+/// out so the gate body stays under clippy's `too_many_lines`
+/// threshold + so each adjacent-shape authoring footgun (`*` / `>` /
+/// `/` / `:`) carries its own self-locating diagnostic shape.
+fn contrato_subject_byte_reason(b: u8, subject: &str) -> String {
+    if b == b'*' {
+        "contains NATS subscribe wildcard `*` (single-token wildcard); \
+         `:contratos :subject` declares the publish-side subject the `:de` \
+         Servico emits to, and NATS publish subjects are fully qualified — \
+         wildcards belong on the subscriber's subscription pattern, not on \
+         the contract's publish subject"
+            .to_string()
+    } else if b == b'>' {
+        "contains NATS subscribe wildcard `>` (rest-of-subject wildcard); \
+         `:contratos :subject` declares the publish-side subject the `:de` \
+         Servico emits to, and NATS publish subjects are fully qualified — \
+         wildcards belong on the subscriber's subscription pattern, not on \
+         the contract's publish subject"
+            .to_string()
+    } else if b == b' ' || b == b'\t' {
+        "contains whitespace (NATS / Kafka subjects must not contain spaces \
+         or tabs; replace with `.` for NATS tokens or `_` / `-` within a token)"
+            .to_string()
+    } else if b == b'/' {
+        format!(
+            "contains `/` (HTTP path syntax leaked into a pub-sub subject; \
+             NATS / Kafka subjects use `.` as the token delimiter — drop the \
+             `/` or rewrite as `{}`)",
+            subject.replace('/', ".")
+        )
+    } else if b == b':' {
+        "contains `:` (scheme syntax leaked into a pub-sub subject; the WIT \
+         world prefix `nats:` / `kafka:` belongs in `:wit`, not in `:subject`)"
+            .to_string()
+    } else if !b.is_ascii() {
+        format!(
+            "contains non-ASCII byte {b:#04x} (NATS / Kafka subjects are \
+             ASCII-only; pre-encode any Unicode token using only `[A-Za-z0-9._-]`)"
+        )
+    } else if b.is_ascii_control() {
+        format!(
+            "contains ASCII control byte {b:#04x} (NATS / Kafka subjects \
+             must contain only printable `[A-Za-z0-9._-]`)"
+        )
+    } else {
+        format!(
+            "contains invalid character {ch:?} (NATS / Kafka subjects allow \
+             only `[A-Za-z0-9._-]`)",
+            ch = b as char
+        )
+    }
 }
 
 mod rate_limit_codec {
@@ -1364,6 +1552,20 @@ pub enum AplicacaoError {
          pub-sub-shaped)"
     )]
     ContratoSubjectEmpty { de: String, para: String },
+    #[error(
+        "pub-sub contrato {de:?} → {para:?} :subject {subject:?} is not a valid \
+         publish subject: {reason} (NATS / Kafka brokers refuse this shape at \
+         publish time; use a fully-qualified dotted identifier like \
+         `\"rio.events.order.shipped\"` over `[A-Za-z0-9._-]` — wildcards belong \
+         on the subscriber's subscription pattern, not on the contract's publish \
+         subject)"
+    )]
+    ContratoSubjectInvalid {
+        de: String,
+        para: String,
+        subject: String,
+        reason: String,
+    },
     #[error(
         "store contrato {de:?} → {para:?} :slot is empty (an empty slot template \
          addresses the bucket root, defeating the per-key isolation the slot exists \
@@ -3513,5 +3715,314 @@ mod tests {
         // on is_empty() to decide whether to emit at all without
         // re-deriving the contract from inline field probes.
         assert!(!three_member_spec().politicas.is_empty());
+    }
+
+    // ── :contratos :subject value-shape gate ──────────────────────────────
+    //
+    // The byte-level intersection of NATS subject + Kafka topic-name
+    // grammars. Until this gate landed `target()` only refused the
+    // empty string; a malformed-but-non-empty subject silently passed
+    // validate and the broker's "invalid subject" /
+    // "InvalidTopicException" surfaced at publish time, far from the
+    // source caixa.lisp. Same trajectory as the `:entrada :host`
+    // gate (c7d05ec) on the sibling pub-sub axis. Each test below
+    // pins one canonical authoring footgun so a future relaxation
+    // surfaces here as a regression.
+
+    fn contract_pubsub(de: &str, para: &str, subject: &str) -> WitContract {
+        WitContract {
+            de: de.into(),
+            para: para.into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(subject.into()),
+            slot: None,
+        }
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_whitespace() {
+        // The canonical "I forgot subjects don't allow spaces" typo —
+        // NATS / Kafka both refuse whitespace at publish time, but
+        // the empty-only gate let this through. Pin the diagnostic
+        // names the offending edge + the subject verbatim.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events checkout"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoSubjectInvalid {
+                    ref de, ref para, ref subject, ..
+                } if de == "cart" && para == "catalog" && subject == "events checkout"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_leading_dot() {
+        // NATS treats `.` as the token delimiter; a leading `.` is
+        // an empty leading token, rejected at publish.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", ".events.charge"));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_trailing_dot() {
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events.charge."));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_consecutive_dots() {
+        // Empty NATS token between two dots. Also catches the Kafka-
+        // reserved topic name `..` (filesystem-conflict in the broker's
+        // log-directory naming convention).
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events..charge"));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_nats_wildcard_star() {
+        // `*` is the NATS single-token subscribe wildcard. The
+        // canonical "I wrote the subscriber's pattern in the contract"
+        // footgun — `:contratos :subject` is by construction the
+        // publish-side subject, and NATS publish subjects are fully
+        // qualified.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events.*.charge"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoSubjectInvalid { ref reason, .. }
+                    if reason.contains('*')
+            ),
+            "diagnostic must name the offending `*` wildcard, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_nats_wildcard_gt() {
+        // `>` is the NATS rest-of-subject subscribe wildcard. Same
+        // footgun as `*` — wildcards belong on the subscriber side.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events.>"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoSubjectInvalid { ref reason, .. }
+                    if reason.contains('>')
+            ),
+            "diagnostic must name the offending `>` wildcard, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_slash() {
+        // The canonical "I'm thinking of an HTTP path" typo — NATS /
+        // Kafka subjects use `.` as the token delimiter, never `/`.
+        // The diagnostic suggests the `/`-→-`.` rewrite verbatim.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events/charge"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoSubjectInvalid { ref reason, .. }
+                    if reason.contains("events.charge")
+            ),
+            "diagnostic must suggest the rewritten subject, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_colon() {
+        // The canonical "the WIT prefix leaked into the subject" typo
+        // — `:wit "nats:..."` carries the broker selector; `:subject`
+        // is the bare subject string.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "nats:events.charge"));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_too_long() {
+        // The `CONTRATO_SUBJECT_MAX_LEN`-byte boundary is the Kafka-
+        // strictest cap (249); one byte over is the fail-before
+        // pin. Build a `<prefix>.<long-tail>` subject so the byte
+        // count is verifiable inline.
+        let long = format!("e.{}", "a".repeat(CONTRATO_SUBJECT_MAX_LEN));
+        assert!(long.len() > CONTRATO_SUBJECT_MAX_LEN);
+        let mut s = three_member_spec();
+        s.contratos.push(contract_pubsub("cart", "catalog", &long));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoSubjectInvalid { ref reason, .. }
+                    if reason.contains("max length")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_unicode() {
+        // NATS / Kafka subjects are ASCII-only. The canonical "I
+        // thought Unicode worked" footgun: an accented character in
+        // a subject token.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events.entréga"));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_control_byte() {
+        // Embedded control byte (here: tab). Catches the
+        // copy-paste-from-a-formatted-log footgun.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events\tcharge"));
+        assert!(matches!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoSubjectInvalid { .. }
+        ));
+    }
+
+    #[test]
+    fn contrato_subject_empty_takes_precedence_over_invalid() {
+        // Order pin: the narrower `ContratoSubjectEmpty` diagnostic
+        // fires before the new `ContratoSubjectInvalid` diagnostic on
+        // the empty string. `validate_contrato_subject` also rejects
+        // `""`, but the empty-string arm is the more self-locating
+        // diagnostic for the author. Same ordering discipline as the
+        // entrada-host empty-vs-invalid precedence pin (c7d05ec) and
+        // the membros-versao empty-vs-invalid pin (9888b13).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(String::new()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectEmpty { ref de, ref para }
+                if de == "cart" && para == "catalog"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_subject_invalid_diagnostic_carries_offending_subject() {
+        // The diagnostic-shape pin: the error names the offending
+        // edge (`de`, `para`) + the offending subject value verbatim
+        // + a non-empty `reason`, so the author can grep their
+        // caixa.lisp without re-running the build.
+        let bad = WitContract {
+            de: "src".into(),
+            para: "dst".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("not a subject".into()),
+            slot: None,
+        };
+        let AplicacaoError::ContratoSubjectInvalid {
+            de,
+            para,
+            subject,
+            reason,
+        } = bad.target().unwrap_err()
+        else {
+            panic!("expected ContratoSubjectInvalid");
+        };
+        assert_eq!(de, "src");
+        assert_eq!(para, "dst");
+        assert_eq!(subject, "not a subject");
+        assert!(
+            !reason.is_empty(),
+            "ContratoSubjectInvalid `reason` must carry the parser's wording verbatim"
+        );
+    }
+
+    #[test]
+    fn pubsub_contrato_subject_max_length_validates() {
+        // Boundary pin: the exact-`CONTRATO_SUBJECT_MAX_LEN`-byte case
+        // is the last legal length, so it must validate.
+        let exact = "a".repeat(CONTRATO_SUBJECT_MAX_LEN);
+        assert_eq!(exact.len(), CONTRATO_SUBJECT_MAX_LEN);
+        let mut s = three_member_spec();
+        s.contratos.push(contract_pubsub("cart", "catalog", &exact));
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_canonical_pubsub_subjects() {
+        // Positive-control sweep across the canonical shapes:
+        //   - the doc-example `"rio.events.order.shipped"`
+        //   - mixed `[A-Za-z0-9._-]` characters
+        //   - single-token (the min-token-count boundary)
+        //   - uppercase / digits / underscore / hyphen mix
+        // Pin every leg so a future tightening surfaces here.
+        for canonical in [
+            "rio.events.order.shipped",
+            "checkout.events.charge.failed",
+            "a",
+            "a-b_c.0.x",
+            "events.Order_Shipped-v2",
+        ] {
+            let mut s = three_member_spec();
+            s.contratos
+                .push(contract_pubsub("cart", "catalog", canonical));
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical subject {canonical:?} must validate, got {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn pubsub_contrato_subject_kafka_wildcard_validates() {
+        // Pin that `*` and `>` rejection is rooted in NATS wildcard
+        // semantics, not in some other charset rule — a subject that
+        // *contains* neither character (but is otherwise structurally
+        // identical to a wildcard form) round-trips through validate
+        // without surprise. Same pin shape as
+        // `pubsub_contrato_subject_max_length_validates`.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_pubsub("cart", "catalog", "events.charge.x"));
+        s.validate().unwrap();
     }
 }
