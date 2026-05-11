@@ -38,9 +38,9 @@ pub use render::{
     KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_LABELS, KUBE_KEY_MATCH_LABELS, KUBE_KEY_METADATA,
     KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, KindMismatch, LABEL_APLICACAO, LABEL_CONTRATO,
     LABEL_PROGRAM, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M3_KEY_PLACEMENT,
-    PLEME_LABEL_PREFIX, RenderError, kube_resource_skeleton, label_selector,
-    pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind,
-    servico_m2_overlay, single_field_overlay, yaml_string_mapping,
+    PLEME_LABEL_PREFIX, RenderError, insert_overlay, kube_resource_skeleton, label_selector,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind, servico_m2_overlay,
+    single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction};
