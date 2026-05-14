@@ -841,6 +841,37 @@ impl AplicacaoSpec {
             // :endpoint", "NATS wit with :endpoint set", etc. as named
             // build errors instead of silent renderer drops.
             c.target()?;
+            // Self-loop gate (:de == :para). A typed-mesh edge from a
+            // Servico to itself is structurally meaningless across every
+            // WIT shape: HTTP/Store/Capability self-loops are length-1
+            // sync cycles that `detect_sync_cycles` already catches but
+            // surface as a generic `ContratoCycle { cycle: [<x>, <x>] }`
+            // — the more pointed diagnostic is "self-loop", not "cycle".
+            // Pub-sub self-loops bypass cycle detection entirely (pub-sub
+            // edges are skipped — they are "acyclic by construction"), so
+            // until this gate landed a `:de "foo" :para "foo" :wit
+            // "nats:pub-sub" :subject "x"` contract silently passed
+            // validate and rendered as a `<aplicacao>-foo-to-foo`
+            // CiliumNetworkPolicy whose `fromEndpoints` and
+            // `endpointSelector` selectors both resolve to the same pod
+            // identity — Cilium's identity-based L7 enforcement is a
+            // no-op on intra-pod traffic, so the policy was a structural
+            // no-op the apiserver still admitted, and the Hubble flow
+            // attribution surfaced a `cart → cart` mesh edge that
+            // misrepresents the typed graph. Lifting the gate here closes
+            // the pub-sub footgun and sharpens the sync diagnostic in one
+            // edit, keeping every `:contratos` axis structurally
+            // well-formed by validate time. Same trajectory as the
+            // duplicate-`:contratos` gate (5dbcfaf), the typed-graph node
+            // set gate (`:membros` duplicate, 4bb3f3d), and the typed
+            // WIT-shape gates (c4213a4, 0c943d3): every typed-graph axis
+            // becomes structurally exact at the validate boundary.
+            if c.de == c.para {
+                return Err(AplicacaoError::ContratoSelfLoop {
+                    caixa: c.de.clone(),
+                    wit: c.wit.clone(),
+                });
+            }
             // Contract identity: (de, para, wit, endpoint, subject, slot).
             // Two contracts that match on all six are the same typed edge
             // declared twice — author error, not a legitimate variant of
@@ -1139,6 +1170,13 @@ impl AplicacaoSpec {
     /// (`WitTarget::PubSub`) are skipped: an event publisher does not
     /// block on its subscribers, so they can never close a sync loop.
     ///
+    /// Length-1 cycles (`:de == :para` self-loops) never reach this
+    /// gate — `AplicacaoSpec::validate`'s per-contract loop rejects
+    /// them earlier as `AplicacaoError::ContratoSelfLoop` (the more
+    /// pointed diagnostic), and pub-sub self-loops are caught there
+    /// too (which this function would otherwise skip). So every cycle
+    /// reported here has length ≥ 2 by construction.
+    ///
     /// Iterative DFS with three-coloring; the reported cycle is the
     /// path of caixa names traversed from the back-edge target around
     /// to itself, in declaration order. Adjacency lists and DFS roots
@@ -1376,6 +1414,13 @@ pub enum AplicacaoError {
         cycle.join(" → ")
     )]
     ContratoCycle { cycle: Vec<String> },
+    #[error(
+        ":contratos entry has :de == :para — self-loop on caixa {caixa:?} (:wit {wit:?}); \
+         a mesh edge from a Servico to itself is structurally meaningless: Cilium's \
+         identity-based L7 enforcement is a no-op on intra-pod traffic, and same-pod \
+         call sites belong inside the Servico's source rather than as a typed mesh edge"
+    )]
+    ContratoSelfLoop { caixa: String, wit: String },
     #[error(
         ":contratos entry {de:?} → {para:?} (:wit {wit:?} {target}) appears more \
          than once (the typed graph edges are a set, not a multiset; duplicate \
@@ -2260,15 +2305,202 @@ mod tests {
 
     #[test]
     fn rejects_self_loop_in_synchronous_contratos() {
+        // An HTTP self-loop is a length-1 sync cycle that the cycle
+        // detector would otherwise surface as a generic
+        // `ContratoCycle { cycle: ["cart", "cart"] }`. The typed
+        // self-loop gate surfaces the more pointed diagnostic
+        // (`ContratoSelfLoop`) before cycle detection runs, naming the
+        // structural issue (self-loop) rather than the symptom (cycle).
         let mut s = three_member_spec();
         s.contratos.push(contract_http("cart", "cart", "/loop"));
         let err = s.validate().unwrap_err();
         match err {
-            AplicacaoError::ContratoCycle { cycle } => {
-                assert_eq!(cycle, vec!["cart".to_string(), "cart".to_string()]);
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(caixa, "cart");
+                assert_eq!(wit, "wasi:http/proxy");
             }
-            other => panic!("expected ContratoCycle, got {other:?}"),
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn rejects_self_loop_in_pubsub_contratos() {
+        // The bug-closing arm: until the typed self-loop gate landed
+        // a pub-sub self-loop silently passed validate (pub-sub edges
+        // are skipped by `detect_sync_cycles` — "acyclic by
+        // construction" — so a `:de "cart" :para "cart" :wit
+        // "nats:pub-sub"` contract was the only typed-graph self-loop
+        // the typed surface admitted). The gate now closes it: every
+        // self-loop is rejected at validate time regardless of WIT
+        // shape, so the renderer never emits a structurally-no-op
+        // `<aplicacao>-cart-to-cart` CiliumNetworkPolicy.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "cart".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("cart.events.heartbeat".into()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(caixa, "cart");
+                assert_eq!(wit, "nats:pub-sub");
+            }
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_self_loop_in_store_contratos() {
+        // wasi:keyvalue/store self-loops are also length-1 sync cycles
+        // (store edges count as synchronous for cycle detection — pinned
+        // by `store_edge_counts_as_synchronous_for_cycle_detection`).
+        // Surface the self-loop diagnostic, not the generic cycle one,
+        // for parity with the HTTP arm above.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "payment".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("payment/$id".into()),
+        });
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(caixa, "payment");
+                assert_eq!(wit, "wasi:keyvalue/store");
+            }
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_self_loop_in_capability_contratos() {
+        // Capability-only edges (unknown WIT shape, no payload) also
+        // count as synchronous for cycle detection. Surface the
+        // self-loop diagnostic at the value-shape gate for parity.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "catalog".into(),
+            para: "catalog".into(),
+            wit: "custom:exchange".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(caixa, "catalog");
+                assert_eq!(wit, "custom:exchange");
+            }
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn self_loop_diagnostic_carries_offending_caixa_and_wit() {
+        // Diagnostic-shape pin — the Display string names the offending
+        // caixa + the wit shape so the author can grep their caixa.lisp
+        // for `:de "<caixa>" :para "<caixa>"` and fix it in one edit.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("payment", "payment", "/refund"));
+        let err = s.validate().unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("payment"),
+            "diagnostic must name the offending caixa (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("wasi:http/proxy"),
+            "diagnostic must name the WIT shape (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn self_loop_fires_before_duplicate_check() {
+        // Ordering pin: when the same self-loop is declared twice, the
+        // self-loop gate fires before the duplicate gate — the
+        // structural issue (self-loop) is the more self-locating
+        // diagnostic. (Both arms would point at the same source
+        // caixa.lisp, but the self-loop name is more actionable.)
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "cart", "/loop"));
+        s.contratos.push(contract_http("cart", "cart", "/loop"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSelfLoop { ref caixa, .. } if caixa == "cart"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn member_missing_fires_before_self_loop() {
+        // Ordering pin: a missing :de/:para member is the more
+        // self-locating diagnostic on `:de "ghost" :para "ghost"` —
+        // it names the typo in the contract source rather than treating
+        // the unresolved name as a structurally meaningful self-loop.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("ghost", "ghost", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoMemberMissing { ref caixa } if caixa == "ghost"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn wit_empty_fires_before_self_loop() {
+        // Ordering pin: an empty :wit is the more pointed structural
+        // diagnostic — the contract is malformed at the wit-shape layer
+        // before "from == to" is even meaningful. (`EmptyWit` names
+        // both endpoints in its message, so it remains self-locating.)
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "cart".into(),
+            wit: String::new(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EmptyWit { ref de, ref para }
+                if de == "cart" && para == "cart"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn wit_shape_mismatch_fires_before_self_loop() {
+        // Ordering pin: a wit-shape ↔ payload mismatch is a more
+        // structural diagnostic than a self-loop (the contract is
+        // malformed at the typed-graph axis before the from==to axis
+        // is meaningful). `contract_http("foo", "foo", ...)` would
+        // ordinarily fire the self-loop gate; subbing in an HTTP wit
+        // *without* :endpoint surfaces the ContratoMissingTarget arm
+        // first via `c.target()?`.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "cart".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoMissingTarget { .. }),
+            "got {err:?}"
+        );
     }
 
     #[test]
