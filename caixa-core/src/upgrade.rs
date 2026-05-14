@@ -157,6 +157,15 @@ pub enum UpgradeError {
         script.display()
     )]
     ParentEscapeScript { script: PathBuf },
+    #[error(
+        ":upgrade-from has more than one entry with :from {from:?} — every prior \
+         version is described by exactly one upgrade entry (OTP appup's per-version \
+         instruction list is a function of the prior version, not a multimap); the \
+         duplicate would force the wasm-operator to pick one entry nondeterministically \
+         at hot-upgrade time. Merge the two entries' :instructions, or drop the \
+         redundant block."
+    )]
+    DuplicateFrom { from: String },
 }
 
 #[cfg(test)]
