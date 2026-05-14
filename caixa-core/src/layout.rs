@@ -182,6 +182,23 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
+        // Upgrade-from: every entry must be value-shape valid (parseable
+        // :from, non-empty :module, sandbox-safe :script) and the list
+        // must carry each :from at most once. Lifting this pass *before*
+        // the existence loop below mirrors the :behavior trajectory
+        // (value-shape pass first, existence pass second) so the
+        // diagnostic names the offending slot before a downstream
+        // `MissingEntry` would otherwise surface a less-locating "missing
+        // upgrade-script /etc/foo.lisp" (or, worst, silently pass when
+        // the absolute path happens to exist on the host). See
+        // `Caixa::validate_upgrade_from` for the full rationale.
+        caixa
+            .validate_upgrade_from()
+            .map_err(|err| LayoutError::UpgradeFromViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Upgrade scripts: every state-change instruction must point at
         // an existing tatara-lisp file.
         for entry in &caixa.upgrade_from {
@@ -249,6 +266,8 @@ pub enum LayoutError {
     LimitsViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :behavior callback: {issue}")]
     BehaviorViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :upgrade-from: {issue}")]
+    UpgradeFromViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{caixa}' violates typed shape: {issue}")]
     SupervisorViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas")]
@@ -461,6 +480,144 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn upgrade_from_malformed_from_surfaces_as_layout_violation() {
+        // End-to-end: a non-semver `:from` surfaces at
+        // `StandardLayout::verify` time as a typed UpgradeFromViolation,
+        // not at hot-upgrade time. Mirrors `limits_zero_axis_surfaces_as_layout_violation`
+        // and the BehaviorSpec lift tests — the value-shape pass is the
+        // single forcing function that closes the M2-typed-slot loop.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "v0.1".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeFromViolation { caixa, issue } = err else {
+            panic!("expected UpgradeFromViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(issue.contains("v0.1"), "issue must name the offending :from: {issue}");
+    }
+
+    #[test]
+    fn upgrade_absolute_script_is_violation_not_missing() {
+        // Sandbox-bypass pin (parity with `behavior_absolute_callback_is_violation_not_missing`):
+        // an absolute :script silently subverts `root.join(p)` (Path::join
+        // replaces the base when the right side is absolute). Before
+        // validate_upgrade_from ran, an `:script "/etc/passwd"` either
+        // surfaced as a confusing "missing upgrade-script /etc/passwd"
+        // (path *outside* the caixa root) — or, worst, passed when
+        // /etc/passwd happens to exist. Now it's a value-shape error
+        // naming the slot.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("/etc/passwd"),
+            }],
+        }];
+        // Path-exists check would *succeed* on /etc/passwd (proving the
+        // sandbox bypass) — value-shape pass must fire first.
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == svc || p == Path::new("/etc/passwd"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::UpgradeFromViolation { ref caixa, .. } if caixa == "demo"),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn upgrade_duplicate_from_is_violation() {
+        // Typed-set discipline pin (parity with the supervisor
+        // `:children` duplicate gate dbf50a9): two entries sharing a
+        // `:from` is the same multimap-vs-set distinction closed for
+        // every other typed-graph slot. The diagnostic names the
+        // duplicated version so the author can grep their caixa.lisp
+        // for `:from "<version>"` and fix it in one edit.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![UpgradeInstruction::LoadModule {
+                    module: "demo".into(),
+                }],
+            },
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+        ];
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeFromViolation { caixa, issue } = err else {
+            panic!("expected UpgradeFromViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.1.0"),
+            "issue must name the duplicated :from: {issue}"
+        );
+    }
+
+    #[test]
+    fn upgrade_well_formed_chain_passes_layout() {
+        // Positive control: a realistic multi-version chain whose
+        // `:script` paths all exist passes the full layout check.
+        // Closes the loop on `validate_upgrade_from_accepts_canonical_chain`
+        // (manifest tests) by exercising the same shape through
+        // StandardLayout::verify with the existence pass also wired.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let migration = root.join("lib/migrations/v01.lisp");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "demo".into(),
+                    },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/migrations/v01.lisp"),
+                    },
+                ],
+            },
+            UpgradeFromEntry {
+                from: "0.1.5".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+        ];
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == svc || p == migration);
+        layout.verify(&c, &root).unwrap();
     }
 
     #[test]

@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use crate::{
     behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec, supervisor::SupervisorSpec,
-    upgrade::UpgradeFromEntry, CaixaKind, Dep,
+    upgrade::{UpgradeError, UpgradeFromEntry},
+    CaixaKind, Dep,
 };
 
 /// Inline duration parser for `restart_window`. Mirrors
@@ -275,6 +276,63 @@ impl Caixa {
         }
         for dep in &self.deps_dev {
             dep.validate()?;
+        }
+        Ok(())
+    }
+
+    /// Validate every `:upgrade-from` entry through
+    /// [`UpgradeFromEntry::validate`] *and* reject duplicate `:from`
+    /// values across the whole list — closing the only remaining M2
+    /// typed-slot validation gap.
+    ///
+    /// Until this gate landed `:upgrade-from` was the lone M2 slot whose
+    /// per-entry [`UpgradeFromEntry::validate`] (which enforces
+    /// semver-parseable `:from`, non-empty `LoadModule`/`SoftPurge`/`Purge`
+    /// `:module`, and the value-shape gates `EmptyScript` / `AbsoluteScript`
+    /// / `ParentEscapeScript` on every `StateChange` `:script`) was *defined*
+    /// but never reached from any caller: [`crate::layout::StandardLayout::verify`]
+    /// only iterated `caixa.upgrade_from` to check `:script` path existence
+    /// via `instr.declared_path()`, so a malformed `:from` ("not-a-semver",
+    /// "v0.1"), an empty `:module`, or an absolute `:script` ("/etc/foo.lisp"
+    /// — the same `Path::join` sandbox-bypass closed for `:behavior` paths
+    /// in b0c8389) all silently passed validate and the diagnostic surfaced
+    /// far downstream (semver::Error at lacre-resolve time; a confusing
+    /// `MissingEntry { kind: "upgrade-script", path: /etc/foo.lisp }` whose
+    /// path is *outside* the caixa root; or worst, a successful build when
+    /// the absolute path happens to exist on the host). Wiring the per-entry
+    /// validator through here makes the four M2 typed-slot validate() entry
+    /// points (`:limits`, `:behavior`, `:upgrade-from`, supervisor's
+    /// `:children`) and the M3 mesh ones (`:membros`, `:contratos`,
+    /// `:politicas`, `:placement`, `:entrada`) structurally equivalent —
+    /// every typed slot's `validate()` is reachable from a single layout
+    /// entry point, and a regression at any axis surfaces at build time
+    /// with a diagnostic naming the offending slot.
+    ///
+    /// On top of the per-entry pass: duplicate `:from` values across the
+    /// `Vec<UpgradeFromEntry>` are themselves a typed-set discipline
+    /// violation — the same graph-node-set / multiset distinction closed
+    /// for `:membros` (4bb3f3d), `:placement :clusters` (c7c7799),
+    /// `:entrada :paths` (eb3456d), `:children` (dbf50a9), and
+    /// `:contratos` (5dbcfaf). OTP appup's per-version instruction list
+    /// is a *function* of the prior version, not a multimap (`.appup`
+    /// files reject `[{"0.1.0", […]}, {"0.1.0", […]}]` at the
+    /// `release_handler` boundary): two entries sharing a `:from` would
+    /// force the wasm-operator to pick one nondeterministically at
+    /// hot-upgrade time. Surface the collision at build time.
+    ///
+    /// Iteration is in declaration order so a multi-malformed manifest
+    /// surfaces the first offending entry deterministically — same
+    /// trajectory as `validate_deps`'s "runtime deps first, dev deps
+    /// second" pin (the runtime axis is load-bearing; surface it first).
+    pub fn validate_upgrade_from(&self) -> Result<(), UpgradeError> {
+        let mut seen = std::collections::HashSet::new();
+        for entry in &self.upgrade_from {
+            entry.validate()?;
+            if !seen.insert(entry.from.as_str()) {
+                return Err(UpgradeError::DuplicateFrom {
+                    from: entry.from.clone(),
+                });
+            }
         }
         Ok(())
     }
@@ -623,5 +681,197 @@ mod tests {
         let emitted = c1.to_lisp();
         let c2 = Caixa::from_lisp(&emitted).expect("round trip");
         assert_eq!(c1.deps, c2.deps);
+    }
+
+    // ── :upgrade-from typed gate (Caixa::validate_upgrade_from) ────────
+
+    #[test]
+    fn validate_upgrade_from_accepts_canonical_empty_list() {
+        // Positive control: the bare template — zero upgrade entries —
+        // passes trivially. A future axis added to the gate mustn't
+        // regress an `:upgrade-from ()` caixa to a build error.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_upgrade_from().unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_accepts_canonical_chain() {
+        // Positive control sweep: a realistic multi-version chain with
+        // each instruction variant exercised at least once. Pins the
+        // accepted set so a future tightening surfaces here as a test
+        // failure (parity with `validate_deps_accepts_canonical_versao_forms_in_both_lists`).
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "demo".into(),
+                    },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/migrations/v01.lisp"),
+                    },
+                    UpgradeInstruction::SoftPurge {
+                        module: "demo-old".into(),
+                    },
+                ],
+            },
+            UpgradeFromEntry {
+                from: "0.1.5".into(),
+                instructions: vec![UpgradeInstruction::Purge {
+                    module: "demo-old".into(),
+                }],
+            },
+            UpgradeFromEntry {
+                from: "0.2.0-rc.1".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+        ];
+        c.validate_upgrade_from().unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_rejects_non_semver_from() {
+        // Fail-before-pass-after pin: a malformed `:from` surfaces at
+        // validate_upgrade_from() time, not at hot-upgrade time when
+        // the wasm-operator's appup matcher would otherwise fail with a
+        // far-from-source diagnostic.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "not-a-semver".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::BadFromVersion(ref s) if s == "not-a-semver"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_rejects_empty_module() {
+        // Per-instruction value-shape gate: `LoadModule` / `SoftPurge` /
+        // `Purge` with an empty `:module` is rejected — the wasm-engine
+        // would otherwise try to load/purge a module whose name is the
+        // empty string, surfacing a registry-side `module not found ""`
+        // at hot-upgrade time.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: String::new(),
+            }],
+        }];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert_eq!(err, UpgradeError::EmptyModule);
+    }
+
+    #[test]
+    fn validate_upgrade_from_rejects_absolute_script() {
+        // Sandbox-bypass pin: an absolute `:script` ("/etc/foo.lisp")
+        // silently subverts `root.join(p)` (Path::join replaces the
+        // base when the right side is absolute). Same trajectory as
+        // BehaviorSpec's AbsolutePath gate (b0c8389): the value-shape
+        // pass surfaces the sandbox bypass before the existence check
+        // would either fail with a confusing "/etc/foo.lisp" path or
+        // pass when the absolute path happens to exist on the host.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("/etc/migrations.lisp"),
+            }],
+        }];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::AbsoluteScript { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_rejects_parent_escape_script() {
+        // Parity pin: a `..`-traversing `:script` is rejected for the
+        // same sandbox-bypass reason as an absolute script. Mid-path
+        // `..` is also caught (`lib/../../escaped.lisp`).
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("../sibling/migrations.lisp"),
+            }],
+        }];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::ParentEscapeScript { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_rejects_duplicate_from() {
+        // Typed-set discipline pin: two entries with the same `:from`
+        // are the same authoring footgun closed for `:membros`
+        // (4bb3f3d), `:placement :clusters` (c7c7799), `:entrada :paths`
+        // (eb3456d), `:children` (dbf50a9), and `:contratos` (5dbcfaf).
+        // OTP appup's per-version instruction list is a function of the
+        // prior version — `[{"0.1.0", […]}, {"0.1.0", […]}]` is
+        // rejected by `release_handler`; pleme-io enforces the same
+        // shape at build time.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![UpgradeInstruction::LoadModule {
+                    module: "demo".into(),
+                }],
+            },
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+        ];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::DuplicateFrom { ref from } if from == "0.1.0"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_surfaces_first_offender_deterministically() {
+        // Order pin: when an early entry is value-shape valid but a
+        // later one is malformed, the diagnostic names the later one
+        // (declaration-order iteration). When two distinct
+        // value-shape failures coexist, the *first* declared entry's
+        // failure surfaces — same per-entry-before-cross-entry shape
+        // as `validate_deps_runs_deps_before_deps_dev` (the per-list
+        // axis runs before the cross-list axis surfaces).
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "not-a-semver".into(),
+                instructions: vec![],
+            },
+            UpgradeFromEntry {
+                from: "also-not-semver".into(),
+                instructions: vec![],
+            },
+        ];
+        let err = c.validate_upgrade_from().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::BadFromVersion(ref s) if s == "not-a-semver"),
+            "expected first offending entry's :from to surface; got {err:?}"
+        );
     }
 }
