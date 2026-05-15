@@ -432,6 +432,125 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
 
+/// `:membros :caixa` max length, in bytes — the K8s DNS-1123 label
+/// rule's max, which is also the strictest among every K8s object
+/// `metadata.name` axis a validated member name lands in:
+///
+///   * the rendered programs.yaml entry's `name:` (consumed by
+///     `lareira-fleet-programs` to derive the
+///     `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name`),
+///   * the K8s [`Service`][svc] `metadata.name` the future
+///     `app-operator` provisions per-member (DNS-1035 label rule:
+///     `[a-z]([-a-z0-9]*[a-z0-9])?` max 63),
+///   * the [`LABEL_PROGRAM`][crate::LABEL_PROGRAM] label value Cilium /
+///     Hubble key identity off (K8s label value rule: `[a-z0-9]([-a-z0-9_.]*[a-z0-9])?`
+///     max 63),
+///   * the composed `<aplicacao>-<de>-to-<para>` `CiliumNetworkPolicy`
+///     `metadata.name` caixa-mesh emits (DNS-1123 subdomain rule:
+///     max 253; per-component max 63 keeps the composed name
+///     well under the subdomain limit even for the longest
+///     plausible Aplicacao+pair triples).
+///
+/// 63 is the floor each apiserver-side schema enforces independently;
+/// a value that fits passes every downstream validator.
+///
+/// [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
+const MEMBRO_CAIXA_MAX_LEN: usize = 63;
+
+/// Reject `:membros :caixa` values the K8s apiserver would refuse at
+/// admission time. The contract — the intersection of every cluster-
+/// side rule a validated member name lands in (see
+/// [`MEMBRO_CAIXA_MAX_LEN`] for the per-target axis breakdown):
+///
+///   - 1..=63 bytes (DNS-1123 label limit);
+///   - lowercase ASCII alphanumeric + hyphen (`[a-z0-9-]` only; no
+///     uppercase — K8s rejects, no underscore — DNS-1123 forbids, no
+///     dot — a `:membros :caixa` entry is a single label, not a
+///     subdomain, no Unicode/IDN — must be pre-encoded);
+///   - non-hyphen ASCII alphanumeric at both label boundaries
+///     (no `-foo`, no `foo-`).
+///
+/// Lifted as a typed gate (rather than an inline cascade in
+/// [`AplicacaoSpec::validate_membros`]) so the contract lives in one
+/// place — every future axis reaching for the same DNS-1123 label
+/// rule (the M3.x `:placement :clusters` value-shape gate; the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's member-name
+/// validator; the future per-Servico `:nome` gate at the Caixa-load
+/// boundary; the future `cse-lint aplicacao-completeness`
+/// MESH-COMPOSITION §VI cse-lint check's name axis) reaches for the
+/// same predicate, not its own. Same compounding shape as
+/// [`validate_entrada_host`] (c7d05ec),
+/// [`is_canonical_rate_limit_window`] (808017c), and
+/// [`contrato_target_label`] (5dbcfaf).
+///
+/// The diagnostic carries the offending `caixa:` verbatim plus a
+/// parser-shaped `reason:` naming the specific violation, so the
+/// author can grep their caixa.lisp for `:caixa "<name>"` and fix
+/// it in one edit. Same diagnostic shape as [`AplicacaoError::EntradaHostInvalid`]
+/// (c7d05ec) and [`AplicacaoError::MembroVersaoInvalid`] (9888b13).
+fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
+    // Empty is already gated by `MembroCaixaEmpty` at the call site;
+    // re-checking here keeps the predicate usable from any future
+    // call site (the M3.x `:placement :clusters` lift, the M4 CR
+    // materializer) without an empty-check footgun.
+    if caixa.is_empty() {
+        return Err(AplicacaoError::MembroCaixaEmpty);
+    }
+    if caixa.len() > MEMBRO_CAIXA_MAX_LEN {
+        return Err(AplicacaoError::MembroCaixaInvalid {
+            caixa: caixa.to_string(),
+            reason: format!(
+                "exceeds DNS-1123 label max length of {MEMBRO_CAIXA_MAX_LEN} bytes \
+                 (got {} bytes; the K8s apiserver rejects longer names at admission \
+                 time on every Service / Pod / CR `metadata.name` axis)",
+                caixa.len()
+            ),
+        });
+    }
+    let bytes = caixa.as_bytes();
+    if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
+        return Err(AplicacaoError::MembroCaixaInvalid {
+            caixa: caixa.to_string(),
+            reason: "must start and end with an ASCII alphanumeric character \
+                     (no leading or trailing `-`; DNS-1123 label rule)"
+                .to_string(),
+        });
+    }
+    for &b in bytes {
+        let valid = b.is_ascii_digit() || b.is_ascii_lowercase() || b == b'-';
+        if !valid {
+            let msg = if b.is_ascii_uppercase() {
+                format!(
+                    "contains uppercase character {ch:?} (K8s DNS-1123 label \
+                     names are lowercase-only; use {lower:?})",
+                    ch = b as char,
+                    lower = caixa.to_ascii_lowercase()
+                )
+            } else if b == b'_' {
+                "contains `_` (DNS-1123 labels allow only `[a-z0-9-]`; use `-` \
+                 instead)"
+                    .to_string()
+            } else if b == b'.' {
+                "contains `.` (a `:membros :caixa` entry is a single DNS-1123 \
+                 label, not a subdomain; split into separate members or use `-` \
+                 to namespace)"
+                    .to_string()
+            } else {
+                format!(
+                    "contains invalid character {ch:?} (DNS-1123 labels allow \
+                     only `[a-z0-9-]`)",
+                    ch = b as char
+                )
+            };
+            return Err(AplicacaoError::MembroCaixaInvalid {
+                caixa: caixa.to_string(),
+                reason: msg,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
 /// would refuse at admission time. The contract — exactly the regex
 /// the Gateway API CRD's OpenAPI schema enforces on `Listener.hostname`
@@ -964,6 +1083,28 @@ impl AplicacaoSpec {
             if m.caixa.is_empty() {
                 return Err(AplicacaoError::MembroCaixaEmpty);
             }
+            // Every emitted cluster artifact's `metadata.name` derives
+            // from a `:membros :caixa` value verbatim — the rendered
+            // programs.yaml entry's `name:` (caixa-mesh/src/lib.rs:133),
+            // the [`crate::LABEL_PROGRAM`] label value on every CNP
+            // endpointSelector / fromEndpoints (caixa-mesh/src/lib.rs:263,
+            // 272), the composed CiliumNetworkPolicy `metadata.name`
+            // (caixa-mesh/src/lib.rs:250), and the Gateway API HTTPRoute
+            // `metadata.name` when the member is the `:entrada :para`
+            // target (caixa-mesh/src/lib.rs:423). Each apiserver-side
+            // schema enforces the DNS-1123 label rule on admission;
+            // a structurally invalid member name (`"Cart"`, `"my_cart"`,
+            // `"my.cart"`, `"-cart"`, `"cart-"`, the >63-byte UUID-shaped
+            // mistaken-identity slug) silently passes the prior empty-/
+            // duplicate-only gate and the failure surfaces at `kubectl
+            // apply` time as a `metadata.name: Invalid value` rejection,
+            // far from the source caixa.lisp, with no field naming the
+            // offending `:membros` entry. Lifting the gate to caixa-build
+            // time mirrors the `:entrada :host` value-shape trajectory
+            // (c7d05ec) on the peer axis — every author surface that
+            // emits a K8s name now matches the apiserver's accepted set
+            // at validate time.
+            validate_membro_caixa(&m.caixa)?;
             if m.versao.is_empty() {
                 return Err(AplicacaoError::MembroVersaoEmpty {
                     caixa: m.caixa.clone(),
@@ -1257,6 +1398,13 @@ pub enum AplicacaoError {
          omit the entry instead of carrying an empty name)"
     )]
     MembroCaixaEmpty,
+    #[error(
+        ":membros entry :caixa {caixa:?} is not a valid DNS-1123 label: {reason} \
+         (the K8s apiserver enforces this rule on every `metadata.name` / Service \
+         name / label value the member name lands in; use a lowercase \
+         alphanumeric + hyphen identifier like `\"checkout\"` or `\"cart-v2\"`)"
+    )]
+    MembroCaixaInvalid { caixa: String, reason: String },
     #[error(
         ":membros entry {caixa:?} has empty :versao (every member must pin a \
          semver constraint that resolves through the lacre pipeline)"
@@ -1735,6 +1883,296 @@ mod tests {
         // invariant explicit so a future refactor of the fixture can't
         // silently break the guarantee.
         three_member_spec().validate().unwrap();
+    }
+
+    // ── :membros :caixa DNS-1123 label value-shape gate ───────────────────
+
+    #[test]
+    fn rejects_membro_caixa_with_uppercase() {
+        // The canonical "I copied the Servico's display name verbatim"
+        // typo — caixa names are lowercase per K8s DNS-1123 label rule,
+        // but author tools often round-trip a TitleCase or CamelCase
+        // identifier from an ADR or a sketch. Pin the diagnostic names
+        // the offending name and suggests the lower-cased fix in one
+        // edit, mirroring the `rejects_entrada_host_with_uppercase`
+        // gate's shape (c7d05ec).
+        let mut s = three_member_spec();
+        s.membros[1].caixa = "Cart".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::MembroCaixaInvalid { caixa, reason } = err else {
+            panic!("expected MembroCaixaInvalid, got other variant");
+        };
+        assert_eq!(caixa, "Cart");
+        assert!(
+            reason.contains("uppercase"),
+            "diagnostic must name the violation as `uppercase` (got: {reason:?})"
+        );
+        assert!(
+            reason.contains("\"cart\""),
+            "diagnostic must suggest the lower-cased fix verbatim (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_with_underscore() {
+        // The canonical "I'm thinking of a Python module / Postgres
+        // table" leak — `_` is forbidden by every DNS-1123 / DNS-1035
+        // label schema. K8s rejects `metadata.name: my_cart` at admission
+        // time with an opaque `field is invalid` (no source-citing
+        // diagnostic). The gate moves it to caixa-build time.
+        let mut s = three_member_spec();
+        s.membros[0].caixa = "my_cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, ref reason }
+                    if caixa == "my_cart" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_with_dot() {
+        // A `:membros :caixa` entry is a single DNS-1123 *label*, not a
+        // subdomain — even though K8s `metadata.name` itself accepts
+        // dots (DNS-1123 subdomain rule), this string also lands as a
+        // K8s Service name (DNS-1035 label — no dots) and as a label
+        // value on identity-based Cilium selectors. The strictest floor
+        // among the use sites wins. The "I want to namespace my member
+        // names with `.`" intent is expressed via `-` (e.g. `cart-v2`).
+        let mut s = three_member_spec();
+        s.membros[2].caixa = "team.cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, ref reason }
+                    if caixa == "team.cart" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_with_leading_hyphen() {
+        // DNS-1123 / DNS-1035 boundary rule: labels must start and end
+        // with an alphanumeric. The K8s apiserver rejects `-cart`
+        // outright; the renderer would emit a `metadata.name: "-cart"`
+        // that fails admission far from the source caixa.lisp.
+        let mut s = three_member_spec();
+        s.membros[0].caixa = "-cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, ref reason }
+                    if caixa == "-cart" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_with_trailing_hyphen() {
+        // The symmetric arm of the boundary rule. Pin separately so
+        // both ends of the label are covered against a future relaxation
+        // that only checks one boundary.
+        let mut s = three_member_spec();
+        s.membros[1].caixa = "cart-".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, .. }
+                    if caixa == "cart-"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_with_unicode() {
+        // DNS-1123 is ASCII-only; IDN must be pre-encoded as Punycode
+        // (`xn--…`) by the author before it reaches K8s. The byte-by-
+        // byte ASCII validity check rejects multi-byte UTF-8 sequences
+        // by the first byte that fails the `[a-z0-9-]` predicate.
+        let mut s = three_member_spec();
+        s.membros[2].caixa = "café".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, .. }
+                    if caixa == "café"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_with_whitespace() {
+        // Whitespace is the canonical "I pasted from a sketch / doc"
+        // footgun. The apiserver rejects every `metadata.name` value
+        // carrying whitespace; pin the gate fires at the right boundary.
+        let mut s = three_member_spec();
+        s.membros[0].caixa = "my cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, .. }
+                    if caixa == "my cart"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_membro_caixa_too_long() {
+        // 64 bytes exceeds the DNS-1123 label cap by one — the boundary
+        // pin. K8s Service name + DNS-1123 label both cap at 63 bytes
+        // exactly. The gate's reason names both the cap and the actual
+        // length so the author can shorten in one edit.
+        let mut s = three_member_spec();
+        let too_long = "a".repeat(64);
+        s.membros[1].caixa = too_long.clone();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::MembroCaixaInvalid { caixa, reason } = err else {
+            panic!("expected MembroCaixaInvalid");
+        };
+        assert_eq!(caixa, too_long);
+        assert!(
+            reason.contains("63") && reason.contains("64"),
+            "diagnostic must name the cap (63) and the actual length (64): {reason:?}"
+        );
+    }
+
+    #[test]
+    fn membro_caixa_max_length_validates() {
+        // 63 bytes exactly — the K8s DNS-1123 label cap. Pin the boundary
+        // so a future tightening (e.g. dropping to 62) surfaces here as
+        // a regression, mirroring `entrada_host_max_length_validates`
+        // (c7d05ec).
+        let mut s = three_member_spec();
+        s.membros[2].caixa = "a".repeat(63);
+        s.entrada.as_mut().unwrap().para = "a".repeat(63);
+        // remove contratos referencing the renamed member; they'd
+        // raise ContratoMemberMissing otherwise
+        s.contratos
+            .retain(|c| c.de != "payment" && c.para != "payment");
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_canonical_membro_caixa_forms() {
+        // The DNS-1123 label shapes a caixa author is realistically
+        // going to write: single-word lowercase, hyphen-joined, ending
+        // in a digit-suffixed version (`cart-v2`), starting with a
+        // digit (`3rd-party-shim` — DNS-1123 allows this, unlike
+        // DNS-1035 which requires a letter at position 0), single-
+        // character (`a` — boundary). Pin every leg so a future
+        // tightening that bans (e.g.) digit-start identifiers surfaces
+        // here.
+        for form in [
+            "checkout",
+            "cart",
+            "cart-v2",
+            "a",
+            "c0",
+            "3rd-party-shim",
+            "x-1-2-3-4",
+        ] {
+            let mut s = three_member_spec();
+            // Renaming a member also requires updating downstream refs;
+            // drop everything else and rebuild a minimal spec around
+            // just the one renamed member.
+            s.membros = vec![membro(form, "^0.1")];
+            s.contratos = vec![];
+            s.entrada = None;
+            s.validate()
+                .unwrap_or_else(|e| panic!("canonical form {form:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn membro_caixa_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `MembroCaixaEmpty` diagnostic
+        // (which doesn't try to parse) fires before the new
+        // `MembroCaixaInvalid` parse-side diagnostic, so an empty
+        // `:caixa` keeps its narrower error message — the new gate
+        // would also reject `""`, but the empty-string arm is the more
+        // self-locating diagnostic for the author. Mirrors the
+        // `entrada_host_empty_takes_precedence_over_invalid` pin
+        // (c7d05ec).
+        let mut s = three_member_spec();
+        s.membros[1].caixa = String::new();
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, AplicacaoError::MembroCaixaEmpty);
+    }
+
+    #[test]
+    fn membro_caixa_invalid_fires_before_versao_check() {
+        // Order pin: an invalid-shape `:caixa` surfaces *its own*
+        // diagnostic (which names the offending caixa name), even when
+        // the same entry's `:versao` is also empty/invalid. The shape
+        // gate runs first because the diagnostic is more self-locating —
+        // an empty/invalid `:versao` on an invalid-shape caixa name is
+        // a downstream-fix-after-the-caixa-rename concern.
+        let mut s = three_member_spec();
+        s.membros[1].caixa = "Cart".into();
+        s.membros[1].versao = String::new(); // would otherwise raise MembroVersaoEmpty
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, .. } if caixa == "Cart"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn membro_caixa_invalid_fires_before_duplicate_check() {
+        // Order pin: a malformed-shape `:caixa` on an earlier entry
+        // surfaces *its own* diagnostic, even when a later entry would
+        // otherwise collapse onto a duplicate name. The per-entry shape
+        // gate runs inline before the duplicate-key insert, parallel
+        // to `membro_versao_invalid_fires_before_duplicate_check`.
+        let mut s = three_member_spec();
+        s.membros[0].caixa = "Catalog".into();
+        s.membros.push(membro("cart", "^0.2")); // would otherwise raise MembroDuplicate
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::MembroCaixaInvalid { ref caixa, .. } if caixa == "Catalog"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn membro_caixa_invalid_diagnostic_carries_offending_caixa() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:caixa` value verbatim so the author can grep their
+        // caixa.lisp without re-running the build, and carries a
+        // non-empty `reason` naming the specific violation. Same
+        // shape every typed-shape gate enshrines (c7d05ec's
+        // `entrada_host_diagnostic_carries_offending_host`,
+        // 9888b13's `membro_versao_invalid_diagnostic_carries_offending_versao`).
+        let mut s = three_member_spec();
+        s.membros[2].caixa = "BAD_NAME".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::MembroCaixaInvalid { caixa, reason } = err else {
+            panic!("expected MembroCaixaInvalid");
+        };
+        assert_eq!(caixa, "BAD_NAME");
+        assert!(
+            !reason.is_empty(),
+            "MembroCaixaInvalid `reason` must carry a parser-shaped wording"
+        );
     }
 
     #[test]
