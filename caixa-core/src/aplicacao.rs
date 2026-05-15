@@ -432,89 +432,84 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
 
-/// `:membros :caixa` max length, in bytes — the K8s DNS-1123 label
-/// rule's max, which is also the strictest among every K8s object
-/// `metadata.name` axis a validated member name lands in:
+/// K8s DNS-1123 label rule's max length, in bytes — the floor each
+/// apiserver-side schema enforces independently on every `metadata.name`
+/// / Service name / label value axis a validated identifier lands in.
 ///
-///   * the rendered programs.yaml entry's `name:` (consumed by
-///     `lareira-fleet-programs` to derive the
-///     `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name`),
-///   * the K8s [`Service`][svc] `metadata.name` the future
-///     `app-operator` provisions per-member (DNS-1035 label rule:
-///     `[a-z]([-a-z0-9]*[a-z0-9])?` max 63),
-///   * the [`LABEL_PROGRAM`][crate::LABEL_PROGRAM] label value Cilium /
-///     Hubble key identity off (K8s label value rule: `[a-z0-9]([-a-z0-9_.]*[a-z0-9])?`
-///     max 63),
-///   * the composed `<aplicacao>-<de>-to-<para>` `CiliumNetworkPolicy`
-///     `metadata.name` caixa-mesh emits (DNS-1123 subdomain rule:
-///     max 253; per-component max 63 keeps the composed name
-///     well under the subdomain limit even for the longest
-///     plausible Aplicacao+pair triples).
+/// Per-axis breakdown of why 63 is the strictest among the rules each
+/// validated DNS-1123-label-shaped identifier passes through:
 ///
-/// 63 is the floor each apiserver-side schema enforces independently;
-/// a value that fits passes every downstream validator.
+///   * `:membros :caixa` lands as the rendered programs.yaml entry's
+///     `name:` (consumed by `lareira-fleet-programs` to derive the
+///     `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name`), as the K8s
+///     [`Service`][svc] `metadata.name` the future `app-operator`
+///     provisions per-member (DNS-1035 label rule:
+///     `[a-z]([-a-z0-9]*[a-z0-9])?` max 63), as the
+///     [`LABEL_PROGRAM`][crate::LABEL_PROGRAM] label value (K8s label
+///     value rule: `[a-z0-9]([-a-z0-9_.]*[a-z0-9])?` max 63), and as
+///     a component of the composed `<aplicacao>-<de>-to-<para>`
+///     `CiliumNetworkPolicy` `metadata.name`.
+///   * `:placement :clusters` lands as the K8s context name keying
+///     every per-cluster `kubeconfig`, as the `clusters[]` filter the
+///     `lareira-fleet-programs` aggregator applies to scope programs
+///     to their owning cluster, and as the namespace prefix /
+///     `cluster.x-k8s.io/v1beta1/Cluster.metadata.name` cluster
+///     identity the future M4 cross-cluster fan-out emits per entry —
+///     all DNS-1123-label territory.
+///
+/// Lifted to one const so a future identifier axis reaching for the
+/// same rule (the future per-Servico `:nome` gate at the Caixa-load
+/// boundary, the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-member / per-cluster validators) reads the limit from one place.
 ///
 /// [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
-const MEMBRO_CAIXA_MAX_LEN: usize = 63;
+const DNS_1123_LABEL_MAX_LEN: usize = 63;
 
-/// Reject `:membros :caixa` values the K8s apiserver would refuse at
-/// admission time. The contract — the intersection of every cluster-
-/// side rule a validated member name lands in (see
-/// [`MEMBRO_CAIXA_MAX_LEN`] for the per-target axis breakdown):
+/// Predicate: assert that `s` is a valid K8s DNS-1123 label. The
+/// contract — exactly the regex the K8s apiserver enforces on every
+/// `metadata.name` / Service name / label value via OpenAPI v3 admission
+/// validation, `[a-z0-9]([-a-z0-9]*[a-z0-9])?` with a 63-byte cap:
 ///
-///   - 1..=63 bytes (DNS-1123 label limit);
+///   - 1..=63 bytes ([`DNS_1123_LABEL_MAX_LEN`] cap);
 ///   - lowercase ASCII alphanumeric + hyphen (`[a-z0-9-]` only; no
 ///     uppercase — K8s rejects, no underscore — DNS-1123 forbids, no
-///     dot — a `:membros :caixa` entry is a single label, not a
-///     subdomain, no Unicode/IDN — must be pre-encoded);
+///     dot — a single label is not a subdomain, no Unicode/IDN — must
+///     be pre-encoded);
 ///   - non-hyphen ASCII alphanumeric at both label boundaries
 ///     (no `-foo`, no `foo-`).
 ///
-/// Lifted as a typed gate (rather than an inline cascade in
-/// [`AplicacaoSpec::validate_membros`]) so the contract lives in one
-/// place — every future axis reaching for the same DNS-1123 label
-/// rule (the M3.x `:placement :clusters` value-shape gate; the M4
-/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's member-name
-/// validator; the future per-Servico `:nome` gate at the Caixa-load
-/// boundary; the future `cse-lint aplicacao-completeness`
-/// MESH-COMPOSITION §VI cse-lint check's name axis) reaches for the
-/// same predicate, not its own. Same compounding shape as
-/// [`validate_entrada_host`] (c7d05ec),
-/// [`is_canonical_rate_limit_window`] (808017c), and
-/// [`contrato_target_label`] (5dbcfaf).
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — [`validate_membro_caixa`]
+/// for `:membros :caixa`, [`validate_placement_cluster`] for
+/// `:placement :clusters`, every future per-axis lift (the per-Servico
+/// `:nome` gate at the Caixa-load boundary, the M4 CR materializer's
+/// per-member / per-cluster validators) — wraps the same reason in its
+/// own typed `AplicacaoError::*Invalid { <axis>, reason }` variant.
+/// The reason wording is axis-agnostic ("DNS-1123 labels allow only
+/// `[a-z0-9-]`") so two call sites reading the same diagnostic point
+/// at the same rule — drift between two axes' rule enforcement is a
+/// build error visible at this predicate, not a per-renderer "this
+/// passed validate but failed admission" surprise.
 ///
-/// The diagnostic carries the offending `caixa:` verbatim plus a
-/// parser-shaped `reason:` naming the specific violation, so the
-/// author can grep their caixa.lisp for `:caixa "<name>"` and fix
-/// it in one edit. Same diagnostic shape as [`AplicacaoError::EntradaHostInvalid`]
-/// (c7d05ec) and [`AplicacaoError::MembroVersaoInvalid`] (9888b13).
-fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
-    // Empty is already gated by `MembroCaixaEmpty` at the call site;
-    // re-checking here keeps the predicate usable from any future
-    // call site (the M3.x `:placement :clusters` lift, the M4 CR
-    // materializer) without an empty-check footgun.
-    if caixa.is_empty() {
-        return Err(AplicacaoError::MembroCaixaEmpty);
+/// Empty input is rejected at the call site (each axis has its own
+/// narrower `*Empty` variant — [`AplicacaoError::MembroCaixaEmpty`],
+/// [`AplicacaoError::PlacementClusterEmpty`]) before this predicate
+/// is consulted, mirroring `validate_entrada_host`'s empty-first
+/// cascade (c7d05ec).
+fn is_dns_1123_label(s: &str) -> Result<(), String> {
+    if s.len() > DNS_1123_LABEL_MAX_LEN {
+        return Err(format!(
+            "exceeds DNS-1123 label max length of {DNS_1123_LABEL_MAX_LEN} bytes \
+             (got {} bytes; the K8s apiserver rejects longer names at admission \
+             time on every Service / Pod / CR `metadata.name` axis)",
+            s.len()
+        ));
     }
-    if caixa.len() > MEMBRO_CAIXA_MAX_LEN {
-        return Err(AplicacaoError::MembroCaixaInvalid {
-            caixa: caixa.to_string(),
-            reason: format!(
-                "exceeds DNS-1123 label max length of {MEMBRO_CAIXA_MAX_LEN} bytes \
-                 (got {} bytes; the K8s apiserver rejects longer names at admission \
-                 time on every Service / Pod / CR `metadata.name` axis)",
-                caixa.len()
-            ),
-        });
-    }
-    let bytes = caixa.as_bytes();
+    let bytes = s.as_bytes();
     if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
-        return Err(AplicacaoError::MembroCaixaInvalid {
-            caixa: caixa.to_string(),
-            reason: "must start and end with an ASCII alphanumeric character \
-                     (no leading or trailing `-`; DNS-1123 label rule)"
-                .to_string(),
-        });
+        return Err("must start and end with an ASCII alphanumeric character \
+                    (no leading or trailing `-`; DNS-1123 label rule)"
+            .to_string());
     }
     for &b in bytes {
         let valid = b.is_ascii_digit() || b.is_ascii_lowercase() || b == b'-';
@@ -524,16 +519,15 @@ fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
                     "contains uppercase character {ch:?} (K8s DNS-1123 label \
                      names are lowercase-only; use {lower:?})",
                     ch = b as char,
-                    lower = caixa.to_ascii_lowercase()
+                    lower = s.to_ascii_lowercase()
                 )
             } else if b == b'_' {
                 "contains `_` (DNS-1123 labels allow only `[a-z0-9-]`; use `-` \
                  instead)"
                     .to_string()
             } else if b == b'.' {
-                "contains `.` (a `:membros :caixa` entry is a single DNS-1123 \
-                 label, not a subdomain; split into separate members or use `-` \
-                 to namespace)"
+                "contains `.` (a single DNS-1123 label is not a subdomain; \
+                 split into separate entries or use `-` to namespace)"
                     .to_string()
             } else {
                 format!(
@@ -542,13 +536,74 @@ fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
                     ch = b as char
                 )
             };
-            return Err(AplicacaoError::MembroCaixaInvalid {
-                caixa: caixa.to_string(),
-                reason: msg,
-            });
+            return Err(msg);
         }
     }
     Ok(())
+}
+
+/// Reject `:membros :caixa` values the K8s apiserver would refuse at
+/// admission time. Thin wrapper around [`is_dns_1123_label`] that maps
+/// the shared parser-shaped reason into the
+/// [`AplicacaoError::MembroCaixaInvalid`] variant, so the diagnostic
+/// is self-locating (the offending `caixa:` is named verbatim) and
+/// the author can grep their caixa.lisp for `:caixa "<name>"` and
+/// fix it in one edit. Same diagnostic shape as
+/// [`AplicacaoError::EntradaHostInvalid`] (c7d05ec) and
+/// [`AplicacaoError::MembroVersaoInvalid`] (9888b13).
+fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
+    // Empty is already gated by `MembroCaixaEmpty` at the call site;
+    // re-checking here keeps the predicate usable from any future
+    // call site (the M4 CR materializer) without an empty-check
+    // footgun.
+    if caixa.is_empty() {
+        return Err(AplicacaoError::MembroCaixaEmpty);
+    }
+    is_dns_1123_label(caixa).map_err(|reason| AplicacaoError::MembroCaixaInvalid {
+        caixa: caixa.to_string(),
+        reason,
+    })
+}
+
+/// Reject `:placement :clusters` entries the K8s apiserver would refuse
+/// at admission time. Thin wrapper around [`is_dns_1123_label`] that
+/// maps the shared parser-shaped reason into the
+/// [`AplicacaoError::PlacementClusterInvalid`] variant.
+///
+/// Cluster names land in DNS-1123-label territory across every consumer:
+/// the K8s context name keying `kubeconfig`, the `clusters[]` filter
+/// the `lareira-fleet-programs` aggregator applies to scope programs to
+/// their owning cluster (caixa-mesh's `placement.clusters` overlay,
+/// 4d91c0b), the namespace prefix the future cross-cluster fan-out
+/// emits per entry, and the `cluster.x-k8s.io/v1beta1/Cluster.metadata.name`
+/// cluster identity the M4 CR materializer round-trips. Each apiserver-
+/// side schema enforces the DNS-1123 label rule on admission; a
+/// structurally invalid cluster name (`"Rio"`, `"my_cluster"`,
+/// `"team.rio"`, `"-rio"`, `"rio-"`, the >63-byte UUID-shaped
+/// mistaken-identity slug) silently passes the prior empty-/duplicate-
+/// only gate and the failure surfaces as a no-match at filter time —
+/// the workload doesn't land in the named cluster, with no diagnostic
+/// naming the offending `:clusters` entry. Lifting the gate to caixa-
+/// build time mirrors the `:membros :caixa` value-shape trajectory
+/// (3f9d7a0) on the peer name axis.
+///
+/// The diagnostic carries the offending `cluster:` verbatim plus a
+/// parser-shaped `reason:` naming the specific violation, so the
+/// author can grep their caixa.lisp for `:clusters` and fix it in
+/// one edit. Same diagnostic shape as
+/// [`AplicacaoError::MembroCaixaInvalid`] (3f9d7a0).
+fn validate_placement_cluster(cluster: &str) -> Result<(), AplicacaoError> {
+    // Empty is already gated by `PlacementClusterEmpty` at the call
+    // site; re-checking here keeps the predicate usable from any
+    // future call site (the M4 CR materializer's per-cluster validator)
+    // without an empty-check footgun.
+    if cluster.is_empty() {
+        return Err(AplicacaoError::PlacementClusterEmpty);
+    }
+    is_dns_1123_label(cluster).map_err(|reason| AplicacaoError::PlacementClusterInvalid {
+        cluster: cluster.to_string(),
+        reason,
+    })
 }
 
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
@@ -1174,9 +1229,17 @@ impl AplicacaoSpec {
         }
         let mut seen = std::collections::HashSet::new();
         for c in &self.placement.clusters {
-            if c.is_empty() {
-                return Err(AplicacaoError::PlacementClusterEmpty);
-            }
+            // Per-entry value-shape gate: the cluster name lands in
+            // every K8s context / `lareira-fleet-programs` aggregator
+            // filter / future M4 CR materializer's per-cluster axis
+            // a validated `:clusters` entry passes through, each
+            // enforcing the DNS-1123 label rule on admission. Same
+            // typed-shape trajectory as `:membros :caixa` (3f9d7a0)
+            // on the peer name axis — both axes' validated values
+            // are guaranteed-accepted by the apiserver without
+            // re-validation at any downstream renderer or admission
+            // layer.
+            validate_placement_cluster(c)?;
             if !seen.insert(c.as_str()) {
                 return Err(AplicacaoError::PlacementClusterDuplicate { cluster: c.clone() });
             }
@@ -1459,6 +1522,15 @@ pub enum AplicacaoError {
     PlacementWithoutClusters { estrategia: PlacementStrategy },
     #[error(":placement :clusters entry is empty (cluster names must be non-empty)")]
     PlacementClusterEmpty,
+    #[error(
+        ":placement :clusters entry {cluster:?} is not a valid DNS-1123 label: {reason} \
+         (cluster names land in the K8s context keying every per-cluster `kubeconfig`, \
+         in the `lareira-fleet-programs` aggregator's `clusters[]` filter, and in the \
+         future M4 cross-cluster fan-out's per-entry namespace prefix / cluster identity \
+         — each enforces the DNS-1123 label rule; use a lowercase alphanumeric + hyphen \
+         identifier like `\"rio\"` or `\"mar-east\"`)"
+    )]
+    PlacementClusterInvalid { cluster: String, reason: String },
     #[error(":placement :clusters entry {cluster:?} appears more than once")]
     PlacementClusterDuplicate { cluster: String },
     #[error(
@@ -3814,6 +3886,255 @@ mod tests {
         assert!(
             matches!(err, AplicacaoError::PlacementClusterDuplicate { ref cluster } if cluster == "rio"),
             "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_uppercase() {
+        // The canonical "I copied the cluster's display name verbatim"
+        // typo — K8s context names are lowercase per DNS-1123 label
+        // rule, but org docs often round-trip a TitleCase identifier
+        // (`Rio`, `Mar-East`) from an ADR. Mirrors the
+        // `rejects_membro_caixa_with_uppercase` gate's shape (3f9d7a0)
+        // on the peer name axis.
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["Rio".into(), "mar".into()];
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::PlacementClusterInvalid { cluster, reason } = err else {
+            panic!("expected PlacementClusterInvalid, got other variant");
+        };
+        assert_eq!(cluster, "Rio");
+        assert!(
+            reason.contains("uppercase"),
+            "diagnostic must name the violation as `uppercase` (got: {reason:?})"
+        );
+        assert!(
+            reason.contains("\"rio\""),
+            "diagnostic must suggest the lower-cased fix verbatim (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_underscore() {
+        // The canonical "I'm thinking of an env var / hostname slug"
+        // leak — `_` is forbidden by every DNS-1123 / DNS-1035 label
+        // schema. K8s context filtering on `my_cluster` silently misses
+        // the cluster the author intended; the gate moves it to caixa-
+        // build time. Same shape as `rejects_membro_caixa_with_underscore`
+        // (3f9d7a0).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["my_cluster".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, ref reason }
+                    if cluster == "my_cluster" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_dot() {
+        // A `:placement :clusters` entry is a single DNS-1123 *label*,
+        // not a subdomain — even though K8s context names sometimes
+        // carry a dotted form via kubeconfig conventions, the strictest
+        // floor among the use sites (DNS-1035 cluster.x-k8s.io
+        // `metadata.name`, Cilium identity label values) wins. The "I
+        // want to namespace my cluster names with `.`" intent is
+        // expressed via `-` (`mar-east`).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["team.rio".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, ref reason }
+                    if cluster == "team.rio" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_leading_hyphen() {
+        // DNS-1123 / DNS-1035 boundary rule: labels must start and end
+        // with an alphanumeric. The K8s apiserver rejects `-rio`
+        // outright; the rendered fan-out would emit a `metadata.name:
+        // "-rio"` that fails admission far from the source caixa.lisp.
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["-rio".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, ref reason }
+                    if cluster == "-rio" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_trailing_hyphen() {
+        // The symmetric arm of the boundary rule. Pin separately so
+        // both ends are covered against a future relaxation that only
+        // checks one boundary (parallel to
+        // `rejects_membro_caixa_with_trailing_hyphen`, 3f9d7a0).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["rio-".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, .. }
+                    if cluster == "rio-"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_unicode() {
+        // DNS-1123 is ASCII-only; IDN must be pre-encoded as Punycode
+        // before it reaches K8s. The byte-by-byte ASCII validity check
+        // rejects multi-byte UTF-8 sequences by the first byte that
+        // fails `[a-z0-9-]`.
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["rió".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, .. }
+                    if cluster == "rió"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_with_whitespace() {
+        // Whitespace is the canonical "I pasted from a sketch / doc"
+        // footgun. The apiserver rejects every cluster `metadata.name`
+        // value carrying whitespace.
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["rio cluster".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, .. }
+                    if cluster == "rio cluster"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_cluster_too_long() {
+        // 64 bytes exceeds the DNS-1123 label cap by one — the boundary
+        // pin. The diagnostic names both the cap (63) and the actual
+        // length so the author can shorten in one edit. Mirrors
+        // `rejects_membro_caixa_too_long` (3f9d7a0).
+        let mut s = three_member_spec();
+        let too_long = "a".repeat(64);
+        s.placement.clusters = vec![too_long.clone()];
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::PlacementClusterInvalid { cluster, reason } = err else {
+            panic!("expected PlacementClusterInvalid");
+        };
+        assert_eq!(cluster, too_long);
+        assert!(
+            reason.contains("63") && reason.contains("64"),
+            "diagnostic must name the cap (63) and the actual length (64): {reason:?}"
+        );
+    }
+
+    #[test]
+    fn placement_cluster_max_length_validates() {
+        // 63 bytes exactly — the DNS-1123 label cap. Boundary pin so a
+        // future tightening (e.g. dropping to 62) surfaces here as a
+        // regression, mirroring `membro_caixa_max_length_validates`
+        // (3f9d7a0).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["a".repeat(63)];
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_canonical_placement_cluster_forms() {
+        // The DNS-1123 label shapes a caixa author is realistically
+        // going to write for cluster names: single-word lowercase
+        // (`rio`), regional hyphen-joined (`mar-east`), single
+        // character (`a` — boundary), digit-start (`3-prod` — DNS-1123
+        // allows this, unlike DNS-1035), version-suffixed (`prod-v2`).
+        // Pin every leg so a future tightening that bans (e.g.) digit-
+        // start identifiers surfaces here.
+        for form in ["rio", "mar", "mar-east", "a", "p1", "3-prod", "prod-v2"] {
+            let mut s = three_member_spec();
+            s.placement.clusters = vec![form.into()];
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical cluster form {form:?} must validate, got {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn placement_cluster_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `PlacementClusterEmpty` diagnostic
+        // (which doesn't try to parse) fires before the new
+        // `PlacementClusterInvalid` parse-side diagnostic, so an empty
+        // `:clusters` entry keeps its narrower error message — the new
+        // gate would also reject `""`, but the empty-string arm is the
+        // more self-locating diagnostic. Mirrors the
+        // `membro_caixa_empty_takes_precedence_over_invalid` pin
+        // (3f9d7a0).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["rio".into(), "".into()];
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, AplicacaoError::PlacementClusterEmpty);
+    }
+
+    #[test]
+    fn placement_cluster_invalid_fires_before_duplicate_check() {
+        // Order pin: a malformed-shape `:clusters` entry surfaces *its
+        // own* diagnostic, even when a later entry would otherwise
+        // collapse onto a duplicate name. The per-entry shape gate runs
+        // inline before the duplicate-key insert, parallel to
+        // `membro_caixa_invalid_fires_before_duplicate_check` (3f9d7a0).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["Rio".into(), "rio".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementClusterInvalid { ref cluster, .. } if cluster == "Rio"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn placement_cluster_invalid_diagnostic_carries_offending_cluster() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:clusters` value verbatim so the author can grep their
+        // caixa.lisp without re-running the build, and carries a
+        // non-empty `reason` naming the specific violation. Same shape
+        // every typed-shape gate enshrines
+        // (3f9d7a0's `membro_caixa_invalid_diagnostic_carries_offending_caixa`,
+        // c7d05ec's `entrada_host_diagnostic_carries_offending_host`).
+        let mut s = three_member_spec();
+        s.placement.clusters = vec!["BAD_CLUSTER".into()];
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::PlacementClusterInvalid { cluster, reason } = err else {
+            panic!("expected PlacementClusterInvalid");
+        };
+        assert_eq!(cluster, "BAD_CLUSTER");
+        assert!(
+            !reason.is_empty(),
+            "PlacementClusterInvalid `reason` must carry a parser-shaped wording"
         );
     }
 
