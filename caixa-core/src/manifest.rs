@@ -610,6 +610,65 @@ mod tests {
     }
 
     #[test]
+    fn validate_deps_rejects_ambiguous_fonte_in_deps_dev() {
+        // Cross-axis pin: `validate_deps` walks both :deps and
+        // :deps-dev through `Dep::validate`, and the new fonte gate
+        // (`:tag` + `:branch` both set — the canonical "pin drift"
+        // footgun) must surface from the :deps-dev arm with the
+        // offending entry's :nome named. Pin the :deps-dev arm
+        // explicitly so a future shortcut that only walks :deps
+        // surfaces here as a regression.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![Dep {
+            nome: "dev-only".into(),
+            versao: "^0.1".into(),
+            fonte: Some(crate::DepSource::Git {
+                repo: "github:p/x".into(),
+                tag: Some("v1".into()),
+                rev: None,
+                branch: Some("main".into()),
+            }),
+            opcional: false,
+            caracteristicas: vec![],
+        }];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::FontePinAmbiguous { nome, pins } = err else {
+            panic!("expected FontePinAmbiguous from :deps-dev walk");
+        };
+        assert_eq!(nome, "dev-only");
+        assert!(pins.contains(":tag") && pins.contains(":branch"));
+    }
+
+    #[test]
+    fn validate_deps_rejects_empty_repo_in_deps() {
+        // Parity pin on the :deps arm: an empty :repo on the runtime
+        // deps list surfaces the same FonteRepoEmpty diagnostic the
+        // dep.rs per-entry tests pin, naming the offending entry.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep {
+            nome: "runtime".into(),
+            versao: "^0.1".into(),
+            fonte: Some(crate::DepSource::Git {
+                repo: String::new(),
+                tag: Some("v1".into()),
+                rev: None,
+                branch: None,
+            }),
+            opcional: false,
+            caracteristicas: vec![],
+        }];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::FonteRepoEmpty { ref nome }
+                    if nome == "runtime"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
     fn to_lisp_preserves_deps() {
         let src = r#"
 (defcaixa
