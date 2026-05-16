@@ -432,6 +432,15 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
 
+/// K8s Gateway API v1 `HTTPPathMatch.value` max length, in bytes —
+/// same value the apiserver-side OpenAPI schema enforces
+/// (`maxLength: 1024`). Lifted as a typed const so a future axis
+/// reaching for the same bound (the `:contratos :endpoint` value-shape
+/// gate when its third occurrence triggers a lift, the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-path
+/// validation) reads from one place.
+const ENTRADA_PATH_MAX_LEN: usize = 1024;
+
 /// Reject `:membros :caixa` values the K8s apiserver would refuse at
 /// admission time. Thin wrapper around [`crate::render::is_dns_1123_label`]
 /// that maps the shared parser-shaped reason into the
@@ -678,6 +687,137 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                 });
             }
         }
+    }
+    Ok(())
+}
+
+/// Reject `:entrada :paths` entries the K8s Gateway API v1 apiserver
+/// would refuse at admission time. The contract — exactly the shape
+/// the Gateway API `HTTPPathMatch.value` webhook (and its CRD's
+/// `OpenAPI` schema for `maxLength`) enforces on `type: PathPrefix`
+/// matches:
+///
+///   - 1..=1024 bytes (apiserver schema `maxLength: 1024`);
+///   - leading `/` (the `PathPrefix` invariant — already gated by
+///     [`AplicacaoError::EntradaPathNotAbsolute`] at the call site,
+///     re-checked here so the predicate is usable from any future
+///     call site without a shape-mismatch footgun);
+///   - no consecutive `/` characters (the Gateway API path-match
+///     validator rejects `//`);
+///   - no `/./` or `/../` segments (and no trailing `/.` / `/..`) —
+///     path-traversal segments are rejected outright;
+///   - no `?` (query separator: queries are matched separately via
+///     `queryParams`, not in the path);
+///   - no `#` (fragment separator: fragments are client-side and
+///     never reach the gateway);
+///   - no whitespace (space, tab — must be percent-encoded);
+///   - no ASCII control characters (`0x00..0x1F`, `0x7F`);
+///   - no non-ASCII bytes (RFC 3986 requires percent-encoding for
+///     anything outside the unreserved + reserved ASCII set).
+///
+/// Lifted as a typed gate (rather than an inline cascade in
+/// `validate()`) so the contract lives in one place — every future
+/// per-path axis (the `:contratos :endpoint` value-shape gate when
+/// the third path-axis triggers a lift, the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-path
+/// validator, the future per-`HTTPRouteRule` per-path-match emission
+/// when M4 lands per-rule overrides) reaches for the same predicate,
+/// not its own. Same compounding shape as `validate_entrada_host`
+/// (c7d05ec) on the sibling `:entrada :host` axis.
+///
+/// The diagnostic carries the offending `path:` verbatim plus a
+/// parser-shaped `reason:` naming the specific violation, so the
+/// author can grep their caixa.lisp for `:paths` and fix it in one
+/// edit. Same diagnostic shape as `EntradaHostInvalid` (c7d05ec).
+fn validate_entrada_path(path: &str) -> Result<(), AplicacaoError> {
+    // Empty and missing-leading-`/` are already gated at the call
+    // site by `EntradaPathEmpty` and `EntradaPathNotAbsolute`; re-
+    // checking here keeps the predicate usable from any future call
+    // site (the M4 CR materializer's per-path validator) without a
+    // shape-mismatch footgun and preserves the more self-locating
+    // diagnostic when reached directly.
+    if path.is_empty() {
+        return Err(AplicacaoError::EntradaPathEmpty);
+    }
+    if !path.starts_with('/') {
+        return Err(AplicacaoError::EntradaPathNotAbsolute {
+            path: path.to_string(),
+        });
+    }
+    if path.len() > ENTRADA_PATH_MAX_LEN {
+        return Err(AplicacaoError::EntradaPathInvalid {
+            path: path.to_string(),
+            reason: format!(
+                "exceeds Gateway API v1 HTTPPathMatch.value max length of \
+                 {ENTRADA_PATH_MAX_LEN} bytes (got {} bytes; the K8s apiserver \
+                 rejects longer values at admission time)",
+                path.len()
+            ),
+        });
+    }
+    for &b in path.as_bytes() {
+        let reason = if b == b'?' {
+            Some(
+                "must not contain `?` (queries are matched separately via \
+                 HTTPRoute `queryParams`, not in the path; drop the `?…` suffix)"
+                    .to_string(),
+            )
+        } else if b == b'#' {
+            Some(
+                "must not contain `#` (fragments are client-side and never reach \
+                 the gateway; drop the `#…` suffix)"
+                    .to_string(),
+            )
+        } else if b == b' ' || b == b'\t' {
+            Some(format!(
+                "must not contain whitespace character {ch:?} (percent-encode as `%20` \
+                 or use `-`/`_` instead)",
+                ch = b as char
+            ))
+        } else if b < 0x20 || b == 0x7F {
+            Some(format!(
+                "must not contain control character 0x{b:02x} (Gateway API \
+                 HTTPPathMatch.value characters must be printable ASCII)"
+            ))
+        } else if b >= 0x80 {
+            Some(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (RFC 3986 requires \
+                 percent-encoding `%XX` for characters outside the ASCII unreserved \
+                 + reserved set)"
+            ))
+        } else {
+            None
+        };
+        if let Some(r) = reason {
+            return Err(AplicacaoError::EntradaPathInvalid {
+                path: path.to_string(),
+                reason: r,
+            });
+        }
+    }
+    if path.contains("//") {
+        return Err(AplicacaoError::EntradaPathInvalid {
+            path: path.to_string(),
+            reason: "must not contain consecutive `/` characters (the Gateway API \
+                     HTTPPathMatch validator rejects `//`; collapse to a single `/`)"
+                .to_string(),
+        });
+    }
+    if path.contains("/./") || path == "/." || path.ends_with("/.") {
+        return Err(AplicacaoError::EntradaPathInvalid {
+            path: path.to_string(),
+            reason: "must not contain the `.` segment (`/./` or trailing `/.`); \
+                     it is semantically a no-op and the Gateway API rejects it"
+                .to_string(),
+        });
+    }
+    if path.contains("/../") || path == "/.." || path.ends_with("/..") {
+        return Err(AplicacaoError::EntradaPathInvalid {
+            path: path.to_string(),
+            reason: "must not contain the `..` parent-segment (`/../` or trailing \
+                     `/..`); path traversal is rejected by the Gateway API"
+                .to_string(),
+        });
     }
     Ok(())
 }
@@ -983,6 +1123,27 @@ impl AplicacaoSpec {
                 if !p.starts_with('/') {
                     return Err(AplicacaoError::EntradaPathNotAbsolute { path: p.clone() });
                 }
+                // Per-entry value-shape gate: the path lands verbatim
+                // as a K8s Gateway API HTTPRoute `matches[].path.value`
+                // (caixa-mesh/src/lib.rs:498), apiserver-validated
+                // against `maxLength: 1024` + the Gateway API webhook's
+                // path-grammar rules (no `//`, no `/./`, no `/../`, no
+                // query/fragment separators, no whitespace, no control
+                // characters, no non-ASCII bytes). Until this gate
+                // landed `validate` only refused the empty string and
+                // missing-leading-slash (eb3456d); a structurally
+                // invalid path (`"/api?q=1"`, `"/api#frag"`,
+                // `"/api bar"`, `"/api/../etc"`, `"/api//cart"`, a
+                // 1025-byte URL-shaped slug) silently passed validate
+                // and the failure surfaced at `kubectl apply` time as
+                // a Gateway API webhook rejection, far from the source
+                // caixa.lisp, with no field naming the offending
+                // `:paths` entry. Lifting the gate to caixa-build time
+                // mirrors the `:entrada :host` value-shape trajectory
+                // (c7d05ec) on the sibling axis — every author surface
+                // that emits a Gateway API field now matches the
+                // apiserver's accepted set at validate time.
+                validate_entrada_path(p)?;
                 if !seen.insert(p.as_str()) {
                     return Err(AplicacaoError::EntradaPathDuplicate { path: p.clone() });
                 }
@@ -1403,6 +1564,14 @@ pub enum AplicacaoError {
         ":entrada :paths entry {path:?} must start with `/` (Gateway API PathPrefix invariant)"
     )]
     EntradaPathNotAbsolute { path: String },
+    #[error(
+        ":entrada :paths entry {path:?} is not a valid Gateway API v1 HTTPPathMatch \
+         value: {reason} (the K8s apiserver enforces the same shape on \
+         `HTTPRoute.spec.rules[].matches[].path.value` at admission time; use a \
+         single-`/`-prefixed printable-ASCII path like `\"/api/cart\"` — RFC 3986 \
+         requires percent-encoding `%XX` for non-ASCII and whitespace)"
+    )]
+    EntradaPathInvalid { path: String, reason: String },
     #[error(":entrada :paths entry {path:?} appears more than once")]
     EntradaPathDuplicate { path: String },
     #[error(
@@ -3083,6 +3252,288 @@ mod tests {
         let mut s = three_member_spec();
         s.entrada.as_mut().unwrap().port = 0;
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPortZero);
+    }
+
+    // ── :entrada :paths value-shape gate ─────────────────────────────
+    //
+    // Mirrors the `:entrada :host` value-shape suite (c7d05ec) on the
+    // sibling `:paths` axis. Every authoring footgun the K8s Gateway
+    // API v1 apiserver / webhook would catch on `HTTPRoute.spec.rules[]
+    // .matches[].path.value` (caixa-mesh/src/lib.rs:498) at admission
+    // time now becomes a caixa-build-time `EntradaPathInvalid` with
+    // the offending `:paths` entry named verbatim.
+
+    #[test]
+    fn rejects_entrada_path_with_query() {
+        // Fail-before-pass-after pin — pre-gate the `?q=1` suffix
+        // silently passed validate and the Gateway API webhook
+        // rejected it at apply time with no source citation.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart?q=1".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/cart?q=1" && reason.contains("must not contain `?`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_fragment() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart#frag".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/cart#frag" && reason.contains("must not contain `#`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_space() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/my cart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/my cart" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_tab() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/\tcart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/\tcart" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_control_char() {
+        // 0x01 (SOH) — a non-whitespace control char surfaces the
+        // distinct "control character" reason arm, separate from
+        // the whitespace arm. Pinned so a future refactor that
+        // collapses the two arms can't accidentally drop the more
+        // self-locating diagnostic.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/\x01cart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/\x01cart" && reason.contains("control character")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_non_ascii() {
+        // `café` — the un-percent-encoded UTF-8 footgun the RFC 3986
+        // unreserved-set rule rejects. The Gateway API webhook
+        // rejects literal non-ASCII bytes; percent-encoding is the
+        // only way to author non-ASCII in a path.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/café".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/café" && reason.contains("non-ASCII")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_consecutive_slashes() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api//cart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api//cart" && reason.contains("consecutive `/`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_dot_segment() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/./cart".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/./cart" && reason.contains("`.` segment")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_trailing_dot_segment() {
+        // The bare `/.` and the trailing `/foo/.` are both rejected
+        // by the Gateway API webhook; pinned separately so a future
+        // narrowing that catches only the inner form surfaces here.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/.".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/." && reason.contains("`.` segment")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_parent_segment() {
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/../etc".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/../etc" && reason.contains("`..` parent-segment")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_with_trailing_parent_segment() {
+        // Trailing `/..` — symmetric arm of the parent-segment rule,
+        // pinned separately so a future relaxation that only checks
+        // the inner form (`/../`) surfaces here.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/..".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/.." && reason.contains("`..` parent-segment")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_path_too_long() {
+        // 1025-byte path — one over the Gateway API HTTPPathMatch.value
+        // maxLength cap of 1024. Use a `/api/` prefix + a 1020-byte
+        // ASCII-alphanumeric body so only the length rule fires.
+        let mut s = three_member_spec();
+        let big = format!("/api/{}", "a".repeat(1020));
+        assert_eq!(big.len(), 1025);
+        s.entrada.as_mut().unwrap().paths = vec![big.clone()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == &big && reason.contains("max length of 1024")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_path_max_length_validates() {
+        // 1024-byte path — exactly the Gateway API HTTPPathMatch.value
+        // maxLength cap. Boundary pin: drift in the cap surfaces here
+        // and at `rejects_entrada_path_too_long` simultaneously.
+        let mut s = three_member_spec();
+        let big = format!("/api/{}", "a".repeat(1019));
+        assert_eq!(big.len(), 1024);
+        s.entrada.as_mut().unwrap().paths = vec![big];
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn entrada_accepts_canonical_paths() {
+        // Positive-control sweep — every form the Gateway API
+        // apiserver accepts must round-trip through validate. Covers
+        // the root catch-all, plain paths, dot-prefixed segments
+        // (hidden-file-style, distinct from `.` and `..` segments
+        // which are rejected), digit-bearing segments, the canonical
+        // route-template `:param` form (`:` is RFC 3986 reserved-set
+        // valid in paths), trailing-slash form, percent-encoded
+        // segments, and an interior `..` *substring* (`/foo..bar` is
+        // not the `..` segment and is allowed).
+        for path in [
+            "/",
+            "/api/cart",
+            "/healthz",
+            "/api/.config",
+            "/v1/products",
+            "/products/:id",
+            "/api/cart/",
+            "/api/caf%C3%A9",
+            "/foo..bar",
+            "/...",
+        ] {
+            let mut s = three_member_spec();
+            s.entrada.as_mut().unwrap().paths = vec![path.into()];
+            s.validate()
+                .unwrap_or_else(|e| panic!("expected {path:?} to validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn entrada_path_empty_takes_precedence_over_invalid() {
+        // Ordering pin: `EntradaPathEmpty` is the more self-locating
+        // diagnostic on `""` and must lead — `validate_entrada_path`
+        // is only reached after the empty-check fires at the call
+        // site. (The predicate itself defends against direct
+        // invocation by returning the same error on `""`.)
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["".into()];
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPathEmpty);
+    }
+
+    #[test]
+    fn entrada_path_not_absolute_takes_precedence_over_invalid() {
+        // Ordering pin: a path without a leading `/` surfaces the
+        // narrower `EntradaPathNotAbsolute` diagnostic first; the
+        // value-shape gate is only consulted on paths that already
+        // satisfy the absolute-prefix invariant.
+        let mut s = three_member_spec();
+        // `bad path` would fire the whitespace rule under the
+        // value-shape gate, but missing-leading-`/` is the more
+        // self-locating diagnostic.
+        s.entrada.as_mut().unwrap().paths = vec!["bad path".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathNotAbsolute { ref path } if path == "bad path"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_path_invalid_fires_before_duplicate_check() {
+        // Ordering pin: a malformed path on the *first* entry of a
+        // would-be duplicate pair fires the value-shape gate before
+        // the duplicate gate, mirroring the
+        // `placement_cluster_invalid_fires_before_duplicate_check`
+        // (6cbb900) pattern on the peer axis.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api?q".into(), "/api?q".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, .. } if path == "/api?q"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_path_diagnostic_carries_offending_path() {
+        // Diagnostic-shape pin — the offending path + a non-empty
+        // reason flow through verbatim so the author can grep their
+        // caixa.lisp for `:paths` and fix it in one edit. Same shape
+        // as `entrada_host_diagnostic_carries_offending_host` (c7d05ec).
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api?q=1".into()];
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::EntradaPathInvalid { path, reason } => {
+                assert_eq!(path, "/api?q=1");
+                assert!(!reason.is_empty(), "reason field must be non-empty");
+            }
+            other => panic!("expected EntradaPathInvalid, got {other:?}"),
+        }
     }
 
     // ── :entrada :host value-shape gate ──────────────────────────────
