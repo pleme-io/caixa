@@ -3,9 +3,11 @@ use tatara_lisp::DeriveTataraDomain;
 
 use std::time::Duration;
 
+use thiserror::Error;
+
 use crate::{
-    behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec, supervisor::SupervisorSpec,
-    upgrade::UpgradeFromEntry, CaixaKind, Dep,
+    behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec, render::is_dns_1123_label,
+    supervisor::SupervisorSpec, upgrade::UpgradeFromEntry, CaixaKind, Dep,
 };
 
 /// Inline duration parser for `restart_window`. Mirrors
@@ -279,6 +281,63 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:nome` values the K8s apiserver would refuse at admission
+    /// time. The top-level Caixa identity flows directly into every
+    /// substrate-side artifact's `metadata.name` axis: the
+    /// `lareira-<nome>` Helm chart name ([`caixa-helm::lib::chart_name`]),
+    /// the programs.yaml `name:` entry the `lareira-fleet-programs`
+    /// aggregator keys ComputeUnit derivation off
+    /// ([`caixa-flux::lib::programs_yaml_entry`]), the
+    /// `LABEL_APLICACAO` label value carried on every Aplicacao-owned
+    /// pod and the per-`:contratos` CiliumNetworkPolicy `metadata.name`
+    /// (`<aplicacao>-<de>-to-<para>`) and the per-`:entrada`
+    /// `<aplicacao>-<para>` HTTPRoute `metadata.name`
+    /// ([`caixa-mesh::lib::cilium_network_policies`],
+    /// [`caixa-mesh::lib::gateway_routes`]), and the default
+    /// `lib/<nome>.lisp` / `exe/<nome>` layout paths
+    /// ([`crate::StandardLayout::verify`]). Each K8s apiserver-side
+    /// schema enforces the DNS-1123 label rule on admission; a
+    /// structurally invalid `:nome` (`"MyApp"` — the canonical
+    /// "I copied the display name verbatim" footgun, `"my_app"` — the
+    /// Python-/Postgres-leak, `"team.app"` — `:nome` is a single label
+    /// not a subdomain, `"-app"` / `"app-"` — DNS-1123 boundary
+    /// violations, `"my app"` — the paste-from-doc footgun, `"café"` —
+    /// IDN must be pre-encoded as Punycode, the 64-byte UUID-shaped
+    /// over-cap slug) silently passed [`Caixa::from_lisp`] and the
+    /// failure surfaced at `kubectl apply` time as a `metadata.name:
+    /// Invalid value` rejection on whichever derived artifact admitted
+    /// first, far from the source `caixa.lisp` and without any field
+    /// naming the offending `:nome`.
+    ///
+    /// Thin wrapper around [`crate::render::is_dns_1123_label`] (the
+    /// substrate-side predicate the per-axis name gates already share:
+    /// `:membros :caixa` 3f9d7a0, `:placement :clusters` 6cbb900,
+    /// `:children :caixa` 31bfa43) that maps the shared parser-shaped
+    /// reason into the [`ManifestError::NomeInvalid`] variant, so the
+    /// diagnostic is self-locating (the offending `:nome` is named
+    /// verbatim) and the author can grep their `caixa.lisp` for
+    /// `:nome "<value>"` and fix it in one edit. Same diagnostic shape
+    /// every per-axis sibling gate already exposes
+    /// ([`crate::AplicacaoError::MembroCaixaInvalid`],
+    /// [`crate::AplicacaoError::PlacementClusterInvalid`],
+    /// [`crate::SupervisorError::ChildCaixaInvalid`]).
+    ///
+    /// Empty `:nome` (which [`Caixa::from_lisp`] does not reject — the
+    /// derive macro stores the raw String) is gated by the narrower
+    /// [`ManifestError::NomeEmpty`] arm before the predicate is
+    /// consulted, mirroring the empty-first cascade every per-axis
+    /// name gate already uses (e.g. `MembroCaixaEmpty` before
+    /// `MembroCaixaInvalid`, `EmptyChildName` before `ChildCaixaInvalid`).
+    pub fn validate_nome(&self) -> Result<(), ManifestError> {
+        if self.nome.is_empty() {
+            return Err(ManifestError::NomeEmpty);
+        }
+        is_dns_1123_label(&self.nome).map_err(|reason| ManifestError::NomeInvalid {
+            nome: self.nome.clone(),
+            reason,
+        })
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -347,6 +406,37 @@ impl Caixa {
         out.push_str(")\n");
         out
     }
+}
+
+/// Errors raised by top-level [`Caixa`] validators that don't fit
+/// the per-axis [`DepError`] / [`crate::AplicacaoError`] /
+/// [`crate::SupervisorError`] / [`crate::LayoutError`] families —
+/// the Caixa's own identity axes (`:nome`) that flow through every
+/// substrate-side artifact's `metadata.name` derivation.
+///
+/// A future top-level sum (the M4 `CaixaError` the [`DepError`]
+/// doc-comment anticipates) can hold one of each per-axis error
+/// family without reshaping individual diagnostics; this enum is
+/// the first such per-Caixa-identity family.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ManifestError {
+    #[error(
+        ":nome is empty (every caixa must name itself; the value flows \
+         into every K8s artifact's `metadata.name` derivation and into \
+         the default `lib/<nome>.lisp` / `exe/<nome>` layout paths)"
+    )]
+    NomeEmpty,
+    #[error(
+        ":nome {nome:?} is not a valid DNS-1123 label: {reason} (the K8s \
+         apiserver enforces this rule on every `metadata.name` the \
+         caixa's substrate-side renderers derive from `:nome` — the \
+         `lareira-<nome>` Helm chart name, the programs.yaml entry \
+         name, the `LABEL_APLICACAO` label value, the `<aplicacao>-<de>-to-<para>` \
+         CiliumNetworkPolicy name, the `<aplicacao>-<para>` HTTPRoute \
+         name; use a lowercase alphanumeric + hyphen identifier like \
+         `\"checkout\"` or `\"cart-v2\"`)"
+    )]
+    NomeInvalid { nome: String, reason: String },
 }
 
 #[cfg(test)]
@@ -682,5 +772,238 @@ mod tests {
         let emitted = c1.to_lisp();
         let c2 = Caixa::from_lisp(&emitted).expect("round trip");
         assert_eq!(c1.deps, c2.deps);
+    }
+
+    // ── Caixa::validate_nome — top-level :nome value-shape gate ─────────
+
+    fn caixa_with_nome(nome: &str) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("placeholder")).unwrap();
+        c.nome = nome.to_string();
+        c
+    }
+
+    #[test]
+    fn validate_nome_accepts_canonical_template() {
+        // Positive control: the bare `feira init`-style template's
+        // `:nome` ("demo") is a canonical DNS-1123 label; the gate must
+        // not regress this baseline shape. A future tightening of the
+        // accepted set surfaces here as a test failure first.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_nome().unwrap();
+    }
+
+    #[test]
+    fn validate_nome_accepts_canonical_forms() {
+        // Positive-set sweep: each realistic caixa-name shape the K8s
+        // apiserver accepts as a `metadata.name` label must pass —
+        // single-word, hyphen-joined, version-suffixed, single-char,
+        // two-char, digit-start (DNS-1123 allows this; the stricter
+        // DNS-1035 Service-name rule doesn't), version-suffix-bearing.
+        // Mirrors `accepts_canonical_membro_caixa_forms` (3f9d7a0) on
+        // the peer member-name axis.
+        for nome in [
+            "checkout",
+            "cart-v2",
+            "a",
+            "db",
+            "3rd-party-shim",
+            "payment-retry",
+            "0",
+        ] {
+            caixa_with_nome(nome)
+                .validate_nome()
+                .unwrap_or_else(|e| panic!("canonical :nome {nome:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_nome_rejects_empty() {
+        // Fail-before-pass-after pin: `Caixa::from_lisp` does not refuse
+        // an empty `:nome` (the derive macro stores the raw String);
+        // the gate's empty arm names the offending axis with a narrower
+        // diagnostic than the `NomeInvalid` parse arm would emit.
+        let c = caixa_with_nome("");
+        let err = c.validate_nome().unwrap_err();
+        assert_eq!(err, ManifestError::NomeEmpty);
+    }
+
+    #[test]
+    fn validate_nome_rejects_uppercase() {
+        // The canonical "I copied the TitleCase display name verbatim"
+        // footgun. The K8s apiserver rejects `metadata.name: MyApp` at
+        // admission on every derived artifact (Helm chart, ComputeUnit,
+        // CNP, HTTPRoute, label values); the gate moves the diagnostic
+        // to the source `caixa.lisp` and the reason suggests the
+        // lowercased fix verbatim.
+        let c = caixa_with_nome("MyApp");
+        let err = c.validate_nome().unwrap_err();
+        let ManifestError::NomeInvalid { nome, reason } = err else {
+            panic!("expected NomeInvalid for uppercase :nome");
+        };
+        assert_eq!(nome, "MyApp");
+        assert!(
+            reason.contains("uppercase") && reason.contains("myapp"),
+            "diagnostic must name the violation + the lowercased fix, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_underscore() {
+        // The Python-/Postgres-style `snake_case` leak. DNS-1123 forbids
+        // `_`; the apiserver rejects on admission across every derived
+        // artifact. Same fixture pinned for `:membros :caixa` (3f9d7a0)
+        // and `:children :caixa` (31bfa43).
+        let c = caixa_with_nome("my_app");
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeInvalid { ref nome, ref reason }
+                    if nome == "my_app" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_dot() {
+        // A `:nome` is a single DNS-1123 label, not a subdomain. The
+        // "I want to namespace with `.`" footgun the gate redirects to
+        // `-` via the shared predicate's reason wording.
+        let c = caixa_with_nome("team.app");
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeInvalid { ref nome, ref reason }
+                    if nome == "team.app" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_leading_hyphen() {
+        // DNS-1123 boundary rule: the label must start with an ASCII
+        // alphanumeric. Pin the leading-`-` arm explicitly.
+        let c = caixa_with_nome("-app");
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeInvalid { ref nome, .. } if nome == "-app"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_trailing_hyphen() {
+        // Symmetric arm of the boundary rule, pinned separately so a
+        // future relaxation that only checks the leading position
+        // surfaces here. Mirrors `rejects_membro_caixa_with_trailing_hyphen`
+        // and `_with_trailing_hyphen` on the supervisor / aplicacao
+        // axes.
+        let c = caixa_with_nome("app-");
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeInvalid { ref nome, .. } if nome == "app-"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_unicode() {
+        // IDN must be pre-encoded as Punycode (`xn--…`); raw Unicode
+        // bytes are rejected by the K8s apiserver on every name axis.
+        let c = caixa_with_nome("café");
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeInvalid { ref nome, .. } if nome == "café"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_whitespace() {
+        // The paste-from-sketch / paste-from-spec footgun. Internal
+        // whitespace is rejected by every K8s name axis.
+        let c = caixa_with_nome("my app");
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeInvalid { ref nome, .. } if nome == "my app"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_rejects_too_long() {
+        // 64-byte boundary pin: the K8s apiserver rejects any
+        // `metadata.name` over 63 bytes at admission; the diagnostic
+        // names both the 63-byte cap and the actual length so the
+        // author can shorten in one edit. Mirrors `_too_long` on the
+        // peer member-/cluster-/child-name axes.
+        let over = "a".repeat(crate::DNS_1123_LABEL_MAX_LEN + 1);
+        let c = caixa_with_nome(&over);
+        let err = c.validate_nome().unwrap_err();
+        let ManifestError::NomeInvalid { nome, reason } = err else {
+            panic!("expected NomeInvalid for over-cap :nome");
+        };
+        assert_eq!(nome.len(), crate::DNS_1123_LABEL_MAX_LEN + 1);
+        assert!(
+            reason.contains("63") && reason.contains("64"),
+            "diagnostic must name the cap + actual length, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn nome_max_length_validates() {
+        // The 63-byte cap exactly — the boundary-accepting case pinned
+        // alongside `validate_nome_rejects_too_long` so a future cap
+        // shift surfaces both arms simultaneously. Mirrors
+        // `membro_caixa_max_length_validates`,
+        // `placement_cluster_max_length_validates`,
+        // `child_caixa_max_length_validates`.
+        let at_cap = "a".repeat(crate::DNS_1123_LABEL_MAX_LEN);
+        caixa_with_nome(&at_cap).validate_nome().unwrap();
+    }
+
+    #[test]
+    fn nome_empty_takes_precedence_over_invalid() {
+        // Order pin: the empty arm fires before the predicate is
+        // consulted. Empty < invalid in self-locating-ness — the
+        // narrower `NomeEmpty` diagnostic doesn't carry a useless
+        // `nome: ""` reference into the parser-shaped reason. Mirrors
+        // `membro_caixa_empty_takes_precedence_over_invalid` on the
+        // peer axis (3f9d7a0).
+        let c = caixa_with_nome("");
+        assert_eq!(c.validate_nome().unwrap_err(), ManifestError::NomeEmpty);
+    }
+
+    #[test]
+    fn nome_invalid_diagnostic_carries_offending_nome() {
+        // Diagnostic-shape pin: the error names the offending `:nome`
+        // verbatim with a non-empty parser-shaped reason, so a `feira
+        // lint` run can render the diagnostic without re-parsing.
+        // Mirrors `membro_caixa_invalid_diagnostic_carries_offending_caixa`.
+        let c = caixa_with_nome("MyApp");
+        let err = c.validate_nome().unwrap_err();
+        let ManifestError::NomeInvalid { nome, reason } = err else {
+            panic!("expected NomeInvalid variant");
+        };
+        assert_eq!(nome, "MyApp");
+        assert!(
+            !reason.is_empty(),
+            "NomeInvalid `reason` must carry the predicate's wording verbatim"
+        );
     }
 }
