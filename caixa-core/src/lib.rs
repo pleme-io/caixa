@@ -33,7 +33,7 @@ pub use dep::{Dep, DepError, DepSource};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{LimitsError, LimitsSpec};
-pub use manifest::Caixa;
+pub use manifest::{Caixa, ManifestError};
 pub use render::{
     DNS_1123_LABEL_MAX_LEN, KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_LABELS,
     KUBE_KEY_MATCH_LABELS, KUBE_KEY_METADATA, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, KindMismatch,
