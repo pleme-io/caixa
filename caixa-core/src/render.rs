@@ -126,6 +126,145 @@ pub fn require_kind(caixa: &Caixa, expected: CaixaKind) -> Result<(), KindMismat
     }
 }
 
+/// K8s DNS-1123 label rule's max length, in bytes — the floor each
+/// apiserver-side schema enforces independently on every `metadata.name`
+/// / Service name / label value axis a validated identifier lands in.
+///
+/// Per-axis breakdown of why 63 is the strictest among the rules each
+/// validated DNS-1123-label-shaped identifier passes through:
+///
+///   * `:membros :caixa` lands as the rendered programs.yaml entry's
+///     `name:` (consumed by `lareira-fleet-programs` to derive the
+///     `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name`), as the K8s
+///     [`Service`][svc] `metadata.name` the future `app-operator`
+///     provisions per-member (DNS-1035 label rule:
+///     `[a-z]([-a-z0-9]*[a-z0-9])?` max 63), as the
+///     [`LABEL_PROGRAM`] label value (K8s label value rule:
+///     `[a-z0-9]([-a-z0-9_.]*[a-z0-9])?` max 63), and as a component of
+///     the composed `<aplicacao>-<de>-to-<para>` `CiliumNetworkPolicy`
+///     `metadata.name`.
+///   * `:placement :clusters` lands as the K8s context name keying
+///     every per-cluster `kubeconfig`, as the `clusters[]` filter the
+///     `lareira-fleet-programs` aggregator applies to scope programs
+///     to their owning cluster, and as the namespace prefix /
+///     `cluster.x-k8s.io/v1beta1/Cluster.metadata.name` cluster
+///     identity the future M4 cross-cluster fan-out emits per entry —
+///     all DNS-1123-label territory.
+///   * `:children :caixa` lands as the rendered
+///     `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name` per child the
+///     supervisor materializes, as the [`LABEL_PROGRAM`] label value on
+///     every emitted child's pod identity, and as the per-child
+///     [`Service`][svc] `metadata.name` the future wasm-operator
+///     provisions — every K8s apiserver-side schema on each landing site
+///     enforces the same DNS-1123 label rule on admission.
+///
+/// Lifted to one const so a future identifier axis reaching for the
+/// same rule (the future per-Servico `:nome` gate at the Caixa-load
+/// boundary, the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-member / per-cluster validators, the future per-Aplicacao
+/// `:nome` gate when `feira init` lands DNS-1123 enforcement on the
+/// scaffold's `--nome` flag) reads the limit from one place.
+///
+/// [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
+pub const DNS_1123_LABEL_MAX_LEN: usize = 63;
+
+/// Predicate: assert that `s` is a valid K8s DNS-1123 label. The
+/// contract — exactly the regex the K8s apiserver enforces on every
+/// `metadata.name` / Service name / label value via OpenAPI v3 admission
+/// validation, `[a-z0-9]([-a-z0-9]*[a-z0-9])?` with a 63-byte cap:
+///
+///   - 1..=63 bytes ([`DNS_1123_LABEL_MAX_LEN`] cap);
+///   - lowercase ASCII alphanumeric + hyphen (`[a-z0-9-]` only; no
+///     uppercase — K8s rejects, no underscore — DNS-1123 forbids, no
+///     dot — a single label is not a subdomain, no Unicode/IDN — must
+///     be pre-encoded);
+///   - non-hyphen ASCII alphanumeric at both label boundaries
+///     (no `-foo`, no `foo-`).
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — `validate_membro_caixa`
+/// for `:membros :caixa`, `validate_placement_cluster` for
+/// `:placement :clusters`, `validate_child_caixa` for `:children :caixa`,
+/// every future per-axis lift (the per-Servico `:nome` gate at the
+/// Caixa-load boundary, the M4 CR materializer's per-member /
+/// per-cluster validators) — wraps the same reason in its own typed
+/// `*Error::*Invalid { <axis>, reason }` variant. The reason wording is
+/// axis-agnostic ("DNS-1123 labels allow only `[a-z0-9-]`") so every
+/// call site reading the same diagnostic points at the same rule —
+/// drift between any two axes' rule enforcement is a build error
+/// visible at this predicate, not a per-renderer "this passed validate
+/// but failed admission" surprise.
+///
+/// Empty input is rejected at the call site (each axis has its own
+/// narrower `*Empty` variant — [`crate::AplicacaoError::MembroCaixaEmpty`],
+/// [`crate::AplicacaoError::PlacementClusterEmpty`],
+/// [`crate::SupervisorError::EmptyChildName`]) before this predicate
+/// is consulted, mirroring `validate_entrada_host`'s empty-first
+/// cascade (c7d05ec).
+///
+/// Lifted from `caixa-core::aplicacao` (where it was first inlined for
+/// `:membros :caixa` in 3f9d7a0 and then reused for `:placement :clusters`
+/// in 6cbb900) so the third axis reaching for the rule (`:children
+/// :caixa` on the supervisor tree) lands as a thin five-line wrapper
+/// rather than re-inlining 40 lines of regex enforcement. The
+/// "before its third occurrence" boundary the PRIME DIRECTIVE
+/// duplication-budget rule draws (THEORY.md §I.3.5: "the duplication
+/// budget is zero") promotes the predicate to a typed substrate-side
+/// primitive on the same trajectory the M2-overlay and label-selector
+/// helpers (9e3a057, 9d09cfb, 9dbeafd, 31455a7, 07a4544) already follow.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / boundary / character-class), without wrapping in any
+/// error variant — every caller maps the same `String` into its own
+/// typed `*Invalid { <axis>, reason }` enum variant.
+pub fn is_dns_1123_label(s: &str) -> Result<(), String> {
+    if s.len() > DNS_1123_LABEL_MAX_LEN {
+        return Err(format!(
+            "exceeds DNS-1123 label max length of {DNS_1123_LABEL_MAX_LEN} bytes \
+             (got {} bytes; the K8s apiserver rejects longer names at admission \
+             time on every Service / Pod / CR `metadata.name` axis)",
+            s.len()
+        ));
+    }
+    let bytes = s.as_bytes();
+    if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
+        return Err("must start and end with an ASCII alphanumeric character \
+                    (no leading or trailing `-`; DNS-1123 label rule)"
+            .to_string());
+    }
+    for &b in bytes {
+        let valid = b.is_ascii_digit() || b.is_ascii_lowercase() || b == b'-';
+        if !valid {
+            let msg = if b.is_ascii_uppercase() {
+                format!(
+                    "contains uppercase character {ch:?} (K8s DNS-1123 label \
+                     names are lowercase-only; use {lower:?})",
+                    ch = b as char,
+                    lower = s.to_ascii_lowercase()
+                )
+            } else if b == b'_' {
+                "contains `_` (DNS-1123 labels allow only `[a-z0-9-]`; use `-` \
+                 instead)"
+                    .to_string()
+            } else if b == b'.' {
+                "contains `.` (a single DNS-1123 label is not a subdomain; \
+                 split into separate entries or use `-` to namespace)"
+                    .to_string()
+            } else {
+                format!(
+                    "contains invalid character {ch:?} (DNS-1123 labels allow \
+                     only `[a-z0-9-]`)",
+                    ch = b as char
+                )
+            };
+            return Err(msg);
+        }
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -1424,5 +1563,52 @@ mod tests {
         .unwrap();
         let v_clone = v.clone();
         assert_eq!(v, v_clone);
+    }
+
+    // ── is_dns_1123_label — shared DNS-1123 label predicate ──────────────
+
+    #[test]
+    fn dns_1123_label_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts the same canonical
+        // shapes its three caller axes (`:membros :caixa`,
+        // `:placement :clusters`, `:children :caixa`) accept at their own
+        // gates. Drift between this list and the per-axis positive-set
+        // sweeps surfaces here — one source of truth for the rule.
+        for s in [
+            "worker",
+            "a",
+            "0",
+            "cache-v2",
+            "payment-retry",
+            "2-pool",
+            "mar-east",
+        ] {
+            is_dns_1123_label(s)
+                .unwrap_or_else(|e| panic!("canonical DNS-1123 label {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn dns_1123_label_rejects_uppercase_with_lower_suggestion() {
+        // The diagnostic carries the lower-cased fix verbatim so every
+        // caller's per-axis `*Invalid { reason }` wrapping the predicate's
+        // output reads back as a one-edit-fix suggestion. Pinned at the
+        // substrate layer so the suggestion shape lives in one place.
+        let err = is_dns_1123_label("Rio").unwrap_err();
+        assert!(err.contains("uppercase"), "got: {err:?}");
+        assert!(err.contains("\"rio\""), "got: {err:?}");
+    }
+
+    #[test]
+    fn dns_1123_label_rejects_at_64_byte_boundary() {
+        // The 63-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously.
+        let max_ok = "a".repeat(63);
+        is_dns_1123_label(&max_ok).unwrap();
+        let too_long = "a".repeat(64);
+        let err = is_dns_1123_label(&too_long).unwrap_err();
+        assert!(err.contains("63"), "got: {err:?}");
+        assert!(err.contains("64"), "got: {err:?}");
     }
 }

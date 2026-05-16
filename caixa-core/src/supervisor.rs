@@ -206,6 +206,38 @@ impl SupervisorSpec {
             if child.caixa.is_empty() {
                 return Err(SupervisorError::EmptyChildName);
             }
+            // Every emitted cluster artifact's `metadata.name` for a
+            // supervised child derives from this `:children :caixa` value
+            // verbatim — the rendered `wasm.pleme.io/v1alpha1/ComputeUnit
+            // .metadata.name` per child, the [`crate::LABEL_PROGRAM`]
+            // label value on every child's pod identity, and the per-
+            // child K8s [`Service`][svc] `metadata.name` the future
+            // wasm-operator (M3) provisions for inter-child supervision
+            // tree wiring. Each apiserver-side schema on each landing
+            // site enforces the DNS-1123 label rule on admission; a
+            // structurally invalid child name (`"Worker"`, `"my_worker"`,
+            // `"team.worker"`, `"-worker"`, `"worker-"`, the >63-byte
+            // UUID-shaped mistaken-identity slug) silently passes the
+            // prior empty-/duplicate-only gate and the failure surfaces
+            // at `kubectl apply` time as a `metadata.name: Invalid value`
+            // rejection, far from the source caixa.lisp, with no field
+            // naming the offending `:children` entry. Lifting the gate
+            // to caixa-build time mirrors the `:membros :caixa` value-
+            // shape trajectory (3f9d7a0) and the `:placement :clusters`
+            // trajectory (6cbb900) onto the third DNS-1123-label-shaped
+            // identifier axis — the supervisor tree's child names —
+            // through the lifted [`crate::render::is_dns_1123_label`]
+            // predicate (the "before its third occurrence" boundary the
+            // PRIME DIRECTIVE duplication-budget rule draws, THEORY.md
+            // §I.3.5).
+            //
+            // [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
+            if let Err(reason) = crate::render::is_dns_1123_label(&child.caixa) {
+                return Err(SupervisorError::ChildCaixaInvalid {
+                    caixa: child.caixa.clone(),
+                    reason,
+                });
+            }
             if child.versao.is_empty() {
                 return Err(SupervisorError::EmptyChildVersion {
                     caixa: child.caixa.clone(),
@@ -251,7 +283,9 @@ impl SupervisorSpec {
 pub enum SupervisorError {
     #[error("supervisor :estrategia {estrategia:?} requires at least one :children entry")]
     NoChildren { estrategia: RestartStrategy },
-    #[error("SimpleOneForOne supervisors must declare zero static children (children spawn dynamically)")]
+    #[error(
+        "SimpleOneForOne supervisors must declare zero static children (children spawn dynamically)"
+    )]
     SimpleOneForOneWithStaticChildren,
     #[error(":max-restarts must be > 0")]
     ZeroMaxRestarts,
@@ -264,6 +298,16 @@ pub enum SupervisorError {
     RestartWindowZero,
     #[error("child entry has empty :caixa name")]
     EmptyChildName,
+    #[error(
+        "child :caixa {caixa:?} is not a valid DNS-1123 label: {reason} \
+         (the K8s apiserver enforces this rule on every `metadata.name` / Service \
+         name / label value the child name lands in — the per-child \
+         `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name`, the `LABEL_PROGRAM` \
+         label value, and the future wasm-operator per-child Service `metadata.name` \
+         — each apiserver-side schema rejects names that don't match; use a \
+         lowercase alphanumeric + hyphen identifier like `\"worker\"` or `\"cache-v2\"`)"
+    )]
+    ChildCaixaInvalid { caixa: String, reason: String },
     #[error("child {caixa:?} has empty :versao constraint")]
     EmptyChildVersion { caixa: String },
     #[error(
@@ -415,7 +459,8 @@ mod tests {
             estrategia: RestartStrategy::SimpleOneForOne,
             ..SupervisorSpec::default()
         };
-        s.children.push(child("w", "^0.1", RestartPolicy::Permanent));
+        s.children
+            .push(child("w", "^0.1", RestartPolicy::Permanent));
         assert_eq!(
             s.validate().unwrap_err(),
             SupervisorError::SimpleOneForOneWithStaticChildren
@@ -630,6 +675,320 @@ mod tests {
         assert!(
             !reason.is_empty(),
             "ChildVersaoInvalid `reason` must carry the parser's wording verbatim"
+        );
+    }
+
+    // ── value-shape: DNS-1123 label rule on :children :caixa ──────────────
+
+    #[test]
+    fn validate_rejects_child_caixa_with_uppercase() {
+        // The canonical "I copied the Servico's display name verbatim"
+        // typo — child caixa names are lowercase per K8s DNS-1123 label
+        // rule. The diagnostic names the offending name and suggests the
+        // lower-cased fix in one edit, mirroring the
+        // `rejects_membro_caixa_with_uppercase` gate's shape (3f9d7a0).
+        let s = SupervisorSpec {
+            children: vec![child("Worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        let SupervisorError::ChildCaixaInvalid { caixa, reason } = err else {
+            panic!("expected ChildCaixaInvalid, got other variant");
+        };
+        assert_eq!(caixa, "Worker");
+        assert!(
+            reason.contains("uppercase"),
+            "diagnostic must name the violation as `uppercase` (got: {reason:?})"
+        );
+        assert!(
+            reason.contains("\"worker\""),
+            "diagnostic must suggest the lower-cased fix verbatim (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_with_underscore() {
+        // The canonical "I'm thinking of a Python module / Postgres
+        // table" leak — `_` is forbidden by every DNS-1123 / DNS-1035
+        // label schema. K8s rejects `metadata.name: my_worker` at
+        // admission time with an opaque `field is invalid` (no source-
+        // citing diagnostic). The gate moves it to caixa-build time.
+        let s = SupervisorSpec {
+            children: vec![child("my_worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, ref reason }
+                    if caixa == "my_worker" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_with_dot() {
+        // A `:children :caixa` entry is a single DNS-1123 label, not a
+        // subdomain. The K8s Service / ComputeUnit `metadata.name` rules
+        // forbid dots. Same shape as `rejects_membro_caixa_with_dot`
+        // (3f9d7a0) on the peer name axis.
+        let s = SupervisorSpec {
+            children: vec![child("team.worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, ref reason }
+                    if caixa == "team.worker" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_with_leading_hyphen() {
+        // DNS-1123 / DNS-1035 boundary rule: labels must start and end
+        // with an alphanumeric. The K8s apiserver rejects `-worker`
+        // outright; the renderer would emit a `metadata.name: "-worker"`
+        // that fails admission far from the source caixa.lisp.
+        let s = SupervisorSpec {
+            children: vec![child("-worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, ref reason }
+                    if caixa == "-worker" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_with_trailing_hyphen() {
+        // The symmetric arm of the boundary rule. Pin separately so
+        // both ends of the label are covered against a future relaxation
+        // that only checks one boundary.
+        let s = SupervisorSpec {
+            children: vec![child("worker-", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, .. }
+                    if caixa == "worker-"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_with_unicode() {
+        // DNS-1123 is ASCII-only; IDN must be pre-encoded as Punycode
+        // (`xn--…`) by the author before it reaches K8s. The byte-by-
+        // byte ASCII validity check rejects multi-byte UTF-8 sequences
+        // by the first byte that fails the `[a-z0-9-]` predicate.
+        let s = SupervisorSpec {
+            children: vec![child("café", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, .. }
+                    if caixa == "café"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_with_whitespace() {
+        // Whitespace is the canonical "I pasted from a sketch / doc"
+        // footgun. The apiserver rejects every `metadata.name` value
+        // carrying whitespace; pin the gate fires at the right boundary.
+        let s = SupervisorSpec {
+            children: vec![child("my worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, .. }
+                    if caixa == "my worker"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_child_caixa_too_long() {
+        // The 64-byte boundary pin. DNS-1123 / DNS-1035 cap labels at
+        // 63 bytes; the K8s apiserver rejects every `metadata.name`
+        // axis over the limit at admission time. The diagnostic names
+        // both the cap and the actual length so the author can shorten
+        // in one edit, mirroring `rejects_membro_caixa_too_long`
+        // (3f9d7a0) and `rejects_placement_cluster_too_long` (6cbb900).
+        let too_long = "a".repeat(64);
+        let s = SupervisorSpec {
+            children: vec![child(&too_long, "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        let SupervisorError::ChildCaixaInvalid { caixa, reason } = err else {
+            panic!("expected ChildCaixaInvalid, got other variant");
+        };
+        assert_eq!(caixa, too_long);
+        assert!(
+            reason.contains("63"),
+            "diagnostic must name the 63-byte cap (got: {reason:?})"
+        );
+        assert!(
+            reason.contains("64"),
+            "diagnostic must name the actual length (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn child_caixa_max_length_validates() {
+        // The 63-byte boundary control pin — exactly-at-the-cap is
+        // accepted, mirroring `membro_caixa_max_length_validates`
+        // (3f9d7a0) and `placement_cluster_max_length_validates`
+        // (6cbb900). Pinned separately so a future off-by-one tightening
+        // surfaces here.
+        let max_label = "a".repeat(63);
+        let s = SupervisorSpec {
+            children: vec![child(&max_label, "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_canonical_child_caixa_forms() {
+        // The realistic shapes a supervised child's `:caixa` carries —
+        // single-word `worker`, version-suffixed `cache-v2`, single-char
+        // `a`, two-char `db`, digit-start `2-pool`, longer hyphen-joined
+        // `payment-retry`, all-digit `0`. Pin every leg so a future
+        // tightening (e.g. requiring a leading lowercase letter) surfaces
+        // here as a test failure. Mirrors `accepts_canonical_membro_caixa_forms`
+        // (3f9d7a0) and `accepts_canonical_placement_cluster_forms`
+        // (6cbb900).
+        for form in [
+            "worker",
+            "cache-v2",
+            "a",
+            "db",
+            "2-pool",
+            "payment-retry",
+            "0",
+        ] {
+            let s = SupervisorSpec {
+                children: vec![child(form, "^0.1", RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            s.validate()
+                .unwrap_or_else(|e| panic!("canonical form {form:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn child_caixa_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `EmptyChildName` diagnostic (which
+        // doesn't try to parse the DNS-1123 shape) fires before the new
+        // `ChildCaixaInvalid` per-axis gate, so an empty `:caixa` keeps
+        // its narrower error message — `is_dns_1123_label` would reject
+        // the empty string too (boundary check on the first byte), but
+        // the empty-string arm is the more self-locating diagnostic for
+        // the author. Same ordering discipline as
+        // `membro_caixa_empty_takes_precedence_over_invalid` in
+        // aplicacao.rs.
+        let s = SupervisorSpec {
+            children: vec![child("", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, SupervisorError::EmptyChildName);
+    }
+
+    #[test]
+    fn child_caixa_invalid_fires_before_versao_check() {
+        // Order pin: the per-axis shape gate runs inline before the
+        // per-entry versao check, so a malformed `:caixa` on an entry
+        // whose `:versao` would also fail surfaces the more self-
+        // locating name-axis diagnostic first. Parallel to
+        // `membro_versao_invalid_fires_before_duplicate_check` (9888b13)
+        // and `placement_cluster_invalid_fires_before_duplicate_check`
+        // (6cbb900).
+        let s = SupervisorSpec {
+            children: vec![child("My_Worker", "", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, .. } if caixa == "My_Worker"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn child_caixa_invalid_fires_before_duplicate_check() {
+        // Order pin: a malformed name on a non-duplicate entry surfaces
+        // its own diagnostic, even when a later entry would otherwise
+        // collapse onto an earlier name. The per-entry shape gate runs
+        // inline before the duplicate-key HashSet insert, mirroring
+        // `placement_cluster_invalid_fires_before_duplicate_check`
+        // (6cbb900).
+        let s = SupervisorSpec {
+            children: vec![
+                child("Worker", "^0.1", RestartPolicy::Permanent),
+                child("cache", "^0.1", RestartPolicy::Transient),
+                child("worker", "^0.2", RestartPolicy::Permanent), // would otherwise raise DuplicateChildCaixa
+            ],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::ChildCaixaInvalid { ref caixa, .. } if caixa == "Worker"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn child_caixa_invalid_diagnostic_carries_offending_caixa() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:caixa` verbatim plus a non-empty parser-shaped `reason` so
+        // the author can grep their caixa.lisp without re-running the
+        // build. Mirrors the diagnostic-shape sweep on every prior
+        // value-shape gate (3f9d7a0, 6cbb900, c7d05ec).
+        let s = SupervisorSpec {
+            children: vec![child("My_Worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        let SupervisorError::ChildCaixaInvalid { caixa, reason } = err else {
+            panic!("expected ChildCaixaInvalid, got other variant");
+        };
+        assert_eq!(caixa, "My_Worker");
+        assert!(
+            !reason.is_empty(),
+            "ChildCaixaInvalid `reason` must carry the parser's wording verbatim"
         );
     }
 
