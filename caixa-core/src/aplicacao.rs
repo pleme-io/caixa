@@ -432,119 +432,9 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
 
-/// K8s DNS-1123 label rule's max length, in bytes — the floor each
-/// apiserver-side schema enforces independently on every `metadata.name`
-/// / Service name / label value axis a validated identifier lands in.
-///
-/// Per-axis breakdown of why 63 is the strictest among the rules each
-/// validated DNS-1123-label-shaped identifier passes through:
-///
-///   * `:membros :caixa` lands as the rendered programs.yaml entry's
-///     `name:` (consumed by `lareira-fleet-programs` to derive the
-///     `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name`), as the K8s
-///     [`Service`][svc] `metadata.name` the future `app-operator`
-///     provisions per-member (DNS-1035 label rule:
-///     `[a-z]([-a-z0-9]*[a-z0-9])?` max 63), as the
-///     [`LABEL_PROGRAM`][crate::LABEL_PROGRAM] label value (K8s label
-///     value rule: `[a-z0-9]([-a-z0-9_.]*[a-z0-9])?` max 63), and as
-///     a component of the composed `<aplicacao>-<de>-to-<para>`
-///     `CiliumNetworkPolicy` `metadata.name`.
-///   * `:placement :clusters` lands as the K8s context name keying
-///     every per-cluster `kubeconfig`, as the `clusters[]` filter the
-///     `lareira-fleet-programs` aggregator applies to scope programs
-///     to their owning cluster, and as the namespace prefix /
-///     `cluster.x-k8s.io/v1beta1/Cluster.metadata.name` cluster
-///     identity the future M4 cross-cluster fan-out emits per entry —
-///     all DNS-1123-label territory.
-///
-/// Lifted to one const so a future identifier axis reaching for the
-/// same rule (the future per-Servico `:nome` gate at the Caixa-load
-/// boundary, the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
-/// per-member / per-cluster validators) reads the limit from one place.
-///
-/// [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
-const DNS_1123_LABEL_MAX_LEN: usize = 63;
-
-/// Predicate: assert that `s` is a valid K8s DNS-1123 label. The
-/// contract — exactly the regex the K8s apiserver enforces on every
-/// `metadata.name` / Service name / label value via OpenAPI v3 admission
-/// validation, `[a-z0-9]([-a-z0-9]*[a-z0-9])?` with a 63-byte cap:
-///
-///   - 1..=63 bytes ([`DNS_1123_LABEL_MAX_LEN`] cap);
-///   - lowercase ASCII alphanumeric + hyphen (`[a-z0-9-]` only; no
-///     uppercase — K8s rejects, no underscore — DNS-1123 forbids, no
-///     dot — a single label is not a subdomain, no Unicode/IDN — must
-///     be pre-encoded);
-///   - non-hyphen ASCII alphanumeric at both label boundaries
-///     (no `-foo`, no `foo-`).
-///
-/// Returns the parser-shaped reason on rejection (without wrapping in
-/// any error variant) so each per-axis caller — [`validate_membro_caixa`]
-/// for `:membros :caixa`, [`validate_placement_cluster`] for
-/// `:placement :clusters`, every future per-axis lift (the per-Servico
-/// `:nome` gate at the Caixa-load boundary, the M4 CR materializer's
-/// per-member / per-cluster validators) — wraps the same reason in its
-/// own typed `AplicacaoError::*Invalid { <axis>, reason }` variant.
-/// The reason wording is axis-agnostic ("DNS-1123 labels allow only
-/// `[a-z0-9-]`") so two call sites reading the same diagnostic point
-/// at the same rule — drift between two axes' rule enforcement is a
-/// build error visible at this predicate, not a per-renderer "this
-/// passed validate but failed admission" surprise.
-///
-/// Empty input is rejected at the call site (each axis has its own
-/// narrower `*Empty` variant — [`AplicacaoError::MembroCaixaEmpty`],
-/// [`AplicacaoError::PlacementClusterEmpty`]) before this predicate
-/// is consulted, mirroring `validate_entrada_host`'s empty-first
-/// cascade (c7d05ec).
-fn is_dns_1123_label(s: &str) -> Result<(), String> {
-    if s.len() > DNS_1123_LABEL_MAX_LEN {
-        return Err(format!(
-            "exceeds DNS-1123 label max length of {DNS_1123_LABEL_MAX_LEN} bytes \
-             (got {} bytes; the K8s apiserver rejects longer names at admission \
-             time on every Service / Pod / CR `metadata.name` axis)",
-            s.len()
-        ));
-    }
-    let bytes = s.as_bytes();
-    if !bytes[0].is_ascii_alphanumeric() || !bytes[bytes.len() - 1].is_ascii_alphanumeric() {
-        return Err("must start and end with an ASCII alphanumeric character \
-                    (no leading or trailing `-`; DNS-1123 label rule)"
-            .to_string());
-    }
-    for &b in bytes {
-        let valid = b.is_ascii_digit() || b.is_ascii_lowercase() || b == b'-';
-        if !valid {
-            let msg = if b.is_ascii_uppercase() {
-                format!(
-                    "contains uppercase character {ch:?} (K8s DNS-1123 label \
-                     names are lowercase-only; use {lower:?})",
-                    ch = b as char,
-                    lower = s.to_ascii_lowercase()
-                )
-            } else if b == b'_' {
-                "contains `_` (DNS-1123 labels allow only `[a-z0-9-]`; use `-` \
-                 instead)"
-                    .to_string()
-            } else if b == b'.' {
-                "contains `.` (a single DNS-1123 label is not a subdomain; \
-                 split into separate entries or use `-` to namespace)"
-                    .to_string()
-            } else {
-                format!(
-                    "contains invalid character {ch:?} (DNS-1123 labels allow \
-                     only `[a-z0-9-]`)",
-                    ch = b as char
-                )
-            };
-            return Err(msg);
-        }
-    }
-    Ok(())
-}
-
 /// Reject `:membros :caixa` values the K8s apiserver would refuse at
-/// admission time. Thin wrapper around [`is_dns_1123_label`] that maps
-/// the shared parser-shaped reason into the
+/// admission time. Thin wrapper around [`crate::render::is_dns_1123_label`]
+/// that maps the shared parser-shaped reason into the
 /// [`AplicacaoError::MembroCaixaInvalid`] variant, so the diagnostic
 /// is self-locating (the offending `caixa:` is named verbatim) and
 /// the author can grep their caixa.lisp for `:caixa "<name>"` and
@@ -559,15 +449,15 @@ fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
     if caixa.is_empty() {
         return Err(AplicacaoError::MembroCaixaEmpty);
     }
-    is_dns_1123_label(caixa).map_err(|reason| AplicacaoError::MembroCaixaInvalid {
+    crate::render::is_dns_1123_label(caixa).map_err(|reason| AplicacaoError::MembroCaixaInvalid {
         caixa: caixa.to_string(),
         reason,
     })
 }
 
 /// Reject `:placement :clusters` entries the K8s apiserver would refuse
-/// at admission time. Thin wrapper around [`is_dns_1123_label`] that
-/// maps the shared parser-shaped reason into the
+/// at admission time. Thin wrapper around [`crate::render::is_dns_1123_label`]
+/// that maps the shared parser-shaped reason into the
 /// [`AplicacaoError::PlacementClusterInvalid`] variant.
 ///
 /// Cluster names land in DNS-1123-label territory across every consumer:
@@ -600,9 +490,11 @@ fn validate_placement_cluster(cluster: &str) -> Result<(), AplicacaoError> {
     if cluster.is_empty() {
         return Err(AplicacaoError::PlacementClusterEmpty);
     }
-    is_dns_1123_label(cluster).map_err(|reason| AplicacaoError::PlacementClusterInvalid {
-        cluster: cluster.to_string(),
-        reason,
+    crate::render::is_dns_1123_label(cluster).map_err(|reason| {
+        AplicacaoError::PlacementClusterInvalid {
+            cluster: cluster.to_string(),
+            reason,
+        }
     })
 }
 
@@ -1374,8 +1266,7 @@ impl AplicacaoSpec {
                 .insert(c.para.as_str());
         }
 
-        let mut color: BTreeMap<&str, Mark> =
-            adj.keys().map(|k| (*k, Mark::White)).collect();
+        let mut color: BTreeMap<&str, Mark> = adj.keys().map(|k| (*k, Mark::White)).collect();
         let mut parent: BTreeMap<&str, &str> = BTreeMap::new();
 
         // Stable DFS root order — BTreeMap iteration is sorted by key.
@@ -1390,8 +1281,7 @@ impl AplicacaoSpec {
                 .get(root)
                 .map(|s| s.iter().copied().collect())
                 .unwrap_or_default();
-            let mut stack: Vec<(&str, Vec<&str>, usize)> =
-                vec![(root, root_neighbors, 0)];
+            let mut stack: Vec<(&str, Vec<&str>, usize)> = vec![(root, root_neighbors, 0)];
             color.insert(root, Mark::Gray);
 
             loop {
