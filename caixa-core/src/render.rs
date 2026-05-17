@@ -265,6 +265,166 @@ pub fn is_dns_1123_label(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// K8s Gateway API v1 `HTTPPathMatch.value` max length, in bytes —
+/// the apiserver-side `OpenAPI` schema's `maxLength: 1024` cap. Lifted
+/// to a typed const so a future axis reaching for the same bound (the
+/// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-path
+/// validator, the future per-`HTTPRouteRule` per-path-match emission
+/// when M4 lands per-rule overrides, the future `:politicas`-derived
+/// per-edge HTTP path overlay's per-path validator) reads the limit
+/// from one place. The two landed call sites — `:entrada :paths`
+/// entries (caixa-mesh's `HTTPRoute.spec.rules[].matches[].path.value`
+/// emission) and `:contratos :endpoint` (caixa-mesh's Cilium L7
+/// `path:` rule emission, caixa-mesh/src/lib.rs:311) — both inherit
+/// the same cap; drift between either landing site and the K8s CRD
+/// schema surfaces at this one const.
+pub const GATEWAY_API_HTTP_PATH_MAX_LEN: usize = 1024;
+
+/// Predicate: assert that `path` is a valid HTTP path under both the
+/// K8s Gateway API v1 `HTTPPathMatch.value` admission grammar AND the
+/// Cilium L7 `path:` rule grammar — the two landing sites every
+/// validated pleme-io HTTP-shaped path lands in. The contract:
+///
+///   - 1..=[`GATEWAY_API_HTTP_PATH_MAX_LEN`] (1024) bytes;
+///   - leading `/` (the `PathPrefix` invariant — pre-checked at the
+///     call site by each axis's narrower `*NotAbsolute` variant;
+///     re-checked here so the predicate is usable from any future
+///     call site without a shape-mismatch footgun);
+///   - no consecutive `/` characters (HTTP path matchers reject
+///     `//` — collapse to a single `/`);
+///   - no `/./` or `/../` segments (and no trailing `/.` or `/..`) —
+///     path-traversal and no-op segments are rejected outright;
+///   - no `?` (query separator: queries are matched separately via
+///     `HTTPRoute` `queryParams`, never in the path);
+///   - no `#` (fragment separator: fragments are client-side and
+///     never reach the gateway);
+///   - no whitespace (space, tab — must be percent-encoded as `%20`);
+///   - no ASCII control characters (`0x00..0x1F`, `0x7F`);
+///   - no non-ASCII bytes (`>= 0x80`) — RFC 3986 requires `%XX`
+///     percent-encoding for anything outside the ASCII unreserved +
+///     reserved set.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — `validate_entrada_path`
+/// for `:entrada :paths` entries, `WitContract::target` for the HTTP-
+/// shaped `:contratos :endpoint` axis, every future per-path lift
+/// (the M4 CR materializer's per-path validator, the future
+/// per-`HTTPRouteRule` per-path-match emission) — wraps the same
+/// reason in its own typed `*Invalid { <axis>, reason }` variant. The
+/// reason wording is axis-agnostic ("HTTP path matchers reject
+/// `//`") so every call site reading the same diagnostic points at
+/// the same rule; drift between any two axes' rule enforcement is a
+/// build error visible at this predicate, not a per-renderer "this
+/// passed validate but failed admission" surprise.
+///
+/// Empty input is rejected at the call site (each axis has its own
+/// narrower `*Empty` variant — [`crate::AplicacaoError::EntradaPathEmpty`],
+/// [`crate::AplicacaoError::ContratoEndpointEmpty`]) before this
+/// predicate is consulted, mirroring `is_dns_1123_label`'s empty-first
+/// cascade. The predicate body re-checks empty + leading-`/`
+/// defensively so it can be called from any future call site without
+/// a shape-mismatch footgun.
+///
+/// Lifted from `caixa-core::aplicacao::validate_entrada_path` (where
+/// it was first inlined for `:entrada :paths` in 55410e4) at the
+/// second occurrence of the HTTP-path-grammar — the `:contratos
+/// :endpoint` axis (c4213a4 gated non-empty + leading-`/` only,
+/// silently passing the same authoring footguns the `:entrada :paths`
+/// gate catches) — so the second axis lands as a thin three-line
+/// wrapper at the per-axis call site rather than re-inlining 90 lines
+/// of grammar enforcement. Same compounding shape as
+/// `is_dns_1123_label` (lifted at its third occurrence in 31bfa43)
+/// and the M2-overlay / label-selector helpers (9e3a057, 9d09cfb,
+/// 9dbeafd, 31455a7, 07a4544) on the render side — each lifted a
+/// recurring shape into a typed primitive at the threshold where the
+/// duplication budget would otherwise have been exceeded.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / character-class / segment / consecutive-slash), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_gateway_api_http_path(path: &str) -> Result<(), String> {
+    if path.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if !path.starts_with('/') {
+        return Err("must start with `/` (HTTP path matchers require a leading `/`)".to_string());
+    }
+    if path.len() > GATEWAY_API_HTTP_PATH_MAX_LEN {
+        return Err(format!(
+            "exceeds HTTP path max length of {GATEWAY_API_HTTP_PATH_MAX_LEN} bytes \
+             (got {} bytes; both the K8s Gateway API HTTPPathMatch.value OpenAPI \
+             schema and the Cilium L7 path matcher reject longer values at \
+             admission time)",
+            path.len()
+        ));
+    }
+    for &b in path.as_bytes() {
+        let reason = if b == b'?' {
+            Some(
+                "must not contain `?` (queries are matched separately via HTTPRoute \
+                 `queryParams`, not in the path; drop the `?…` suffix)"
+                    .to_string(),
+            )
+        } else if b == b'#' {
+            Some(
+                "must not contain `#` (fragments are client-side and never reach \
+                 the gateway; drop the `#…` suffix)"
+                    .to_string(),
+            )
+        } else if b == b' ' || b == b'\t' {
+            Some(format!(
+                "must not contain whitespace character {ch:?} (percent-encode as `%20` \
+                 or use `-`/`_` instead)",
+                ch = b as char
+            ))
+        } else if b < 0x20 || b == 0x7F {
+            Some(format!(
+                "must not contain control character 0x{b:02x} (HTTP path characters \
+                 must be printable ASCII; the K8s Gateway API HTTPPathMatch.value and \
+                 Cilium L7 path matcher both reject control characters at admission \
+                 time)"
+            ))
+        } else if b >= 0x80 {
+            Some(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (RFC 3986 requires \
+                 percent-encoding `%XX` for characters outside the ASCII unreserved \
+                 + reserved set)"
+            ))
+        } else {
+            None
+        };
+        if let Some(r) = reason {
+            return Err(r);
+        }
+    }
+    if path.contains("//") {
+        return Err(
+            "must not contain consecutive `/` characters (HTTP path matchers reject \
+             `//`; collapse to a single `/`)"
+                .to_string(),
+        );
+    }
+    if path.contains("/./") || path == "/." || path.ends_with("/.") {
+        return Err(
+            "must not contain the `.` segment (`/./` or trailing `/.`); it is \
+             semantically a no-op and HTTP path matchers reject it"
+                .to_string(),
+        );
+    }
+    if path.contains("/../") || path == "/.." || path.ends_with("/..") {
+        return Err(
+            "must not contain the `..` parent-segment (`/../` or trailing `/..`); \
+             path traversal is rejected by HTTP path matchers"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -1610,5 +1770,102 @@ mod tests {
         let err = is_dns_1123_label(&too_long).unwrap_err();
         assert!(err.contains("63"), "got: {err:?}");
         assert!(err.contains("64"), "got: {err:?}");
+    }
+
+    // ── is_gateway_api_http_path — shared HTTP-path predicate ────────────
+
+    #[test]
+    fn gateway_api_http_path_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts the same canonical
+        // shapes both caller axes (`:entrada :paths` and `:contratos
+        // :endpoint`) accept at their own gates. Drift between this
+        // list and the per-axis positive-set sweeps surfaces here —
+        // one source of truth for the rule. Includes the bare-root
+        // `/` (the catch-all both renderers fall back to), the
+        // `/foo..bar` interior-`..`-substring (not a `..` segment),
+        // the `/...` and `/foo.` `.`-bearing names (not `.` segments),
+        // and the percent-encoded form.
+        for p in [
+            "/",
+            "/api/cart",
+            "/healthz",
+            "/api/.config",
+            "/v1/products",
+            "/products/:id",
+            "/api/cart/",
+            "/api/caf%C3%A9",
+            "/foo..bar",
+            "/...",
+            "/charge",
+        ] {
+            is_gateway_api_http_path(p)
+                .unwrap_or_else(|e| panic!("canonical HTTP path {p:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn gateway_api_http_path_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so
+        // a future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep.
+        for (path, needle) in [
+            ("/api?q=1", "must not contain `?`"),
+            ("/api#frag", "must not contain `#`"),
+            ("/api my", "whitespace"),
+            ("/api\x01x", "control character"),
+            ("/api/café", "non-ASCII"),
+            ("/api//x", "consecutive `/`"),
+            ("/api/./x", "`.` segment"),
+            ("/api/../x", "`..` parent-segment"),
+        ] {
+            let err = is_gateway_api_http_path(path)
+                .err()
+                .unwrap_or_else(|| panic!("path {path:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "path {path:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_api_http_path_rejects_at_1025_byte_boundary() {
+        // The 1024-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring
+        // `dns_1123_label_rejects_at_64_byte_boundary` on the peer
+        // predicate.
+        let max_ok = format!("/{}", "a".repeat(1023));
+        assert_eq!(max_ok.len(), 1024);
+        is_gateway_api_http_path(&max_ok).unwrap();
+        let too_long = format!("/{}", "a".repeat(1024));
+        assert_eq!(too_long.len(), 1025);
+        let err = is_gateway_api_http_path(&too_long).unwrap_err();
+        assert!(err.contains("1024"), "got: {err:?}");
+        assert!(err.contains("1025"), "got: {err:?}");
+    }
+
+    #[test]
+    fn gateway_api_http_path_rejects_empty_defensively() {
+        // The predicate is called only after each caller's narrower
+        // `*Empty` arm has fired; re-checking here keeps the predicate
+        // usable from any future call site without an empty-precondition
+        // footgun, and avoids a panic on `bytes[0]`-style indexing if
+        // a future arm is added. Same defensive empty-check
+        // `validate_entrada_path` carries at its call site (55410e4).
+        let err = is_gateway_api_http_path("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn gateway_api_http_path_rejects_not_absolute_defensively() {
+        // Defensive re-check of the leading-`/` invariant the per-axis
+        // call site enforces with its own narrower `*NotAbsolute` arm;
+        // ensures the predicate is callable from any future call site
+        // without a shape-mismatch footgun.
+        let err = is_gateway_api_http_path("api/cart").unwrap_err();
+        assert!(err.contains('/'), "got: {err:?}");
     }
 }
