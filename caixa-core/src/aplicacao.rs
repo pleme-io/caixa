@@ -249,6 +249,33 @@ impl WitContract {
                     para: self.para.clone(),
                 });
             }
+            // The `:subject` lands at runtime as the NATS subject the
+            // producer publishes to and the consumer subscribes from.
+            // Until this gate landed `target()` only refused the
+            // empty string; a structurally invalid subject
+            // (`"foo..bar"` — empty token between separators,
+            // `"foo.>.bar"` — non-trailing `>` wildcard the NATS
+            // server's subject parser rejects, `"foo bar"` —
+            // un-percent-encoded whitespace, `"foo.café"` —
+            // un-percent-encoded non-ASCII, `".foo"` / `"foo."` —
+            // empty leading/trailing tokens, the >256-byte
+            // paste-from-binary slug) silently passed validate and
+            // the failure surfaced at runtime as a NATS server-side
+            // `-ERR 'Invalid Subject'` on publish / subscribe, or as
+            // a silent message drop, far from the source caixa.lisp.
+            // Same Gateway API HTTPPathMatch / WIT-IDL grammar
+            // trajectory `:contratos :endpoint` (4f0390b) and
+            // `:contratos :wit` (6226bf4) already gate, now shared
+            // with `:contratos :subject` through the lifted
+            // `crate::render::is_nats_subject` predicate.
+            if let Err(reason) = crate::render::is_nats_subject(s) {
+                return Err(AplicacaoError::ContratoSubjectInvalid {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
+                    subject: s.to_string(),
+                    reason,
+                });
+            }
             return Ok(WitTarget::PubSub { subject: s });
         }
         if self.is_store() {
@@ -1634,6 +1661,21 @@ pub enum AplicacaoError {
          pub-sub-shaped)"
     )]
     ContratoSubjectEmpty { de: String, para: String },
+    #[error(
+        "pub-sub contrato {de:?} → {para:?} :subject {subject:?} is not a valid \
+         NATS subject: {reason} (the NATS server's subject parser enforces the \
+         same shape — `.`-separated tokens of `[A-Za-z0-9_-]`, with the `*` \
+         single-token and `>` multi-token wildcards — at publish/subscribe time; \
+         use a token-by-token form like `\"checkout.events.charge.failed\"` or \
+         `\"orders.*.completed\"` — a malformed subject silently drops every \
+         message at runtime far from the source caixa.lisp)"
+    )]
+    ContratoSubjectInvalid {
+        de: String,
+        para: String,
+        subject: String,
+        reason: String,
+    },
     #[error(
         "store contrato {de:?} → {para:?} :slot is empty (an empty slot template \
          addresses the bucket root, defeating the per-key isolation the slot exists \
@@ -3376,6 +3418,307 @@ mod tests {
                 assert!(!reason.is_empty(), "reason field must be non-empty");
             }
             other => panic!("expected ContratoWitInvalid, got {other:?}"),
+        }
+    }
+
+    // ── :contratos :subject value-shape gate ─────────────────────────────
+    //
+    // Mirrors the `:contratos :endpoint` / `:contratos :wit` value-shape
+    // suites on the peer payload axes. Until this gate landed
+    // `WitContract::target()` only refused the empty string; a
+    // structurally invalid subject silently passed validate and the
+    // failure surfaced at runtime as a NATS server-side `-ERR 'Invalid
+    // Subject'` on publish / subscribe, or as a silent message drop,
+    // far from the source caixa.lisp. Every authoring footgun the
+    // NATS server's subject parser would catch on admission now
+    // becomes a caixa-build-time `ContratoSubjectInvalid` with the
+    // offending `:subject` + `:de` + `:para` named verbatim. Same
+    // diagnostic shape as `ContratoEndpointInvalid` /
+    // `ContratoWitInvalid` on the peer payload axes; same shared
+    // predicate (`crate::render::is_nats_subject`) ensures drift
+    // between any two axes' rule enforcement is a build error at the
+    // predicate, not piecemeal across renderers.
+
+    fn contrato_subject_err(subject: &str) -> AplicacaoError {
+        // Fresh spec per call so the new contract doesn't collide on
+        // identity with `three_member_spec`'s pre-existing entries.
+        // The new edge uses `(payment, catalog)` — a pair the fixture
+        // doesn't already declare — with `:wit "nats:pub-sub"` and the
+        // varying `:subject`, so the subject-shape gate fires cleanly
+        // after the wit-shape gate (which `"nats:pub-sub"` passes).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(subject.into()),
+            slot: None,
+        });
+        s.validate().unwrap_err()
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_whitespace() {
+        // Fail-before-pass-after pin — pre-gate `"foo bar"` silently
+        // landed at the NATS server as a malformed subject the parser
+        // rejects with `-ERR 'Invalid Subject'`. Now caught at the
+        // source caixa.lisp.
+        let err = contrato_subject_err("foo bar");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo bar" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_control_char() {
+        let err = contrato_subject_err("foo\x01bar");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo\x01bar" && reason.contains("control character")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_non_ascii() {
+        // Un-percent-encoded non-ASCII byte — the canonical "I copied
+        // the subject from a doc with smart quotes / accented
+        // characters" footgun.
+        let err = contrato_subject_err("foo.caf\u{e9}");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo.caf\u{e9}" && reason.contains("non-ASCII")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_leading_dot() {
+        // Empty leading token — NATS rejects.
+        let err = contrato_subject_err(".foo");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == ".foo" && reason.contains("must not start with `.`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_trailing_dot() {
+        // Empty trailing token — NATS rejects. The remediation
+        // (use `>` instead) is in the reason string.
+        let err = contrato_subject_err("foo.");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo." && reason.contains("must not end with `.`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_consecutive_dots() {
+        // The canonical "I forgot to fill in the middle segment"
+        // typo — `"foo..bar"`. NATS rejects empty tokens.
+        let err = contrato_subject_err("foo..bar");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo..bar" && reason.contains("consecutive `.`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_non_trailing_multi_wildcard() {
+        // `foo.>.bar` — `>` is the multi-token wildcard, only allowed
+        // as the final segment. Pre-gate this passed as a typed edge
+        // and surfaced at runtime as a NATS subscribe rejection.
+        let err = contrato_subject_err("foo.>.bar");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo.>.bar" && reason.contains("only allowed as the final segment")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_mid_segment_star() {
+        // `foo*.bar` — NATS wildcards are standalone tokens. The
+        // remediation is in the reason string.
+        let err = contrato_subject_err("foo*.bar");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo*.bar" && reason.contains("`*` mid-segment")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_with_invalid_char() {
+        // `foo,bar` — comma is not a valid NATS subject character.
+        // Pinned separately from the wildcard arms so the invalid-
+        // character diagnostic is in force.
+        let err = contrato_subject_err("foo,bar");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == "foo,bar" && reason.contains("invalid character")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_pubsub_contrato_subject_too_long() {
+        // 257-byte subject — one over the NATS_SUBJECT_MAX_LEN cap.
+        // The legitimate-shape arms all pass (one all-`a` token, no
+        // `.`, no wildcards); only the cap arm fires. Surfaces the
+        // paste-from-binary / accidental-multi-line-blob landing
+        // footgun. Mirrors `rejects_http_contrato_endpoint_too_long`
+        // on the peer axis.
+        let big = "a".repeat(257);
+        assert_eq!(big.len(), 257);
+        let err = contrato_subject_err(&big);
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectInvalid { ref subject, ref reason, .. }
+                if subject == &big && reason.contains("max length of 256")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn pubsub_contrato_subject_max_length_validates() {
+        // 256-byte subject — exactly the cap. Boundary pin: drift in
+        // the cap surfaces here and at
+        // `rejects_pubsub_contrato_subject_too_long` simultaneously,
+        // mirroring `http_contrato_endpoint_max_length_validates` and
+        // `wit_max_length_validates` on the peer axes.
+        let big = "a".repeat(256);
+        assert_eq!(big.len(), 256);
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(big),
+            slot: None,
+        });
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn pubsub_contrato_subject_accepts_canonical_forms() {
+        // Positive-set sweep: every canonical NATS subject shape the
+        // substrate-side `is_nats_subject` predicate accepts (the
+        // multi-dot `events.order.charged`, the snake_case / kebab-
+        // case / mixed-case tokens, the digit-bearing tokens, the
+        // single-token wildcard `*` at every segment position, and
+        // the trailing `>` multi-token wildcard) must remain a valid
+        // contrato subject too. Drift between this list and the
+        // substrate-side `nats_subject_accepts_canonical_forms` sweep
+        // surfaces at the shared predicate — one source of truth.
+        // Uses a fresh `(payment, catalog)` edge so none of the swept
+        // subjects collide with the pre-existing entries in
+        // `three_member_spec`.
+        for subject in [
+            "checkout.events.charge.failed",
+            "rio.events.order.charged",
+            "orders",
+            "orders.123",
+            "snake_case.token",
+            "kebab-case.token",
+            "MixedCase.Token",
+            "orders.*.charged",
+            "*.events.*",
+            "orders.>",
+        ] {
+            let mut s = three_member_spec();
+            s.contratos.push(WitContract {
+                de: "payment".into(),
+                para: "catalog".into(),
+                wit: "nats:pub-sub".into(),
+                endpoint: None,
+                subject: Some(subject.into()),
+                slot: None,
+            });
+            s.validate()
+                .unwrap_or_else(|e| panic!("expected {subject:?} to validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn contrato_subject_empty_takes_precedence_over_invalid() {
+        // Ordering pin: `ContratoSubjectEmpty` is the more self-
+        // locating diagnostic on `""` and must lead — the value-shape
+        // gate is only reached after the empty-check fires. Mirrors
+        // `contrato_endpoint_empty_takes_precedence_over_invalid` on
+        // the peer payload axis.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some(String::new()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSubjectEmpty { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_subject_invalid_diagnostic_carries_offending_subject() {
+        // Diagnostic-shape pin — the offending `:subject` + `:de` +
+        // `:para` + a non-empty reason flow through verbatim so the
+        // author can grep their caixa.lisp for the offending contrato
+        // block and fix it in one edit. Same shape as
+        // `contrato_endpoint_invalid_diagnostic_carries_offending_endpoint`
+        // and `wit_invalid_diagnostic_carries_offending_wit`.
+        let err = contrato_subject_err("foo..bar");
+        match err {
+            AplicacaoError::ContratoSubjectInvalid {
+                de,
+                para,
+                subject,
+                reason,
+            } => {
+                assert_eq!(de, "payment");
+                assert_eq!(para, "catalog");
+                assert_eq!(subject, "foo..bar");
+                assert!(!reason.is_empty(), "reason field must be non-empty");
+            }
+            other => panic!("expected ContratoSubjectInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn target_view_pubsub_subject_passes_through_to_typed_view() {
+        // The compounding theorem on the pub-sub axis: every
+        // `WitTarget::PubSub { subject }` returned by `target()` carries
+        // a NATS-server-accepted subject. Renderers downstream of
+        // `typed_view()` (caixa-mesh's CNP L4 emitter, the future
+        // NATS Stream/Consumer CR emitter, the future `feira app graph`
+        // view's subject labeller) can rely on this without re-checking
+        // — the type system carries the proof. Mirrors
+        // `target_view_payload_is_guaranteed_nonempty_after_target_call`
+        // on the peer axes.
+        let nats = WitContract {
+            de: "a".into(),
+            para: "b".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("orders.events.*.charged".into()),
+            slot: None,
+        };
+        match nats.target().unwrap() {
+            WitTarget::PubSub { subject } => {
+                assert_eq!(subject, "orders.events.*.charged");
+            }
+            other => panic!("expected PubSub, got {other:?}"),
         }
     }
 
