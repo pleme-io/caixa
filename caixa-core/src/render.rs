@@ -425,6 +425,274 @@ pub fn is_gateway_api_http_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Max length, in bytes, of a single typed `:contratos :wit` world
+/// reference passing the [`is_wit_world_ref`] predicate. 128 bytes —
+/// roughly 8× the longest real-world WIT reference the caixa-mesh test
+/// fixtures carry (`wasi:keyvalue/store` = 19 bytes) and the WIT registry
+/// references its peers under (`wasi:http/proxy@0.2.0` = 21 bytes), so
+/// the cap exists to reject the paste-from-binary footgun (a multi-line
+/// blob accidentally landed in the `:wit` slot) rather than to constrain
+/// legitimate authoring. Lifted as a typed const so a future axis
+/// reaching for the same bound (the M4 per-edge WIT registry resolver,
+/// the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-contract WIT validator) reads from one place.
+pub const WIT_IDENT_MAX_LEN: usize = 128;
+
+/// Predicate: assert that `s` is a valid WIT (WebAssembly Component
+/// Model) world reference — the canonical shape every typed
+/// `:contratos :wit` value carries. The contract — modeled on the
+/// [WIT IDL grammar][wit] (`namespace:package(/interface)*(@version)?`)
+/// restricted to the lowercase subset the pleme-io substrate dispatches
+/// on:
+///
+///   - 1..=[`WIT_IDENT_MAX_LEN`] (128) bytes;
+///   - no whitespace, no control characters, no non-ASCII bytes;
+///   - exactly one `:` separator splitting the namespace from the
+///     package — `wasi:http/proxy`, `nats:pub-sub`, `wasi:keyvalue/store`
+///     (no `:` = there's no namespace to dispatch on; multiple `:` =
+///     the package half can't parse);
+///   - an optional `/`-separated interface suffix (one or more
+///     segments — the WIT grammar allows `('/' id)+` after the package);
+///   - an optional `@<version>` suffix (one trailing `@` only; the
+///     version body is non-empty printable ASCII without `:` or `/`,
+///     since those are reserved for the namespace/interface axes);
+///   - every identifier segment (namespace, package, each interface)
+///     is a lowercase kebab-case ASCII identifier: `[a-z]([a-z0-9]|-)*`,
+///     starting with a lowercase letter, no consecutive `-`, no
+///     trailing `-`.
+///
+/// Lowercase-only is deliberate — the substrate's
+/// [`crate::aplicacao::WitContract::is_http`] / `is_pubsub` / `is_store`
+/// dispatch keys off the lowercase canonical prefix (`wasi:http/`,
+/// `nats:`, `wasi:keyvalue/`, `kafka:`, `kv:`, `http:`). An uppercase
+/// `WASI:HTTP/proxy` is structurally a valid WIT identifier under the
+/// upstream IDL grammar but silently falls through every `is_*` arm and
+/// renders as a capability-only L4-only edge — the canonical "I thought
+/// I had L7 HTTP routing, got L4-only" footgun. Lifting the lowercase
+/// rule to caixa-build time makes the dispatch reachable-by-construction:
+/// every validated `:wit` value matches exactly one of the three typed
+/// dispatch arms (or the explicit capability arm), structurally.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — `WitContract::target`
+/// for the `:contratos :wit` axis at validate time, the future M4 CR
+/// materializer's per-contract WIT validator, the future per-edge WIT
+/// registry resolver — wraps the same reason in its own typed
+/// `*Invalid { <axis>, reason }` variant. The reason wording is
+/// axis-agnostic ("WIT identifiers allow only `[a-z0-9-]`") so every
+/// call site reading the same diagnostic points at the same rule;
+/// drift between any two axes' rule enforcement is a build error
+/// visible at this predicate, not a per-renderer "this passed validate
+/// but silently demoted to capability-only" surprise.
+///
+/// Empty input is rejected here (defensively) and at the call site via
+/// the narrower [`crate::AplicacaoError::EmptyWit`] variant — the same
+/// empty-first cascade [`is_dns_1123_label`] and
+/// [`is_gateway_api_http_path`] carry.
+///
+/// Lifted as a typed substrate-side primitive on the same trajectory
+/// the M2-overlay and label-selector helpers (9e3a057, 9d09cfb, 9dbeafd,
+/// 31455a7, 07a4544) and the value-shape predicates (`is_dns_1123_label`,
+/// `is_gateway_api_http_path`) already follow — the typed slot's valid
+/// set matches its dispatch's accepted set, structurally.
+///
+/// [wit]: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / separator / character-class / kebab-shape), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_wit_world_ref(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > WIT_IDENT_MAX_LEN {
+        return Err(format!(
+            "exceeds WIT world-reference max length of {WIT_IDENT_MAX_LEN} bytes \
+             (got {} bytes; legitimate WIT references rarely exceed ~32 bytes — \
+             this length suggests a paste-from-binary or multi-line blob landed \
+             in the `:wit` slot)",
+            s.len()
+        ));
+    }
+    for &b in s.as_bytes() {
+        if b.is_ascii_whitespace() {
+            return Err(format!(
+                "must not contain whitespace character {ch:?} (WIT world references \
+                 are single tokens with no whitespace between identifier segments)",
+                ch = b as char
+            ));
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (WIT world references \
+                 are printable ASCII tokens)"
+            ));
+        }
+        if b >= 0x80 {
+            return Err(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (WIT world references \
+                 are restricted to ASCII identifiers + the `:` / `/` / `@` / `-` \
+                 separators)"
+            ));
+        }
+    }
+    // Split off the optional `@<version>` suffix first so the
+    // namespace/package parse below operates on a clean
+    // `<ns>:<pkg>(/<iface>)*` head.
+    let (head, version) = match s.split_once('@') {
+        Some((h, v)) => (h, Some(v)),
+        None => (s, None),
+    };
+    if let Some(ver) = version {
+        if ver.is_empty() {
+            return Err(
+                "trailing `@` must be followed by a version (e.g. `@0.2.0`); drop \
+                 the trailing `@` to omit the version pin"
+                    .to_string(),
+            );
+        }
+        if ver.contains('@') {
+            return Err(
+                "must contain at most one `@` separator (the optional version suffix \
+                 is `@<version>`, not `@<ver>@<ver>`)"
+                    .to_string(),
+            );
+        }
+        if ver.contains(':') || ver.contains('/') {
+            return Err(format!(
+                "version suffix {ver:?} must not contain `:` or `/` (those separators \
+                 are reserved for the namespace and interface axes; the version body \
+                 is opaque)"
+            ));
+        }
+    }
+    // Then split the head on `:` — exactly one separator, splitting the
+    // namespace from the package(/interface) body.
+    let Some((ns, rest)) = head.split_once(':') else {
+        return Err(format!(
+            "must contain a `:` separating the namespace from the package (e.g. \
+             `wasi:http/proxy`); got {s:?} with no `:` — pleme-io dispatches `:wit` \
+             values on the canonical `<namespace>:<package>` shape and silently \
+             demotes unmatched shapes to a capability-only L4 edge"
+        ));
+    };
+    if rest.contains(':') {
+        return Err(format!(
+            "must contain exactly one `:` separator (between namespace and package); \
+             got {s:?} with multiple `:`"
+        ));
+    }
+    is_wit_kebab_id(ns)
+        .map_err(|r| format!("namespace {ns:?} is not a valid WIT identifier: {r}"))?;
+    let mut segments = rest.split('/');
+    let pkg = segments.next().unwrap_or("");
+    is_wit_kebab_id(pkg)
+        .map_err(|r| format!("package {pkg:?} is not a valid WIT identifier: {r}"))?;
+    for iface in segments {
+        is_wit_kebab_id(iface)
+            .map_err(|r| format!("interface {iface:?} is not a valid WIT identifier: {r}"))?;
+    }
+    Ok(())
+}
+
+/// Predicate: assert that `s` is a lowercase kebab-case ASCII identifier
+/// — the WIT IDL `id ::= word ('-' word)*` rule restricted to the
+/// lowercase `word ::= [a-z][a-z0-9]*` arm the pleme-io substrate
+/// dispatches on. Private because every legitimate caller flows through
+/// [`is_wit_world_ref`] (which segments the world reference and runs
+/// this predicate per segment); exposing it directly would invite
+/// per-axis WIT-shape gates that re-implement the segmenting logic
+/// inline.
+fn is_wit_kebab_id(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    let bytes = s.as_bytes();
+    if !bytes[0].is_ascii_lowercase() {
+        let msg = if bytes[0].is_ascii_uppercase() {
+            format!(
+                "must start with a lowercase ASCII letter (got uppercase {ch:?}); \
+                 pleme-io dispatches `:wit` values on the lowercase canonical shape \
+                 — `wasi:http/proxy` is recognized, `WASI:HTTP/proxy` is silently \
+                 demoted to a capability-only edge",
+                ch = bytes[0] as char
+            )
+        } else if bytes[0].is_ascii_digit() {
+            format!(
+                "must start with a lowercase ASCII letter (got digit {ch:?}); WIT \
+                 identifiers begin with a letter, not a digit",
+                ch = bytes[0] as char
+            )
+        } else if bytes[0] == b'-' {
+            "must not start with `-` (WIT identifiers are kebab-case words; the \
+             leading character is a lowercase letter)"
+                .to_string()
+        } else {
+            format!(
+                "must start with a lowercase ASCII letter (got {ch:?}); WIT \
+                 identifiers allow only `[a-z0-9-]`",
+                ch = bytes[0] as char
+            )
+        };
+        return Err(msg);
+    }
+    if bytes[bytes.len() - 1] == b'-' {
+        return Err(
+            "must not end with `-` (WIT identifiers are kebab-case words separated \
+             by single hyphens; no trailing `-`)"
+                .to_string(),
+        );
+    }
+    let mut prev_hyphen = false;
+    for &b in bytes {
+        if b == b'-' {
+            if prev_hyphen {
+                return Err(
+                    "must not contain consecutive `-` characters (WIT identifiers \
+                     join words with single hyphens, not `--`)"
+                        .to_string(),
+                );
+            }
+            prev_hyphen = true;
+            continue;
+        }
+        prev_hyphen = false;
+        if b.is_ascii_uppercase() {
+            return Err(format!(
+                "must be lowercase (got uppercase character {ch:?}); pleme-io \
+                 dispatches `:wit` values on the lowercase canonical shape — \
+                 `wasi:http/proxy` is recognized, `WASI:HTTP/proxy` is silently \
+                 demoted to a capability-only edge",
+                ch = b as char
+            ));
+        }
+        if !(b.is_ascii_lowercase() || b.is_ascii_digit()) {
+            let msg = if b == b'_' {
+                "contains `_` (WIT identifiers are kebab-case; use `-` between \
+                 words instead of `_`)"
+                    .to_string()
+            } else if b == b'.' {
+                "contains `.` (WIT identifiers are single kebab-case words; split \
+                 into separate namespace/package/interface segments via `:` and \
+                 `/` instead of `.`)"
+                    .to_string()
+            } else {
+                format!(
+                    "contains invalid character {ch:?} (WIT identifiers allow only \
+                     `[a-z0-9-]`)",
+                    ch = b as char
+                )
+            };
+            return Err(msg);
+        }
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -1867,5 +2135,124 @@ mod tests {
         // without a shape-mismatch footgun.
         let err = is_gateway_api_http_path("api/cart").unwrap_err();
         assert!(err.contains('/'), "got: {err:?}");
+    }
+
+    // ── is_wit_world_ref — shared WIT world-reference predicate ──────────
+
+    #[test]
+    fn wit_world_ref_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // WIT identifier the `:contratos :wit` axis already carries in
+        // the test fixtures + the example checkout-aplicacao (each
+        // hand-curated to match real WIT registry references). Drift
+        // between this list and the per-axis positive-set sweep
+        // surfaces here — one source of truth for the rule. Includes
+        // every shape variant: HTTP-prefixed (`wasi:http/proxy`),
+        // KV-prefixed (`wasi:keyvalue/store`), pubsub-prefixed
+        // (`nats:pub-sub`, `kafka:topic`), capability-only
+        // (`custom:exchange`, `pleme:cap/audit`), the optional
+        // `@<version>` suffix (`wasi:http/proxy@0.2.0`), and the
+        // multi-segment `/iface/iface` form the WIT IDL grammar allows.
+        for s in [
+            "wasi:http/proxy",
+            "wasi:keyvalue/store",
+            "nats:pub-sub",
+            "kafka:topic",
+            "custom:exchange",
+            "pleme:cap/audit",
+            "http:server",
+            "kv:store",
+            "wasi:http/proxy@0.2.0",
+            "wasi:keyvalue/store@0.2.0-rc.1",
+            "pleme:cap/audit/v2",
+        ] {
+            is_wit_world_ref(s)
+                .unwrap_or_else(|e| panic!("canonical WIT reference {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn wit_world_ref_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so a
+        // future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `gateway_api_http_path_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicate.
+        for (s, needle) in [
+            // Missing `:` separator → silent capability demotion.
+            ("wasi-http/proxy", "must contain a `:`"),
+            // Multiple `:` → can't split into ns + pkg.
+            ("wasi:http:proxy", "exactly one `:`"),
+            // Uppercase → silently bypasses the lowercase dispatch.
+            ("WASI:http/proxy", "lowercase"),
+            ("wasi:HTTP/proxy", "lowercase"),
+            // Empty package half → can't resolve via WIT registry.
+            ("wasi:", "must not be empty"),
+            // Empty namespace half.
+            (":http/proxy", "must not be empty"),
+            // Underscore → DNS-1123 / WIT kebab-case footgun.
+            ("wasi:http_proxy", "_"),
+            // Leading digit → WIT identifiers begin with a letter.
+            ("wasi:1http/proxy", "digit"),
+            // Consecutive hyphens → invalid kebab-case.
+            ("wasi:pub--sub", "consecutive `-`"),
+            // Trailing hyphen → invalid kebab-case.
+            ("wasi:proxy-", "must not end with `-`"),
+            // Whitespace inside the token.
+            ("wasi:http proxy", "whitespace"),
+            // Control characters.
+            ("wasi:http\x01proxy", "control character"),
+            // Non-ASCII byte (café-style un-percent-encoded literal).
+            ("wasi:caf\u{e9}/proxy", "non-ASCII"),
+            // Trailing `@` with no version body.
+            ("wasi:http/proxy@", "trailing `@`"),
+            // Version body carrying `:` or `/`.
+            ("wasi:http/proxy@0.2:rc1", "must not contain `:` or `/`"),
+            // Doubled `@`.
+            ("wasi:http/proxy@0.2@beta", "at most one `@`"),
+        ] {
+            let err = is_wit_world_ref(s)
+                .err()
+                .unwrap_or_else(|| panic!("WIT reference {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "WIT reference {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_world_ref_rejects_empty_defensively() {
+        // The predicate is called from `WitContract::target()` only
+        // after the per-axis `EmptyWit` arm has fired at validate
+        // time; re-checking here keeps the predicate usable from any
+        // future call site without an empty-precondition footgun.
+        // Same defensive empty-check `is_dns_1123_label` /
+        // `is_gateway_api_http_path` carry at their call sites.
+        let err = is_wit_world_ref("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn wit_world_ref_rejects_at_129_byte_boundary() {
+        // The 128-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring
+        // `dns_1123_label_rejects_at_64_byte_boundary` and
+        // `gateway_api_http_path_rejects_at_1025_byte_boundary` on the
+        // peer predicates. Constructed as `wasi:<long-pkg>` so the
+        // kebab-shape arms don't fire first and obscure the cap arm.
+        let pad = "a".repeat(123); // 5 + 123 = 128 (`wasi:` + pad)
+        let max_ok = format!("wasi:{pad}");
+        assert_eq!(max_ok.len(), 128);
+        is_wit_world_ref(&max_ok).unwrap();
+        let pad_over = "a".repeat(124);
+        let too_long = format!("wasi:{pad_over}");
+        assert_eq!(too_long.len(), 129);
+        let err = is_wit_world_ref(&too_long).unwrap_err();
+        assert!(err.contains("128"), "got: {err:?}");
+        assert!(err.contains("129"), "got: {err:?}");
     }
 }
