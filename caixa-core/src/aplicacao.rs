@@ -134,6 +134,38 @@ impl WitContract {
         let slot = self.slot.as_deref();
         let edge = || (self.de.clone(), self.para.clone(), self.wit.clone());
 
+        // The `:wit` value drives every downstream dispatch — the
+        // is_http/is_pubsub/is_store prefix matchers below, the
+        // caixa-mesh L7-vs-L4 emission, the cycle-detector's pub-sub
+        // exclusion. Until this gate landed `target()` accepted any
+        // non-empty string and silently demoted unrecognized shapes to
+        // a capability-only edge (`:wit "WASI:HTTP/proxy"` — uppercase
+        // typo, `:wit "wasi-http/proxy"` — hyphen-instead-of-colon typo,
+        // `:wit "wasi:http proxy"` — whitespace, `:wit "wasi:"` — empty
+        // package, the paste-from-binary footgun a multi-line blob
+        // accidentally landing in the slot, the un-percent-encoded
+        // non-ASCII byte) — the canonical "I thought I had L7 HTTP
+        // routing, got L4-only" footgun. Empty is still pre-checked at
+        // the [`AplicacaoSpec::validate`] call site via the narrower
+        // [`AplicacaoError::EmptyWit`] variant (and fires first at the
+        // validate layer); the value-shape gate here picks up the
+        // structurally-invalid non-empty cases the empty check misses,
+        // and remains correct under direct `target()` calls outside
+        // validate (the predicate's defensive empty arm returns a
+        // parser-shaped reason rather than silently falling through to
+        // the Capability arm). Same trajectory as c4213a4 (WitContract
+        // endpoint/subject/slot value-shape gates lifted into
+        // `target()`) on the peer payload axes.
+        if let Err(reason) = crate::render::is_wit_world_ref(&self.wit) {
+            let (de, para, wit) = edge();
+            return Err(AplicacaoError::ContratoWitInvalid {
+                de,
+                para,
+                wit,
+                reason,
+            });
+        }
+
         if self.is_http() {
             if subject.is_some() || slot.is_some() {
                 let (de, para, wit) = edge();
@@ -1475,6 +1507,20 @@ pub enum AplicacaoError {
     ContratoMemberMissing { caixa: String },
     #[error("contrato {de:?} → {para:?} has empty :wit")]
     EmptyWit { de: String, para: String },
+    #[error(
+        "contrato {de:?} → {para:?} :wit {wit:?} is not a valid WIT world reference: \
+         {reason} (the substrate dispatches `:wit` values on the canonical \
+         lowercase `<namespace>:<package>(/<interface>)?(@<version>)?` shape — \
+         `wasi:http/proxy`, `nats:pub-sub`, `wasi:keyvalue/store` — and silently \
+         demotes unmatched shapes to a capability-only L4 edge; use a lowercase \
+         kebab-case identifier per segment)"
+    )]
+    ContratoWitInvalid {
+        de: String,
+        para: String,
+        wit: String,
+        reason: String,
+    },
     #[error(":entrada routes to caixa {para:?} not declared in :membros")]
     EntradaMemberMissing { para: String },
     #[error(":entrada must declare a non-empty :host")]
@@ -3014,6 +3060,323 @@ mod tests {
         };
         assert!(kv.is_store());
         assert!(!kv.is_http());
+    }
+
+    // ── :contratos :wit value-shape gate ─────────────────────────────────
+    //
+    // Mirrors the `:contratos :endpoint` value-shape suite on the peer
+    // dispatch-discriminator axis. Until this gate landed
+    // `WitContract::target()` accepted any non-empty string and
+    // silently demoted unrecognized shapes to a capability-only L4
+    // edge — the canonical "I thought I had L7 HTTP routing, got
+    // L4-only" footgun. Every authoring footgun the WIT registry's
+    // own grammar rejects (uppercase, hyphen-for-colon typo,
+    // whitespace, empty package, doubled `@`, …) now becomes a
+    // caixa-build-time `ContratoWitInvalid` with the offending
+    // `:wit` + `:de` + `:para` named verbatim. Same diagnostic shape
+    // as `ContratoEndpointInvalid` on the sibling axis; same shared
+    // predicate (`crate::render::is_wit_world_ref`) ensures drift
+    // between any two axes' rule enforcement is a build error at the
+    // predicate, not piecemeal across renderers.
+
+    fn contrato_wit_err(wit: &str) -> AplicacaoError {
+        // Fresh spec per call so the new contract doesn't collide on
+        // identity with `three_member_spec`'s pre-existing entries.
+        // The new edge uses `(payment, catalog)` — a pair the fixture
+        // doesn't already declare — with no payload field set, so the
+        // wit-shape gate fires before any payload-shape arm.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: wit.into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        s.validate().unwrap_err()
+    }
+
+    #[test]
+    fn rejects_wit_with_uppercase_namespace() {
+        // Fail-before-pass-after pin — pre-gate `:wit "WASI:http/proxy"`
+        // didn't match the lowercase `wasi:http/` prefix is_http() keys
+        // off, so the dispatch fell through to the capability arm and
+        // the contract silently rendered as an L4-only Cilium edge.
+        // The new gate surfaces the uppercase typo at validate time
+        // with the offending `:wit` named.
+        let err = contrato_wit_err("WASI:http/proxy");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "WASI:http/proxy" && reason.contains("lowercase")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_hyphen_for_colon_typo() {
+        // The canonical "I forgot the `:` separator" typo — pre-gate
+        // this passed as Capability silently, so the renderer emitted
+        // an L4-only policy where the author expected L7 HTTP rules.
+        let err = contrato_wit_err("wasi-http/proxy");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi-http/proxy" && reason.contains("must contain a `:`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_multiple_colons() {
+        // Doubled `:` — the namespace/package split has nowhere to
+        // anchor, so the dispatch silently demotes to Capability.
+        let err = contrato_wit_err("wasi:http:proxy");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi:http:proxy" && reason.contains("exactly one `:`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_empty_package() {
+        // `wasi:` — namespace alone with no package. Pre-gate this
+        // failed neither the is_http nor is_pubsub nor is_store
+        // prefix check (none of `wasi:http/`, `wasi:keyvalue/` match
+        // a bare `wasi:`), so it silently demoted to Capability.
+        let err = contrato_wit_err("wasi:");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi:" && reason.contains("package") && reason.contains("must not be empty")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_underscore() {
+        // Underscore — WIT identifiers are kebab-case, same rule
+        // DNS-1123 enforces on its peer axes. The diagnostic carries
+        // the explicit "use `-` instead" remediation.
+        let err = contrato_wit_err("wasi:http_proxy");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi:http_proxy" && reason.contains('_')),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_whitespace() {
+        // Whitespace mid-token — the prefix check matches but the
+        // package-and-onward parse silently demoted to Capability.
+        let err = contrato_wit_err("wasi:http proxy");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi:http proxy" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_non_ascii() {
+        // Un-percent-encoded non-ASCII byte — the canonical "I copied
+        // the package name from a doc with smart quotes / accented
+        // characters" footgun.
+        let err = contrato_wit_err("wasi:caf\u{e9}/proxy");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi:caf\u{e9}/proxy" && reason.contains("non-ASCII")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_consecutive_hyphens() {
+        // `pub--sub` — WIT identifiers join words with single hyphens.
+        let err = contrato_wit_err("nats:pub--sub");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "nats:pub--sub" && reason.contains("consecutive `-`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_with_trailing_at_no_version() {
+        // `wasi:http/proxy@` — the version-suffix author started to
+        // type `@0.2.0` and stopped, leaving a stray `@`. The WIT
+        // parser would reject this; surface it at validate time.
+        let err = contrato_wit_err("wasi:http/proxy@");
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == "wasi:http/proxy@" && reason.contains("trailing `@`")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_wit_too_long() {
+        // 129-byte WIT reference — one over the WIT_IDENT_MAX_LEN cap.
+        // The legitimate-shape arms all pass (lowercase, single `:`,
+        // kebab-case identifiers); only the cap arm fires. Surfaces
+        // the paste-from-binary / accidental-multi-line-blob landing
+        // footgun. Mirrors `rejects_http_contrato_endpoint_too_long`
+        // on the peer axis.
+        let big = format!("wasi:{}", "a".repeat(124));
+        assert_eq!(big.len(), 129);
+        let err = contrato_wit_err(&big);
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, ref reason, .. }
+                if wit == &big && reason.contains("max length of 128")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn wit_max_length_validates() {
+        // 128-byte WIT reference — exactly the cap. Boundary pin:
+        // drift in the cap surfaces here and at `rejects_wit_too_long`
+        // simultaneously, mirroring
+        // `http_contrato_endpoint_max_length_validates` on the peer
+        // axis.
+        let big = format!("wasi:{}", "a".repeat(123));
+        assert_eq!(big.len(), 128);
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: big,
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn wit_accepts_canonical_forms_at_aplicacao_layer() {
+        // Positive-set sweep through the AplicacaoSpec::validate
+        // surface (rather than the substrate-side predicate directly)
+        // — pins every shape the existing test fixtures + the
+        // checkout-aplicacao example carry, so the gate's accept-set
+        // matches the substrate's emit-set. Drift between this list
+        // and `render::tests::wit_world_ref_accepts_canonical_forms`
+        // surfaces at the substrate layer's positive sweep — one
+        // source of truth for the rule.
+        for wit in [
+            "wasi:http/proxy",
+            "wasi:keyvalue/store",
+            "nats:pub-sub",
+            "kafka:topic",
+            "custom:exchange",
+            "pleme:cap/audit",
+            "wasi:http/proxy@0.2.0",
+        ] {
+            // Payload field paired to the dispatched WIT shape so the
+            // shape-↔-target arm doesn't fire instead of the wit-shape
+            // arm we're exercising.
+            let (endpoint, subject, slot) =
+                if wit.starts_with("wasi:http/") || wit.starts_with("http:") {
+                    (Some("/x".into()), None, None)
+                } else if wit.starts_with("nats:") || wit.starts_with("kafka:") {
+                    (None, Some("topic.x".into()), None)
+                } else if wit.starts_with("wasi:keyvalue/") || wit.starts_with("kv:") {
+                    (None, None, Some("bucket/$key".into()))
+                } else {
+                    (None, None, None)
+                };
+            let mut s = three_member_spec();
+            s.contratos.push(WitContract {
+                de: "payment".into(),
+                para: "catalog".into(),
+                wit: wit.into(),
+                endpoint,
+                subject,
+                slot,
+            });
+            s.validate()
+                .unwrap_or_else(|e| panic!("canonical WIT {wit:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn empty_wit_takes_precedence_over_invalid() {
+        // Ordering pin: `EmptyWit` is the more self-locating
+        // diagnostic on `""` and must lead — the value-shape gate is
+        // only reached after the empty-check fires. Mirrors
+        // `contrato_endpoint_empty_takes_precedence_over_invalid` on
+        // the peer payload axis.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: String::new(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EmptyWit { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn wit_invalid_fires_before_payload_shape_arm() {
+        // Ordering pin: a malformed `:wit` surfaces *its own*
+        // diagnostic (which names the offending wit verbatim) before
+        // any payload-field check — a contrato whose wit is
+        // structurally invalid AND carries a wrong target field
+        // returns `ContratoWitInvalid`, not `ContratoWrongTarget`,
+        // because the dispatch on the wit is what decides which
+        // payload field is "right" in the first place. Without this
+        // ordering, the author would see "wrong target field" for a
+        // wit that hasn't even been parsed, which doesn't name the
+        // root cause.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            // Hyphen-for-colon typo + endpoint set: pre-gate this
+            // raised `ContratoWrongTarget { expected: "none" }` (the
+            // Capability arm rejecting the endpoint), masking the
+            // real authoring mistake (the wit isn't `wasi:http/proxy`).
+            wit: "wasi-http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoWitInvalid { ref wit, .. }
+                if wit == "wasi-http/proxy"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn wit_invalid_diagnostic_carries_offending_wit() {
+        // Diagnostic-shape pin — the offending `:wit` + `:de` +
+        // `:para` + a non-empty reason flow through verbatim so the
+        // author can grep their caixa.lisp for the offending contrato
+        // block and fix it in one edit. Same shape as
+        // `contrato_endpoint_invalid_diagnostic_carries_offending_endpoint`.
+        let err = contrato_wit_err("WASI:HTTP/proxy");
+        match err {
+            AplicacaoError::ContratoWitInvalid {
+                de,
+                para,
+                wit,
+                reason,
+            } => {
+                assert_eq!(de, "payment");
+                assert_eq!(para, "catalog");
+                assert_eq!(wit, "WASI:HTTP/proxy");
+                assert!(!reason.is_empty(), "reason field must be non-empty");
+            }
+            other => panic!("expected ContratoWitInvalid, got {other:?}"),
+        }
     }
 
     #[test]
