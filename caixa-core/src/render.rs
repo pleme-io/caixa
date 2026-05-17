@@ -693,6 +693,202 @@ fn is_wit_kebab_id(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Max length, in bytes, of a single typed `:contratos :subject` NATS
+/// subject passing the [`is_nats_subject`] predicate. 256 bytes —
+/// matches the upstream NATS Java client's `MAX_SUBJECT_LENGTH`
+/// constant and sits well above the longest legitimate subject the
+/// caixa-mesh test fixtures + example checkout-aplicacao carry
+/// (`"checkout.events.charge.failed"` = 30 bytes, `"rio.events.order.charged"`
+/// = 25 bytes). The cap exists to reject the paste-from-binary footgun
+/// (a multi-line blob accidentally landed in the `:subject` slot)
+/// rather than to constrain legitimate authoring. Lifted as a typed
+/// const so a future axis reaching for the same bound (the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-subject
+/// validator, the future NATS Stream/Consumer CR emitter for the
+/// `nats:pub-sub` branch of `:contratos`, the future per-edge
+/// `:politicas`-derived NATS-aware policy overlay) reads from one
+/// place.
+pub const NATS_SUBJECT_MAX_LEN: usize = 256;
+
+/// Predicate: assert that `s` is a valid NATS subject — the canonical
+/// shape every typed `:contratos :subject` value carries. The
+/// contract — modeled on the [NATS subject grammar][nats] (dot-
+/// separated tokens with `*` / `>` wildcards), restricted to the
+/// strict `[A-Za-z0-9_-]` per-token character set the NATS server's
+/// subject parser accepts at runtime:
+///
+///   - 1..=[`NATS_SUBJECT_MAX_LEN`] (256) bytes;
+///   - no whitespace, no control characters, no non-ASCII bytes
+///     (RFC 3986 requires `%XX` percent-encoding for non-ASCII; NATS
+///     subjects predate that and reject any byte outside the strict
+///     ASCII identifier set);
+///   - one-or-more `.`-separated tokens — no leading `.`, no trailing
+///     `.`, no consecutive `.` (NATS rejects empty tokens between
+///     separators);
+///   - each token is one of:
+///     - a concrete identifier `[A-Za-z0-9_-]+` (NATS subjects are
+///       case-sensitive; unlike DNS-1123 we don't lowercase-fold,
+///       and underscores are permitted since NATS itself accepts them
+///       in tokens);
+///     - the `*` single-token wildcard (matches exactly one token;
+///       allowed at any segment position);
+///     - the `>` multi-token wildcard (matches one-or-more trailing
+///       tokens; allowed ONLY as the final segment — `foo.>` matches
+///       `foo.bar` / `foo.bar.baz`, `foo.>.bar` is rejected outright).
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — `WitContract::target`
+/// for the `:contratos :subject` axis at validate time, the future M4
+/// CR materializer's per-subject validator, the future NATS Stream/
+/// Consumer CR emitter — wraps the same reason in its own typed
+/// `*Invalid { <axis>, reason }` variant. The reason wording is axis-
+/// agnostic ("NATS subjects reject empty tokens between separators")
+/// so every call site reading the same diagnostic points at the same
+/// rule; drift between any two axes' rule enforcement is a build
+/// error visible at this predicate, not a per-renderer "this passed
+/// validate but the NATS server rejected at publish/subscribe" surprise.
+///
+/// Empty input is rejected here (defensively) and at the call site via
+/// the narrower [`crate::AplicacaoError::ContratoSubjectEmpty`] variant
+/// — the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], and [`is_wit_world_ref`] carry.
+///
+/// Lifted as a typed substrate-side primitive on the same trajectory
+/// the M2-overlay and label-selector helpers (9e3a057, 9d09cfb,
+/// 9dbeafd, 31455a7, 07a4544) and the value-shape predicates
+/// (`is_dns_1123_label`, `is_gateway_api_http_path`,
+/// `is_wit_world_ref`) already follow — the typed slot's valid set
+/// matches the NATS server's accepted set, structurally.
+///
+/// [nats]: https://docs.nats.io/nats-concepts/subjects
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / separator / character-class / wildcard-position), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_nats_subject(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > NATS_SUBJECT_MAX_LEN {
+        return Err(format!(
+            "exceeds NATS subject max length of {NATS_SUBJECT_MAX_LEN} bytes \
+             (got {} bytes; legitimate NATS subjects rarely exceed ~64 bytes — \
+             this length suggests a paste-from-binary or multi-line blob landed \
+             in the `:subject` slot)",
+            s.len()
+        ));
+    }
+    for &b in s.as_bytes() {
+        if b == b' ' || b == b'\t' {
+            return Err(format!(
+                "must not contain whitespace character {ch:?} (NATS subjects \
+                 are single tokens with no whitespace between dot-separated \
+                 segments)",
+                ch = b as char
+            ));
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (NATS subjects \
+                 are printable ASCII tokens; the NATS server's subject parser \
+                 rejects control characters at publish/subscribe time)"
+            ));
+        }
+        if b >= 0x80 {
+            return Err(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (NATS subjects \
+                 are restricted to `[A-Za-z0-9_-]` per token + the `.` \
+                 separator and the `*` / `>` wildcards)"
+            ));
+        }
+    }
+    if s.starts_with('.') {
+        return Err(
+            "must not start with `.` (NATS subjects reject empty leading \
+             tokens; drop the leading `.` separator)"
+                .to_string(),
+        );
+    }
+    if s.ends_with('.') {
+        return Err(
+            "must not end with `.` (NATS subjects reject empty trailing \
+             tokens; use the `>` multi-token wildcard to match arbitrary \
+             trailing segments instead)"
+                .to_string(),
+        );
+    }
+    if s.contains("..") {
+        return Err(
+            "must not contain consecutive `.` characters (NATS subjects \
+             reject empty tokens between separators; use the `*` single-\
+             token wildcard to match any one token)"
+                .to_string(),
+        );
+    }
+    let segments: Vec<&str> = s.split('.').collect();
+    let last_idx = segments.len() - 1;
+    for (i, seg) in segments.iter().enumerate() {
+        is_nats_subject_segment(seg, i, last_idx)?;
+    }
+    Ok(())
+}
+
+/// Predicate: assert that `seg` is a valid NATS subject token at index
+/// `i` of a `total = last_idx + 1`-segment subject. Private because
+/// every legitimate caller flows through [`is_nats_subject`] (which
+/// splits the subject on `.` and runs this predicate per segment);
+/// exposing it directly would invite per-axis NATS-segment gates that
+/// re-implement the splitting logic inline.
+///
+/// Mirrors the [`is_wit_kebab_id`] / [`is_wit_world_ref`] private-helper
+/// pair on the WIT predicate.
+fn is_nats_subject_segment(seg: &str, i: usize, last_idx: usize) -> Result<(), String> {
+    if seg == "*" {
+        return Ok(());
+    }
+    if seg == ">" {
+        if i != last_idx {
+            return Err(format!(
+                "the `>` multi-token wildcard is only allowed as the \
+                 final segment (got `>` at segment {one_based} of {total}; \
+                 move to the end or use `*` for a single-token wildcard)",
+                one_based = i + 1,
+                total = last_idx + 1
+            ));
+        }
+        return Ok(());
+    }
+    for &b in seg.as_bytes() {
+        let valid = b.is_ascii_alphanumeric() || b == b'_' || b == b'-';
+        if !valid {
+            let msg = if b == b'*' {
+                "contains `*` mid-segment (NATS wildcards are standalone \
+                 tokens — `foo.*.bar` matches one middle token, `foo*` \
+                 does not; split into separate `.`-separated segments)"
+                    .to_string()
+            } else if b == b'>' {
+                "contains `>` mid-segment (NATS wildcards are standalone \
+                 tokens — `foo.>` matches all trailing tokens, `foo>` \
+                 does not; split into separate `.`-separated segments)"
+                    .to_string()
+            } else {
+                format!(
+                    "contains invalid character {ch:?} in subject segment \
+                     (NATS subject tokens allow only `[A-Za-z0-9_-]`; use \
+                     `_` or `-` instead)",
+                    ch = b as char
+                )
+            };
+            return Err(msg);
+        }
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -2254,5 +2450,158 @@ mod tests {
         let err = is_wit_world_ref(&too_long).unwrap_err();
         assert!(err.contains("128"), "got: {err:?}");
         assert!(err.contains("129"), "got: {err:?}");
+    }
+
+    // ── is_nats_subject — shared NATS subject predicate ──────────────────
+
+    #[test]
+    fn nats_subject_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // NATS subject the `:contratos :subject` axis carries in the
+        // caixa-mesh test fixtures + the example checkout-aplicacao
+        // (each hand-curated to match real NATS server-side admission
+        // shapes). Drift between this list and the per-axis positive-
+        // set sweep surfaces here — one source of truth for the rule.
+        // Includes single-token subjects, multi-dot subjects, snake-
+        // case + kebab-case tokens (NATS accepts both), digit-bearing
+        // tokens, the `*` single-token wildcard at every segment
+        // position, and the `>` multi-token wildcard at the final
+        // position (the two NATS subscription patterns the protocol
+        // defines). Mirrors the canonical-forms sweeps on the peer
+        // value-shape predicates (`gateway_api_http_path_accepts_…`,
+        // `wit_world_ref_accepts_…`).
+        for s in [
+            "checkout.events.charge.failed",
+            "rio.events.order.charged",
+            "orders",
+            "orders.123",
+            "snake_case.token",
+            "kebab-case.token",
+            "MixedCase.Token",
+            "alpha.beta.gamma.delta.epsilon",
+            "orders.*.charged",
+            "*.events.*",
+            "orders.>",
+            "*",
+            ">",
+        ] {
+            is_nats_subject(s)
+                .unwrap_or_else(|e| panic!("canonical NATS subject {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn nats_subject_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so
+        // a future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `gateway_api_http_path_rejects_each_arm_with_substring_pinned_reason`
+        // and `wit_world_ref_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicates.
+        for (s, needle) in [
+            // Whitespace inside the token.
+            ("foo bar", "whitespace"),
+            ("foo\tbar", "whitespace"),
+            // Control characters.
+            ("foo\x01bar", "control character"),
+            // Non-ASCII byte (un-percent-encoded café-style literal).
+            ("foo.caf\u{e9}", "non-ASCII"),
+            // Leading `.` — empty leading token.
+            (".foo", "must not start with `.`"),
+            // Trailing `.` — empty trailing token.
+            ("foo.", "must not end with `.`"),
+            // Consecutive `.` — empty token between separators.
+            ("foo..bar", "consecutive `.`"),
+            // Non-trailing `>` multi-token wildcard.
+            ("foo.>.bar", "only allowed as the final segment"),
+            // Mid-segment `*` (not a standalone wildcard token).
+            ("foo*.bar", "`*` mid-segment"),
+            // Mid-segment `>` (not a standalone wildcard token).
+            ("foo>", "`>` mid-segment"),
+            // `.` is the separator, so `,` (or any other punctuation)
+            // surfaces as an invalid-character arm.
+            ("foo,bar", "invalid character"),
+            // `:` reserved-looking — distinct invalid-character arm
+            // (pinned separately so a future relaxation that accepts
+            // `:` mid-segment surfaces here, not in some downstream
+            // renderer's "this passed validate but the NATS server
+            // rejected at publish" footgun).
+            ("foo:bar", "invalid character"),
+        ] {
+            let err = is_nats_subject(s)
+                .err()
+                .unwrap_or_else(|| panic!("NATS subject {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "NATS subject {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn nats_subject_rejects_empty_defensively() {
+        // The predicate is called from `WitContract::target()` only
+        // after the per-axis `ContratoSubjectEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, and `is_wit_world_ref` carry at
+        // their call sites.
+        let err = is_nats_subject("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn nats_subject_rejects_at_257_byte_boundary() {
+        // The 256-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring
+        // `dns_1123_label_rejects_at_64_byte_boundary`,
+        // `gateway_api_http_path_rejects_at_1025_byte_boundary`, and
+        // `wit_world_ref_rejects_at_129_byte_boundary` on the peer
+        // predicates. Constructed as a single all-`a` token (no `.`)
+        // so the segment / wildcard arms don't fire first and obscure
+        // the cap arm.
+        let max_ok = "a".repeat(256);
+        assert_eq!(max_ok.len(), 256);
+        is_nats_subject(&max_ok).unwrap();
+        let too_long = "a".repeat(257);
+        assert_eq!(too_long.len(), 257);
+        let err = is_nats_subject(&too_long).unwrap_err();
+        assert!(err.contains("256"), "got: {err:?}");
+        assert!(err.contains("257"), "got: {err:?}");
+    }
+
+    #[test]
+    fn nats_subject_lone_wildcard_tokens_validate() {
+        // The two NATS wildcards stand alone as the entire subject —
+        // a `subscribe("*")` matches any single-token publish, a
+        // `subscribe(">")` matches every NATS message on the connection.
+        // Both are protocol-legal; the typed substrate accepts them
+        // structurally and leaves the "should the typed `:contratos`
+        // edge subscribe to literally everything?" question to a
+        // future semantic-level gate. Pinned alongside the canonical-
+        // forms sweep so a future tighten that disallows lone wildcards
+        // surfaces both arms simultaneously.
+        is_nats_subject("*").unwrap();
+        is_nats_subject(">").unwrap();
+    }
+
+    #[test]
+    fn nats_subject_trailing_multi_wildcard_validates() {
+        // `>` at the final segment is the canonical "match all trailing
+        // tokens" subscription pattern. Pinned alongside the non-
+        // trailing-`>` rejection arm so the boundary between the two
+        // is in one place — a future relaxation that allows `>` at
+        // non-trailing positions or a tighten that disallows trailing
+        // `>` surfaces both arms simultaneously.
+        is_nats_subject("orders.>").unwrap();
+        is_nats_subject("orders.events.>").unwrap();
+        // And the `*` single-token wildcard combines freely with the
+        // trailing `>` — the canonical "match one middle token, then
+        // anything trailing" subscription pattern.
+        is_nats_subject("orders.*.>").unwrap();
     }
 }
