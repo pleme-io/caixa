@@ -889,6 +889,155 @@ fn is_nats_subject_segment(seg: &str, i: usize, last_idx: usize) -> Result<(), S
     Ok(())
 }
 
+/// Max length, in bytes, of a single typed `:contratos :slot` WASI
+/// keyvalue store key/template passing the [`is_wasi_keyvalue_slot`]
+/// predicate. 512 bytes — generously above the longest realistic slot
+/// template (`"checkout/$orderId"` = 17 bytes, `"users:{tenant}/{id}"`
+/// = 19 bytes, `"session.tokens.<sid>"` = 20 bytes) and well under any
+/// canonical WASI-keyvalue backend's per-key limit (etcd: 1.5 MB,
+/// DynamoDB partition+sort key: 2 KB combined, Redis: 512 MB — the cap
+/// is chosen for the *template* slot a typed `:contratos` edge
+/// authors, not the realized key at runtime). The cap exists to reject
+/// the paste-from-binary footgun (a multi-line blob accidentally landed
+/// in the `:slot` slot) rather than to constrain legitimate authoring.
+/// Lifted as a typed const so a future axis reaching for the same
+/// bound (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-slot validator, the future per-Servico `:capabilities`
+/// `wasi:keyvalue/store` axis's per-slot validator when M4 lands
+/// per-capability typed slots, the future per-edge `:politicas`-derived
+/// kv-backend-aware policy overlay's per-slot validator) reads from
+/// one place. Same lift trajectory as [`NATS_SUBJECT_MAX_LEN`] (which
+/// caps the peer pub-sub payload axis at 256 bytes — twice that here
+/// because kv slot templates legitimately compose more `/`-separated
+/// path segments + template variables than NATS subjects do
+/// `.`-separated tokens).
+pub const WASI_KV_SLOT_MAX_LEN: usize = 512;
+
+/// Predicate: assert that `s` is a valid WASI keyvalue store slot
+/// template — the canonical shape every typed `:contratos :slot` value
+/// carries when its `:wit` dispatch resolves to the
+/// [`WitTarget::Store`][st] arm (`wasi:keyvalue/store`, `kv:*`). The
+/// WASI keyvalue 0.2 specification ([`bucket = string`, `key = string`,
+/// both opaque][wasi-kv]) places no syntactic constraints on the key
+/// shape, so the substrate enforces the canonical printable-ASCII
+/// floor every realistic kv backend admits: no raw whitespace, no
+/// control bytes, no non-ASCII bytes, length-bounded by
+/// [`WASI_KV_SLOT_MAX_LEN`]. The grammar:
+///
+///   - 1..=[`WASI_KV_SLOT_MAX_LEN`] (512) bytes;
+///   - no whitespace (space, tab — kv slot templates are single-token
+///     identifiers / path expressions, whitespace is the canonical
+///     paste-from-doc footgun whose runtime behavior varies
+///     unpredictably across backends — etcd accepts, Redis accepts
+///     but rejects subsequent CLI ops, DynamoDB rejects on write);
+///   - no ASCII control characters (`0x00..0x1F`, `0x7F`) — every
+///     kv backend either rejects on write (DynamoDB, etcd) or admits
+///     and silently breaks at the next read (Redis: `\r\n` corrupts
+///     the RESP protocol framing if the slot template is rendered
+///     directly into a key without re-encoding);
+///   - no non-ASCII bytes (`>= 0x80`) — RFC 3986-style percent-
+///     encoding (`%XX`) is the substrate's canonical UTF-8 escape
+///     for kv slot templates the author wants to namespace by
+///     non-ASCII identifier; raw non-ASCII silently differs between
+///     backends (etcd preserves bytes verbatim; Redis-via-RESP3 may
+///     re-encode; DynamoDB rejects).
+///
+/// The predicate is intentionally permissive on structure: all
+/// printable ASCII bytes (`0x21..0x7E`) are admitted, including
+/// `/` (path separators), `:` (namespace separators), `.`
+/// (dot-namespacing), `-`/`_` (identifier separators), `$`/`{`/`}`/`<`/`>`
+/// (template-variable syntaxes — the canonical `"checkout/$orderId"`
+/// shape carries `$`-prefixed identifiers, alternate `"users:{id}"` /
+/// `"session.<sid>"` shapes carry `{}` / `<>` brackets), and the
+/// remaining ASCII punctuation. The substrate doesn't know which kv
+/// backend the runtime resolves [`WitTarget::Store`][st] to — that
+/// choice is per-cluster, made by the operator's kv-provider binding
+/// — so the typed slot enforces the intersection-floor every backend
+/// admits rather than any one backend's stricter superset.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — [`WitContract::target`]
+/// for the `:contratos :slot` axis at validate time, the future M4 CR
+/// materializer's per-slot validator, the future per-Servico
+/// `:capabilities wasi:keyvalue/store` per-slot validator — wraps the
+/// same reason in its own typed `*Invalid { <axis>, reason }` variant.
+/// The reason wording is axis-agnostic ("kv slot templates reject raw
+/// whitespace") so every call site reading the same diagnostic points
+/// at the same rule; drift between any two axes' rule enforcement is
+/// a build error visible at this predicate, not a per-renderer "this
+/// passed validate but the kv backend rejected on first write"
+/// surprise.
+///
+/// Empty input is rejected here (defensively) and at the call site
+/// via the narrower [`crate::AplicacaoError::ContratoSlotEmpty`]
+/// variant — the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`], and
+/// [`is_nats_subject`] all carry.
+///
+/// Lifted as a typed substrate-side primitive on the same trajectory
+/// the peer payload-axis predicates ([`is_gateway_api_http_path`] for
+/// `:endpoint`, [`is_nats_subject`] for `:subject`) already follow —
+/// the typed slot's valid set matches the kv backend intersection-
+/// floor's accepted set, structurally. The fifth value-shape primitive
+/// to land in [`crate::render`] after [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`], and
+/// [`is_nats_subject`] — and the one that closes the trajectory across
+/// every typed payload axis the [`WitContract::target`] dispatch
+/// carries (HTTP `:endpoint`, PubSub `:subject`, Store `:slot`).
+///
+/// [st]: crate::WitTarget::Store
+/// [wasi-kv]: https://github.com/WebAssembly/wasi-keyvalue
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / whitespace / control / non-ASCII), without wrapping in
+/// any error variant — every caller maps the same `String` into its
+/// own typed `*Invalid { <axis>, reason }` enum variant.
+pub fn is_wasi_keyvalue_slot(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > WASI_KV_SLOT_MAX_LEN {
+        return Err(format!(
+            "exceeds WASI keyvalue slot max length of {WASI_KV_SLOT_MAX_LEN} bytes \
+             (got {} bytes; legitimate kv slot templates rarely exceed ~64 bytes — \
+             this length suggests a paste-from-binary or multi-line blob landed in \
+             the `:slot` slot)",
+            s.len()
+        ));
+    }
+    for &b in s.as_bytes() {
+        if b == b' ' || b == b'\t' {
+            return Err(format!(
+                "must not contain whitespace character {ch:?} (kv slot templates \
+                 are single-token identifiers / path expressions; raw whitespace \
+                 behaves unpredictably across kv backends — percent-encode as `%20` \
+                 or use `-`/`_` to namespace)",
+                ch = b as char
+            ));
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (kv slot templates \
+                 are printable ASCII; control bytes either get rejected on write \
+                 by strict backends — DynamoDB, etcd — or silently corrupt the \
+                 next read on permissive ones — Redis RESP framing)"
+            ));
+        }
+        if b >= 0x80 {
+            return Err(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (RFC 3986 requires \
+                 percent-encoding `%XX` for characters outside the ASCII unreserved \
+                 + reserved set; raw non-ASCII bytes are admitted by some kv backends \
+                 verbatim and re-encoded by others — the typed slot's value set is \
+                 the intersection-floor every backend admits identically)"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -2603,5 +2752,153 @@ mod tests {
         // trailing `>` — the canonical "match one middle token, then
         // anything trailing" subscription pattern.
         is_nats_subject("orders.*.>").unwrap();
+    }
+
+    // ── is_wasi_keyvalue_slot — shared kv slot-template predicate ────────
+
+    #[test]
+    fn wasi_kv_slot_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical kv
+        // slot template the `:contratos :slot` axis carries in the
+        // caixa-mesh test fixtures + plausible authoring patterns
+        // (each maps to a realistic wasi:keyvalue/store key the runtime
+        // resolves on dispatch). Drift between this list and the
+        // per-axis positive-set sweep surfaces here — one source of
+        // truth for the rule. Includes:
+        //   - single-token identifiers (`"checkout"`, `"events"`);
+        //   - dot-namespaced templates (`"session.tokens.<sid>"`);
+        //   - path-namespaced templates with `$`-prefixed variables
+        //     (`"checkout/$orderId"`, the canonical Akka-cluster-
+        //     sharding-style template);
+        //   - colon-namespaced templates with brace placeholders
+        //     (`"users:{tenant}/{id}"`, the canonical multi-tenant
+        //     Redis-key shape);
+        //   - angle-bracket placeholders (`"session.<sid>"`);
+        //   - underscore identifiers (`"snake_case_key"`);
+        //   - kebab identifiers (`"kebab-case-key"`);
+        //   - mixed-case (`"MixedCase"` — kv slot templates are case-
+        //     sensitive; the predicate doesn't lowercase-fold);
+        //   - digit-bearing tokens (`"shard0"`, `"v2/key"`);
+        //   - percent-encoded fragments (`"users/caf%C3%A9"`); the
+        //     encoded form is the *valid* shape, the raw `café` is
+        //     rejected on the non-ASCII arm.
+        // Mirrors the canonical-forms sweeps on the peer value-shape
+        // predicates (`gateway_api_http_path_accepts_…`,
+        // `nats_subject_accepts_canonical_forms`).
+        for s in [
+            "checkout",
+            "events",
+            "checkout/$orderId",
+            "users:{tenant}/{id}",
+            "session.<sid>",
+            "session.tokens.<sid>",
+            "snake_case_key",
+            "kebab-case-key",
+            "MixedCase",
+            "shard0",
+            "v2/key",
+            "users/caf%C3%A9",
+        ] {
+            is_wasi_keyvalue_slot(s)
+                .unwrap_or_else(|e| panic!("canonical kv slot {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn wasi_kv_slot_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so
+        // a future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `nats_subject_rejects_each_arm_with_substring_pinned_reason`
+        // and `gateway_api_http_path_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicates.
+        for (s, needle) in [
+            // Raw space inside the template — the canonical paste-from-
+            // doc footgun.
+            ("check out/$order", "whitespace"),
+            // Tab byte — distinct arm-pinned reason from the space arm.
+            ("check\tout", "whitespace"),
+            // Control character (SOH = 0x01) — pinned separately from
+            // the whitespace arm so a future relaxation that admits
+            // raw whitespace but still rejects controls surfaces here.
+            ("checkout/\x01order", "control character"),
+            // Newline — the canonical "the paste-from-binary slug
+            // spans multiple lines" footgun. Distinct from the
+            // whitespace arm because `\n` is a control character.
+            ("checkout\norder", "control character"),
+            // DEL byte (0x7F) — the upper boundary of the control-
+            // character range, pinned so a future relaxation that
+            // only checks `< 0x20` surfaces here.
+            ("checkout\x7forder", "control character"),
+            // Un-percent-encoded non-ASCII byte — the canonical
+            // "I copied the key from a doc with smart quotes /
+            // accented characters" footgun. Author must percent-
+            // encode (the canonical-forms sweep covers
+            // `"users/caf%C3%A9"`).
+            ("ch\u{e9}ckout/$order", "non-ASCII"),
+        ] {
+            let err = is_wasi_keyvalue_slot(s)
+                .err()
+                .unwrap_or_else(|| panic!("kv slot {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "kv slot {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wasi_kv_slot_rejects_empty_defensively() {
+        // The predicate is called from `WitContract::target()` only
+        // after the per-axis `ContratoSlotEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`, and
+        // `is_nats_subject` carry at their call sites.
+        let err = is_wasi_keyvalue_slot("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn wasi_kv_slot_rejects_at_513_byte_boundary() {
+        // The 512-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring
+        // `dns_1123_label_rejects_at_64_byte_boundary`,
+        // `gateway_api_http_path_rejects_at_1025_byte_boundary`,
+        // `wit_world_ref_rejects_at_129_byte_boundary`, and
+        // `nats_subject_rejects_at_257_byte_boundary` on the peer
+        // predicates. Constructed as a single all-`a` token (no
+        // separator / template syntax) so only the cap arm fires.
+        let max_ok = "a".repeat(512);
+        assert_eq!(max_ok.len(), 512);
+        is_wasi_keyvalue_slot(&max_ok).unwrap();
+        let too_long = "a".repeat(513);
+        assert_eq!(too_long.len(), 513);
+        let err = is_wasi_keyvalue_slot(&too_long).unwrap_err();
+        assert!(err.contains("512"), "got: {err:?}");
+        assert!(err.contains("513"), "got: {err:?}");
+    }
+
+    #[test]
+    fn wasi_kv_slot_admits_full_printable_ascii_range() {
+        // Structural pin: the predicate admits every printable ASCII
+        // byte from `0x21` (`!`) to `0x7E` (`~`) inclusive, including
+        // every template-variable bracket the documented authoring
+        // patterns use (`$`, `{`, `}`, `<`, `>`) and every namespace
+        // separator (`/`, `:`, `.`, `-`, `_`). Drift here = a future
+        // tighten that removes any byte from the admitted set surfaces
+        // a name-the-byte test failure, not piecemeal across per-axis
+        // sweeps. Constructed as a single all-bytes template (`b!`,
+        // `b"`, …, `b~`) — the predicate doesn't impose structure,
+        // only character-class.
+        for b in 0x21u8..=0x7E {
+            let s = std::str::from_utf8(&[b]).unwrap().to_string();
+            is_wasi_keyvalue_slot(&s)
+                .unwrap_or_else(|e| panic!("printable ASCII byte 0x{b:02x} must pass: {e:?}"));
+        }
     }
 }

@@ -303,6 +303,40 @@ impl WitContract {
                     para: self.para.clone(),
                 });
             }
+            // Value-shape gate on the third (and last) typed payload
+            // axis the `WitContract::target` dispatch carries — the
+            // peer of [`crate::render::is_gateway_api_http_path`] for
+            // `:endpoint` (4f0390b) and [`crate::render::is_nats_subject`]
+            // for `:subject` (63e18a0). Until this gate landed
+            // `target()` only refused the empty string; a structurally
+            // invalid slot (`"check out/$order"` — un-percent-encoded
+            // whitespace whose runtime behavior varies unpredictably
+            // across kv backends, `"checkout/\x01order"` — control
+            // character that Redis admits but corrupts on next read
+            // and DynamoDB rejects outright, `"chéckout/$order"` —
+            // un-percent-encoded non-ASCII byte each backend re-encodes
+            // differently, `"checkout\n/$order"` — embedded newline,
+            // the 513-byte paste-from-binary slug) silently passed
+            // validate and surfaced at runtime as a per-backend kv
+            // write rejection (DynamoDB / etcd) or as a silent
+            // next-read corruption (Redis-via-RESP3), far from the
+            // source caixa.lisp with no field naming which `:contratos`
+            // edge carried the typo. The lifted predicate makes the
+            // kv-backend intersection-floor a substrate-level
+            // invariant at validate time, not a runtime "this passed
+            // validate but the kv backend rejected on first write"
+            // surprise — closes the typed payload-axis value-shape
+            // trajectory across all three legs of the four
+            // [`WitTarget`] arms (HTTP / PubSub / Store / Capability)
+            // that caixa-mesh + the future kv emitters land in.
+            if let Err(reason) = crate::render::is_wasi_keyvalue_slot(sl) {
+                return Err(AplicacaoError::ContratoSlotInvalid {
+                    de: self.de.clone(),
+                    para: self.para.clone(),
+                    slot: sl.to_string(),
+                    reason,
+                });
+            }
             return Ok(WitTarget::Store { slot: sl });
         }
 
@@ -1682,6 +1716,22 @@ pub enum AplicacaoError {
          for; omit :slot only if the WIT world is not store-shaped)"
     )]
     ContratoSlotEmpty { de: String, para: String },
+    #[error(
+        "store contrato {de:?} → {para:?} :slot {slot:?} is not a valid \
+         WASI keyvalue store slot template: {reason} (the substrate enforces \
+         the printable-ASCII intersection-floor every kv backend admits — \
+         use a single-token path / template expression like `\"checkout/$orderId\"`, \
+         `\"users:{{tenant}}/{{id}}\"`, or `\"session.tokens.<sid>\"`; RFC 3986 requires \
+         percent-encoding `%XX` for non-ASCII and whitespace — a malformed \
+         slot either gets rejected on write by strict backends or silently \
+         corrupts the next read on permissive ones, far from the source caixa.lisp)"
+    )]
+    ContratoSlotInvalid {
+        de: String,
+        para: String,
+        slot: String,
+        reason: String,
+    },
     #[error(
         "synchronous :contratos form a cycle ({}); break with a NATS pub-sub edge \
          or an event-sourced indirection (MESH-COMPOSITION §III.3)",
@@ -3719,6 +3769,283 @@ mod tests {
                 assert_eq!(subject, "orders.events.*.charged");
             }
             other => panic!("expected PubSub, got {other:?}"),
+        }
+    }
+
+    // ── :contratos :slot value-shape gate ────────────────────────────────
+    //
+    // Mirrors the `:contratos :endpoint` (4f0390b) + `:contratos :subject`
+    // (63e18a0) value-shape suites on the peer payload axes. Until this
+    // gate landed `WitContract::target()` only refused the empty string
+    // for the Store arm; a structurally invalid slot (raw whitespace,
+    // control character, non-ASCII byte, paste-from-binary multi-line
+    // blob) silently passed validate and surfaced at runtime as a
+    // per-backend kv write rejection or a silent next-read corruption,
+    // far from the source caixa.lisp with no field naming which
+    // `:contratos` edge carried the typo. Every authoring footgun the
+    // kv backend intersection-floor would catch on write now becomes a
+    // caixa-build-time `ContratoSlotInvalid` with the offending
+    // `:slot` + `:de` + `:para` named verbatim. Same diagnostic shape
+    // as `ContratoEndpointInvalid` / `ContratoSubjectInvalid` on the
+    // peer payload axes; same shared predicate
+    // (`crate::render::is_wasi_keyvalue_slot`) ensures drift between
+    // any two axes' rule enforcement is a build error at the
+    // predicate, not piecemeal across renderers. Closes the typed
+    // payload-axis value-shape trajectory across all three legs of the
+    // four `WitTarget` arms (HTTP / PubSub / Store / Capability).
+
+    fn contrato_slot_err(slot: &str) -> AplicacaoError {
+        // Fresh spec per call so the new contract doesn't collide on
+        // identity with `three_member_spec`'s pre-existing entries
+        // and doesn't close a synchronous cycle the cycle detector
+        // would reject before the slot-shape gate fires. The new edge
+        // uses `(payment, catalog)` — a pair the fixture doesn't
+        // already declare in either direction (the fixture carries
+        // `cart -> catalog` and `cart -> payment`, so `payment ->
+        // catalog` doesn't form a cycle on the sync subgraph) — with
+        // `:wit "wasi:keyvalue/store"` and the varying `:slot`, so the
+        // slot-shape gate fires cleanly after the wit-shape gate
+        // (which `"wasi:keyvalue/store"` passes). Same edge pair the
+        // peer `contrato_subject_err` helper uses (63e18a0).
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some(slot.into()),
+        });
+        s.validate().unwrap_err()
+    }
+
+    #[test]
+    fn rejects_store_contrato_slot_with_whitespace() {
+        // Fail-before-pass-after pin — pre-gate `"check out/$order"`
+        // silently landed at the kv backend with whitespace whose
+        // runtime behavior varies unpredictably across backends (etcd
+        // accepts, Redis accepts then breaks on next CLI op, DynamoDB
+        // rejects on write). Now caught at the source caixa.lisp.
+        let err = contrato_slot_err("check out/$order");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotInvalid { ref slot, ref reason, .. }
+                if slot == "check out/$order" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_store_contrato_slot_with_tab() {
+        // Tab byte arm-pinned separately from the space arm so a
+        // future relaxation that admits one but not the other surfaces
+        // here.
+        let err = contrato_slot_err("check\tout");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotInvalid { ref slot, ref reason, .. }
+                if slot == "check\tout" && reason.contains("whitespace")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_store_contrato_slot_with_control_char() {
+        // SOH (0x01) — distinct from the whitespace arm. Redis admits
+        // and corrupts on RESP protocol framing; DynamoDB rejects on
+        // write.
+        let err = contrato_slot_err("checkout/\x01order");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotInvalid { ref slot, ref reason, .. }
+                if slot == "checkout/\x01order" && reason.contains("control character")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_store_contrato_slot_with_newline() {
+        // Embedded newline — the canonical "the paste-from-binary slug
+        // spans multiple lines" footgun. Distinct from the whitespace
+        // arm because `\n` is a control character (0x0A).
+        let err = contrato_slot_err("checkout\norder");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotInvalid { ref slot, ref reason, .. }
+                if slot == "checkout\norder" && reason.contains("control character")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_store_contrato_slot_with_non_ascii() {
+        // Un-percent-encoded non-ASCII byte — the canonical "I copied
+        // the slot from a doc with accented characters" footgun. Each
+        // kv backend re-encodes non-ASCII differently (etcd preserves
+        // bytes verbatim; Redis-via-RESP3 may re-encode; DynamoDB
+        // rejects), so the typed slot's value set is the intersection-
+        // floor every backend admits identically (printable ASCII).
+        let err = contrato_slot_err("ch\u{e9}ckout/$order");
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotInvalid { ref slot, ref reason, .. }
+                if slot == "ch\u{e9}ckout/$order" && reason.contains("non-ASCII")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_store_contrato_slot_too_long() {
+        // 513-byte slot — one over the WASI_KV_SLOT_MAX_LEN cap. The
+        // legitimate-shape arms all pass (a single all-`a` token, no
+        // separators); only the cap arm fires. Surfaces the paste-
+        // from-binary / accidental-multi-line-blob landing footgun.
+        // Mirrors `rejects_pubsub_contrato_subject_too_long` and
+        // `rejects_http_contrato_endpoint_too_long` on the peer
+        // payload axes.
+        let big = "a".repeat(513);
+        assert_eq!(big.len(), 513);
+        let err = contrato_slot_err(&big);
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotInvalid { ref slot, ref reason, .. }
+                if slot == &big && reason.contains("max length of 512")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn store_contrato_slot_max_length_validates() {
+        // 512-byte slot — exactly the cap. Boundary pin: drift in the
+        // cap surfaces here and at `rejects_store_contrato_slot_too_long`
+        // simultaneously, mirroring
+        // `pubsub_contrato_subject_max_length_validates` and
+        // `http_contrato_endpoint_max_length_validates` on the peer
+        // payload axes.
+        let big = "a".repeat(512);
+        assert_eq!(big.len(), 512);
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some(big),
+        });
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn store_contrato_slot_accepts_canonical_forms() {
+        // Positive-set sweep: every canonical kv slot template the
+        // substrate-side `is_wasi_keyvalue_slot` predicate accepts
+        // (single-token identifiers, path-namespaced `$`-templates,
+        // colon-namespaced `{}`-templates, dot-namespaced `<>`-templates,
+        // snake_case / kebab-case / MixedCase tokens, digit-bearing
+        // tokens, percent-encoded fragments) must remain valid
+        // contrato slots too. Drift between this list and the
+        // substrate-side `wasi_kv_slot_accepts_canonical_forms` sweep
+        // surfaces at the shared predicate — one source of truth.
+        // Uses a fresh `(payment, catalog)` edge so none of the swept
+        // slots collide with the pre-existing entries in
+        // `three_member_spec`.
+        for slot in [
+            "checkout",
+            "checkout/$orderId",
+            "users:{tenant}/{id}",
+            "session.<sid>",
+            "session.tokens.<sid>",
+            "snake_case_key",
+            "kebab-case-key",
+            "MixedCase",
+            "shard0",
+            "v2/key",
+            "users/caf%C3%A9",
+        ] {
+            let mut s = three_member_spec();
+            s.contratos.push(WitContract {
+                de: "payment".into(),
+                para: "catalog".into(),
+                wit: "wasi:keyvalue/store".into(),
+                endpoint: None,
+                subject: None,
+                slot: Some(slot.into()),
+            });
+            s.validate()
+                .unwrap_or_else(|e| panic!("expected slot {slot:?} to validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn contrato_slot_empty_takes_precedence_over_invalid() {
+        // Ordering pin: `ContratoSlotEmpty` is the more self-locating
+        // diagnostic on `""` and must lead — the value-shape gate is
+        // only reached after the empty-check fires. Mirrors
+        // `contrato_subject_empty_takes_precedence_over_invalid` and
+        // `contrato_endpoint_empty_takes_precedence_over_invalid` on
+        // the peer payload axes.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "catalog".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some(String::new()),
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoSlotEmpty { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_slot_invalid_diagnostic_carries_offending_slot() {
+        // Diagnostic-shape pin — the offending `:slot` + `:de` +
+        // `:para` + a non-empty reason flow through verbatim so the
+        // author can grep their caixa.lisp for the offending contrato
+        // block and fix it in one edit. Same shape as
+        // `contrato_subject_invalid_diagnostic_carries_offending_subject`
+        // and `contrato_endpoint_invalid_diagnostic_carries_offending_endpoint`
+        // on the peer payload axes.
+        let err = contrato_slot_err("check out/$order");
+        match err {
+            AplicacaoError::ContratoSlotInvalid {
+                de,
+                para,
+                slot,
+                reason,
+            } => {
+                assert_eq!(de, "payment");
+                assert_eq!(para, "catalog");
+                assert_eq!(slot, "check out/$order");
+                assert!(!reason.is_empty(), "reason field must be non-empty");
+            }
+            other => panic!("expected ContratoSlotInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn target_view_store_slot_passes_through_to_typed_view() {
+        // The compounding theorem on the store axis: every
+        // `WitTarget::Store { slot }` returned by `target()` carries a
+        // kv-backend-accepted slot template. Renderers downstream of
+        // `typed_view()` (the future per-Servico `:capabilities
+        // wasi:keyvalue/store` axis emitter, the future `feira app
+        // graph` view's slot labeller, the future kv-provider CR
+        // materializer) can rely on this without re-checking — the
+        // type system carries the proof. Mirrors
+        // `target_view_pubsub_subject_passes_through_to_typed_view` on
+        // the peer payload axis.
+        let store = WitContract {
+            de: "a".into(),
+            para: "b".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("checkout/$orderId".into()),
+        };
+        match store.target().unwrap() {
+            WitTarget::Store { slot } => {
+                assert_eq!(slot, "checkout/$orderId");
+            }
+            other => panic!("expected Store, got {other:?}"),
         }
     }
 
