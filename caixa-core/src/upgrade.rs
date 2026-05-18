@@ -91,6 +91,75 @@ impl UpgradeFromEntry {
     }
 }
 
+/// Validate a whole `:upgrade-from` list: per-entry typed shape via
+/// [`UpgradeFromEntry::validate`] *and* the cross-entry graph-edge-set
+/// invariant — at most one `(:from <prior>)` block per parsed semver.
+///
+/// OTP's appup picks at most one matching block to apply to the running
+/// release (`release_handler:install_release/1` matches the loaded
+/// `:from` against the currently-running version and executes the
+/// associated instruction sequence; the wasm-operator picks the matching
+/// block at upgrade time, per `upgrade.rs` module doc). Two blocks with
+/// the same parsed-semver `:from` are an ambiguous edge in the typed
+/// upgrade graph — the operator can pick either set deterministically,
+/// but each set may carry different `LoadModule | StateChange |
+/// SoftPurge | Purge | Restart` instructions, so the *chosen* path is
+/// non-deterministic relative to the source caixa.lisp. The author's
+/// intent is one path per prior version; the typed graph must enforce
+/// that shape.
+///
+/// Same set-not-multiset discipline already applied to every peer
+/// typed-graph axis: `:children :caixa` (dbf50a9 —
+/// `SupervisorError::DuplicateChildCaixa`, `child_spec.id` is required-
+/// unique per supervisor in OTP), `:membros :caixa` (4bb3f3d —
+/// `AplicacaoError::MembroDuplicate`), `:contratos`
+/// (5dbcfaf — `AplicacaoError::ContratoDuplicate`), `:placement
+/// :clusters` (c7c7799 — `AplicacaoError::PlacementClusterDuplicate`),
+/// and `:entrada :paths` (eb3456d — `AplicacaoError::EntradaPathDuplicate`).
+/// Each closes the same authoring footgun: a Vec authoring surface that
+/// silently accepts duplicate entries and renders the "second wins"
+/// (or "operator picks arbitrarily") shape downstream, far from the
+/// source caixa.lisp.
+///
+/// Duplicates are detected by [`semver::Version`] equality (the
+/// crate's `PartialEq` compares the full identity — major.minor.patch +
+/// pre-release + build metadata — so `1.0.0` and `1.0.0-rc.1` and
+/// `1.0.0+build1` and `1.0.0+build2` are all distinct upgrade paths).
+/// The conservative choice mirrors what the wasm-operator's
+/// `:from`-match dispatch can see; collapsing build metadata to catch
+/// a wider net of duplicates is a future tightening that requires
+/// coordinating with the operator's match step.
+///
+/// Per-entry shape errors fire before the duplicate gate so the
+/// diagnostic names the malformed slot (`BadFromVersion`, `EmptyScript`,
+/// `ModuleInvalid`, …) rather than collapsing two unrelated authoring
+/// errors into a single duplicate diagnostic. Mirrors the
+/// `*_invalid_fires_before_duplicate_check` order pins on every peer
+/// axis ([`crate::SupervisorSpec::validate`],
+/// [`crate::AplicacaoSpec::validate_membros`],
+/// [`crate::AplicacaoSpec::validate_placement`]).
+pub fn validate_upgrade_from(entries: &[UpgradeFromEntry]) -> Result<(), UpgradeError> {
+    use semver::Version;
+    let mut seen: Vec<Version> = Vec::with_capacity(entries.len());
+    for entry in entries {
+        entry.validate()?;
+        // `entry.validate()` accepted this `:from`, so parse cannot
+        // fail here — the BadFromVersion arm above is the only gate
+        // and both call `Version::parse(&self.from)`.
+        let parsed = Version::parse(&entry.from).expect(
+            "UpgradeFromEntry::validate must accept `:from` iff Version::parse does — keep the \
+             two gates aligned",
+        );
+        if seen.contains(&parsed) {
+            return Err(UpgradeError::DuplicateFrom {
+                from: entry.from.clone(),
+            });
+        }
+        seen.push(parsed);
+    }
+    Ok(())
+}
+
 impl UpgradeInstruction {
     /// Kebab-case lisp form name for this instruction, used as the
     /// `:kind` tag in [`UpgradeError::ModuleEmpty`] /
@@ -226,6 +295,16 @@ pub enum UpgradeError {
         script.display()
     )]
     ParentEscapeScript { script: PathBuf },
+    #[error(
+        ":upgrade-from carries more than one `(:from {from:?})` entry — OTP appup picks at most \
+         one matching block per running version (`release_handler:install_release/1` dispatches \
+         on the loaded `:from` against the currently-running release), so two entries with the \
+         same parsed semver are an ambiguous edge in the typed upgrade graph (the operator would \
+         pick either set non-deterministically). Author one path per prior version; if two \
+         distinct instruction sequences are needed, fold them into one ordered list under the \
+         single matching `(:from {from:?} :instructions (…))` block."
+    )]
+    DuplicateFrom { from: String },
 }
 
 #[cfg(test)]
@@ -550,5 +629,196 @@ mod tests {
         };
         let json2 = serde_json::to_string(&i2).unwrap();
         assert!(json2.contains("\"kind\":\"state-change\""));
+    }
+
+    // ── validate_upgrade_from: cross-entry graph-edge-set invariant ────
+
+    #[test]
+    fn validate_upgrade_from_accepts_disjoint_versions() {
+        // Positive control: the canonical "chain v0.1.0 → 0.1.5 →
+        // 0.2.0-rc.1" authoring shape from ABSORPTION-ROADMAP §M2.3
+        // (and `entry_with_chain_of_versions` above) passes the cross-
+        // entry gate. Different `:from` per entry is the intended
+        // shape; the gate must not regress this baseline.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![UpgradeInstruction::LoadModule { module: "x".into() }],
+            ),
+            entry(
+                "0.1.5",
+                vec![UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                }],
+            ),
+            entry("0.2.0-rc.1", vec![UpgradeInstruction::Restart]),
+        ];
+        validate_upgrade_from(&entries).unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_accepts_empty_list() {
+        // Absent `:upgrade-from` (the bare `feira init` shape) — the
+        // gate must trivially pass an empty list. Mirrors the per-axis
+        // "empty list passes" positive control on every peer typed-
+        // graph gate (`validate_membros` empty list, `validate_placement`
+        // requires non-empty clusters but only after a `Placement`
+        // exists, etc.).
+        validate_upgrade_from(&[]).unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_rejects_duplicate_from() {
+        // Fail-before-pass-after pin: two entries with the same parsed-
+        // semver `:from` are an ambiguous edge in the typed upgrade
+        // graph (OTP appup picks at most one matching block per running
+        // version; with two matching blocks the operator picks either
+        // set non-deterministically — author intent is one path per
+        // prior version). Same set-not-multiset discipline as
+        // `:children :caixa` (dbf50a9), `:membros :caixa` (4bb3f3d),
+        // `:contratos` (5dbcfaf), `:placement :clusters` (c7c7799),
+        // `:entrada :paths` (eb3456d) — now extended onto the fifth
+        // typed-graph axis.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![UpgradeInstruction::LoadModule { module: "x".into() }],
+            ),
+            entry(
+                "0.1.0",
+                vec![UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                }],
+            ),
+        ];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateFrom {
+                from: "0.1.0".into()
+            },
+            "two entries with `:from \"0.1.0\"` must surface as DuplicateFrom carrying the \
+             offending value verbatim"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_treats_pre_release_as_distinct() {
+        // Negative-of-positive: `1.0.0` and `1.0.0-rc.1` are *not*
+        // equal under semver (pre-release version is part of the
+        // identity), so they're distinct upgrade paths and must not
+        // collide. A future tightening that collapses pre-release into
+        // the release version surfaces here.
+        let entries = vec![
+            entry("1.0.0", vec![UpgradeInstruction::Restart]),
+            entry("1.0.0-rc.1", vec![UpgradeInstruction::Restart]),
+        ];
+        validate_upgrade_from(&entries).unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_treats_build_metadata_as_distinct() {
+        // Conservative-by-design: [`semver::Version`]'s `PartialEq`
+        // compares build metadata (it derives equality across all
+        // fields including `pre` + `build`), so `1.0.0+build1` and
+        // `1.0.0+build2` are *not* duplicates from the gate's
+        // perspective — the operator may treat the build-metadata
+        // suffix as a tiebreaker even though the semver spec says
+        // build metadata is ignored for precedence
+        // (https://semver.org/#spec-item-10). Pin the conservative
+        // behavior here so a future switch to a build-metadata-
+        // stripping comparator surfaces as a test failure first; that
+        // change would require coordinating with the wasm-operator's
+        // `:from`-match dispatch step, which is the load-bearing
+        // semantic we'd be mirroring.
+        let entries = vec![
+            entry("1.0.0+build1", vec![UpgradeInstruction::Restart]),
+            entry("1.0.0+build2", vec![UpgradeInstruction::Restart]),
+        ];
+        validate_upgrade_from(&entries).unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_per_entry_shape_fires_before_duplicate() {
+        // Order pin: a malformed `:from` on the second entry surfaces
+        // its `BadFromVersion` diagnostic, not a (less-useful)
+        // `DuplicateFrom`. The per-entry shape pass runs *inline*
+        // before the duplicate-key insert — parallel to
+        // `child_versao_invalid_fires_before_duplicate_check`
+        // (b38ff3a) and `membro_versao_invalid_fires_before_duplicate_check`
+        // (9888b13). Without this pin a future shortcut that runs the
+        // cross-entry gate first would surface a duplicate diagnostic
+        // on a string that isn't even parsable as a version.
+        let entries = vec![
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+            entry("not-a-semver", vec![UpgradeInstruction::Restart]),
+        ];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::BadFromVersion(ref s) if s == "not-a-semver"),
+            "malformed `:from` on a non-duplicate entry must surface as BadFromVersion, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_per_entry_shape_fires_before_duplicate_on_first_entry() {
+        // Symmetric arm: a malformed shape on the *first* entry of a
+        // duplicate pair surfaces its per-entry diagnostic too (not
+        // the duplicate diagnostic that would otherwise fire on the
+        // second entry). Pinned separately so a future shortcut that
+        // walks the duplicate-check ahead of the per-entry pass for the
+        // first entry only — easy regression to introduce — surfaces
+        // here.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![UpgradeInstruction::LoadModule {
+                    module: String::new(),
+                }],
+            ),
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+        ];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::ModuleEmpty {
+                kind: ":load-module"
+            },
+            "malformed instruction on the first entry of a duplicate pair must surface its \
+             per-entry diagnostic before the duplicate gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_duplicate_diagnostic_names_second_collision() {
+        // Diagnostic-shape pin: when three entries carry the same
+        // `:from`, the gate reports the *first* collision (the second
+        // entry) and stops — the third entry's duplicate is masked by
+        // the first surfaced one. Mirrors
+        // `validate_duplicate_child_diagnostic_names_first_collision`
+        // (dbf50a9) on the supervisor axis.
+        let entries = vec![
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+        ];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateFrom {
+                from: "0.1.0".into()
+            }
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_single_entry_never_duplicates() {
+        // Boundary control: a list of one entry can never produce a
+        // duplicate, regardless of `:from` value (any single-element
+        // set is trivially without duplicates). Pin this so a future
+        // off-by-one in the seen-set insert doesn't accidentally flag
+        // a single entry as duplicating itself.
+        let entries = vec![entry("0.1.0", vec![UpgradeInstruction::Restart])];
+        validate_upgrade_from(&entries).unwrap();
     }
 }

@@ -184,38 +184,38 @@ impl LayoutInvariants for StandardLayout {
         // Upgrade-from entries: every entry's typed shape must hold
         // (`:from` is a valid semver; every instruction's `:module`
         // is a DNS-1123 label; every `:state-change :script` is
-        // non-empty / relative / parent-escape-free) BEFORE the
-        // existing path-existence pass runs, so the diagnostic names
-        // *which slot* is malformed rather than the less-helpful
-        // "missing upgrade-script" (which doesn't fire for non-script
-        // axes at all). Mirrors the b0c8389 `BehaviorSpec::validate`
-        // wiring on the peer M2 typed slot: the validate pass on the
-        // typed value happens first, the on-disk path-existence pass
-        // happens second.
+        // non-empty / relative / parent-escape-free) AND the
+        // graph-edge-set invariant on the `:from` axis (at most one
+        // entry per parsed semver — OTP appup picks at most one
+        // matching block per running version, so two entries with the
+        // same `:from` are an ambiguous edge), BEFORE the existing
+        // path-existence pass runs, so the diagnostic names *which
+        // slot* is malformed rather than the less-helpful "missing
+        // upgrade-script" (which doesn't fire for non-script axes at
+        // all). Mirrors the b0c8389 `BehaviorSpec::validate` wiring on
+        // the peer M2 typed slot: the validate pass on the typed value
+        // happens first, the on-disk path-existence pass happens
+        // second.
         //
-        // The wiring closes a latent defect: `UpgradeFromEntry::validate`
-        // existed since b0c8389 (and its `UpgradeInstruction::validate`
-        // inner pass since the M2 lift) but no LayoutInvariants
-        // caller invoked it, so the value-shape gates on `:from`
-        // (BadFromVersion), `:state-change :script` (EmptyScript /
-        // AbsoluteScript / ParentEscapeScript), and `:module`
-        // (ModuleEmpty / ModuleInvalid) were dead code from the
-        // build-pipeline perspective — a malformed appup silently
-        // passed `feira lint` / `feira build` and the failure
-        // surfaced at wasm-engine hot-upgrade time as a per-backend
-        // "module not found" / "code:load_module/1 badarg" runtime
-        // error, far from the source caixa.lisp. Wiring entry.validate()
-        // through `LayoutError::UpgradeViolation` turns every typed
-        // appup axis into a build error visible at `feira build`
-        // time, naming the offending caixa and the specific instruction
-        // shape that failed.
+        // The duplicate-`:from` arm of [`validate_upgrade_from`]
+        // closes the typed-graph-set invariant on the fifth axis to
+        // get this discipline — `:children :caixa` (dbf50a9),
+        // `:membros :caixa` (4bb3f3d), `:contratos` (5dbcfaf),
+        // `:placement :clusters` (c7c7799), `:entrada :paths`
+        // (eb3456d) are the prior four. Without it a caixa.lisp with
+        // two `(:from "0.1.0" …)` blocks silently passed `feira
+        // build` and the wasm-operator picked either set non-
+        // deterministically at hot-upgrade time, far from the source.
+        //
+        // 26da2c7 closed the per-entry validate gap; this commit closes
+        // the cross-entry one on the same wiring site.
+        crate::upgrade::validate_upgrade_from(&caixa.upgrade_from).map_err(|err| {
+            LayoutError::UpgradeViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            }
+        })?;
         for entry in &caixa.upgrade_from {
-            entry
-                .validate()
-                .map_err(|err| LayoutError::UpgradeViolation {
-                    caixa: caixa.nome.clone(),
-                    issue: err.to_string(),
-                })?;
             for instr in &entry.instructions {
                 if let Some(p) = instr.declared_path() {
                     let full = root.join(p);
@@ -469,6 +469,45 @@ mod tests {
         let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::BehaviorViolation { .. }));
+    }
+
+    #[test]
+    fn upgrade_from_duplicate_surfaces_as_upgrade_violation() {
+        // Wiring pin: the cross-entry duplicate-`:from` gate in
+        // `validate_upgrade_from` lands on the same
+        // `LayoutError::UpgradeViolation` axis the per-entry
+        // `UpgradeFromEntry::validate` already does (26da2c7), so a
+        // caixa.lisp with two `(:from "0.1.0" …)` blocks surfaces at
+        // `feira build` time naming the offending caixa rather than
+        // silently passing into the wasm-operator's non-deterministic
+        // dispatch. Mirrors `behavior_empty_callback_is_violation` on
+        // the peer M2 typed slot.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+        ];
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::UpgradeViolation for duplicate `:from`, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.1.0"),
+            "UpgradeViolation issue must name the offending `:from` verbatim, got {issue:?}"
+        );
     }
 
     #[test]
