@@ -45,5 +45,5 @@ pub use render::{
     servico_m2_overlay, single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
-pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction};
+pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from};
 pub use version::{CaixaVersion, VersionError, parse_requirement};
