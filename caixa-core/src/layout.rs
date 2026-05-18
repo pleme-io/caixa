@@ -78,9 +78,8 @@ impl LayoutInvariants for StandardLayout {
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
         // "missing entry" error first).
-        let has_code = !caixa.bibliotecas.is_empty()
-            || !caixa.exe.is_empty()
-            || !caixa.servicos.is_empty();
+        let has_code =
+            !caixa.bibliotecas.is_empty() || !caixa.exe.is_empty() || !caixa.servicos.is_empty();
         if caixa.kind == CaixaKind::Supervisor && has_code {
             return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
         }
@@ -182,9 +181,41 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        // Upgrade scripts: every state-change instruction must point at
-        // an existing tatara-lisp file.
+        // Upgrade-from entries: every entry's typed shape must hold
+        // (`:from` is a valid semver; every instruction's `:module`
+        // is a DNS-1123 label; every `:state-change :script` is
+        // non-empty / relative / parent-escape-free) BEFORE the
+        // existing path-existence pass runs, so the diagnostic names
+        // *which slot* is malformed rather than the less-helpful
+        // "missing upgrade-script" (which doesn't fire for non-script
+        // axes at all). Mirrors the b0c8389 `BehaviorSpec::validate`
+        // wiring on the peer M2 typed slot: the validate pass on the
+        // typed value happens first, the on-disk path-existence pass
+        // happens second.
+        //
+        // The wiring closes a latent defect: `UpgradeFromEntry::validate`
+        // existed since b0c8389 (and its `UpgradeInstruction::validate`
+        // inner pass since the M2 lift) but no LayoutInvariants
+        // caller invoked it, so the value-shape gates on `:from`
+        // (BadFromVersion), `:state-change :script` (EmptyScript /
+        // AbsoluteScript / ParentEscapeScript), and `:module`
+        // (ModuleEmpty / ModuleInvalid) were dead code from the
+        // build-pipeline perspective — a malformed appup silently
+        // passed `feira lint` / `feira build` and the failure
+        // surfaced at wasm-engine hot-upgrade time as a per-backend
+        // "module not found" / "code:load_module/1 badarg" runtime
+        // error, far from the source caixa.lisp. Wiring entry.validate()
+        // through `LayoutError::UpgradeViolation` turns every typed
+        // appup axis into a build error visible at `feira build`
+        // time, naming the offending caixa and the specific instruction
+        // shape that failed.
         for entry in &caixa.upgrade_from {
+            entry
+                .validate()
+                .map_err(|err| LayoutError::UpgradeViolation {
+                    caixa: caixa.nome.clone(),
+                    issue: err.to_string(),
+                })?;
             for instr in &entry.instructions {
                 if let Some(p) = instr.declared_path() {
                     let full = root.join(p);
@@ -249,13 +280,19 @@ pub enum LayoutError {
     LimitsViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :behavior callback: {issue}")]
     BehaviorViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :upgrade-from entry: {issue}")]
+    UpgradeViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{caixa}' violates typed shape: {issue}")]
     SupervisorViolation { caixa: String, issue: String },
-    #[error("supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas")]
+    #[error(
+        "supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas"
+    )]
     SupervisorOwnsCode(String),
     #[error("aplicacao caixa '{caixa}' violates typed shape: {issue}")]
     AplicacaoViolation { caixa: String, issue: String },
-    #[error("aplicacao caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — aplicacaos compose Servicos, they don't run code themselves")]
+    #[error(
+        "aplicacao caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — aplicacaos compose Servicos, they don't run code themselves"
+    )]
     AplicacaoOwnsCode(String),
 }
 
@@ -383,8 +420,8 @@ mod tests {
 
         // Now declare the path exists — passes.
         let init = root.join("lib/init.lisp");
-        let layout = StandardLayout::new()
-            .with_path_exists(move |p| p == manifest || p == svc || p == init);
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc || p == init);
         layout.verify(&c, &root).unwrap();
     }
 
@@ -648,5 +685,217 @@ mod tests {
             },
         ];
         layout.verify(&c, &root).unwrap();
+    }
+
+    // ── :upgrade-from entry validation pipes through layout ─────────────
+
+    #[test]
+    fn upgrade_invalid_module_surfaces_as_layout_violation() {
+        // End-to-end pin that
+        // [`crate::UpgradeFromEntry::validate`] runs *inside*
+        // `LayoutInvariants::verify` and surfaces value-shape
+        // violations through the new `UpgradeViolation` arm
+        // (parallel to `BehaviorViolation`, `LimitsViolation`,
+        // `SupervisorViolation`, `AplicacaoViolation`). Until this
+        // wiring landed the entry validator was unreachable from any
+        // build-pipeline caller — an `:upgrade-from
+        // ((:from "0.1.0" :instructions ((:load-module "Hello")))` (uppercase
+        // module name the K8s apiserver would reject on the per-
+        // ComputeUnit `metadata.name` axis) silently passed
+        // `feira lint` / `feira build` and surfaced only at wasm-engine
+        // hot-upgrade time as a per-backend "module not found" /
+        // `code:load_module/1` `badarg` runtime error, far from the
+        // source caixa.lisp. Pinning the wiring here so a future
+        // refactor that drops the `entry.validate()` call surfaces as
+        // a build-pipeline regression at this test, not as a runtime
+        // surprise per consumer.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "Hello".into(), // uppercase — not DNS-1123
+            }],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!("expected UpgradeViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":load-module"),
+            "issue must name the lisp-form of the offending instruction: {issue}"
+        );
+        assert!(
+            issue.contains("Hello"),
+            "issue must name the offending :module verbatim: {issue}"
+        );
+    }
+
+    #[test]
+    fn upgrade_empty_module_surfaces_as_layout_violation() {
+        // Companion to the DNS-1123 footgun above on the narrower
+        // empty arm. Every Module-bearing variant's empty value
+        // reaches the layout pipeline through the kind-tagged
+        // `ModuleEmpty` diagnostic naming its lisp-form.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::SoftPurge {
+                module: String::new(),
+            }],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!("expected UpgradeViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":soft-purge"),
+            "issue must name the lisp-form of the empty instruction: {issue}"
+        );
+    }
+
+    #[test]
+    fn upgrade_invalid_state_change_script_surfaces_as_layout_violation() {
+        // Pins that the b0c8389 script value-shape gates
+        // (AbsoluteScript / ParentEscapeScript) — previously
+        // unreachable from any build-pipeline caller — now fire
+        // through the same `UpgradeViolation` arm before the path-
+        // existence pass would otherwise emit the less-helpful
+        // "missing upgrade-script" (or, worse, *succeed* against
+        // /etc/passwd, proving the sandbox bypass — same defect
+        // the b0c8389 BehaviorSpec wiring closed on the peer M2
+        // slot).
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let etc_passwd = PathBuf::from("/etc/passwd");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("/etc/passwd"),
+            }],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let etc_passwd_clone = etc_passwd.clone();
+        // Critically: /etc/passwd "exists" in our mock — without the
+        // value-shape pre-check, the existence loop would *succeed*
+        // and the path-traversal exit from the project sandbox would
+        // pass `feira build` silently.
+        let layout = StandardLayout::new().with_path_exists(move |p| {
+            p == manifest_clone || p == svc_clone || p == etc_passwd_clone
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!("expected UpgradeViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("absolute") || issue.contains("Absolute"),
+            "issue must name the violation kind (absolute): {issue}"
+        );
+    }
+
+    #[test]
+    fn upgrade_well_formed_passes_layout() {
+        // Positive control — every documented authoring shape
+        // (`:load-module`, `:state-change` with a relative path,
+        // `:soft-purge`, `:purge`, `:restart`) passes the wired
+        // gate. Drift here = a future tighten that rejects any
+        // canonical shape surfaces as a regression at this layout-
+        // level pin, not piecemeal across per-renderer call sites.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let migration = root.join("lib/migrations/v01-to-v02.lisp");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "hello-rio-old".into(),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let migration_clone = migration.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| {
+            p == manifest_clone || p == svc_clone || p == migration_clone
+        });
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn upgrade_bad_from_version_surfaces_as_layout_violation() {
+        // The `:from` semver gate (`UpgradeError::BadFromVersion`)
+        // was likewise unreachable before this wiring landed — a
+        // typo-shaped `:from "v0.1.0"` (git-tag-shape leaking into
+        // the semver slot) silently passed `feira build` and
+        // surfaced only when the operator's hot-upgrade decision
+        // engine tried to match against the version key it couldn't
+        // parse. Now wired through `UpgradeViolation`.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "v0.1.0".into(), // git-tag-shape, not semver
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!("expected UpgradeViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("v0.1.0") || issue.contains(":from"),
+            "issue must name the offending :from value or slot: {issue}"
+        );
     }
 }
