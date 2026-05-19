@@ -176,6 +176,60 @@ impl DepSource {
                         });
                     }
                 }
+                // Per-pin value-shape gate for the refname-shaped axes
+                // (`:tag` + `:branch`). The `:rev` axis is intentionally
+                // skipped: its author-surface shape is a hex commit-ID
+                // (`[0-9a-f]+`), not a refname; routing it through
+                // [`crate::render::is_git_ref_name`] would admit
+                // `:rev "main"`, defeating the reproducibility contract
+                // `:rev` carries vs. `:tag` / `:branch`. A dedicated
+                // `is_git_oid` predicate on the parallel hex-shape
+                // trajectory is a separate future axis.
+                //
+                // Until this gate landed `:tag` / `:branch` were the last
+                // `:fonte`-related axes still untyped past the empty-pin
+                // arm: a malformed-but-non-empty refname
+                // (`:tag "v0.1.0 "` trailing space — the canonical
+                // paste-from-doc footgun; `:tag "v0.1.0.lock"` colliding
+                // with git's atomic-rename guard suffix; `:tag "../escape"`
+                // path-traversal via consecutive dots; `:branch "main "`
+                // trailing space; `:branch "feature/foo bar"` embedded
+                // space; `:branch "@"` the literal HEAD alias;
+                // `:branch "refs/heads/main"` the fully-qualified ref
+                // copied from `git show-ref` output that resolves to
+                // a literal ref named `refs/heads/refs/heads/main` on
+                // disk) silently passed validate and the failure
+                // surfaced at lacre-resolve `git fetch` / `git checkout`
+                // time with a quoting-confused error far from the source
+                // caixa.lisp, with no field naming which `:deps` entry
+                // carried the typo. Lifting the gate to caixa-build time
+                // matches the value-shape trajectory the peer typed
+                // axes already follow (c4213a4 typed WitContract
+                // endpoint/subject/slot; eb3456d :entrada :paths;
+                // c7d05ec :entrada :host; 4f0390b :contratos :endpoint;
+                // 6226bf4 :contratos :wit; 63e18a0 :contratos :subject;
+                // 2f4316e :contratos :slot) — the typed slot's valid
+                // set matches its downstream consumer's accepted set
+                // (here, the git porcelain's refname grammar at
+                // `git fetch` / `git checkout` time), structurally.
+                // Same diagnostic shape every per-axis value-shape lift
+                // already exposes (`*Invalid { axis, reason }`); the
+                // `value:` field carries the offending refname verbatim
+                // so the author can grep their caixa.lisp for the
+                // `:tag "<value>"` / `:branch "<value>"` literal and
+                // fix it in one edit.
+                for (pin, value) in [(":tag", tag.as_ref()), (":branch", branch.as_ref())] {
+                    if let Some(v) = value
+                        && let Err(reason) = crate::render::is_git_ref_name(v)
+                    {
+                        return Err(DepError::FontePinShape {
+                            nome: nome.to_string(),
+                            pin: pin.to_string(),
+                            value: v.clone(),
+                            reason,
+                        });
+                    }
+                }
                 Ok(())
             }
             Self::Path { caminho } => {
@@ -395,6 +449,20 @@ pub enum DepError {
          entirely to fall through to another pin axis)"
     )]
     FontePinEmpty { nome: String, pin: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo git …) {pin} {value:?} is not a \
+         valid git ref name: {reason} (the git porcelain enforces the same \
+         shape at `git fetch` / `git checkout` time on every pin; use a \
+         leaf refname like `\"v0.1.0\"` for `:tag` or `\"main\"` / \
+         `\"feature/foo\"` for `:branch` — drop any `refs/heads/` or \
+         `refs/tags/` prefix the caixa-resolver prepends at clone time)"
+    )]
+    FontePinShape {
+        nome: String,
+        pin: String,
+        value: String,
+        reason: String,
+    },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) has empty :caminho \
          (every path source must name a non-empty filesystem path; \
@@ -1218,6 +1286,352 @@ mod tests {
             assert!(
                 msg.contains("\"caixa-teia\""),
                 "{case}: diagnostic must quote the offending :nome verbatim, got {msg:?}"
+            );
+        }
+    }
+
+    // -- :tag / :branch value-shape gate ----------------------------------
+
+    #[test]
+    fn validate_rejects_git_fonte_with_tag_carrying_trailing_space() {
+        // The canonical paste-from-doc footgun on `:tag` — author
+        // copies `"v0.1.0 "` (trailing space) out of a release-notes
+        // paragraph. Until this gate landed the empty-pin arm passed
+        // (the string isn't empty), the resolver issued
+        // `git fetch <remote> tag 'v0.1.0 '`, and the failure
+        // surfaced at clone time with a quoting-confused git error
+        // far from the source caixa.lisp. The new gate moves the
+        // check to caixa-build time and names the offending dep +
+        // pin + value verbatim.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0 ".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            nome,
+            pin,
+            value,
+            reason,
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(pin, ":tag");
+        assert_eq!(value, "v0.1.0 ");
+        assert!(
+            reason.contains("whitespace"),
+            "reason must surface the whitespace arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_tag_carrying_lock_suffix() {
+        // The `.lock` suffix is git's atomic-rename guard for
+        // in-flight ref updates — a refname ending in `.lock` is
+        // unwritable on disk. Pinned separately from the whitespace
+        // arm so a future relaxation that admits one but not the
+        // other surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0.lock".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":tag");
+        assert_eq!(value, "v0.1.0.lock");
+        assert!(
+            reason.contains(".lock"),
+            "reason must surface the .lock arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_branch_carrying_embedded_space() {
+        // The canonical "branch name with spaces" footgun (`feature
+        // foo`, `release branch`) — git's refname parser rejects raw
+        // whitespace, and the failure surfaces at `git checkout
+        // 'feature foo'` time with a quoting-confused error far from
+        // the source caixa.lisp. Pinned on the `:branch` axis so the
+        // gate-applies-to-both-:tag-and-:branch contract is a build-
+        // error to relax.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: None,
+            branch: Some("feature/foo bar".into()),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":branch");
+        assert_eq!(value, "feature/foo bar");
+        assert!(
+            reason.contains("whitespace"),
+            "reason must surface the whitespace arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_branch_carrying_qualified_prefix() {
+        // The `refs/heads/main` shape — the canonical "I copied the
+        // fully-qualified ref out of `git show-ref` instead of the
+        // leaf" footgun. The caixa-resolver prepends `refs/heads/`
+        // at clone time, so this resolves to a literal ref named
+        // `refs/heads/refs/heads/main` on disk; the silent double-
+        // prefix is the load-bearing reason to gate at validate.
+        // The diagnostic must enumerate the leaf the author probably
+        // meant (`"main"`) so the fix is one edit.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: None,
+            branch: Some("refs/heads/main".into()),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":branch");
+        assert_eq!(value, "refs/heads/main");
+        assert!(
+            reason.contains("fully-qualified"),
+            "reason must surface the qualified-prefix arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("\"main\""),
+            "reason must quote the leaf the author probably meant, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_tag_carrying_qualified_prefix() {
+        // Sibling arm of the qualified-prefix gate on the `:tag`
+        // axis (`refs/tags/v0.1.0` — same `git show-ref` output-leak
+        // footgun). Pinned separately so a future relaxation that
+        // only catches the `:branch` arm surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some("refs/tags/v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":tag");
+        assert_eq!(value, "refs/tags/v0.1.0");
+        assert!(
+            reason.contains("fully-qualified"),
+            "reason must surface the qualified-prefix arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("\"v0.1.0\""),
+            "reason must quote the leaf the author probably meant, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_branch_named_at() {
+        // The bare `@` is git's alias for `HEAD`; a `:branch "@"` is
+        // unsourceable. Pinned so a future relaxation that admits
+        // any single-character refname surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: None,
+            branch: Some("@".into()),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape { pin, value, .. } = err else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":branch");
+        assert_eq!(value, "@");
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_tag_carrying_double_dot() {
+        // Git's `<rev1>..<rev2>` range grammar reserves `..` —
+        // a `:tag "../escape"` (path-traversal-shaped slug) silently
+        // passes parse and surfaces as a refname-parse error or, on
+        // older git, a literal `../escape` checkout that escapes the
+        // refs/ directory tree. Pinned separately from the
+        // qualified-prefix arm so a future relaxation that catches
+        // one but not the other surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some("../escape".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape { pin, value, .. } = err else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":tag");
+        assert_eq!(value, "../escape");
+    }
+
+    #[test]
+    fn validate_accepts_git_fonte_with_hierarchical_branch() {
+        // The positive-control pin: hierarchical refnames with one or
+        // more `/` separators (the `feature/foo` / `user/jdoe/feat`
+        // canonical idiom) round-trip through the gate. Pinned
+        // separately from the leaf-`"main"` positive control so a
+        // future tightening that rejects all multi-component refnames
+        // surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: None,
+            branch: Some("feature/checkout-rewrite".into()),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_git_fonte_with_prerelease_tag() {
+        // The positive-control pin: semver pre-release shape
+        // (`v0.1.0-alpha.1`) — the in-component dot is allowed
+        // (only consecutive `..` and trailing `.` are rejected), the
+        // mid-component hyphen is allowed. Pinned separately from
+        // the bare-`"v0.1.0"` positive control so a future tightening
+        // that rejects pre-release tags surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0-alpha.1".into()),
+            rev: None,
+            branch: None,
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_git_fonte_with_rev_carrying_refname_unfriendly_value() {
+        // The `:rev` axis is intentionally NOT routed through
+        // `is_git_ref_name` (a SHA's character set is `[0-9a-f]`,
+        // not a refname's). The gate must not regress
+        // `:rev` validation — pin the boundary by feeding a value
+        // that would be a refname violation (a `:` mid-string) and
+        // verifying the existing single-pin shape passes through.
+        // When a future `is_git_oid` gate lands, this test flips to
+        // the rejection arm; until then, the omission is a structural
+        // decision pinned at this one place.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("c0ffee:notarefname".into()),
+            branch: None,
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_pin_empty_fires_before_pin_shape() {
+        // Order pin: a `Some("")` `:tag` is the more self-locating
+        // diagnostic (the author chose an axis but left it blank;
+        // grep is unambiguous), so it fires before the shape gate
+        // even when both arms would match. Pinned so a future
+        // reordering surfaces here. Mirrors the
+        // `fonte_repo_empty_fires_before_pin_missing` ordering
+        // discipline on the peer per-axis arms.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some(String::new()),
+            rev: None,
+            branch: None,
+        });
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::FontePinEmpty { ref pin, .. } if pin == ":tag"
+        ));
+    }
+
+    #[test]
+    fn fonte_pin_shape_fires_after_repo_empty() {
+        // Order pin: `:repo ""` is the more self-locating axis
+        // (every git source needs a repo; the per-pin shape gate is
+        // secondary), so the repo-empty arm fires before the
+        // per-pin shape arm even when both are violated. Pinned so
+        // a future reordering surfaces here. Mirrors
+        // `fonte_repo_empty_fires_before_pin_missing` on the
+        // adjacent axis pair.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: String::new(),
+            tag: Some("v0.1.0 ".into()),
+            rev: None,
+            branch: None,
+        });
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::FonteRepoEmpty { .. }
+        ));
+    }
+
+    #[test]
+    fn fonte_pin_shape_diagnostic_carries_offending_nome_pin_value() {
+        // Diagnostic-shape pin across both refname-shaped axes
+        // (`:tag` + `:branch`): every `FontePinShape` variant names
+        // the offending dep's `:nome` + the offending pin axis + the
+        // offending value verbatim, so the author's grep target is
+        // unambiguous (the literal `:tag "<value>"` / `:branch
+        // "<value>"` lands in caixa.lisp with quotes). Cover both
+        // pin axes so a future variant addition forces a parallel
+        // diagnostic-shape decision.
+        for (pin_label, fonte) in [
+            (
+                ":tag",
+                DepSource::Git {
+                    repo: "github:p/x".into(),
+                    tag: Some("v0.1.0~1".into()),
+                    rev: None,
+                    branch: None,
+                },
+            ),
+            (
+                ":branch",
+                DepSource::Git {
+                    repo: "github:p/x".into(),
+                    tag: None,
+                    rev: None,
+                    branch: Some("feature/foo*".into()),
+                },
+            ),
+        ] {
+            let d = dep_with_fonte(fonte);
+            let msg = d
+                .validate()
+                .expect_err(&format!("{pin_label}: expected FontePinShape"))
+                .to_string();
+            assert!(
+                msg.contains("\"caixa-teia\""),
+                "{pin_label}: diagnostic must quote the offending :nome verbatim, got {msg:?}"
+            );
+            assert!(
+                msg.contains(pin_label),
+                "{pin_label}: diagnostic must name the offending pin axis, got {msg:?}"
             );
         }
     }
