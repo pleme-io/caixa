@@ -338,6 +338,79 @@ impl Caixa {
         })
     }
 
+    /// Reject `:versao` values that don't parse as [`semver::Version`].
+    /// The top-level Caixa version flows directly into every
+    /// substrate-side artifact that carries a "this is which version of
+    /// the caixa" axis: the `lareira-<nome>` Helm chart's `Chart.yaml`
+    /// `version:` + `appVersion:` axes ([`caixa-helm::lib`] —
+    /// SemVer-2-strict at `helm template` / `helm install` time per
+    /// https://helm.sh/docs/topics/charts/#charts-and-versioning), the
+    /// `feira publish` Zig-style `v<versao>` git tag
+    /// ([`caixa-flux::lib::programs_yaml_entry`] / the
+    /// `caixa-publish.yml` reusable workflow), the programs.yaml entry's
+    /// `versao:` value the `lareira-fleet-programs` aggregator carries
+    /// onto each rendered ComputeUnit, the OCI image's `:v<versao>` /
+    /// `:latest` tags the substrate's `wasi-service-flake` builds with
+    /// `skopeo push`, the lacre closure's pinned versions
+    /// ([`caixa-resolver`] keys `concrete_versao`), and the
+    /// `:upgrade-from :from` references peers in this exact `versao`
+    /// shape (`semver::Version`, not `VersionReq`). Each consumer
+    /// expects a strict three-part `MAJOR.MINOR.PATCH` (optionally
+    /// `-prerelease` and/or `+build`); a structurally invalid `:versao`
+    /// (`"0.1"` — missing patch, the canonical "I shortened it" footgun;
+    /// `"v0.1.0"` — the git-tag-shape-leaking-into-versao typo;
+    /// `"latest"` / `"main"` — the "I confused it with a docker tag"
+    /// footgun; `"^0.1"` / `"~0.1.2"` — the requirement-shape leaking
+    /// into the version field a peer `:deps :versao` accepts;
+    /// `"0.1.0.0"` — the four-part Java/Microsoft convention DNS
+    /// SemVer-2 forbids) silently passed [`Caixa::from_lisp`] (the
+    /// derive macro stores the raw String) and the failure surfaced at
+    /// the *first* downstream consumer that strict-parses it: at
+    /// `helm install` time as a chart-version rejection, at
+    /// `feira publish` time as a malformed git tag, at lacre-resolve
+    /// time as a `semver::Error` not naming the offending caixa, at
+    /// `feira upgrade --to <versao>` time as an unresolvable
+    /// `:upgrade-from :from` match — far from the source `caixa.lisp`
+    /// and without any field naming the offending `:versao`.
+    ///
+    /// Thin wrapper around [`semver::Version::parse`] — the same parser
+    /// [`crate::CaixaVersion::parse`] (the typed `:versao` accessor)
+    /// and [`crate::UpgradeFromEntry::validate`] (the peer
+    /// `:upgrade-from :from` axis, 26da2c7) consume. Maps the
+    /// `semver::Error` reason into the [`ManifestError::VersaoInvalid`]
+    /// variant, carrying the offending `:versao` verbatim + a
+    /// parser-shaped reason naming the specific violation, so the
+    /// diagnostic is self-locating (the author can grep their
+    /// `caixa.lisp` for `:versao "<value>"` and fix it in one edit).
+    /// Same diagnostic shape as [`ManifestError::NomeInvalid`]
+    /// (6c992f8) and [`crate::UpgradeError::BadFromVersion`]
+    /// (b0c8389) on the peer axes. With this gate, the typed `:versao`
+    /// surfaces — top-level `:versao`, `:upgrade-from :from` — are
+    /// now structurally equivalent (every value past validate is
+    /// round-trippable through [`semver::Version::parse`] without
+    /// re-checking at the renderer, resolver, or operator hot-upgrade
+    /// layer), peer with the four `:versao` requirement axes (`:deps`,
+    /// `:deps-dev`, `:membros`, `:children`) the prior commits
+    /// (2420c44, 9888b13, b38ff3a) wired through `parse_requirement`.
+    ///
+    /// Empty `:versao` (which [`Caixa::from_lisp`] does not reject —
+    /// the derive macro stores the raw String) is gated by the
+    /// narrower [`ManifestError::VersaoEmpty`] arm before the parser is
+    /// consulted, mirroring the empty-first cascade every per-axis
+    /// version gate already uses (e.g. `MembroVersaoEmpty` before
+    /// `MembroVersaoInvalid`, `EmptyChildVersion` before
+    /// `ChildVersaoInvalid`, `NomeEmpty` before `NomeInvalid`).
+    pub fn validate_versao(&self) -> Result<(), ManifestError> {
+        if self.versao.is_empty() {
+            return Err(ManifestError::VersaoEmpty);
+        }
+        semver::Version::parse(&self.versao).map_err(|e| ManifestError::VersaoInvalid {
+            versao: self.versao.clone(),
+            reason: e.to_string(),
+        })?;
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -411,8 +484,9 @@ impl Caixa {
 /// Errors raised by top-level [`Caixa`] validators that don't fit
 /// the per-axis [`DepError`] / [`crate::AplicacaoError`] /
 /// [`crate::SupervisorError`] / [`crate::LayoutError`] families —
-/// the Caixa's own identity axes (`:nome`) that flow through every
-/// substrate-side artifact's `metadata.name` derivation.
+/// the Caixa's own identity axes (`:nome`, `:versao`) that flow
+/// through every substrate-side artifact's `metadata.name` /
+/// version derivation.
 ///
 /// A future top-level sum (the M4 `CaixaError` the [`DepError`]
 /// doc-comment anticipates) can hold one of each per-axis error
@@ -437,6 +511,27 @@ pub enum ManifestError {
          `\"checkout\"` or `\"cart-v2\"`)"
     )]
     NomeInvalid { nome: String, reason: String },
+    #[error(
+        ":versao is empty (every caixa must pin its own version; the value flows \
+         into the `lareira-<nome>` Helm chart's `Chart.yaml` version + appVersion, \
+         the `feira publish` `v<versao>` git tag, the OCI image's `:v<versao>` / \
+         `:latest` tags, the lacre closure's `concrete_versao`, and the \
+         `:upgrade-from :from` peers — use a SemVer-2 literal like `\"0.1.0\"`)"
+    )]
+    VersaoEmpty,
+    #[error(
+        ":versao {versao:?} is not a valid SemVer-2 version: {reason} (the substrate \
+         consumes this string as `semver::Version` — three-part `MAJOR.MINOR.PATCH` \
+         with optional `-prerelease` and `+build` — across every artifact derived \
+         from `:versao`: the `lareira-<nome>` Helm chart's `Chart.yaml` version + \
+         appVersion (Helm SemVer-2-strict), the `feira publish` `v<versao>` git tag, \
+         the OCI image's `:v<versao>` tag, the lacre closure's `concrete_versao`, \
+         and the `:upgrade-from :from` peers that match against this exact shape; \
+         use a literal like `\"0.1.0\"`, `\"0.2.0-rc.1\"`, or `\"1.0.0+build.42\"` — \
+         not a git-tag-shape like `\"v0.1.0\"`, a docker-tag-shape like `\"latest\"`, \
+         a requirement-shape like `\"^0.1\"`, or a four-part `\"0.1.0.0\"`)"
+    )]
+    VersaoInvalid { versao: String, reason: String },
 }
 
 #[cfg(test)]
@@ -1005,5 +1100,213 @@ mod tests {
             !reason.is_empty(),
             "NomeInvalid `reason` must carry the predicate's wording verbatim"
         );
+    }
+
+    // ── Caixa::validate_versao — top-level :versao value-shape gate ─────
+
+    fn caixa_with_versao(versao: &str) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.versao = versao.to_string();
+        c
+    }
+
+    #[test]
+    fn validate_versao_accepts_canonical_template() {
+        // Positive control: the bare `feira init`-style template's
+        // `:versao` ("0.1.0") is a canonical SemVer-2 literal; the gate
+        // must not regress this baseline shape. A future tightening of
+        // the accepted set surfaces here as a test failure first.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_versao().unwrap();
+    }
+
+    #[test]
+    fn validate_versao_accepts_canonical_forms() {
+        // Positive-set sweep: each realistic SemVer-2 shape the
+        // substrate's downstream consumers accept must pass — bare
+        // MAJOR.MINOR.PATCH, pre-release tags (`-rc.1`, `-alpha.0`),
+        // build metadata (`+build.42`), the combined form, and the
+        // `0.0.0` boundary case. Mirrors `accepts_canonical_forms` on
+        // the peer `:nome` axis (6c992f8).
+        for versao in [
+            "0.1.0",
+            "0.0.0",
+            "1.0.0",
+            "0.2.0-rc.1",
+            "1.0.0-alpha.0",
+            "1.0.0+build.42",
+            "1.0.0-rc.1+build.42",
+            "10.20.30",
+        ] {
+            caixa_with_versao(versao)
+                .validate_versao()
+                .unwrap_or_else(|e| {
+                    panic!("canonical :versao {versao:?} must validate, got {e:?}")
+                });
+        }
+    }
+
+    #[test]
+    fn validate_versao_rejects_empty() {
+        // Fail-before-pass-after pin: `Caixa::from_lisp` does not refuse
+        // an empty `:versao` (the derive macro stores the raw String);
+        // the gate's empty arm names the offending axis with a narrower
+        // diagnostic than the `VersaoInvalid` parse arm would emit.
+        // Mirrors `validate_nome_rejects_empty` (6c992f8).
+        let c = caixa_with_versao("");
+        let err = c.validate_versao().unwrap_err();
+        assert_eq!(err, ManifestError::VersaoEmpty);
+    }
+
+    #[test]
+    fn validate_versao_rejects_git_tag_shape() {
+        // The canonical "I copied the git tag verbatim" footgun —
+        // `feira publish` *emits* `v<versao>` git tags, so a leaked
+        // `v0.1.0` in `:versao` would render as `vv0.1.0` and silently
+        // shift every downstream consumer's version axis. `semver`
+        // rejects the leading `v` at parse time; the gate moves the
+        // diagnostic to the source `caixa.lisp`.
+        let c = caixa_with_versao("v0.1.0");
+        let err = c.validate_versao().unwrap_err();
+        let ManifestError::VersaoInvalid { versao, reason } = err else {
+            panic!("expected VersaoInvalid for git-tag-shape :versao");
+        };
+        assert_eq!(versao, "v0.1.0");
+        assert!(
+            !reason.is_empty(),
+            "VersaoInvalid `reason` must carry the parser's wording, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_versao_rejects_missing_patch() {
+        // The canonical "I shortened it" footgun — SemVer-2 requires
+        // three parts. Cargo's `version =` field accepts the shortened
+        // form as a requirement, conflating the two leaks across the
+        // typed `:deps :versao` vs top-level `:versao` axes; the gate
+        // pins the top-level axis to the strict three-part shape.
+        let c = caixa_with_versao("0.1");
+        let err = c.validate_versao().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::VersaoInvalid { ref versao, .. } if versao == "0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_versao_rejects_requirement_shape() {
+        // The canonical "I leaked a requirement into a version" footgun —
+        // the typed `:deps :versao` / `:membros :versao` axes accept
+        // `^0.1` (a `VersionReq`); the top-level `:versao` requires a
+        // concrete `Version`. Without this gate the two typed surfaces
+        // would silently overlap, and a top-level `^0.1` would surface
+        // at `helm install` time as a Chart.yaml version rejection far
+        // from the source `caixa.lisp`.
+        let c = caixa_with_versao("^0.1");
+        let err = c.validate_versao().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::VersaoInvalid { ref versao, .. } if versao == "^0.1"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_versao_rejects_docker_tag_shape() {
+        // The "I confused it with a docker tag" footgun — `latest`,
+        // `main`, `stable` parse as identifiers, not SemVer-2 versions.
+        // SemVer rejects at parse time; the gate moves the diagnostic
+        // to the source `caixa.lisp`.
+        for bad in ["latest", "main", "stable"] {
+            let c = caixa_with_versao(bad);
+            let err = c.validate_versao().unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    ManifestError::VersaoInvalid { ref versao, .. } if versao == bad
+                ),
+                "got {err:?} for {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_versao_rejects_four_part_form() {
+        // The Java/Microsoft "MAJOR.MINOR.PATCH.BUILD" convention
+        // SemVer-2 forbids. A leak from a non-SemVer ecosystem; the
+        // semver crate rejects the extra `.0` at parse time.
+        let c = caixa_with_versao("0.1.0.0");
+        let err = c.validate_versao().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::VersaoInvalid { ref versao, .. } if versao == "0.1.0.0"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn versao_empty_takes_precedence_over_invalid() {
+        // Order pin: the empty arm fires before the parser is consulted.
+        // Empty < invalid in self-locating-ness — the narrower
+        // `VersaoEmpty` diagnostic doesn't carry a useless `versao: ""`
+        // reference into the parser-shaped reason. Mirrors
+        // `nome_empty_takes_precedence_over_invalid` (6c992f8) on the
+        // peer axis.
+        let c = caixa_with_versao("");
+        assert_eq!(c.validate_versao().unwrap_err(), ManifestError::VersaoEmpty);
+    }
+
+    #[test]
+    fn versao_invalid_diagnostic_carries_offending_versao() {
+        // Diagnostic-shape pin: the error names the offending `:versao`
+        // verbatim with a non-empty parser-shaped reason, so a `feira
+        // lint` run can render the diagnostic without re-parsing.
+        // Mirrors `nome_invalid_diagnostic_carries_offending_nome`.
+        let c = caixa_with_versao("v0.1.0");
+        let err = c.validate_versao().unwrap_err();
+        let ManifestError::VersaoInvalid { versao, reason } = err else {
+            panic!("expected VersaoInvalid variant");
+        };
+        assert_eq!(versao, "v0.1.0");
+        assert!(
+            !reason.is_empty(),
+            "VersaoInvalid `reason` must carry the parser's wording verbatim"
+        );
+    }
+
+    #[test]
+    fn validate_versao_accepts_what_upgrade_from_from_accepts() {
+        // Parity pin: every shape `UpgradeFromEntry::validate` accepts
+        // for `:upgrade-from :from` must also pass `validate_versao` —
+        // the two `:versao`-typed surfaces (top-level `:versao`,
+        // `:upgrade-from :from`) consume the *same* `semver::Version`
+        // parser, so they must agree on the accepted set. Without this
+        // pin, a future tightening of one axis could silently diverge
+        // from the other. Mirrors the `:versao` requirement-axis
+        // parity (`:deps`/`:deps-dev`/`:membros`/`:children`) the prior
+        // commits established.
+        for versao in ["0.1.0", "0.2.0-rc.1", "1.0.0+build.42"] {
+            // From the canonical UpgradeFromEntry round-trip fixture
+            // (`upgrade::tests::round_trip_load_module` peers).
+            let entry = crate::UpgradeFromEntry {
+                from: versao.to_string(),
+                instructions: Vec::new(),
+            };
+            entry
+                .validate()
+                .unwrap_or_else(|e| panic!(":from {versao:?} must validate, got {e:?}"));
+            caixa_with_versao(versao)
+                .validate_versao()
+                .unwrap_or_else(|e| {
+                    panic!(":versao {versao:?} must validate, got {e:?} — peer axis diverges")
+                });
+        }
     }
 }
