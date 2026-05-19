@@ -1038,6 +1038,300 @@ pub fn is_wasi_keyvalue_slot(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Max length, in bytes, of a single typed git ref name passing the
+/// [`is_git_ref_name`] predicate. 255 bytes — matches the POSIX
+/// `NAME_MAX` filesystem-component limit every Git porcelain ultimately
+/// stores refs into (loose `refs/<category>/<name>` files under
+/// `.git/refs/`, packed-refs index entries). Refs that exceed this cap
+/// fail to land on disk at clone/fetch time on every realistic
+/// filesystem (ext4, btrfs, xfs, APFS, NTFS), so a `:tag` / `:branch`
+/// past that length is unsourceable in practice. The cap exists to
+/// reject the paste-from-binary footgun (a multi-line blob accidentally
+/// landed in the `:tag` slot) rather than to constrain legitimate
+/// authoring — realistic tag/branch names rarely exceed ~32 bytes
+/// (`"v0.1.0"` = 6 bytes, `"release-1.0-alpha.1"` = 19 bytes,
+/// `"feature/checkout-rewrite"` = 24 bytes). Lifted as a typed const
+/// so a future axis reaching for the same bound (the future
+/// `lacre.lisp` ref-shape gate on resolved-pin axes, the future M4
+/// per-dep CR materializer's per-pin validator) reads from one place.
+pub const GIT_REF_NAME_MAX_LEN: usize = 255;
+
+/// Predicate: assert that `s` is a valid Git ref name under the
+/// `git check-ref-format --allow-onelevel` rule set — the canonical
+/// shape every typed `:fonte (:tipo git …)` `:tag` / `:branch` value
+/// carries. The contract — modeled on the [`git check-ref-format`][gcr]
+/// grammar the Git porcelain enforces at clone/fetch/checkout time,
+/// with the multi-component requirement waived (`:tag "v0.1.0"` and
+/// `:branch "main"` are both single-component refs, the canonical
+/// leaf form for caixa's `:fonte` pin axes):
+///
+///   - 1..=[`GIT_REF_NAME_MAX_LEN`] (255) bytes — the POSIX `NAME_MAX`
+///     filesystem-component limit Git's loose-ref `.git/refs/<cat>/<name>`
+///     storage tops out at;
+///   - no ASCII control characters (`0x00..=0x1F`, `0x7F`) — Git's
+///     refname parser rejects them, and the `\r` / `\n` arms are the
+///     canonical "the paste-from-doc spans multiple lines" footgun;
+///   - no whitespace (space, tab) — Git's refname parser rejects them
+///     too; a `:tag "v0.1.0 "` (trailing space, from a copy-paste)
+///     silently passes string emptiness checks and fails at
+///     `git fetch origin tag 'v0.1.0 '` with a quoting-confused error
+///     far from the source caixa.lisp;
+///   - no non-ASCII bytes (`>= 0x80`) — Git's refname rules predate
+///     UTF-8 normalization (NFC vs NFD on APFS silently rewrites the
+///     ref body, breaking the lacre's content addressing); the
+///     intersection-floor every realistic Git host accepts is ASCII
+///     identifiers + the small punctuation set below;
+///   - no `~`, `^`, `:`, `?`, `*`, `[`, `\` anywhere — Git reserves
+///     these for revision-grammar expressions (`HEAD~3`, `HEAD^`,
+///     `:/searched`, glob wildcards, refspec brackets, Windows-path
+///     backslash);
+///   - no `@{` sequence — Git's reflog grammar (`HEAD@{2 hours ago}`,
+///     `branch@{upstream}`);
+///   - the bare `@` is not a valid refname (it's the alias for `HEAD`);
+///   - no `..` anywhere (Git's `<rev1>..<rev2>` range syntax + the
+///     `.` / `..` parent-traversal footgun);
+///   - per `/`-separated component: must not begin with `.` (Git
+///     refuses to follow loose `.git/refs/<cat>/.<name>` files), must
+///     not end with `.lock` (Git's atomic-rename guard suffix), must
+///     not be empty (`//` rejected by the no-empty-component arm
+///     below);
+///   - no leading `/`, no trailing `/`, no consecutive `//`;
+///   - no trailing `.` on the whole ref (Git rejects `<name>.`);
+///   - no `refs/heads/` or `refs/tags/` prefix — the canonical "I
+///     copied the fully-qualified ref name out of `git show-ref`
+///     instead of the leaf" footgun (per [`theory/FLAKE-DEDUP.md`][fd]
+///     `BranchName` constructor rules); the caixa-resolver prepends
+///     the category prefix at clone time, so an author-side
+///     `:branch "refs/heads/main"` resolves to a literal ref named
+///     `refs/heads/refs/heads/main` on disk.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — `DepSource::validate`
+/// for the `:fonte :tag` / `:fonte :branch` axes at validate time,
+/// the future per-pin gate on `lacre.lisp` resolved-ref axes, the
+/// future M4 per-dep CR materializer's per-pin validator — wraps the
+/// same reason in its own typed `*Invalid { <axis>, reason }` variant.
+/// The reason wording is axis-agnostic ("git ref names reject ASCII
+/// control characters") so every call site reading the same diagnostic
+/// points at the same rule; drift between any two axes' rule
+/// enforcement is a build error visible at this predicate, not a
+/// per-renderer "this passed validate but `git fetch` rejected at
+/// clone time" surprise.
+///
+/// Empty input is rejected here (defensively) and at each call site
+/// via the narrower [`crate::DepError::FontePinEmpty`] variant — the
+/// same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], and [`is_wasi_keyvalue_slot`] all carry.
+///
+/// `:rev` is intentionally NOT routed through this predicate — its
+/// author-surface shape is a hex commit-ID (`[0-9a-f]+`), not a
+/// refname; a dedicated `is_git_oid` predicate on the parallel
+/// hex-shape trajectory is a separate future axis. Routing `:rev`
+/// through `is_git_ref_name` would admit `:rev "main"`, defeating the
+/// reproducibility contract `:rev` carries vs. `:branch` / `:tag`.
+///
+/// Lifted as a typed substrate-side primitive on the same trajectory
+/// the peer value-shape predicates ([`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], [`is_wasi_keyvalue_slot`]) already follow —
+/// the typed slot's valid set matches the Git porcelain's accepted
+/// set, structurally. The sixth value-shape primitive to land in
+/// [`crate::render`], and the first to gate a non-K8s downstream
+/// landing surface (git CLI invocation from caixa-resolver, vs. the
+/// K8s apiserver / NATS server / WASI kv backend for the prior five).
+///
+/// [gcr]: https://git-scm.com/docs/git-check-ref-format
+/// [fd]: pleme-io/theory/FLAKE-DEDUP.md §1 `BranchName`
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / control-char / forbidden-char / component-shape / prefix),
+/// without wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_git_ref_name(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > GIT_REF_NAME_MAX_LEN {
+        return Err(format!(
+            "exceeds git ref name max length of {GIT_REF_NAME_MAX_LEN} bytes \
+             (got {} bytes; legitimate tag/branch names rarely exceed ~32 bytes — \
+             this length suggests a paste-from-binary or multi-line blob landed \
+             in the `:tag` / `:branch` slot)",
+            s.len()
+        ));
+    }
+    for &b in s.as_bytes() {
+        if b == b' ' || b == b'\t' {
+            return Err(format!(
+                "must not contain whitespace character {ch:?} (git ref names are \
+                 single tokens with no whitespace — a trailing space in a `:tag` \
+                 / `:branch` value is the canonical paste-from-doc footgun, \
+                 silently breaking `git fetch <remote> tag '<value> '` at \
+                 clone time)",
+                ch = b as char
+            ));
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (git ref names are \
+                 printable ASCII; `\\r` / `\\n` are the canonical \
+                 paste-from-multiline-doc footgun and break git's refname parser \
+                 at every porcelain entry point)"
+            ));
+        }
+        if b >= 0x80 {
+            return Err(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (git's refname rules \
+                 predate UTF-8 normalization — APFS NFC/NFD silently rewrites the \
+                 ref body, breaking the lacre's content addressing across \
+                 platforms; the intersection-floor every git host admits is ASCII)"
+            ));
+        }
+        match b {
+            b'~' => {
+                return Err("must not contain `~` (git reserves `~` for the revision \
+                     grammar — `HEAD~3` means `parent of parent of parent of \
+                     HEAD`; the bare character is not admitted in a refname)"
+                    .to_string());
+            }
+            b'^' => {
+                return Err("must not contain `^` (git reserves `^` for the revision \
+                     grammar — `HEAD^` means `first parent of HEAD`; the bare \
+                     character is not admitted in a refname)"
+                    .to_string());
+            }
+            b':' => {
+                return Err("must not contain `:` (git reserves `:` for revspec / \
+                     refspec separators — `:refs/heads/...`, `<src>:<dst>`)"
+                    .to_string());
+            }
+            b'?' => {
+                return Err("must not contain `?` (git reserves `?` for refspec glob \
+                     wildcards)"
+                    .to_string());
+            }
+            b'*' => {
+                return Err("must not contain `*` (git reserves `*` for refspec glob \
+                     wildcards — `refs/heads/*:refs/remotes/origin/*`)"
+                    .to_string());
+            }
+            b'[' => {
+                return Err("must not contain `[` (git reserves `[` for refspec \
+                     bracketed-glob syntax)"
+                    .to_string());
+            }
+            b'\\' => {
+                return Err("must not contain `\\` (git's refname grammar rejects \
+                     backslash — the canonical Windows-path-leak footgun; use \
+                     `/` for hierarchical refs)"
+                    .to_string());
+            }
+            _ => {}
+        }
+    }
+    if s.contains("..") {
+        return Err(
+            "must not contain `..` (git reserves `..` for the `<rev1>..<rev2>` \
+             range grammar; a `..` component would also escape the loose-ref \
+             directory tree at clone time)"
+                .to_string(),
+        );
+    }
+    if s.contains("@{") {
+        return Err(
+            "must not contain `@{` (git reserves `@{` for the reflog grammar \
+             — `branch@{upstream}`, `HEAD@{2 hours ago}`)"
+                .to_string(),
+        );
+    }
+    if s == "@" {
+        return Err(
+            "must not be the bare `@` (git aliases `@` to `HEAD`; a `:tag` / \
+             `:branch` named `@` is unsourceable)"
+                .to_string(),
+        );
+    }
+    if s.starts_with('/') {
+        return Err(
+            "must not begin with `/` (git refnames are relative to the ref \
+             category prefix the resolver prepends — drop the leading `/`)"
+                .to_string(),
+        );
+    }
+    if s.ends_with('/') {
+        return Err(
+            "must not end with `/` (git refnames are leaf-or-multi-component; \
+             a trailing `/` would resolve to an empty final component)"
+                .to_string(),
+        );
+    }
+    if s.contains("//") {
+        return Err(
+            "must not contain consecutive `/` characters (git refnames reject \
+             empty components between separators)"
+                .to_string(),
+        );
+    }
+    if s.ends_with('.') {
+        return Err(
+            "must not end with `.` (git refnames reject a trailing `.` — \
+             `<name>.` collides with the `<name>.lock` atomic-rename guard \
+             suffix on case-insensitive filesystems)"
+                .to_string(),
+        );
+    }
+    if s.starts_with("refs/heads/") || s.starts_with("refs/tags/") {
+        return Err(format!(
+            "must not carry the fully-qualified `refs/heads/` or `refs/tags/` \
+             prefix (this is the canonical `git show-ref` output-leak footgun; \
+             the caixa-resolver prepends the category prefix at clone time, so \
+             a `:branch \"refs/heads/main\"` would resolve to a literal ref \
+             named `refs/heads/refs/heads/main` on disk — drop the prefix and \
+             pass the leaf: `{leaf:?}`)",
+            leaf = s
+                .strip_prefix("refs/heads/")
+                .or_else(|| s.strip_prefix("refs/tags/"))
+                .unwrap_or(s),
+        ));
+    }
+    for (i, component) in s.split('/').enumerate() {
+        if component.starts_with('.') {
+            return Err(format!(
+                "component {component:?} (segment {one_based} of the `/`-split \
+                 refname) must not begin with `.` (git refuses to follow loose \
+                 `.git/refs/<cat>/.<name>` files)",
+                one_based = i + 1,
+            ));
+        }
+        // Case-insensitive `.lock` check: git enforces the `.lock`
+        // suffix as the atomic-rename guard on case-sensitive
+        // filesystems (refs/heads/main.lock collides with the
+        // in-flight update lockfile); on case-insensitive
+        // filesystems (APFS default, NTFS, HFS+) the `.LOCK` /
+        // `.Lock` variants collide identically. Rejecting all case
+        // permutations matches the broader-rejection intent on the
+        // axis the lacre pipeline ultimately stores into.
+        if component.len() >= 5
+            && component.as_bytes()[component.len() - 5..].eq_ignore_ascii_case(b".lock")
+        {
+            return Err(format!(
+                "component {component:?} (segment {one_based} of the `/`-split \
+                 refname) must not end with `.lock` (git uses the `.lock` \
+                 suffix as the atomic-rename guard for in-flight ref updates; \
+                 a refname ending in `.lock` is unwritable, and the suffix is \
+                 case-insensitive on the case-insensitive filesystems Git \
+                 supports — APFS default, NTFS, HFS+)",
+                one_based = i + 1,
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -2899,6 +3193,191 @@ mod tests {
             let s = std::str::from_utf8(&[b]).unwrap().to_string();
             is_wasi_keyvalue_slot(&s)
                 .unwrap_or_else(|e| panic!("printable ASCII byte 0x{b:02x} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn git_ref_name_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // refname the `:fonte :tag` / `:fonte :branch` axes carry in
+        // realistic authoring patterns (each maps to a refname `git
+        // fetch <remote> tag '<value>'` and `git checkout '<value>'`
+        // resolve cleanly at clone time). Drift between this list and
+        // any per-axis positive-set sweep surfaces here — one source
+        // of truth for the rule. Includes:
+        //   - semver tag with `v` prefix (`"v0.1.0"`, the canonical
+        //     pleme-io release shape);
+        //   - bare semver tag (`"0.1.0"`, the npm / Cargo idiom);
+        //   - pre-release tag (`"v0.1.0-alpha.1"`);
+        //   - release-line tag with hyphens (`"release-1.0"`);
+        //   - leaf branch (`"main"` / `"master"`);
+        //   - hierarchical feature branch (`"feature/checkout"`);
+        //   - multi-component branch with hyphens and digits
+        //     (`"user-1/feat-x-v2"`);
+        //   - dot-bearing tag (`"v0.1.0.rc1"`, mid-component dot
+        //     allowed — only consecutive `..` and trailing `.` are
+        //     rejected).
+        // Mirrors the canonical-forms sweeps on the peer value-shape
+        // predicates (`wasi_kv_slot_accepts_canonical_forms`,
+        // `nats_subject_accepts_canonical_forms`).
+        for s in [
+            "v0.1.0",
+            "0.1.0",
+            "v0.1.0-alpha.1",
+            "release-1.0",
+            "main",
+            "master",
+            "feature/checkout",
+            "user-1/feat-x-v2",
+            "v0.1.0.rc1",
+            "stable",
+        ] {
+            is_git_ref_name(s)
+                .unwrap_or_else(|e| panic!("canonical git ref {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn git_ref_name_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so
+        // a future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `wasi_kv_slot_rejects_each_arm_with_substring_pinned_reason`
+        // and `nats_subject_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicates.
+        for (s, needle) in [
+            // Trailing space — the canonical paste-from-doc footgun.
+            ("v0.1.0 ", "whitespace"),
+            // Embedded space (branch with spaces).
+            ("feature/foo bar", "whitespace"),
+            // Tab byte.
+            ("v0.1.0\t", "whitespace"),
+            // Newline — the canonical "paste-from-multiline-doc"
+            // footgun. Distinct from the whitespace arm because `\n`
+            // is a control character.
+            ("v0.1.0\n", "control character"),
+            // DEL byte (0x7F) — upper boundary of the control range.
+            ("v0.1.0\x7f", "control character"),
+            // Non-ASCII byte (the canonical "I copied the tag from a
+            // doc with smart quotes" footgun).
+            ("v0.1.0\u{e9}", "non-ASCII"),
+            // Tilde — git's revision grammar (`HEAD~3`).
+            ("v0.1.0~1", "`~`"),
+            // Caret — git's revision grammar (`HEAD^`).
+            ("v0.1.0^", "`^`"),
+            // Colon — git's refspec separator.
+            ("v0.1.0:rebase", "`:`"),
+            // Question mark — git's refspec glob.
+            ("v0.1.0?", "`?`"),
+            // Asterisk — git's refspec glob.
+            ("v0.1.*", "`*`"),
+            // Open bracket — git's refspec glob.
+            ("v0.1.0[1]", "`[`"),
+            // Backslash — the canonical Windows-path-leak footgun.
+            ("feature\\foo", "`\\`"),
+            // Consecutive dots — git's `<rev1>..<rev2>` range grammar.
+            ("v0.1..0", "`..`"),
+            // Reflog grammar.
+            ("main@{upstream}", "`@{`"),
+            // The bare `@` — git aliases to `HEAD`.
+            ("@", "bare `@`"),
+            // Leading slash.
+            ("/main", "begin with `/`"),
+            // Trailing slash.
+            ("feature/", "end with `/`"),
+            // Consecutive slashes.
+            ("feature//foo", "consecutive `/`"),
+            // Trailing dot.
+            ("v0.1.0.", "end with `.`"),
+            // Fully-qualified branch ref — the canonical
+            // `git show-ref`-output-leak footgun.
+            ("refs/heads/main", "fully-qualified"),
+            // Fully-qualified tag ref.
+            ("refs/tags/v0.1.0", "fully-qualified"),
+            // Component beginning with `.` (per-component rule).
+            ("feature/.hidden", "begin with `.`"),
+            // Component ending with `.lock` (per-component rule).
+            ("feature/main.lock", "`.lock`"),
+            // Leaf ref named `<x>.lock` — same per-component rule on
+            // the single-component refname.
+            ("main.lock", "`.lock`"),
+            // Case-insensitive `.LOCK` — APFS / NTFS / HFS+ admit
+            // both spellings as the same on-disk file, so a
+            // `:tag "v1.LOCK"` collides with git's atomic-rename
+            // guard on case-insensitive filesystems. Pinned
+            // separately from the canonical lowercase arm so a
+            // future relaxation that only catches lowercase
+            // surfaces here.
+            ("v1.LOCK", "`.lock`"),
+            ("feature/Main.Lock", "`.lock`"),
+        ] {
+            let err = is_git_ref_name(s)
+                .err()
+                .unwrap_or_else(|| panic!("git ref {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "git ref {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn git_ref_name_rejects_empty_defensively() {
+        // The predicate is called from `DepSource::validate` only
+        // after the per-axis `FontePinEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, and `is_wasi_keyvalue_slot` carry at
+        // their call sites.
+        let err = is_git_ref_name("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn git_ref_name_rejects_at_256_byte_boundary() {
+        // The 255-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring
+        // `dns_1123_label_rejects_at_64_byte_boundary`,
+        // `gateway_api_http_path_rejects_at_1025_byte_boundary`,
+        // `wit_world_ref_rejects_at_129_byte_boundary`,
+        // `nats_subject_rejects_at_257_byte_boundary`, and
+        // `wasi_kv_slot_rejects_at_513_byte_boundary` on the peer
+        // predicates. Constructed as a single all-`a` leaf so only
+        // the cap arm fires.
+        let max_ok = "a".repeat(255);
+        assert_eq!(max_ok.len(), 255);
+        is_git_ref_name(&max_ok).unwrap();
+        let too_long = "a".repeat(256);
+        assert_eq!(too_long.len(), 256);
+        let err = is_git_ref_name(&too_long).unwrap_err();
+        assert!(err.contains("255"), "got: {err:?}");
+        assert!(err.contains("256"), "got: {err:?}");
+    }
+
+    #[test]
+    fn git_ref_name_qualified_prefix_diagnostic_quotes_leaf() {
+        // Diagnostic-shape pin: the `refs/heads/` / `refs/tags/`
+        // rejection arm enumerates the leaf the author probably
+        // meant, so the author's grep target is the *intended*
+        // refname literal rather than the (rejected) qualified form.
+        // Pinned across both prefixes so a future relaxation that
+        // drops the leaf-suggestion surfaces here.
+        for (qualified, leaf) in [
+            ("refs/heads/main", "main"),
+            ("refs/tags/v0.1.0", "v0.1.0"),
+            ("refs/heads/feature/checkout", "feature/checkout"),
+        ] {
+            let err = is_git_ref_name(qualified).unwrap_err();
+            assert!(
+                err.contains(&format!("{leaf:?}")),
+                "qualified ref {qualified:?} diagnostic must quote the leaf \
+                 {leaf:?}; got {err:?}"
+            );
         }
     }
 }
