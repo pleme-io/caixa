@@ -226,6 +226,7 @@ impl Dep {
     }
 
     /// Reject dependency entries whose `:nome` or `:versao` are empty,
+    /// whose `:nome` is non-empty but not a valid DNS-1123 label,
     /// or whose `:versao` is non-empty but not a valid Cargo-shaped
     /// semver requirement.
     ///
@@ -235,8 +236,8 @@ impl Dep {
     /// and `:children :versao` (validated at
     /// [`crate::SupervisorSpec::validate`] since b38ff3a) carry — and
     /// the lacre pipeline resolves all three axes through the same
-    /// [`crate::parse_requirement`] entry-point. Until this gate
-    /// landed `:deps :versao` was the last `:versao` axis untyped past
+    /// [`crate::parse_requirement`] entry-point. Until 2420c44 landed
+    /// `:deps :versao` was the last `:versao` axis untyped past
     /// `Caixa::from_lisp`: a malformed-but-non-empty requirement
     /// (`"^bad-version"`, `"^^0.1"`, the canonical git-tag-shape-
     /// leaking-into-:versao `"v0.1"` typo, the accidental
@@ -248,15 +249,59 @@ impl Dep {
     /// verbatim + the parser's own wording in `reason`, so the
     /// author's grep target is unambiguous.
     ///
+    /// The author surface for `:deps :nome` is the same DNS-1123 label
+    /// the peer caixa-identifier axes carry — top-level Caixa `:nome`
+    /// (validated at [`crate::Caixa::validate_nome`] since 6c992f8),
+    /// `:membros :caixa` (validated at
+    /// [`crate::AplicacaoSpec::validate_membros`] since 3f9d7a0),
+    /// `:children :caixa` (validated at
+    /// [`crate::SupervisorSpec::validate`] since 31bfa43). A `:deps
+    /// :nome` value flows verbatim through the lacre pipeline as the
+    /// target caixa's `:nome` (which the gate at the *target* side now
+    /// rejects if non-DNS-1123) and lands as the rendered caixa's
+    /// `lareira-<nome>` Helm chart name segment, the per-dep
+    /// `LABEL_PROGRAM` label value, and the `caixa-resolver`'s
+    /// `~/.cache/caixa/<org>/<nome>` checkout-directory leaf. Until
+    /// this gate landed `:deps :nome` was the fourth and last
+    /// DNS-1123-shaped caixa-identifier axis still untyped past
+    /// `Caixa::from_lisp`: a syntactically wrong dep name (`"Caixa-
+    /// Teia"` uppercase — the canonical "I copied the README header"
+    /// typo; `"caixa_teia"` underscore — the Go module / Python
+    /// identifier leak; `"caixa-teia."` trailing dot — the FQDN
+    /// confusion; `"-caixa-teia"` leading hyphen; a 64-byte slug)
+    /// silently passed parse and surfaced at lacre-resolve time when
+    /// the resolved target caixa's `:nome` failed *its* DNS-1123 gate
+    /// — far from the source `:deps` entry, with a diagnostic naming
+    /// the *target's* `:nome` rather than the dep entry that referenced
+    /// it. Mirroring the 3f9d7a0 / 31bfa43 / 6c992f8 trajectory through
+    /// the lifted [`crate::render::is_dns_1123_label`] predicate (the
+    /// "before its third occurrence" PRIME DIRECTIVE boundary, THEORY.md
+    /// §I.3.5): every `Dep::nome` past validate is DNS-1123-label-shaped,
+    /// so every downstream consumer (caixa-resolver's lacre fetch,
+    /// caixa-helm's `lareira-<nome>` chart name, the future M4 per-dep
+    /// fan-out emitter) reaches for the name knowing the value is
+    /// apiserver-valid without re-validating.
+    ///
     /// Empty checks fire first (narrower diagnostic), parse last —
     /// same ordering discipline as
     /// [`crate::AplicacaoSpec::validate_membros`] and
     /// [`crate::SupervisorSpec::validate`]. `parse_requirement("")`
     /// returns `Ok(VersionReq::STAR)`, so the empty-`:versao` arm is
-    /// structurally necessary even with the parse arm in place.
+    /// structurally necessary even with the parse arm in place. The
+    /// `:nome` shape gate runs after the `:nome` empty gate and before
+    /// the `:versao` checks so a one-entry caixa.lisp with both wrong
+    /// sees the name-side diagnostic first (the name is the
+    /// self-locating axis — without it, the parse diagnostic can't
+    /// quote `:nome "<bad>"`).
     pub fn validate(&self) -> Result<(), DepError> {
         if self.nome.is_empty() {
             return Err(DepError::NomeEmpty);
+        }
+        if let Err(reason) = crate::render::is_dns_1123_label(&self.nome) {
+            return Err(DepError::NomeInvalid {
+                nome: self.nome.clone(),
+                reason,
+            });
         }
         if self.versao.is_empty() {
             return Err(DepError::VersaoEmpty {
@@ -293,6 +338,16 @@ pub enum DepError {
          omit the entry instead of carrying an empty name)"
     )]
     NomeEmpty,
+    #[error(
+        ":deps entry :nome {nome:?} is not a valid DNS-1123 label: {reason} \
+         (the value flows verbatim as the target caixa's `:nome`, the rendered \
+         `lareira-<nome>` Helm chart name segment, the `LABEL_PROGRAM` label \
+         value, and the resolver's checkout-directory leaf — each apiserver-side \
+         schema rejects non-DNS-1123 names at admission time; use a lowercase \
+         RFC 1123 label like `\"caixa-teia\"` or `\"pleme-mesh\"`, 1..=63 bytes, \
+         pattern `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)"
+    )]
+    NomeInvalid { nome: String, reason: String },
     #[error(
         ":deps entry {nome:?} has empty :versao (every dep must pin a semver \
          constraint that resolves through the lacre pipeline)"
@@ -410,6 +465,250 @@ mod tests {
         assert!(
             matches!(err, DepError::VersaoEmpty { ref nome } if nome == "caixa-teia"),
             "got {err:?}"
+        );
+    }
+
+    // ── value-shape: DNS-1123 label on :deps :nome ────────────────────────
+
+    #[test]
+    fn validate_rejects_nome_with_uppercase() {
+        // The fail-before-pass-after pin: a non-empty but uppercase
+        // `:nome` silently passed `validate()` on every pre-gate
+        // codebase because the prior shape only refused the empty
+        // string. The DNS-1123 violation surfaced far downstream at
+        // lacre-resolve time when the *target* caixa's `:nome` failed
+        // its own gate — far from the `:deps` entry, with a diagnostic
+        // naming the target rather than the dep entry that referenced
+        // it. Same fail-before-pass-after fixture pinned for
+        // `:membros :caixa` (3f9d7a0), `:children :caixa` (31bfa43),
+        // and Caixa `:nome` (6c992f8).
+        let d = Dep::simple("Caixa-Teia", "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome == "Caixa-Teia" && reason.contains("uppercase")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_nome_with_underscore() {
+        // RFC 1123 allows `[a-z0-9-]` only; underscore is the canonical
+        // "I'm thinking of Go module names / Python identifiers" leak.
+        // Same fixture pinned for the peer caixa-identifier axes.
+        let d = Dep::simple("caixa_teia", "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome == "caixa_teia" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_nome_with_dot() {
+        // A `:deps :nome` is a single DNS-1123 *label*, not a
+        // subdomain — dots are rejected. The `"caixa.teia"` shape is
+        // the canonical "I confused the dep name with the FQDN /
+        // namespace" footgun, distinct from the legitimate
+        // `:fonte :repo "github:org/caixa-teia"` axis.
+        let d = Dep::simple("caixa.teia", "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome == "caixa.teia" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_nome_with_leading_hyphen() {
+        // RFC 1123 requires alphanumeric at both label boundaries.
+        // Pinned in parity with the peer DNS-1123 fixtures.
+        let d = Dep::simple("-caixa-teia", "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome == "-caixa-teia" && reason.contains("alphanumeric")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_nome_with_trailing_hyphen() {
+        let d = Dep::simple("caixa-teia-", "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome == "caixa-teia-" && reason.contains("alphanumeric")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_nome_with_slash() {
+        // The canonical "I copied the GitHub repo path into `:nome`
+        // instead of `:fonte :repo`" typo. A `/` in the name leaks the
+        // lacre-side `:repositorio` shape (`pleme-io/caixa-teia`) into
+        // the local-name slot. Same fixture pinned for `:membros
+        // :caixa` (3f9d7a0).
+        let d = Dep::simple("pleme-io/caixa-teia", "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome == "pleme-io/caixa-teia" && reason.contains('/')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_nome_too_long() {
+        // 64-byte label — one over the RFC 1035 / RFC 1123 label cap.
+        // Built from a valid character set so the length-bound
+        // diagnostic surfaces before any per-character check (the
+        // order pin parallel to the per-character predicates inside
+        // [`crate::render::is_dns_1123_label`]).
+        let long = "a".repeat(64);
+        let d = Dep::simple(&long, "^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::NomeInvalid { ref nome, ref reason }
+                    if nome.len() == 64 && reason.contains("max length of 63")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_canonical_nome_labels() {
+        // Positive-control sweep — every form the K8s apiserver
+        // accepts as a DNS-1123 label must round-trip through
+        // validate. Covers a hyphen-bearing label, a numeric-suffix
+        // label, a leading-digit label, a single-character label, and
+        // a 63-byte (exactly the cap) label — the same fixture set
+        // the peer `:membros :caixa` / `:children :caixa` positive
+        // controls pin.
+        for nome in [
+            "caixa-teia",
+            "caixa-resolver2",
+            "2nd-tier-cache",
+            "x",
+            "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0",
+        ] {
+            Dep::simple(nome, "^0.1")
+                .validate()
+                .unwrap_or_else(|e| panic!("canonical label {nome:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn nome_empty_takes_precedence_over_nome_invalid() {
+        // Ordering pin: `NomeEmpty` is the more self-locating
+        // diagnostic on `""` and must lead — `is_dns_1123_label` is
+        // only reached after the empty-check fires at the call site.
+        // Mirrors `membro_caixa_empty_takes_precedence_over_invalid`
+        // (3f9d7a0) on the peer caixa-identifier axis.
+        let mut d = Dep::simple("placeholder", "^0.1");
+        d.nome = String::new();
+        assert_eq!(d.validate().unwrap_err(), DepError::NomeEmpty);
+    }
+
+    #[test]
+    fn nome_invalid_fires_before_versao_empty() {
+        // Ordering pin: a malformed `:nome` fires before any `:versao`
+        // axis check on the *same* entry — the per-entry shape gates
+        // run top-to-bottom (nome empty → nome shape → versao empty →
+        // versao parse → fonte shape), so a one-entry caixa.lisp with
+        // both wrong sees the name-side diagnostic first (the name is
+        // the self-locating axis — without a valid name, the parse
+        // diagnostic can't quote `:nome "<bad>"`). Same ordering
+        // discipline as `membro_caixa_invalid_fires_before_versao_check`
+        // (3f9d7a0).
+        let mut d = Dep::simple("Caixa-Teia", "^0.1");
+        d.versao = String::new();
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::NomeInvalid { ref nome, .. } if nome == "Caixa-Teia"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn nome_invalid_fires_before_versao_invalid() {
+        // Ordering pin: a malformed `:nome` fires before the `:versao`
+        // parse-side check on the *same* entry. Pin separately from
+        // the empty-versao ordering so a future re-ordering surfaces
+        // here, parallel to the b0c8389 / c4213a4 trajectory.
+        let d = Dep::simple("Caixa-Teia", "^^0.1");
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::NomeInvalid { ref nome, .. } if nome == "Caixa-Teia"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn nome_invalid_fires_before_fonte_invalid() {
+        // Ordering pin: a malformed `:nome` fires before the `:fonte`
+        // shape check on the *same* entry. The `:fonte` diagnostic
+        // names the offending dep's `:nome` verbatim (via
+        // `DepSource::validate(&self.nome)`), so a non-self-locating
+        // name would taint the downstream diagnostic too — the gate
+        // ordering keeps both diagnostics individually self-locating.
+        let mut d = Dep::simple("Caixa-Teia", "^0.1");
+        d.fonte = Some(DepSource::Git {
+            repo: String::new(),
+            tag: None,
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::NomeInvalid { ref nome, .. } if nome == "Caixa-Teia"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn nome_invalid_diagnostic_carries_offending_name() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:nome` value verbatim so the author can grep their
+        // caixa.lisp without re-running the build, and carries a
+        // non-empty `reason` from `is_dns_1123_label` so the
+        // predicate's own wording flows through to the diagnostic.
+        // Same shape as `MembroCaixaInvalid` (3f9d7a0),
+        // `ChildCaixaInvalid` (31bfa43), `ManifestError::NomeInvalid`
+        // (6c992f8) — the four DNS-1123 caixa-identifier axes now
+        // share a structurally-equivalent diagnostic family.
+        let d = Dep::simple("Caixa_Teia", "^0.1");
+        let err = d.validate().unwrap_err();
+        let DepError::NomeInvalid { nome, reason } = err else {
+            panic!("expected NomeInvalid, got other variant");
+        };
+        assert_eq!(nome, "Caixa_Teia");
+        assert!(
+            !reason.is_empty(),
+            "NomeInvalid `reason` must carry the predicate's wording verbatim"
         );
     }
 
