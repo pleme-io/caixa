@@ -1332,6 +1332,149 @@ pub fn is_git_ref_name(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Length, in lowercase-hex characters, of a full Git SHA-1 commit
+/// OID — the canonical commit identifier every `git rev-parse HEAD`
+/// invocation emits on a SHA-1-hashed repository. `git`'s loose-object
+/// store keys every object under `.git/objects/<first-2-hex>/<last-38-hex>`,
+/// so the full 40-char OID is the address-of-truth the porcelain consumes
+/// at `git fetch <remote> <40-hex>` and `git checkout <40-hex>` time;
+/// abbreviated OIDs are admitted by the porcelain through a separate
+/// prefix-lookup pass and are ambiguous across repository history (a 7-char
+/// prefix that resolves to one commit today can become a collision tomorrow
+/// as the repo grows). Lifted as a typed const so the `:fonte :rev`
+/// validate gate, the future lacre-side resolved-rev gate, and the future
+/// M4 per-dep CR materializer's per-pin validator all read from one place.
+pub const GIT_OID_SHA1_LEN: usize = 40;
+
+/// Length, in lowercase-hex characters, of a full Git SHA-256 commit
+/// OID — the canonical commit identifier on a SHA-256-hashed repository
+/// (Git's [`extensions.objectFormat = sha256`][gitsha256] mode, GA since
+/// Git 2.42 / Oct 2023). Doubled width vs. SHA-1: 256 bits = 64 hex chars.
+/// Carried alongside [`GIT_OID_SHA1_LEN`] so the typed `:rev` slot admits
+/// either canonical hash-algorithm OID without per-renderer branching;
+/// the lacre's BLAKE3 content-addressing (THEORY.md §IV — typed reproducibility
+/// envelope) is orthogonal to the upstream git's chosen object hash and
+/// neither OID width should leak into downstream code paths.
+///
+/// [gitsha256]: https://git-scm.com/docs/hash-function-transition
+pub const GIT_OID_SHA256_LEN: usize = 64;
+
+/// Predicate: assert that `s` is a valid Git commit OID — the canonical
+/// shape the typed `:fonte (:tipo git …)` `:rev` axis carries. The
+/// reproducibility contract `:rev` carries vs. `:tag` / `:branch`
+/// (CAIXA-SDLC §V — Substrate; `:tag` resolves to whatever the upstream
+/// has tagged today, `:branch` to whatever the upstream's HEAD points at
+/// today, `:rev` to exactly one immutable commit forever — same shape
+/// Unison's [content-addressed code identity][unison] gives terms by
+/// construction: the hash is the address, the address never moves):
+///
+///   - exactly [`GIT_OID_SHA1_LEN`] (40, SHA-1) or [`GIT_OID_SHA256_LEN`]
+///     (64, SHA-256) characters — the two canonical Git hash-algorithm
+///     widths; anything in between is an abbreviated prefix (the
+///     canonical `git log --short` / `git rev-parse --short HEAD`
+///     paste-from-release-notes footgun), which is ambiguous across
+///     repository history and surfaces at clone time as an
+///     [`ambiguous argument`][gitambig] error far from the source
+///     caixa.lisp;
+///   - every byte in `[0-9a-f]` (lowercase ASCII hex) — `git rev-parse`
+///     and `git show --format=%H` both emit lowercase exclusively, so an
+///     uppercase-bearing `:rev` round-trips inconsistently across the
+///     resolver's `git fetch <remote> <:rev>` ↔ `git rev-parse HEAD`
+///     equality-check pipeline and fails the lacre's content-addressing
+///     equality probe with a confusing case-only diff;
+///   - no whitespace, no control bytes, no non-ASCII, no refname
+///     punctuation (`~ ^ : ? * [ \`), no `/` separators — every
+///     character outside `[0-9a-f]` is rejected on the same predicate
+///     arm, so a `:rev "main"` (the canonical "I conflated `:rev`
+///     and `:branch`" footgun) lands at the same gate as a
+///     `:rev "v0.1.0"` (`:tag` mis-slot) or a `:rev "c0ffee:scratch"`
+///     (refname-shape leak); the typed `:rev` slot's valid set
+///     intersects the `:tag` / `:branch` slot's valid set at exactly
+///     the empty set, structurally — every refname is rejected here,
+///     every OID is rejected by [`is_git_ref_name`].
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — [`crate::DepError::FontePinShape`]
+/// at validate time on the `:fonte :rev` axis, the future per-pin gate
+/// on `lacre.lisp` resolved-rev axes, the future M4 per-dep CR
+/// materializer's per-pin validator — wraps the same reason in its own
+/// typed `*Invalid { axis, reason }` variant. The reason wording is
+/// axis-agnostic ("git commit OIDs are lowercase hex (`[0-9a-f]`)") so
+/// every call site reading the same diagnostic points at the same rule.
+///
+/// Empty input is rejected here (defensively) and at each call site via
+/// the narrower [`crate::DepError::FontePinEmpty`] variant — the same
+/// empty-first cascade [`is_dns_1123_label`], [`is_gateway_api_http_path`],
+/// [`is_wit_world_ref`], [`is_nats_subject`], [`is_wasi_keyvalue_slot`],
+/// and [`is_git_ref_name`] all carry.
+///
+/// Sibling of [`is_git_ref_name`]: the two predicates together bracket
+/// the `:fonte` pin axes — refname-shaped (`:tag` / `:branch`) vs.
+/// hex-OID-shaped (`:rev`) — so an authored value lands in exactly one
+/// of the two valid sets, and a cross-axis mis-slot (`:rev "main"` /
+/// `:tag "deadbeef…"`) is a build error at the offending axis's
+/// predicate, not a clone-time surprise.
+///
+/// [unison]: https://www.unison-lang.org/docs/the-big-idea/
+/// [gitambig]: https://git-scm.com/docs/git-rev-parse#_specifying_revisions
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / character-class), without wrapping in any error variant —
+/// every caller maps the same `String` into its own typed
+/// `*Invalid { axis, reason }` enum variant.
+pub fn is_git_oid(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    let len = s.len();
+    if len != GIT_OID_SHA1_LEN && len != GIT_OID_SHA256_LEN {
+        return Err(format!(
+            "git commit OIDs are exactly {GIT_OID_SHA1_LEN} hex chars (SHA-1) or \
+             {GIT_OID_SHA256_LEN} hex chars (SHA-256); got {len} chars (an \
+             abbreviated commit ID is ambiguous across repository history — \
+             `git log --short` / `git rev-parse --short HEAD` emit prefixes for \
+             human display only, not as reproducible commit addresses; pin the \
+             full OID so the resolver's `git fetch <remote> <:rev>` and the \
+             lacre's content-addressing equality probe both resolve to exactly \
+             one immutable commit, forever)"
+        ));
+    }
+    for (i, b) in s.bytes().enumerate() {
+        match b {
+            b'0'..=b'9' | b'a'..=b'f' => {}
+            b'A'..=b'F' => {
+                return Err(format!(
+                    "git commit OIDs are lowercase hex (`[0-9a-f]`); got \
+                     uppercase character {ch:?} at byte {i} (git porcelain \
+                     emits OIDs lowercase exclusively — `git rev-parse HEAD` \
+                     and `git show --format=%H` both lowercase on output; a \
+                     `:rev` value with `[A-F]` round-trips inconsistently \
+                     across the resolver's fetch ↔ `git rev-parse HEAD` \
+                     equality-check pipeline and fails the lacre's \
+                     content-addressing probe with a confusing case-only diff)",
+                    ch = b as char
+                ));
+            }
+            _ => {
+                return Err(format!(
+                    "git commit OIDs are lowercase hex (`[0-9a-f]`); got non-hex \
+                     character {ch:?} at byte {i} (the `:rev` slot's value-shape \
+                     contract is a hex commit ID — for refname-shaped pins \
+                     (`v0.1.0`, `main`, `feature/checkout`) use `:tag` or \
+                     `:branch`, not `:rev`; the substrate's `is_git_ref_name` \
+                     and `is_git_oid` predicates partition the `:fonte` axes \
+                     structurally, so a cross-axis mis-slot lands at the \
+                     offending axis's predicate, not at clone time)",
+                    ch = b as char
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -3377,6 +3520,198 @@ mod tests {
                 err.contains(&format!("{leaf:?}")),
                 "qualified ref {qualified:?} diagnostic must quote the leaf \
                  {leaf:?}; got {err:?}"
+            );
+        }
+    }
+
+    // ── is_git_oid — `:fonte :rev` value-shape predicate ────────────────
+
+    #[test]
+    fn git_oid_canonical_widths_match_sha1_and_sha256() {
+        // The single-source-of-truth pin on the two canonical widths.
+        // Drift between the predicate's accepted widths and the const
+        // values would surface here as a build error, not as a silent
+        // round-trip break at the renderer layer. Mirrors
+        // `wasm32_memory_cap_matches_parsed_4_gib` (9d49a3a) — the
+        // constant equality pin keeps the contract one place.
+        assert_eq!(GIT_OID_SHA1_LEN, 40);
+        assert_eq!(GIT_OID_SHA256_LEN, 64);
+        // Doubled width: SHA-256 is exactly twice SHA-1 in hex char
+        // count (256 / 4 = 64; 160 / 4 = 40). Pinned so a future
+        // hash-algorithm widening reads the relationship here.
+        assert_eq!(GIT_OID_SHA256_LEN, GIT_OID_SHA1_LEN * 2 - 16);
+    }
+
+    #[test]
+    fn git_oid_accepts_canonical_sha1() {
+        // Positive control on the SHA-1 OID width: 40 lowercase hex
+        // characters — the canonical `git rev-parse HEAD` emission
+        // shape every realistic pleme-io upstream uses today.
+        is_git_oid("0123456789abcdef0123456789abcdef01234567").unwrap();
+        is_git_oid("deadbeefcafebabe0123456789abcdef01234567").unwrap();
+        is_git_oid("ffffffffffffffffffffffffffffffffffffffff").unwrap();
+        is_git_oid("0000000000000000000000000000000000000000").unwrap();
+    }
+
+    #[test]
+    fn git_oid_accepts_canonical_sha256() {
+        // Positive control on the SHA-256 OID width: 64 lowercase hex
+        // characters — `git`'s `extensions.objectFormat = sha256`
+        // emission (GA since Git 2.42 / Oct 2023). Doubled SHA-1 width.
+        let sha256_one = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        assert_eq!(sha256_one.len(), 64);
+        is_git_oid(sha256_one).unwrap();
+        let sha256_zeros = "0".repeat(64);
+        is_git_oid(&sha256_zeros).unwrap();
+    }
+
+    #[test]
+    fn git_oid_rejects_empty_defensively() {
+        // The predicate is called from `crate::dep::DepSource::validate`
+        // only after the per-axis `FontePinEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`, and
+        // `is_git_ref_name` carry at their call sites.
+        let err = is_git_oid("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn git_oid_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so a
+        // future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `git_ref_name_rejects_each_arm_with_substring_pinned_reason`,
+        // `wasi_kv_slot_rejects_each_arm_with_substring_pinned_reason`,
+        // and `nats_subject_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicates.
+        for (s, needle) in [
+            // Abbreviated 7-char prefix — the canonical `git log
+            // --short` paste-from-release-notes footgun.
+            ("c0ffee0", "abbreviated"),
+            // Abbreviated 12-char prefix — `git log --short=12`.
+            ("c0ffee001234", "abbreviated"),
+            // Off-by-one above SHA-1 width.
+            ("0123456789abcdef0123456789abcdef012345670", "abbreviated"),
+            // Off-by-one below SHA-256 width.
+            (
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+                "abbreviated",
+            ),
+            // Off-by-one above SHA-256 width.
+            (
+                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0",
+                "abbreviated",
+            ),
+            // Uppercase SHA-1 — `git porcelain` lowercases on output.
+            ("DEADBEEFCAFEBABE0123456789ABCDEF01234567", "uppercase"),
+            // Mixed-case SHA-1 — same path as pure-uppercase; the first
+            // uppercase byte fires the arm.
+            ("deadbeefCAFEbabe0123456789abcdef01234567", "uppercase"),
+            // Non-hex character at exact SHA-1 length — the cross-axis
+            // mis-slot footgun (a refname-style char landing in `:rev`).
+            // `g` is the first non-hex byte; the non-hex arm fires
+            // ahead of any other rule. The hyphen / colon / slash arms
+            // are the same path on the same predicate.
+            ("g123456789abcdef0123456789abcdef01234567", "non-hex"),
+            ("0123456789abcdef-123456789abcdef01234567", "non-hex"),
+            ("0123456789abcdef/123456789abcdef01234567", "non-hex"),
+            ("0123456789abcdef:123456789abcdef01234567", "non-hex"),
+            // Whitespace inside an otherwise-SHA-shaped value (length
+            // 41 — fails the length arm first; pinned to ensure the
+            // diagnostic surfaces *some* parser wording).
+            ("0123456789abcdef0123456789abcdef01234567 ", "abbreviated"),
+        ] {
+            let err = is_git_oid(s)
+                .err()
+                .unwrap_or_else(|| panic!("git OID {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "git OID {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn git_oid_rejects_at_canonical_width_boundaries() {
+        // Boundary pin on the two canonical widths simultaneously: 39
+        // (below SHA-1), 40 (SHA-1 exactly), 41 (just above), 63 (just
+        // below SHA-256), 64 (SHA-256 exactly), 65 (just above). Pinned
+        // so a future relaxation that admits "close enough" widths
+        // surfaces here. Constructed as all-zero hex so only the length
+        // arm fires.
+        for (len, ok) in [
+            (1usize, false),
+            (7, false),
+            (39, false),
+            (40, true),
+            (41, false),
+            (63, false),
+            (64, true),
+            (65, false),
+            (128, false),
+        ] {
+            let s = "0".repeat(len);
+            let result = is_git_oid(&s);
+            if ok {
+                result.unwrap_or_else(|e| panic!("len {len} must pass: {e:?}"));
+            } else {
+                let err = result.expect_err(&format!("len {len} must fail"));
+                assert!(
+                    err.contains("abbreviated") || err.contains(&len.to_string()),
+                    "len {len} reason must name the offending length or surface \
+                     the abbreviation arm, got {err:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn git_oid_rejection_is_disjoint_from_ref_name_acceptance() {
+        // Structural pin: the two predicates partition the `:fonte`
+        // pin axes — every canonical refname is rejected by
+        // `is_git_oid`, and every canonical OID is rejected by
+        // `is_git_ref_name`. The intersection of the two valid sets
+        // is exactly the empty set. Drift here = a value that passes
+        // both predicates would land at *both* axes silently, defeating
+        // the structural "cross-axis mis-slot is a build error"
+        // contract. Pinned with a representative cross-set so a future
+        // predicate weakening surfaces here.
+        let canonical_refnames = [
+            "v0.1.0",
+            "main",
+            "feature/checkout",
+            "release-1.0",
+            "user-1/feat-x-v2",
+        ];
+        for refname in canonical_refnames {
+            is_git_ref_name(refname).unwrap_or_else(|e| {
+                panic!("setup: canonical refname {refname:?} must pass is_git_ref_name: {e:?}")
+            });
+            assert!(
+                is_git_oid(refname).is_err(),
+                "canonical refname {refname:?} must NOT pass is_git_oid \
+                 (predicate-partition pin)"
+            );
+        }
+        let canonical_oids = [
+            "0123456789abcdef0123456789abcdef01234567",
+            "deadbeefcafebabe0123456789abcdef01234567",
+            "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+        ];
+        for oid in canonical_oids {
+            is_git_oid(oid).unwrap_or_else(|e| {
+                panic!("setup: canonical OID {oid:?} must pass is_git_oid: {e:?}")
+            });
+            assert!(
+                is_git_ref_name(oid).is_err(),
+                "canonical OID {oid:?} must NOT pass is_git_ref_name \
+                 (predicate-partition pin)"
             );
         }
     }
