@@ -7,6 +7,7 @@ pub mod build;
 pub mod chart;
 pub mod deploy;
 pub mod ephemeral;
+pub mod ephemeral_runtime;
 pub mod fmt;
 pub mod init;
 pub mod lint;
