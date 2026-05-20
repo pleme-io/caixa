@@ -21,6 +21,7 @@ members = [
     "caixa-helm",
     "caixa-flux",
     "caixa-mesh",
+    "caixa-tatara",
 ]
 
 [workspace.package]
@@ -73,6 +74,7 @@ ropey = "1"
 tatara-lisp = { path = "../tatara/tatara-lisp" }
 tatara-lisp-derive = { path = "../tatara/tatara-lisp-derive" }
 tatara-process = { path = "../tatara/tatara-process" }
+caixa-tatara = { path = "caixa-tatara" }
 iac-forge = { path = "../iac-forge" }
 
 pretty_assertions = "1"
