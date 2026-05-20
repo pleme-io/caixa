@@ -1,0 +1,24 @@
+[package]
+name = "caixa-tatara"
+description = "caixa-tatara — typed renderer that emits a tatara Process CR with Intent::Aplicacao + Lifetime::Ephemeral from an :kind Aplicacao caixa. Bridges caixa-helm's chart output to tatara-reconciler's ephemeral envelope."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "caixa_tatara"
+path = "src/lib.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+tatara-process = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
