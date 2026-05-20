@@ -31,6 +31,7 @@
 //! is preserved by construction).
 
 use std::collections::BTreeMap;
+use std::path::{Component, Path};
 use thiserror::Error;
 
 use crate::{Caixa, CaixaKind};
@@ -1471,6 +1472,121 @@ pub fn is_git_oid(s: &str) -> Result<(), String> {
                 ));
             }
         }
+    }
+    Ok(())
+}
+
+/// Tagged reason a caixa-author-supplied path can fail the
+/// sandboxed-relative shape gate every callback / script path must
+/// pass for the layout checker's `root.join(p)` to stay inside the
+/// caixa root.
+///
+/// Returned by [`is_sandboxed_relative_path`] so each per-axis caller
+/// — [`crate::BehaviorSpec::validate`] on `:behavior :on-*` paths
+/// (b0c8389), [`crate::UpgradeInstruction::validate`]'s `StateChange`
+/// arm on `:upgrade-from :state-change :script` (26da2c7), every
+/// future axis admitting a user-supplied path — match-and-wraps the
+/// tag into its own typed `*Invalid { slot, path }` enum variant so
+/// the diagnostic still names *which slot* carried the malformed
+/// value. The tag is axis-agnostic; the wrapping per-axis variant
+/// carries the slot identity.
+///
+/// Sibling discriminator-style of the per-arm reason substrings every
+/// value-shape predicate already exposes (`is_dns_1123_label`,
+/// `is_gateway_api_http_path`, …) — but typed rather than string-
+/// shaped, because the per-axis variants for path violations were
+/// already split three ways (`EmptyPath` / `AbsolutePath` /
+/// `ParentEscape` in `BehaviorError`; `EmptyScript` / `AbsoluteScript`
+/// / `ParentEscapeScript` in `UpgradeError`), so collapsing them to a
+/// single `*PathInvalid { reason }` variant would *regress* the
+/// diagnostic shape rather than preserve it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PathShapeViolation {
+    /// The path string is empty — `PathBuf::new()` or the
+    /// canonical "I declared the slot but left the value blank"
+    /// authoring footgun. `root.join(PathBuf::new())` resolves to
+    /// `root` itself, silently pointing the runtime's `LisleLoader`
+    /// at the project root rather than a file.
+    Empty,
+    /// The path is absolute — `Path::join` *replaces* the base
+    /// with an absolute right-hand side, so `root.join("/etc/passwd")`
+    /// resolves to `"/etc/passwd"` and escapes the project sandbox
+    /// entirely. The Lunatic-style sandbox discipline
+    /// ([`theory/INSPIRATIONS.md` §III.1][i31]) requires every
+    /// author-supplied path to live under the caixa root.
+    ///
+    /// [i31]: https://github.com/pleme-io/theory/blob/main/INSPIRATIONS.md
+    Absolute,
+    /// The path contains a [`Component::ParentDir`] component anywhere
+    /// — `root.join("../sibling/x")` traverses above the caixa root,
+    /// the same sandbox-escape vector via parent-directory traversal.
+    /// Caught regardless of where the `..` component sits (leading,
+    /// mid-path, trailing) so a future relaxation that only checks
+    /// one position surfaces at this one predicate.
+    ParentEscape,
+}
+
+/// Predicate: assert that `path` is a *sandboxed-relative* path —
+/// the shape every caixa-author-supplied callback / script path must
+/// take so the layout checker's `root.join(p)` resolves inside the
+/// caixa root sandbox. The contract:
+///
+///   - non-empty (`PathBuf::new()` → `Empty`);
+///   - relative (absolute paths replace the base under
+///     [`Path::join`] semantics → `Absolute`);
+///   - no [`Component::ParentDir`] components anywhere (traversal
+///     above the caixa root → `ParentEscape`).
+///
+/// Returns [`PathShapeViolation`] tagging the specific failure;
+/// each per-axis caller match-and-wraps the variant in its own
+/// typed `*Invalid { slot, path }` enum variant so the diagnostic
+/// still names *which slot* carried the malformed value. The
+/// arm-ordering is the same `Empty → Absolute → ParentEscape`
+/// every prior inlined copy followed (b0c8389 [`crate::BehaviorSpec`],
+/// 26da2c7 [`crate::UpgradeInstruction::StateChange`]), so any
+/// caller migrating to the lifted predicate preserves its existing
+/// per-slot diagnostic precedence by construction.
+///
+/// Lifted from `caixa-core::behavior` and `caixa-core::upgrade`
+/// where the same three-step gate was inlined verbatim across two
+/// call sites — the PRIME DIRECTIVE duplication-budget rule
+/// (THEORY.md §I.3.5: "every recurring shape becomes a generator
+/// before it becomes a pattern; every pattern becomes a library
+/// before it becomes duplicated code. The duplication budget is
+/// zero.") promotes the gate to a typed substrate-side predicate
+/// on the same trajectory the M2-overlay and label-selector helpers
+/// (9e3a057, 9d09cfb, 9dbeafd, 31455a7, 07a4544, 8b4db42) already
+/// follow. The third caller — the future M3/M4 axis admitting a
+/// user-supplied path (the future `:entrada :tls-cert` /
+/// `:entrada :tls-key` PEM-file axes, the future
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-path
+/// validator, the future per-Servico pre-warm script axis) — lands
+/// as a thin five-line wrapper rather than re-inlining the same
+/// three checks.
+///
+/// Pairs with the per-axis empty / absolute / parent-escape variants
+/// on [`crate::BehaviorError`] and [`crate::UpgradeError`] — those
+/// remain the typed surface authors see; this predicate is the
+/// single-source-of-truth gate the caixa-build pipeline consults to
+/// produce them.
+///
+/// # Errors
+///
+/// Returns the [`PathShapeViolation`] tag identifying the specific
+/// violation ([`PathShapeViolation::Empty`] / [`PathShapeViolation::Absolute`]
+/// / [`PathShapeViolation::ParentEscape`]) so each per-axis caller
+/// match-and-wraps it into its own typed `*Path` / `*Script` enum
+/// variant (preserving the per-slot diagnostic granularity the inline
+/// pre-lift gates already produced).
+pub fn is_sandboxed_relative_path(path: &Path) -> Result<(), PathShapeViolation> {
+    if path.as_os_str().is_empty() {
+        return Err(PathShapeViolation::Empty);
+    }
+    if path.is_absolute() {
+        return Err(PathShapeViolation::Absolute);
+    }
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
+        return Err(PathShapeViolation::ParentEscape);
     }
     Ok(())
 }
@@ -3712,6 +3828,223 @@ mod tests {
                 is_git_ref_name(oid).is_err(),
                 "canonical OID {oid:?} must NOT pass is_git_ref_name \
                  (predicate-partition pin)"
+            );
+        }
+    }
+
+    // ── is_sandboxed_relative_path — `:behavior :on-*` + `:upgrade-from ─
+    // ── :state-change :script` value-shape predicate ────────────────────
+
+    #[test]
+    fn sandboxed_relative_path_accepts_canonical_relative_paths() {
+        // Positive controls: every documented authoring shape across
+        // the two existing call sites (`:behavior :on-init` / `:on-call`
+        // / `:on-cast` / `:on-info` / `:on-state-change` / `:on-terminate`
+        // and `:upgrade-from :state-change :script`) — bare filename,
+        // standard `lib/` subdirectory, deeply-nested migrations
+        // subdirectory, sibling-folder-shaped path, and explicit
+        // current-dir-relative-prefixed path. Pin every leg so a
+        // future tightening that rejects any of these (e.g. demanding
+        // a `lib/` prefix specifically, or forbidding the explicit
+        // `./` segment) surfaces here as a test-failure at the predicate
+        // boundary, not piecemeal across per-axis call sites.
+        for relpath in [
+            "init.lisp",
+            "lib/init.lisp",
+            "lib/handlers.lisp",
+            "lib/migrations/v01-to-v02.lisp",
+            "callbacks/on_call.lisp",
+            "./lib/init.lisp",
+            "a",
+        ] {
+            is_sandboxed_relative_path(Path::new(relpath)).unwrap_or_else(|v| {
+                panic!("canonical relative path {relpath:?} must pass, got {v:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn sandboxed_relative_path_rejects_empty() {
+        // The fail-before-pass-after pin on the empty arm. Both
+        // `PathBuf::new()` (no bytes) and `PathBuf::from("")` (empty
+        // string) hit the `as_os_str().is_empty()` precondition; both
+        // resolve to `root` under `root.join(p)` and silently point the
+        // `LisleLoader` at the project directory rather than a file.
+        assert_eq!(
+            is_sandboxed_relative_path(Path::new("")),
+            Err(PathShapeViolation::Empty)
+        );
+        let blank = PathBuf::new();
+        assert_eq!(
+            is_sandboxed_relative_path(&blank),
+            Err(PathShapeViolation::Empty)
+        );
+    }
+
+    #[test]
+    fn sandboxed_relative_path_rejects_absolute() {
+        // The fail-before-pass-after pin on the absolute arm. Sweep
+        // the canonical sandbox-escape paste-from-shell-prompt
+        // footguns: an `/etc/...` Lunatic-style sandbox bypass, a
+        // user-home leak that the renderer's `root.join(p)` would
+        // silently replace, the project-relative-shaped `/lib/...`
+        // typo where the author meant `lib/...` without a leading
+        // slash, and the bare root `/`. `Path::join` replaces the
+        // base with an absolute right-hand side, so every one of
+        // these resolves verbatim to outside the caixa root regardless
+        // of where the layout checker rooted itself.
+        for abs in [
+            "/etc/passwd",
+            "/home/user/escape.lisp",
+            "/lib/init.lisp",
+            "/",
+        ] {
+            assert_eq!(
+                is_sandboxed_relative_path(Path::new(abs)),
+                Err(PathShapeViolation::Absolute),
+                "absolute path {abs:?} must surface as PathShapeViolation::Absolute"
+            );
+        }
+    }
+
+    #[test]
+    fn sandboxed_relative_path_rejects_parent_escape_at_every_position() {
+        // The fail-before-pass-after pin on the parent-escape arm.
+        // Position sweep — `..` as a leading component (the canonical
+        // "I meant the sibling caixa" mis-author), as a mid-path
+        // component (the canonical "lib/../../escape" path-traversal
+        // that's structurally identical regardless of how many `..`
+        // segments stack), as a trailing component (lib/.., resolving
+        // to the project root via a delayed escape), and the bare `..`
+        // (project parent directory). Each must surface as
+        // `PathShapeViolation::ParentEscape` regardless of position —
+        // pinned per-position so a future relaxation that only
+        // checks one position surfaces at this one place, not
+        // piecemeal across per-axis call sites.
+        for escape in [
+            "../sibling/init.lisp",
+            "lib/../../escaped.lisp",
+            "lib/..",
+            "..",
+            "lib/handlers/../../escape.lisp",
+        ] {
+            assert_eq!(
+                is_sandboxed_relative_path(Path::new(escape)),
+                Err(PathShapeViolation::ParentEscape),
+                "parent-escape path {escape:?} must surface as \
+                 PathShapeViolation::ParentEscape"
+            );
+        }
+    }
+
+    #[test]
+    fn sandboxed_relative_path_arm_ordering_is_empty_absolute_parent_escape() {
+        // Order pin: the predicate evaluates Empty → Absolute →
+        // ParentEscape — the same arm-ordering both inlined call sites
+        // followed verbatim (b0c8389 `BehaviorSpec::validate`'s
+        // `validate_callback_path`, 26da2c7
+        // `UpgradeInstruction::StateChange::validate`). A future
+        // reordering would silently flip which diagnostic the per-axis
+        // wrapper surfaces (e.g. an absolute-and-empty hybrid value
+        // would suddenly raise `Absolute` instead of `Empty`). Pinned
+        // here so a future reorder surfaces at the predicate boundary.
+        //
+        // The empty case can't *also* be absolute (empty paths are
+        // relative-by-construction) or parent-escaping, so the
+        // empty-first ordering only matters relative to the OS-string
+        // emptiness check vs. the absolute-prefix check. Pin the two
+        // legs that *can* compose: an absolute path with `..` segments
+        // must raise `Absolute` (not `ParentEscape`); an absolute-but-
+        // not-parent-escaping path must also raise `Absolute`. The
+        // arm-ordering pin is structural — every parent-escape case
+        // tested above is relative, so the ParentEscape arm is reached
+        // only when both Empty and Absolute arms have been cleared.
+        assert_eq!(
+            is_sandboxed_relative_path(Path::new("/etc/../passwd")),
+            Err(PathShapeViolation::Absolute),
+            "absolute path with `..` segments must surface as Absolute (not \
+             ParentEscape) — Empty → Absolute → ParentEscape arm-ordering pin"
+        );
+    }
+
+    #[test]
+    fn sandboxed_relative_path_distinguishes_curdir_from_parent_escape() {
+        // Boundary pin: `Component::CurDir` (`.`) is NOT a sandbox
+        // escape — `root.join("./lib/x.lisp")` resolves to
+        // `root/lib/x.lisp`, identical to `root.join("lib/x.lisp")`,
+        // so `./` segments must pass the predicate. The arm-ordering
+        // check above pins that `Component::ParentDir` is the only
+        // escape vector caught here. Pinned separately so a future
+        // tightening that *does* reject `.` segments (e.g. requiring
+        // canonical normalized form) lands at this one predicate.
+        is_sandboxed_relative_path(Path::new("./lib/init.lisp")).unwrap();
+        is_sandboxed_relative_path(Path::new("lib/./handlers.lisp")).unwrap();
+    }
+
+    #[test]
+    fn sandboxed_relative_path_violations_are_distinct_variants() {
+        // Diagnostic-shape pin: the three `PathShapeViolation` variants
+        // are distinct enum tags so each per-axis caller can match-and-
+        // wrap into its own typed `*Path` / `*Script` variant without
+        // a string-parse step (the trap [`is_dns_1123_label`] etc.
+        // avoid by returning `Result<(), String>` — but the path-shape
+        // callers were already split three ways across `BehaviorError`
+        // / `UpgradeError`, so a `String` return would *regress* the
+        // diagnostic shape rather than preserve it). The PartialEq /
+        // Copy / Hash derives on `PathShapeViolation` are pinned here
+        // so a future API rework reads the requirement off this test.
+        let v1 = PathShapeViolation::Empty;
+        let v2 = PathShapeViolation::Absolute;
+        let v3 = PathShapeViolation::ParentEscape;
+        assert_ne!(v1, v2);
+        assert_ne!(v2, v3);
+        assert_ne!(v1, v3);
+        // Copy + Eq round-trip: predicate consumers like
+        // `BehaviorSpec::validate` and `UpgradeInstruction::validate`
+        // pattern-match on the variant without consuming it.
+        let v_copy = v1;
+        assert_eq!(v1, v_copy);
+    }
+
+    #[test]
+    fn sandboxed_relative_path_matches_inlined_call_site_semantics() {
+        // End-to-end pin: every value the two pre-lift inline gates
+        // (`BehaviorSpec::validate_callback_path` and
+        // `UpgradeInstruction::StateChange::validate`'s inline arms)
+        // accepted-or-rejected must surface from the lifted predicate
+        // with identically-classified violation tags. Drift here would
+        // mean a previously-accepted authoring shape would suddenly
+        // fail (or vice versa) silently across the lift commit. Pinned
+        // by sweeping the canonical authoring shapes both pre-lift call
+        // sites' tests cover.
+        // Pre-lift accepts (must still pass):
+        for accept in [
+            "lib/init.lisp",
+            "lib/handlers.lisp",
+            "lib/migrations.lisp",
+            "lib/cleanup.lisp",
+            "lib/migrations/v01-to-v02.lisp",
+            "callbacks/handle_call.lisp",
+        ] {
+            is_sandboxed_relative_path(Path::new(accept))
+                .unwrap_or_else(|v| panic!("pre-lift accept {accept:?} regressed, got {v:?}"));
+        }
+        // Pre-lift rejects (must still reject, with the same tag):
+        let cases: &[(&str, PathShapeViolation)] = &[
+            ("", PathShapeViolation::Empty),
+            ("/etc/passwd", PathShapeViolation::Absolute),
+            ("/etc/migrations.lisp", PathShapeViolation::Absolute),
+            (
+                "../sibling/migrations.lisp",
+                PathShapeViolation::ParentEscape,
+            ),
+            ("lib/../../escaped.lisp", PathShapeViolation::ParentEscape),
+        ];
+        for (reject, expected) in cases {
+            assert_eq!(
+                is_sandboxed_relative_path(Path::new(reject)).unwrap_err(),
+                *expected,
+                "pre-lift reject {reject:?} must classify as {expected:?}"
             );
         }
     }

@@ -39,12 +39,12 @@ pub use render::{
     GIT_REF_NAME_MAX_LEN, KUBE_KEY_API_VERSION, KUBE_KEY_KIND, KUBE_KEY_LABELS,
     KUBE_KEY_MATCH_LABELS, KUBE_KEY_METADATA, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, KindMismatch,
     LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
-    M2_KEY_UPGRADE_FROM, M3_KEY_PLACEMENT, NATS_SUBJECT_MAX_LEN, PLEME_LABEL_PREFIX, RenderError,
-    WASI_KV_SLOT_MAX_LEN, WIT_IDENT_MAX_LEN, is_dns_1123_label, is_gateway_api_http_path,
-    is_git_oid, is_git_ref_name, is_nats_subject, is_wasi_keyvalue_slot, is_wit_world_ref,
-    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, require_kind, servico_m2_overlay, single_field_overlay,
-    yaml_string_mapping,
+    M2_KEY_UPGRADE_FROM, M3_KEY_PLACEMENT, NATS_SUBJECT_MAX_LEN, PLEME_LABEL_PREFIX,
+    PathShapeViolation, RenderError, WASI_KV_SLOT_MAX_LEN, WIT_IDENT_MAX_LEN, is_dns_1123_label,
+    is_gateway_api_http_path, is_git_oid, is_git_ref_name, is_nats_subject,
+    is_sandboxed_relative_path, is_wasi_keyvalue_slot, is_wit_world_ref, kube_resource_skeleton,
+    label_selector, pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind,
+    servico_m2_overlay, single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from};
