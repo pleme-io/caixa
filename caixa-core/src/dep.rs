@@ -176,18 +176,25 @@ impl DepSource {
                         });
                     }
                 }
-                // Per-pin value-shape gate for the refname-shaped axes
-                // (`:tag` + `:branch`). The `:rev` axis is intentionally
-                // skipped: its author-surface shape is a hex commit-ID
-                // (`[0-9a-f]+`), not a refname; routing it through
-                // [`crate::render::is_git_ref_name`] would admit
-                // `:rev "main"`, defeating the reproducibility contract
-                // `:rev` carries vs. `:tag` / `:branch`. A dedicated
-                // `is_git_oid` predicate on the parallel hex-shape
-                // trajectory is a separate future axis.
+                // Per-pin value-shape gate. The refname-shaped axes
+                // (`:tag` + `:branch`) route through
+                // [`crate::render::is_git_ref_name`]; the hex-OID-shaped
+                // `:rev` axis routes through
+                // [`crate::render::is_git_oid`]. The two predicates
+                // partition the `:fonte` pin axes structurally — refname
+                // vs. hex commit — so a cross-axis mis-slot (the
+                // canonical "I conflated `:rev` and `:branch`" footgun:
+                // `:rev "main"` defeating the reproducibility contract,
+                // `:tag "deadbeef…"` mis-slotting a SHA into the
+                // refname-shaped axis) lands at the offending axis's
+                // predicate, not at lacre-resolve `git fetch` /
+                // `git checkout` time. Their valid sets intersect at
+                // the empty set: every refname is rejected by
+                // `is_git_oid`, every OID is rejected by
+                // `is_git_ref_name`, structurally.
                 //
-                // Until this gate landed `:tag` / `:branch` were the last
-                // `:fonte`-related axes still untyped past the empty-pin
+                // Until this gate landed `:tag` / `:branch` were the
+                // refname-shaped axes still untyped past the empty-pin
                 // arm: a malformed-but-non-empty refname
                 // (`:tag "v0.1.0 "` trailing space — the canonical
                 // paste-from-doc footgun; `:tag "v0.1.0.lock"` colliding
@@ -198,26 +205,38 @@ impl DepSource {
                 // `:branch "refs/heads/main"` the fully-qualified ref
                 // copied from `git show-ref` output that resolves to
                 // a literal ref named `refs/heads/refs/heads/main` on
-                // disk) silently passed validate and the failure
-                // surfaced at lacre-resolve `git fetch` / `git checkout`
-                // time with a quoting-confused error far from the source
-                // caixa.lisp, with no field naming which `:deps` entry
-                // carried the typo. Lifting the gate to caixa-build time
-                // matches the value-shape trajectory the peer typed
-                // axes already follow (c4213a4 typed WitContract
-                // endpoint/subject/slot; eb3456d :entrada :paths;
-                // c7d05ec :entrada :host; 4f0390b :contratos :endpoint;
-                // 6226bf4 :contratos :wit; 63e18a0 :contratos :subject;
-                // 2f4316e :contratos :slot) — the typed slot's valid
-                // set matches its downstream consumer's accepted set
-                // (here, the git porcelain's refname grammar at
-                // `git fetch` / `git checkout` time), structurally.
-                // Same diagnostic shape every per-axis value-shape lift
-                // already exposes (`*Invalid { axis, reason }`); the
-                // `value:` field carries the offending refname verbatim
-                // so the author can grep their caixa.lisp for the
-                // `:tag "<value>"` / `:branch "<value>"` literal and
-                // fix it in one edit.
+                // disk) silently passed validate; the `:rev` axis was
+                // the last `:fonte`-related axis still untyped past the
+                // empty-pin arm: a malformed-but-non-empty hex-OID
+                // (`:rev "main"` conflating with `:branch` — the
+                // reproducibility-contract leak; `:rev "v0.1.0"`
+                // conflating with `:tag` — the same mis-slot on the
+                // refname/OID boundary; `:rev "c0ffee"` an abbreviated
+                // 6-char prefix that's ambiguous across repo history;
+                // `:rev "DEADBEEF…"` an uppercase OID that round-trips
+                // inconsistently against `git rev-parse HEAD`'s
+                // lowercase emission) silently passed validate and the
+                // failure surfaced at lacre-resolve `git fetch` /
+                // `git checkout` time with a quoting-confused error
+                // far from the source caixa.lisp, with no field naming
+                // which `:deps` entry carried the typo. Lifting both
+                // gates to caixa-build time matches the value-shape
+                // trajectory the peer typed axes already follow
+                // (c4213a4 typed WitContract endpoint/subject/slot;
+                // eb3456d :entrada :paths; c7d05ec :entrada :host;
+                // 4f0390b :contratos :endpoint; 6226bf4 :contratos :wit;
+                // 63e18a0 :contratos :subject; 2f4316e :contratos
+                // :slot; e70d213 :fonte :tag + :branch) — the typed
+                // slot's valid set matches its downstream consumer's
+                // accepted set (here, the git porcelain's refname /
+                // commit-OID grammars at `git fetch` / `git checkout`
+                // time), structurally. Same diagnostic shape every
+                // per-axis value-shape lift already exposes
+                // (`*Invalid { axis, reason }`); the `value:` field
+                // carries the offending refname / OID verbatim so the
+                // author can grep their caixa.lisp for the
+                // `:tag "<value>"` / `:branch "<value>"` /
+                // `:rev "<value>"` literal and fix it in one edit.
                 for (pin, value) in [(":tag", tag.as_ref()), (":branch", branch.as_ref())] {
                     if let Some(v) = value
                         && let Err(reason) = crate::render::is_git_ref_name(v)
@@ -229,6 +248,16 @@ impl DepSource {
                             reason,
                         });
                     }
+                }
+                if let Some(v) = rev.as_ref()
+                    && let Err(reason) = crate::render::is_git_oid(v)
+                {
+                    return Err(DepError::FontePinShape {
+                        nome: nome.to_string(),
+                        pin: ":rev".to_string(),
+                        value: v.clone(),
+                        reason,
+                    });
                 }
                 Ok(())
             }
@@ -450,12 +479,14 @@ pub enum DepError {
     )]
     FontePinEmpty { nome: String, pin: String },
     #[error(
-        ":deps entry {nome:?} :fonte (:tipo git …) {pin} {value:?} is not a \
-         valid git ref name: {reason} (the git porcelain enforces the same \
-         shape at `git fetch` / `git checkout` time on every pin; use a \
-         leaf refname like `\"v0.1.0\"` for `:tag` or `\"main\"` / \
-         `\"feature/foo\"` for `:branch` — drop any `refs/heads/` or \
-         `refs/tags/` prefix the caixa-resolver prepends at clone time)"
+        ":deps entry {nome:?} :fonte (:tipo git …) {pin} {value:?} has invalid \
+         value-shape: {reason} (the git porcelain enforces the same shape at \
+         `git fetch` / `git checkout` time on every pin; use a leaf refname \
+         like `\"v0.1.0\"` for `:tag` or `\"main\"` / `\"feature/foo\"` for \
+         `:branch`, or a full 40/64 lowercase-hex commit OID for `:rev` — \
+         drop any `refs/heads/` or `refs/tags/` prefix the caixa-resolver \
+         prepends at clone time, and avoid abbreviated SHAs which are \
+         ambiguous across repository history)"
     )]
     FontePinShape {
         nome: String,
@@ -946,11 +977,16 @@ mod tests {
     fn validate_accepts_git_fonte_with_rev() {
         // Each of the three pin axes is independently a valid single-pin
         // shape; pin the :rev arm so a future relaxation that only
-        // accepts :tag surfaces here.
+        // accepts :tag surfaces here. The value is a full 40-hex SHA-1
+        // OID — the canonical `git rev-parse HEAD` emission shape the
+        // `crate::render::is_git_oid` value-shape gate now requires;
+        // abbreviated OIDs are ambiguous across repo history and
+        // rejected at this gate (pinned separately by
+        // `validate_rejects_git_fonte_with_rev_abbreviated_prefix`).
         let d = dep_with_fonte(DepSource::Git {
             repo: "github:pleme-io/caixa-teia".into(),
             tag: None,
-            rev: Some("c0ffee0123abc".into()),
+            rev: Some("c0ffee0123abcdef0123456789abcdef01234567".into()),
             branch: None,
         });
         d.validate().unwrap();
@@ -1529,23 +1565,313 @@ mod tests {
     }
 
     #[test]
-    fn validate_accepts_git_fonte_with_rev_carrying_refname_unfriendly_value() {
-        // The `:rev` axis is intentionally NOT routed through
-        // `is_git_ref_name` (a SHA's character set is `[0-9a-f]`,
-        // not a refname's). The gate must not regress
-        // `:rev` validation — pin the boundary by feeding a value
-        // that would be a refname violation (a `:` mid-string) and
-        // verifying the existing single-pin shape passes through.
-        // When a future `is_git_oid` gate lands, this test flips to
-        // the rejection arm; until then, the omission is a structural
-        // decision pinned at this one place.
+    fn validate_rejects_git_fonte_with_rev_carrying_refname_unfriendly_value() {
+        // The `:rev` axis is routed through `crate::render::is_git_oid`
+        // (a SHA's character set is `[0-9a-f]`, not a refname's), so a
+        // value with refname-shape punctuation (here, a `:` mid-string
+        // — would be a refname violation under `is_git_ref_name` too)
+        // is rejected at the OID-shape gate. The two predicates
+        // partition the `:fonte` pin axes structurally: an `:rev` value
+        // that's a valid refname (`:rev "main"`, `:rev "v0.1.0"`) is
+        // *still* rejected here because every refname character outside
+        // `[0-9a-f]` fails the OID gate. Same shape as
+        // `fonte_pin_shape_diagnostic_carries_offending_nome_pin_value`
+        // on the refname-shaped axes — the diagnostic names the
+        // offending dep + pin + value verbatim. The flip-from-accept
+        // case the prior `:tag`/`:branch` gate left as a "future axis"
+        // (e70d213) — now landed.
         let d = dep_with_fonte(DepSource::Git {
             repo: "github:pleme-io/caixa-teia".into(),
             tag: None,
             rev: Some("c0ffee:notarefname".into()),
             branch: None,
         });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            nome,
+            pin,
+            value,
+            reason,
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, "c0ffee:notarefname");
+        assert!(
+            !reason.is_empty(),
+            "FontePinShape `reason` must carry the predicate's wording verbatim"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_git_fonte_with_rev_full_sha1() {
+        // The positive-control pin on the SHA-1 OID width: exactly 40
+        // lowercase hex characters — the canonical `git rev-parse HEAD`
+        // emission on a SHA-1-hashed repository (the default on every
+        // pre-2.42 git and the canonical pleme-io substrate hash).
+        // Pinned separately from the SHA-256 positive control so a
+        // future tightening that only admits one width surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("0123456789abcdef0123456789abcdef01234567".into()),
+            branch: None,
+        });
         d.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_git_fonte_with_rev_full_sha256() {
+        // The positive-control pin on the SHA-256 OID width: exactly
+        // 64 lowercase hex characters — `git`'s
+        // `extensions.objectFormat = sha256` emission (GA since Git
+        // 2.42 / Oct 2023). The substrate admits either canonical
+        // width so an `:rev` authored against a SHA-256-hashed
+        // upstream round-trips through the gate without per-repo
+        // configuration. Pinned separately from the SHA-1 positive
+        // control so a future tightening that drops one width surfaces
+        // here as a structural decision.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".into()),
+            branch: None,
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_rev_abbreviated_prefix() {
+        // The canonical `git log --short` / `git rev-parse --short HEAD`
+        // paste-from-release-notes footgun: a 7-char prefix (git's
+        // default `core.abbrev`) silently passes string emptiness
+        // checks and resolves to one commit today, but becomes ambiguous
+        // tomorrow as the repo grows. Until this gate landed the empty-
+        // pin arm passed (the string isn't empty) and the resolver
+        // accepted the prefix through git's separate prefix-lookup pass
+        // — defeating the reproducibility contract `:rev` carries vs.
+        // `:tag` / `:branch`. The new gate moves the check to caixa-
+        // build time and names the offending dep + pin + value verbatim.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("c0ffee0".into()),
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, "c0ffee0");
+        assert!(
+            reason.contains("abbreviated") || reason.contains("ambiguous"),
+            "reason must surface the abbreviation arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_rev_uppercase_hex() {
+        // The canonical "I pasted the SHA in uppercase" footgun: `git
+        // porcelain` emits OIDs lowercase exclusively, so an uppercase-
+        // bearing `:rev` round-trips inconsistently across the
+        // resolver's `git fetch <remote> <:rev>` ↔ `git rev-parse HEAD`
+        // equality-check pipeline and fails the lacre's content-
+        // addressing probe with a confusing case-only diff. Pinned
+        // separately from the non-hex arm so a future relaxation that
+        // admits one but not the other surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("DEADBEEFCAFEBABE0123456789ABCDEF01234567".into()),
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, "DEADBEEFCAFEBABE0123456789ABCDEF01234567");
+        assert!(
+            reason.contains("uppercase"),
+            "reason must surface the uppercase arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_rev_refname_value() {
+        // The cross-axis mis-slot footgun: `:rev "main"` — the author
+        // conflated `:rev` (hex commit ID, immutable) and `:branch`
+        // (mutable ref pointing at whatever HEAD is today). Until this
+        // gate landed the resolver silently dispatched on the value
+        // shape ("`main` doesn't look like a SHA, fall back to
+        // refname"), defeating the `:rev` reproducibility contract.
+        // The new gate rejects every non-hex value on the `:rev` axis,
+        // so the `:rev`/`:branch` boundary is structurally enforced —
+        // a refname in the `:rev` slot is a build error, not a
+        // resolver-time silent reinterpretation.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("main".into()),
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, "main");
+        // 4 chars `main` fails the length arm before the character arm,
+        // so the diagnostic surfaces the abbreviation wording (same
+        // path the `c0ffee0` 7-char fixture lands on); the structural
+        // assertion is just that the `:rev "main"` value is rejected.
+        assert!(
+            !reason.is_empty(),
+            "FontePinShape reason must be non-empty for refname-shaped :rev"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_rev_tag_shaped_value() {
+        // Sibling cross-axis mis-slot: `:rev "v0.1.0"` — the author
+        // conflated `:rev` and `:tag`. Pinned separately from the
+        // `:rev "main"` (`:branch` mis-slot) arm so a future relaxation
+        // that catches one but not the other surfaces here. The
+        // length arm fires first (6 chars ≠ 40 ≠ 64); the structural
+        // assertion is just that the cross-axis mis-slot is a build
+        // error, regardless of which sub-arm surfaces the diagnostic
+        // (`is_git_oid` rejects at the first violation; longer
+        // tag-shape values would hit the non-hex arm instead).
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some("v0.1.0".into()),
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, "v0.1.0");
+        assert!(
+            !reason.is_empty(),
+            "FontePinShape reason must be non-empty for tag-shaped :rev"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_rev_too_long() {
+        // Boundary case on the upper end: 41 hex chars — one past the
+        // SHA-1 width, well below the SHA-256 width. Pin so a future
+        // relaxation that admits "long enough to be a SHA" without
+        // matching either canonical width surfaces here. The diagnostic
+        // names the offending length verbatim so the author's grep
+        // target is unambiguous (either trim one char or paste the
+        // full SHA-256).
+        let too_long: String = "0".repeat(41);
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some(too_long.clone()),
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, too_long);
+        assert!(
+            reason.contains("41"),
+            "reason must surface the offending length verbatim, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_rev_carrying_whitespace() {
+        // The canonical paste-from-doc footgun on `:rev` — author
+        // copies `"deadbeefcafe…0123 "` (trailing space) out of a
+        // commit-message paragraph. Until this gate landed the empty-
+        // pin arm passed (the string isn't empty), the resolver issued
+        // `git fetch <remote> 'deadbeef… '` and the failure surfaced at
+        // clone time with a quoting-confused git error far from the
+        // source caixa.lisp. The new gate moves the check to caixa-
+        // build time. Length is 41 (40 hex + space) so the length arm
+        // fires first — pinned separately from the pure-length arm to
+        // ensure the diagnostic surfaces *some* parser wording, not
+        // silently pass through.
+        let with_space = "0123456789abcdef0123456789abcdef01234567 ".to_string();
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: None,
+            rev: Some(with_space.clone()),
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FontePinShape {
+            pin, value, reason, ..
+        } = err
+        else {
+            panic!("expected FontePinShape, got other variant");
+        };
+        assert_eq!(pin, ":rev");
+        assert_eq!(value, with_space);
+        assert!(
+            !reason.is_empty(),
+            "FontePinShape reason must be non-empty for whitespace-bearing :rev"
+        );
+    }
+
+    #[test]
+    fn fonte_pin_shape_diagnostic_carries_offending_nome_pin_value_for_rev() {
+        // Diagnostic-shape pin on the `:rev` axis: every FontePinShape
+        // variant on this axis names the offending dep's `:nome` + the
+        // `:rev` axis + the offending value verbatim, so the author's
+        // grep target is the literal `:rev "<value>"` block in
+        // caixa.lisp. Sibling of the `fonte_pin_shape_diagnostic_
+        // carries_offending_nome_pin_value` test on the refname-shaped
+        // (`:tag` / `:branch`) axes.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:p/x".into(),
+            tag: None,
+            rev: Some("not-a-sha".into()),
+            branch: None,
+        });
+        let msg = d
+            .validate()
+            .expect_err(":rev: expected FontePinShape")
+            .to_string();
+        assert!(
+            msg.contains("\"caixa-teia\""),
+            ":rev: diagnostic must quote the offending :nome verbatim, got {msg:?}"
+        );
+        assert!(
+            msg.contains(":rev"),
+            ":rev: diagnostic must name the offending pin axis, got {msg:?}"
+        );
+        assert!(
+            msg.contains("not-a-sha"),
+            ":rev: diagnostic must quote the offending value verbatim, got {msg:?}"
+        );
     }
 
     #[test]
