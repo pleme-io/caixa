@@ -32,7 +32,7 @@ pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepError, DepSource};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
-pub use limits::{LimitsError, LimitsSpec};
+pub use limits::{LIMITS_MEMORY_WASM32_MAX_BYTES, LimitsError, LimitsSpec};
 pub use manifest::{Caixa, ManifestError};
 pub use render::{
     DNS_1123_LABEL_MAX_LEN, GATEWAY_API_HTTP_PATH_MAX_LEN, GIT_REF_NAME_MAX_LEN,

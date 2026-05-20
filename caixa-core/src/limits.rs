@@ -29,6 +29,42 @@ use std::time::Duration;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
+/// Hard upper bound for `:limits :memory`, in bytes — the
+/// `wasm32-wasip2` linear-memory ceiling. The canonical caixa Servico
+/// compilation target ([`theory/CAIXA-SDLC.md` §V — *Substrate /
+/// Nix*][sdlc-v]) is `wasm32-wasip2`, whose linear memory is 32-bit-
+/// addressed at a 64 KiB page size; the in-spec maximum is
+/// `2^16 pages × 2^16 bytes/page = 2^32` bytes = 4 GiB exactly.
+/// A `:limits :memory` value above this bound is structurally
+/// unreachable under wasm32: wasmtime's `Store::limiter` cannot grow
+/// past the 32-bit address space, so an authored `"8GiB"` either
+/// silently saturates at the engine's effective cap or surfaces as a
+/// `memory.grow` trap at runtime, far from the source caixa.lisp.
+///
+/// Pairs with [`LimitsError::MemoryZero`] (the zero-floor gate added
+/// by the prior typed-shape lift on this axis) to bracket the valid
+/// `:memory` set top-to-bottom: every validated value lies in
+/// `1..=LIMITS_MEMORY_WASM32_MAX_BYTES` (inclusive on both ends).
+/// Renderers ([`crate::render::servico_m2_overlay`] and the M2.5
+/// `wasm-engine` instantiator the ABSORPTION-ROADMAP names as the
+/// downstream wiring) consume the typed value with no re-validation
+/// — the value-shape gate is the structural contract.
+///
+/// Lifted as a typed `pub const` (rather than an inline literal at
+/// the [`LimitsSpec::validate`] call site) so the bound has exactly
+/// one source of truth — a future axis reaching for the same value
+/// (a future `memory64`-target opt-in raising the cap to 2^64, a
+/// wasm-engine smoke test asserting the engine's effective limit
+/// matches the typed bound, the M4 `mesh.pleme.io/v1alpha1/Caixa`
+/// CR materializer's per-`:limits :memory` admission webhook)
+/// reads from one place. Same shape every other typed bound in this
+/// crate carries ([`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::GATEWAY_API_HTTP_PATH_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+///
+/// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
+pub const LIMITS_MEMORY_WASM32_MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+
 /// Per-process limits. All fields optional — `None` = unbounded for that axis.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -96,6 +132,27 @@ impl LimitsSpec {
         if self.memory == Some(0) {
             return Err(LimitsError::MemoryZero);
         }
+        // Upper-bound gate on `:memory`: every validated value must
+        // also fit within the wasm32-wasip2 linear-memory ceiling
+        // ([`LIMITS_MEMORY_WASM32_MAX_BYTES`] = 4 GiB). The
+        // zero-floor arm immediately above and this cap arm together
+        // bracket the typed `:memory` axis structurally — every
+        // validated value lies in `1..=LIMITS_MEMORY_WASM32_MAX_BYTES`.
+        // Until this gate landed the byte-size codec accepted any
+        // `Option<u64>` past zero (the parser's only upper bound was
+        // `u64::MAX`), so `(:memory "8GiB")` round-tripped cleanly
+        // through serde and the per-axis CSE invariant (no value the
+        // wasm-engine can't honor) was a runtime, not build-time,
+        // contract. Same trajectory as the typed-shape gates
+        // [`AplicacaoSpec::validate_politicas`] (the
+        // canonical-rate-limit-window upper bound) and the
+        // [`is_dns_1123_label`]/[`is_gateway_api_http_path`] length
+        // caps lift to the typed surface.
+        if let Some(m) = self.memory {
+            if m > LIMITS_MEMORY_WASM32_MAX_BYTES {
+                return Err(LimitsError::MemoryExceedsWasm32Cap { bytes: m });
+            }
+        }
         if self.fuel == Some(0) {
             return Err(LimitsError::FuelZero);
         }
@@ -129,6 +186,10 @@ pub enum LimitsError {
         ":limits :memory must be > 0 — wasmtime StoreLimits refuses a zero memory cap; omit the field for unbounded"
     )]
     MemoryZero,
+    #[error(
+        ":limits :memory ({bytes} bytes) exceeds the wasm32-wasip2 linear-memory ceiling (4 GiB = 4294967296 bytes); pin a value ≤ 4 GiB or omit the field for unbounded"
+    )]
+    MemoryExceedsWasm32Cap { bytes: u64 },
     #[error(
         ":limits :fuel must be > 0 — wasmtime traps the first instruction at fuel=0; omit the field for unbounded"
     )]
@@ -454,5 +515,122 @@ mod tests {
             cpu: Some(0),
         };
         assert_eq!(l.validate().unwrap_err(), LimitsError::MemoryZero);
+    }
+
+    // ── value-shape: :memory upper bound — wasm32-wasip2 4 GiB ceiling ────
+
+    #[test]
+    fn wasm32_memory_cap_matches_parsed_4_gib() {
+        // The cap constant tracks the canonical "4 GiB" byte-size
+        // codec output structurally — drift between the codec's
+        // accepted magnitude for `"4GiB"` and the validate gate's
+        // accepted upper bound would surface here, not as a silent
+        // round-trip break at the renderer layer. Same single-source-
+        // of-truth shape the is_canonical_rate_limit_window predicate
+        // gives the rate-limit window set.
+        assert_eq!(parse_byte_size("4GiB").unwrap(), LIMITS_MEMORY_WASM32_MAX_BYTES);
+        assert_eq!(LIMITS_MEMORY_WASM32_MAX_BYTES, 4 * 1024 * 1024 * 1024);
+        assert_eq!(LIMITS_MEMORY_WASM32_MAX_BYTES, 1u64 << 32);
+    }
+
+    #[test]
+    fn validate_accepts_memory_at_wasm32_cap() {
+        // 4 GiB exactly is the wasm32 in-spec maximum — `2^16 pages ×
+        // 2^16 bytes/page`. The validate gate is inclusive on the
+        // upper end (mirrors the inclusive lower-end rejection: zero
+        // is *out*, one is *in*; 4 GiB+1 is *out*, 4 GiB is *in*).
+        let l = LimitsSpec {
+            memory: Some(LIMITS_MEMORY_WASM32_MAX_BYTES),
+            ..Default::default()
+        };
+        l.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_memory_one_byte_above_wasm32_cap() {
+        // Boundary case: exactly 1 byte past the cap. Catches a
+        // future "strictly less than" half-measure and pins the
+        // diagnostic to name the offending byte count verbatim.
+        let bytes = LIMITS_MEMORY_WASM32_MAX_BYTES + 1;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryExceedsWasm32Cap { bytes }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_memory_8_gib() {
+        // The "obvious authoring footgun" case: a value the byte-size
+        // codec accepts cleanly (`"8GiB"` → 8 * 1024^3 bytes) and
+        // serde round-trips silently, but no wasm32 component can
+        // honor. Until this gate landed `validate` accepted it.
+        let bytes = parse_byte_size("8GiB").unwrap();
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryExceedsWasm32Cap { bytes }
+        );
+    }
+
+    #[test]
+    fn validate_memory_zero_takes_precedence_over_cap_check() {
+        // Memory zero is structurally meaningless under *any* wasm
+        // engine (zero-cap traps the first allocation); above-cap is
+        // wasm32-specific. The zero arm fires first so the canonical
+        // "omit the slot for unbounded" remediation in the existing
+        // MemoryZero diagnostic still leads — pinning this precedence
+        // guards against a future re-ordering that would surface the
+        // wasm32-specific message in the case where the simpler
+        // zero-floor message is more actionable.
+        let l = LimitsSpec {
+            memory: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::MemoryZero);
+    }
+
+    #[test]
+    fn validate_rejects_memory_cap_before_other_axes() {
+        // With both an above-cap :memory and a zero :fuel, the
+        // diagnostic names :memory rather than :fuel — peer of the
+        // existing `validate_rejects_first_zero_axis_deterministically`
+        // ordering pin.
+        let bytes = LIMITS_MEMORY_WASM32_MAX_BYTES + 1024;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            fuel: Some(0),
+            wall_clock: Some(Duration::ZERO),
+            cpu: Some(0),
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryExceedsWasm32Cap { bytes }
+        );
+    }
+
+    #[test]
+    fn above_cap_value_still_round_trips_through_serde() {
+        // The byte-size codec accepts the above-cap value (the cap
+        // lives in the validate gate, not the codec). This pins that
+        // the structural property is "above-cap is rejected by
+        // validate" — not "above-cap is unparseable by the codec";
+        // the latter would prevent the diagnostic from naming the
+        // offending byte count at all, since deserialize would fail
+        // first.
+        let l = LimitsSpec {
+            memory: Some(LIMITS_MEMORY_WASM32_MAX_BYTES + 1),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&l).unwrap();
+        let back: LimitsSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(l, back);
+        assert!(back.validate().is_err());
     }
 }
