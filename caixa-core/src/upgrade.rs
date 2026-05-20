@@ -25,7 +25,7 @@
 //! succeed (transactional upgrade). On any failure, the current
 //! version stays load-bearing — a typed atomic upgrade.
 
-use std::path::{Component, PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -187,23 +187,33 @@ impl UpgradeInstruction {
                 validate_module(self.lisp_form(), module)
             }
             Self::StateChange { script } => {
-                if script.as_os_str().is_empty() {
-                    return Err(UpgradeError::EmptyScript);
+                // Delegate the three structural checks (non-empty /
+                // relative / no-parent-escape) to the lifted
+                // [`crate::render::is_sandboxed_relative_path`]
+                // predicate — same Empty → Absolute → ParentEscape
+                // arm-ordering this method previously inlined verbatim,
+                // now shared with [`crate::BehaviorSpec::validate`]'s
+                // per-`:on-*`-callback gate so every author-supplied path
+                // on every M2 typed slot consults one gate, not two-and-
+                // counting verbatim copies. Each arm wraps the tag in
+                // the same `*Script` variant the original inline code
+                // raised, so the diagnostic shape every caller depends
+                // on (the `:state-change :script` self-locating error)
+                // is preserved by construction.
+                match crate::render::is_sandboxed_relative_path(script) {
+                    Ok(()) => Ok(()),
+                    Err(crate::render::PathShapeViolation::Empty) => Err(UpgradeError::EmptyScript),
+                    Err(crate::render::PathShapeViolation::Absolute) => {
+                        Err(UpgradeError::AbsoluteScript {
+                            script: script.clone(),
+                        })
+                    }
+                    Err(crate::render::PathShapeViolation::ParentEscape) => {
+                        Err(UpgradeError::ParentEscapeScript {
+                            script: script.clone(),
+                        })
+                    }
                 }
-                if script.is_absolute() {
-                    return Err(UpgradeError::AbsoluteScript {
-                        script: script.clone(),
-                    });
-                }
-                if script
-                    .components()
-                    .any(|c| matches!(c, Component::ParentDir))
-                {
-                    return Err(UpgradeError::ParentEscapeScript {
-                        script: script.clone(),
-                    });
-                }
-                Ok(())
             }
             Self::Restart => Ok(()),
         }

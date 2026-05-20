@@ -24,7 +24,7 @@
 //! noop terminate). The `StandardLayout` invariant in `layout.rs`
 //! verifies every declared path exists on disk before the build.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -137,22 +137,29 @@ impl BehaviorSpec {
 }
 
 fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), BehaviorError> {
-    if path.as_os_str().is_empty() {
-        return Err(BehaviorError::EmptyPath { slot });
-    }
-    if path.is_absolute() {
-        return Err(BehaviorError::AbsolutePath {
+    // Delegate the three structural checks (non-empty / relative /
+    // no-parent-escape) to the lifted [`crate::render::is_sandboxed_relative_path`]
+    // predicate — same Empty → Absolute → ParentEscape arm-ordering
+    // this function previously inlined verbatim, now shared with
+    // [`crate::UpgradeInstruction::StateChange`]'s `:script` arm so
+    // every author-supplied path on every M2 typed slot consults one
+    // gate, not two-and-counting verbatim copies. Each arm wraps the
+    // tag in the same `*Path` / `*Escape` variant the original inline
+    // code raised, so the diagnostic shape every caller depends on
+    // (the per-slot diagnostic naming `:behavior :on-init`, etc.) is
+    // preserved by construction.
+    match crate::render::is_sandboxed_relative_path(path) {
+        Ok(()) => Ok(()),
+        Err(crate::render::PathShapeViolation::Empty) => Err(BehaviorError::EmptyPath { slot }),
+        Err(crate::render::PathShapeViolation::Absolute) => Err(BehaviorError::AbsolutePath {
             slot,
             path: path.to_path_buf(),
-        });
-    }
-    if path.components().any(|c| matches!(c, Component::ParentDir)) {
-        return Err(BehaviorError::ParentEscape {
+        }),
+        Err(crate::render::PathShapeViolation::ParentEscape) => Err(BehaviorError::ParentEscape {
             slot,
             path: path.to_path_buf(),
-        });
+        }),
     }
-    Ok(())
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -228,7 +235,10 @@ mod tests {
             ..Default::default()
         };
         let paths: Vec<_> = b.declared_paths().cloned().collect();
-        assert_eq!(paths, vec![PathBuf::from("a.lisp"), PathBuf::from("b.lisp")]);
+        assert_eq!(
+            paths,
+            vec![PathBuf::from("a.lisp"), PathBuf::from("b.lisp")]
+        );
     }
 
     #[test]
