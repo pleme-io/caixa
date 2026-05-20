@@ -72,6 +72,7 @@ ropey = "1"
 # Consumers outside pleme-io drive the Nix flake, which pins tatara via inputs.
 tatara-lisp = { path = "../tatara/tatara-lisp" }
 tatara-lisp-derive = { path = "../tatara/tatara-lisp-derive" }
+tatara-process = { path = "../tatara/tatara-process" }
 iac-forge = { path = "../iac-forge" }
 
 pretty_assertions = "1"
