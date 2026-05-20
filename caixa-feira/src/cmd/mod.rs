@@ -6,9 +6,11 @@ pub mod app;
 pub mod build;
 pub mod chart;
 pub mod deploy;
+pub mod allocation;
 pub mod ephemeral;
 pub mod ephemeral_runtime;
 pub mod fmt;
+pub mod pool;
 pub mod init;
 pub mod lint;
 pub mod lock;
@@ -47,6 +49,10 @@ pub enum Command {
     /// `feira ephemeral …` — verbs for `(defephemeral …)` Lisp forms:
     /// compile + lower to a Process CR YAML for review or apply.
     Ephemeral(ephemeral::Ephemeral),
+    /// `feira pool …` — manage EphemeralPool CRs (list/scale/delete/apply/status).
+    Pool(pool::Pool),
+    /// `feira allocation …` — manage EphemeralAllocation CRs (request/release/list/status).
+    Allocation(allocation::Allocation),
     /// Tag + push the current caixa's versao to its Git origin.
     Publish(publish::Publish),
     /// End-to-end: Lisp → teia → arch proof → HCL → tofu plan/apply/destroy.
@@ -68,6 +74,8 @@ impl Command {
             Self::Deploy(c) => c.run(),
             Self::App(c) => c.run(),
             Self::Ephemeral(c) => c.run(),
+            Self::Pool(c) => c.run(),
+            Self::Allocation(c) => c.run(),
             Self::Publish(c) => c.run(),
             Self::Tofu(c) => c.run(),
         }
