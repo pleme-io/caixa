@@ -1,22 +1,30 @@
 //! `feira ephemeral …` — verbs for `(defephemeral …)` Lisp forms.
 //!
-//! v0 ships two subcommands:
+//! Five subcommands:
 //!
 //!   feira ephemeral graph <form.lisp>
 //!     — Compile the form, lower to ProcessSpec, print as YAML for
-//!       review. Pure-data; no cluster access. Use this as the
-//!       "code-review" surface for ephemeral env declarations.
+//!       review. Pure-data; no cluster access.
 //!
 //!   feira ephemeral plan <form.lisp> [--out path]
-//!     — Same as graph, but write the resulting Process YAML to a file
-//!       (or stdout if --out is `-`). The output is exactly what
-//!       `kubectl apply -f` would consume. Stays NO SHELL — the apply
-//!       step is the operator's call.
+//!     — Same as graph, but write the resulting Process YAML to a file.
+//!       The output is `kubectl apply -f`-ready.
 //!
-//! Future scope (deferred — needs in-cluster kube-rs setup decisions):
-//!   feira ephemeral up      — compile + kube-rs apply
-//!   feira ephemeral down    — kube-rs delete by name
-//!   feira ephemeral list    — kube-rs list Processes with lifetime.ephemeral
+//!   feira ephemeral up <form.lisp> [--wait] [--timeout]
+//!     — Compile + apply via kube-rs (server-side apply). Optionally
+//!       block until the Process reaches `Attested`. CI-friendly:
+//!       returns 0 on attestation, non-zero on timeout/failure.
+//!
+//!   feira ephemeral down <name> [--namespace]
+//!     — Delete the Process by name via kube-rs. Owner-ref cascade
+//!       reaps every emitted Flux resource.
+//!
+//!   feira ephemeral status <name> [--namespace]
+//!     — Print phase + boundary conditions + attestation root for the
+//!       named Process.
+//!
+//!   feira ephemeral list [--namespace] [--all]
+//!     — Table of ephemeral Processes (or every Process when --all).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,7 +33,10 @@ use anyhow::{anyhow, Context, Result};
 use clap::{Args, Subcommand};
 
 use tatara_process::ephemeral::compile_ephemeral_source;
+use tatara_process::phase::ProcessPhase;
 use tatara_process::prelude::{Process, ProcessSpec};
+
+use super::ephemeral_runtime as runtime;
 
 /// `feira ephemeral …` — verbs for `(defephemeral …)` forms.
 #[derive(Args)]
@@ -38,9 +49,16 @@ pub struct Ephemeral {
 pub enum EphemeralCommand {
     /// Compile a (defephemeral …) form and print the lowered Process YAML.
     Graph(GraphArgs),
-    /// Compile a (defephemeral …) form and write the Process YAML to a file
-    /// (or stdout when --out is `-`). The output is `kubectl apply`-ready.
+    /// Compile a (defephemeral …) form and write the Process YAML to a file.
     Plan(PlanArgs),
+    /// Compile + apply (server-side) the Process; optionally wait for Attested.
+    Up(UpArgs),
+    /// Delete a named Process; owner-refs cascade-reap the chart.
+    Down(DownArgs),
+    /// Print phase + conditions + attestation root for the named Process.
+    Status(StatusArgs),
+    /// List ephemeral Processes in a namespace (or every Process when --all).
+    List(ListArgs),
 }
 
 impl Ephemeral {
@@ -48,6 +66,10 @@ impl Ephemeral {
         match self.command {
             EphemeralCommand::Graph(c) => c.run(),
             EphemeralCommand::Plan(c) => c.run(),
+            EphemeralCommand::Up(c) => c.run(),
+            EphemeralCommand::Down(c) => c.run(),
+            EphemeralCommand::Status(c) => c.run(),
+            EphemeralCommand::List(c) => c.run(),
         }
     }
 }
@@ -104,6 +126,234 @@ impl PlanArgs {
             );
         }
         Ok(())
+    }
+}
+
+// ── cluster-touching subcommands ──────────────────────────────────────
+
+#[derive(Args)]
+pub struct UpArgs {
+    /// Path to a `.lisp` file containing one or more `(defephemeral …)` forms.
+    pub path: PathBuf,
+    /// Namespace to apply into. Defaults to "default".
+    #[arg(long, default_value = "default")]
+    pub namespace: String,
+    /// Block until the Process reaches `Attested`.
+    #[arg(long)]
+    pub wait: bool,
+    /// Max wait duration (humantime: "10m", "1h"). Default 10m.
+    #[arg(long, default_value = "10m")]
+    pub timeout: String,
+    /// Poll interval while waiting (humantime). Default 5s.
+    #[arg(long, default_value = "5s")]
+    pub poll: String,
+}
+
+impl UpArgs {
+    pub fn run(self) -> Result<()> {
+        let processes = lower_file(&self.path, &self.namespace)?;
+        let timeout = humantime::parse_duration(&self.timeout)
+            .with_context(|| format!("--timeout {} is not a humantime duration", self.timeout))?;
+        let poll = humantime::parse_duration(&self.poll)
+            .with_context(|| format!("--poll {} is not a humantime duration", self.poll))?;
+        run_async(async move {
+            let client = runtime::client().await?;
+            for p in &processes {
+                let applied = runtime::apply_process(client.clone(), p).await?;
+                let name = applied.metadata.name.as_deref().unwrap_or("?");
+                eprintln!("applied Process {}/{name}", self.namespace);
+            }
+            if self.wait {
+                for p in &processes {
+                    let name = p
+                        .metadata
+                        .name
+                        .clone()
+                        .ok_or_else(|| anyhow!("Process has no metadata.name"))?;
+                    eprintln!(
+                        "waiting for {}/{name} → Attested (timeout {:?}, poll {:?})",
+                        self.namespace, timeout, poll
+                    );
+                    let final_proc = runtime::wait_for_phase(
+                        client.clone(),
+                        &self.namespace,
+                        &name,
+                        ProcessPhase::Attested,
+                        timeout,
+                        poll,
+                    )
+                    .await?;
+                    print_status_summary(&final_proc);
+                }
+            }
+            Ok::<_, anyhow::Error>(())
+        })
+    }
+}
+
+#[derive(Args)]
+pub struct DownArgs {
+    /// Process name to delete.
+    pub name: String,
+    /// Namespace. Defaults to "default".
+    #[arg(long, default_value = "default")]
+    pub namespace: String,
+}
+
+impl DownArgs {
+    pub fn run(self) -> Result<()> {
+        run_async(async move {
+            let client = runtime::client().await?;
+            let deleted = runtime::delete_process(client, &self.namespace, &self.name).await?;
+            if deleted {
+                eprintln!(
+                    "deleted Process {}/{} (owner refs cascade-reap the chart)",
+                    self.namespace, self.name
+                );
+            } else {
+                eprintln!(
+                    "Process {}/{} not found (already deleted)",
+                    self.namespace, self.name
+                );
+            }
+            Ok::<_, anyhow::Error>(())
+        })
+    }
+}
+
+#[derive(Args)]
+pub struct StatusArgs {
+    /// Process name.
+    pub name: String,
+    /// Namespace. Defaults to "default".
+    #[arg(long, default_value = "default")]
+    pub namespace: String,
+}
+
+impl StatusArgs {
+    pub fn run(self) -> Result<()> {
+        run_async(async move {
+            let client = runtime::client().await?;
+            let process = runtime::get_process(client, &self.namespace, &self.name)
+                .await?
+                .ok_or_else(|| {
+                    anyhow!(
+                        "Process {}/{} not found",
+                        self.namespace, self.name
+                    )
+                })?;
+            print_status_summary(&process);
+            Ok::<_, anyhow::Error>(())
+        })
+    }
+}
+
+#[derive(Args)]
+pub struct ListArgs {
+    /// Namespace. Defaults to "default".
+    #[arg(long, default_value = "default")]
+    pub namespace: String,
+    /// Show every Process (default: only ephemeral-lifetime).
+    #[arg(long)]
+    pub all: bool,
+}
+
+impl ListArgs {
+    pub fn run(self) -> Result<()> {
+        run_async(async move {
+            let client = runtime::client().await?;
+            let processes =
+                runtime::list_processes(client, &self.namespace, !self.all).await?;
+            if processes.is_empty() {
+                eprintln!(
+                    "no {}Processes in {}",
+                    if self.all { "" } else { "ephemeral " },
+                    self.namespace
+                );
+                return Ok::<_, anyhow::Error>(());
+            }
+            println!("{:<40} {:<14} {:<10} {}", "NAME", "PHASE", "LIFETIME", "AGE");
+            for p in processes {
+                let name = p.metadata.name.as_deref().unwrap_or("?");
+                let phase = p
+                    .status
+                    .as_ref()
+                    .map(|s| format!("{:?}", s.phase))
+                    .unwrap_or_else(|| "Pending".into());
+                let lifetime = if p.spec.lifetime.is_ephemeral() {
+                    "ephemeral"
+                } else {
+                    "permanent"
+                };
+                let age = p
+                    .metadata
+                    .creation_timestamp
+                    .as_ref()
+                    .map(|t| short_age(t.0))
+                    .unwrap_or_else(|| "?".into());
+                println!("{:<40} {:<14} {:<10} {}", name, phase, lifetime, age);
+            }
+            Ok::<_, anyhow::Error>(())
+        })
+    }
+}
+
+// ── helpers ───────────────────────────────────────────────────────────
+
+fn run_async<F, T>(fut: F) -> Result<T>
+where
+    F: std::future::Future<Output = Result<T>>,
+{
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("build tokio runtime")?;
+    runtime.block_on(fut)
+}
+
+fn short_age(creation: chrono::DateTime<chrono::Utc>) -> String {
+    let elapsed = chrono::Utc::now().signed_duration_since(creation);
+    let secs = elapsed.num_seconds().max(0) as u64;
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m{}s", secs / 60, secs % 60)
+    } else if secs < 86400 {
+        format!("{}h{}m", secs / 3600, (secs % 3600) / 60)
+    } else {
+        format!("{}d{}h", secs / 86400, (secs % 86400) / 3600)
+    }
+}
+
+fn print_status_summary(p: &Process) {
+    let ns = p.metadata.namespace.as_deref().unwrap_or("?");
+    let name = p.metadata.name.as_deref().unwrap_or("?");
+    let status = p.status.as_ref();
+    let phase = status
+        .map(|s| format!("{:?}", s.phase))
+        .unwrap_or_else(|| "Pending".into());
+    let pid = status
+        .and_then(|s| s.pid.clone())
+        .unwrap_or_else(|| "(unassigned)".into());
+    println!("Process {ns}/{name}");
+    println!("  phase: {phase}");
+    println!("  pid:   {pid}");
+    if let Some(att) = status.and_then(|s| s.attestation.as_ref()) {
+        println!(
+            "  attestation generation: {}",
+            att.generation
+        );
+        println!("  composed_root: {}", att.composed_root);
+    }
+    if let Some(s) = status {
+        if !s.boundary.postconditions.is_empty() {
+            println!("  postconditions:");
+            for c in &s.boundary.postconditions {
+                let mark = if c.satisfied { "✓" } else { "✗" };
+                let msg = c.message.as_deref().unwrap_or("");
+                println!("    {mark} {:?}  {msg}", c.condition.kind);
+            }
+        }
     }
 }
 

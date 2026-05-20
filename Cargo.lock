@@ -422,8 +422,12 @@ dependencies = [
  "caixa-resolver",
  "caixa-teia",
  "caixa-theme",
+ "chrono",
  "clap",
  "dirs 5.0.1",
+ "humantime",
+ "k8s-openapi",
+ "kube",
  "pretty_assertions",
  "serde",
  "serde_json",
@@ -432,6 +436,7 @@ dependencies = [
  "tatara-process",
  "tempfile",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

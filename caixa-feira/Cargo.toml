@@ -34,6 +34,12 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 dirs = { workspace = true }
+# Ephemeral env runtime — kube-rs CRUD against tatara Process CRs, NO SHELL.
+kube = { workspace = true }
+k8s-openapi = { workspace = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+chrono = { version = "0.4", features = ["serde"] }
+humantime = "2"
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
