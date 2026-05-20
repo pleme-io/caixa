@@ -6,6 +6,7 @@ pub mod app;
 pub mod build;
 pub mod chart;
 pub mod deploy;
+pub mod ephemeral;
 pub mod fmt;
 pub mod init;
 pub mod lint;
@@ -42,6 +43,9 @@ pub enum Command {
     /// `feira app …` — composition verbs for `:kind Aplicacao` caixas
     /// (graph, deploy). See `theory/MESH-COMPOSITION.md`.
     App(app::App),
+    /// `feira ephemeral …` — verbs for `(defephemeral …)` Lisp forms:
+    /// compile + lower to a Process CR YAML for review or apply.
+    Ephemeral(ephemeral::Ephemeral),
     /// Tag + push the current caixa's versao to its Git origin.
     Publish(publish::Publish),
     /// End-to-end: Lisp → teia → arch proof → HCL → tofu plan/apply/destroy.
@@ -62,6 +66,7 @@ impl Command {
             Self::Chart(c) => c.run(),
             Self::Deploy(c) => c.run(),
             Self::App(c) => c.run(),
+            Self::Ephemeral(c) => c.run(),
             Self::Publish(c) => c.run(),
             Self::Tofu(c) => c.run(),
         }

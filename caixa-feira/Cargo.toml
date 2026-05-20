@@ -26,6 +26,7 @@ caixa-helm = { workspace = true }
 caixa-flux = { workspace = true }
 caixa-mesh = { workspace = true }
 tatara-lisp = { workspace = true }
+tatara-process = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
