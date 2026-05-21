@@ -160,6 +160,104 @@ pub fn validate_upgrade_from(entries: &[UpgradeFromEntry]) -> Result<(), Upgrade
     Ok(())
 }
 
+/// Reject `:upgrade-from` entries whose `:from` is not strictly less
+/// than the caixa's current `:versao` (under SemVer-2 precedence — the
+/// same ordering [`semver::Version::cmp`] implements, with build
+/// metadata ignored per [SemVer §11][semver-11]).
+///
+/// The whole point of an `:upgrade-from :from "<prior>"` block is the
+/// declarative answer to "given the wasm-operator is loading a node
+/// running `<prior>`, how do I upgrade it to the *current* `:versao`?"
+/// (`upgrade.rs` module doc, OTP appup `release_handler:install_release/1`
+/// semantic). The operator's `:from`-match dispatch loads the
+/// current `:versao` and matches the *running* version against each
+/// entry's `:from`; an entry whose `:from >= :versao` is structurally
+/// unreachable — the operator never runs a version greater than or
+/// equal to the current `:versao` that it could then "upgrade *to*"
+/// the current `:versao`. Two authoring footguns close here:
+///
+///   - `:from > :versao` (downgrade-shaped) — the canonical
+///     "I copy-pasted from the next minor version and forgot to bump
+///     `:versao`" / "I bumped `:versao` then reverted but left the
+///     `:upgrade-from` entry behind" footgun. Until this gate landed
+///     `(defcaixa :versao "0.1.5" :upgrade-from ((:from "0.2.0" …)))`
+///     silently passed `feira build` and the wasm-operator's
+///     `:from`-match dispatch would never fire on the entry — the
+///     instructions sat dormant in the caixa.lisp forever, the
+///     author's intent ("upgrade users coming from 0.2.0") permanently
+///     unreached because they actually meant to bump `:versao`.
+///
+///   - `:from == :versao` (precedence-equal self-upgrade) — the
+///     "I declared an upgrade from myself to myself" no-op the
+///     operator's dispatch would either skip silently (no semantic
+///     transition) or attempt and trivially "succeed" with no
+///     observable state change. Includes the build-metadata-only
+///     difference case (`:versao "0.2.0"`, `:from "0.2.0+build.1"`):
+///     SemVer-2 precedence ignores build metadata so they compare
+///     equal under [`semver::Version::cmp`] — the gate rejects this
+///     even though [`UpgradeError::DuplicateFrom`] doesn't (the peer
+///     gate uses derived `PartialEq` which keeps them distinct;
+///     they're distinct dispatch keys but the same "from" version
+///     for our purposes here).
+///
+/// Same cross-slot value-shape discipline as
+/// [`crate::AplicacaoSpec::validate_placement`]'s strategy ↔ shard-key
+/// partition (934bc58 — the typed partition between two declared
+/// slots): one slot's value constrains the valid set of another's,
+/// and the constraint is a structural property visible at validate
+/// time. The validated set after this gate satisfies
+/// `entry.from.parse::<Version>().unwrap() < versao.parse::<Version>().unwrap()`
+/// for every entry, so the future operator-side hot-upgrade dispatch
+/// step can reach for `entry.from` knowing the precedence relation
+/// holds without re-deriving it from inline checks.
+///
+/// Silent-pass semantics on malformed inputs:
+///
+///   - When `versao` itself doesn't parse as semver, this gate
+///     returns `Ok(())` silently — the narrower
+///     [`crate::ManifestError::VersaoInvalid`] / [`UpgradeError::BadFromVersion`]
+///     diagnostics are the load-bearing surfaces for those failure
+///     modes, and surfacing a `FromNotBeforeVersao` over an
+///     unparseable `:versao` would mask the more actionable root
+///     cause.
+///   - Likewise, an entry whose `:from` itself doesn't parse falls
+///     through to its narrower diagnostic surface
+///     ([`UpgradeError::BadFromVersion`]), which is expected to fire
+///     via [`validate_upgrade_from`] *before* this gate runs at the
+///     [`crate::LayoutInvariants`] call site.
+///
+/// [semver-11]: https://semver.org/#spec-item-11
+pub fn validate_upgrade_from_against_versao(
+    entries: &[UpgradeFromEntry],
+    versao: &str,
+) -> Result<(), UpgradeError> {
+    use semver::Version;
+    let Ok(current) = Version::parse(versao) else {
+        // Malformed `:versao` is a separate gate (ManifestError::VersaoInvalid);
+        // surfacing a precedence-relation diagnostic over an unparseable
+        // top-level version would mask the more actionable root cause.
+        return Ok(());
+    };
+    for entry in entries {
+        // Per-entry shape — including a malformed `:from` — is gated
+        // by [`validate_upgrade_from`] / [`UpgradeFromEntry::validate`]
+        // upstream at the LayoutInvariants call site; an unparseable
+        // `:from` here falls through silently to keep the
+        // BadFromVersion diagnostic load-bearing. Same fall-through
+        // posture as the `versao` arm above.
+        let Ok(prior) = Version::parse(&entry.from) else {
+            continue;
+        };
+        if prior >= current {
+            return Err(UpgradeError::FromNotBeforeVersao {
+                from: entry.from.clone(),
+                versao: versao.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 impl UpgradeInstruction {
     /// Kebab-case lisp form name for this instruction, used as the
     /// `:kind` tag in [`UpgradeError::ModuleEmpty`] /
@@ -315,6 +413,23 @@ pub enum UpgradeError {
          single matching `(:from {from:?} :instructions (…))` block."
     )]
     DuplicateFrom { from: String },
+    #[error(
+        ":upgrade-from `(:from {from:?})` is not strictly less than the caixa's current \
+         `:versao {versao:?}` under SemVer-2 precedence — an upgrade block whose `:from` is \
+         greater than or equal to the caixa's own version is structurally unreachable \
+         (the wasm-operator's `:from`-match dispatch loads the current `:versao` and matches \
+         the running version against each entry's `:from`; an entry whose `:from >= :versao` \
+         is never reached because the operator never runs a version greater than or equal to \
+         the current one that it could then upgrade *to* the current one). Bump the caixa's \
+         `:versao` past {from:?} (the typical fix — you added the entry intending to upgrade \
+         *to* a new version but forgot to bump `:versao`), drop the entry (if it's a stale \
+         reference left over from a reverted `:versao` bump), or correct `:from` to a prior \
+         version (if it's a typo). Pre-release values like `\"0.2.0-rc.1\"` are strictly less \
+         than the corresponding release `\"0.2.0\"` under SemVer §11 precedence; build-metadata \
+         values like `\"0.2.0+build.1\"` are equal to `\"0.2.0\"` under precedence and rejected \
+         here as a self-upgrade no-op."
+    )]
+    FromNotBeforeVersao { from: String, versao: String },
 }
 
 #[cfg(test)]
@@ -830,5 +945,178 @@ mod tests {
         // a single entry as duplicating itself.
         let entries = vec![entry("0.1.0", vec![UpgradeInstruction::Restart])];
         validate_upgrade_from(&entries).unwrap();
+    }
+
+    // ── validate_upgrade_from_against_versao: cross-slot precedence gate ─
+
+    #[test]
+    fn versao_gate_accepts_strict_upgrade() {
+        // Positive control: the canonical "chain prior versions →
+        // current" authoring shape from ABSORPTION-ROADMAP §M2.3 — each
+        // `:from` strictly less than the current `:versao` under
+        // SemVer-2 precedence. The gate must not regress this baseline.
+        let entries = vec![
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+            entry("0.1.5", vec![UpgradeInstruction::Restart]),
+            entry("0.1.9", vec![UpgradeInstruction::Restart]),
+        ];
+        validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap();
+    }
+
+    #[test]
+    fn versao_gate_accepts_empty_entries() {
+        // Bare `feira init` shape (no `:upgrade-from`) trivially passes;
+        // the gate is a no-op when the entries list is empty. Mirrors
+        // `validate_upgrade_from_accepts_empty_list` on the peer gate.
+        validate_upgrade_from_against_versao(&[], "0.1.0").unwrap();
+    }
+
+    #[test]
+    fn versao_gate_rejects_equal_from() {
+        // Self-upgrade no-op: declaring `:from "0.2.0"` while
+        // `:versao "0.2.0"` means "upgrade from myself to myself" —
+        // the operator's dispatch either skips silently or
+        // trivially "succeeds" with no observable state change.
+        // Reject as the canonical "I forgot to bump :versao when
+        // adding this entry" footgun.
+        let entries = vec![entry("0.2.0", vec![UpgradeInstruction::Restart])];
+        let err = validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::FromNotBeforeVersao {
+                from: "0.2.0".into(),
+                versao: "0.2.0".into(),
+            },
+            ":from == :versao under precedence must surface as FromNotBeforeVersao naming both \
+             values verbatim, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn versao_gate_rejects_downgrade_from() {
+        // Downgrade-shaped: `:from "0.3.0"` while `:versao "0.2.0"`
+        // means "upgrade nodes coming from 0.3.0 to 0.2.0", which
+        // the operator's `:from`-match dispatch can never reach (it
+        // never runs a version >= the current one). Reject as the
+        // canonical "I copy-pasted from the next minor version and
+        // forgot to bump :versao" footgun.
+        let entries = vec![entry("0.3.0", vec![UpgradeInstruction::Restart])];
+        let err = validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::FromNotBeforeVersao {
+                from: "0.3.0".into(),
+                versao: "0.2.0".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn versao_gate_accepts_prerelease_before_release() {
+        // SemVer §11 precedence: pre-release versions are *less than*
+        // the corresponding release (`0.2.0-rc.1 < 0.2.0`). Upgrading
+        // FROM an RC TO the GA release is the canonical authoring
+        // shape — must pass. A regression that collapses pre-release
+        // into the release version (treating them as equal) surfaces
+        // here as a false-positive rejection.
+        let entries = vec![entry("0.2.0-rc.1", vec![UpgradeInstruction::Restart])];
+        validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap();
+    }
+
+    #[test]
+    fn versao_gate_rejects_release_after_prerelease() {
+        // Symmetric arm: with `:versao "0.2.0-rc.1"` and
+        // `:from "0.2.0"`, precedence says `0.2.0 > 0.2.0-rc.1` —
+        // the typical "I'm on an RC of a release that already
+        // shipped" footgun. The gate names both values verbatim
+        // so the author can grep for either side and fix in one
+        // edit.
+        let entries = vec![entry("0.2.0", vec![UpgradeInstruction::Restart])];
+        let err = validate_upgrade_from_against_versao(&entries, "0.2.0-rc.1").unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::FromNotBeforeVersao {
+                from: "0.2.0".into(),
+                versao: "0.2.0-rc.1".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn versao_gate_rejects_build_metadata_only_difference() {
+        // SemVer §11 explicitly excludes build metadata from
+        // precedence comparison: `0.2.0+build.1` and `0.2.0` are
+        // *equal* under [`semver::Version::cmp`]. From the
+        // operator's `:from`-match dispatch perspective this is a
+        // self-upgrade no-op (no semantic transition between the
+        // two), so the gate rejects it — *unlike* the peer
+        // duplicate-`:from` gate which uses derived `PartialEq` and
+        // treats build-metadata variants as distinct dispatch keys.
+        // The two gates' different equality notions are deliberate:
+        // duplicate-check is conservative (preserves operator-side
+        // tiebreaking surface), precedence-check is permissive
+        // (matches operator-side dispatch semantic).
+        let entries = vec![entry("0.2.0+build.1", vec![UpgradeInstruction::Restart])];
+        let err = validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::FromNotBeforeVersao {
+                from: "0.2.0+build.1".into(),
+                versao: "0.2.0".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn versao_gate_silently_passes_on_unparseable_versao() {
+        // Defensive arm: a malformed `:versao` (gated by the
+        // narrower `ManifestError::VersaoInvalid` surface at the
+        // load-bearing call site) must not regress into a
+        // `FromNotBeforeVersao` diagnostic from this gate. Surfacing
+        // the precedence error over an unparseable `:versao` would
+        // mask the more actionable root cause (the author meant to
+        // type `"0.2.0"`, not `"v0.2.0"`).
+        let entries = vec![entry("0.1.0", vec![UpgradeInstruction::Restart])];
+        validate_upgrade_from_against_versao(&entries, "not-a-semver").unwrap();
+    }
+
+    #[test]
+    fn versao_gate_silently_passes_on_unparseable_from() {
+        // Symmetric defensive arm: a malformed `:from` is gated by
+        // [`UpgradeFromEntry::validate`] / [`validate_upgrade_from`]
+        // upstream at the LayoutInvariants call site. Surfacing the
+        // precedence error over an unparseable `:from` from this
+        // gate alone would mask the narrower `BadFromVersion`
+        // diagnostic that's expected to lead — same fall-through
+        // posture as the unparseable-`:versao` arm above. The
+        // wiring in `LayoutInvariants::verify` runs
+        // `validate_upgrade_from` *before* this gate, so in practice
+        // an unparseable `:from` surfaces as `BadFromVersion` first
+        // and this gate is never reached on that input.
+        let entries = vec![entry("not-a-semver", vec![UpgradeInstruction::Restart])];
+        validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap();
+    }
+
+    #[test]
+    fn versao_gate_reports_first_offending_entry() {
+        // Determinism pin: with multiple offending entries the gate
+        // surfaces the *first* one in declaration order — same
+        // posture as `validate_upgrade_from_duplicate_diagnostic_names_second_collision`
+        // on the peer gate. Walks the entries in order; first
+        // failing `:from >= :versao` short-circuits.
+        let entries = vec![
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+            entry("0.3.0", vec![UpgradeInstruction::Restart]),
+            entry("0.4.0", vec![UpgradeInstruction::Restart]),
+        ];
+        let err = validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::FromNotBeforeVersao {
+                from: "0.3.0".into(),
+                versao: "0.2.0".into(),
+            },
+            "the first offending `:from` (0.3.0) must surface, not the later one (0.4.0)"
+        );
     }
 }

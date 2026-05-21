@@ -215,6 +215,36 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             }
         })?;
+        // Cross-slot precedence gate: every `:upgrade-from :from` must
+        // be strictly less than the caixa's own `:versao` under
+        // SemVer-2 precedence. An upgrade block whose `:from` is
+        // greater than or equal to `:versao` is structurally
+        // unreachable by the wasm-operator's `:from`-match dispatch
+        // (the operator loads the current `:versao` and matches the
+        // *running* version against each entry's `:from`; an entry
+        // whose `:from >= :versao` is never reached because the
+        // operator never runs a version >= the current one that it
+        // could then upgrade *to* the current one).
+        //
+        // Same cross-slot value-shape discipline as the typed
+        // `:placement` strategy ↔ `:shard-key` partition (934bc58):
+        // one slot's value constrains the valid set of another's, and
+        // the constraint becomes a structural property visible at
+        // validate time. Runs *after* the per-entry shape pass + the
+        // cross-entry duplicate gate so the precedence diagnostic
+        // fires on already-parseable `:from`/`:versao` values (a
+        // malformed `:from` surfaces as `BadFromVersion` first; a
+        // malformed `:versao` falls through silently here and is
+        // gated by the narrower `ManifestError::VersaoInvalid` arm
+        // at its load-bearing call site). Mirrors the
+        // arm-ordering posture every peer cross-axis gate uses
+        // (`*_invalid_fires_before_duplicate_check` /
+        // `*_takes_precedence_over_*` pins on every typed-graph axis).
+        crate::upgrade::validate_upgrade_from_against_versao(&caixa.upgrade_from, &caixa.versao)
+            .map_err(|err| LayoutError::UpgradeViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
         for entry in &caixa.upgrade_from {
             for instr in &entry.instructions {
                 if let Some(p) = instr.declared_path() {
@@ -511,6 +541,100 @@ mod tests {
     }
 
     #[test]
+    fn upgrade_from_downgrade_surfaces_as_upgrade_violation() {
+        // Wiring pin: the cross-slot precedence gate in
+        // `validate_upgrade_from_against_versao` lands on the same
+        // `LayoutError::UpgradeViolation` axis the per-entry and
+        // cross-entry gates already do (26da2c7, 7c6aef2), so a
+        // caixa.lisp whose `:upgrade-from :from` is greater than the
+        // caixa's own `:versao` surfaces at `feira build` time
+        // naming the offending caixa rather than silently passing
+        // into the wasm-operator's `:from`-match dispatch where the
+        // entry would sit dormant forever. Mirrors
+        // `upgrade_from_duplicate_surfaces_as_upgrade_violation` on
+        // the peer cross-entry gate.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.versao = "0.1.5".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.2.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!(
+                "expected LayoutError::UpgradeViolation for downgrade-shaped `:from`, got {err:?}"
+            );
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.2.0") && issue.contains("0.1.5"),
+            "UpgradeViolation issue must name both `:from` and `:versao` verbatim, got {issue:?}"
+        );
+    }
+
+    #[test]
+    fn upgrade_from_equal_to_versao_surfaces_as_upgrade_violation() {
+        // Self-upgrade no-op arm: `:from "0.1.0"` while
+        // `:versao "0.1.0"` declares "upgrade from myself to
+        // myself", which the operator's dispatch either skips
+        // silently or trivially "succeeds" with no observable
+        // transition. Surfaces at validate time naming both values
+        // so the author can fix in one edit.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.versao = "0.1.0".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!(
+                "expected LayoutError::UpgradeViolation for self-upgrade `:from == :versao`, got \
+                 {err:?}"
+            );
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.1.0"),
+            "UpgradeViolation issue must name the equal `:from`/`:versao` verbatim, got {issue:?}"
+        );
+    }
+
+    #[test]
+    fn upgrade_from_strict_upgrade_passes_layout() {
+        // Positive control for the precedence gate at the
+        // LayoutInvariants level: a valid `:from < :versao` chain
+        // (`0.1.0 → 0.2.0`) must not regress into a false-positive
+        // `UpgradeViolation`. Mirrors `behavior_callback_path_must_exist`'s
+        // positive-control arm.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.versao = "0.2.0".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
     fn upgrade_script_path_must_exist() {
         use crate::{UpgradeFromEntry, UpgradeInstruction};
         use std::path::PathBuf;
@@ -518,6 +642,10 @@ mod tests {
         let manifest = root.join("caixa.lisp");
         let svc = root.join("servicos/demo.computeunit.yaml");
         let mut c = caixa(CaixaKind::Servico);
+        // `:versao` past the entry's `:from` so the cross-slot
+        // precedence gate (`FromNotBeforeVersao`) lets this case
+        // through to the path-existence pass under test.
+        c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
         c.upgrade_from = vec![UpgradeFromEntry {
             from: "0.1.0".into(),
@@ -875,6 +1003,10 @@ mod tests {
         let svc = root.join("servicos/demo.computeunit.yaml");
         let migration = root.join("lib/migrations/v01-to-v02.lisp");
         let mut c = caixa(CaixaKind::Servico);
+        // `:versao` past the entry's `:from` so the cross-slot
+        // precedence gate (`FromNotBeforeVersao`) lets this canonical
+        // authoring shape through to the positive-control assertion.
+        c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
         c.upgrade_from = vec![UpgradeFromEntry {
             from: "0.1.0".into(),
