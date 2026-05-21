@@ -1018,7 +1018,13 @@ impl AplicacaoSpec {
     ///     edges are a set, not a multiset (peer of the `:membros` /
     ///     `:placement :clusters` / `:entrada :paths` duplicate gates)
     ///   - `:entrada :para` must be in `:membros`
-    ///   - `:placement Sharded` must declare `:shard-key` (non-empty)
+    ///   - `:placement Sharded` must declare `:shard-key` (non-empty);
+    ///     `:placement Replicated`/`SingleNode` must NOT declare
+    ///     `:shard-key` — only the hash-keyed Akka-cluster-sharding axis
+    ///     consumes it (MESH-COMPOSITION §II.4), and the typed partition
+    ///     between strategy and shard-key is symmetric: every validated
+    ///     `Placement` has `shard_key.is_some()` iff `estrategia ==
+    ///     Sharded`
     ///   - every `:placement` strategy must declare ≥1 `:clusters` entry —
     ///     `Replicated`/`SingleNode` need hosting clusters, `Sharded` needs
     ///     the shard pool (MESH-COMPOSITION §III.1)
@@ -1291,6 +1297,17 @@ impl AplicacaoSpec {
     /// or apply it literally and fail at admission time. Lifting both
     /// to build errors mirrors MESH-COMPOSITION §III.3's "placement
     /// violation is a build error" promise.
+    ///
+    /// `:shard-key` and `:estrategia` are typed-partitioned: the slot
+    /// is required exactly when `:estrategia Sharded` (hash-keyed
+    /// distribution, Akka cluster-sharding convention, §II.4) and
+    /// refused on `:estrategia Replicated`/`SingleNode` (where no
+    /// hash-keyed routing axis consumes it). The partition closes the
+    /// "I think I configured sharding" footgun where an author writes
+    /// `:placement (:estrategia Replicated :shard-key "tenantId")` and
+    /// the typed slot's value silently vanishes at the renderer layer
+    /// — every validated `Placement` past this call satisfies
+    /// `shard_key.is_some() == matches!(estrategia, Sharded)`.
     fn validate_placement(&self) -> Result<(), AplicacaoError> {
         // Every strategy needs at least one named cluster: `Replicated`
         // and `SingleNode` use the list as hosting/takeover candidates
@@ -1331,7 +1348,41 @@ impl AplicacaoSpec {
                 Some(k) if k.is_empty() => return Err(AplicacaoError::ShardedKeyEmpty),
                 Some(_) => {}
             },
-            PlacementStrategy::Replicated | PlacementStrategy::SingleNode => {}
+            // `:shard-key` is the Akka-cluster-sharding axis
+            // (MESH-COMPOSITION §II.4) — hash-keyed entity distribution
+            // across the cluster pool. `Replicated` (active-active across
+            // every named cluster) and `SingleNode` (Erlang/OTP
+            // distributed-app takeover/failover, §II.1) have no hash-keyed
+            // routing axis to consume the slot; downstream renderers
+            // (caixa-mesh's `placement.shardKey` overlay at
+            // caixa-mesh/src/lib.rs:909, the future M4 Akka-style cluster-
+            // sharding reconciler) ignore `:shard-key` outside the
+            // `Sharded` arm by construction. Until this gate landed an
+            // author who wrote `:placement (:estrategia Replicated
+            // :shard-key "tenantId")` (an off-by-one strategy typo, a
+            // copy-paste from a Sharded sibling caixa, the "I think I
+            // configured sharding" footgun) silently passed validate and
+            // the typed slot's value vanished at the renderer layer with
+            // no diagnostic — the canonical "declared-but-inert" footgun
+            // the empty-:affinity / empty-shard-key / zero-:politicas /
+            // empty-:contratos-target gates already close on every other
+            // declare-but-no-opinion axis (2d71a9a / 5dbcfaf / c7c7799).
+            // Lifting the rejection to a build-time gate closes the
+            // Sharded ↔ non-Sharded partition over the typed
+            // `:placement` slot: every validated `Placement` past this
+            // call has `shard_key.is_some()` iff `estrategia ==
+            // Sharded`, structurally — the future Akka reconciler can
+            // reach for `placement.shard_key` knowing it's `Some` exactly
+            // when the strategy consumes it, without re-deriving the
+            // partition from inline strategy probes.
+            PlacementStrategy::Replicated | PlacementStrategy::SingleNode => {
+                if let Some(k) = &self.placement.shard_key {
+                    return Err(AplicacaoError::ShardKeyOnNonSharded {
+                        estrategia: self.placement.estrategia,
+                        shard_key: k.clone(),
+                    });
+                }
+            }
         }
         Ok(())
     }
@@ -1641,6 +1692,18 @@ pub enum AplicacaoError {
          hashes every entity onto the same shard, defeating sharding entirely)"
     )]
     ShardedKeyEmpty,
+    #[error(
+        ":placement {estrategia:?} carries :shard-key {shard_key:?} — only :estrategia \
+         Sharded consumes :shard-key (hash-keyed entity distribution, Akka cluster-sharding \
+         convention); :estrategia Replicated runs every cluster active-active and \
+         :estrategia SingleNode takes over a single cluster at a time (Erlang/OTP \
+         distributed-app convention) — both ignore the slot. Drop :shard-key, or switch \
+         to :estrategia Sharded if hash-keyed routing is the intent"
+    )]
+    ShardKeyOnNonSharded {
+        estrategia: PlacementStrategy,
+        shard_key: String,
+    },
     #[error("contrato {de:?} → {para:?} (:wit {wit:?}) is missing required `:{expected}` field")]
     ContratoMissingTarget {
         de: String,
@@ -5724,6 +5787,109 @@ mod tests {
         s.placement.estrategia = PlacementStrategy::Sharded;
         s.placement.shard_key = Some("".into());
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::ShardedKeyEmpty);
+    }
+
+    #[test]
+    fn rejects_shard_key_under_replicated_strategy() {
+        // The fail-before-pass-after pin: a `:placement (:estrategia
+        // Replicated :shard-key "tenantId")` manifest carries the
+        // hash-keyed-distribution slot on a strategy that never consumes
+        // it. Before the gate the typed slot's value silently vanished
+        // at the renderer layer (caixa-mesh emits `placement.shardKey`
+        // verbatim regardless of strategy; the Akka-style cluster-
+        // sharding reconciler keys off `estrategia == Sharded` and
+        // ignores the slot otherwise), with no diagnostic. Lifting the
+        // rejection to a build-time gate makes the
+        // `shard_key.is_some() == matches!(estrategia, Sharded)`
+        // partition a structural property of every validated
+        // [`Placement`].
+        let mut s = three_member_spec();
+        // The fixture already uses Replicated; just add a shard-key.
+        s.placement.shard_key = Some("$tenantId".into());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ShardKeyOnNonSharded {
+            estrategia,
+            shard_key,
+        } = err
+        else {
+            panic!("expected ShardKeyOnNonSharded, got {err:?}");
+        };
+        assert_eq!(estrategia, PlacementStrategy::Replicated);
+        assert_eq!(shard_key, "$tenantId");
+    }
+
+    #[test]
+    fn rejects_shard_key_under_singlenode_strategy() {
+        // Peer of the Replicated case above on the SingleNode arm: OTP
+        // distributed-app takeover (one cluster runs at a time) has no
+        // hash-keyed routing axis to consume `:shard-key` either, so
+        // the rejection fires on both non-Sharded arms uniformly.
+        let mut s = three_member_spec();
+        s.placement.estrategia = PlacementStrategy::SingleNode;
+        s.placement.shard_key = Some("$tenantId".into());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ShardKeyOnNonSharded {
+            estrategia,
+            shard_key,
+        } = err
+        else {
+            panic!("expected ShardKeyOnNonSharded, got {err:?}");
+        };
+        assert_eq!(estrategia, PlacementStrategy::SingleNode);
+        assert_eq!(shard_key, "$tenantId");
+    }
+
+    #[test]
+    fn rejects_empty_shard_key_under_replicated_strategy() {
+        // The `Some("")` case under non-Sharded is rejected by
+        // [`AplicacaoError::ShardKeyOnNonSharded`] (the strategy gate
+        // fires before the empty-value gate), not
+        // [`AplicacaoError::ShardedKeyEmpty`] (which is reserved for
+        // the `Sharded` arm). Pin the partition so a future reorder of
+        // the validate_placement match arms doesn't silently swap which
+        // diagnostic the author sees — both are author errors, but
+        // ShardKeyOnNonSharded names which strategy is the actual fix
+        // (drop the slot, or switch to Sharded), while ShardedKeyEmpty
+        // only says "pick a non-empty key".
+        let mut s = three_member_spec();
+        s.placement.shard_key = Some(String::new());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyOnNonSharded {
+                    estrategia: PlacementStrategy::Replicated,
+                    ref shard_key,
+                } if shard_key.is_empty()
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn replicated_without_shard_key_validates() {
+        // The complement of the rejection: `:placement :estrategia
+        // Replicated` with `:shard-key None` is the canonical happy
+        // path on every existing fixture. Pin the no-shard-key case so
+        // the new gate doesn't accidentally fire on `None`.
+        let mut s = three_member_spec();
+        assert!(matches!(
+            s.placement.estrategia,
+            PlacementStrategy::Replicated
+        ));
+        s.placement.shard_key = None;
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn singlenode_without_shard_key_validates() {
+        // Peer of the Replicated no-shard-key case on the SingleNode
+        // arm — both non-Sharded strategies must validate cleanly when
+        // the slot is omitted.
+        let mut s = three_member_spec();
+        s.placement.estrategia = PlacementStrategy::SingleNode;
+        s.placement.shard_key = None;
+        s.validate().unwrap();
     }
 
     #[test]
