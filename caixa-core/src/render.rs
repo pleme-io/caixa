@@ -1128,9 +1128,17 @@ pub const GIT_REF_NAME_MAX_LEN: usize = 255;
 /// `:rev` is intentionally NOT routed through this predicate — its
 /// author-surface shape is a hex commit-ID (`[0-9a-f]+`), not a
 /// refname; a dedicated `is_git_oid` predicate on the parallel
-/// hex-shape trajectory is a separate future axis. Routing `:rev`
-/// through `is_git_ref_name` would admit `:rev "main"`, defeating the
-/// reproducibility contract `:rev` carries vs. `:branch` / `:tag`.
+/// hex-shape trajectory carries the reproducibility contract. Routing
+/// `:rev` through `is_git_ref_name` would admit `:rev "main"`,
+/// defeating the reproducibility contract `:rev` carries vs.
+/// `:branch` / `:tag`. The reverse mis-slot — a canonical OID
+/// (40-char SHA-1 or 64-char SHA-256 lowercase hex) pasted into the
+/// `:tag` / `:branch` slot — is closed by this predicate too: a
+/// pre-emption arm below rejects any value whose width and byte set
+/// match the canonical OID shape, surfacing the cross-axis mis-slot
+/// at validate time with a diagnostic pointing the author at the
+/// `:rev` slot. The two predicates' valid sets intersect at exactly
+/// the empty set, structurally.
 ///
 /// Lifted as a typed substrate-side primitive on the same trajectory
 /// the peer value-shape predicates ([`is_dns_1123_label`],
@@ -1163,6 +1171,65 @@ pub fn is_git_ref_name(s: &str) -> Result<(), String> {
              this length suggests a paste-from-binary or multi-line blob landed \
              in the `:tag` / `:branch` slot)",
             s.len()
+        ));
+    }
+    // Canonical-OID-shape pre-emption — the structural partition the
+    // doc-comment above promises and [`crate::DepSource::validate`]
+    // routes the `:fonte` pin axes through ([`is_git_ref_name`] for
+    // `:tag` + `:branch`, [`is_git_oid`] for `:rev`): a value that's
+    // exactly the canonical Git commit-OID width
+    // ([`GIT_OID_SHA1_LEN`] (40) lowercase-hex for SHA-1,
+    // [`GIT_OID_SHA256_LEN`] (64) lowercase-hex for SHA-256) is the
+    // shape `is_git_oid` accepts; the two predicates' valid sets must
+    // intersect at exactly the empty set, so a value of that shape is
+    // rejected here. Without this arm a canonical lowercase-hex OID of
+    // either canonical width passes every other refname-shape arm in
+    // this predicate — pure-hex strings carry none of the forbidden
+    // characters, no `..` / `@{` / leading-`/` / trailing-`/` /
+    // `.lock`-suffix / `refs/heads/`-prefix — and the cross-axis
+    // partition silently fails on the canonical "I copied the SHA out
+    // of `git show --format=%H` and pasted it into `:tag` / `:branch`"
+    // mis-slot footgun. The pleme-io discipline (CAIXA-SDLC §V — the
+    // `:rev` slot carries the reproducibility contract; `:tag` /
+    // `:branch` resolve to whatever the upstream has tagged / `HEAD`
+    // today) requires that an OID-shaped value live under `:rev`, never
+    // under `:tag` / `:branch`; this arm makes that discipline a typed
+    // structural property, not a convention.
+    //
+    // Uppercase hex (`"DEADBEEF…"` 40 chars) is intentionally NOT
+    // matched here — uppercase letters are legitimate in refnames per
+    // `git check-ref-format`, so an uppercase 40/64-char hex string is a
+    // valid refname (`is_git_ref_name` accepts it); the `:rev` axis
+    // separately rejects uppercase via [`is_git_oid`]'s lowercase-only
+    // contract. Off-canonical lengths (39 / 41 / 63 / 65 hex chars) are
+    // also intentionally NOT matched — abbreviated commit IDs are
+    // ambiguous across repository history but they're not canonical
+    // OIDs either; they remain accepted as refnames here (consistent
+    // with `is_git_oid` already rejecting them via its exact-width
+    // check).
+    if (s.len() == GIT_OID_SHA1_LEN || s.len() == GIT_OID_SHA256_LEN)
+        && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+    {
+        return Err(format!(
+            "looks like a canonical Git commit OID ({len} lowercase hex \
+             characters — the SHA-{algo} OID width); pleme-io's `:fonte` axes \
+             partition refnames vs. commit OIDs structurally, so a value of \
+             this shape belongs in the `:rev` slot (which routes through \
+             `is_git_oid` for the reproducibility contract — one immutable \
+             commit, forever), not `:tag` / `:branch` (which route through \
+             this predicate for human-readable refs `git fetch` resolves at \
+             clone time). Move the value to `:rev`; keeping it under `:tag` \
+             / `:branch` is the canonical paste-from-`git show --format=%H` \
+             mis-slot footgun, silently demoting an OID to a refname-shaped \
+             pin the resolver would attempt to `git fetch tag '<sha>'` and \
+             fail at clone time with a quoting-confused porcelain error far \
+             from the source caixa.lisp.",
+            len = s.len(),
+            algo = if s.len() == GIT_OID_SHA1_LEN {
+                "1"
+            } else {
+                "256"
+            },
         ));
     }
     for &b in s.as_bytes() {
@@ -3638,6 +3705,181 @@ mod tests {
                  {leaf:?}; got {err:?}"
             );
         }
+    }
+
+    // ── is_git_ref_name canonical-OID-shape partition arm ────────────────
+
+    #[test]
+    fn git_ref_name_rejects_canonical_sha1_oid() {
+        // The fail-before-pass-after pin on the canonical SHA-1 OID
+        // partition arm: a 40-char lowercase-hex string is the shape
+        // `is_git_oid` accepts, so `is_git_ref_name` must reject it.
+        // Until this arm landed `is_git_ref_name` accepted every
+        // 40-char lowercase-hex string (pure hex carries none of the
+        // forbidden refname characters, no `..`/`@{`/`/`-prefix/
+        // `/`-suffix/`.lock`-suffix/`refs/heads/`-prefix), silently
+        // breaking the cross-axis partition the
+        // [`DepSource::validate`] gate routes the `:fonte` axes
+        // through and admitting `:tag "deadbeef…"` /
+        // `:branch "deadbeef…"` as legitimate refnames — the
+        // canonical paste-from-`git show --format=%H` mis-slot
+        // footgun. The diagnostic names the `:rev` axis so the author
+        // grep-fixes in one edit.
+        for oid in [
+            "0123456789abcdef0123456789abcdef01234567",
+            "deadbeefcafebabe0123456789abcdef01234567",
+            "ffffffffffffffffffffffffffffffffffffffff",
+            "0000000000000000000000000000000000000000",
+        ] {
+            assert_eq!(oid.len(), GIT_OID_SHA1_LEN);
+            let err = is_git_ref_name(oid).unwrap_err();
+            assert!(
+                err.contains("OID") && err.contains(":rev"),
+                "canonical SHA-1 OID {oid:?} must surface a diagnostic \
+                 naming OID + `:rev`; got {err:?}"
+            );
+            assert!(
+                err.contains("SHA-1"),
+                "canonical SHA-1 OID {oid:?} diagnostic must name the \
+                 hash algorithm; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn git_ref_name_rejects_canonical_sha256_oid() {
+        // The fail-before-pass-after pin on the canonical SHA-256 OID
+        // partition arm — Git 2.42+ `extensions.objectFormat = sha256`
+        // mode. 64-char lowercase-hex strings are equally OID-shaped
+        // and must surface the same `:rev`-axis diagnostic. Pinned
+        // separately from SHA-1 so a future relaxation that only
+        // catches one width surfaces here.
+        let sha256_zeros = "0".repeat(GIT_OID_SHA256_LEN);
+        let sha256_ones = "f".repeat(GIT_OID_SHA256_LEN);
+        let sha256_mixed = format!("deadbeefcafebabe{}", "0123456789abcdef".repeat(3));
+        for oid in [&sha256_zeros, &sha256_ones, &sha256_mixed] {
+            assert_eq!(oid.len(), GIT_OID_SHA256_LEN);
+            let err = is_git_ref_name(oid).unwrap_err();
+            assert!(
+                err.contains("OID") && err.contains(":rev"),
+                "canonical SHA-256 OID {oid:?} must surface a \
+                 diagnostic naming OID + `:rev`; got {err:?}"
+            );
+            assert!(
+                err.contains("SHA-256"),
+                "canonical SHA-256 OID {oid:?} diagnostic must name \
+                 the hash algorithm; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn git_ref_name_partition_excludes_off_by_one_lengths() {
+        // Boundary pin: lengths that *aren't* exactly 40 or 64 hex
+        // characters are NOT canonical OIDs, so the partition arm
+        // must not fire — they remain accepted as refnames (consistent
+        // with `is_git_oid` rejecting them on its exact-width check).
+        // Abbreviated OIDs (`"c0ffee0"`, 7-char prefix) are ambiguous
+        // across repository history and `is_git_oid` rejects them
+        // separately, but they're legitimate refname shapes per `git
+        // check-ref-format`, so `is_git_ref_name` accepts them here.
+        // Pinned across the 39/41/63/65-char and abbreviated arms so
+        // a future widening of the partition arm to "any hex-shaped
+        // value" surfaces here as a regression rather than silently
+        // rejecting valid refnames.
+        for accept in [
+            // 39 hex chars — one short of SHA-1 width.
+            "0123456789abcdef0123456789abcdef0123456",
+            // 41 hex chars — one over SHA-1 width.
+            "0123456789abcdef0123456789abcdef012345670",
+            // 63 hex chars — one short of SHA-256 width.
+            &"a".repeat(63),
+            // 65 hex chars — one over SHA-256 width.
+            &"a".repeat(65),
+            // Abbreviated 7-char SHA — the `git log --short` width.
+            "c0ffee0",
+            // Pure-numeric 8-char (looks vaguely SHA-shaped but
+            // isn't canonical-width).
+            "00000000",
+        ] {
+            is_git_ref_name(accept).unwrap_or_else(|e| {
+                panic!(
+                    "off-canonical-width hex-shaped value {accept:?} \
+                     (len {len}) must still pass is_git_ref_name — \
+                     the partition arm is exact-width 40/64, not a \
+                     prefix or pattern: {e:?}",
+                    len = accept.len()
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn git_ref_name_partition_excludes_uppercase_canonical_widths() {
+        // Boundary pin: the partition arm targets the canonical
+        // *lowercase-hex* OID shape `git rev-parse HEAD` /
+        // `git show --format=%H` emit. Uppercase or mixed-case
+        // 40/64-char hex strings are legitimate refnames per
+        // `git check-ref-format` (uppercase letters are admitted in
+        // refnames), so `is_git_ref_name` accepts them here; the
+        // `:rev` axis separately rejects uppercase OIDs via
+        // [`is_git_oid`]'s lowercase-only contract — so neither
+        // axis silently admits an uppercase-hex value cross-slot.
+        // Pinned across both widths + both uppercase variants so a
+        // future relaxation of either predicate surfaces here.
+        for accept in [
+            // Uppercase 40-char hex — passes is_git_ref_name (valid
+            // refname), rejected by is_git_oid on lowercase contract.
+            "DEADBEEFCAFEBABE0123456789ABCDEF01234567",
+            // Mixed case 40-char hex.
+            "DeadBeefCafeBabe0123456789abcdef01234567",
+            // Uppercase 64-char hex.
+            &"A".repeat(64),
+        ] {
+            is_git_ref_name(accept).unwrap_or_else(|e| {
+                panic!(
+                    "uppercase canonical-width hex value {accept:?} \
+                     must still pass is_git_ref_name — the partition \
+                     arm targets lowercase-canonical only (uppercase \
+                     is a legitimate refname character per \
+                     git-check-ref-format); the `:rev` axis catches \
+                     uppercase via is_git_oid's lowercase contract: \
+                     {e:?}"
+                )
+            });
+            // And confirm is_git_oid rejects it on the lowercase arm
+            // (so neither axis silently admits the value).
+            let oid_err = is_git_oid(accept).unwrap_err();
+            assert!(
+                oid_err.contains("lowercase") || oid_err.contains("uppercase"),
+                "uppercase hex value {accept:?} must be rejected by \
+                 is_git_oid on its lowercase contract; got {oid_err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn git_ref_name_partition_arm_fires_before_per_byte_scan() {
+        // Order pin: the partition arm runs after the length check
+        // but before the per-byte refname-character scan, so a
+        // canonical-OID-shaped value surfaces the `:rev`-axis
+        // diagnostic rather than (e.g.) falling through to a generic
+        // per-component arm. Pinned via a canonical OID — pure hex
+        // can't violate any of the per-byte / `..` / `@{` / `/` /
+        // `.lock` / `refs/heads/` arms (which is precisely why the
+        // partition arm is needed), so position-wise this pin
+        // forecloses a future refactor that splits the partition arm
+        // across the scan (where uppercase / mixed-case canonical-
+        // width values would silently route through one branch).
+        let oid = "0123456789abcdef0123456789abcdef01234567";
+        let err = is_git_ref_name(oid).unwrap_err();
+        // The diagnostic mentions OID + `:rev`; it does NOT contain
+        // any of the per-byte-arm needle substrings the
+        // `git_ref_name_rejects_each_arm_with_substring_pinned_reason`
+        // sweep pins, structurally — canonical OIDs can't violate
+        // those arms.
+        assert!(err.contains("OID"), "got: {err:?}");
+        assert!(err.contains(":rev"), "got: {err:?}");
     }
 
     // ── is_git_oid — `:fonte :rev` value-shape predicate ────────────────
