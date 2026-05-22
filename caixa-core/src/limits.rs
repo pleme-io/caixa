@@ -174,6 +174,18 @@ pub enum LimitsError {
     UnknownByteUnit { unit: String },
     #[error("byte-size: failed to parse magnitude {0:?}")]
     BadByteMagnitude(String),
+    #[error(
+        "byte-size: magnitude {value:?} is not a non-negative integer — the canonical \
+         authoring form for `:limits :memory` is `<integer><unit>` (e.g. `\"1024\"`, \
+         `\"64MiB\"`, `\"1GiB\"`) with no decimal point and no leading `+` sign. A \
+         fractional / decimal-shaped magnitude (`\"1.5KiB\"`, `\"1.0MiB\"`, `\"0.5GiB\"`, \
+         `\"+1024\"`) round-trips through `render_byte_size` to a *different* canonical \
+         form (`\"1536\"`, `\"1MiB\"`, `\"512MiB\"`, `\"1KiB\"`) on first serialize — \
+         breaking the THEORY.md §V.2.7 render-determinism contract every typed slot \
+         carries. Pick an integer magnitude in the unit that divides cleanly (write \
+         `\"1536\"` instead of `\"1.5KiB\"`; `\"512MiB\"` instead of `\"0.5GiB\"`)"
+    )]
+    NonIntegerByteMagnitude { value: String },
     #[error("duration: missing magnitude in {0:?}")]
     EmptyDuration(String),
     #[error("duration: unknown unit {unit:?} (expected one of ms, s, m, h)")]
@@ -215,13 +227,71 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
         .find(|c: char| c.is_ascii_alphabetic())
         .unwrap_or(s.len());
     let (num_part, unit) = s.split_at(split_at);
-    let num: f64 = num_part
-        .trim()
-        .parse()
-        .map_err(|_| LimitsError::BadByteMagnitude(num_part.into()))?;
-    if num < 0.0 {
+    let num_trim = num_part.trim();
+    // The canonical authoring form for `:limits :memory` is
+    // `<integer><unit>` — every magnitude `render_byte_size` emits is a
+    // non-negative integer with no decimal point and no leading sign,
+    // so the parser's accepted set must match for serialize/deserialize
+    // to round-trip without canonical-form drift. Until this gate
+    // landed the parser accepted any `f64`-shaped magnitude
+    // (`"1.5KiB"` → 1536 bytes, `"1.0MiB"` → 1MiB, `"0.5GiB"` → 512MiB,
+    // `"+1024"` → 1024) and serde silently round-tripped the value to
+    // a *different* canonical string on the next emit (`"1.5KiB"` →
+    // 1536 → `"1536"`, `"1.0MiB"` → 1048576 → `"1MiB"`, `"0.5GiB"` →
+    // 536870912 → `"512MiB"`, `"+1024"` → 1024 → `"1KiB"`) — breaking
+    // the THEORY.md §V.2.7 render-determinism contract every typed slot
+    // carries.
+    //
+    // Strict canonical form: every byte of the magnitude is an ASCII
+    // digit (no `.`, no `+`, no `-`). On current Rust `u64::from_str`
+    // permissively accepts a leading `+` (`"+1024"` → 1024) — that's a
+    // canonical-drift shape `render_byte_size` never emits, so the
+    // digit-only check is what closes the leading-sign class; relying
+    // on `u64::from_str`'s strictness alone would silently admit it.
+    // On non-digit-only inputs the gate distinguishes "non-canonical-
+    // but-numeric" (parses as f64 or i64, so it's an authoring-shape
+    // footgun) from "garbage" (parses as neither, so it's not a
+    // numeric input at all) — the diagnostic names the offending
+    // magnitude shape verbatim rather than collapsing both authoring
+    // footguns into a single opaque `BadByteMagnitude`.
+    //
+    // Same canonical-form discipline
+    // [`crate::AplicacaoSpec::validate_politicas`]'s
+    // [`is_canonical_rate_limit_window`] gate (808017c) applies to the
+    // rate-limit `:window` axis — the codec's accepted set matches its
+    // emitted set, structurally.
+    //
+    // (Scientific-notation magnitudes like `"1e3KiB"` are also rejected,
+    // but on a different arm: the parser splits on the first ASCII-
+    // alphabetic byte, so the `e` is read as a unit prefix and the
+    // input falls into the `UnknownByteUnit { unit: "e3KiB" }` branch
+    // before this gate is consulted — that's the existing diagnostic
+    // for the scientific-shape footgun, and this gate is additive to
+    // it.)
+    let digit_only = !num_trim.is_empty() && num_trim.bytes().all(|b| b.is_ascii_digit());
+    if !digit_only {
+        // Distinguish "non-canonical-but-numeric" (`"1.5"`, `"1.0"`,
+        // `"+1024"`, `"-1"`) from "garbage" (`"abc"`, `"--1"`) so the
+        // diagnostic names the offending magnitude shape verbatim.
+        // Use f64 + i64 fallbacks for the "numeric" detection so every
+        // non-digit-only-but-parseable input lands on
+        // `NonIntegerByteMagnitude` regardless of sign or fractionality.
+        let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
+        if numeric {
+            return Err(LimitsError::NonIntegerByteMagnitude {
+                value: num_trim.into(),
+            });
+        }
         return Err(LimitsError::BadByteMagnitude(num_part.into()));
     }
+    // `digit_only` guarantees every byte is `[0-9]`, so the only way
+    // u64::from_str can fail here is overflow (the magnitude exceeds
+    // u64::MAX). Surface that as `BadByteMagnitude` with an overflow-
+    // shaped wording so the diagnostic names the offending magnitude
+    // verbatim rather than collapsing onto the non-canonical arm.
+    let num: u64 = num_trim.parse::<u64>().map_err(|_| {
+        LimitsError::BadByteMagnitude(format!("{num_trim} (digit-only magnitude overflows u64)"))
+    })?;
     let multiplier: u64 = match unit.trim() {
         "" | "B" => 1,
         "KB" => 1_000,
@@ -236,8 +306,20 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
             });
         }
     };
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    Ok((num * multiplier as f64) as u64)
+    // Overflow surfaces as `BadByteMagnitude` (a u64-saturating
+    // multiply would silently truncate to `u64::MAX` and then the
+    // wasm32-cap gate at validate time would catch it — but a u64
+    // overflow is a parse-shaped failure on the author's input, not a
+    // domain-cap rejection on a well-formed value, so it surfaces here
+    // as a parser diagnostic naming the offending magnitude × unit
+    // pair rather than as `MemoryExceedsWasm32Cap { bytes: u64::MAX }`
+    // far from the author's intent).
+    num.checked_mul(multiplier).ok_or_else(|| {
+        LimitsError::BadByteMagnitude(format!(
+            "{num_trim}{unit_trim} overflows u64 (magnitude × unit > 2^64-1)",
+            unit_trim = unit.trim()
+        ))
+    })
 }
 
 fn render_byte_size(n: u64) -> String {
@@ -632,5 +714,206 @@ mod tests {
         let back: LimitsSpec = serde_json::from_str(&json).unwrap();
         assert_eq!(l, back);
         assert!(back.validate().is_err());
+    }
+
+    // ── canonical-form: integer-magnitude byte-size codec gate ────────────
+    //
+    // Every magnitude `render_byte_size` emits is a non-negative integer
+    // (no decimal point, no leading sign, no scientific notation). The
+    // parser's accepted set must match for parse → render → parse to
+    // round-trip without canonical-form drift. The tests below pin every
+    // canonical-drift shape — fractional (`"1.5KiB"`), decimal-shaped-
+    // integer (`"1.0MiB"`), half-unit (`"0.5GiB"`), leading-`+`
+    // (`"+1024"`) — plus the scientific-notation dispatch path (caught
+    // by `UnknownByteUnit` on a different arm), the two complement-side
+    // pins (the integer happy paths the gate must continue to accept),
+    // the round-trip convergence property (parse → render → parse must
+    // converge on a single canonical form for every accepted input),
+    // the BadByteMagnitude-precedence pin (genuinely unparseable inputs
+    // keep their narrower diagnostic), the overflow-surface pin
+    // (u64-overflow on magnitude × unit surfaces at parse time), and
+    // the serde-path pin (the gate fires at deserialize, before any
+    // validate gate runs).
+
+    #[test]
+    fn parse_byte_size_rejects_fractional_kib() {
+        // The fail-before-pass-after pin: `"1.5KiB"` parsed cleanly on
+        // every pre-gate codebase (f64::parse accepts the decimal), the
+        // codec produced 1536 bytes, and `render_byte_size(1536)`
+        // emitted `"1536"` on the next serialize — silently drifting
+        // the canonical form away from the author's intent. The new
+        // gate surfaces the round-trip break at the parser layer with
+        // a self-locating diagnostic (the offending magnitude verbatim,
+        // the canonical-form remediation in the wording).
+        let err = parse_byte_size("1.5KiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerByteMagnitude { ref value } if value == "1.5"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_decimal_shaped_integer() {
+        // The canonical-drift case where the *value* is integer but
+        // the *form* carries a redundant decimal point — `"1.0MiB"`
+        // parses to 1 MiB (integer), but the renderer emits `"1MiB"`
+        // on the next serialize (no decimal point). The parse-shape
+        // gate fires here too so the codec's accepted set is exactly
+        // the renderer's emitted set — no `"1.0MiB"` ↔ `"1MiB"` drift
+        // surviving a round-trip silently.
+        let err = parse_byte_size("1.0MiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerByteMagnitude { ref value } if value == "1.0"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_half_gib() {
+        // `"0.5GiB"` parses to 536870912 bytes = 512MiB; the renderer
+        // emits `"512MiB"` on the next serialize. Pin the round-trip
+        // drift on the explicitly-fractional case sized to land on a
+        // unit boundary, so the gate's coverage includes both the
+        // "doesn't land on a boundary" (1.5KiB → 1536) and "lands on
+        // a smaller-unit boundary" (0.5GiB → 512MiB) drift shapes.
+        let err = parse_byte_size("0.5GiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerByteMagnitude { ref value } if value == "0.5"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_scientific_notation_via_unit_arm() {
+        // Scientific-notation magnitudes are canonical-form drift too
+        // — the renderer never emits `"1e3KiB"` for any value. But
+        // they're caught on a *different* arm than the fractional /
+        // leading-`+` shapes: the parser's split-on-first-alphabetic-
+        // byte heuristic reads the `e` as a unit prefix, so the input
+        // falls into the existing `UnknownByteUnit { unit: "e3KiB" }`
+        // diagnostic before the `NonIntegerByteMagnitude` gate is
+        // consulted. Pin this dispatch path so a future relaxation of
+        // the split heuristic (e.g. recognizing `e` as part of a
+        // scientific-notation magnitude) surfaces here as a test
+        // failure — at which point the `NonIntegerByteMagnitude` gate
+        // would correctly take over, and this test would flip to that
+        // arm with no other change required.
+        let err = parse_byte_size("1e3KiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::UnknownByteUnit { ref unit } if unit == "e3KiB"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_leading_plus() {
+        // `"+1024"` parses through f64 as 1024 bytes; the renderer
+        // emits `"1KiB"` on the next serialize. The leading `+` is
+        // not a renderer-emitted shape, so it falls in the same
+        // canonical-drift class as the fractional / scientific forms
+        // — surfacing under the same diagnostic keeps the gate's
+        // coverage uniform across every non-canonical-but-numeric
+        // input shape the parser would otherwise accept.
+        let err = parse_byte_size("+1024").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerByteMagnitude { ref value } if value == "+1024"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_continues_to_accept_integer_magnitudes() {
+        // The complement-side pin: every canonical integer-magnitude
+        // form the renderer emits must continue to parse to the same
+        // value the renderer produced. Sweep the five canonical
+        // authoring shapes (unitless integer, KiB, MiB, GiB, KB) so a
+        // future tightening of the parser surfaces here as a test
+        // failure rather than a silent regression in the canonical
+        // authoring set.
+        assert_eq!(parse_byte_size("1024").unwrap(), 1024);
+        assert_eq!(parse_byte_size("1KiB").unwrap(), 1024);
+        assert_eq!(parse_byte_size("64MiB").unwrap(), 64 * 1024 * 1024);
+        assert_eq!(parse_byte_size("1GiB").unwrap(), 1024 * 1024 * 1024);
+        assert_eq!(parse_byte_size("1000KB").unwrap(), 1_000_000);
+    }
+
+    #[test]
+    fn parse_byte_size_round_trips_through_render_for_every_canonical_form() {
+        // The structural property the gate makes load-bearing: every
+        // value the parser accepts round-trips through `render_byte_size`
+        // to a string the parser also accepts — and to the *same* value.
+        // Sweep the values the renderer emits canonically (1024 / 1MiB
+        // / 1GiB / 1536 / 64MiB) so a future codec change that breaks
+        // round-trip convergence surfaces here, not at a downstream
+        // renderer that double-emits a typed slot.
+        for n in [1u64, 1023, 1024, 1536, 64 * 1024 * 1024, 1024 * 1024 * 1024] {
+            let rendered = render_byte_size(n);
+            let reparsed = parse_byte_size(&rendered)
+                .unwrap_or_else(|e| panic!("render({n}) = {rendered:?} must reparse, got {e:?}"));
+            assert_eq!(
+                reparsed, n,
+                "round-trip drift on {n}: rendered={rendered:?}, reparsed={reparsed}",
+            );
+        }
+    }
+
+    #[test]
+    fn parse_byte_size_keeps_bad_magnitude_for_unparseable_input() {
+        // The precedence pin: the new `NonIntegerByteMagnitude` arm
+        // distinguishes *non-canonical-but-numeric* (`"1.5"`, `"1.0"`,
+        // `"+1024"`, `"-1"`) from *genuinely-unparseable* (`"abc"`,
+        // `"--1"`) so the existing `BadByteMagnitude` diagnostic's
+        // wording remains load-bearing for the latter class — the gate
+        // is additive, not replacing. Pin both arms so a future
+        // relaxation that collapses them surfaces here.
+        let err = parse_byte_size("abc").unwrap_err();
+        assert!(matches!(err, LimitsError::BadByteMagnitude(_)), "got {err:?}");
+        let err = parse_byte_size("--1").unwrap_err();
+        assert!(matches!(err, LimitsError::BadByteMagnitude(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn parse_byte_size_overflow_surfaces_as_bad_magnitude() {
+        // `u64::MAX KiB` overflows the u64 result; the parser surfaces
+        // the overflow as a `BadByteMagnitude` (not as a saturated
+        // `u64::MAX` value that the wasm32-cap validate gate then
+        // catches), so the diagnostic names the offending magnitude ×
+        // unit pair at parse time rather than as
+        // `MemoryExceedsWasm32Cap { bytes: u64::MAX }` far from the
+        // author's intent. (`u64::MAX` itself parses cleanly with no
+        // unit since `u64::MAX × 1 = u64::MAX` fits.)
+        let err = parse_byte_size("18446744073709551615KiB").unwrap_err();
+        let LimitsError::BadByteMagnitude(reason) = err else {
+            panic!("expected BadByteMagnitude(overflow), got other variant");
+        };
+        assert!(
+            reason.contains("overflow"),
+            "overflow diagnostic must mention overflow (got {reason:?})"
+        );
+    }
+
+    #[test]
+    fn de_byte_size_rejects_fractional_value_through_serde() {
+        // The serde-path pin: a `:limits :memory` carrying a fractional
+        // magnitude (`"1.5KiB"`) must fail at deserialize time, not
+        // silently round-trip the value through the f64 parser. Pin
+        // both the success-on-canonical path (the integer form
+        // deserializes cleanly) and the failure-on-non-canonical path
+        // (the fractional form is rejected by the codec before any
+        // validate gate runs).
+        let json = r#"{"memory":"1.5KiB"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-negative integer"),
+            "serde diagnostic must surface the integer-magnitude reason verbatim (got {msg:?})"
+        );
+
+        // The integer-form complement — same author-side intent
+        // (1.5KiB = 1536 bytes), written in the canonical form the
+        // renderer would emit, deserializes cleanly.
+        let json = r#"{"memory":"1536"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.memory, Some(1536));
     }
 }
