@@ -992,10 +992,18 @@ mod tests {
     fn upgrade_well_formed_passes_layout() {
         // Positive control — every documented authoring shape
         // (`:load-module`, `:state-change` with a relative path,
-        // `:soft-purge`, `:purge`, `:restart`) passes the wired
-        // gate. Drift here = a future tighten that rejects any
-        // canonical shape surfaces as a regression at this layout-
-        // level pin, not piecemeal across per-renderer call sites.
+        // `:soft-purge`, `:purge`, sole `:restart`) passes the wired
+        // gate. The typed sequence (`:load-module` → `:state-change`
+        // → `:soft-purge` → `:purge`) lives in one entry; the sole
+        // `:restart` fallback lives in a *separate* entry on a
+        // different `:from` (the within-entry restart-exclusivity
+        // gate added in this commit rejects mixing the fallback with
+        // the typed sequence — per the UpgradeInstruction::Restart
+        // doc, `:restart` is terminal and any other instructions in
+        // the same entry are dead code). Drift here = a future
+        // tighten that rejects any canonical shape surfaces as a
+        // regression at this layout-level pin, not piecemeal across
+        // per-renderer call sites.
         use crate::{UpgradeFromEntry, UpgradeInstruction};
         use std::path::PathBuf;
         let root = PathBuf::from("/tmp/x");
@@ -1003,9 +1011,63 @@ mod tests {
         let svc = root.join("servicos/demo.computeunit.yaml");
         let migration = root.join("lib/migrations/v01-to-v02.lisp");
         let mut c = caixa(CaixaKind::Servico);
-        // `:versao` past the entry's `:from` so the cross-slot
+        // `:versao` past both entries' `:from` so the cross-slot
         // precedence gate (`FromNotBeforeVersao`) lets this canonical
         // authoring shape through to the positive-control assertion.
+        c.versao = "0.2.0".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![
+            UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: vec![
+                    UpgradeInstruction::LoadModule {
+                        module: "hello-rio".into(),
+                    },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                    },
+                    UpgradeInstruction::SoftPurge {
+                        module: "hello-rio-old".into(),
+                    },
+                    UpgradeInstruction::Purge {
+                        module: "hello-rio-old".into(),
+                    },
+                ],
+            },
+            UpgradeFromEntry {
+                from: "0.0.9".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            },
+        ];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let migration_clone = migration.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| {
+            p == manifest_clone || p == svc_clone || p == migration_clone
+        });
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn upgrade_from_restart_mixed_surfaces_as_upgrade_violation() {
+        // Wiring pin: the within-entry `(:restart)`-exclusivity gate
+        // (`UpgradeFromEntry::validate_restart_exclusive`) lands on
+        // the same `LayoutError::UpgradeViolation` axis the per-entry
+        // shape gate (26da2c7), the cross-entry duplicate-`:from`
+        // gate (7c6aef2), and the cross-slot `:from < :versao`
+        // precedence gate (de7ab1a) already do. A caixa.lisp whose
+        // `:upgrade-from` entry mixes `(:restart)` with a typed
+        // instruction surfaces at `feira build` time naming the
+        // offending caixa + the entry's `:from` rather than silently
+        // passing into the wasm-operator with semantically dead code
+        // in the operator's dispatch table. Mirrors
+        // `upgrade_from_duplicate_surfaces_as_upgrade_violation` on
+        // the peer cross-entry gate.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
         c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
         c.upgrade_from = vec![UpgradeFromEntry {
@@ -1014,25 +1076,68 @@ mod tests {
                 UpgradeInstruction::LoadModule {
                     module: "hello-rio".into(),
                 },
-                UpgradeInstruction::StateChange {
-                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
-                },
-                UpgradeInstruction::SoftPurge {
-                    module: "hello-rio-old".into(),
-                },
-                UpgradeInstruction::Purge {
-                    module: "hello-rio-old".into(),
-                },
                 UpgradeInstruction::Restart,
             ],
         }];
-        let manifest_clone = manifest.clone();
-        let svc_clone = svc.clone();
-        let migration_clone = migration.clone();
-        let layout = StandardLayout::new().with_path_exists(move |p| {
-            p == manifest_clone || p == svc_clone || p == migration_clone
-        });
-        layout.verify(&c, &root).unwrap();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::UpgradeViolation for restart-mixed entry, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.1.0"),
+            "UpgradeViolation issue must name the offending entry's `:from` verbatim, got \
+             {issue:?}"
+        );
+        assert!(
+            issue.contains(":restart"),
+            "UpgradeViolation issue must name the `:restart` axis verbatim, got {issue:?}"
+        );
+        assert!(
+            issue.contains(":load-module"),
+            "UpgradeViolation issue must name the non-:restart peer instruction's lisp-form \
+             verbatim, got {issue:?}"
+        );
+    }
+
+    #[test]
+    fn upgrade_from_restart_duplicated_surfaces_as_upgrade_violation() {
+        // Companion arm: the duplicate-`(:restart)` mode of
+        // `RestartNotExclusive` (no typed peers, just multiple
+        // `Restart` variants) surfaces through the same wiring as the
+        // mixed-with-typed mode above. The diagnostic still names the
+        // offending entry's `:from` verbatim even when `other_kinds`
+        // is empty.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.versao = "0.2.0".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart, UpgradeInstruction::Restart],
+        }];
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc);
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::UpgradeViolation { caixa, issue } = err else {
+            panic!(
+                "expected LayoutError::UpgradeViolation for duplicate-restart entry, got \
+                 {err:?}"
+            );
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.1.0"),
+            "UpgradeViolation issue must name the offending entry's `:from` verbatim, got \
+             {issue:?}"
+        );
+        assert!(
+            issue.contains("(:restart)") || issue.contains(":restart"),
+            "UpgradeViolation issue must name the `:restart` axis verbatim, got {issue:?}"
+        );
     }
 
     #[test]

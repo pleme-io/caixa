@@ -79,15 +79,102 @@ pub struct UpgradeFromEntry {
 }
 
 impl UpgradeFromEntry {
-    /// Verify the `:from` field is a valid semver.
+    /// Verify the `:from` field is a valid semver, every instruction's
+    /// typed shape, and the within-entry `(:restart)`-exclusivity
+    /// invariant (an entry containing `(:restart)` must contain
+    /// exactly one `(:restart)` and nothing else — see
+    /// [`Self::validate_restart_exclusive`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
         Version::parse(&self.from).map_err(|_| UpgradeError::BadFromVersion(self.from.clone()))?;
-        // Validate each instruction's referenced paths if any.
+        // Per-instruction typed shape: kind-tagged `:module` /
+        // `:script` value-shape gates fire here, *before* the
+        // within-entry restart-exclusivity gate below — so a
+        // malformed-shape diagnostic on a Module/Script-bearing
+        // instruction surfaces with its narrower self-locating
+        // wording (`ModuleEmpty`, `ModuleInvalid`, `EmptyScript`,
+        // `AbsoluteScript`, `ParentEscapeScript`) rather than
+        // collapsing two unrelated authoring errors into a single
+        // exclusivity diagnostic. Same empty-first cascade discipline
+        // every peer DNS-1123 / path-shape gate inside this module
+        // uses (`validate_module`'s ModuleEmpty arm precedes the
+        // DNS-1123 predicate; `validate` on `StateChange` consults
+        // the lifted `is_sandboxed_relative_path` shape gate first).
         for instr in &self.instructions {
             instr.validate()?;
         }
+        self.validate_restart_exclusive()?;
         Ok(())
+    }
+
+    /// Reject `:upgrade-from :instructions` lists that carry
+    /// `(:restart)` alongside any other instruction, or that carry
+    /// more than one `(:restart)`. The valid Restart-bearing shape is
+    /// exactly `((:restart))` — a single `Restart` as the entry's
+    /// whole instructions list.
+    ///
+    /// Per [`UpgradeInstruction::Restart`]'s doc comment, `(:restart)`
+    /// is the *fallback* for an entry whose typed upgrade is
+    /// impossible (wasm component-model world incompatibility,
+    /// irreversible state shape change). The fallback is terminal by
+    /// construction: the operator restarts the pod and the new version
+    /// comes up fresh, so any other instructions in the same entry
+    /// are dead code in both directions — either the typed sequence
+    /// would have succeeded and `(:restart)` is unreached, or it
+    /// wouldn't and the typed instructions are dead because the
+    /// operator restarts anyway. Two canonical authoring footguns
+    /// close here:
+    ///
+    ///   - `((:load-module …) (:state-change …) (:restart))` — the
+    ///     "I'll try the typed path *then* restart anyway" footgun.
+    ///     There is no coherent OTP-shaped semantic for this: if the
+    ///     typed sequence succeeds, the trailing restart discards the
+    ///     work that just succeeded (defeating the whole point of
+    ///     declaring it); if it fails, the restart is never reached
+    ///     because the entry already failed.
+    ///   - `((:restart) (:restart))` — multiple `Restart` variants in
+    ///     one entry. The fallback is a single semantic; repeating it
+    ///     is at best redundant, at worst suggests the author thought
+    ///     the second one would re-trigger after the first.
+    ///
+    /// Same within-entry exclusivity discipline OTP's `relup` enforces
+    /// at the `restart_new_emulator | restart_emulator` instruction
+    /// boundary — those instructions are terminal in the upgrade
+    /// script (`systools(3)` rejects sequences that continue past
+    /// them); pleme-io lifts the same shape to a build-time gate,
+    /// matching the CAIXA-SDLC §III "build errors, not runtime
+    /// surprises" frame.
+    ///
+    /// Same within-entry cross-instruction discipline the
+    /// [`crate::AplicacaoSpec::validate_placement`] strategy ↔
+    /// shard-key partition (934bc58) and
+    /// [`validate_upgrade_from_against_versao`]'s `:from` ↔ `:versao`
+    /// precedence partition (de7ab1a) apply on cross-slot axes — now
+    /// extended onto the first within-list cross-instruction axis on
+    /// the `:upgrade-from` typed slot.
+    fn validate_restart_exclusive(&self) -> Result<(), UpgradeError> {
+        let restart_count = self
+            .instructions
+            .iter()
+            .filter(|i| matches!(i, UpgradeInstruction::Restart))
+            .count();
+        if restart_count == 0 {
+            return Ok(());
+        }
+        if restart_count == 1 && self.instructions.len() == 1 {
+            return Ok(());
+        }
+        let other_kinds: Vec<&'static str> = self
+            .instructions
+            .iter()
+            .filter(|i| !matches!(i, UpgradeInstruction::Restart))
+            .map(UpgradeInstruction::lisp_form)
+            .collect();
+        Err(UpgradeError::RestartNotExclusive {
+            from: self.from.clone(),
+            restart_count,
+            other_kinds,
+        })
     }
 }
 
@@ -430,6 +517,30 @@ pub enum UpgradeError {
          here as a self-upgrade no-op."
     )]
     FromNotBeforeVersao { from: String, versao: String },
+    #[error(
+        ":upgrade-from `(:from {from:?})` :instructions list violates the `(:restart)` \
+         exclusivity invariant — an entry containing `(:restart)` must contain exactly one \
+         `(:restart)` and nothing else (found {restart_count} `(:restart)` plus other \
+         instruction(s): {other_kinds:?}). Per the UpgradeInstruction::Restart doc comment, \
+         `(:restart)` is the fallback for an entry whose typed upgrade is impossible (wasm \
+         component-model world incompatibility, irreversible state shape change), and the \
+         fallback is terminal by construction (the operator restarts the pod and the new \
+         version comes up fresh). Mixing the fallback with the typed sequence is dead code \
+         in both directions: if the typed instructions would succeed, `(:restart)` is \
+         unreached; if they wouldn't, the typed instructions are dead because the operator \
+         restarts anyway. Author *either* a typed sequence (`(:load-module …) \
+         (:state-change …) (:soft-purge …)`) *or* a single `((:restart))` — never both, \
+         never repeated. If two distinct upgrade strategies are needed for the same prior \
+         version, that is itself a typed-graph ambiguity (the operator's `:from`-match \
+         dispatch picks exactly one block per running version) — keep the typed sequence; \
+         the fallback restart is what the operator does on any typed-sequence failure \
+         already."
+    )]
+    RestartNotExclusive {
+        from: String,
+        restart_count: usize,
+        other_kinds: Vec<&'static str>,
+    },
 }
 
 #[cfg(test)]
@@ -1117,6 +1228,261 @@ mod tests {
                 versao: "0.2.0".into(),
             },
             "the first offending `:from` (0.3.0) must surface, not the later one (0.4.0)"
+        );
+    }
+
+    // ── UpgradeFromEntry::validate_restart_exclusive: within-entry gate ─
+
+    #[test]
+    fn validate_rejects_restart_mixed_with_load_module() {
+        // The "I'll try the typed path *then* restart anyway" footgun:
+        // an instructions list with `(:restart)` plus `(:load-module …)`
+        // is dead code in both directions (succeed → restart discards
+        // the work that just succeeded, defeating the typed sequence's
+        // whole point; fail → restart never reached because the entry
+        // already failed). The gate names the offending entry's `:from`
+        // verbatim plus the kebab-case lisp-form of every non-`:restart`
+        // peer so the author can grep their caixa.lisp for either side
+        // and fix in one edit.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::RestartNotExclusive {
+                from: "0.1.0".into(),
+                restart_count: 1,
+                other_kinds: vec![":load-module"],
+            },
+            "restart + load-module mix must surface as RestartNotExclusive naming the \
+             offending `:from` + the non-:restart kinds verbatim, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_restart_mixed_with_full_typed_sequence() {
+        // Sweep the typed-sequence universe — every non-`:restart`
+        // variant alongside `:restart` — and assert every typed
+        // instruction's lisp-form appears in `other_kinds` in
+        // declaration order. The author should be able to grep for
+        // each verbatim (`:load-module`, `:state-change`, `:soft-purge`,
+        // `:purge`) and resolve in one pass. Drift in the `lisp_form`
+        // mapping surfaces here.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "hello-rio-old".into(),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::RestartNotExclusive {
+                from: "0.1.0".into(),
+                restart_count: 1,
+                other_kinds: vec![":load-module", ":state-change", ":soft-purge", ":purge"],
+            },
+        );
+    }
+
+    #[test]
+    fn validate_rejects_restart_duplicated() {
+        // `((:restart) (:restart))` — multiple Restart variants in one
+        // entry. The fallback is a single semantic (restart the pod;
+        // the new version comes up fresh); repeating it is at best
+        // redundant, at worst suggests the author thought the second
+        // would re-trigger after the first. The gate reports
+        // `restart_count: 2` so the diagnostic surfaces the duplication
+        // mode unambiguously even when `other_kinds` is empty.
+        let e = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::Restart, UpgradeInstruction::Restart],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::RestartNotExclusive {
+                from: "0.1.0".into(),
+                restart_count: 2,
+                other_kinds: vec![],
+            },
+        );
+    }
+
+    #[test]
+    fn validate_accepts_sole_restart() {
+        // Positive control: the canonical "this prior version's typed
+        // upgrade is impossible — restart" authoring shape from the
+        // UpgradeInstruction::Restart doc comment. `((:restart))` alone
+        // is the entry's whole instructions list and the only valid
+        // Restart-bearing shape.
+        let e = entry("0.1.0", vec![UpgradeInstruction::Restart]);
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_typed_sequence_without_restart() {
+        // Positive control: the canonical typed hot-upgrade authoring
+        // shape from ABSORPTION-ROADMAP §M2.3 — `:load-module` →
+        // `:state-change` → `:soft-purge`. Absent `:restart` is the
+        // only shape that lets the sequence run to completion under
+        // the wasm-operator's `:from`-match dispatch. Drift here =
+        // a future tighten that rejects any canonical typed-only shape
+        // surfaces as a regression at this gate.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_restart_order_independent() {
+        // Position-agnostic: `(:restart)` leading or trailing the
+        // mixed sequence surfaces the same RestartNotExclusive shape.
+        // Mirrors OTP appup's order-insensitive
+        // `restart_emulator | restart_new_emulator` terminal rule —
+        // the position of the restart instruction in the script is
+        // irrelevant; what matters is the script *contains* it
+        // alongside other instructions at all. The gate must not
+        // gain a false positive by depending on instruction ordering.
+        let leading = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::Restart,
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let trailing = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        let middle = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "a".into() },
+                UpgradeInstruction::Restart,
+                UpgradeInstruction::SoftPurge {
+                    module: "a-old".into(),
+                },
+            ],
+        );
+        for e in [&leading, &trailing, &middle] {
+            assert!(
+                matches!(
+                    e.validate().unwrap_err(),
+                    UpgradeError::RestartNotExclusive {
+                        restart_count: 1,
+                        ..
+                    }
+                ),
+                "mixed-with-:restart entry must surface RestartNotExclusive regardless of \
+                 instruction order, got {:?}",
+                e.validate()
+            );
+        }
+    }
+
+    #[test]
+    fn validate_restart_exclusive_fires_after_per_instr_shape() {
+        // Order pin: a malformed `:module` value on a Module-bearing
+        // instruction (an empty string) surfaces its narrower
+        // kind-tagged `ModuleEmpty` diagnostic *before* the within-
+        // entry restart-exclusivity gate fires. The per-instruction
+        // shape pass walks the list inline before the restart-
+        // exclusive check, so the narrower self-locating diagnostic
+        // surfaces first — mirrors the empty-first cascade on every
+        // peer DNS-1123 gate (`validate_module`,
+        // `validate_membro_caixa`, `validate_placement_cluster`) and
+        // the `*_invalid_fires_before_duplicate_check` arm-ordering
+        // pins on every typed-graph axis. Without this pin a future
+        // shortcut that runs the restart-exclusive check ahead of
+        // per-instruction shape would surface a less-actionable
+        // RestartNotExclusive over an instruction list that's also
+        // malformed at the per-instruction layer.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: String::new(),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::ModuleEmpty {
+                kind: ":load-module"
+            },
+            "malformed instruction must surface its kind-tagged diagnostic before the \
+             restart-exclusivity gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_exclusive_threads_through_validate_upgrade_from() {
+        // Wiring pin: the within-entry restart-exclusivity gate fires
+        // through [`validate_upgrade_from`] (which delegates to
+        // [`UpgradeFromEntry::validate`] per entry) before the cross-
+        // entry duplicate-`:from` gate would have a chance to run on
+        // the malformed entry. Pinned here so a future refactor that
+        // walks the cross-entry gate first doesn't accidentally
+        // surface a DuplicateFrom over an entry that's also malformed
+        // at the within-entry restart-exclusivity layer.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::Restart,
+                ],
+            ),
+            entry("0.1.0", vec![UpgradeInstruction::Restart]),
+        ];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::RestartNotExclusive {
+                    restart_count: 1,
+                    ..
+                }
+            ),
+            "within-entry restart-exclusivity diagnostic must surface before the cross-entry \
+             duplicate-`:from` gate fires, got {err:?}"
         );
     }
 }
