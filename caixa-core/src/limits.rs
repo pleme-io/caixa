@@ -192,6 +192,18 @@ pub enum LimitsError {
     UnknownDurationUnit { unit: String },
     #[error("duration: failed to parse magnitude {0:?}")]
     BadDurationMagnitude(String),
+    #[error(
+        "duration: magnitude {value:?} is not a non-negative integer — the canonical \
+         authoring form for `:limits :wall-clock` is `<integer><unit>` (e.g. `\"30s\"`, \
+         `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no decimal point and no leading `+` sign. A \
+         fractional / decimal-shaped magnitude (`\"1.5s\"`, `\"1.0s\"`, `\"0.5m\"`, \
+         `\"+30s\"`, `\"-30s\"`) round-trips through `render_duration` to a *different* \
+         canonical form (`\"1500ms\"`, `\"1s\"`, `\"30s\"`, `\"30s\"`) on first serialize \
+         — breaking the THEORY.md Part V render-determinism contract every typed slot \
+         carries. Pick an integer magnitude in the unit that divides cleanly (write \
+         `\"1500ms\"` instead of `\"1.5s\"`; `\"30s\"` instead of `\"0.5m\"`)"
+    )]
+    NonIntegerDurationMagnitude { value: String },
     #[error("millicores: bad value {0:?} (expected `<int>m` or `<int>`)")]
     BadMillicores(String),
     #[error(
@@ -364,18 +376,72 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
         .find(|c: char| c.is_ascii_alphabetic())
         .unwrap_or(s.len());
     let (num_part, unit) = s.split_at(split_at);
-    let num: f64 = num_part
-        .trim()
-        .parse()
-        .map_err(|_| LimitsError::BadDurationMagnitude(num_part.into()))?;
-    if num < 0.0 {
+    let num_trim = num_part.trim();
+    // The canonical authoring form for `:limits :wall-clock` is
+    // `<integer><unit>` — every magnitude `render_duration` emits is a
+    // non-negative integer with no decimal point and no leading sign,
+    // so the parser's accepted set must match for serialize/deserialize
+    // to round-trip without canonical-form drift. Until this gate
+    // landed the parser accepted any `f64`-shaped magnitude
+    // (`"1.5s"` → 1500ms, `"1.0s"` → 1s, `"0.5m"` → 30s, `"+30s"` →
+    // 30s) and serde silently round-tripped the value to a *different*
+    // canonical string on the next emit (`"1.5s"` → 1500ms →
+    // `"1500ms"`, `"1.0s"` → 1s → `"1s"`, `"0.5m"` → 30s → `"30s"`,
+    // `"+30s"` → 30s → `"30s"`) — breaking the THEORY.md Part V
+    // render-determinism contract every typed slot carries. The same
+    // canonical-form discipline `parse_byte_size`'s integer-magnitude
+    // gate (the immediate predecessor on the peer `:limits :memory`
+    // codec) applies; this gate is the direct successor on the
+    // `:limits :wall-clock` codec.
+    //
+    // Strict canonical form: every byte of the magnitude is an ASCII
+    // digit (no `.`, no `+`, no `-`). On current Rust `u64::from_str`
+    // permissively accepts a leading `+` (`"+30"` → 30) — that's a
+    // canonical-drift shape `render_duration` never emits, so the
+    // digit-only check is what closes the leading-sign class; relying
+    // on `u64::from_str`'s strictness alone would silently admit it.
+    // On non-digit-only inputs the gate distinguishes "non-canonical-
+    // but-numeric" (parses as f64 or i64 — surfaced as the new
+    // `NonIntegerDurationMagnitude` variant with a self-locating
+    // diagnostic) from "garbage" (parses as neither — surfaced as the
+    // existing `BadDurationMagnitude` so its narrower diagnostic
+    // remains load-bearing).
+    let digit_only = !num_trim.is_empty() && num_trim.bytes().all(|b| b.is_ascii_digit());
+    if !digit_only {
+        let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
+        if numeric {
+            return Err(LimitsError::NonIntegerDurationMagnitude {
+                value: num_trim.into(),
+            });
+        }
         return Err(LimitsError::BadDurationMagnitude(num_part.into()));
     }
-    let dur = match unit.trim() {
-        "ms" => Duration::from_secs_f64(num / 1000.0),
-        "s" | "" => Duration::from_secs_f64(num),
-        "m" => Duration::from_secs_f64(num * 60.0),
-        "h" => Duration::from_secs_f64(num * 3600.0),
+    // `digit_only` guarantees every byte is `[0-9]`, so the only way
+    // u64::from_str can fail here is overflow.
+    let num: u64 = num_trim.parse::<u64>().map_err(|_| {
+        LimitsError::BadDurationMagnitude(format!(
+            "{num_trim} (digit-only magnitude overflows u64)"
+        ))
+    })?;
+    // Multiply on u64 with overflow detection — every unit conversion
+    // is integer-exact for an integer magnitude, so the codec drops
+    // `Duration::from_secs_f64` entirely. Overflow surfaces at parse
+    // time with a parser-shaped diagnostic naming the offending
+    // magnitude × unit pair (matches `parse_byte_size`'s overflow arm).
+    let unit_trim = unit.trim();
+    let dur = match unit_trim {
+        "ms" => Duration::from_millis(num),
+        "s" | "" => Duration::from_secs(num),
+        "m" => Duration::from_secs(num.checked_mul(60).ok_or_else(|| {
+            LimitsError::BadDurationMagnitude(format!(
+                "{num_trim}{unit_trim} overflows u64 (magnitude × 60 > 2^64-1)"
+            ))
+        })?),
+        "h" => Duration::from_secs(num.checked_mul(3600).ok_or_else(|| {
+            LimitsError::BadDurationMagnitude(format!(
+                "{num_trim}{unit_trim} overflows u64 (magnitude × 3600 > 2^64-1)"
+            ))
+        })?),
         other => {
             return Err(LimitsError::UnknownDurationUnit {
                 unit: other.into(),
@@ -890,6 +956,210 @@ mod tests {
             reason.contains("overflow"),
             "overflow diagnostic must mention overflow (got {reason:?})"
         );
+    }
+
+    // ── canonical-form: integer-magnitude duration codec gate ─────────────
+    //
+    // Direct successor to the `parse_byte_size` integer-magnitude gate on
+    // the peer `:limits :memory` codec — every magnitude `render_duration`
+    // emits is a non-negative integer (no decimal point, no leading sign,
+    // no scientific notation). The parser's accepted set must match for
+    // parse → render → parse to round-trip without canonical-form drift.
+    // Pins every canonical-drift shape — fractional (`"1.5s"`),
+    // decimal-shaped-integer (`"1.0s"`), half-unit (`"0.5m"`),
+    // leading-`+` (`"+30s"`), leading-`-` (`"-30s"`) — plus the
+    // complement-side pin (integer happy paths), the round-trip
+    // convergence property, the BadDurationMagnitude-precedence pin
+    // (genuinely unparseable inputs keep their narrower diagnostic), the
+    // overflow-surface pin (u64-overflow on magnitude × unit surfaces at
+    // parse time), and the serde-path pin (the gate fires at deserialize,
+    // before any validate gate runs).
+
+    #[test]
+    fn parse_duration_rejects_fractional_seconds() {
+        // The fail-before-pass-after pin: `"1.5s"` parsed cleanly on
+        // every pre-gate codebase (f64::parse accepts the decimal), the
+        // codec produced 1500ms, and `render_duration(1500ms)` emitted
+        // `"1500ms"` on the next serialize — silently drifting the
+        // canonical form away from the author's intent. The new gate
+        // surfaces the round-trip break at the parser layer with a
+        // self-locating diagnostic.
+        let err = parse_duration("1.5s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerDurationMagnitude { ref value } if value == "1.5"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_decimal_shaped_integer() {
+        // The canonical-drift case where the *value* is integer but the
+        // *form* carries a redundant decimal point — `"1.0s"` parses to
+        // 1s (integer), but the renderer emits `"1s"` on the next
+        // serialize (no decimal point). The parse-shape gate fires here
+        // too so the codec's accepted set is exactly the renderer's
+        // emitted set.
+        let err = parse_duration("1.0s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerDurationMagnitude { ref value } if value == "1.0"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_half_minute() {
+        // `"0.5m"` parses to 30s; the renderer emits `"30s"` on the
+        // next serialize. Pin the round-trip drift on the explicitly-
+        // fractional case sized to land on a smaller-unit boundary, so
+        // the gate's coverage includes both the "doesn't land on a
+        // boundary" (1.5s → 1500ms) and "lands on a smaller-unit
+        // boundary" (0.5m → 30s) drift shapes — the same two-shape
+        // pattern the byte-size gate covers (1.5KiB → 1536, 0.5GiB →
+        // 512MiB).
+        let err = parse_duration("0.5m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerDurationMagnitude { ref value } if value == "0.5"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_leading_plus() {
+        // `"+30s"` parses through f64 as 30s; the renderer emits `"30s"`
+        // on the next serialize. The leading `+` is not a renderer-
+        // emitted shape, so it falls in the same canonical-drift class
+        // as the fractional forms — surfacing under the same diagnostic
+        // keeps the gate's coverage uniform across every non-canonical-
+        // but-numeric input shape the parser would otherwise accept.
+        let err = parse_duration("+30s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerDurationMagnitude { ref value } if value == "+30"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_negative_seconds_via_integer_gate() {
+        // The negative-magnitude class — pre-gate the parser routed
+        // negatives through the `num < 0.0` check to `BadDurationMagnitude`;
+        // the new digit-only gate fires earlier and routes the same
+        // input to `NonIntegerDurationMagnitude` (negatives are not
+        // digit-only). Pin the new diagnostic so a future relaxation
+        // that re-routes negatives back to the old arm surfaces here.
+        let err = parse_duration("-30s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerDurationMagnitude { ref value } if value == "-30"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_continues_to_accept_integer_magnitudes() {
+        // The complement-side pin: every canonical integer-magnitude
+        // form the renderer emits must continue to parse to the same
+        // value the renderer produced. Sweep the canonical authoring
+        // shapes (ms, bare-s, s, m, h, and the bare-integer "0" zero-
+        // shape) so a future tightening of the parser surfaces here as
+        // a test failure rather than a silent regression.
+        assert_eq!(parse_duration("0s").unwrap(), Duration::ZERO);
+        assert_eq!(parse_duration("500ms").unwrap(), Duration::from_millis(500));
+        assert_eq!(parse_duration("30s").unwrap(), Duration::from_secs(30));
+        assert_eq!(parse_duration("2m").unwrap(), Duration::from_secs(120));
+        assert_eq!(parse_duration("1h").unwrap(), Duration::from_secs(3600));
+        assert_eq!(parse_duration("3600").unwrap(), Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn parse_duration_round_trips_through_render_for_every_canonical_form() {
+        // The structural property the gate makes load-bearing: every
+        // value the parser accepts round-trips through `render_duration`
+        // to a string the parser also accepts — and to the *same* value.
+        // Sweep the values the renderer emits canonically (ms / s / m /
+        // h boundaries plus a non-aligned millisecond) so a future
+        // codec change that breaks round-trip convergence surfaces here.
+        for d in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_millis(1500),
+            Duration::from_secs(1),
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(120),
+            Duration::from_secs(3600),
+        ] {
+            let rendered = render_duration(d);
+            let reparsed = parse_duration(&rendered).unwrap_or_else(|e| {
+                panic!("render({d:?}) = {rendered:?} must reparse, got {e:?}")
+            });
+            assert_eq!(
+                reparsed, d,
+                "round-trip drift on {d:?}: rendered={rendered:?}, reparsed={reparsed:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn parse_duration_keeps_bad_magnitude_for_unparseable_input() {
+        // The precedence pin: the new `NonIntegerDurationMagnitude` arm
+        // distinguishes *non-canonical-but-numeric* (`"1.5"`, `"+30"`,
+        // `"-30"`) from *genuinely-unparseable* (`"abc"`, `"--1"`) so
+        // the existing `BadDurationMagnitude` diagnostic's wording
+        // remains load-bearing for the latter class — the gate is
+        // additive, not replacing.
+        let err = parse_duration("abcs").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::BadDurationMagnitude(_)),
+            "got {err:?}"
+        );
+        let err = parse_duration("--1s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::BadDurationMagnitude(_)),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_overflow_surfaces_as_bad_magnitude() {
+        // `u64::MAX h` overflows the seconds computation (magnitude ×
+        // 3600); the parser surfaces the overflow as a
+        // `BadDurationMagnitude` with an overflow-shaped wording so the
+        // diagnostic names the offending magnitude × unit pair at parse
+        // time. Matches `parse_byte_size`'s overflow-surface arm
+        // structurally.
+        let err = parse_duration("18446744073709551615h").unwrap_err();
+        let LimitsError::BadDurationMagnitude(reason) = err else {
+            panic!("expected BadDurationMagnitude(overflow), got other variant");
+        };
+        assert!(
+            reason.contains("overflow"),
+            "overflow diagnostic must mention overflow (got {reason:?})"
+        );
+    }
+
+    #[test]
+    fn de_duration_rejects_fractional_value_through_serde() {
+        // The serde-path pin: a `:limits :wall-clock` carrying a
+        // fractional magnitude (`"1.5s"`) must fail at deserialize time,
+        // not silently round-trip the value through the f64 parser. Pin
+        // both the success-on-canonical path (the integer form
+        // deserializes cleanly) and the failure-on-non-canonical path
+        // (the fractional form is rejected by the codec before any
+        // validate gate runs).
+        let json = r#"{"wallClock":"1.5s"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-negative integer"),
+            "serde diagnostic must surface the integer-magnitude reason verbatim \
+             (got {msg:?})"
+        );
+
+        // The integer-form complement — same author-side intent
+        // (1.5s = 1500ms), written in the canonical form the renderer
+        // would emit, deserializes cleanly.
+        let json = r#"{"wallClock":"1500ms"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.wall_clock, Some(Duration::from_millis(1500)));
     }
 
     #[test]
