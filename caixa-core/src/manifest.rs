@@ -1,37 +1,12 @@
 use serde::{Deserialize, Serialize};
 use tatara_lisp::DeriveTataraDomain;
 
-use std::time::Duration;
-
 use thiserror::Error;
 
 use crate::{
     behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec, render::is_dns_1123_label,
     supervisor::SupervisorSpec, upgrade::UpgradeFromEntry, CaixaKind, Dep,
 };
-
-/// Inline duration parser for `restart_window`. Mirrors
-/// `supervisor::duration_codec::parse` but keeps the typed Caixa lib
-/// minimal (one tiny shared parser).
-fn parse_window_inline(s: &str) -> Option<Duration> {
-    let s = s.trim();
-    if s.is_empty() {
-        return None;
-    }
-    let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
-    let (num, unit) = s.split_at(split);
-    let num: f64 = num.trim().parse().ok()?;
-    if num < 0.0 {
-        return None;
-    }
-    Some(match unit.trim() {
-        "ms" => Duration::from_secs_f64(num / 1000.0),
-        "s" | "" => Duration::from_secs_f64(num),
-        "m" => Duration::from_secs_f64(num * 60.0),
-        "h" => Duration::from_secs_f64(num * 3600.0),
-        _ => return None,
-    })
-}
 
 /// Top-level manifest for a caixa (a tatara-lisp package).
 ///
@@ -411,6 +386,67 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:restart-window` values the shared
+    /// [`crate::supervisor::duration_codec::parse`] refuses. The flat
+    /// `restart_window: Option<String>` slot on [`Caixa`] is stored
+    /// raw by the derive macro (the typed [`SupervisorSpec`] holds an
+    /// `Option<Duration>` routed through the shared codec via `with =
+    /// "duration_codec"`); the inline `Caixa → SupervisorSpec`
+    /// view-construction path ([`Self::supervisor_view`]) folds the
+    /// raw string through the same shared codec and soft-swallows the
+    /// parse error as `None` to keep the view best-effort. Without
+    /// this gate a malformed `:restart-window` (`"1.5s"` — the
+    /// fractional-seconds drift class; `"1.0s"` — the decimal-shaped
+    /// integer drift; `"0.5m"` — the unit-fraction drift; `"+30s"` /
+    /// `"-30s"` — the leading-sign drift; `"30x"` — the unknown-unit
+    /// footgun; `"abc"` — pure garbage; `""` — the empty-after-trim
+    /// edge case) silently produced a `SupervisorSpec` with
+    /// `restart_window: None`, indistinguishable from the canonical
+    /// "omit the slot to express no reset" authoring shape — Erlang/OTP's
+    /// `MaxIntensity / Period` invariant turns into a never-reset
+    /// supervisor far from the source `caixa.lisp`, with no field
+    /// naming the offending `:restart-window`. Lifting the gate to a
+    /// Caixa-level validator mirrors the trajectory of the peer
+    /// per-axis identity gates ([`Self::validate_nome`] 6c992f8,
+    /// [`Self::validate_versao`] 1fdaa02, [`Self::validate_deps`]
+    /// a7f0d8c) and the ABSORPTION-ROADMAP.md M2.2 test pin
+    /// (line 196: "reject invalid `:restart-window` (non-duration)").
+    ///
+    /// Thin wrapper around [`crate::supervisor::duration_codec::parse`]
+    /// (the shared codec backing `:supervisor :restart-window` as
+    /// serde-routed on [`SupervisorSpec`], `:politicas :timeout`, and
+    /// `:politicas :circuit-breaker :window` — all three covered by
+    /// the integer-magnitude gate 1c55a2a). Maps the codec's parse
+    /// error verbatim into the [`ManifestError::RestartWindowMalformed`]
+    /// variant, carrying the offending raw string + a parser-shaped
+    /// reason naming the canonical authoring form, so the diagnostic
+    /// is self-locating (the author can grep their `caixa.lisp` for
+    /// `:restart-window "<value>"` and fix it in one edit) and
+    /// uniform with every other manifest-level validate diagnostic.
+    /// With this gate the four `:restart-window`-shaped surfaces (the
+    /// flat raw string on [`Caixa`], the typed `Option<Duration>` on
+    /// [`SupervisorSpec`], the two `MeshPolicy` peer durations) are
+    /// now structurally equivalent — every value past the codec is in
+    /// one accepted set, by construction.
+    ///
+    /// `None` (the canonical "omit the slot to express no reset"
+    /// shape) is accepted trivially — the gate is a no-op when the
+    /// author didn't author a window. The empty string is rejected by
+    /// the shared codec (its digit-only gate refuses an empty
+    /// magnitude), surfacing the same `RestartWindowMalformed`
+    /// diagnostic as every other rejected non-canonical shape.
+    pub fn validate_restart_window(&self) -> Result<(), ManifestError> {
+        let Some(s) = self.restart_window.as_deref() else {
+            return Ok(());
+        };
+        crate::supervisor::duration_codec::parse(s).map(|_| ()).map_err(|reason| {
+            ManifestError::RestartWindowMalformed {
+                restart_window: s.to_string(),
+                reason,
+            }
+        })
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -424,10 +460,31 @@ impl Caixa {
         if self.kind != CaixaKind::Supervisor {
             return None;
         }
+        // Fold through the shared `supervisor::duration_codec::parse`
+        // — the same parser the serde-routed `with = "duration_codec"`
+        // on `SupervisorSpec::restart_window`, the `:politicas
+        // :timeout` codec, and the `:politicas :circuit-breaker
+        // :window` codec all consume. The prior inline f64-shaped
+        // duplicate (`parse_window_inline`) admitted every magnitude
+        // the integer-magnitude gate (1c55a2a) rejects on the three
+        // serde-routed siblings — `"1.5s"`, `"1.0s"`, `"0.5m"`,
+        // `"+30s"`, `"-30s"` — and silently dropped malformed input as
+        // `None` (i.e. "no reset"), divergent from the shared codec's
+        // integer-magnitude discipline by construction. The fold
+        // closes the divergence: every value the typed
+        // `SupervisorSpec` carries past `supervisor_view` is in the
+        // shared codec's accepted set. The `.ok()` here preserves the
+        // existing soft-swallow shape on this view-construction path;
+        // the new [`Caixa::validate_restart_window`] (sibling of
+        // [`Self::validate_nome`] / [`Self::validate_versao`]) names
+        // the offending raw string at build time so authoring tools
+        // (`feira lint`, the future layout-side wire-up) surface a
+        // self-locating diagnostic instead of a silently dropped
+        // window.
         let restart_window = self
             .restart_window
             .as_deref()
-            .and_then(parse_window_inline);
+            .and_then(|s| crate::supervisor::duration_codec::parse(s).ok());
         Some(SupervisorSpec {
             estrategia: self.estrategia.unwrap_or_default(),
             max_restarts: self.max_restarts.unwrap_or(5),
@@ -532,6 +589,27 @@ pub enum ManifestError {
          a requirement-shape like `\"^0.1\"`, or a four-part `\"0.1.0.0\"`)"
     )]
     VersaoInvalid { versao: String, reason: String },
+    #[error(
+        ":restart-window {restart_window:?} is not a valid duration: {reason} (the \
+         substrate consumes this string through the shared \
+         `supervisor::duration_codec` — the same parser routed via `with = \
+         \"duration_codec\"` onto the typed `SupervisorSpec::restart_window`, \
+         `:politicas :timeout`, and `:politicas :circuit-breaker :window` slots; \
+         the canonical authoring form is `<integer><unit>` where the unit is one \
+         of `ms` / `s` / `m` / `h` and the magnitude has no decimal point and no \
+         leading `+` / `-` sign — e.g. `\"60s\"`, `\"5m\"`, `\"1h\"`, `\"500ms\"`. \
+         Without this gate a malformed `:restart-window` silently produced a \
+         supervisor with `restart_window: None` (\"never reset\"), turning OTP's \
+         `MaxIntensity / Period` invariant into a never-reset supervisor far from \
+         the source `caixa.lisp`; the gate moves the diagnostic to the manifest \
+         layer with the offending value named verbatim. Omit the slot entirely to \
+         express \"no reset\"; carry a positive integer duration to express the \
+         sliding window)"
+    )]
+    RestartWindowMalformed {
+        restart_window: String,
+        reason: String,
+    },
 }
 
 #[cfg(test)]
@@ -1308,5 +1386,270 @@ mod tests {
                     panic!(":versao {versao:?} must validate, got {e:?} — peer axis diverges")
                 });
         }
+    }
+
+    // ── Caixa::validate_restart_window — supervisor restart-window
+    //    folds through the shared `supervisor::duration_codec` ────────
+
+    fn caixa_with_restart_window(window: Option<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("root")).unwrap();
+        c.kind = CaixaKind::Supervisor;
+        c.restart_window = window.map(str::to_string);
+        c
+    }
+
+    #[test]
+    fn validate_restart_window_accepts_none() {
+        // The canonical "omit the slot to express no reset" shape — a
+        // `None` raw string is the absence of the typed
+        // `:restart-window` slot, which is exactly the SupervisorSpec
+        // "never reset" semantics. The gate must be a no-op here; a
+        // future tightening that rejected `None` would force every
+        // supervisor caixa to authoring-time pin a window even when
+        // the OTP semantics call for none.
+        caixa_with_restart_window(None).validate_restart_window().unwrap();
+    }
+
+    #[test]
+    fn validate_restart_window_accepts_canonical_forms() {
+        // Positive-set sweep across the canonical authoring units the
+        // shared `supervisor::duration_codec::parse` accepts —
+        // matches the codec-side `parse_accepts_integer_canonical_units`
+        // pin in supervisor::tests so a future codec-side tightening
+        // surfaces simultaneously on both axes.
+        for window in ["60s", "5m", "1h", "500ms", "30", "0s"] {
+            caixa_with_restart_window(Some(window))
+                .validate_restart_window()
+                .unwrap_or_else(|e| {
+                    panic!("canonical :restart-window {window:?} must validate, got {e:?}")
+                });
+        }
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_fractional_seconds() {
+        // Fail-before-pass-after pin: the `"1.5s"` drift class (parses
+        // as f64 to 1.5 → renders back as `"1500ms"` on first
+        // serialize). Prior to the fold + this gate, the inline
+        // `parse_window_inline` accepted f64 magnitudes and silently
+        // produced a `Duration::from_secs_f64(1.5)`, divergent from
+        // the shared codec's integer-magnitude discipline on the
+        // serde-routed siblings. The gate now surfaces a self-locating
+        // diagnostic at the manifest layer.
+        let err = caixa_with_restart_window(Some("1.5s"))
+            .validate_restart_window()
+            .unwrap_err();
+        let ManifestError::RestartWindowMalformed {
+            restart_window,
+            reason,
+        } = err
+        else {
+            panic!("expected RestartWindowMalformed for fractional seconds");
+        };
+        assert_eq!(restart_window, "1.5s");
+        assert!(
+            reason.contains("\"1.5\"") && reason.contains("not a non-negative integer"),
+            "diagnostic must carry shared-codec wording, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_decimal_shaped_integer() {
+        // The `"1.0s"` class — numerically `1s` exactly, but the
+        // canonical form is `"1s"` not `"1.0s"`. Decimal-shape leak
+        // gets the same canonical-form diagnostic.
+        let err = caixa_with_restart_window(Some("1.0s"))
+            .validate_restart_window()
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::RestartWindowMalformed { ref restart_window, .. }
+                    if restart_window == "1.0s"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_half_unit_minute() {
+        // `"0.5m"` is the unit-fraction footgun — author writes a
+        // human-readable half-minute, the prior inline parser silently
+        // produced `Duration::from_secs_f64(30.0)` and serde
+        // re-emitted as `"30s"`, rewriting author intent. The gate
+        // closes the loop at the manifest layer.
+        let err = caixa_with_restart_window(Some("0.5m"))
+            .validate_restart_window()
+            .unwrap_err();
+        let ManifestError::RestartWindowMalformed {
+            restart_window,
+            reason,
+        } = err
+        else {
+            panic!("expected RestartWindowMalformed");
+        };
+        assert_eq!(restart_window, "0.5m");
+        assert!(
+            reason.contains("\"30s\""),
+            "diagnostic must point at the canonical-form remediation, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_leading_sign() {
+        // `"+30s"` and `"-30s"` both round-tripped through f64 cleanly
+        // on the prior parser (`+30` parses as `30.0`; `-30` parsed
+        // and was caught by the `num < 0.0` arm which silently
+        // returned `None`, dropping the author-supplied window). The
+        // shared codec's digit-only gate rejects both with a unified
+        // canonical-form diagnostic; the manifest-layer wrapper names
+        // the offending value.
+        for bad in ["+30s", "-30s"] {
+            let err = caixa_with_restart_window(Some(bad))
+                .validate_restart_window()
+                .unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    ManifestError::RestartWindowMalformed { ref restart_window, .. }
+                        if restart_window == bad
+                ),
+                "got {err:?} for {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_unknown_unit() {
+        // `"30x"` — the typo / wrong-unit footgun. The shared codec's
+        // unit dispatch surfaces an `unknown duration unit` reason;
+        // the manifest-layer wrapper names the offending value.
+        let err = caixa_with_restart_window(Some("30x"))
+            .validate_restart_window()
+            .unwrap_err();
+        let ManifestError::RestartWindowMalformed {
+            restart_window,
+            reason,
+        } = err
+        else {
+            panic!("expected RestartWindowMalformed for unknown unit");
+        };
+        assert_eq!(restart_window, "30x");
+        assert!(
+            reason.contains("unknown duration unit"),
+            "diagnostic must carry shared-codec unit-rejection wording, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_garbage() {
+        // Pure non-numeric magnitude (`"abc"`) falls through to the
+        // shared codec's narrower `"bad duration magnitude"` arm. Same
+        // diagnostic shape as the codec-side
+        // `parse_garbage_still_falls_through_to_bad_magnitude` pin.
+        let err = caixa_with_restart_window(Some("abc"))
+            .validate_restart_window()
+            .unwrap_err();
+        let ManifestError::RestartWindowMalformed {
+            restart_window,
+            reason,
+        } = err
+        else {
+            panic!("expected RestartWindowMalformed for garbage");
+        };
+        assert_eq!(restart_window, "abc");
+        assert!(
+            reason.contains("bad duration magnitude"),
+            "diagnostic must carry shared-codec garbage-rejection wording, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_rejects_empty_string() {
+        // The empty-after-trim edge case — distinct from the `None`
+        // canonical "omit the slot" shape. The shared codec's
+        // digit-only gate refuses an empty magnitude; the manifest
+        // layer names the offending `""` so the author can grep for
+        // the literal empty value in their `caixa.lisp` and either
+        // remove the slot (the canonical "no reset" shape) or pin a
+        // positive duration.
+        let err = caixa_with_restart_window(Some(""))
+            .validate_restart_window()
+            .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::RestartWindowMalformed { ref restart_window, .. }
+                    if restart_window.is_empty()
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_diagnostic_carries_offending_value() {
+        // Diagnostic-shape pin (peer with
+        // `nome_invalid_diagnostic_carries_offending_nome` /
+        // `versao_invalid_diagnostic_carries_offending_versao`): the
+        // error names the offending raw `:restart-window` verbatim
+        // with a non-empty shared-codec-shaped reason, so a `feira
+        // lint` run can render the diagnostic without re-parsing.
+        let err = caixa_with_restart_window(Some("1.5s"))
+            .validate_restart_window()
+            .unwrap_err();
+        let ManifestError::RestartWindowMalformed {
+            restart_window,
+            reason,
+        } = err
+        else {
+            panic!("expected RestartWindowMalformed variant");
+        };
+        assert_eq!(restart_window, "1.5s");
+        assert!(
+            !reason.is_empty(),
+            "RestartWindowMalformed `reason` must carry the codec's wording verbatim"
+        );
+    }
+
+    #[test]
+    fn supervisor_view_folds_through_shared_codec_on_canonical_form() {
+        // Behavioral parity pin after the fold (`parse_window_inline`
+        // deletion): the canonical `"60s"` still produces
+        // `Duration::from_secs(60)` on the typed view — the fold is
+        // semantically equivalent to the prior inline parser on the
+        // accepted set. Mirrors the pre-fold `supervisor_view_returns_typed_shape`
+        // pin, narrowed to the parser-side contract.
+        let c = caixa_with_restart_window(Some("60s"));
+        let view = c.supervisor_view().expect("Supervisor kind has a view");
+        assert_eq!(view.restart_window, Some(std::time::Duration::from_secs(60)));
+    }
+
+    #[test]
+    fn supervisor_view_soft_swallows_what_validate_rejects() {
+        // Parity pin between the view-construction path and the
+        // manifest-level validator: the same `"1.5s"` that surfaces
+        // `RestartWindowMalformed` at `validate_restart_window` time
+        // becomes `restart_window: None` on the typed view (the fold
+        // preserves the existing best-effort shape of `supervisor_view`).
+        // The contract is: a layout-verifier / `feira lint` flow that
+        // cares about the malformed-window axis MUST consult
+        // `validate_restart_window` — relying solely on the view's
+        // `None` swallows the diagnostic silently. This pin makes the
+        // expectation a typed invariant.
+        let c = caixa_with_restart_window(Some("1.5s"));
+        let view = c.supervisor_view().expect("Supervisor kind has a view");
+        assert_eq!(
+            view.restart_window, None,
+            "view-construction path soft-swallows the parse error to None"
+        );
+        // And the manifest-level validator does NOT soft-swallow:
+        assert!(
+            matches!(
+                c.validate_restart_window().unwrap_err(),
+                ManifestError::RestartWindowMalformed { ref restart_window, .. }
+                    if restart_window == "1.5s"
+            ),
+            "validator must surface the offending value",
+        );
     }
 }
