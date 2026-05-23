@@ -356,21 +356,91 @@ pub mod duration_codec {
     pub(crate) fn parse(s: &str) -> Result<Duration, String> {
         let s = s.trim();
         let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
-        let (num, unit) = s.split_at(split);
-        let num: f64 = num
-            .trim()
-            .parse()
-            .map_err(|_| format!("bad duration magnitude in {s:?}"))?;
-        if num < 0.0 {
-            return Err(format!("negative duration in {s:?}"));
+        let (num_part, unit) = s.split_at(split);
+        let num_trim = num_part.trim();
+        // The canonical authoring form for every typed slot routed
+        // through this shared codec — `:supervisor :restart-window`,
+        // `:politicas :timeout`, `:politicas :circuit-breaker :window`
+        // — is `<integer><unit>`. Every magnitude [`render`] emits is a
+        // non-negative integer with no decimal point and no leading
+        // sign, so the parser's accepted set must match for
+        // serialize/deserialize to round-trip without canonical-form
+        // drift. Until this gate landed the parser accepted any
+        // `f64`-shaped magnitude (`"1.5s"` → 1500ms, `"1.0s"` → 1s,
+        // `"0.5m"` → 30s, `"+30s"` → 30s) and serde silently round-
+        // tripped the value to a *different* canonical string on the
+        // next emit (`"1.5s"` → 1500ms → `"1500ms"`, `"1.0s"` → 1s →
+        // `"1s"`, `"0.5m"` → 30s → `"30s"`, `"+30s"` → 30s → `"30s"`)
+        // — breaking the THEORY.md Part V render-determinism contract
+        // on three typed slots at once. Same canonical-form discipline
+        // `crate::limits::parse_duration` (818dd38, the immediate
+        // predecessor on the peer `:limits :wall-clock` codec) applies;
+        // this gate lifts the discipline onto the shared codec that
+        // backs the remaining three typed-duration slots in caixa-core.
+        //
+        // Strict canonical form: every byte of the magnitude is an
+        // ASCII digit (no `.`, no `+`, no `-`). On non-digit-only
+        // inputs the gate distinguishes "non-canonical-but-numeric"
+        // (parses as f64 or i64 — surfaced with a self-locating
+        // diagnostic naming the canonical authoring form, the
+        // round-trip drift each rejected shape would produce on first
+        // serialize, and the canonical-form remediation) from
+        // "garbage" (parses as neither — surfaced with the existing
+        // narrower "bad duration magnitude" wording so its diagnostic
+        // shape remains stable for the parser-shape footgun case).
+        // The pre-existing `num < 0.0` arm is now unreachable — the
+        // digit-only gate strictly precedes magnitude parsing, and a
+        // leading `-` is not an ASCII digit, so `"-30s"` lands on the
+        // non-canonical-but-numeric branch with the `-30` named
+        // verbatim in the diagnostic rather than the prior
+        // value-laundered "negative duration in \"-30s\"" wording.
+        let digit_only = !num_trim.is_empty() && num_trim.bytes().all(|b| b.is_ascii_digit());
+        if !digit_only {
+            let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
+            if numeric {
+                return Err(format!(
+                    "duration: magnitude {num_trim:?} is not a non-negative integer — the \
+                     canonical authoring form for the typed duration slots routed through \
+                     this shared codec (`:supervisor :restart-window`, `:politicas :timeout`, \
+                     `:politicas :circuit-breaker :window`) is `<integer><unit>` (e.g. \
+                     `\"30s\"`, `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no decimal point and \
+                     no leading `+` / `-` sign. A fractional / decimal-shaped magnitude \
+                     (`\"1.5s\"`, `\"1.0s\"`, `\"0.5m\"`, `\"+30s\"`, `\"-30s\"`) round-trips \
+                     through `render` to a *different* canonical form (`\"1500ms\"`, `\"1s\"`, \
+                     `\"30s\"`, `\"30s\"`, `\"30s\"`) on first serialize — breaking the \
+                     THEORY.md Part V render-determinism contract every typed slot carries. \
+                     Pick an integer magnitude in the unit that divides cleanly (write \
+                     `\"1500ms\"` instead of `\"1.5s\"`; `\"30s\"` instead of `\"0.5m\"`)"
+                ));
+            }
+            return Err(format!("bad duration magnitude in {s:?}"));
         }
-        Ok(match unit.trim() {
-            "ms" => Duration::from_secs_f64(num / 1000.0),
-            "s" | "" => Duration::from_secs_f64(num),
-            "m" => Duration::from_secs_f64(num * 60.0),
-            "h" => Duration::from_secs_f64(num * 3600.0),
+        // The digit-only gate guarantees every byte is `[0-9]`, so the
+        // only way `u64::from_str` can fail here is overflow (the
+        // magnitude exceeds `u64::MAX`). Surface that with an
+        // overflow-shaped wording so the diagnostic names the offending
+        // magnitude verbatim rather than collapsing onto the
+        // non-canonical arm. The codec now operates on `u64` end-to-end
+        // — every accepted magnitude is integer-exact; no f64 mantissa
+        // drift between author-supplied magnitude and the consumer's
+        // `Duration` value. Same shape `crate::limits::parse_duration`
+        // (818dd38) carries on the peer `:limits :wall-clock` axis.
+        let num: u64 = num_trim.parse::<u64>().map_err(|_| {
+            format!("bad duration magnitude in {s:?} (digit-only magnitude overflows u64)")
+        })?;
+        let unit_trim = unit.trim();
+        let dur = match unit_trim {
+            "ms" => Duration::from_millis(num),
+            "s" | "" => Duration::from_secs(num),
+            "m" => Duration::from_secs(num.checked_mul(60).ok_or_else(|| {
+                format!("duration {num}{unit_trim} overflows u64 (magnitude × 60 > 2^64-1)")
+            })?),
+            "h" => Duration::from_secs(num.checked_mul(3600).ok_or_else(|| {
+                format!("duration {num}{unit_trim} overflows u64 (magnitude × 3600 > 2^64-1)")
+            })?),
             other => return Err(format!("unknown duration unit {other:?}")),
-        })
+        };
+        Ok(dur)
     }
 
     /// Render a [`Duration`] in the canonical pleme-io duration string
@@ -1217,5 +1287,214 @@ mod tests {
         };
         let json = serde_json::to_string(&s).unwrap();
         assert!(json.contains("\"estrategia\":\"OneForOne\""));
+    }
+
+    // ── shared duration codec: integer-magnitude canonical-form gate ──
+    //
+    // The gate lifts the discipline `crate::limits::parse_duration`
+    // (818dd38) carries on the peer `:limits :wall-clock` codec onto
+    // the shared codec backing the remaining three typed-duration
+    // slots: `:supervisor :restart-window`, `:politicas :timeout`, and
+    // `:politicas :circuit-breaker :window`. Every magnitude `render`
+    // emits is a non-negative integer with no decimal point and no
+    // leading sign, so the codec's accepted set must match for
+    // serialize/deserialize to round-trip without canonical-form
+    // drift.
+
+    #[test]
+    fn parse_accepts_integer_canonical_units() {
+        // Pin the happy-path: every canonical author shape `render`
+        // ever emits parses to the same `Duration` value, so the
+        // codec's accepted set is at least a superset of its emitted
+        // set on the canonical-unit axis.
+        for (lit, dur) in [
+            ("30s", Duration::from_secs(30)),
+            ("500ms", Duration::from_millis(500)),
+            ("2m", Duration::from_secs(120)),
+            ("1h", Duration::from_secs(3600)),
+            ("0s", Duration::ZERO),
+        ] {
+            assert_eq!(
+                duration_codec::parse(lit).unwrap(),
+                dur,
+                "parse({lit:?}) should be {dur:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_accepts_bare_integer_as_seconds() {
+        // The `"s" | ""` arm: a bare integer with no unit is read as
+        // seconds. Pin this so the unit-empty form keeps parsing (it
+        // renders to `"<n>s"` on serialize — that's a unit-choice
+        // drift the integer-magnitude gate does NOT close, matching
+        // the `parse_byte_size` `"1024"` → `"1KiB"` scope decision in
+        // the peer `:limits :memory` codec).
+        assert_eq!(
+            duration_codec::parse("30").unwrap(),
+            Duration::from_secs(30)
+        );
+    }
+
+    #[test]
+    fn parse_rejects_fractional_seconds_with_canonical_form_diagnostic() {
+        // `"1.5s"` parses as f64 to 1.5 → renders back as `"1500ms"`
+        // on first serialize — DRIFT. The integer-magnitude gate names
+        // the offending `"1.5"` verbatim and points at the canonical
+        // remediation `"1500ms"`.
+        let err = duration_codec::parse("1.5s").unwrap_err();
+        assert!(err.contains("\"1.5\""), "missing magnitude in {err:?}");
+        assert!(
+            err.contains("not a non-negative integer"),
+            "missing canonical-form reason in {err:?}"
+        );
+        assert!(
+            err.contains("\"1500ms\""),
+            "missing canonical-form remediation in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_decimal_shaped_integer_seconds() {
+        // `"1.0s"` is the trickiest drift class: numerically `1.0s` is
+        // `1s` exactly, so the round-trip looks correct — but the
+        // emitted canonical form is `"1s"`, not `"1.0s"`. Gate the
+        // decimal-shape-with-integer-value form so author intent is
+        // never silently rewritten.
+        let err = duration_codec::parse("1.0s").unwrap_err();
+        assert!(err.contains("\"1.0\""), "missing magnitude in {err:?}");
+        assert!(
+            err.contains("not a non-negative integer"),
+            "missing canonical-form reason in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_half_unit_minute() {
+        // `"0.5m"` is the unit-fraction footgun — author writes a
+        // human-readable half-minute, serde silently rewrites to
+        // `"30s"` on next emit. The gate names the offending
+        // magnitude `"0.5"` and points at the integer-in-smaller-unit
+        // form.
+        let err = duration_codec::parse("0.5m").unwrap_err();
+        assert!(err.contains("\"0.5\""), "missing magnitude in {err:?}");
+        assert!(
+            err.contains("\"30s\""),
+            "missing canonical-form remediation in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_leading_plus_sign() {
+        // `u64::from_str` rejects `"+30"` but `f64::from_str` accepts
+        // it as `30.0` — the prior parser used f64 so `"+30s"` parsed
+        // cleanly to 30s and round-tripped to `"30s"` on next emit
+        // (DRIFT). The digit-only gate closes the leading-sign class
+        // first; the diagnostic names `"+30"` verbatim.
+        let err = duration_codec::parse("+30s").unwrap_err();
+        assert!(err.contains("\"+30\""), "missing magnitude in {err:?}");
+        assert!(
+            err.contains("not a non-negative integer"),
+            "missing canonical-form reason in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_leading_minus_sign() {
+        // The former `num < 0.0` arm: `"-30s"` parsed as f64 to -30,
+        // rejected with `"negative duration in \"-30s\""`. Under the
+        // integer-magnitude gate the diagnostic is unified — `-30` is
+        // non-digit-only, f64-numeric, and surfaces with the canonical-
+        // form reason (no leading `+` / `-` sign) naming the offending
+        // `"-30"` verbatim. Same diagnostic shape as every other
+        // rejected non-integer magnitude.
+        let err = duration_codec::parse("-30s").unwrap_err();
+        assert!(err.contains("\"-30\""), "missing magnitude in {err:?}");
+        assert!(
+            err.contains("not a non-negative integer"),
+            "missing canonical-form reason in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_garbage_still_falls_through_to_bad_magnitude() {
+        // Non-digit-only AND non-numeric (`"--1s"`, `"abc"`) falls
+        // through to the narrower "bad duration magnitude" arm — the
+        // canonical-form diagnostic is reserved for the parser-shape
+        // footgun case, not the "not a number at all" case. Same
+        // shape `parse_byte_size`'s `BadByteMagnitude` arm carries on
+        // the peer `:limits :memory` codec.
+        let err = duration_codec::parse("--1s").unwrap_err();
+        assert!(
+            err.contains("bad duration magnitude"),
+            "expected bad-magnitude wording in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_digit_only_magnitude_carries_zero_f64_drift() {
+        // The accepted set is now closed under `u64`-exact integer
+        // arithmetic: `"500ms"` → `Duration::from_millis(500)` exactly,
+        // `"3600s"` → `Duration::from_secs(3600)` exactly, `"1h"` →
+        // `Duration::from_secs(3600)` exactly, no f64 mantissa drift
+        // possible. Pin the integer-exact arms across the four unit
+        // suffixes so a future refactor that reaches back for f64
+        // (`from_secs_f64`, `mul_f64`) surfaces here.
+        assert_eq!(
+            duration_codec::parse("3600s").unwrap(),
+            Duration::from_secs(3600)
+        );
+        assert_eq!(
+            duration_codec::parse("60m").unwrap(),
+            Duration::from_secs(3600)
+        );
+        assert_eq!(
+            duration_codec::parse("1h").unwrap(),
+            Duration::from_secs(3600)
+        );
+        assert_eq!(
+            duration_codec::parse("999ms").unwrap(),
+            Duration::from_millis(999)
+        );
+    }
+
+    #[test]
+    fn restart_window_serde_rejects_fractional_seconds() {
+        // The shared codec backs `SupervisorSpec::restart_window`
+        // (`with = "duration_codec"`) — so the gate applies on serde
+        // deserialize for the typed Supervisor slot. A
+        // `{"restartWindow":"1.5s"}` payload that previously round-
+        // tripped to a different canonical string on next serialize
+        // is now refused at deserialize with the integer-magnitude
+        // diagnostic.
+        let payload = r#"{"estrategia":"OneForOne","maxRestarts":5,
+            "restartWindow":"1.5s",
+            "children":[{"caixa":"w","versao":"^0.1","restart":"Permanent"}]}"#;
+        let err = serde_json::from_str::<SupervisorSpec>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"1.5\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn restart_window_serde_rejects_leading_plus() {
+        // The `u64::from_str` leading-`+` permissiveness gap that
+        // motivated the digit-only gate (the `f64`-side accepted
+        // `"+30"`, the prior parser silently round-tripped to `"30s"`)
+        // is now closed on the shared codec — surfaces as a structured
+        // diagnostic at the serde layer for every typed-duration slot.
+        let payload = r#"{"estrategia":"OneForOne","maxRestarts":5,
+            "restartWindow":"+30s",
+            "children":[{"caixa":"w","versao":"^0.1","restart":"Permanent"}]}"#;
+        let err = serde_json::from_str::<SupervisorSpec>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("\"+30\""), "missing magnitude in {msg:?}");
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "missing canonical-form reason in {msg:?}"
+        );
     }
 }

@@ -6002,4 +6002,83 @@ mod tests {
         // re-deriving the contract from inline field probes.
         assert!(!three_member_spec().politicas.is_empty());
     }
+
+    // ── shared duration codec: cross-slot integer-magnitude gate ──
+    //
+    // The integer-magnitude discipline applied to
+    // `supervisor::duration_codec::parse` lifts onto every typed slot
+    // that routes through the shared codec — `MeshPolicy::timeout`
+    // (`:politicas :timeout`) and `CircuitBreaker::window`
+    // (`:politicas :circuit-breaker :window`) on the Aplicacao side.
+    // These cross-slot tests pin that the gate fires at the serde
+    // layer for both typed slots, not just for the supervisor side.
+
+    #[test]
+    fn policy_timeout_serde_rejects_fractional_seconds() {
+        // `MeshPolicy::timeout` uses `with = "supervisor::duration_codec"`,
+        // so the shared codec's integer-magnitude gate applies on
+        // deserialize. `"1.5s"` previously parsed to 1500ms and round-
+        // tripped to `"1500ms"` on next emit — DRIFT. Now refused at
+        // deserialize with the canonical-form diagnostic naming the
+        // offending `"1.5"` and the remediation `"1500ms"`.
+        let payload = r#"{"timeout":"1.5s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"1.5\""), "missing magnitude in {msg:?}");
+        assert!(
+            msg.contains("\"1500ms\""),
+            "missing canonical-form remediation in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn policy_timeout_serde_rejects_leading_plus_sign() {
+        // Pin the leading-`+` arm cross-slot — the prior f64 parser
+        // accepted `"+30s"` silently and round-tripped to `"30s"`.
+        let payload = r#"{"timeout":"+30s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("\"+30\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn circuit_breaker_window_serde_rejects_fractional_minutes() {
+        // `CircuitBreaker::window` uses `with =
+        // "supervisor::duration_codec_required"` (the required-Duration
+        // variant that delegates to the same shared parser). `"0.5m"`
+        // parsed to 30s and round-tripped to `"30s"` on next emit —
+        // DRIFT closed.
+        let payload = r#"{"maxFailures":5,"window":"0.5m"}"#;
+        let err = serde_json::from_str::<CircuitBreaker>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"0.5\""), "missing magnitude in {msg:?}");
+        assert!(
+            msg.contains("\"30s\""),
+            "missing canonical-form remediation in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_serde_accepts_integer_canonical_form() {
+        // Pin the happy-path on the cross-slot side: every canonical
+        // author shape `render` ever emits parses cleanly through the
+        // shared codec on the `CircuitBreaker` slot. The
+        // codec's accepted set (post-gate) is exactly its emitted set
+        // for the integer-magnitude class.
+        for window_lit in ["30s", "500ms", "2m", "1h"] {
+            let payload = format!(r#"{{"maxFailures":5,"window":"{window_lit}"}}"#);
+            let cb: CircuitBreaker = serde_json::from_str(&payload).unwrap_or_else(|e| {
+                panic!("expected {window_lit:?} to parse cleanly through shared codec: {e}")
+            });
+            assert_eq!(cb.max_failures, 5);
+        }
+    }
 }
