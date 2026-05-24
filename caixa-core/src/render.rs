@@ -1543,6 +1543,190 @@ pub fn is_git_oid(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// `:fonte (:tipo git :repo …)` value max length, in bytes — a generous
+/// URL-shaped cap covering every documented author surface (the
+/// `github:org/repo` shorthand, the `https://` / `ssh://` / `git://` /
+/// `file://` URL schemes, the `git@host:path` scp-style SSH form). The
+/// cap mirrors the conservative ceiling typical HTTP gateways and git
+/// porcelain entries enforce on URL inputs (the OWASP-recommended URL
+/// max of 2048 bytes); a `:repo` value above this bound is structurally
+/// untenable on every realistic landing site — the caixa-resolver's
+/// `git clone <repo>` invocation, the future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-dep `repo:`
+/// axis, the future lacre BLAKE3 closure's resolved-repo identity — and
+/// a value of that length is almost certainly a paste-from-binary slug
+/// or a multi-line blob that landed in the slot.
+///
+/// Lifted as a typed `pub const` (rather than an inline literal at the
+/// [`is_git_repo_url`] call site) so a future axis reaching for the same
+/// bound (the future lacre-side resolved-repo gate, the M4 CR
+/// materializer's per-dep `repo:` admission webhook) reads from one
+/// place. Same shape every other typed bound in this module carries
+/// ([`DNS_1123_LABEL_MAX_LEN`], [`GATEWAY_API_HTTP_PATH_MAX_LEN`],
+/// [`NATS_SUBJECT_MAX_LEN`], [`WASI_KV_SLOT_MAX_LEN`],
+/// [`GIT_REF_NAME_MAX_LEN`]).
+pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
+
+/// Predicate: assert that `s` is a value-shape-valid `:fonte (:tipo git
+/// :repo …)` value — the canonical shape every typed `:deps :fonte`
+/// (and future `:deps-dev :fonte`) git-source carries. The contract —
+/// modeled on the intersection of (a) the git porcelain's URL-parser
+/// accepted set the caixa-resolver invokes at `git clone <repo>` time,
+/// (b) the OWASP URL-shape guidance for author-surface inputs that flow
+/// to a CLI subprocess, and (c) the typed slot's documented accepted
+/// shapes ([`crate::DepSource::Git`] doc comment: `github:org/repo`
+/// shorthand, `https://…` / `ssh://…` / `git://…` / `file://…` URL
+/// schemes, `git@host:path` scp-style SSH):
+///
+///   - 1..=[`GIT_REPO_URL_MAX_LEN`] (2048) bytes;
+///   - must not start with `-` (the canonical CLI-argument-injection
+///     footgun — `git clone <repo>` interprets a leading `-` as a CLI
+///     flag, so a `:repo "-upload-pack=evil"` value escapes the
+///     subprocess argument boundary and runs an attacker-controlled
+///     command; the `--` separator workaround does not fix the typed
+///     slot's accepted set, the gate rejects the shape upstream);
+///   - no whitespace (space, tab) — every documented form is a single
+///     token without whitespace; a `:repo "github:p/x "` (trailing
+///     space, paste-from-doc) silently passes the empty check and
+///     surfaces at `git clone` time with a quoting-confused error far
+///     from the source caixa.lisp;
+///   - no ASCII control characters (`0x00..=0x1F`, `0x7F`) — the `\r`
+///     / `\n` arms are the canonical "the paste-from-multiline-doc
+///     spans multiple lines" footgun, and CRLF injection at the URL
+///     boundary is a class of subprocess-arg attack;
+///   - no non-ASCII bytes (`>= 0x80`) — IDN hosts must be pre-encoded
+///     as Punycode (`xn--…`); raw non-ASCII silently breaks at git's
+///     URL parser and may round-trip inconsistently across NFC/NFD
+///     normalization on APFS / case-folding filesystems, the same
+///     intersection-floor [`is_git_ref_name`] enforces on the peer
+///     refname axes;
+///   - must contain a `:` separator at a non-leading position — every
+///     documented form carries one (`github:org/repo`, `https://…`,
+///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
+///     bare `org/repo` (no scheme) shape is ambiguous (could be a
+///     filesystem path or a missing scheme) and silently passes
+///     downstream git porcelain as a local relative path rather than
+///     the intended GitHub-shorthand expansion. A leading `:` (`":foo"`)
+///     is the canonical "empty scheme" footgun and is rejected too.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — [`crate::DepError::FonteRepoShape`]
+/// at validate time on the `:fonte :repo` axis, the future per-pin gate
+/// on `lacre.lisp` resolved-repo axes, the future M4 per-dep CR
+/// materializer's per-repo validator — wraps the same reason in its
+/// own typed `*Invalid { axis, reason }` variant. The reason wording is
+/// axis-agnostic ("git repo URLs reject whitespace") so every call site
+/// reading the same diagnostic points at the same rule; drift between
+/// any two axes' rule enforcement is a build error visible at this
+/// predicate, not a per-resolver "this passed validate but `git clone`
+/// rejected" surprise.
+///
+/// Empty input is rejected here (defensively) and at each call site via
+/// the narrower [`crate::DepError::FonteRepoEmpty`] variant — the same
+/// empty-first cascade [`is_dns_1123_label`], [`is_gateway_api_http_path`],
+/// [`is_wit_world_ref`], [`is_nats_subject`], [`is_wasi_keyvalue_slot`],
+/// [`is_git_ref_name`], and [`is_git_oid`] all carry.
+///
+/// Lifted as the seventh value-shape primitive in this module, peer with
+/// [`is_git_ref_name`] (the `:fonte :tag` / `:fonte :branch` refname-
+/// shaped axes) and [`is_git_oid`] (the `:fonte :rev` commit-OID axis) —
+/// together they bracket the typed `:fonte` slot end-to-end: the
+/// `:repo` URL axis (gate here), the refname-pin axes (gate via
+/// `is_git_ref_name`), the OID-pin axis (gate via `is_git_oid`). Every
+/// validated `:fonte (:tipo git …)` past `DepSource::validate` is
+/// guaranteed-acceptable by the caixa-resolver's `git clone`/`git
+/// fetch`/`git checkout` invocations, structurally — the parser-of-
+/// record divergence the prior trajectory closed on the pin axes is
+/// now closed on the last unsealed `:fonte` axis.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / leading-`-` / whitespace / control-char / non-ASCII /
+/// missing-`:` separator / leading-`:`), without wrapping in any error
+/// variant — every caller maps the same `String` into its own typed
+/// `*Invalid { axis, reason }` enum variant.
+pub fn is_git_repo_url(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > GIT_REPO_URL_MAX_LEN {
+        return Err(format!(
+            "exceeds git repo URL max length of {GIT_REPO_URL_MAX_LEN} bytes \
+             (got {} bytes; legitimate `github:org/repo` shorthands and \
+             `https://…` / `ssh://…` / `git://…` / `file://…` URLs rarely \
+             exceed ~128 bytes — this length suggests a paste-from-binary or \
+             multi-line blob landed in the `:repo` slot)",
+            s.len()
+        ));
+    }
+    if s.starts_with('-') {
+        return Err(
+            "must not start with `-` (the canonical CLI-argument-injection \
+             footgun — `git clone <repo>` interprets a leading `-` as a CLI \
+             flag, so a `-upload-pack=…` / `--config=…` value escapes the \
+             subprocess argument boundary; use a scheme prefix like \
+             `github:org/repo`, `https://host/path`, `ssh://[user@]host/path`, \
+             `git://host/path`, `git@host:path`, or `file:///path` for the \
+             intended source)"
+                .to_string(),
+        );
+    }
+    for &b in s.as_bytes() {
+        if b == b' ' || b == b'\t' {
+            return Err(format!(
+                "must not contain whitespace character {ch:?} (git repo URLs \
+                 are single tokens with no whitespace — a trailing space in a \
+                 `:repo` value is the canonical paste-from-doc footgun, \
+                 silently breaking `git clone '<value> '` at clone time)",
+                ch = b as char
+            ));
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (git repo URLs \
+                 are printable ASCII; `\\r` / `\\n` are the canonical paste-\
+                 from-multiline-doc footgun and break git's URL parser at \
+                 every porcelain entry point, plus CRLF at the URL boundary \
+                 is a class of subprocess-arg injection)"
+            ));
+        }
+        if b >= 0x80 {
+            return Err(format!(
+                "must not contain non-ASCII byte 0x{b:02x} (IDN hosts must be \
+                 pre-encoded as Punycode `xn--…`; raw non-ASCII silently \
+                 breaks at git's URL parser and round-trips inconsistently \
+                 across NFC/NFD normalization on APFS / case-folding \
+                 filesystems)"
+            ));
+        }
+    }
+    if s.starts_with(':') {
+        return Err(
+            "must not start with `:` (the canonical empty-scheme footgun — \
+             `:foo` parses as a zero-length scheme that no git porcelain \
+             entry-point accepts; use a non-empty scheme prefix like \
+             `github:`, `https://`, `ssh://`, `git://`, `file://`, or the \
+             `git@host:path` scp-style SSH form)"
+                .to_string(),
+        );
+    }
+    if !s.contains(':') {
+        return Err(
+            "must contain a `:` separator (every documented `:fonte :repo` \
+             shape carries one: `github:org/repo` shorthand, `https://…` / \
+             `ssh://…` / `git://…` / `file://…` URL schemes, or \
+             `git@host:path` scp-style SSH; a bare `org/repo` form is \
+             ambiguous — `git clone` reads it as a relative filesystem path \
+             rather than the GitHub-shorthand expansion the author probably \
+             intended — so prefix it with `github:` for the registry-\
+             shorthand resolver convention)"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
