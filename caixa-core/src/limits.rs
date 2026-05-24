@@ -207,6 +207,20 @@ pub enum LimitsError {
     #[error("millicores: bad value {0:?} (expected `<int>m` or `<int>`)")]
     BadMillicores(String),
     #[error(
+        "millicores: magnitude {value:?} is not a non-negative integer — the canonical \
+         authoring form for `:limits :cpu` is `<integer>m` (Kubernetes millicores, e.g. \
+         `\"500m\"` for half a core, `\"2000m\"` for two cores) or the bare-core \
+         shorthand `<integer>` (e.g. `\"2\"` = `\"2000m\"`), with no decimal point and \
+         no leading `+` sign. A fractional / decimal-shaped magnitude (`\"1.5\"`, \
+         `\"500.0m\"`, `\"+500m\"`, `\"-100m\"`) round-trips through `render_millicores` \
+         to a *different* canonical form (`\"1500m\"`, `\"500m\"`, `\"500m\"`, \
+         parse-rejection) on first serialize — breaking the THEORY.md Part V \
+         render-determinism contract every typed slot carries. Pick an integer magnitude \
+         in millicores (write `\"1500m\"` instead of `\"1.5\"`; `\"500m\"` instead of \
+         `\"500.0m\"`)"
+    )]
+    NonIntegerMillicoreMagnitude { value: String },
+    #[error(
         ":limits :memory must be > 0 — wasmtime StoreLimits refuses a zero memory cap; omit the field for unbounded"
     )]
     MemoryZero,
@@ -486,17 +500,90 @@ fn de_duration<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Duration>, D::E
 // ── millicores codec ───────────────────────────────────────────────────
 
 fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
-    let s = s.trim();
-    if let Some(stripped) = s.strip_suffix('m') {
-        stripped
-            .trim()
-            .parse()
-            .map_err(|_| LimitsError::BadMillicores(s.into()))
+    let s_trim = s.trim();
+    if s_trim.is_empty() {
+        return Err(LimitsError::BadMillicores(s.into()));
+    }
+    let (magnitude, has_m_suffix) = match s_trim.strip_suffix('m') {
+        Some(stripped) => (stripped.trim(), true),
+        None => (s_trim, false),
+    };
+    if magnitude.is_empty() {
+        // Bare `"m"` (or `" m "`) — no magnitude was authored. The
+        // canonical millicores authoring form requires a magnitude in
+        // front of the unit (`"500m"`, not `"m"`). Surface as
+        // `BadMillicores` so the existing narrower-arm wording stays
+        // load-bearing for "no recognizable magnitude" inputs.
+        return Err(LimitsError::BadMillicores(s.into()));
+    }
+    // The canonical authoring form for `:limits :cpu` is `<integer>m`
+    // (Kubernetes millicores) or the bare-core shorthand `<integer>`
+    // (`"2"` = 2000 millicores). Every magnitude `render_millicores`
+    // emits is a non-negative integer (`format!("{m}m")`) — no decimal
+    // point, no leading sign — so the parser's accepted set must match
+    // for serialize/deserialize to round-trip without canonical-form
+    // drift. Until this gate landed the parser accepted any
+    // `u32::from_str`-shaped magnitude (`"+500m"` → 500, `"+2"` →
+    // 2000) and serde silently round-tripped the value to a *different*
+    // canonical string on the next emit (`"+500m"` → `"500m"`, `"+2"`
+    // → `"2000m"`) — breaking the THEORY.md Part V render-determinism
+    // contract every typed slot carries. Closes the sixth (and last)
+    // typed-codec surface in caixa-core on the integer-magnitude
+    // canonical-form axis, peer with the five duration / byte-size /
+    // rate-limit codecs the prior trajectory (1c55a2a / 818dd38 /
+    // d1fd67b / f479c41 / d53c922) covered.
+    //
+    // Strict canonical form: every byte of the magnitude is an ASCII
+    // digit (no `.`, no `+`, no `-`). On current Rust `u32::from_str`
+    // permissively accepts a leading `+` (`"+500"` → 500) — that's a
+    // canonical-drift shape `render_millicores` never emits, so the
+    // digit-only check is what closes the leading-sign class; relying
+    // on `u32::from_str`'s strictness alone would silently admit it.
+    // On non-digit-only inputs the gate distinguishes "non-canonical-
+    // but-numeric" (parses as f64 or i64 — surfaced as the new
+    // `NonIntegerMillicoreMagnitude` variant naming the offending
+    // magnitude verbatim with the canonical-form remediation) from
+    // "garbage" (parses as neither — surfaced as the existing
+    // `BadMillicores` so its narrower diagnostic shape remains
+    // load-bearing for the not-a-numeric-input class).
+    let digit_only = magnitude.bytes().all(|b| b.is_ascii_digit());
+    if !digit_only {
+        let numeric = magnitude.parse::<f64>().is_ok() || magnitude.parse::<i64>().is_ok();
+        if numeric {
+            return Err(LimitsError::NonIntegerMillicoreMagnitude {
+                value: magnitude.into(),
+            });
+        }
+        return Err(LimitsError::BadMillicores(s.into()));
+    }
+    // `digit_only` guarantees every byte is `[0-9]`, so the only way
+    // `u32::from_str` can fail here is overflow (the magnitude exceeds
+    // `u32::MAX`). Surface that as `BadMillicores` with an overflow-
+    // shaped wording so the diagnostic names the offending magnitude
+    // verbatim rather than collapsing onto the non-canonical arm —
+    // matches `parse_byte_size` / `parse_duration` / `rate_limit_codec`
+    // overflow-arm shape on the peer typed codecs.
+    let num: u32 = magnitude.parse::<u32>().map_err(|_| {
+        LimitsError::BadMillicores(format!("{magnitude} (digit-only magnitude overflows u32)"))
+    })?;
+    if has_m_suffix {
+        Ok(num)
     } else {
-        // "2" → 2000 millicores
-        s.parse::<u32>()
-            .map(|n| n.saturating_mul(1000))
-            .map_err(|_| LimitsError::BadMillicores(s.into()))
+        // Bare-core shorthand: `"2"` = 2000 millicores. Use
+        // `checked_mul` (not the prior `saturating_mul`) so a
+        // magnitude that overflows u32 on the × 1000 conversion
+        // surfaces a parser-shaped diagnostic at parse time rather
+        // than silently saturating to `u32::MAX` (which would land
+        // as the cap value far from the author's intent and bypass
+        // any future validate-time upper-bound gate the `:cpu` axis
+        // grows). Matches `parse_byte_size`'s overflow-arm shape on
+        // the magnitude × unit multiply.
+        num.checked_mul(1000).ok_or_else(|| {
+            LimitsError::BadMillicores(format!(
+                "{magnitude} cores × 1000 overflows u32 (write the value in millicores: max \"{}m\")",
+                u32::MAX
+            ))
+        })
     }
 }
 
@@ -1185,5 +1272,281 @@ mod tests {
         let json = r#"{"memory":"1536"}"#;
         let l: LimitsSpec = serde_json::from_str(json).unwrap();
         assert_eq!(l.memory, Some(1536));
+    }
+
+    // ── canonical-form: integer-magnitude millicores codec gate ───────────
+    //
+    // Direct successor to the `parse_byte_size` / `parse_duration` /
+    // shared `supervisor::duration_codec` / `rate_limit_codec`
+    // integer-magnitude gates on the four peer typed codecs in
+    // caixa-core — closes the sixth (and last) typed-codec surface in
+    // the crate. Every magnitude `render_millicores` emits is a
+    // non-negative integer (`format!("{m}m")`) — no decimal point, no
+    // leading sign, no scientific notation. The parser's accepted set
+    // must match for parse → render → parse to round-trip without
+    // canonical-form drift. Pins every canonical-drift shape —
+    // leading-`+` (`"+500m"` / `"+2"`, the load-bearing class the
+    // digit-only gate closes beyond `u32::from_str` strictness),
+    // leading-`-` (`"-100m"`), fractional (`"1.5"`), decimal-shaped-
+    // integer on both authoring paths (`"500.0m"` / `"2.0"`), the
+    // bare-`m`-with-no-magnitude pin, the empty-string pin, the
+    // garbage-precedence pin (genuinely unparseable inputs keep the
+    // narrower `BadMillicores` diagnostic), the u32-overflow surface
+    // pin on both the `m`-suffix and bare-core multiply paths, the
+    // complement-side pin (every integer happy path the gate must
+    // continue to accept), the round-trip convergence property, and
+    // the serde-path pin (the gate fires at deserialize, before any
+    // validate gate runs).
+
+    #[test]
+    fn parse_millicores_rejects_fractional_magnitude() {
+        // The fail-before-pass-after pin on the bare-core path:
+        // `"1.5"` parsed cleanly on no pre-gate codebase (`u32::from_str`
+        // rejects the decimal), but the diagnostic was value-laundered
+        // (the bare `BadMillicores("1.5")` wording didn't name the
+        // canonical-form remediation or the round-trip drift the next
+        // emit would produce — `1.5 cores × 1000 = 1500 millicores` →
+        // `"1500m"` on the renderer). The gate routes the same input to
+        // `NonIntegerMillicoreMagnitude` with the canonical-form wording.
+        let err = parse_millicores("1.5").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerMillicoreMagnitude { ref value } if value == "1.5"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_decimal_shaped_integer_with_suffix() {
+        // The canonical-drift case on the `m`-suffix path where the
+        // *value* is integer but the *form* carries a redundant decimal
+        // point — `"500.0m"` parses to 500 millicores (integer), but
+        // the renderer emits `"500m"` on the next serialize (no decimal
+        // point). The parse-shape gate fires here too so the codec's
+        // accepted set is exactly the renderer's emitted set — same
+        // shape as `parse_byte_size`'s `"1.0MiB"` case.
+        let err = parse_millicores("500.0m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerMillicoreMagnitude { ref value } if value == "500.0"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_decimal_shaped_integer_bare_core() {
+        // The decimal-shaped-integer pin on the bare-core path —
+        // `"2.0"` would be 2000 millicores (the canonical `"2000m"`),
+        // but the redundant decimal point is not a renderer-emitted
+        // shape. Surfaces under the same diagnostic as the `m`-suffix
+        // path so the gate's coverage is uniform across both authoring
+        // paths.
+        let err = parse_millicores("2.0").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerMillicoreMagnitude { ref value } if value == "2.0"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_leading_plus_sign_with_suffix() {
+        // The load-bearing class the digit-only gate closes beyond
+        // `u32::from_str`'s strictness: current Rust `u32::from_str`
+        // permissively accepts `"+500"` → 500, so `"+500m"` parsed
+        // cleanly through the pre-gate codec to `RateLimit`-shaped
+        // 500 millicores and serde silently round-tripped to `"500m"`
+        // on the next emit — a *different* canonical string. Same
+        // shape as `parse_byte_size`'s `"+1024"` (875 commit) and
+        // `parse_duration`'s `"+30s"` (1027 commit) cases on the peer
+        // codecs.
+        let err = parse_millicores("+500m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerMillicoreMagnitude { ref value } if value == "+500"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_leading_plus_sign_bare_core() {
+        // The leading-`+` pin on the bare-core path — `"+2"` parsed
+        // through `u32::from_str` as 2 → 2000 millicores → `"2000m"`
+        // on the renderer; canonical-drift. The digit-only gate routes
+        // the same input to `NonIntegerMillicoreMagnitude`, peer with
+        // the `m`-suffix path.
+        let err = parse_millicores("+2").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerMillicoreMagnitude { ref value } if value == "+2"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_leading_minus_sign() {
+        // The negative-magnitude class — pre-gate `u32::from_str`
+        // rejected negatives but the diagnostic collapsed onto the
+        // opaque `BadMillicores("-100m")` wording. The digit-only gate
+        // fires earlier and routes the same input to
+        // `NonIntegerMillicoreMagnitude` (negatives are not digit-only,
+        // and `i64::from_str` accepts the leading sign so the numeric
+        // arm matches). Pin the new diagnostic so a future relaxation
+        // that re-routes negatives back to the old arm surfaces here.
+        let err = parse_millicores("-100m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonIntegerMillicoreMagnitude { ref value } if value == "-100"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_empty_string() {
+        // The empty-input pin — `""` is not a magnitude at all. Pre-
+        // gate this fell through to `s.parse::<u32>()` and surfaced as
+        // a generic parse failure with the same `BadMillicores("")`
+        // wording; the explicit empty-check at the top of the codec
+        // surfaces the same diagnostic earlier and makes the empty-
+        // input class structurally distinct from the digit-only /
+        // numeric / garbage arms below.
+        let err = parse_millicores("").unwrap_err();
+        assert!(matches!(err, LimitsError::BadMillicores(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn parse_millicores_rejects_bare_unit_with_no_magnitude() {
+        // The bare-`m`-with-no-magnitude pin — `"m"` strips to `""`,
+        // which is not a magnitude at all. The canonical millicores
+        // authoring form requires a magnitude in front of the unit
+        // (`"500m"`, not `"m"`). Surface as `BadMillicores` so the
+        // narrower-arm wording stays load-bearing for this class.
+        let err = parse_millicores("m").unwrap_err();
+        assert!(matches!(err, LimitsError::BadMillicores(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn parse_millicores_garbage_still_falls_through_to_bad_millicores() {
+        // The precedence pin: the new `NonIntegerMillicoreMagnitude`
+        // arm distinguishes *non-canonical-but-numeric* (`"1.5"`,
+        // `"+500m"`, `"-100m"`, `"500.0m"`) from *genuinely-
+        // unparseable* (`"abc"`, `"--1m"`, `"foo"`) so the existing
+        // `BadMillicores` diagnostic's wording remains load-bearing
+        // for the latter class — the gate is additive, not replacing.
+        // Pin both arms so a future relaxation that collapses them
+        // surfaces here.
+        let err = parse_millicores("abc").unwrap_err();
+        assert!(matches!(err, LimitsError::BadMillicores(_)), "got {err:?}");
+        let err = parse_millicores("--1m").unwrap_err();
+        assert!(matches!(err, LimitsError::BadMillicores(_)), "got {err:?}");
+        let err = parse_millicores("foo").unwrap_err();
+        assert!(matches!(err, LimitsError::BadMillicores(_)), "got {err:?}");
+    }
+
+    #[test]
+    fn parse_millicores_u32_overflow_with_suffix_surfaces_as_overflow() {
+        // The u32-overflow surface pin on the `m`-suffix path: a
+        // magnitude exceeding `u32::MAX` (4294967296 = u32::MAX + 1)
+        // surfaces as `BadMillicores` with an overflow-shaped wording
+        // naming the offending magnitude verbatim. The digit-only
+        // guard guarantees every byte is `[0-9]`, so overflow is the
+        // only remaining `u32::from_str` failure mode — the overflow
+        // arm is no longer in unreachable-by-prior-gate territory.
+        // Matches the overflow-arm shape on `parse_byte_size` /
+        // `parse_duration` / `rate_limit_codec`.
+        let err = parse_millicores("4294967296m").unwrap_err();
+        let LimitsError::BadMillicores(reason) = err else {
+            panic!("expected BadMillicores(overflow), got other variant");
+        };
+        assert!(
+            reason.contains("overflow"),
+            "overflow diagnostic must mention overflow (got {reason:?})"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_bare_core_overflow_surfaces_as_overflow() {
+        // The u32-overflow surface pin on the bare-core path: a
+        // magnitude that fits u32 on its own but overflows on the
+        // `× 1000` conversion to millicores surfaces as
+        // `BadMillicores` with an overflow-shaped wording. Pre-gate
+        // the codec used `saturating_mul(1000)` which silently
+        // saturated the result at `u32::MAX` — landing as the cap
+        // value far from the author's intent and bypassing any
+        // future validate-time upper-bound gate the `:cpu` axis
+        // grows. The `checked_mul` rewrite surfaces the overflow at
+        // parse time. (4294968 cores × 1000 = 4294968000 > u32::MAX
+        // = 4294967295 — the smallest digit-string that overflows
+        // u32 on the × 1000 multiply while fitting u32 on its own.)
+        let err = parse_millicores("4294968").unwrap_err();
+        let LimitsError::BadMillicores(reason) = err else {
+            panic!("expected BadMillicores(× 1000 overflow), got other variant");
+        };
+        assert!(
+            reason.contains("overflow"),
+            "× 1000 overflow diagnostic must mention overflow (got {reason:?})"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_continues_to_accept_canonical_forms() {
+        // The complement-side pin: every canonical integer-magnitude
+        // form the renderer emits must continue to parse to the same
+        // value the renderer produced. Sweep the canonical authoring
+        // shapes on both paths (the `m`-suffix path: `"0m"`, `"500m"`,
+        // `"2000m"`; the bare-core shorthand: `"0"`, `"2"`, `"4"`) so
+        // a future tightening of the parser surfaces here as a test
+        // failure rather than a silent regression. The `0` case is at
+        // the codec layer only; `validate_rejects_zero_cpu` rejects
+        // `Some(0)` one level up.
+        assert_eq!(parse_millicores("0m").unwrap(), 0);
+        assert_eq!(parse_millicores("500m").unwrap(), 500);
+        assert_eq!(parse_millicores("1500m").unwrap(), 1500);
+        assert_eq!(parse_millicores("2000m").unwrap(), 2000);
+        assert_eq!(parse_millicores("0").unwrap(), 0);
+        assert_eq!(parse_millicores("2").unwrap(), 2000);
+        assert_eq!(parse_millicores("4").unwrap(), 4000);
+    }
+
+    #[test]
+    fn parse_millicores_round_trips_through_render_for_every_canonical_form() {
+        // The structural property the gate makes load-bearing: every
+        // value the parser accepts round-trips through
+        // `render_millicores` to a string the parser also accepts —
+        // and to the *same* value. Sweep the values the renderer emits
+        // canonically (zero, sub-core, single-core boundary, multi-
+        // core, and a non-1000-multiple millicore value) so a future
+        // codec change that breaks round-trip convergence surfaces
+        // here, not at a downstream renderer that double-emits a
+        // typed slot.
+        for m in [0u32, 1, 100, 500, 1000, 1500, 2000, 12345] {
+            let rendered = render_millicores(m);
+            let reparsed = parse_millicores(&rendered)
+                .unwrap_or_else(|e| panic!("render({m}) = {rendered:?} must reparse, got {e:?}"));
+            assert_eq!(
+                reparsed, m,
+                "round-trip drift on {m}: rendered={rendered:?}, reparsed={reparsed}",
+            );
+        }
+    }
+
+    #[test]
+    fn de_millicores_rejects_leading_plus_through_serde() {
+        // The serde-path pin: a `:limits :cpu` carrying a leading-`+`
+        // magnitude (`"+500m"`) must fail at deserialize time, not
+        // silently round-trip the value through `u32::from_str`'s
+        // permissive sign-acceptance. Pin both the success-on-canonical
+        // path (the integer form deserializes cleanly) and the
+        // failure-on-non-canonical path (the leading-`+` form is
+        // rejected by the codec before any validate gate runs).
+        let json = r#"{"cpu":"+500m"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-negative integer"),
+            "serde diagnostic must surface the integer-magnitude reason verbatim \
+             (got {msg:?})"
+        );
+
+        // The integer-form complement — same author-side intent
+        // (500 millicores), written in the canonical form the renderer
+        // would emit, deserializes cleanly.
+        let json = r#"{"cpu":"500m"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.cpu, Some(500));
     }
 }
