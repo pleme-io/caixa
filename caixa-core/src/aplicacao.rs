@@ -869,10 +869,72 @@ mod rate_limit_codec {
         let (rate_str, unit) = s
             .split_once('/')
             .ok_or_else(|| format!("rate-limit must be `<n>/<unit>`, got {s:?}"))?;
-        let rate: u32 = rate_str
-            .trim()
-            .parse()
-            .map_err(|_| format!("rate-limit rate {rate_str:?} not a u32"))?;
+        let rate_trim = rate_str.trim();
+        // The canonical authoring form for `:politicas :rate-limit` is
+        // `<integer>/<s|m|h>` — every magnitude [`render`] emits is a
+        // non-negative integer with no decimal point and no leading
+        // sign, so the parser's accepted set must match for
+        // serialize/deserialize to round-trip without canonical-form
+        // drift. Until this gate landed the parser accepted any
+        // `u32::from_str`-shaped magnitude — and current Rust
+        // `u32::from_str` permissively accepts a leading `+` (`"+100"`
+        // → 100), so `"+100/s"` parsed to `RateLimit { 100, 1s }` and
+        // serde silently round-tripped to `"100/s"` on the next emit
+        // (a *different* canonical string) — breaking the THEORY.md
+        // Part V render-determinism contract on the fifth typed-codec
+        // surface in caixa-core (peer with the four duration codecs the
+        // 1c55a2a / 818dd38 / d1fd67b / 737a676 / d53c922 trajectory
+        // already covered: `supervisor::duration_codec` backing three
+        // typed-duration slots, `limits::parse_duration` backing
+        // `:limits :wall-clock`, `limits::parse_byte_size` backing
+        // `:limits :memory`). The fractional / decimal-shaped sibling
+        // (`"1.5/s"`, `"1.0/s"`, `"0.5/m"`) lands on `u32::from_str`'s
+        // existing rejection arm, but the diagnostic is value-laundered
+        // (the bare `"rate-limit rate \"1.5\" not a u32"` wording
+        // doesn't name the canonical-form remediation or the round-trip
+        // drift the next emit would produce); this gate lifts the
+        // fractional arm onto the same canonical-form diagnostic the
+        // peer codecs carry.
+        //
+        // Strict canonical form: every byte of the magnitude is an
+        // ASCII digit (no `.`, no `+`, no `-`). On non-digit-only
+        // inputs the gate distinguishes "non-canonical-but-numeric"
+        // (parses as f64 or i64 — surfaced with a self-locating
+        // diagnostic naming the canonical authoring form and the
+        // round-trip drift the rejected shape would produce on first
+        // serialize) from "garbage" (parses as neither — surfaced with
+        // the existing narrower `"not a u32"` wording so its
+        // diagnostic shape remains stable for the parser-shape footgun
+        // case).
+        let digit_only = !rate_trim.is_empty() && rate_trim.bytes().all(|b| b.is_ascii_digit());
+        if !digit_only {
+            let numeric = rate_trim.parse::<f64>().is_ok() || rate_trim.parse::<i64>().is_ok();
+            if numeric {
+                return Err(format!(
+                    "rate-limit: rate {rate_trim:?} is not a non-negative integer — the \
+                     canonical authoring form for `:politicas :rate-limit` is \
+                     `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) \
+                     with no decimal point and no leading `+` / `-` sign. A fractional / \
+                     signed magnitude (`\"1.5/s\"`, `\"+100/s\"`, `\"-1/s\"`) round-trips \
+                     through `render` to a *different* canonical form (`\"1/s\"`, \
+                     `\"100/s\"`, parser-reject) on first serialize — breaking the \
+                     THEORY.md Part V render-determinism contract every typed slot \
+                     carries. Pick an integer rate that fits the desired window \
+                     (write `\"6000/m\"` instead of `\"1.66/s\"`)"
+                ));
+            }
+            return Err(format!("rate-limit rate {rate_str:?} not a u32"));
+        }
+        // The digit-only gate guarantees every byte is `[0-9]`, so the
+        // only way `u32::from_str` can fail here is overflow (the
+        // magnitude exceeds `u32::MAX`). Surface that with an
+        // overflow-shaped wording so the diagnostic names the offending
+        // magnitude verbatim rather than collapsing onto the
+        // non-canonical arm. Same shape `supervisor::duration_codec`
+        // (1c55a2a) carries on the peer duration-codec axis.
+        let rate: u32 = rate_trim.parse::<u32>().map_err(|_| {
+            format!("rate-limit rate {rate_trim:?} (digit-only magnitude overflows u32)")
+        })?;
         let window = match unit.trim() {
             "s" => Duration::from_secs(1),
             "m" => Duration::from_secs(60),
@@ -6079,6 +6141,200 @@ mod tests {
                 panic!("expected {window_lit:?} to parse cleanly through shared codec: {e}")
             });
             assert_eq!(cb.max_failures, 5);
+        }
+    }
+
+    // ── rate_limit_codec: integer-magnitude gate ──
+    //
+    // The integer-magnitude discipline the 1c55a2a / 818dd38 / d1fd67b
+    // / 737a676 / d53c922 trajectory landed on every typed-duration /
+    // typed-byte-size codec in caixa-core lifts onto the fifth typed
+    // codec — `rate_limit_codec` — through the digit-only magnitude
+    // gate on the `<rate>` half of the `<rate>/<unit>` author surface.
+    // These tests pin the gate at the serde layer for `:politicas
+    // :rate-limit` (the only typed slot the codec backs), and at the
+    // codec-internal `parse` layer for the canonical positive cases.
+
+    #[test]
+    fn rate_limit_serde_rejects_fractional_rate() {
+        // `"1.5/s"` previously hit `u32::from_str`'s rejection arm with
+        // the value-laundered `"rate-limit rate \"1.5\" not a u32"`
+        // wording, which didn't name the canonical-form remediation or
+        // the round-trip drift the next emit would produce. Now refused
+        // at deserialize with the canonical-form diagnostic naming the
+        // offending `"1.5"` magnitude and the round-trip drift wording.
+        let payload = r#"{"rateLimit":"1.5/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"1.5\""), "missing magnitude in {msg:?}");
+        assert!(
+            msg.contains("THEORY.md"),
+            "missing render-determinism contract citation in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_leading_plus_sign() {
+        // `u32::from_str("+100")` returns `Ok(100)` (Rust's
+        // permissive-`+` parse), so `"+100/s"` silently parsed to
+        // `RateLimit { 100, 1s }` and round-tripped through `render` to
+        // `"100/s"` — a *different* canonical string on the next emit,
+        // breaking the THEORY.md Part V render-determinism contract
+        // exactly the way the peer duration codecs' `"+30s"` case did.
+        // This is the load-bearing class the digit-only gate closes
+        // beyond what `u32::from_str`'s strictness covers on its own.
+        let payload = r#"{"rateLimit":"+100/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"+100\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_leading_minus_sign() {
+        // The signed-negative arm: `"-1/s"` lands on the
+        // non-canonical-but-numeric branch via the `i64` fallback (the
+        // `f64` parse also succeeds), surfacing the canonical-form
+        // diagnostic. Replaces the prior value-laundered "not a u32"
+        // wording with the unified diagnostic across signs.
+        let payload = r#"{"rateLimit":"-1/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"-1\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_decimal_shaped_integer() {
+        // `"100.0/s"` is integer-valued numerically but not in the
+        // codec's accepted set — `render` emits `"100/s"`, so the
+        // round-trip would drift. Lifted to the canonical-form
+        // diagnostic peer with the duration codec's `"1.0s"` case
+        // (1c55a2a).
+        let payload = r#"{"rateLimit":"100.0/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a non-negative integer"),
+            "expected integer-magnitude diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"100.0\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_garbage_still_falls_through_to_not_a_u32() {
+        // Non-numeric, non-digit-only input lands on the existing
+        // narrower `"not a u32"` arm (preserved for diagnostic-shape
+        // stability on the parser-shape footgun case). Pin this so a
+        // future relaxation of the numeric-fallback predicate doesn't
+        // silently collapse garbage onto the canonical-form arm — same
+        // partition the peer duration codecs draw between
+        // `NonIntegerDurationMagnitude` and `BadDurationMagnitude`.
+        let payload = r#"{"rateLimit":"abc/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not a u32"),
+            "garbage magnitude must surface the narrower `not a u32` wording, got: {msg:?}"
+        );
+        assert!(
+            !msg.contains("not a non-negative integer"),
+            "garbage magnitude must NOT surface the canonical-form arm, got: {msg:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_u32_overflow_surfaces_as_overflow() {
+        // `u32::MAX + 1` (= 4_294_967_296) is digit-only but exceeds
+        // u32's range. The digit-only gate passes; `u32::from_str`
+        // fails on overflow. Surface that with the overflow-shaped
+        // diagnostic naming the offending magnitude verbatim, peer
+        // with `supervisor::duration_codec`'s overflow arm. Pinning
+        // the wording so a future refactor doesn't silently collapse
+        // overflow onto the canonical-form arm.
+        let payload = r#"{"rateLimit":"4294967296/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("overflows u32"),
+            "expected overflow diagnostic in {msg:?}"
+        );
+        assert!(
+            msg.contains("\"4294967296\""),
+            "missing offending magnitude in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_accepts_integer_canonical_forms() {
+        // Pin the happy-path: every canonical author shape `render`
+        // ever emits parses cleanly through the codec post-gate. The
+        // codec's accepted set (post-gate) is exactly its emitted set
+        // for the integer-magnitude class — same property
+        // `parse_byte_size`'s and `parse_duration`'s integer-magnitude
+        // gates guarantee on the peer codecs. Iterating across rate
+        // magnitudes (including `"0"`, which the codec accepts even
+        // though `validate_politicas` rejects `rate == 0` at the typed
+        // layer above) closes the codec contract at the parse layer
+        // independently of the validate layer.
+        for rate_lit in ["0", "1", "100", "5000", "1000000", "4294967295"] {
+            for unit_lit in ["s", "m", "h"] {
+                let lit = format!("{rate_lit}/{unit_lit}");
+                let payload = format!(r#"{{"rateLimit":{lit:?}}}"#);
+                let policy: MeshPolicy = serde_json::from_str(&payload).unwrap_or_else(|e| {
+                    panic!("expected {lit:?} to parse cleanly through rate_limit_codec: {e}")
+                });
+                let rl = policy.rate_limit.expect("rate_limit must be Some");
+                assert_eq!(
+                    rl.rate,
+                    rate_lit.parse::<u32>().unwrap(),
+                    "rate mismatch for {lit:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_serde_round_trip_holds_for_every_canonical_form() {
+        // The structural property the gate enforces: serialize ∘
+        // deserialize is the identity on every canonical author shape.
+        // Peer of `parse_byte_size`'s and `parse_duration`'s
+        // `_round_trips_through_render_for_every_canonical_form` tests
+        // on the rate-limit axis. Before the gate, `"+100/s"` violated
+        // this (`parse` → `RateLimit { 100, 1s }` → `render` →
+        // `"100/s"` ≠ `"+100/s"`); the gate forecloses that class.
+        for rate in [1u32, 100, 5000, 1_000_000] {
+            for (window, unit) in [
+                (Duration::from_secs(1), "s"),
+                (Duration::from_secs(60), "m"),
+                (Duration::from_secs(3600), "h"),
+            ] {
+                let policy = MeshPolicy {
+                    rate_limit: Some(RateLimit { rate, window }),
+                    ..Default::default()
+                };
+                let json = serde_json::to_string(&policy).unwrap();
+                let expected = format!("\"{rate}/{unit}\"");
+                assert!(
+                    json.contains(&expected),
+                    "expected {expected:?} in {json:?}"
+                );
+                let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+                assert_eq!(
+                    back.rate_limit, policy.rate_limit,
+                    "round-trip for {json:?}"
+                );
+            }
         }
     }
 }
