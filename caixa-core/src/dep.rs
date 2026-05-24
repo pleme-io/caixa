@@ -146,6 +146,38 @@ impl DepSource {
                         nome: nome.to_string(),
                     });
                 }
+                // The `:repo` value flows verbatim into the caixa-resolver's
+                // `git clone <repo>` subprocess invocation. Until this gate
+                // landed `:repo` was the last untyped `:fonte`-related axis
+                // past the empty arm: a malformed-but-non-empty repo URL
+                // (`":repo "github:p/x ""` trailing space, paste-from-doc;
+                // `":repo "-upload-pack=evil""` leading `-` — the canonical
+                // CLI-argument-injection vector at the `git clone` boundary;
+                // `":repo "pleme-io/caixa-teia""` missing scheme — `git clone`
+                // reads as a relative filesystem path rather than the
+                // GitHub-shorthand expansion; `":repo "github:p/x\n""`
+                // embedded newline; `":repo "github:café/x""` raw non-ASCII)
+                // silently passed validate and the failure surfaced at
+                // lacre-resolve time with a porcelain-quoting-confused error
+                // far from the source caixa.lisp. The lifted predicate makes
+                // the git-porcelain-URL intersection-floor a substrate-level
+                // invariant at validate time, peer with the three pin axes
+                // (`:tag` + `:branch` via [`crate::render::is_git_ref_name`],
+                // e70d213; `:rev` via [`crate::render::is_git_oid`], be07fd5)
+                // — every `:fonte (:tipo git …)` past validate is now
+                // structurally accept-shaped on every axis the resolver
+                // consumes (the `:repo` URL the `git clone` invokes against,
+                // the `:tag`/`:branch` refname `git fetch`/`git checkout`
+                // accepts, the `:rev` commit OID the lacre's content-
+                // addressing equality probe resolves), closing the
+                // `:fonte` slot's value-shape trajectory end-to-end.
+                if let Err(reason) = crate::render::is_git_repo_url(repo) {
+                    return Err(DepError::FonteRepoShape {
+                        nome: nome.to_string(),
+                        repo: repo.clone(),
+                        reason,
+                    });
+                }
                 let pins: [(&'static str, Option<&String>); 3] = [
                     (":tag", tag.as_ref()),
                     (":rev", rev.as_ref()),
@@ -456,6 +488,21 @@ pub enum DepError {
          convention)"
     )]
     FonteRepoEmpty { nome: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo git …) :repo {repo:?} has \
+         invalid value-shape: {reason} (the value flows verbatim into the \
+         caixa-resolver's `git clone <repo>` subprocess invocation; every \
+         documented form carries a `:` separator and no whitespace / \
+         control / non-ASCII bytes — use a `github:org/repo` shorthand, \
+         an `https://host/path` / `ssh://[user@]host/path` / \
+         `git://host/path` / `file:///path` URL, or the `git@host:path` \
+         scp-style SSH form)"
+    )]
+    FonteRepoShape {
+        nome: String,
+        repo: String,
+        reason: String,
+    },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo git …) has no pin set \
          (set exactly one of :tag, :rev, or :branch so the resolver \
@@ -1040,6 +1087,333 @@ mod tests {
         );
     }
 
+    // -- :repo value-shape gate -------------------------------------------
+    //
+    // The `:fonte (:tipo git :repo …)` value flows verbatim into the
+    // caixa-resolver's `git clone <repo>` subprocess. The pre-gate
+    // codebase admitted any non-empty string; the new
+    // [`crate::render::is_git_repo_url`] predicate gates the git-porcelain
+    // URL intersection-floor at validate time, peer with the three pin
+    // axes (`:tag` + `:branch` via `is_git_ref_name`, `:rev` via
+    // `is_git_oid`). Every test in this section is a fail-before /
+    // pass-after pin on a specific authoring footgun.
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_trailing_space() {
+        // The canonical paste-from-doc footgun on `:repo` — an author
+        // copies `"github:pleme-io/caixa-teia "` (trailing space) out of
+        // a doc paragraph. Until this gate landed the empty-repo arm
+        // passed (the string isn't empty), the resolver issued
+        // `git clone 'github:pleme-io/caixa-teia '`, and the failure
+        // surfaced at clone time with a quoting-confused error far from
+        // the source caixa.lisp. Same paste-from-doc footgun the
+        // `:tag "v0.1.0 "` gate (e70d213) closes on the peer refname
+        // axis — now closed on the `:repo` URL axis too.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia ".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "github:pleme-io/caixa-teia ");
+        assert!(
+            reason.contains("whitespace"),
+            "reason must surface the whitespace arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_starting_with_dash() {
+        // The canonical CLI-argument-injection footgun at the `git clone`
+        // subprocess boundary — `:repo "-upload-pack=evil"` makes git's
+        // argv parser read the value as a CLI flag, escaping the
+        // subprocess argument boundary. The `--` separator workaround
+        // does not fix the typed slot's accepted set; the gate rejects
+        // the shape upstream at validate time so the resolver never
+        // invokes a `git clone -…` subprocess.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "-upload-pack=evil".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { repo, reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(repo, "-upload-pack=evil");
+        assert!(
+            reason.contains("must not start with `-`"),
+            "reason must surface the leading-`-` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_embedded_newline() {
+        // The canonical paste-from-multiline-doc footgun — a `:repo`
+        // string with an embedded `\n` silently breaks git's URL parser
+        // and is a class of CRLF-injection at the subprocess-argument
+        // boundary. Caught by the control-char arm (0x0A < 0x20).
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia\nrm -rf /".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("control character"),
+            "reason must surface the control-char arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_tab() {
+        // Tab is the sibling whitespace footgun (the canonical
+        // copy-from-aligned-table paste); pinned separately from the
+        // space arm so a future relaxation that only catches one
+        // surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia\t".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteRepoShape { ref reason, .. }
+                    if reason.contains("whitespace")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_non_ascii() {
+        // IDN hosts must be pre-encoded as Punycode (`xn--…`) — raw
+        // non-ASCII silently breaks at git's URL parser and round-trips
+        // inconsistently across NFC/NFD normalization on APFS /
+        // case-folding filesystems. Same intersection-floor
+        // [`is_git_ref_name`] enforces on the refname axes.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/café".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteRepoShape { ref reason, .. }
+                    if reason.contains("non-ASCII")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
+        // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
+        // (no `github:` prefix, no scheme). Every documented form
+        // carries a `:` (`github:`, `https://`, `ssh://`, `git://`,
+        // `file://`, or `git@host:path`); a bare `org/repo` is
+        // ambiguous (`git clone` reads as a relative filesystem path
+        // rather than the GitHub-shorthand expansion the author
+        // probably intended) and the gate rejects the shape upstream.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must contain a `:`"),
+            "reason must surface the missing-`:` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("github:"),
+            "reason must name the canonical `github:` shorthand prefix, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_leading_colon() {
+        // The "empty scheme" footgun — `:repo ":foo"` has a zero-length
+        // scheme that no git porcelain entry-point accepts. Pinned
+        // separately from the missing-`:` arm because a value with a
+        // leading `:` does technically contain a `:` separator; the
+        // shape gate rejects on a dedicated arm so the diagnostic
+        // names the specific footgun.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: ":pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not start with `:`"),
+            "reason must surface the leading-`:` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_too_long() {
+        // The cap arm — a `:repo` value longer than
+        // [`crate::render::GIT_REPO_URL_MAX_LEN`] (2048) bytes is
+        // structurally untenable on every realistic landing site (the
+        // resolver's `git clone` invocation, the future M4 CR
+        // materializer's per-dep `repo:` axis); a value of that length
+        // is almost certainly a paste-from-binary slug.
+        let too_long = format!(
+            "github:pleme-io/{}",
+            "x".repeat(crate::render::GIT_REPO_URL_MAX_LEN)
+        );
+        let d = dep_with_fonte(DepSource::Git {
+            repo: too_long.clone(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("2048"),
+            "reason must name the cap, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_canonical_git_fonte_repo_shapes() {
+        // The positive-control sweep: every documented author shape on
+        // the `:fonte :repo` axis ([`crate::DepSource::Git`] doc comment)
+        // must pass the value-shape gate. Pinned so a future tightening
+        // (e.g. forbidding `http://` in favor of `https://`-only) surfaces
+        // here as a structural decision. Each form is exercised with the
+        // same canonical `:tag` pin so only the `:repo` axis varies.
+        for repo in [
+            // The pleme-io registry-shorthand convention — `github:org/repo`.
+            "github:pleme-io/caixa-teia",
+            // Other host-aliased shorthands (the resolver's pluggable
+            // host-prefix table).
+            "gitlab:pleme-io/caixa-teia",
+            "codeberg:pleme-io/caixa-teia",
+            "sourcehut:~pleme-io/caixa-teia",
+            // Full HTTPS URL with and without `.git` suffix.
+            "https://github.com/pleme-io/caixa-teia",
+            "https://github.com/pleme-io/caixa-teia.git",
+            // HTTP (rare; dev / mirror).
+            "http://example.com/pleme-io/caixa-teia.git",
+            // SSH URL.
+            "ssh://git@github.com/pleme-io/caixa-teia.git",
+            "ssh://git@git.example.com:2222/pleme-io/caixa-teia.git",
+            // Scp-style SSH — the canonical `git@host:path` short form.
+            "git@github.com:pleme-io/caixa-teia.git",
+            "git@git.example.com:team/private.git",
+            // Anonymous git protocol.
+            "git://git.example.com/pleme-io/caixa-teia.git",
+            // Local file URL (dev path).
+            "file:///tmp/caixa-teia",
+        ] {
+            let d = dep_with_fonte(DepSource::Git {
+                repo: repo.into(),
+                tag: Some("v0.1.0".into()),
+                rev: None,
+                branch: None,
+            });
+            d.validate()
+                .unwrap_or_else(|e| panic!("canonical repo {repo:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn fonte_repo_empty_takes_precedence_over_shape() {
+        // Order pin: the existing `FonteRepoEmpty` diagnostic (narrower
+        // diagnostic; doesn't try to parse the URL shape) fires before
+        // the new `FonteRepoShape` per-axis gate, so an empty `:repo`
+        // keeps its narrower error message. Mirrors
+        // `fonte_repo_empty_fires_before_pin_missing` (already pinned)
+        // on the ordering layer.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: String::new(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteRepoEmpty { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_shape_fires_before_pin_missing() {
+        // Order pin: a malformed `:repo` value on a dep with no pin set
+        // surfaces the `:repo` shape diagnostic (the more self-locating
+        // axis — the `:repo` is the load-bearing identity of the source;
+        // a missing pin is downstream from "do we even know the repo")
+        // rather than collapsing onto the pin-missing diagnostic. The
+        // shape gate runs inline before the pin enumeration in
+        // `DepSource::validate`.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "pleme-io/caixa-teia".into(), // missing `:` separator
+            tag: None,
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteRepoShape { .. }),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_shape_diagnostic_carries_offending_repo_verbatim() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:repo` value verbatim plus a non-empty parser-shaped `reason`
+        // so the author can grep their caixa.lisp without re-running
+        // the build. Mirrors the diagnostic-shape sweep on every prior
+        // value-shape gate (3f9d7a0, 6cbb900, c7d05ec, e70d213, be07fd5).
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "pleme-io/caixa-teia");
+        assert!(
+            !reason.is_empty(),
+            "FonteRepoShape `reason` must carry the predicate's wording verbatim"
+        );
+    }
+
     #[test]
     fn validate_rejects_git_fonte_with_no_pin() {
         // The fail-before-pass-after pin for the canonical
@@ -1268,13 +1642,22 @@ mod tests {
         // The diagnostic-shape pin: every :fonte error variant names
         // the offending dep's :nome verbatim, so the author can grep
         // caixa.lisp for the `:nome "<n>"` block and fix it in one
-        // edit. Cover all five variants so a future variant addition
+        // edit. Cover all six variants so a future variant addition
         // forces a parallel diagnostic-shape decision.
         for (case, fonte) in [
             (
                 "repo-empty",
                 DepSource::Git {
                     repo: String::new(),
+                    tag: Some("v1".into()),
+                    rev: None,
+                    branch: None,
+                },
+            ),
+            (
+                "repo-shape",
+                DepSource::Git {
+                    repo: "github:p/x ".into(),
                     tag: Some("v1".into()),
                     rev: None,
                     branch: None,
