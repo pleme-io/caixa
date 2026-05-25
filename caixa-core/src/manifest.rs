@@ -221,6 +221,56 @@ impl Caixa {
         })
     }
 
+    /// The kebab-case `:slot` tags of every M3 mesh slot this caixa
+    /// *declares* a value on, in canonical declaration order
+    /// (`:membros` → `:contratos` → `:politicas` → `:placement` →
+    /// `:entrada`). A slot counts as declared when its backing field
+    /// carries a value — a non-empty `Vec`, or a `Some(...)`.
+    ///
+    /// The M3 mesh slots compose the typed graph of a `:kind Aplicacao`
+    /// (MESH-COMPOSITION §III.1). [`Self::aplicacao_view`] only folds
+    /// them into a validatable [`crate::aplicacao::AplicacaoSpec`] when
+    /// the kind matches (returns `None` otherwise), and the caixa-mesh /
+    /// caixa-flux / caixa-helm renderers only emit them for an
+    /// Aplicacao. On any *other* kind a declared mesh slot is the
+    /// manifest field's documented "ignored otherwise" (see the
+    /// `:membros` … `:entrada` field docs): it silently passes
+    /// [`Caixa::from_lisp`] and then vanishes — never validated, never
+    /// rendered — far from the source caixa.lisp.
+    /// [`crate::StandardLayout::verify`] consults this to reject that
+    /// silent-drop at caixa-build time
+    /// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`]), mirroring the
+    /// `SupervisorOwnsCode` / `AplicacaoOwnsCode` kind-coherence gates:
+    /// a slot foreign to the kind is a build error, not a silent drop.
+    ///
+    /// Lifted as a typed method (rather than an inline disjunction at
+    /// the verify call site) so the mesh-slot set lives in one place —
+    /// a future M4 axis added to the Aplicacao surface (per-edge policy
+    /// overlay, distributed-app takeover config) is one push here, and
+    /// every consumer reaching for "which mesh slots are set" (the
+    /// verify gate, a future `feira lint` kind-coherence advisory)
+    /// inherits the canonical order without rolling its own.
+    #[must_use]
+    pub fn declared_mesh_slots(&self) -> Vec<&'static str> {
+        let mut slots = Vec::new();
+        if !self.membros.is_empty() {
+            slots.push(":membros");
+        }
+        if !self.contratos.is_empty() {
+            slots.push(":contratos");
+        }
+        if self.politicas.is_some() {
+            slots.push(":politicas");
+        }
+        if self.placement.is_some() {
+            slots.push(":placement");
+        }
+        if self.entrada.is_some() {
+            slots.push(":entrada");
+        }
+        slots
+    }
+
     /// Validate every entry of `:deps` and `:deps-dev` through
     /// [`Dep::validate`] — closing the parity loop with the per-axis
     /// `:versao` gates already wired into the typed-graph
@@ -731,6 +781,32 @@ mod tests {
     fn supervisor_view_none_for_non_supervisor_kinds() {
         let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
         assert!(c.supervisor_view().is_none());
+    }
+
+    #[test]
+    fn declared_mesh_slots_empty_for_bare_caixa() {
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(c.declared_mesh_slots().is_empty());
+    }
+
+    #[test]
+    fn declared_mesh_slots_reports_only_set_slots_in_canonical_order() {
+        use crate::{Entrada, Membro};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        // Set a non-adjacent pair (:membros + :entrada) to pin that the
+        // canonical declaration order is preserved regardless of which
+        // subset is populated.
+        c.membros = vec![Membro {
+            caixa: "a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.entrada = Some(Entrada {
+            host: "x.example.com".into(),
+            para: "a".into(),
+            paths: vec![],
+            port: 8080,
+        });
+        assert_eq!(c.declared_mesh_slots(), vec![":membros", ":entrada"]);
     }
 
     #[test]

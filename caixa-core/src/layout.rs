@@ -87,6 +87,32 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::AplicacaoOwnsCode(caixa.nome.clone()));
         }
 
+        // Kind ↔ slot coherence: the M3 mesh slots (:membros,
+        // :contratos, :politicas, :placement, :entrada) compose the
+        // typed graph of a :kind Aplicacao (MESH-COMPOSITION §III.1).
+        // `Caixa::aplicacao_view` only folds them into a validatable
+        // AplicacaoSpec when the kind is Aplicacao, and the
+        // caixa-mesh/-flux/-helm renderers only emit them for an
+        // Aplicacao — so on any *other* kind a declared mesh slot is the
+        // manifest field's documented "ignored otherwise": it silently
+        // passes verify and then vanishes (never validated, never
+        // rendered), far from the source caixa.lisp. Reject it here —
+        // before the path-existence loops — mirroring the
+        // SupervisorOwnsCode / AplicacaoOwnsCode kind-coherence gates
+        // above: a slot foreign to the kind is a build error, not a
+        // silent drop. `declared_mesh_slots` is the single typed source
+        // of the mesh-slot set + its canonical diagnostic order.
+        if caixa.kind != CaixaKind::Aplicacao {
+            let mesh_slots = caixa.declared_mesh_slots();
+            if !mesh_slots.is_empty() {
+                return Err(LayoutError::MeshSlotsOnNonAplicacao {
+                    caixa: caixa.nome.clone(),
+                    kind: caixa.kind,
+                    slots: mesh_slots.join(" "),
+                });
+            }
+        }
+
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
@@ -324,6 +350,17 @@ pub enum LayoutError {
         "aplicacao caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — aplicacaos compose Servicos, they don't run code themselves"
     )]
     AplicacaoOwnsCode(String),
+    #[error(
+        "caixa '{caixa}' is :kind {kind:?} but declares Aplicacao-only mesh slot(s): {slots} — \
+         :membros / :contratos / :politicas / :placement / :entrada compose a :kind Aplicacao's \
+         typed graph (MESH-COMPOSITION §III.1) and are silently ignored on every other kind \
+         (never validated, never rendered); move them to a :kind Aplicacao caixa or remove them"
+    )]
+    MeshSlotsOnNonAplicacao {
+        caixa: String,
+        kind: CaixaKind,
+        slots: String,
+    },
 }
 
 #[cfg(test)]
@@ -727,6 +764,99 @@ mod tests {
             caixa: "service-a".into(),
             versao: "^0.1".into(),
         }];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn mesh_slots_on_servico_rejected() {
+        // The canonical real-world footgun: an author adds :entrada to a
+        // :kind Servico expecting it to expose ingress. aplicacao_view
+        // returns None for Servico, so the slot is the manifest's
+        // "ignored otherwise" — never validated, never rendered. The
+        // kind-coherence gate rejects it at build time (before the
+        // :servicos existence loop), naming the offending slot + kind.
+        use crate::Entrada;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.entrada = Some(Entrada {
+            host: "demo.example.com".into(),
+            para: "demo".into(),
+            paths: vec![],
+            port: 8080,
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::MeshSlotsOnNonAplicacao { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Servico);
+                assert_eq!(slots, ":entrada");
+            }
+            other => panic!("expected MeshSlotsOnNonAplicacao, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mesh_slots_on_non_aplicacao_lists_slots_in_canonical_order() {
+        // All five mesh slots declared on a Biblioteca → the diagnostic
+        // enumerates them in canonical declaration order, deterministic
+        // across runs. The gate fires on declared-ness only (the values
+        // need not be a *valid* AplicacaoSpec — aplicacao_view is never
+        // called for a non-Aplicacao kind).
+        use crate::{Entrada, Membro, MeshPolicy, Placement, PlacementStrategy, WitContract};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.membros = vec![Membro {
+            caixa: "a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "a".into(),
+            para: "a".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        c.politicas = Some(MeshPolicy::default());
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.entrada = Some(Entrada {
+            host: "x.example.com".into(),
+            para: "a".into(),
+            paths: vec![],
+            port: 8080,
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::MeshSlotsOnNonAplicacao { slots, .. } => {
+                assert_eq!(slots, ":membros :contratos :politicas :placement :entrada");
+            }
+            other => panic!("expected MeshSlotsOnNonAplicacao, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_without_mesh_slots_still_verifies() {
+        // Pass-after control: a well-formed Servico carrying no mesh
+        // slots must remain accepted — the gate keys off declared-ness,
+        // so it must not over-fire on the common case.
+        let root = PathBuf::from("/tmp/x");
+        let servico = root.join("servicos/demo.computeunit.yaml");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == servico);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
         layout.verify(&c, &root).unwrap();
     }
 
