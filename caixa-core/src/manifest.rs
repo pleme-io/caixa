@@ -312,6 +312,46 @@ impl Caixa {
         slots
     }
 
+    /// The kebab-case `:slot` tags of every M2 Servico-runtime slot this
+    /// caixa *declares* a value on, in canonical declaration order
+    /// (`:limits` → `:behavior` → `:upgrade-from`). A slot counts as
+    /// declared when its backing field carries a value — a `Some(...)`,
+    /// or a non-empty `Vec`.
+    ///
+    /// The M2 slots configure the runtime of a long-running wasm
+    /// component, i.e. a `:kind Servico`: `:limits` is Lunatic
+    /// per-process sandboxing (INSPIRATIONS §III.1), `:behavior` is the
+    /// OTP `gen_server` callback set (§II.3), `:upgrade-from` is the OTP
+    /// appup hot-code-reload table (§II.4). The caixa-helm / caixa-flux
+    /// renderers gate on [`crate::require_kind`]`(_, Servico)` and only
+    /// emit these slots for a Servico; on any *other* kind a declared M2
+    /// slot is the manifest field's documented "ignored otherwise": its
+    /// well-formedness is checked by [`crate::StandardLayout::verify`]
+    /// but the value is never rendered into a chart / programs.yaml entry
+    /// — it silently passes [`Caixa::from_lisp`] + `feira build` and then
+    /// vanishes, far from the source caixa.lisp.
+    /// [`crate::StandardLayout::verify`] consults this to reject that
+    /// silent-drop at caixa-build time
+    /// ([`crate::LayoutError::ServicoSlotsOnNonServico`]), the exact
+    /// mirror of the [`Self::declared_mesh_slots`] /
+    /// [`Self::declared_supervisor_slots`] gates on the peer
+    /// kind-exclusive slot sets: a slot foreign to the kind is a build
+    /// error, not a silent drop.
+    #[must_use]
+    pub fn declared_servico_slots(&self) -> Vec<&'static str> {
+        let mut slots = Vec::new();
+        if self.limits.is_some() {
+            slots.push(":limits");
+        }
+        if self.behavior.is_some() {
+            slots.push(":behavior");
+        }
+        if !self.upgrade_from.is_empty() {
+            slots.push(":upgrade-from");
+        }
+        slots
+    }
+
     /// Validate every entry of `:deps` and `:deps-dev` through
     /// [`Dep::validate`] — closing the parity loop with the per-axis
     /// `:versao` gates already wired into the typed-graph
@@ -869,6 +909,30 @@ mod tests {
             c.declared_supervisor_slots(),
             vec![":estrategia", ":restart-window"]
         );
+    }
+
+    #[test]
+    fn declared_servico_slots_empty_for_bare_caixa() {
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(c.declared_servico_slots().is_empty());
+    }
+
+    #[test]
+    fn declared_servico_slots_reports_only_set_slots_in_canonical_order() {
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        // Set a non-adjacent pair (:limits + :upgrade-from) to pin that
+        // the canonical declaration order is preserved regardless of
+        // which subset is populated.
+        c.limits = Some(crate::LimitsSpec {
+            fuel: Some(1_000_000),
+            ..Default::default()
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        assert_eq!(c.declared_servico_slots(), vec![":limits", ":upgrade-from"]);
     }
 
     #[test]

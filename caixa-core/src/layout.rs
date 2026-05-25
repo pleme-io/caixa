@@ -139,6 +139,36 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
+        // Kind ↔ slot coherence (mirror of the mesh-slot + supervisor-slot
+        // gates above on the M2 Servico-runtime slot set): the M2 slots
+        // (:limits, :behavior, :upgrade-from) configure the runtime of a
+        // long-running wasm component, i.e. a :kind Servico — :limits is
+        // Lunatic per-process sandboxing (INSPIRATIONS §III.1), :behavior
+        // the OTP gen_server callback set (§II.3), :upgrade-from the OTP
+        // appup hot-reload table (§II.4). The caixa-helm / caixa-flux
+        // renderers gate on `require_kind(_, Servico)` and only emit these
+        // slots for a Servico — so on any *other* kind a declared M2 slot
+        // is the manifest field's documented "ignored otherwise": its
+        // well-formedness is checked by the M2 invariant blocks below, but
+        // the value is never rendered into a chart / programs.yaml entry —
+        // it silently passes verify and then vanishes, far from the source
+        // caixa.lisp. Reject it here — beside the mesh- and supervisor-slot
+        // gates, before the M2 validate blocks (which would otherwise spend
+        // their diagnostics on a value the kind can never render) — naming
+        // the offending kind + slot(s). `declared_servico_slots` is the
+        // single typed source of the M2-slot set + its canonical
+        // diagnostic order.
+        if caixa.kind != CaixaKind::Servico {
+            let servico_slots = caixa.declared_servico_slots();
+            if !servico_slots.is_empty() {
+                return Err(LayoutError::ServicoSlotsOnNonServico {
+                    caixa: caixa.nome.clone(),
+                    kind: caixa.kind,
+                    slots: servico_slots.join(" "),
+                });
+            }
+        }
+
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
@@ -394,6 +424,18 @@ pub enum LayoutError {
          (never validated, never reconciled); move them to a :kind Supervisor caixa or remove them"
     )]
     SupervisorSlotsOnNonSupervisor {
+        caixa: String,
+        kind: CaixaKind,
+        slots: String,
+    },
+    #[error(
+        "caixa '{caixa}' is :kind {kind:?} but declares Servico-only slot(s): {slots} — \
+         :limits / :behavior / :upgrade-from configure the runtime of a long-running :kind Servico \
+         wasm component (INSPIRATIONS §III.1 / §II.3 / §II.4) and are silently ignored on every \
+         other kind (never rendered into a chart or programs.yaml entry); move them to a :kind \
+         Servico caixa or remove them"
+    )]
+    ServicoSlotsOnNonServico {
         caixa: String,
         kind: CaixaKind,
         slots: String,
@@ -1011,6 +1053,149 @@ mod tests {
         let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == servico);
         let mut c = caixa(CaixaKind::Servico);
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn servico_slots_on_biblioteca_rejected() {
+        // Mirror of `mesh_slots_on_servico_rejected` /
+        // `supervisor_slots_on_servico_rejected` on the M2
+        // Servico-runtime slot set: an author adds `:limits` to a
+        // `:kind Biblioteca` expecting per-process sandboxing. The
+        // caixa-helm / caixa-flux renderers gate on `require_kind(_,
+        // Servico)`, so the slot is the manifest's "ignored otherwise" —
+        // never rendered into any artifact. The kind-coherence gate
+        // rejects it at build time (before the M2 validate blocks),
+        // naming the offending slot + kind.
+        use crate::LimitsSpec;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let lib = root.join("lib").join("demo.lisp");
+        let manifest_clone = manifest.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.limits = Some(LimitsSpec {
+            fuel: Some(1_000_000),
+            ..Default::default()
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ServicoSlotsOnNonServico { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Biblioteca);
+                assert_eq!(slots, ":limits");
+            }
+            other => panic!("expected ServicoSlotsOnNonServico, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_slots_on_non_servico_lists_slots_in_canonical_order() {
+        // All three M2 slots declared on a Biblioteca → the diagnostic
+        // enumerates them in canonical declaration order (`:limits` →
+        // `:behavior` → `:upgrade-from`), deterministic across runs. The
+        // gate fires on declared-ness only (the values need not pass the
+        // M2 validate blocks — those run only after the kind-coherence
+        // gate, and never for a non-Servico declared-slot caixa). Mirror
+        // of the mesh/supervisor `*_lists_slots_in_canonical_order` pins.
+        use crate::{BehaviorSpec, LimitsSpec, UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.limits = Some(LimitsSpec {
+            fuel: Some(1_000_000),
+            ..Default::default()
+        });
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..Default::default()
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ServicoSlotsOnNonServico { slots, .. } => {
+                assert_eq!(slots, ":limits :behavior :upgrade-from");
+            }
+            other => panic!("expected ServicoSlotsOnNonServico, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn aplicacao_with_servico_slots_rejected() {
+        // Cross-kind pin (mirror of `aplicacao_with_supervisor_slots_rejected`):
+        // an Aplicacao that declares an M2 Servico-runtime slot is
+        // rejected by the Servico-slot gate, just as a Supervisor
+        // declaring a mesh slot is rejected by the mesh-slot gate — the
+        // three kind ↔ slot coherence gates are symmetric and mutually
+        // exclusive. The gate fires before the Aplicacao typed-graph
+        // validation, so the diagnostic names the foreign M2 slot rather
+        // than a downstream AplicacaoViolation about missing :membros.
+        use crate::{Membro, Placement, PlacementStrategy, UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.membros = vec![Membro {
+            caixa: "service-a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ServicoSlotsOnNonServico { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Aplicacao);
+                assert_eq!(slots, ":upgrade-from");
+            }
+            other => panic!("expected ServicoSlotsOnNonServico, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_with_servico_slots_still_verifies() {
+        // Pass-after control: a well-formed Servico carrying all three M2
+        // slots must remain accepted — the gate is guarded by `kind !=
+        // Servico`, so it must not over-fire on the kind these slots
+        // exist for. Mirror of `servico_without_{mesh,supervisor}_slots_
+        // still_verifies` on the legitimate-declaration axis.
+        use crate::{BehaviorSpec, LimitsSpec, UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let init = root.join("lib/init.lisp");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == svc || p == init);
+        let mut c = caixa(CaixaKind::Servico);
+        c.versao = "0.2.0".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.limits = Some(LimitsSpec {
+            fuel: Some(1_000_000),
+            ..Default::default()
+        });
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..Default::default()
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
         layout.verify(&c, &root).unwrap();
     }
 
