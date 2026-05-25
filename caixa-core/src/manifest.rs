@@ -271,6 +271,47 @@ impl Caixa {
         slots
     }
 
+    /// The kebab-case `:slot` tags of every supervisor-tree slot this
+    /// caixa *declares* a value on, in canonical declaration order
+    /// (`:estrategia` → `:max-restarts` → `:restart-window` →
+    /// `:children`). A slot counts as declared when its backing field
+    /// carries a value — a `Some(...)`, or a non-empty `Vec`.
+    ///
+    /// The supervisor-tree slots compose the typed OTP supervisor of a
+    /// `:kind Supervisor` (INSPIRATIONS §II.2; the `:estrategia` +
+    /// `:children` field docs above). [`Self::supervisor_view`] only
+    /// folds them into a validatable [`SupervisorSpec`] when the kind
+    /// matches (returns `None` otherwise), and the wasm-operator's
+    /// hierarchical reconciler only consumes them for a Supervisor. On
+    /// any *other* kind a declared supervisor slot is the manifest
+    /// field's documented "ignored otherwise" (see the `:estrategia` …
+    /// `:children` field docs): it silently passes [`Caixa::from_lisp`]
+    /// and then vanishes — never validated, never reconciled — far from
+    /// the source caixa.lisp. [`crate::StandardLayout::verify`] consults
+    /// this to reject that silent-drop at caixa-build time
+    /// ([`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]), the
+    /// exact mirror of the [`Self::declared_mesh_slots`] /
+    /// [`crate::LayoutError::MeshSlotsOnNonAplicacao`] gate on the
+    /// Aplicacao-only slot set: a slot foreign to the kind is a build
+    /// error, not a silent drop.
+    #[must_use]
+    pub fn declared_supervisor_slots(&self) -> Vec<&'static str> {
+        let mut slots = Vec::new();
+        if self.estrategia.is_some() {
+            slots.push(":estrategia");
+        }
+        if self.max_restarts.is_some() {
+            slots.push(":max-restarts");
+        }
+        if self.restart_window.is_some() {
+            slots.push(":restart-window");
+        }
+        if !self.children.is_empty() {
+            slots.push(":children");
+        }
+        slots
+    }
+
     /// Validate every entry of `:deps` and `:deps-dev` through
     /// [`Dep::validate`] — closing the parity loop with the per-axis
     /// `:versao` gates already wired into the typed-graph
@@ -807,6 +848,27 @@ mod tests {
             port: 8080,
         });
         assert_eq!(c.declared_mesh_slots(), vec![":membros", ":entrada"]);
+    }
+
+    #[test]
+    fn declared_supervisor_slots_empty_for_bare_caixa() {
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        assert!(c.declared_supervisor_slots().is_empty());
+    }
+
+    #[test]
+    fn declared_supervisor_slots_reports_only_set_slots_in_canonical_order() {
+        use crate::RestartStrategy;
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        // Set a non-adjacent pair (:estrategia + :restart-window) to pin
+        // that the canonical declaration order is preserved regardless
+        // of which subset is populated.
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.restart_window = Some("60s".into());
+        assert_eq!(
+            c.declared_supervisor_slots(),
+            vec![":estrategia", ":restart-window"]
+        );
     }
 
     #[test]

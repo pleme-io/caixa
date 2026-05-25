@@ -113,6 +113,32 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
+        // Kind ↔ slot coherence (mirror of the mesh-slot gate above on
+        // the supervisor-tree slot set): the supervisor slots
+        // (:estrategia, :max-restarts, :restart-window, :children)
+        // compose the typed OTP supervisor of a :kind Supervisor
+        // (INSPIRATIONS §II.2). `Caixa::supervisor_view` only folds them
+        // into a validatable SupervisorSpec when the kind is Supervisor,
+        // and the wasm-operator's hierarchical reconciler only consumes
+        // them for one — so on any *other* kind a declared supervisor
+        // slot is the manifest field's documented "ignored otherwise":
+        // it silently passes verify and then vanishes (never validated,
+        // never reconciled), far from the source caixa.lisp. Reject it
+        // here — beside the mesh-slot gate, before the path-existence
+        // loops — naming the offending kind + slot(s). `declared_
+        // supervisor_slots` is the single typed source of the
+        // supervisor-slot set + its canonical diagnostic order.
+        if caixa.kind != CaixaKind::Supervisor {
+            let supervisor_slots = caixa.declared_supervisor_slots();
+            if !supervisor_slots.is_empty() {
+                return Err(LayoutError::SupervisorSlotsOnNonSupervisor {
+                    caixa: caixa.nome.clone(),
+                    kind: caixa.kind,
+                    slots: supervisor_slots.join(" "),
+                });
+            }
+        }
+
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
@@ -357,6 +383,17 @@ pub enum LayoutError {
          (never validated, never rendered); move them to a :kind Aplicacao caixa or remove them"
     )]
     MeshSlotsOnNonAplicacao {
+        caixa: String,
+        kind: CaixaKind,
+        slots: String,
+    },
+    #[error(
+        "caixa '{caixa}' is :kind {kind:?} but declares Supervisor-only slot(s): {slots} — \
+         :estrategia / :max-restarts / :restart-window / :children compose a :kind Supervisor's \
+         typed OTP supervisor (INSPIRATIONS §II.2) and are silently ignored on every other kind \
+         (never validated, never reconciled); move them to a :kind Supervisor caixa or remove them"
+    )]
+    SupervisorSlotsOnNonSupervisor {
         caixa: String,
         kind: CaixaKind,
         slots: String,
@@ -851,6 +888,123 @@ mod tests {
         // Pass-after control: a well-formed Servico carrying no mesh
         // slots must remain accepted — the gate keys off declared-ness,
         // so it must not over-fire on the common case.
+        let root = PathBuf::from("/tmp/x");
+        let servico = root.join("servicos/demo.computeunit.yaml");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == servico);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn supervisor_slots_on_servico_rejected() {
+        // Mirror of `mesh_slots_on_servico_rejected` on the
+        // supervisor-tree slot set: an author adds `:children` to a
+        // `:kind Servico` expecting it to spawn workers. supervisor_view
+        // returns None for Servico, so the slot is the manifest's
+        // "ignored otherwise" — never validated, never reconciled. The
+        // kind-coherence gate rejects it at build time (before the
+        // :servicos existence loop), naming the offending slot + kind.
+        use crate::{ChildSpec, RestartPolicy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::SupervisorSlotsOnNonSupervisor { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Servico);
+                assert_eq!(slots, ":children");
+            }
+            other => panic!("expected SupervisorSlotsOnNonSupervisor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn supervisor_slots_on_non_supervisor_lists_slots_in_canonical_order() {
+        // All four supervisor slots declared on a Biblioteca → the
+        // diagnostic enumerates them in canonical declaration order
+        // (`:estrategia` → `:max-restarts` → `:restart-window` →
+        // `:children`), deterministic across runs. The gate fires on
+        // declared-ness only (the values need not be a *valid*
+        // SupervisorSpec — supervisor_view is never called for a
+        // non-Supervisor kind). Mirror of
+        // `mesh_slots_on_non_aplicacao_lists_slots_in_canonical_order`.
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.restart_window = Some("60s".into());
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::SupervisorSlotsOnNonSupervisor { slots, .. } => {
+                assert_eq!(slots, ":estrategia :max-restarts :restart-window :children");
+            }
+            other => panic!("expected SupervisorSlotsOnNonSupervisor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn aplicacao_with_supervisor_slots_rejected() {
+        // Cross-kind pin: an Aplicacao (the other no-code orchestrator
+        // kind) that declares a supervisor slot is rejected by the
+        // supervisor-slot gate, just as a Supervisor declaring a mesh
+        // slot is rejected by the mesh-slot gate — the two kind ↔ slot
+        // coherence gates are symmetric and mutually exclusive. The
+        // gate fires before the Aplicacao typed-graph validation, so
+        // the diagnostic names the foreign supervisor slot rather than
+        // a downstream AplicacaoViolation.
+        use crate::{Membro, Placement, PlacementStrategy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.membros = vec![Membro {
+            caixa: "service-a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.estrategia = Some(RestartStrategy::OneForAll);
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::SupervisorSlotsOnNonSupervisor { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Aplicacao);
+                assert_eq!(slots, ":estrategia");
+            }
+            other => panic!("expected SupervisorSlotsOnNonSupervisor, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_without_supervisor_slots_still_verifies() {
+        // Pass-after control: a well-formed Servico carrying no
+        // supervisor slots must remain accepted — the gate keys off
+        // declared-ness, so it must not over-fire on the common case.
         let root = PathBuf::from("/tmp/x");
         let servico = root.join("servicos/demo.computeunit.yaml");
         let manifest = root.join("caixa.lisp");
