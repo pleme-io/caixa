@@ -1075,6 +1075,10 @@ impl AplicacaoSpec {
     ///     `:caixa` (MESH-COMPOSITION §III.1 — the graph nodes are a set,
     ///     not a multiset)
     ///   - every `:contratos` :de + :para must be in `:membros`
+    ///   - no `:contratos` edge is a self-edge (`:de == :para`) — a
+    ///     contract is an inter-Servico edge, so a Servico contracting
+    ///     with itself is a build error under every WIT shape
+    ///     (MESH-COMPOSITION §III.1)
     ///   - no two `:contratos` entries agree on
     ///     `(de, para, wit, endpoint, subject, slot)` — the typed-graph
     ///     edges are a set, not a multiset (peer of the `:membros` /
@@ -1126,6 +1130,41 @@ impl AplicacaoSpec {
             if !names.contains(c.para.as_str()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
                     caixa: c.para.clone(),
+                });
+            }
+            // A `:contratos` entry is an *inter*-Servico contract
+            // (MESH-COMPOSITION §III.1 — "Servico A calls Servico B"): a
+            // typed edge between two distinct graph nodes. An edge whose
+            // `:de` equals its `:para` is a Servico contracting with
+            // itself — a degenerate edge under every WIT shape. The
+            // synchronous shapes were caught only incidentally, and with
+            // a misleading diagnostic: `detect_sync_cycles` reported
+            // `cart → cart` as a `ContratoCycle` whose path is
+            // `["cart", "cart"]` — framing a self-edge as a multi-node
+            // deadlock. The pub-sub shape slipped through entirely
+            // (`detect_sync_cycles` excludes `WitTarget::PubSub`, so a
+            // `nats:pub-sub` edge from a member to itself silently
+            // validated, then rendered a CiliumNetworkPolicy whose
+            // endpointSelector and fromEndpoints both name the same
+            // program — a self-allow rule that is a no-op, since
+            // intra-pod traffic never traverses the mesh). A self-edge's
+            // runtime meaning is an in-process call, which doesn't go
+            // through the mesh at all, so no `:contratos` edge can carry
+            // it. Firing the gate before the `:wit`/`target()` shape
+            // checks means the structural "this edge can't exist" error
+            // precedes the narrower payload-shape diagnostics, and shape-
+            // agnostically covers all four `WitTarget` arms (HTTP / Store
+            // / Capability / PubSub) at one point — closing the pub-sub
+            // hole and replacing the misleading cycle diagnostic in one
+            // gate. Peer of the duplicate-`:contratos` / duplicate-
+            // `:membros` set gates: both reject a structurally
+            // ill-formed graph at the typed surface, before the renderer
+            // emits a K8s object that fails or no-ops far from the source
+            // caixa.lisp.
+            if c.de == c.para {
+                return Err(AplicacaoError::ContratoSelfLoop {
+                    caixa: c.de.clone(),
+                    wit: c.wit.clone(),
                 });
             }
             if c.wit.is_empty() {
@@ -1679,6 +1718,13 @@ pub enum AplicacaoError {
     MembroDuplicate { caixa: String },
     #[error("contrato references caixa {caixa:?} not declared in :membros")]
     ContratoMemberMissing { caixa: String },
+    #[error(
+        "contrato {caixa:?} → {caixa:?} (:wit {wit:?}) is a self-edge — a :contratos \
+         entry is an inter-Servico contract whose :de and :para must name distinct \
+         :membros; a Servico's calls to itself are in-process, not mesh edges (drop \
+         the contract, or point :para at the member it actually calls)"
+    )]
+    ContratoSelfLoop { caixa: String, wit: String },
     #[error("contrato {de:?} → {para:?} has empty :wit")]
     EmptyWit { de: String, para: String },
     #[error(
@@ -4176,14 +4222,79 @@ mod tests {
 
     #[test]
     fn rejects_self_loop_in_synchronous_contratos() {
+        // A synchronous self-edge (`cart → cart` over HTTP) is now
+        // rejected by the dedicated `ContratoSelfLoop` gate — a precise
+        // "this edge is degenerate" diagnostic — rather than incidentally
+        // by the cycle detector framing it as a `["cart", "cart"]`
+        // multi-node deadlock.
         let mut s = three_member_spec();
         s.contratos.push(contract_http("cart", "cart", "/loop"));
         let err = s.validate().unwrap_err();
         match err {
-            AplicacaoError::ContratoCycle { cycle } => {
-                assert_eq!(cycle, vec!["cart".to_string(), "cart".to_string()]);
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(caixa, "cart");
+                assert_eq!(wit, "wasi:http/proxy");
             }
-            other => panic!("expected ContratoCycle, got {other:?}"),
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_self_loop_in_pubsub_contratos() {
+        // The cycle detector excludes pub-sub edges (acyclic by
+        // construction), so before the explicit gate a `nats:pub-sub`
+        // self-edge silently validated and rendered a self-allow CNP.
+        // The shape-agnostic `ContratoSelfLoop` gate closes that hole.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "payment".into(),
+            para: "payment".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("rio.events.payment".into()),
+            slot: None,
+        });
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::ContratoSelfLoop { caixa, wit } => {
+                assert_eq!(caixa, "payment");
+                assert_eq!(wit, "nats:pub-sub");
+            }
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn self_loop_fires_before_payload_shape_check() {
+        // The structural "this edge can't exist" error precedes the
+        // narrower payload-shape diagnostics: a self-edge carrying an
+        // otherwise-malformed endpoint still reports ContratoSelfLoop,
+        // not ContratoEndpointInvalid.
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "cart".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("not-absolute".into()),
+            subject: None,
+            slot: None,
+        });
+        match s.validate().unwrap_err() {
+            AplicacaoError::ContratoSelfLoop { caixa, .. } => assert_eq!(caixa, "cart"),
+            other => panic!("expected ContratoSelfLoop, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn self_loop_fires_before_membership_is_satisfied_but_after_missing_member() {
+        // A self-edge naming a non-member reports the more fundamental
+        // ContratoMemberMissing first (the member doesn't exist), so the
+        // self-loop gate is reached only once both endpoints resolve.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("ghost", "ghost", "/loop"));
+        match s.validate().unwrap_err() {
+            AplicacaoError::ContratoMemberMissing { caixa } => assert_eq!(caixa, "ghost"),
+            other => panic!("expected ContratoMemberMissing, got {other:?}"),
         }
     }
 
