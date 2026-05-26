@@ -73,6 +73,12 @@ pub fn all_rules() -> Vec<Rule> {
             Severity::Error,
             check_explicit_kind,
         ),
+        Rule::new(
+            "aplicacao-completeness",
+            "a :kind Aplicacao must declare :politicas :timeout — no infinite blocking (MESH-COMPOSITION §V)",
+            Severity::Error,
+            check_aplicacao_timeout,
+        ),
     ]
 }
 
@@ -307,6 +313,44 @@ fn check_explicit_kind(node: &Node, diags: &mut Vec<Diagnostic>) {
     }
 }
 
+fn check_aplicacao_timeout(node: &Node, diags: &mut Vec<Diagnostic>) {
+    if node.head_symbol() != Some("defcaixa") {
+        return;
+    }
+    // The mesh-policy minimums are Aplicacao-specific: only a
+    // `:kind Aplicacao` composes Servicos behind `:politicas`, so the
+    // §V "no infinite blocking" invariant has no meaning on the other
+    // four kinds. `:kind` is a bare PascalCase symbol (enforced by the
+    // `enum-variant-pascal-case` rule), so match on the Symbol arm.
+    let is_aplicacao = matches!(
+        node.kwarg("kind").map(|n| &n.kind),
+        Some(NodeKind::Symbol(s)) if s == "Aplicacao"
+    );
+    if !is_aplicacao {
+        return;
+    }
+    // `:politicas` is authored either flat (`(:timeout "30s" :retries 3)`)
+    // or nested (`((:timeout "30s") (:retries 3))`) — MESH-COMPOSITION
+    // §III.1 shows the nested form, the canonical example the flat one.
+    // Search the whole `:politicas` subtree for a `:timeout` keyword so
+    // the rule is shape-agnostic. A missing `:politicas` slot fails the
+    // same way an empty one does: no declared per-call deadline.
+    let has_timeout = node
+        .kwarg("politicas")
+        .is_some_and(|p| keyword_present(p, "timeout"));
+    if !has_timeout {
+        diags.push(
+            Diagnostic::new(
+                "aplicacao-completeness",
+                Severity::Error,
+                node.span,
+                ":kind Aplicacao must declare :politicas :timeout (no infinite blocking)",
+            )
+            .with_hint("add :politicas (:timeout \"30s\" …) — MESH-COMPOSITION §V"),
+        );
+    }
+}
+
 fn check_git_pin(node: &Node, diags: &mut Vec<Diagnostic>) {
     // Walk every `(:tipo git …)` source and ensure :tag or :rev is set.
     walk(node, &mut |n| {
@@ -403,6 +447,19 @@ fn walk<F: FnMut(&Node)>(node: &Node, f: &mut F) {
         | NodeKind::UnquoteSplice(inner) => walk(inner, f),
         _ => {}
     }
+}
+
+/// True when `key` appears as a keyword anywhere in `node`'s subtree.
+/// Used by the `aplicacao-completeness` rule to find `:politicas
+/// :timeout` regardless of whether the slot is authored flat or nested.
+fn keyword_present(node: &Node, key: &str) -> bool {
+    let mut found = false;
+    walk(node, &mut |n| {
+        if matches!(&n.kind, NodeKind::Keyword(k) if k == key) {
+            found = true;
+        }
+    });
+    found
 }
 
 fn matches_kwarg<P: Fn(&Node) -> bool>(items: &[Node], key: &str, pred: P) -> bool {
@@ -609,6 +666,71 @@ mod tests {
 "#;
         let d = lint(src);
         assert!(d.iter().any(|d| d.rule_id == "git-dep-needs-pin"));
+    }
+
+    #[test]
+    fn flags_aplicacao_without_timeout() {
+        // An Aplicacao whose :politicas omits :timeout leaves the mesh
+        // with no per-call deadline — MESH-COMPOSITION §V "no infinite
+        // blocking". The rule fires at Error severity (the §IV
+        // aplicacao-completeness check that rejects partial Aplicacaos).
+        let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao
+  :politicas (:retries 3))"#;
+        let d = lint(src);
+        assert!(
+            d.iter()
+                .any(|d| d.rule_id == "aplicacao-completeness" && d.severity == Severity::Error),
+            "diags: {d:?}"
+        );
+    }
+
+    #[test]
+    fn flags_aplicacao_without_politicas() {
+        // A wholly-absent :politicas slot is the same defect as a
+        // :timeout-less one: no declared deadline reaches the mesh.
+        let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao)"#;
+        let d = lint(src);
+        assert!(
+            d.iter().any(|d| d.rule_id == "aplicacao-completeness"),
+            "diags: {d:?}"
+        );
+    }
+
+    #[test]
+    fn aplicacao_with_flat_timeout_is_clean() {
+        let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao
+  :politicas (:timeout "30s" :retries 3))"#;
+        let d = lint(src);
+        assert!(
+            d.iter().all(|d| d.rule_id != "aplicacao-completeness"),
+            "should not flag a :timeout-bearing Aplicacao: {d:?}"
+        );
+    }
+
+    #[test]
+    fn aplicacao_with_nested_timeout_is_clean() {
+        // The MESH-COMPOSITION §III.1 nested authoring shape must pass
+        // the same as the flat form — the rule searches the subtree.
+        let src = r#"(defcaixa :nome "checkout" :versao "0.1.0" :kind Aplicacao
+  :politicas ((:timeout "30s") (:retries 3)))"#;
+        let d = lint(src);
+        assert!(
+            d.iter().all(|d| d.rule_id != "aplicacao-completeness"),
+            "should not flag a nested :timeout Aplicacao: {d:?}"
+        );
+    }
+
+    #[test]
+    fn non_aplicacao_without_timeout_is_not_flagged() {
+        // The §V mesh-policy minimums are Aplicacao-specific — a Servico
+        // (or any non-Aplicacao kind) carries no :politicas, so the rule
+        // must not over-fire on it.
+        let src = r#"(defcaixa :nome "hello" :versao "0.1.0" :kind Servico)"#;
+        let d = lint(src);
+        assert!(
+            d.iter().all(|d| d.rule_id != "aplicacao-completeness"),
+            "should not flag a non-Aplicacao kind: {d:?}"
+        );
     }
 
     #[test]
