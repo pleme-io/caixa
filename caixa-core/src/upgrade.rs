@@ -80,10 +80,13 @@ pub struct UpgradeFromEntry {
 
 impl UpgradeFromEntry {
     /// Verify the `:from` field is a valid semver, every instruction's
-    /// typed shape, and the within-entry `(:restart)`-exclusivity
-    /// invariant (an entry containing `(:restart)` must contain
-    /// exactly one `(:restart)` and nothing else — see
-    /// [`Self::validate_restart_exclusive`]).
+    /// typed shape, the within-entry `(:restart)`-exclusivity invariant
+    /// (an entry containing `(:restart)` must contain exactly one
+    /// `(:restart)` and nothing else — see
+    /// [`Self::validate_restart_exclusive`]), and the within-entry
+    /// state-change-ordering invariant (every `(:state-change …)` must
+    /// be preceded by a `(:load-module …)` — see
+    /// [`Self::validate_state_change_ordering`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
         Version::parse(&self.from).map_err(|_| UpgradeError::BadFromVersion(self.from.clone()))?;
@@ -104,6 +107,7 @@ impl UpgradeFromEntry {
             instr.validate()?;
         }
         self.validate_restart_exclusive()?;
+        self.validate_state_change_ordering()?;
         Ok(())
     }
 
@@ -175,6 +179,68 @@ impl UpgradeFromEntry {
             restart_count,
             other_kinds,
         })
+    }
+
+    /// Reject an entry whose `(:state-change …)` is not preceded by a
+    /// `(:load-module …)` in the same `:instructions` list.
+    ///
+    /// `StateChange` is the `gen_server:code_change/3` analog
+    /// ([`UpgradeInstruction::StateChange`] doc; INSPIRATIONS §II.4):
+    /// it runs the migration script that folds the *old* state into the
+    /// shape the *new* code expects. In OTP, `code_change/3` is invoked
+    /// in the context of the newly-loaded code — `release_handler`
+    /// always loads the new module before running the advanced update
+    /// that triggers the callback. caixa decomposes that into two
+    /// explicit instructions (`LoadModule` brings the new version up
+    /// "alongside the current one"; `StateChange` migrates the state),
+    /// and the module doc pins that the operator "runs the instructions
+    /// in order" and only swaps traffic after all succeed. So a
+    /// `:state-change` with no preceding `:load-module` migrates state
+    /// into code that was never loaded — the migration script runs while
+    /// the only resident version is still the *old* one, which expects
+    /// the *old* state. Two authoring footguns close here:
+    ///
+    ///   - `((:state-change "…"))` — the "I wrote the migration but
+    ///     forgot to load the new module" footgun. The new code that
+    ///     defines the new state representation (and that the migration
+    ///     output is destined for) never comes up; the operator runs
+    ///     the script against the old code and either no-ops or corrupts
+    ///     live state.
+    ///   - `((:state-change "…") (:load-module "…"))` — the
+    ///     right-instructions-wrong-order footgun. Because the operator
+    ///     executes in declared order, the migration runs *before* the
+    ///     new code is resident, then the load brings up code expecting
+    ///     already-migrated state that the just-run script produced
+    ///     against the old version's shape. The canonical order is
+    ///     `(:load-module …) (:state-change …) (:soft-purge …)`
+    ///     (module doc example).
+    ///
+    /// Same within-entry cross-instruction discipline as
+    /// [`Self::validate_restart_exclusive`] (the `(:restart)` terminal-
+    /// exclusivity gate it runs beside): both reject an
+    /// `:instructions` list whose instructions are individually
+    /// well-shaped but jointly incoherent, at the typed build surface
+    /// rather than as a runtime surprise. Runs *after*
+    /// `validate_restart_exclusive` so a `((:state-change …)
+    /// (:restart))` shape still surfaces the more-fundamental
+    /// `RestartNotExclusive` (a valid `(:restart)` entry is `(:restart)`
+    /// alone, so no Restart-bearing entry reaches this gate carrying a
+    /// `StateChange`).
+    fn validate_state_change_ordering(&self) -> Result<(), UpgradeError> {
+        let mut loaded = false;
+        for instr in &self.instructions {
+            match instr {
+                UpgradeInstruction::LoadModule { .. } => loaded = true,
+                UpgradeInstruction::StateChange { script } if !loaded => {
+                    return Err(UpgradeError::StateChangeWithoutPriorLoad {
+                        from: self.from.clone(),
+                        script: script.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }
 
@@ -541,6 +607,19 @@ pub enum UpgradeError {
         restart_count: usize,
         other_kinds: Vec<&'static str>,
     },
+    #[error(
+        ":upgrade-from `(:from {from:?})` runs `(:state-change {})` before any \
+         `(:load-module …)` in its :instructions list — a state migration is the \
+         gen_server:code_change/3 analog and must run in the context of the newly-loaded \
+         code, but the operator executes instructions in declared order, so this migration \
+         runs while the only resident version is still the prior one (which expects the \
+         pre-migration state shape). Load the new module first: author the canonical \
+         `(:load-module …) (:state-change {}) (:soft-purge …)` order so the new code is \
+         resident before its state migration runs.",
+        script.display(),
+        script.display()
+    )]
+    StateChangeWithoutPriorLoad { from: String, script: PathBuf },
 }
 
 #[cfg(test)]
@@ -1363,6 +1442,145 @@ mod tests {
             ],
         );
         e.validate().unwrap();
+    }
+
+    // ── within-entry state-change-ordering invariant ───────────────────
+
+    #[test]
+    fn validate_rejects_state_change_without_load() {
+        // Fail-before-pass-after pin: a `:state-change` migrates state
+        // into the newly-loaded code (gen_server:code_change/3 analog),
+        // so an entry that runs it with no preceding `:load-module`
+        // migrates state into code that was never loaded. The operator
+        // runs instructions in declared order, so this is a build error,
+        // not a runtime surprise (CAIXA-SDLC §III).
+        let e = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            }],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeWithoutPriorLoad {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            "a `:state-change` with no preceding `:load-module` must surface as \
+             StateChangeWithoutPriorLoad naming the offending entry + script verbatim"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_state_change_before_load() {
+        // Right-instructions-wrong-order: the load is present but runs
+        // *after* the migration. Because the operator executes in
+        // declared order, the migration runs before the new code is
+        // resident — the same incoherence as the missing-load case.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
+            "a `:state-change` ahead of its `:load-module` must surface as \
+             StateChangeWithoutPriorLoad, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_state_change_after_load() {
+        // Positive control: the canonical `(:load-module …)
+        // (:state-change …)` order validates. The load need not name
+        // the same module the migration targets (StateChange carries a
+        // script, not a module ref), so any preceding `:load-module`
+        // satisfies "new code is resident before its migration runs".
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_multiple_state_changes_after_one_load() {
+        // A single leading `:load-module` covers every subsequent
+        // `:state-change` — the `loaded` latch stays set once the new
+        // code is resident.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m1.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m2.lisp"),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_state_change_ordering_fires_after_restart_exclusive() {
+        // Diagnostic-precedence pin: a `((:state-change …) (:restart))`
+        // shape is *both* state-change-without-load and restart-mixed.
+        // The more-fundamental `RestartNotExclusive` must win (a valid
+        // `(:restart)` entry is `(:restart)` alone, so no Restart-bearing
+        // entry should reach the ordering gate). Guards the call order
+        // in `validate` against silent reordering.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::RestartNotExclusive { .. }),
+            "restart-mixed must surface before the ordering gate, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_ordering_threads_through_validate_upgrade_from() {
+        // The whole-list entry-point surfaces the per-entry ordering
+        // error (mirrors `validate_restart_exclusive_threads_through_…`):
+        // the gate is reachable from the LayoutInvariants call site, not
+        // only from a direct `entry.validate()`.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            }],
+        )];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
+            "validate_upgrade_from must thread the ordering error, got {err:?}"
+        );
     }
 
     #[test]
