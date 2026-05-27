@@ -279,6 +279,41 @@ impl SupervisorSpec {
     }
 }
 
+/// Cross-slot coherence gate on the supervision tree: no
+/// `:children :caixa` entry may name the supervisor's own `:nome`.
+///
+/// A supervisor that lists itself as a child is a degenerate self-parent
+/// — the supervision tree is a DAG rooted at the supervisor (OTP child
+/// specs reference *distinct* child processes; a supervisor is never its
+/// own child), and the wasm-operator's hierarchical reconciliation would
+/// otherwise be handed a node that is its own parent: a one-node cycle it
+/// either rejects far from the source `caixa.lisp` or recurses on. Because
+/// every `:nome` is a globally-unique substrate identity (DNS-1123 label +
+/// lacre closure root), a child whose `:caixa` equals the supervisor's
+/// `:nome` *is* the supervisor itself, not a coincidentally-named peer.
+///
+/// Lives outside [`SupervisorSpec::validate`] because the typed view
+/// carries the children but not the parent `:nome`; mirrors the
+/// cross-slot precedence gate `validate_upgrade_from_against_versao`
+/// (which likewise reads one slot against another at the
+/// [`crate::layout`] wire-up site) and the mesh self-edge gate
+/// `AplicacaoSpec`'s `ContratoSelfLoop` — the same "an edge from a graph
+/// node to itself is structurally not a tree/mesh edge" discipline, here
+/// on the supervision-tree axis.
+pub fn validate_no_self_supervision(
+    children: &[ChildSpec],
+    parent_nome: &str,
+) -> Result<(), SupervisorError> {
+    for child in children {
+        if child.caixa == parent_nome {
+            return Err(SupervisorError::ChildSupervisesSelf {
+                caixa: parent_nome.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum SupervisorError {
     #[error("supervisor :estrategia {estrategia:?} requires at least one :children entry")]
@@ -328,6 +363,15 @@ pub enum SupervisorError {
          ComputeUnits in the rendered chart, one silently overwriting the other)"
     )]
     DuplicateChildCaixa { caixa: String },
+    #[error(
+        "supervisor {caixa:?} lists itself as a :children entry — a supervisor is \
+         never its own child (the supervision tree is a DAG rooted at the supervisor; \
+         OTP child specs reference distinct child processes). Since every :nome is a \
+         globally-unique substrate identity, a child naming the supervisor's own :nome \
+         is a one-node reconciliation cycle, not a coincidentally-named peer; drop the \
+         self-referential :children entry or rename it to the actual child caixa."
+    )]
+    ChildSupervisesSelf { caixa: String },
 }
 
 /// Shared duration string codec for the typed slots that take a
@@ -1135,6 +1179,41 @@ mod tests {
             matches!(err, SupervisorError::DuplicateChildCaixa { ref caixa } if caixa == "a"),
             "got {err:?}"
         );
+    }
+
+    // ── self-supervision cross-slot gate ──────────────────────────
+
+    #[test]
+    fn validate_no_self_supervision_rejects_self_referential_child() {
+        // A supervisor whose `:children` lists its own `:nome` is a
+        // one-node reconciliation cycle — rejected, naming the parent.
+        let children = vec![
+            child("worker", "^0.1", RestartPolicy::Permanent),
+            child("orquestra", "^0.1", RestartPolicy::Permanent),
+        ];
+        let err = validate_no_self_supervision(&children, "orquestra").unwrap_err();
+        assert!(
+            matches!(err, SupervisorError::ChildSupervisesSelf { ref caixa } if caixa == "orquestra"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_no_self_supervision_accepts_distinct_children() {
+        // Positive control: distinct child names (including a child that
+        // is itself a supervisor — nested trees are valid OTP) pass.
+        let children = vec![
+            child("worker", "^0.1", RestartPolicy::Permanent),
+            child("sub-tree", "^0.1", RestartPolicy::Permanent),
+        ];
+        validate_no_self_supervision(&children, "orquestra").unwrap();
+    }
+
+    #[test]
+    fn validate_no_self_supervision_empty_children_is_ok() {
+        // SimpleOneForOne / no-static-children supervisors have nothing
+        // to self-reference — the gate is vacuously satisfied.
+        validate_no_self_supervision(&[], "orquestra").unwrap();
     }
 
     #[test]
