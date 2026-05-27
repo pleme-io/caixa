@@ -8,8 +8,8 @@
 //!
 //!   1. **programs.yaml fan-out** — one entry per `:membros`,
 //!      consumed by lareira-fleet-programs (V0; this crate)
-//!   2. **Cilium NetworkPolicy** — one per `:contratos`, identity-based
-//!      L7 allow-list (M3.x next)
+//!   2. **Cilium NetworkPolicy** — one per distinct `:contratos`
+//!      `(:de, :para)` pair, identity-based L7 allow-list (M3.x next)
 //!   3. **Gateway + HTTPRoute** — one per `:entrada`, K8s Gateway API
 //!      external ingress (M3.x next)
 //!
@@ -34,7 +34,7 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitTarget,
+    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
     aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
     pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
@@ -173,10 +173,23 @@ pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
-/// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per `:contratos`
-/// edge. The policy whitelists the `:de → :para` flow at L4 (every
-/// contract); HTTP contracts add L7 rules (method + path) keyed by the
-/// `:wit` shape.
+/// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
+/// `(:de, :para)` pair across `:contratos`. The policy whitelists the
+/// `:de → :para` flow at L4 (every contract); HTTP contracts add L7
+/// rules (path) keyed by the `:wit` shape.
+///
+/// A CiliumNetworkPolicy's identity is its destination (`endpointSelector`)
+/// plus its admitted source (`fromEndpoints`), so the `(:de, :para)`
+/// pair is the policy's `metadata.name` axis — `<aplicacao>-<de>-to-<para>`.
+/// [`AplicacaoSpec::validate`] deliberately permits multiple typed edges
+/// between the same ordered pair (cart→catalog at `/products` *and*
+/// `/search`, an HTTP edge alongside a NATS edge — distinct identity keys
+/// via differing payloads, see `caixa_core::aplicacao` validate), so the
+/// renderer fans those in: each edge in a `(:de, :para)` group contributes
+/// one `ingress[0].toPorts[]` entry to the *single* policy for that pair.
+/// Emitting one policy per raw contrato instead would name two objects
+/// `<aplicacao>-<de>-to-<para>` identically and collide at `kubectl apply`
+/// time, far from the source caixa.lisp.
 ///
 /// Every emitted policy is identity-based — `endpointSelector` matches
 /// pleme labels (`pleme.pleme.io/program: <:para>`) injected by the
@@ -231,15 +244,33 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     let mtls_overlay = single_field_overlay(spec.politicas.mtls_required, "mode", |required| {
         serde_yaml::Value::String(if required { "required" } else { "disabled" }.into())
     });
-    let mut out = Vec::with_capacity(spec.contratos.len());
+    // Fan typed edges into per-`(:de, :para)` groups — the policy
+    // identity axis. A `BTreeMap` keyed by the pair gives deterministic
+    // policy order independent of `:contratos` declaration order
+    // (THEORY.md §V.2.7 render determinism), and collapses the
+    // validate-permitted "same caller-callee pair, different payload"
+    // contratos (cart→catalog at `/products` and `/search`) onto the
+    // single CiliumNetworkPolicy whose `metadata.name` they'd otherwise
+    // collide on. Insertion preserves source order within each group, so
+    // the per-edge `toPorts[]` entries appear in the author's declared
+    // order.
+    let mut groups: BTreeMap<(&str, &str), Vec<&WitContract>> = BTreeMap::new();
     for c in &spec.contratos {
+        groups
+            .entry((c.de.as_str(), c.para.as_str()))
+            .or_default()
+            .push(c);
+    }
+
+    let mut out = Vec::with_capacity(groups.len());
+    for ((de, para), edges) in &groups {
         // Policy's own labels — `aplicacao` (which graph) and
-        // `contrato` (which typed edge). Keys come from
+        // `contrato` (which typed edge pair). Keys come from
         // caixa_core::render so a future label-namespace rebrand is a
         // one-line edit, not a search-and-replace across renderers.
         let mut labels = BTreeMap::new();
         labels.insert(LABEL_APLICACAO, caixa.nome.clone());
-        labels.insert(LABEL_CONTRATO, format!("{}-to-{}", c.de, c.para));
+        labels.insert(LABEL_CONTRATO, format!("{de}-to-{para}"));
         // The apiVersion + kind + metadata.{name, namespace, labels}
         // skeleton comes from caixa_core::render::kube_resource_skeleton
         // — same lift as pleme_program_*_selector applied to the K8s-
@@ -247,7 +278,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         let mut policy = kube_resource_skeleton(
             "cilium.io/v2",
             "CiliumNetworkPolicy",
-            &format!("{}-{}-to-{}", caixa.nome, c.de, c.para),
+            &format!("{}-{}-to-{}", caixa.nome, de, para),
             namespace,
             labels,
         );
@@ -260,7 +291,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // caixa_core::render::label_selector — same lift as
         // yaml_string_mapping / kube_resource_skeleton applied to the
         // K8s LabelSelector axis.
-        let endpoint_selector = label_selector(pleme_program_selector(&c.para));
+        let endpoint_selector = label_selector(pleme_program_selector(para));
 
         // ingress[0]: from the source Servico, scoped to this
         // Aplicacao (so a same-named program in a different Aplicacao
@@ -269,60 +300,69 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // hand-written insert() calls. Wrapped in label_selector so
         // the `matchLabels` envelope is the typed primitive's
         // responsibility, not this site's.
-        let from_endpoint = label_selector(pleme_program_in_aplicacao_selector(&c.de, &caixa.nome));
+        let from_endpoint = label_selector(pleme_program_in_aplicacao_selector(de, &caixa.nome));
         let mut ingress_rule = serde_yaml::Mapping::new();
         ingress_rule.insert(
             serde_yaml::Value::String("fromEndpoints".into()),
             serde_yaml::Value::Sequence(vec![from_endpoint]),
         );
 
-        // toPorts — wit-shape-aware. HTTP gets L7 rules; pubsub +
-        // store get L4-only (Cilium can't introspect those protocols).
-        let mut to_port = serde_yaml::Mapping::new();
-        let mut port_entry = serde_yaml::Mapping::new();
-        let port = spec
-            .entrada
-            .as_ref()
-            .filter(|e| e.para == c.para)
-            .map(|e| e.port)
-            .unwrap_or(8080);
-        port_entry.insert(
-            serde_yaml::Value::String("port".into()),
-            serde_yaml::Value::String(port.to_string()),
-        );
-        port_entry.insert(
-            serde_yaml::Value::String("protocol".into()),
-            serde_yaml::Value::String("TCP".into()),
-        );
-        to_port.insert(
-            serde_yaml::Value::String("ports".into()),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(port_entry)]),
-        );
-
-        // L7 introspection only fires for HTTP-shaped contracts; the
-        // typed view (validated upstream by AplicacaoSpec::validate)
-        // makes the "wit world ↔ payload field" link impossible to
-        // get wrong silently. PubSub / Store / Capability edges stay
-        // L4-only — Cilium can't introspect those protocols.
-        if let WitTarget::Http { endpoint } = c.target().expect("validated by typed_view") {
-            let mut http_rule = serde_yaml::Mapping::new();
-            http_rule.insert(
-                serde_yaml::Value::String("path".into()),
-                serde_yaml::Value::String(endpoint.to_string()),
+        // One `toPorts[]` entry per typed edge in the group — Cilium
+        // unions the L4/L7 rules across entries, so each edge keeps its
+        // own L7 shape (an HTTP edge's path stays scoped to the HTTP
+        // edge; a NATS/store edge stays L4-only) instead of leaking
+        // across the shared destination port.
+        let mut to_ports_seq = Vec::with_capacity(edges.len());
+        for c in edges {
+            // toPorts — wit-shape-aware. HTTP gets L7 rules; pubsub +
+            // store get L4-only (Cilium can't introspect those protocols).
+            let mut to_port = serde_yaml::Mapping::new();
+            let mut port_entry = serde_yaml::Mapping::new();
+            let port = spec
+                .entrada
+                .as_ref()
+                .filter(|e| e.para == c.para)
+                .map(|e| e.port)
+                .unwrap_or(8080);
+            port_entry.insert(
+                serde_yaml::Value::String("port".into()),
+                serde_yaml::Value::String(port.to_string()),
             );
-            let mut rules = serde_yaml::Mapping::new();
-            rules.insert(
-                serde_yaml::Value::String("http".into()),
-                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
+            port_entry.insert(
+                serde_yaml::Value::String("protocol".into()),
+                serde_yaml::Value::String("TCP".into()),
             );
             to_port.insert(
-                serde_yaml::Value::String("rules".into()),
-                serde_yaml::Value::Mapping(rules),
+                serde_yaml::Value::String("ports".into()),
+                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(port_entry)]),
             );
+
+            // L7 introspection only fires for HTTP-shaped contracts; the
+            // typed view (validated upstream by AplicacaoSpec::validate)
+            // makes the "wit world ↔ payload field" link impossible to
+            // get wrong silently. PubSub / Store / Capability edges stay
+            // L4-only — Cilium can't introspect those protocols.
+            if let WitTarget::Http { endpoint } = c.target().expect("validated by typed_view") {
+                let mut http_rule = serde_yaml::Mapping::new();
+                http_rule.insert(
+                    serde_yaml::Value::String("path".into()),
+                    serde_yaml::Value::String(endpoint.to_string()),
+                );
+                let mut rules = serde_yaml::Mapping::new();
+                rules.insert(
+                    serde_yaml::Value::String("http".into()),
+                    serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
+                );
+                to_port.insert(
+                    serde_yaml::Value::String("rules".into()),
+                    serde_yaml::Value::Mapping(rules),
+                );
+            }
+            to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
         }
         ingress_rule.insert(
             serde_yaml::Value::String("toPorts".into()),
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(to_port)]),
+            serde_yaml::Value::Sequence(to_ports_seq),
         );
         if let Some(a) = &mtls_overlay {
             ingress_rule.insert(
@@ -1001,7 +1041,7 @@ mod tests {
     }
 
     #[test]
-    fn cilium_emits_one_policy_per_contrato() {
+    fn cilium_emits_one_policy_per_de_para_pair() {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         assert_eq!(policies.len(), 2);
         let names: Vec<_> = policies
@@ -1016,6 +1056,74 @@ mod tests {
             .collect();
         assert!(names.contains(&"checkout-cart-to-catalog".to_string()));
         assert!(names.contains(&"checkout-cart-to-payment".to_string()));
+    }
+
+    #[test]
+    fn cilium_fans_same_de_para_edges_into_one_policy() {
+        // Fail-before / pass-after: AplicacaoSpec::validate permits two
+        // contratos sharing a `(:de, :para)` pair with distinct payloads
+        // (cart→catalog at `/products/:id` *and* `/search`). The renderer
+        // names every CiliumNetworkPolicy `<aplicacao>-<de>-to-<para>`, so
+        // before the per-pair fan-in those two contratos rendered two
+        // objects both named `checkout-cart-to-catalog` — a `kubectl apply`
+        // collision far from the source caixa.lisp. They must now fan into
+        // exactly one policy whose `ingress[0].toPorts[]` carries both
+        // edges' L7 paths.
+        let mut c = aplicacao_caixa();
+        c.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/search".into()),
+            subject: None,
+            slot: None,
+        });
+        let policies = cilium_network_policies(&c).unwrap();
+
+        let cart_to_catalog: Vec<_> = policies
+            .iter()
+            .filter(|p| {
+                p.get("metadata")
+                    .and_then(|m| m.get("name"))
+                    .and_then(|n| n.as_str())
+                    == Some("checkout-cart-to-catalog")
+            })
+            .collect();
+        assert_eq!(
+            cart_to_catalog.len(),
+            1,
+            "two cart→catalog contratos must fan into one policy, not two \
+             colliding `checkout-cart-to-catalog` objects"
+        );
+
+        let to_ports = cart_to_catalog[0]
+            .get("spec")
+            .and_then(|s| s.get("ingress"))
+            .and_then(|i| i.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|i| i.get("toPorts"))
+            .and_then(|p| p.as_sequence())
+            .expect("ingress[0].toPorts sequence");
+        assert_eq!(
+            to_ports.len(),
+            2,
+            "each typed edge in the (cart, catalog) group contributes one toPorts entry"
+        );
+        let paths: Vec<&str> = to_ports
+            .iter()
+            .filter_map(|tp| {
+                tp.get("rules")
+                    .and_then(|r| r.get("http"))
+                    .and_then(|h| h.as_sequence())
+                    .and_then(|s| s.first())
+                    .and_then(|rule| rule.get("path"))
+                    .and_then(|v| v.as_str())
+            })
+            .collect();
+        assert!(
+            paths.contains(&"/products/:id") && paths.contains(&"/search"),
+            "both edges' L7 paths must survive the fan-in, got {paths:?}"
+        );
     }
 
     #[test]
