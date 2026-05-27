@@ -353,6 +353,21 @@ impl LayoutInvariants for StandardLayout {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),
                 })?;
+            // Cross-slot coherence: `:children :caixa` must not name the
+            // supervisor's own `:nome`. The typed `SupervisorSpec` view
+            // carries the children but not the parent `:nome`, so this
+            // self-parent gate reads one slot against another here, the
+            // same wire-up shape `validate_upgrade_from_against_versao`
+            // uses for the `:from`/`:versao` precedence gate. Runs after
+            // `view.validate()` so the per-child shape + duplicate
+            // diagnostics surface first; a self-referential child is
+            // always a valid DNS-1123 label (it equals the already-valid
+            // `:nome`), so this ordering never masks a narrower defect.
+            crate::supervisor::validate_no_self_supervision(&caixa.children, &caixa.nome)
+                .map_err(|err| LayoutError::SupervisorViolation {
+                    caixa: caixa.nome.clone(),
+                    issue: err.to_string(),
+                })?;
         }
 
         // Aplicacao invariants — typed graph composition. Like
@@ -806,6 +821,64 @@ mod tests {
         // No children → should fail
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::SupervisorViolation { .. }));
+    }
+
+    #[test]
+    fn supervisor_self_referential_child_is_violation() {
+        // A Supervisor whose `:children` names its own `:nome` is a
+        // one-node supervision cycle. The cross-slot gate fires at
+        // verify time, surfacing as a SupervisorViolation that names the
+        // offending supervisor — not at the cluster apply far from
+        // source. The `caixa()` helper's `:nome` is "demo".
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.children = vec![
+            ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+            ChildSpec {
+                caixa: "demo".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+        ];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::SupervisorViolation { caixa, issue } = err else {
+            panic!("expected SupervisorViolation for self-referential child, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("demo") && issue.contains("itself"),
+            "issue must name the self-supervising caixa, got {issue:?}"
+        );
+    }
+
+    #[test]
+    fn supervisor_distinct_children_pass_self_supervision_gate() {
+        // Positive control: a Supervisor whose children are all distinct
+        // from its own `:nome` verifies cleanly.
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        layout.verify(&c, &root).unwrap();
     }
 
     #[test]
