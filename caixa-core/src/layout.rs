@@ -763,11 +763,21 @@ mod tests {
         // through to the path-existence pass under test.
         c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        // A `:load-module` precedes the `:state-change` so the entry
+        // satisfies the within-entry state-change-ordering gate
+        // (`StateChangeWithoutPriorLoad`) and the path-existence pass
+        // under test is the gate actually exercised. `:load-module`
+        // carries no on-disk path, so it adds no existence requirement.
         c.upgrade_from = vec![UpgradeFromEntry {
             from: "0.1.0".into(),
-            instructions: vec![UpgradeInstruction::StateChange {
-                script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
-            }],
+            instructions: vec![
+                UpgradeInstruction::LoadModule {
+                    module: "demo".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+            ],
         }];
         let manifest_clone = manifest.clone();
         let svc_clone = svc.clone();
