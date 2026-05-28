@@ -34,7 +34,7 @@ use thiserror::Error;
 /// instructions: enough to express every common upgrade pattern,
 /// few enough that the wasm-operator can implement each
 /// deterministically.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, gen_platform::TypedDispatcher)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum UpgradeInstruction {
     /// Load a new wasm module alongside the current one — the analog
@@ -62,6 +62,20 @@ pub enum UpgradeInstruction {
     /// upgrade is impossible (e.g. wasm component world incompatible).
     Restart,
 }
+
+// Fleet-wide dispatcher-catalog registration. UpgradeInstruction is
+// the OTP-style hot-upgrade primitive (load_module/code_change/
+// soft_purge/purge/restart) — the first NON-ADAPTER consumer of
+// gen-platform's typed-dispatcher catamorphism, satisfying the ★★
+// "two classes of consumer" promotion criterion from
+// theory/QUIRK-APPLIER.md §V.1.
+//
+// Operators query via:
+//   gen dispatchers --from-catalog | jq '.[] | select(.label=="caixa.upgrade-instruction")'
+//
+// The substrate's lib/build/shared/fleet-catalog-coverage-test.nix
+// adds an assertion row for this label on the next snapshot refresh.
+gen_platform::register_dispatcher!("caixa.upgrade-instruction", UpgradeInstruction);
 
 /// One upgrade entry: the *prior* version we're upgrading from, plus
 /// the instruction sequence to execute.

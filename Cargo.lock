@@ -402,6 +402,8 @@ dependencies = [
 name = "caixa-core"
 version = "0.1.0"
 dependencies = [
+ "gen-platform",
+ "gen-types",
  "pretty_assertions",
  "semver",
  "serde",
@@ -1217,6 +1219,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "gen-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "gen-platform"
+version = "0.1.0"
+dependencies = [
+ "gen-macros",
+ "gen-types",
+ "inventory",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gen-types"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "chrono",
+ "indexmap",
+ "inventory",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1692,6 +1728,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "inventory"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+dependencies = [
+ "rustversion",
 ]
 
 [[package]]
@@ -3201,7 +3246,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tatara-core"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3222,7 +3267,7 @@ dependencies = [
 
 [[package]]
 name = "tatara-lisp"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "blake3",
  "serde",
@@ -3233,7 +3278,7 @@ dependencies = [
 
 [[package]]
 name = "tatara-lisp-derive"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3242,7 +3287,7 @@ dependencies = [
 
 [[package]]
 name = "tatara-process"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "blake3",
