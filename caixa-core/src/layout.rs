@@ -169,6 +169,55 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
+        // Kind ↔ slot coherence on the fourth and final axis — the
+        // code-surface slot set (the trio M2/Supervisor/Aplicacao gates
+        // above close on the M2 runtime, supervisor-tree, and M3 mesh
+        // axes; this gate closes the symmetric "kind owns this code
+        // shape" relation on `:exe` + `:servicos`). `:exe` is the nix-
+        // built executable surface owned only by Binario; `:servicos`
+        // is the wasm-component daemon surface owned only by Servico.
+        // The caixa-helm / caixa-flux / caixa-flake renderers gate on
+        // `require_kind(_, <owning-kind>)` and only emit the slot for
+        // its owning kind — so on any *other* code-running kind a
+        // declared `:exe` / `:servicos` is the manifest field's
+        // documented "ignored otherwise" (see the field docs on
+        // `Caixa::exe` + `Caixa::servicos`): the path is validated by
+        // the per-kind path-existence loops below, but the value is
+        // never rendered into a build target or programs.yaml entry —
+        // it silently passes `feira build` and then vanishes, far from
+        // the source caixa.lisp.
+        //
+        // Reject it here — beside the M2/Supervisor/Aplicacao slot
+        // gates, after the `SupervisorOwnsCode` / `AplicacaoOwnsCode`
+        // OwnCode gates which dominate on those two no-code kinds (a
+        // Supervisor / Aplicacao with any of `:bibliotecas` / `:exe` /
+        // `:servicos` surfaces the OwnCode diagnostic first), and
+        // before the path-existence loops which would otherwise spend
+        // a less-helpful `MissingEntry` diagnostic on the foreign
+        // slot's path. `declared_foreign_code_slots` is the single
+        // typed source of the foreign-code-slot set + its canonical
+        // diagnostic order (`:exe` → `:servicos`).
+        //
+        // Mirrors the 9d37f98 / 510c00a / 760a430 kind ↔ slot
+        // coherence trio's "declared-but-inert" footgun closure on the
+        // M2 / supervisor-tree / M3 axes, now extended onto the code-
+        // surface axis — every code-running kind's exclusive code
+        // surface is structurally fenced from every other code-running
+        // kind. `:bibliotecas` is deliberately excluded from the foreign
+        // set on Binario / Servico (a `lib/` helper bundled into the
+        // nix flake's build or the wasm-component's source tree is a
+        // legitimate cross-kind authoring shape); on Biblioteca it is
+        // the native slot, and on Supervisor / Aplicacao the OwnCode
+        // gates above already close it.
+        let foreign_code_slots = caixa.declared_foreign_code_slots();
+        if !foreign_code_slots.is_empty() {
+            return Err(LayoutError::ForeignCodeSlot {
+                caixa: caixa.nome.clone(),
+                kind: caixa.kind,
+                slots: foreign_code_slots.join(" "),
+            });
+        }
+
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
@@ -451,6 +500,21 @@ pub enum LayoutError {
          Servico caixa or remove them"
     )]
     ServicoSlotsOnNonServico {
+        caixa: String,
+        kind: CaixaKind,
+        slots: String,
+    },
+    #[error(
+        "caixa '{caixa}' is :kind {kind:?} but declares foreign code-surface slot(s): {slots} — \
+         :exe is the nix-built executable surface owned only by :kind Binario, :servicos is the \
+         wasm-component + ComputeUnit daemon surface owned only by :kind Servico; \
+         caixa-helm / caixa-flux / caixa-flake gate emission on `require_kind(_, <owning-kind>)`, \
+         so a declared :exe / :servicos on the wrong code-running kind is silently ignored — the \
+         path is validated by the layout's path-existence loops but never rendered into a build \
+         target or programs.yaml entry. Move the slot to its owning kind, change :kind to match \
+         (Binario for :exe, Servico for :servicos), or drop the slot entirely"
+    )]
+    ForeignCodeSlot {
         caixa: String,
         kind: CaixaKind,
         slots: String,
@@ -1303,6 +1367,257 @@ mod tests {
         });
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::AplicacaoOwnsCode(_)));
+    }
+
+    // ── ForeignCodeSlot — kind ↔ code-surface coherence ────────────────
+
+    #[test]
+    fn biblioteca_with_exe_rejected() {
+        // Fail-before-pass-after pin: a `:kind Biblioteca` declaring
+        // `:exe` is the "I added a CLI to my library" footgun — the nix
+        // flake renderer for Binario gates on `require_kind(_, Binario)`,
+        // so on a Biblioteca the `:exe` path is silently dropped past
+        // the layout's path-existence check (no executable target is
+        // ever generated). The diagnostic names the offending kind +
+        // slot verbatim so the author can grep their caixa.lisp for
+        // `:exe` and fix in one edit (drop the slot or change
+        // `:kind Biblioteca` → `:kind Binario`).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let lib = root.join("lib").join("demo.lisp");
+        let exe_path = root.join("exe").join("tool");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == lib || p == exe_path);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.exe = vec!["exe/tool".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ForeignCodeSlot { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Biblioteca);
+                assert_eq!(slots, ":exe");
+            }
+            other => panic!("expected ForeignCodeSlot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn biblioteca_with_servicos_rejected() {
+        // Symmetric to `biblioteca_with_exe_rejected` on the
+        // `:servicos` axis: a `:kind Biblioteca` declaring a Servico
+        // computeunit silently passed validate and the daemon's
+        // ComputeUnit / lareira chart never materialized (caixa-helm /
+        // caixa-flux gate emission on `require_kind(_, Servico)`).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let lib = root.join("lib").join("demo.lisp");
+        let svc = root.join("servicos").join("demo.computeunit.yaml");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == lib || p == svc);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ForeignCodeSlot { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Biblioteca);
+                assert_eq!(slots, ":servicos");
+            }
+            other => panic!("expected ForeignCodeSlot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn biblioteca_with_exe_and_servicos_lists_slots_in_canonical_order() {
+        // Both foreign code slots declared on a Biblioteca → the
+        // diagnostic enumerates them in canonical declaration order
+        // (`:exe` → `:servicos`), deterministic across runs. Mirrors the
+        // mesh/supervisor/servico-slot `*_lists_slots_in_canonical_order`
+        // pins on the peer kind ↔ slot algebra axes; drift in the
+        // [`Caixa::declared_foreign_code_slots`] iteration order surfaces
+        // here.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.exe = vec!["exe/tool".into()];
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ForeignCodeSlot { slots, .. } => {
+                assert_eq!(slots, ":exe :servicos");
+            }
+            other => panic!("expected ForeignCodeSlot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn binario_with_servicos_rejected() {
+        // The peer footgun on the Binario kind: declaring a Servico
+        // computeunit on a `:kind Binario` caixa. The caixa-helm /
+        // caixa-flux renderers gate on `require_kind(_, Servico)`, so
+        // the `:servicos` slot vanishes past the layout's path-
+        // existence check — no ComputeUnit, no Helm chart. `:exe` stays
+        // valid (Binario's native code surface), so the kind-coherence
+        // diagnostic targets only `:servicos`.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let exe_path = root.join("exe").join("tool");
+        let svc = root.join("servicos").join("demo.computeunit.yaml");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == exe_path || p == svc);
+        let mut c = caixa(CaixaKind::Binario);
+        c.exe = vec!["exe/tool".into()];
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ForeignCodeSlot { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Binario);
+                assert_eq!(slots, ":servicos");
+            }
+            other => panic!("expected ForeignCodeSlot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_with_exe_rejected() {
+        // Symmetric to `binario_with_servicos_rejected` on the other
+        // code-running peer: a `:kind Servico` declaring an `:exe` is
+        // the "I added a host-side CLI to my wasm component" footgun —
+        // the nix flake's Binario target gates on `require_kind(_,
+        // Binario)`, so the `:exe` path vanishes past the layout's
+        // path-existence check.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos").join("demo.computeunit.yaml");
+        let exe_path = root.join("exe").join("tool");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == svc || p == exe_path);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.exe = vec!["exe/tool".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ForeignCodeSlot { caixa, kind, slots } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Servico);
+                assert_eq!(slots, ":exe");
+            }
+            other => panic!("expected ForeignCodeSlot, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn binario_without_servicos_still_verifies() {
+        // Pass-after control: a well-formed Binario carrying only its
+        // native `:exe` surface must remain accepted — the gate keys off
+        // declared-ness of the *foreign* slots, so it must not over-fire
+        // on the legitimate same-kind case. Mirror of
+        // `servico_with_servico_slots_still_verifies` on the peer axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let exe_path = root.join("exe").join("tool");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == exe_path);
+        let mut c = caixa(CaixaKind::Binario);
+        c.exe = vec!["exe/tool".into()];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn biblioteca_with_only_bibliotecas_still_verifies() {
+        // Pass-after control: a well-formed Biblioteca carrying only
+        // its native `:bibliotecas` surface (or the default
+        // `lib/<nome>.lisp`) must remain accepted. The gate keys off
+        // declared-ness of `:exe` + `:servicos` only — `:bibliotecas`
+        // is deliberately excluded from the foreign-set on every
+        // code-running kind (`declared_foreign_code_slots` doc), so a
+        // Biblioteca with the canonical lib surface alone passes.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let lib = root.join("lib").join("demo.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == lib);
+        layout
+            .verify(&caixa(CaixaKind::Biblioteca), &root)
+            .expect("Biblioteca with default lib must verify");
+    }
+
+    #[test]
+    fn binario_with_bibliotecas_helper_still_verifies() {
+        // Pass-after control on the deliberate `:bibliotecas`-as-helper
+        // shape: a `:kind Binario` may legitimately bundle a `lib/`
+        // helper its nix flake build consumes (the same shape a
+        // `:kind Servico` may bundle for its wasm-component source).
+        // The foreign-code-slot gate must NOT fire on `:bibliotecas` for
+        // either code-running kind; pinned here so a future tightening
+        // that adds `:bibliotecas` to the foreign set on Binario /
+        // Servico surfaces as a test failure rather than as a silent
+        // over-reach.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let exe_path = root.join("exe").join("tool");
+        let lib = root.join("lib").join("helper.lisp");
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest || p == exe_path || p == lib);
+        let mut c = caixa(CaixaKind::Binario);
+        c.exe = vec!["exe/tool".into()];
+        c.bibliotecas = vec!["lib/helper.lisp".into()];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn supervisor_with_exe_still_surfaces_owns_code() {
+        // Diagnostic-precedence pin: a `:kind Supervisor` declaring
+        // `:exe` is *both* "Supervisor with code" and "foreign code
+        // slot". The more-fundamental `SupervisorOwnsCode` must win
+        // (Supervisor doesn't run code at all — the foreign-slot
+        // diagnostic would mislead the author toward changing `:kind`
+        // when the underlying defect is that supervisors orchestrate
+        // children, not code). Guards the call order in `verify`
+        // against silent reordering.
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.exe = vec!["exe/tool".into()];
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::SupervisorOwnsCode(_)),
+            "Supervisor-with-:exe must surface as SupervisorOwnsCode (the more-fundamental \
+             no-code-at-all diagnostic), got {err:?}"
+        );
+    }
+
+    #[test]
+    fn declared_foreign_code_slots_returns_canonical_order() {
+        // Unit-level pin for the lifted method: the canonical iteration
+        // order is `:exe` → `:servicos`, independent of which subset is
+        // populated. Empty input + each single-slot subset + the full
+        // pair are all checked so a future axis added to the method
+        // (a hypothetical fifth code-surface slot) is one extension
+        // point + one assertion update here, not a coordinated rewrite
+        // across the layout-test sites that reach for the canonical
+        // order.
+        let mut c = caixa(CaixaKind::Biblioteca);
+        assert!(c.declared_foreign_code_slots().is_empty());
+        c.exe = vec!["exe/tool".into()];
+        assert_eq!(c.declared_foreign_code_slots(), vec![":exe"]);
+        c.exe.clear();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        assert_eq!(c.declared_foreign_code_slots(), vec![":servicos"]);
+        c.exe = vec!["exe/tool".into()];
+        assert_eq!(c.declared_foreign_code_slots(), vec![":exe", ":servicos"]);
     }
 
     #[test]
