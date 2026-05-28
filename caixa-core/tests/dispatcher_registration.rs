@@ -138,3 +138,38 @@ fn restart_policy_kinds_via_trait() {
         vec!["permanent", "temporary", "transient"]
     );
 }
+
+#[test]
+fn upgrade_instruction_discriminant_returns_kebab_kind() {
+    let load = UpgradeInstruction::LoadModule { module: "x".into() };
+    let restart = UpgradeInstruction::Restart;
+    assert_eq!(load.discriminant(), "load-module");
+    assert_eq!(restart.discriminant(), "restart");
+}
+
+#[test]
+fn upgrade_instruction_is_variant_predicates() {
+    let load = UpgradeInstruction::LoadModule { module: "x".into() };
+    let restart = UpgradeInstruction::Restart;
+    let purge = UpgradeInstruction::Purge { module: "y".into() };
+
+    assert!(load.is_load_module());
+    assert!(!load.is_restart());
+    assert!(!load.is_purge());
+
+    assert!(restart.is_restart());
+    assert!(!restart.is_load_module());
+
+    assert!(purge.is_purge());
+    assert!(!purge.is_soft_purge());
+}
+
+#[test]
+fn upgrade_instruction_const_fn_in_const_context() {
+    // Unit variant Restart works in const context — proves
+    // Discriminant + IsVariant emit real `const fn`.
+    const IS_RESTART: bool = UpgradeInstruction::Restart.is_restart();
+    const RESTART_KIND: &str = UpgradeInstruction::Restart.discriminant();
+    assert!(IS_RESTART);
+    assert_eq!(RESTART_KIND, "restart");
+}
