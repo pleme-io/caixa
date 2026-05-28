@@ -83,10 +83,13 @@ impl UpgradeFromEntry {
     /// typed shape, the within-entry `(:restart)`-exclusivity invariant
     /// (an entry containing `(:restart)` must contain exactly one
     /// `(:restart)` and nothing else — see
-    /// [`Self::validate_restart_exclusive`]), and the within-entry
+    /// [`Self::validate_restart_exclusive`]), the within-entry
     /// state-change-ordering invariant (every `(:state-change …)` must
     /// be preceded by a `(:load-module …)` — see
-    /// [`Self::validate_state_change_ordering`]).
+    /// [`Self::validate_state_change_ordering`]), and the within-entry
+    /// purge-ordering invariant (every `(:soft-purge …)` / `(:purge …)`
+    /// must be preceded by a `(:load-module …)` — see
+    /// [`Self::validate_purge_ordering`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
         Version::parse(&self.from).map_err(|_| UpgradeError::BadFromVersion(self.from.clone()))?;
@@ -108,6 +111,7 @@ impl UpgradeFromEntry {
         }
         self.validate_restart_exclusive()?;
         self.validate_state_change_ordering()?;
+        self.validate_purge_ordering()?;
         Ok(())
     }
 
@@ -235,6 +239,74 @@ impl UpgradeFromEntry {
                     return Err(UpgradeError::StateChangeWithoutPriorLoad {
                         from: self.from.clone(),
                         script: script.clone(),
+                    });
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Reject an entry whose `(:soft-purge …)` or `(:purge …)` is not
+    /// preceded by a `(:load-module …)` in the same `:instructions` list.
+    ///
+    /// `SoftPurge` and `Purge` are the `code:soft_purge/1` /
+    /// `code:purge/1` analogs (INSPIRATIONS §II.4): they remove the
+    /// *old* module from memory after the new one is resident. OTP's
+    /// two-phase code load is `code:load_module/1` *then*
+    /// `code:soft_purge/1` — load the new version alongside the old
+    /// (both in memory, new requests route to new), then purge the old
+    /// after in-flight callers drain. caixa decomposes that into two
+    /// explicit instructions (`LoadModule` brings the new version up
+    /// "alongside the current one", per [`UpgradeInstruction::LoadModule`]
+    /// doc; `SoftPurge` "waits for in-flight requests on a named module
+    /// to drain, then GC it", per [`UpgradeInstruction::SoftPurge`] doc),
+    /// and the module doc pins that the operator "runs the instructions
+    /// in order". So a `:soft-purge` / `:purge` with no preceding
+    /// `:load-module` purges old code while the only resident version is
+    /// still the *same* old code, leaving the upgrade entry asking the
+    /// operator to drain or discard the live module with no replacement
+    /// resident. Two authoring footguns close here:
+    ///
+    ///   - `((:soft-purge "…"))` / `((:purge "…"))` — the "I wrote the
+    ///     cleanup but forgot to load the new module" footgun. The new
+    ///     code never comes up alongside; the operator either drains the
+    ///     old version to nothing (`SoftPurge`) or discards it outright
+    ///     mid-request (`Purge`), with no replacement to route in-flight
+    ///     or future requests to.
+    ///   - `((:soft-purge "…") (:load-module "…"))` /
+    ///     `((:purge "…") (:load-module "…"))` — the right-instructions-
+    ///     wrong-order footgun. Because the operator executes in declared
+    ///     order, the cleanup runs *before* the new code is resident,
+    ///     leaving a window during which neither version is available;
+    ///     the canonical order is `(:load-module …) (:state-change …)
+    ///     (:soft-purge …)` (module doc example).
+    ///
+    /// Same within-entry cross-instruction discipline as
+    /// [`Self::validate_state_change_ordering`] (the `:state-change`-
+    /// ordering gate it runs beside): both close the same load-before-X
+    /// post-condition on the OTP appup ordering contract, now extending
+    /// the typed coverage from "new code resident before its state
+    /// migration runs" to "new code resident before the old code is
+    /// drained or discarded" — the second half of OTP's two-phase code
+    /// load. Runs *after* `validate_state_change_ordering` so an entry
+    /// like `((:state-change …) (:soft-purge …))` surfaces the more-
+    /// fundamental `StateChangeWithoutPriorLoad` first (both instructions
+    /// are load-less, but state-change is the load-bearing semantic — the
+    /// purge is meaningless either way without a preceding load, so the
+    /// author should see the migration-side diagnostic first).
+    fn validate_purge_ordering(&self) -> Result<(), UpgradeError> {
+        let mut loaded = false;
+        for instr in &self.instructions {
+            match instr {
+                UpgradeInstruction::LoadModule { .. } => loaded = true,
+                UpgradeInstruction::SoftPurge { module } | UpgradeInstruction::Purge { module }
+                    if !loaded =>
+                {
+                    return Err(UpgradeError::PurgeWithoutPriorLoad {
+                        from: self.from.clone(),
+                        kind: instr.lisp_form(),
+                        module: module.clone(),
                     });
                 }
                 _ => {}
@@ -620,6 +692,24 @@ pub enum UpgradeError {
         script.display()
     )]
     StateChangeWithoutPriorLoad { from: String, script: PathBuf },
+    #[error(
+        ":upgrade-from `(:from {from:?})` runs `({kind} {module:?})` before any \
+         `(:load-module …)` in its :instructions list — `:soft-purge` and `:purge` are the \
+         code:soft_purge/1 / code:purge/1 analogs and must run after the new code is \
+         resident alongside the old (OTP's two-phase code load: `code:load_module/1` \
+         then `code:soft_purge/1`), but the operator executes instructions in declared \
+         order, so this cleanup runs while the only resident version is still the same \
+         old code (`:soft-purge` drains it to nothing; `:purge` discards it outright \
+         mid-request), leaving no replacement to route in-flight or future requests \
+         to. Load the new module first: author the canonical `(:load-module …) \
+         (:state-change …) ({kind} {module:?})` order so the new code is resident \
+         before the old code is drained or discarded."
+    )]
+    PurgeWithoutPriorLoad {
+        from: String,
+        kind: &'static str,
+        module: String,
+    },
 }
 
 #[cfg(test)]
@@ -905,6 +995,14 @@ mod tests {
 
     #[test]
     fn entry_with_chain_of_versions() {
+        // Middle entry pairs a `:load-module` with the trailing
+        // `:soft-purge` so it satisfies the within-entry purge-ordering
+        // gate (`PurgeWithoutPriorLoad` rejects `:soft-purge` without a
+        // preceding `:load-module`, mirroring the state-change-ordering
+        // gate's `StateChangeWithoutPriorLoad`). The chain shape under
+        // test is *cross-entry* `:from` values; the within-entry shape
+        // is incidental — keeping it canonical (`:load-module` before
+        // `:soft-purge`) leaves the chain assertion load-bearing.
         let entries = vec![
             entry(
                 "0.1.0",
@@ -912,9 +1010,12 @@ mod tests {
             ),
             entry(
                 "0.1.5",
-                vec![UpgradeInstruction::SoftPurge {
-                    module: "x-old".into(),
-                }],
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::SoftPurge {
+                        module: "x-old".into(),
+                    },
+                ],
             ),
             entry("0.2.0-rc.1", vec![UpgradeInstruction::Restart]),
         ];
@@ -954,7 +1055,10 @@ mod tests {
         // 0.2.0-rc.1" authoring shape from ABSORPTION-ROADMAP §M2.3
         // (and `entry_with_chain_of_versions` above) passes the cross-
         // entry gate. Different `:from` per entry is the intended
-        // shape; the gate must not regress this baseline.
+        // shape; the gate must not regress this baseline. Middle entry
+        // pairs `:load-module` with `:soft-purge` to satisfy the
+        // within-entry purge-ordering gate (see
+        // `entry_with_chain_of_versions` for the same shape).
         let entries = vec![
             entry(
                 "0.1.0",
@@ -962,9 +1066,12 @@ mod tests {
             ),
             entry(
                 "0.1.5",
-                vec![UpgradeInstruction::SoftPurge {
-                    module: "x-old".into(),
-                }],
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::SoftPurge {
+                        module: "x-old".into(),
+                    },
+                ],
             ),
             entry("0.2.0-rc.1", vec![UpgradeInstruction::Restart]),
         ];
@@ -1001,9 +1108,12 @@ mod tests {
             ),
             entry(
                 "0.1.0",
-                vec![UpgradeInstruction::SoftPurge {
-                    module: "x-old".into(),
-                }],
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::SoftPurge {
+                        module: "x-old".into(),
+                    },
+                ],
             ),
         ];
         let err = validate_upgrade_from(&entries).unwrap_err();
@@ -1561,6 +1671,234 @@ mod tests {
         assert!(
             matches!(err, UpgradeError::RestartNotExclusive { .. }),
             "restart-mixed must surface before the ordering gate, got {err:?}"
+        );
+    }
+
+    // ── within-entry purge-ordering invariant ──────────────────────────
+
+    #[test]
+    fn validate_rejects_soft_purge_without_load() {
+        // Fail-before-pass-after pin: `:soft-purge` drains the *old*
+        // module after the new one is resident (OTP's two-phase code
+        // load — code:load_module/1 then code:soft_purge/1), so an
+        // entry that runs it with no preceding `:load-module` drains
+        // the live module with no replacement. The operator runs
+        // instructions in declared order, so this is a build error,
+        // not a runtime surprise (CAIXA-SDLC §III).
+        let e = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::SoftPurge {
+                module: "x-old".into(),
+            }],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::PurgeWithoutPriorLoad {
+                from: "0.1.0".into(),
+                kind: ":soft-purge",
+                module: "x-old".into(),
+            },
+            "a `:soft-purge` with no preceding `:load-module` must surface as \
+             PurgeWithoutPriorLoad naming the offending entry + kind + module verbatim"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_purge_without_load() {
+        // Per-arm coverage: `:purge` (immediate discard, no drain) is
+        // the more catastrophic peer of `:soft-purge`; same gate, same
+        // shape, kind-tag differs so the author can grep their
+        // caixa.lisp for the offending `(:purge …)` form.
+        let e = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::Purge {
+                module: "x-old".into(),
+            }],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::PurgeWithoutPriorLoad {
+                from: "0.1.0".into(),
+                kind: ":purge",
+                module: "x-old".into(),
+            },
+        );
+    }
+
+    #[test]
+    fn validate_rejects_soft_purge_before_load() {
+        // Right-instructions-wrong-order: the load is present but runs
+        // *after* the purge. Because the operator executes in declared
+        // order, the cleanup drains the old code before the new code
+        // is resident — same incoherence as the missing-load case,
+        // leaving a window during which neither version is available.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: ":soft-purge",
+                    ..
+                }
+            ),
+            "a `:soft-purge` ahead of its `:load-module` must surface as \
+             PurgeWithoutPriorLoad, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_purge_before_load() {
+        // Symmetric arm on the `:purge` variant — the kind tag
+        // distinguishes the diagnostic so the author lands on the
+        // offending form directly.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad { kind: ":purge", .. }
+            ),
+            "a `:purge` ahead of its `:load-module` must surface as \
+             PurgeWithoutPriorLoad, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_soft_purge_after_load() {
+        // Positive control: the canonical `(:load-module …)
+        // (:soft-purge …)` order validates. The load need not name the
+        // same module the purge targets — the cleanup typically targets
+        // the *old* module name (e.g. `"x-old"`) and the load brings up
+        // the *new* one (`"x"`); the gate only requires that *some*
+        // `:load-module` precedes the purge, so the new code is resident
+        // before the old one is drained.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_multiple_purges_after_one_load() {
+        // A single leading `:load-module` covers every subsequent
+        // `:soft-purge` / `:purge` — the `loaded` latch stays set once
+        // the new code is resident. Same shape as
+        // `validate_accepts_multiple_state_changes_after_one_load` on
+        // the peer ordering gate.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-oldest".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_purge_ordering_fires_after_state_change_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:state-change …)
+        // (:soft-purge …))` is *both* state-change-without-load and
+        // purge-without-load. The state-change gate must win — it's
+        // the load-bearing semantic on this ordering contract, and
+        // surfacing the purge diagnostic first would mask the more-
+        // fundamental migration-against-stale-code defect. Guards the
+        // call order in `validate` against silent reordering.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
+            "state-change-without-load must surface before purge-without-load, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_purge_ordering_fires_after_per_instr_shape() {
+        // Order pin: a malformed `:module` value on a `:soft-purge` (an
+        // empty string) surfaces its narrower kind-tagged `ModuleEmpty`
+        // diagnostic *before* the within-entry purge-ordering gate fires.
+        // The per-instruction shape pass walks the list inline before
+        // the ordering checks, so the narrower self-locating diagnostic
+        // surfaces first — mirrors the empty-first cascade on every peer
+        // DNS-1123 gate and the `validate_restart_exclusive_fires_after_
+        // per_instr_shape` pin on the sibling ordering gate.
+        let e = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::SoftPurge {
+                module: String::new(),
+            }],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::ModuleEmpty {
+                kind: ":soft-purge"
+            },
+            "malformed instruction must surface its kind-tagged diagnostic before the \
+             purge-ordering gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_purge_ordering_threads_through_validate_upgrade_from() {
+        // The whole-list entry-point surfaces the per-entry ordering
+        // error (mirrors
+        // `validate_state_change_ordering_threads_through_validate_upgrade_from`):
+        // the gate is reachable from the LayoutInvariants call site, not
+        // only from a direct `entry.validate()`.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![UpgradeInstruction::Purge {
+                module: "x-old".into(),
+            }],
+        )];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad { kind: ":purge", .. }
+            ),
+            "validate_upgrade_from must thread the purge-ordering error, got {err:?}"
         );
     }
 
