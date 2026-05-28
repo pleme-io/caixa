@@ -1678,6 +1678,49 @@ impl AplicacaoSpec {
     }
 }
 
+/// Cross-slot coherence gate on the Aplicacao graph: no `:membros :caixa`
+/// entry may name the Aplicacao's own `:nome`.
+///
+/// An Aplicacao that lists itself as a member is a degenerate self-edge in
+/// the typed graph — the application graph is a DAG rooted at the Aplicacao
+/// (MESH-COMPOSITION §III.1 names `:membros` as the set of *constituent*
+/// Servicos that compose the app; an Aplicacao is never its own constituent),
+/// and the lacre pipeline's closure-resolution would otherwise be handed a
+/// node that is its own parent: a one-node cycle it either rejects far from
+/// the source `caixa.lisp` (the resolver detecting infinite recursion on the
+/// closure walk) or, worse, recurses on until it exhausts the lacre stack.
+/// Because every `:nome` is a globally-unique substrate identity (DNS-1123
+/// label + lacre closure root), a member whose `:caixa` equals the
+/// Aplicacao's `:nome` *is* the Aplicacao itself, not a coincidentally-named
+/// peer.
+///
+/// Lives outside [`AplicacaoSpec::validate`] because the typed view carries
+/// the membros but not the parent `:nome`; mirrors the cross-slot precedence
+/// gate `validate_upgrade_from_against_versao` and the supervision-tree
+/// self-parent gate `crate::supervisor::validate_no_self_supervision`
+/// (ad4abf1) — the same "an edge from a graph node to itself is structurally
+/// not a tree/mesh edge" discipline, here on the second typed-graph axis
+/// (the Aplicacao :membros set; the supervision-tree :children list was the
+/// first). Closes the kind ↔ self-edge coverage on both typed-graph kinds:
+/// every validated Supervisor's children are distinct from its `:nome`,
+/// every validated Aplicacao's membros are distinct from its `:nome`. The
+/// transitive consequence is that `:entrada :para` and `:contratos`
+/// `:de`/`:para` — already gated to be members of `:membros` — also cannot
+/// name the Aplicacao itself, without re-deriving the partition.
+pub fn validate_no_self_membership(
+    membros: &[Membro],
+    parent_nome: &str,
+) -> Result<(), AplicacaoError> {
+    for m in membros {
+        if m.caixa == parent_nome {
+            return Err(AplicacaoError::MembroIsSelfAplicacao {
+                caixa: parent_nome.to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AplicacaoError {
     #[error("Aplicacao must declare at least one :membros entry")]
@@ -1716,6 +1759,17 @@ pub enum AplicacaoError {
          programs.yaml entries and ambiguous :contratos membership lookups)"
     )]
     MembroDuplicate { caixa: String },
+    #[error(
+        "aplicacao {caixa:?} lists itself as a :membros entry — an Aplicacao is \
+         never its own constituent Servico (the application graph is a DAG rooted \
+         at the Aplicacao; :membros names the *other* caixas that compose the \
+         app, not the app itself). Since every :nome is a globally-unique \
+         substrate identity, a member naming the Aplicacao's own :nome is a \
+         one-node lacre-closure recursion, not a coincidentally-named peer; \
+         drop the self-referential :membros entry or rename it to the actual \
+         constituent caixa."
+    )]
+    MembroIsSelfAplicacao { caixa: String },
     #[error("contrato references caixa {caixa:?} not declared in :membros")]
     ContratoMemberMissing { caixa: String },
     #[error(
@@ -6447,5 +6501,66 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ── self-membership cross-slot gate ──────────────────────────────
+
+    #[test]
+    fn validate_no_self_membership_rejects_self_named_membro() {
+        // An Aplicacao whose `:membros` lists its own `:nome` is a
+        // one-node lacre-closure recursion — rejected, naming the parent.
+        let membros = vec![
+            membro("catalog", "^0.1"),
+            membro("checkout", "^0.1"),
+            membro("cart", "^0.1"),
+        ];
+        let err = validate_no_self_membership(&membros, "checkout").unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::MembroIsSelfAplicacao { ref caixa } if caixa == "checkout"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_no_self_membership_accepts_distinct_membros() {
+        // Positive control: distinct member names (including a member
+        // that is itself an Aplicacao — recursive composition is valid,
+        // MESH-COMPOSITION §V) pass the gate.
+        let membros = vec![membro("catalog", "^0.1"), membro("sub-aplicacao", "^0.1")];
+        validate_no_self_membership(&membros, "checkout").unwrap();
+    }
+
+    #[test]
+    fn validate_no_self_membership_empty_membros_is_vacuously_ok() {
+        // An empty `:membros` is rejected by `AplicacaoSpec::validate`'s
+        // `NoMembros` arm (the more-fundamental "graph must have nodes"
+        // gate), not by this cross-slot self-edge gate. Keeping the
+        // self-membership predicate vacuously-ok on the empty input
+        // matches its supervisor-axis peer
+        // (`validate_no_self_supervision_empty_children_is_ok`) and
+        // makes the gate composable from any future call site (an M4
+        // CR materializer's per-membros validator) without re-checking
+        // emptiness.
+        validate_no_self_membership(&[], "checkout").unwrap();
+    }
+
+    #[test]
+    fn validate_no_self_membership_diagnostic_names_offending_caixa() {
+        // Pinning the Display: the self-membership diagnostic must name
+        // the offending caixa verbatim + the "lists itself" framing the
+        // author can grep for, so the cluster-far failure surfaces at
+        // build time with one-line remediation. Same diagnostic shape
+        // as the supervisor-axis `ChildSupervisesSelf` peer.
+        let membros = vec![membro("orquestra", "^0.1")];
+        let err = validate_no_self_membership(&membros, "orquestra").unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("orquestra"),
+            "diagnostic must name the offending caixa nome (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("lists itself"),
+            "diagnostic must use the canonical `lists itself` framing (got: {msg:?})"
+        );
     }
 }
