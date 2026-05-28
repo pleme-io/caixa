@@ -352,6 +352,72 @@ impl Caixa {
         slots
     }
 
+    /// The kebab-case `:slot` tags of every code-surface slot this caixa
+    /// declares a value on that its [`CaixaKind`] doesn't natively own,
+    /// in canonical declaration order (`:exe` → `:servicos`). A
+    /// code-surface slot is owned by exactly one kind: `:exe` by
+    /// [`CaixaKind::Binario`] (the nix-built executable surface), and
+    /// `:servicos` by [`CaixaKind::Servico`] (the wasm component +
+    /// `ComputeUnit` daemon surface).
+    ///
+    /// Each is silently ignored when declared on the wrong kind: the
+    /// caixa-helm / caixa-flux / caixa-flake renderers gate on
+    /// [`crate::require_kind`]`(_, <owning-kind>)`, so on any *other*
+    /// code-running kind a declared `:exe` / `:servicos` is the manifest
+    /// field's documented "ignored otherwise" — its path is checked for
+    /// existence by the layout's `bibliotecas`/`exe`/`servicos` loops
+    /// (which run after [`Caixa::from_lisp`]), but the value is never
+    /// rendered into a build target or programs.yaml entry. It silently
+    /// passes [`Caixa::from_lisp`] + `feira build`, far from the source
+    /// caixa.lisp, with no field naming which slot is foreign.
+    ///
+    /// [`crate::StandardLayout::verify`] consults this to reject that
+    /// silent-drop at caixa-build time
+    /// ([`crate::LayoutError::ForeignCodeSlot`]), beside the M2
+    /// servico-runtime, supervisor-tree, and M3 mesh kind-coherence
+    /// gates ([`Self::declared_servico_slots`] /
+    /// [`Self::declared_supervisor_slots`] /
+    /// [`Self::declared_mesh_slots`]): the fourth kind ↔ slot algebra
+    /// axis to be closed on the typed surface. The Supervisor /
+    /// Aplicacao "no code at all" cases ([`crate::LayoutError::SupervisorOwnsCode`]
+    /// / [`crate::LayoutError::AplicacaoOwnsCode`]) keep their dedicated
+    /// diagnostics — they fire ahead of this gate on the same `verify`
+    /// pass, so for Supervisor / Aplicacao the `OwnCode` arm always wins
+    /// and this method is moot. For Biblioteca / Binario / Servico, this
+    /// gate fires when a code-running kind declares another code-running
+    /// kind's exclusive code surface.
+    ///
+    /// `:bibliotecas` is deliberately excluded — a Binario or Servico
+    /// may legitimately ship a `lib/` helper that the underlying
+    /// substrate (the nix flake for Binario, the wasm component build
+    /// for Servico) bundles into its build, so the slot's
+    /// declared-on-wrong-kind cardinality isn't a structural error on
+    /// either code-running kind. A Biblioteca declaring `:bibliotecas`
+    /// is the native case (the slot's owning kind). Supervisor /
+    /// Aplicacao declaring `:bibliotecas` is gated upstream by
+    /// [`crate::LayoutError::SupervisorOwnsCode`] /
+    /// [`crate::LayoutError::AplicacaoOwnsCode`].
+    ///
+    /// Lifted as a typed method (rather than an inline disjunction at
+    /// the verify call site) so the foreign-code-slot set lives in one
+    /// place — a future kind that gains its own code-surface slot is
+    /// one push here, and every consumer reaching for "which code
+    /// surfaces are foreign to this kind" (the verify gate, a future
+    /// `feira lint` kind-coherence advisory, the future `app-operator`'s
+    /// per-caixa build-target classifier) inherits the canonical order
+    /// without rolling its own.
+    #[must_use]
+    pub fn declared_foreign_code_slots(&self) -> Vec<&'static str> {
+        let mut slots = Vec::new();
+        if !self.exe.is_empty() && !self.kind.requires_exe() {
+            slots.push(":exe");
+        }
+        if !self.servicos.is_empty() && !self.kind.requires_servicos() {
+            slots.push(":servicos");
+        }
+        slots
+    }
+
     /// Validate every entry of `:deps` and `:deps-dev` through
     /// [`Dep::validate`] — closing the parity loop with the per-axis
     /// `:versao` gates already wired into the typed-graph
