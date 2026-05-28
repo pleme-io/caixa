@@ -34,7 +34,7 @@ use thiserror::Error;
 /// instructions: enough to express every common upgrade pattern,
 /// few enough that the wasm-operator can implement each
 /// deterministically.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, gen_platform::TypedDispatcher)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, gen_platform::TypedDispatcher, gen_platform::Discriminant, gen_platform::IsVariant)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum UpgradeInstruction {
     /// Load a new wasm module alongside the current one — the analog
