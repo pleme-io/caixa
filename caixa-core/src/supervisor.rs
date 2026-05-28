@@ -30,7 +30,7 @@ use thiserror::Error;
 ///
 /// The strategy decides what happens to *sibling* children when one
 /// child dies. Per-child behaviour is governed by [`RestartPolicy`].
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::TypedDispatcher)]
 pub enum RestartStrategy {
     /// On child failure, restart only that child. Default; matches
     /// most "tree of independent workers" use cases.
@@ -57,7 +57,7 @@ impl Default for RestartStrategy {
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::TypedDispatcher)]
 pub enum RestartPolicy {
     /// Always restart the child, regardless of how it died. Used for
     /// long-running services that must always be up.
@@ -75,6 +75,14 @@ impl Default for RestartPolicy {
         Self::Permanent
     }
 }
+
+// Fleet-wide dispatcher-catalog registrations for caixa's OTP
+// supervisor surface — two more typed shadows over Erlang/OTP
+// primitives the substrate now mechanically tracks (see
+// theory/UNIFIED-COMPUTING-MODEL.md §VI for the roadmap +
+// theory/TYPED-ABSORPTION.md for the absorption arc).
+gen_platform::register_dispatcher!("caixa.restart-strategy", RestartStrategy);
+gen_platform::register_dispatcher!("caixa.restart-policy",   RestartPolicy);
 
 /// One child entry in the supervisor's `:children` list.
 ///

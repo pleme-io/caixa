@@ -9,7 +9,7 @@
 //! purge / restart) — the substrate's typed shadow of an OTP
 //! ecosystem primitive.
 
-use caixa_core::UpgradeInstruction;
+use caixa_core::{RestartPolicy, RestartStrategy, UpgradeInstruction};
 use gen_platform::{catalog, TypedDispatcherTrait};
 
 #[test]
@@ -97,5 +97,44 @@ fn variant_count_matches_reflected_kinds_len() {
     assert_eq!(
         UpgradeInstruction::variant_count(),
         UpgradeInstruction::variant_kinds().len()
+    );
+}
+
+#[test]
+fn restart_strategy_registers_into_catalog() {
+    let entry = catalog::by_label("caixa.restart-strategy")
+        .expect("RestartStrategy must register");
+    assert_eq!((entry.variant_count)(), 4);
+    let kinds = (entry.variant_kinds)();
+    assert_eq!(
+        kinds,
+        vec!["one-for-one", "one-for-all", "rest-for-one", "simple-one-for-one"]
+    );
+}
+
+#[test]
+fn restart_policy_registers_into_catalog() {
+    let entry =
+        catalog::by_label("caixa.restart-policy").expect("RestartPolicy must register");
+    assert_eq!((entry.variant_count)(), 3);
+    let kinds = (entry.variant_kinds)();
+    assert_eq!(kinds, vec!["permanent", "temporary", "transient"]);
+}
+
+#[test]
+fn restart_strategy_kinds_via_trait() {
+    assert_eq!(RestartStrategy::variant_count(), 4);
+    assert_eq!(
+        RestartStrategy::variant_kinds(),
+        vec!["one-for-one", "one-for-all", "rest-for-one", "simple-one-for-one"]
+    );
+}
+
+#[test]
+fn restart_policy_kinds_via_trait() {
+    assert_eq!(RestartPolicy::variant_count(), 3);
+    assert_eq!(
+        RestartPolicy::variant_kinds(),
+        vec!["permanent", "temporary", "transient"]
     );
 }
