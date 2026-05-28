@@ -430,6 +430,28 @@ impl LayoutInvariants for StandardLayout {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),
                 })?;
+            // Cross-slot coherence: `:membros :caixa` must not name the
+            // Aplicacao's own `:nome`. The typed `AplicacaoSpec` view
+            // carries the membros but not the parent `:nome`, so this
+            // self-edge gate reads one slot against another here, the
+            // same wire-up shape `crate::supervisor::validate_no_self_supervision`
+            // (ad4abf1) uses on the peer supervision-tree axis. Runs
+            // after `view.validate()` so the per-member shape +
+            // duplicate diagnostics surface first; a self-referential
+            // member is always a valid DNS-1123 label (it equals the
+            // already-valid `:nome`), so this ordering never masks a
+            // narrower defect. Because `:contratos` `:de`/`:para` and
+            // `:entrada :para` are already required to be members of
+            // `:membros`, this single gate also transitively closes
+            // those two axes — every validated `:contratos` edge and
+            // every validated `:entrada :para` cannot name the
+            // Aplicacao itself, without re-deriving the partition.
+            crate::aplicacao::validate_no_self_membership(&caixa.membros, &caixa.nome).map_err(
+                |err| LayoutError::AplicacaoViolation {
+                    caixa: caixa.nome.clone(),
+                    issue: err.to_string(),
+                },
+            )?;
         }
 
         Ok(())
@@ -991,6 +1013,129 @@ mod tests {
             versao: "^0.1".into(),
         }];
         layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn aplicacao_self_referential_membro_is_violation() {
+        // An Aplicacao whose `:membros` names its own `:nome` is a
+        // one-node lacre-closure recursion. The cross-slot gate fires
+        // at verify time, surfacing as an AplicacaoViolation that
+        // names the offending aplicacao — not at lacre-resolve time
+        // far from source. The `caixa()` helper's `:nome` is "demo".
+        // Peer of `supervisor_self_referential_child_is_violation`
+        // on the supervision-tree axis.
+        use crate::{Membro, Placement, PlacementStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.membros = vec![
+            Membro {
+                caixa: "service-a".into(),
+                versao: "^0.1".into(),
+            },
+            Membro {
+                caixa: "demo".into(),
+                versao: "^0.1".into(),
+            },
+        ];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::AplicacaoViolation { caixa, issue } = err else {
+            panic!("expected AplicacaoViolation for self-referential membro, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("demo") && issue.contains("lists itself"),
+            "issue must name the self-membering aplicacao, got {issue:?}"
+        );
+    }
+
+    #[test]
+    fn aplicacao_distinct_membros_pass_self_membership_gate() {
+        // Positive control: an Aplicacao whose membros are all distinct
+        // from its own `:nome` verifies cleanly.
+        use crate::{Membro, Placement, PlacementStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.membros = vec![
+            Membro {
+                caixa: "service-a".into(),
+                versao: "^0.1".into(),
+            },
+            Membro {
+                caixa: "service-b".into(),
+                versao: "^0.1".into(),
+            },
+        ];
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn aplicacao_self_membership_fires_after_view_validate() {
+        // Diagnostic-precedence pin: a self-referential membro alongside
+        // a duplicate-:caixa shape surfaces the more-fundamental
+        // `MembroDuplicate` (from `view.validate()`) first; only when the
+        // per-membros shape diagnostics pass does the cross-slot
+        // self-membership gate fire. Mirrors the ordering pin
+        // `supervisor_self_referential_child_is_violation` carries on
+        // the peer supervision-tree axis (`view.validate()` runs first,
+        // then the cross-slot gate). Without this ordering a future
+        // refactor that swaps the two calls would silently mask the
+        // narrower per-membro defect.
+        use crate::{Membro, Placement, PlacementStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Aplicacao);
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.membros = vec![
+            Membro {
+                caixa: "service-a".into(),
+                versao: "^0.1".into(),
+            },
+            Membro {
+                caixa: "service-a".into(),
+                versao: "^0.2".into(),
+            },
+            Membro {
+                caixa: "demo".into(),
+                versao: "^0.1".into(),
+            },
+        ];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::AplicacaoViolation { issue, .. } = err else {
+            panic!("expected AplicacaoViolation, got {err:?}");
+        };
+        // The per-membros duplicate diagnostic (from view.validate())
+        // surfaces ahead of the cross-slot self-membership gate, so the
+        // `service-a` duplicate is named — not the `demo` self-reference.
+        assert!(
+            issue.contains("service-a") && issue.contains("more than once"),
+            "duplicate-:caixa diagnostic must surface before self-membership gate, \
+             got {issue:?}"
+        );
     }
 
     #[test]
