@@ -173,3 +173,60 @@ fn upgrade_instruction_const_fn_in_const_context() {
     assert!(IS_RESTART);
     assert_eq!(RESTART_KIND, "restart");
 }
+
+#[test]
+fn restart_strategy_quintet_round_trip() {
+    use std::str::FromStr;
+    for variant in [
+        RestartStrategy::OneForOne,
+        RestartStrategy::OneForAll,
+        RestartStrategy::RestForOne,
+        RestartStrategy::SimpleOneForOne,
+    ] {
+        let kind = variant.discriminant();
+        let parsed = RestartStrategy::from_str(kind).unwrap_or_else(|_| {
+            panic!("RestartStrategy::from_str must accept own discriminant {kind}")
+        });
+        assert_eq!(parsed.discriminant(), variant.discriminant());
+    }
+}
+
+#[test]
+fn restart_policy_quintet_round_trip() {
+    use std::str::FromStr;
+    for variant in [
+        RestartPolicy::Permanent,
+        RestartPolicy::Temporary,
+        RestartPolicy::Transient,
+    ] {
+        let kind = variant.discriminant();
+        let parsed = RestartPolicy::from_str(kind).unwrap_or_else(|_| {
+            panic!("RestartPolicy::from_str must accept own discriminant {kind}")
+        });
+        assert_eq!(parsed.discriminant(), variant.discriminant());
+    }
+}
+
+#[test]
+fn restart_strategy_display_delegates_to_discriminant() {
+    assert_eq!(RestartStrategy::OneForOne.to_string(), "one-for-one");
+    assert_eq!(
+        RestartStrategy::SimpleOneForOne.to_string(),
+        "simple-one-for-one"
+    );
+}
+
+#[test]
+fn restart_strategy_predicates() {
+    let one_for_one = RestartStrategy::OneForOne;
+    assert!(one_for_one.is_one_for_one());
+    assert!(!one_for_one.is_one_for_all());
+    assert!(!one_for_one.is_rest_for_one());
+    assert!(!one_for_one.is_simple_one_for_one());
+}
+
+#[test]
+fn restart_strategy_from_str_rejects_unknown() {
+    use std::str::FromStr;
+    assert!(RestartStrategy::from_str("does-not-exist").is_err());
+}

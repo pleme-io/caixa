@@ -30,7 +30,12 @@ use thiserror::Error;
 ///
 /// The strategy decides what happens to *sibling* children when one
 /// child dies. Per-child behaviour is governed by [`RestartPolicy`].
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::TypedDispatcher)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
+         gen_platform::TypedDispatcher,
+         gen_platform::Discriminant,
+         gen_platform::IsVariant,
+         gen_platform::FromStrKind)]
+#[discriminant(also_display)]
 pub enum RestartStrategy {
     /// On child failure, restart only that child. Default; matches
     /// most "tree of independent workers" use cases.
@@ -57,7 +62,12 @@ impl Default for RestartStrategy {
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::TypedDispatcher)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
+         gen_platform::TypedDispatcher,
+         gen_platform::Discriminant,
+         gen_platform::IsVariant,
+         gen_platform::FromStrKind)]
+#[discriminant(also_display)]
 pub enum RestartPolicy {
     /// Always restart the child, regardless of how it died. Used for
     /// long-running services that must always be up.
