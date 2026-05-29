@@ -103,7 +103,10 @@ impl UpgradeFromEntry {
     /// [`Self::validate_state_change_ordering`]), the within-entry
     /// purge-ordering invariant (every `(:soft-purge …)` / `(:purge …)`
     /// must be preceded by a `(:load-module …)` — see
-    /// [`Self::validate_purge_ordering`]), and the within-entry
+    /// [`Self::validate_purge_ordering`]), the within-entry
+    /// load-singularity invariant (no module appears as the target of
+    /// `(:load-module …)` more than once — see
+    /// [`Self::validate_load_singularity`]), and the within-entry
     /// cleanup-singularity invariant (no module appears as the target
     /// of `(:soft-purge …)` or `(:purge …)` more than once total — see
     /// [`Self::validate_cleanup_singularity`]).
@@ -129,6 +132,7 @@ impl UpgradeFromEntry {
         self.validate_restart_exclusive()?;
         self.validate_state_change_ordering()?;
         self.validate_purge_ordering()?;
+        self.validate_load_singularity()?;
         self.validate_cleanup_singularity()?;
         Ok(())
     }
@@ -436,6 +440,108 @@ impl UpgradeFromEntry {
                 });
             }
             seen.push((module, kind));
+        }
+        Ok(())
+    }
+
+    /// Reject an entry whose `:instructions` list names the same module
+    /// as the target of more than one `(:load-module …)` instruction —
+    /// set-not-multiset on the `LoadModule` axis.
+    ///
+    /// `LoadModule` is the `code:load_module/1` analog (INSPIRATIONS
+    /// §II.4 verbatim: "1. `code:load_module/1` — load v2 alongside v1;
+    /// new code is 'current', old code is 'old'."). The instruction
+    /// brings the new wasm component up resident alongside the old
+    /// one so the operator can route new traffic to the new code
+    /// while in-flight callers drain on the old — and the operator's
+    /// dispatch table reads the module *name* (a caixa name) to bind
+    /// the component, so two `(:load-module "x")` instructions in one
+    /// entry ask the operator to re-bind the same component twice.
+    /// `systools`-generated `.relup` files emit at most one
+    /// `load_module` per module per upgrade step for this reason; the
+    /// second load has no observable semantic relative to the first
+    /// (the component is already resident). Three authoring footguns
+    /// close here:
+    ///
+    ///   - `((:load-module "x") (:load-module "x"))` — the "I
+    ///     copy-pasted the load line twice" footgun. The second
+    ///     `:load-module` re-reads the same module name and re-binds
+    ///     the same wasm component — a no-op in both directions
+    ///     (no new code becomes resident; no old code is purged) —
+    ///     and any cleanup / migration the author intended for a
+    ///     *distinct* module is silently absent from the entry.
+    ///   - `((:load-module "x") (:load-module "x") (:state-change …))`
+    ///     — the "I meant to load two distinct modules" typo. The
+    ///     author intended `((:load-module "x") (:load-module "y"))`
+    ///     but renamed both to "x" (or copied the first line and
+    ///     forgot to change the module). The migration runs against
+    ///     code that's resident only on one module name, and the
+    ///     second module the author imagined was being loaded never
+    ///     comes up at all — far from the source caixa.lisp.
+    ///   - `((:load-module "x") (:load-module "x") (:soft-purge "x-old"))`
+    ///     — same shape with a trailing cleanup. The duplicate load
+    ///     is dead code; the cleanup still fires correctly, masking
+    ///     the load-side duplication as a silently-passing entry.
+    ///
+    /// Same within-entry exclusivity discipline as
+    /// [`Self::validate_cleanup_singularity`] (the per-module cleanup-
+    /// singularity gate this runs beside) on the sibling
+    /// `LoadModule` axis: both reject an `:instructions` list whose
+    /// instructions are individually well-shaped but jointly
+    /// incoherent on a per-module-per-class basis (load-once for the
+    /// load axis here; cleanup-once for the cleanup axis there), at
+    /// the typed build surface rather than as a runtime surprise.
+    /// Runs *after* [`Self::validate_purge_ordering`] (the load-
+    /// before-cleanup ordering gate) so an entry like
+    /// `((:state-change "m.lisp") (:load-module "x") (:load-module "x"))`
+    /// surfaces the more-fundamental `StateChangeWithoutPriorLoad`
+    /// first (the missing-load defect is load-bearing — the migration
+    /// runs against unloaded code; the duplicate is meaningless either
+    /// way without the preceding load). Runs *before*
+    /// [`Self::validate_cleanup_singularity`] so an entry like
+    /// `((:load-module "x") (:load-module "x") (:soft-purge "y-old")
+    /// (:soft-purge "y-old"))` surfaces `DuplicateLoadModule` first —
+    /// the load axis precedes the cleanup axis in the canonical OTP
+    /// sequence (`code:load_module/1` then `code:soft_purge/1`) and
+    /// in [`UpgradeInstruction`] declaration order (`LoadModule`
+    /// before `SoftPurge`/`Purge`), so the load-side singularity is
+    /// the load-bearing diagnostic when both fire.
+    ///
+    /// Same set-not-multiset discipline applied to every peer
+    /// duplicate-target axis: `:children :caixa` (dbf50a9 —
+    /// `SupervisorError::DuplicateChildCaixa`), `:membros :caixa`
+    /// (4bb3f3d — `AplicacaoError::MembroDuplicate`), `:contratos`
+    /// (5dbcfaf — `AplicacaoError::ContratoDuplicate`), `:placement
+    /// :clusters` (c7c7799 — `AplicacaoError::PlacementClusterDuplicate`),
+    /// `:entrada :paths` (eb3456d — `AplicacaoError::EntradaPathDuplicate`),
+    /// `:upgrade-from :from` ([`UpgradeError::DuplicateFrom`]), and
+    /// the per-module cleanup-target axis (9cedd8b —
+    /// [`UpgradeError::DuplicateCleanup`]). This gate extends the
+    /// discipline onto the within-entry `LoadModule` instruction-target
+    /// axis — the third within-entry per-module singularity completing
+    /// the load+cleanup pair across the OTP two-phase code-load
+    /// contract.
+    ///
+    /// Detection: linear scan of the instructions list collecting the
+    /// module name from every `LoadModule` encountered; on the second
+    /// occurrence of any module the gate fires. Diagnostic-order pin:
+    /// the first colliding occurrence surfaces, not the last — mirrors
+    /// [`Self::validate_cleanup_singularity`]'s first-collision posture
+    /// and every peer duplicate gate's first-collision discipline.
+    fn validate_load_singularity(&self) -> Result<(), UpgradeError> {
+        let mut seen: Vec<&str> = Vec::new();
+        for instr in &self.instructions {
+            let module = match instr {
+                UpgradeInstruction::LoadModule { module } => module.as_str(),
+                _ => continue,
+            };
+            if seen.contains(&module) {
+                return Err(UpgradeError::DuplicateLoadModule {
+                    from: self.from.clone(),
+                    module: module.to_string(),
+                });
+            }
+            seen.push(module);
         }
         Ok(())
     }
@@ -859,6 +965,23 @@ pub enum UpgradeError {
         module: String,
         kinds: Vec<&'static str>,
     },
+    #[error(
+        ":upgrade-from `(:from {from:?})` :instructions list loads module {module:?} more than \
+         once — `:load-module` is the code:load_module/1 analog (INSPIRATIONS §II.4: \"1. \
+         `code:load_module/1` — load v2 alongside v1; new code is 'current', old code is \
+         'old'.\"), and the instruction binds the named wasm component once: the operator's \
+         dispatch table reads the module name and brings up the corresponding component \
+         alongside the running version. systools-generated `.relup` files emit at most one \
+         `load_module` per module per upgrade step for this reason. A second `(:load-module \
+         {module:?})` instruction has no observable semantic relative to the first (the \
+         component is already resident) — either dead code (copy-pasted load line) or a typo \
+         masking a distinct module the author intended to load alongside (renamed both to \
+         {module:?} by mistake), leaving the second module silently absent from the entry. \
+         Author one `(:load-module {module:?})` per old module per entry; if two distinct old \
+         versions need loading alongside the running one, name them distinctly (e.g. \
+         `(:load-module {module:?}) (:load-module \"…-v2\")`)."
+    )]
+    DuplicateLoadModule { from: String, module: String },
 }
 
 #[cfg(test)]
@@ -2397,6 +2520,284 @@ mod tests {
         assert!(
             matches!(err, UpgradeError::DuplicateCleanup { .. }),
             "validate_upgrade_from must thread the cleanup-singularity error, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_load_module_for_same_module() {
+        // `LoadModule` is the `code:load_module/1` analog (INSPIRATIONS
+        // §II.4): each module is loaded exactly once per upgrade entry,
+        // the operator's dispatch table reads the module name to bind
+        // the wasm component, and a second `(:load-module "x")` re-reads
+        // the same module name and re-binds the same component — a
+        // no-op the second time. systools-generated `.relup` files emit
+        // at most one `load_module` per module per upgrade step for
+        // this reason. Author one `(:load-module "x")` per old module.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateLoadModule {
+                from: "0.1.0".into(),
+                module: "x".into(),
+            },
+            "two `:load-module` of the same module must surface as DuplicateLoadModule naming \
+             the module, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_distinct_load_modules() {
+        // Positive control: `:load-module` instructions on *different*
+        // modules pass the gate. Mirrors
+        // `validate_accepts_distinct_cleanup_modules` on the sibling
+        // singularity axis — the load-singularity gate is keyed on
+        // (module), so distinct module names render distinct load
+        // targets and don't collide. Sweep both the bare two-load shape
+        // and the canonical load-pair-with-cleanup shape so a future
+        // tighten that over-fires on distinct loads surfaces here.
+        let two_loads = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "y".into() },
+            ],
+        );
+        two_loads.validate().unwrap();
+        let with_cleanup = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "y".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "y-old".into(),
+                },
+            ],
+        );
+        with_cleanup.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_single_load_per_module() {
+        // Boundary control: a list with exactly one `:load-module`
+        // followed by the canonical `:state-change` + `:soft-purge`
+        // sequence (the module-doc OTP shape) is the gate's identity
+        // element. Pin so a future off-by-one in the duplicate-
+        // detection scan doesn't accidentally flag a single occurrence
+        // as duplicating itself — mirrors
+        // `validate_accepts_single_cleanup_per_module` on the sibling
+        // singularity axis.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_load_singularity_fires_after_state_change_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:state-change
+        // "m.lisp") (:load-module "x") (:load-module "x"))` is *both*
+        // state-change-without-load and duplicate-load. The more-
+        // fundamental ordering gate must win — the missing-load defect
+        // is load-bearing (the migration runs against unloaded code),
+        // and surfacing the duplicate diagnostic first would mask the
+        // migrate-into-unloaded-code defect the ordering gate exists
+        // to close. Guards the call order in `validate` against silent
+        // reordering. Same posture as
+        // `validate_cleanup_singularity_fires_after_purge_ordering`
+        // on the sibling singularity gate.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
+            "state-change-without-load must surface before duplicate-load, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_load_singularity_fires_after_purge_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:soft-purge
+        // "x-old") (:load-module "x") (:load-module "x"))` is *both*
+        // purge-without-load and duplicate-load. The more-fundamental
+        // ordering gate must win — the missing-load defect is load-
+        // bearing (the cleanup runs against no-replacement-window),
+        // and surfacing the duplicate diagnostic first would mask the
+        // drain-to-nothing defect the ordering gate exists to close.
+        // Sibling of
+        // `validate_cleanup_singularity_fires_after_purge_ordering` on
+        // the load-singularity axis.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: ":soft-purge",
+                    ..
+                }
+            ),
+            "purge-without-load must surface before duplicate-load, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_load_singularity_fires_after_per_instr_shape() {
+        // Order pin: a malformed `:module` value on a `:load-module`
+        // (an empty string) surfaces its narrower kind-tagged
+        // `ModuleEmpty` diagnostic *before* the within-entry load-
+        // singularity gate fires. The per-instruction shape pass walks
+        // the list inline before the singularity check, so the
+        // narrower self-locating diagnostic surfaces first — mirrors
+        // the empty-first cascade on every peer DNS-1123 gate and the
+        // `validate_cleanup_singularity_fires_after_per_instr_shape`
+        // pin on the sibling singularity gate.
+        //
+        // Two empty-string `:load-module` would *otherwise* duplicate
+        // (both modules are the same empty string), so this pin
+        // double-locks the precedence: the per-instr shape gate must
+        // win on the first malformed instruction before the duplicate
+        // scan even reaches the second.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: String::new(),
+                },
+                UpgradeInstruction::LoadModule {
+                    module: String::new(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::ModuleEmpty {
+                kind: ":load-module",
+            },
+            "malformed instruction must surface its kind-tagged diagnostic before the \
+             load-singularity gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_load_singularity_fires_before_cleanup_singularity() {
+        // Diagnostic-precedence pin: an entry that violates *both*
+        // singularities — duplicate load on "x" *and* duplicate cleanup
+        // on "y-old" — must surface the load-side diagnostic first.
+        // The load axis precedes the cleanup axis in the canonical OTP
+        // sequence (`code:load_module/1` then `code:soft_purge/1`) and
+        // in [`UpgradeInstruction`] declaration order (LoadModule
+        // before SoftPurge/Purge), so the load-side singularity is the
+        // load-bearing diagnostic when both fire — the cleanup-side
+        // duplicate is meaningless either way without a coherent load.
+        // Guards the call order in `validate`: `validate_load_singularity`
+        // runs before `validate_cleanup_singularity`.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "y-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "y-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateLoadModule {
+                from: "0.1.0".into(),
+                module: "x".into(),
+            },
+            "duplicate-load must surface before duplicate-cleanup, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_load_singularity_reports_first_collision() {
+        // Determinism pin: with three loads of the same module the gate
+        // reports the *first* collision (the second occurrence) and
+        // stops — the third's duplicate is masked by the first surfaced
+        // one. Mirrors
+        // `validate_cleanup_singularity_reports_first_collision` on the
+        // sibling singularity axis and every peer duplicate gate's
+        // first-collision discipline.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateLoadModule {
+                from: "0.1.0".into(),
+                module: "x".into(),
+            },
+            "the first colliding occurrence must surface, not the later third-load collision"
+        );
+    }
+
+    #[test]
+    fn validate_load_singularity_threads_through_validate_upgrade_from() {
+        // The whole-list entry-point surfaces the per-entry singularity
+        // error (mirrors
+        // `validate_cleanup_singularity_threads_through_validate_upgrade_from`):
+        // the gate is reachable from the LayoutInvariants call site,
+        // not only from a direct `entry.validate()`.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        )];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::DuplicateLoadModule { .. }),
+            "validate_upgrade_from must thread the load-singularity error, got {err:?}"
         );
     }
 
