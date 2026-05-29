@@ -1536,6 +1536,7 @@ dependencies = [
 [[package]]
 name = "iac-forge"
 version = "0.1.0"
+source = "git+https://github.com/pleme-io/iac-forge#b2db8c7e5f98ff9064811268132ecd91ede88fbe"
 dependencies = [
  "blake3",
  "meimei",
@@ -3242,6 +3243,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "tatara-core"
 version = "0.2.1"
+source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3263,6 +3265,7 @@ dependencies = [
 [[package]]
 name = "tatara-lisp"
 version = "0.2.1"
+source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
 dependencies = [
  "blake3",
  "serde",
@@ -3274,6 +3277,7 @@ dependencies = [
 [[package]]
 name = "tatara-lisp-derive"
 version = "0.2.1"
+source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3283,6 +3287,7 @@ dependencies = [
 [[package]]
 name = "tatara-process"
 version = "0.2.1"
+source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
 dependencies = [
  "anyhow",
  "blake3",
