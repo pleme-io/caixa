@@ -76,8 +76,8 @@ tatara-lisp-derive = { path = "../tatara/tatara-lisp-derive" }
 tatara-process = { path = "../tatara/tatara-process" }
 caixa-tatara = { path = "caixa-tatara" }
 iac-forge = { path = "../iac-forge" }
-gen-platform = { path = "../gen/crates/gen-platform" }
-gen-types = { path = "../gen/crates/gen-types" }
+gen-platform = { git = "https://github.com/pleme-io/gen" }
+gen-types = { git = "https://github.com/pleme-io/gen" }
 
 pretty_assertions = "1"
 tempfile = "3"
