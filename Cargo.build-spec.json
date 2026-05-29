@@ -16606,8 +16606,10 @@
       "version": "0.1.0",
       "edition": "2024",
       "source": {
-        "kind": "path",
-        "relative_path": "../iac-forge"
+        "kind": "git",
+        "url": "https://github.com/pleme-io/iac-forge",
+        "rev": "b2db8c7e5f98ff9064811268132ecd91ede88fbe",
+        "sha256": "1zd4p54ibqksf0n9746cwmvj7jvzxg38rb3h5nwgxywipf4iql81"
       },
       "features": [
         "default"
@@ -16616,10 +16618,7 @@
       "build_script": null,
       "links": null,
       "binaries": [],
-      "lib_target": {
-        "name": "iac_forge",
-        "path": "src/lib.rs"
-      },
+      "lib_target": null,
       "dependencies": [
         {
           "name": "blake3",
@@ -16813,8 +16812,6 @@
           ]
         },
         "release": true,
-        "libName": "iac_forge",
-        "libPath": "src/lib.rs",
         "preBuild": "export CARGO_CRATE_NAME=iac_forge;"
       }
     },
@@ -32389,18 +32386,17 @@
       "version": "0.2.1",
       "edition": "2021",
       "source": {
-        "kind": "path",
-        "relative_path": "../tatara/tatara-core"
+        "kind": "git",
+        "url": "https://github.com/pleme-io/tatara",
+        "rev": "ceaab25b5e7c0fcb48668b0ec02a63a707fcf604",
+        "sha256": "0c67dinnfm2013c69xkzs2v67asvs31s3vb9rz93fmwgh1maqd2q"
       },
       "features": [],
       "proc_macro": false,
       "build_script": null,
       "links": null,
       "binaries": [],
-      "lib_target": {
-        "name": "tatara_core",
-        "path": "src/lib.rs"
-      },
+      "lib_target": null,
       "dependencies": [
         {
           "name": "anyhow",
@@ -32732,8 +32728,6 @@
         "version": "0.2.1",
         "edition": "2021",
         "release": true,
-        "libName": "tatara_core",
-        "libPath": "src/lib.rs",
         "preBuild": "export CARGO_CRATE_NAME=tatara_core;"
       }
     },
@@ -32742,8 +32736,10 @@
       "version": "0.2.1",
       "edition": "2021",
       "source": {
-        "kind": "path",
-        "relative_path": "../tatara/tatara-lisp"
+        "kind": "git",
+        "url": "https://github.com/pleme-io/tatara",
+        "rev": "ceaab25b5e7c0fcb48668b0ec02a63a707fcf604",
+        "sha256": "0c67dinnfm2013c69xkzs2v67asvs31s3vb9rz93fmwgh1maqd2q"
       },
       "features": [
         "default"
@@ -32752,10 +32748,7 @@
       "build_script": null,
       "links": null,
       "binaries": [],
-      "lib_target": {
-        "name": "tatara_lisp",
-        "path": "src/lib.rs"
-      },
+      "lib_target": null,
       "dependencies": [
         {
           "name": "blake3",
@@ -32889,8 +32882,6 @@
           ]
         },
         "release": true,
-        "libName": "tatara_lisp",
-        "libPath": "src/lib.rs",
         "preBuild": "export CARGO_CRATE_NAME=tatara_lisp;"
       }
     },
@@ -32899,18 +32890,17 @@
       "version": "0.2.1",
       "edition": "2021",
       "source": {
-        "kind": "path",
-        "relative_path": "../tatara/tatara-lisp-derive"
+        "kind": "git",
+        "url": "https://github.com/pleme-io/tatara",
+        "rev": "ceaab25b5e7c0fcb48668b0ec02a63a707fcf604",
+        "sha256": "0c67dinnfm2013c69xkzs2v67asvs31s3vb9rz93fmwgh1maqd2q"
       },
       "features": [],
       "proc_macro": true,
       "build_script": null,
       "links": null,
       "binaries": [],
-      "lib_target": {
-        "name": "tatara_lisp_derive",
-        "path": "src/lib.rs"
-      },
+      "lib_target": null,
       "dependencies": [
         {
           "name": "proc_macro2",
@@ -33002,8 +32992,6 @@
         },
         "release": true,
         "procMacro": true,
-        "libName": "tatara_lisp_derive",
-        "libPath": "src/lib.rs",
         "preBuild": "export CARGO_CRATE_NAME=tatara_lisp_derive;"
       }
     },
@@ -33012,8 +33000,10 @@
       "version": "0.2.1",
       "edition": "2021",
       "source": {
-        "kind": "path",
-        "relative_path": "../tatara/tatara-process"
+        "kind": "git",
+        "url": "https://github.com/pleme-io/tatara",
+        "rev": "ceaab25b5e7c0fcb48668b0ec02a63a707fcf604",
+        "sha256": "0c67dinnfm2013c69xkzs2v67asvs31s3vb9rz93fmwgh1maqd2q"
       },
       "features": [],
       "proc_macro": false,
@@ -33025,10 +33015,7 @@
           "path": "src/bin/tatara-lispc.rs"
         }
       ],
-      "lib_target": {
-        "name": "tatara_process",
-        "path": "src/lib.rs"
-      },
+      "lib_target": null,
       "dependencies": [
         {
           "name": "anyhow",
@@ -33431,8 +33418,6 @@
           ]
         },
         "release": true,
-        "libName": "tatara_process",
-        "libPath": "src/lib.rs",
         "preBuild": "export CARGO_CRATE_NAME=tatara_process;"
       }
     },
@@ -193695,5 +193680,5 @@
       }
     }
   },
-  "cargo_lock_sha256": "b3fcae5b8c086be9a9789bedf644784366dacee0e73e3de50ba4aa5d70fad979"
+  "cargo_lock_sha256": "dff7f898bf2037ecaa8fde87687a7b4ebf407ff6e285d535b38a190988584a81"
 }
