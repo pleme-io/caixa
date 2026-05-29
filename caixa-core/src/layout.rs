@@ -2016,6 +2016,19 @@ mod tests {
         // tighten that rejects any canonical shape surfaces as a
         // regression at this layout-level pin, not piecemeal across
         // per-renderer call sites.
+        //
+        // `:soft-purge` and `:purge` target *distinct* old-version
+        // modules (`hello-rio-old` and `hello-rio-oldest`) so the
+        // within-entry cleanup-singularity gate
+        // (`UpgradeError::DuplicateCleanup`) passes — that gate
+        // rejects more than one cleanup per module per entry (one
+        // semantic per old version; mixing drain + discard on one
+        // module is the soft-then-hard fallback footgun the author
+        // shouldn't write because the operator handles cleanup
+        // failure escalation itself). The two distinct names cover
+        // the legitimate "drain a recent old, hard-discard an
+        // older-still" shape — both authoring forms remain load-
+        // bearing in this positive-control enumeration.
         use crate::{UpgradeFromEntry, UpgradeInstruction};
         use std::path::PathBuf;
         let root = PathBuf::from("/tmp/x");
@@ -2042,7 +2055,7 @@ mod tests {
                         module: "hello-rio-old".into(),
                     },
                     UpgradeInstruction::Purge {
-                        module: "hello-rio-old".into(),
+                        module: "hello-rio-oldest".into(),
                     },
                 ],
             },
