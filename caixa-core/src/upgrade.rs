@@ -34,7 +34,17 @@ use thiserror::Error;
 /// instructions: enough to express every common upgrade pattern,
 /// few enough that the wasm-operator can implement each
 /// deterministically.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, gen_platform::TypedDispatcher, gen_platform::Discriminant, gen_platform::IsVariant)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    gen_platform::TypedDispatcher,
+    gen_platform::Discriminant,
+    gen_platform::IsVariant,
+)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum UpgradeInstruction {
     /// Load a new wasm module alongside the current one — the analog
@@ -106,10 +116,13 @@ impl UpgradeFromEntry {
     /// [`Self::validate_purge_ordering`]), the within-entry
     /// load-singularity invariant (no module appears as the target of
     /// `(:load-module …)` more than once — see
-    /// [`Self::validate_load_singularity`]), and the within-entry
-    /// cleanup-singularity invariant (no module appears as the target
-    /// of `(:soft-purge …)` or `(:purge …)` more than once total — see
-    /// [`Self::validate_cleanup_singularity`]).
+    /// [`Self::validate_load_singularity`]), the within-entry
+    /// state-change-singularity invariant (no script appears as the
+    /// target of `(:state-change …)` more than once — see
+    /// [`Self::validate_state_change_singularity`]), and the within-
+    /// entry cleanup-singularity invariant (no module appears as the
+    /// target of `(:soft-purge …)` or `(:purge …)` more than once
+    /// total — see [`Self::validate_cleanup_singularity`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
         Version::parse(&self.from).map_err(|_| UpgradeError::BadFromVersion(self.from.clone()))?;
@@ -133,6 +146,7 @@ impl UpgradeFromEntry {
         self.validate_state_change_ordering()?;
         self.validate_purge_ordering()?;
         self.validate_load_singularity()?;
+        self.validate_state_change_singularity()?;
         self.validate_cleanup_singularity()?;
         Ok(())
     }
@@ -542,6 +556,122 @@ impl UpgradeFromEntry {
                 });
             }
             seen.push(module);
+        }
+        Ok(())
+    }
+
+    /// Reject an entry whose `:instructions` list names the same script
+    /// as the target of more than one `(:state-change …)` instruction —
+    /// set-not-multiset on the `StateChange` axis.
+    ///
+    /// `StateChange` is the `gen_server:code_change/3` analog
+    /// (INSPIRATIONS §II.4: "State migration uses
+    /// `gen_server:code_change/3`"). The instruction folds the *old*
+    /// state into the shape the *new* code expects — a one-shot
+    /// transition from one declared state representation to another.
+    /// OTP's `release_handler:install_release/1` invokes `code_change/3`
+    /// exactly once per upgrade per `gen_server`; `systools`-generated
+    /// `.relup` files emit at most one `code_change` per `gen_server` per
+    /// upgrade step for this reason. A second `(:state-change "m.lisp")`
+    /// instruction targeting the same script in one entry re-runs the
+    /// migration fold — at best a no-op (idempotent script masking a
+    /// typo where the author intended two distinct scripts) and at
+    /// worst silent state corruption (non-idempotent fold double-
+    /// applied: an `add column` migration that runs twice, an
+    /// `increment counter` that double-bumps, a `rename field` that
+    /// renames-then-fails the second time). Three authoring footguns
+    /// close here:
+    ///
+    ///   - `((:load-module "x") (:state-change "lib/m.lisp")
+    ///     (:state-change "lib/m.lisp"))` — the "I copy-pasted the
+    ///     migration line twice" footgun. The second `:state-change`
+    ///     re-runs the same fold on the already-migrated state — a
+    ///     no-op if the script is idempotent (dead code masking the
+    ///     duplication) or state corruption if not (the migration's
+    ///     pre-condition no longer holds because the post-condition is
+    ///     already in place).
+    ///   - `((:load-module "x") (:state-change "lib/m.lisp")
+    ///     (:state-change "lib/m.lisp") (:soft-purge "x-old"))` — the
+    ///     "duplicate migrate masked by trailing cleanup" footgun. The
+    ///     cleanup still fires correctly, masking the migration-side
+    ///     duplication as a silently-passing entry.
+    ///   - `((:load-module "x") (:state-change "lib/m1.lisp")
+    ///     (:state-change "lib/m1.lisp"))` — the "I meant to migrate
+    ///     two distinct modules" typo. The author intended
+    ///     `(:state-change "lib/m1.lisp") (:state-change "lib/m2.lisp")`
+    ///     but renamed both to `m1.lisp` (or copy-pasted the first line
+    ///     and forgot to change the script). The migration that should
+    ///     have folded the second module's state never runs, far from
+    ///     the source caixa.lisp.
+    ///
+    /// Same within-entry exclusivity discipline as
+    /// [`Self::validate_load_singularity`] (the per-module load-
+    /// singularity gate it runs after) and
+    /// [`Self::validate_cleanup_singularity`] (the per-module cleanup-
+    /// singularity gate it runs before) on the sibling `StateChange`
+    /// axis: each rejects an `:instructions` list whose instructions
+    /// are individually well-shaped but jointly incoherent on a per-
+    /// instruction-class basis (load-once per module for the load
+    /// axis; migrate-once per script for the migration axis here;
+    /// cleanup-once per module for the cleanup axis), at the typed
+    /// build surface rather than as a runtime surprise. Runs *after*
+    /// [`Self::validate_load_singularity`] so an entry like
+    /// `((:load-module "x") (:load-module "x") (:state-change
+    /// "lib/m.lisp") (:state-change "lib/m.lisp"))` surfaces
+    /// `DuplicateLoadModule` first — the load axis precedes the
+    /// migration axis in the canonical OTP sequence
+    /// (`code:load_module/1` then `gen_server:code_change/3`) and in
+    /// [`UpgradeInstruction`] declaration order (`LoadModule` before
+    /// `StateChange`), so the load-side singularity is the load-
+    /// bearing diagnostic when both fire. Runs *before*
+    /// [`Self::validate_cleanup_singularity`] so an entry like
+    /// `((:load-module "x") (:state-change "lib/m.lisp") (:state-change
+    /// "lib/m.lisp") (:soft-purge "y-old") (:soft-purge "y-old"))`
+    /// surfaces `DuplicateStateChange` first — the migration axis
+    /// precedes the cleanup axis in the canonical OTP sequence
+    /// (`code:code_change/3` then `code:soft_purge/1`) and in
+    /// [`UpgradeInstruction`] declaration order (`StateChange` before
+    /// `SoftPurge`/`Purge`).
+    ///
+    /// Same set-not-multiset discipline applied to every peer
+    /// duplicate-target axis: `:children :caixa` (dbf50a9 —
+    /// `SupervisorError::DuplicateChildCaixa`), `:membros :caixa`
+    /// (4bb3f3d — `AplicacaoError::MembroDuplicate`), `:contratos`
+    /// (5dbcfaf — `AplicacaoError::ContratoDuplicate`), `:placement
+    /// :clusters` (c7c7799 — `AplicacaoError::PlacementClusterDuplicate`),
+    /// `:entrada :paths` (eb3456d — `AplicacaoError::EntradaPathDuplicate`),
+    /// `:upgrade-from :from` ([`UpgradeError::DuplicateFrom`]), the
+    /// per-module cleanup-target axis (9cedd8b —
+    /// [`UpgradeError::DuplicateCleanup`]), and the per-module load-
+    /// target axis (a503978 — [`UpgradeError::DuplicateLoadModule`]).
+    /// This gate extends the discipline onto the within-entry
+    /// `StateChange` instruction-target axis — the third within-entry
+    /// per-instruction-class singularity, completing the OTP two-phase
+    /// code-load + state-migration coverage triad
+    /// (`code:load_module/1` → `gen_server:code_change/3` →
+    /// `code:soft_purge/1`).
+    ///
+    /// Detection: linear scan of the instructions list collecting the
+    /// script path from every `StateChange` encountered; on the second
+    /// occurrence of any script the gate fires. Diagnostic-order pin:
+    /// the first colliding occurrence surfaces, not the last — mirrors
+    /// [`Self::validate_load_singularity`]'s and
+    /// [`Self::validate_cleanup_singularity`]'s first-collision posture
+    /// and every peer duplicate gate's first-collision discipline.
+    fn validate_state_change_singularity(&self) -> Result<(), UpgradeError> {
+        let mut seen: Vec<&std::path::Path> = Vec::new();
+        for instr in &self.instructions {
+            let script = match instr {
+                UpgradeInstruction::StateChange { script } => script.as_path(),
+                _ => continue,
+            };
+            if seen.contains(&script) {
+                return Err(UpgradeError::DuplicateStateChange {
+                    from: self.from.clone(),
+                    script: script.to_path_buf(),
+                });
+            }
+            seen.push(script);
         }
         Ok(())
     }
@@ -982,6 +1112,27 @@ pub enum UpgradeError {
          `(:load-module {module:?}) (:load-module \"…-v2\")`)."
     )]
     DuplicateLoadModule { from: String, module: String },
+    #[error(
+        ":upgrade-from `(:from {from:?})` :instructions list runs state migration {} more than \
+         once — `:state-change` is the gen_server:code_change/3 analog (INSPIRATIONS §II.4: \
+         \"State migration uses gen_server:code_change/3\"), and the script folds the prior-version \
+         state shape into the current-version shape: a one-shot transition, not a step that \
+         composes with itself. systools-generated `.relup` files emit at most one `code_change` \
+         per gen_server per upgrade step for this reason; OTP's release_handler invokes the \
+         callback exactly once. A second `(:state-change {})` instruction re-runs the same fold on \
+         the already-migrated state — at best a no-op (idempotent script masking a typo where the \
+         author intended two distinct migration scripts) and at worst silent state corruption \
+         (non-idempotent fold double-applied: an `add column` that runs twice, an `increment \
+         counter` that double-bumps, a `rename field` that renames-then-fails the second time). \
+         Author one `(:state-change {})` per migration script per entry; if two distinct state \
+         transitions are needed (e.g. one module's schema *and* another module's projection), \
+         name them distinctly (e.g. `(:state-change {}) (:state-change \"lib/migrations/v01-to-v02-projection.lisp\")`).",
+        script.display(),
+        script.display(),
+        script.display(),
+        script.display()
+    )]
+    DuplicateStateChange { from: String, script: PathBuf },
 }
 
 #[cfg(test)]
@@ -2798,6 +2949,382 @@ mod tests {
         assert!(
             matches!(err, UpgradeError::DuplicateLoadModule { .. }),
             "validate_upgrade_from must thread the load-singularity error, got {err:?}"
+        );
+    }
+
+    // ── within-entry state-change-singularity invariant ────────────────
+
+    #[test]
+    fn validate_rejects_duplicate_state_change_for_same_script() {
+        // `StateChange` is the `gen_server:code_change/3` analog
+        // (INSPIRATIONS §II.4): the script folds the prior-version
+        // state shape into the current-version shape — a one-shot
+        // transition, not a step that composes with itself. OTP's
+        // release_handler invokes `code_change/3` exactly once per
+        // upgrade per gen_server; systools-generated `.relup` files
+        // emit at most one `code_change` per gen_server per upgrade
+        // step for this reason. A second `(:state-change "m.lisp")`
+        // re-runs the same fold on the already-migrated state — at
+        // best a no-op and at worst silent state corruption from
+        // double-applied non-idempotent transforms (`add column`,
+        // `increment counter`, `rename field`). Author one
+        // `(:state-change "m.lisp")` per migration script per entry.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateStateChange {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+            },
+            "two `:state-change` of the same script must surface as DuplicateStateChange naming \
+             the script, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_distinct_state_change_scripts() {
+        // Positive control: `:state-change` instructions on *different*
+        // scripts pass the gate. Mirrors
+        // `validate_accepts_distinct_cleanup_modules` /
+        // `validate_accepts_distinct_load_modules` on the sibling
+        // singularity axes — the state-change-singularity gate is keyed
+        // on the script PathBuf, so distinct scripts render distinct
+        // migration targets and don't collide. Sweep both the bare two-
+        // migration shape and the canonical load-pair-with-cleanup shape
+        // so a future tighten that over-fires on distinct scripts
+        // surfaces here. This positive control is the gate-level peer of
+        // `validate_accepts_multiple_state_changes_after_one_load` (the
+        // ordering-gate positive control on distinct scripts), pinned
+        // here independently so a future refactor that decouples the
+        // gates can't accidentally drop coverage on either.
+        let two_migrations = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m1.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m2.lisp"),
+                },
+            ],
+        );
+        two_migrations.validate().unwrap();
+        let with_cleanup = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m1.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m2.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        with_cleanup.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_single_state_change_per_script() {
+        // Boundary control: a list with exactly one `:state-change`
+        // wrapped by the canonical `:load-module` + `:soft-purge`
+        // sequence (the module-doc OTP shape) is the gate's identity
+        // element. Pin so a future off-by-one in the duplicate-
+        // detection scan doesn't accidentally flag a single occurrence
+        // as duplicating itself — mirrors
+        // `validate_accepts_single_load_per_module` /
+        // `validate_accepts_single_cleanup_per_module` on the sibling
+        // singularity axes.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_state_change_singularity_fires_after_state_change_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:state-change
+        // "m.lisp") (:state-change "m.lisp"))` is *both* state-change-
+        // without-load and duplicate-state-change. The more-fundamental
+        // ordering gate must win — the missing-load defect is load-
+        // bearing (the migration runs against unloaded code), and
+        // surfacing the duplicate diagnostic first would mask the
+        // migrate-into-unloaded-code defect the ordering gate exists to
+        // close. Guards the call order in `validate` against silent
+        // reordering. Same posture as
+        // `validate_load_singularity_fires_after_state_change_ordering`
+        // on the sibling singularity gate.
+        //
+        // Two same-script `:state-change` would *otherwise* duplicate
+        // (both scripts collide on the very first `:state-change`-
+        // without-load encountered), so this pin double-locks the
+        // precedence: the ordering gate must win on the first un-loaded
+        // `:state-change` before the singularity scan even reaches the
+        // second.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
+            "state-change-without-load must surface before duplicate-state-change, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_fires_after_purge_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:soft-purge
+        // "x-old") (:load-module "x") (:state-change "m.lisp")
+        // (:state-change "m.lisp"))` is *both* purge-without-load and
+        // duplicate-state-change. The more-fundamental ordering gate
+        // must win — the missing-load defect (a cleanup that drains the
+        // only resident version to nothing) is load-bearing, and
+        // surfacing the duplicate diagnostic first would mask the
+        // drain-to-nothing defect the ordering gate exists to close.
+        // Sibling of `validate_load_singularity_fires_after_purge_ordering`
+        // on the state-change-singularity axis.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: ":soft-purge",
+                    ..
+                }
+            ),
+            "purge-without-load must surface before duplicate-state-change, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_fires_after_per_instr_shape() {
+        // Order pin: a malformed `:script` value on a `:state-change`
+        // (an empty path) surfaces its narrower `EmptyScript` diagnostic
+        // *before* the within-entry state-change-singularity gate fires.
+        // The per-instruction shape pass walks the list inline before
+        // the singularity check, so the narrower self-locating
+        // diagnostic surfaces first — mirrors the empty-first cascade on
+        // every peer path-shape gate and the
+        // `validate_load_singularity_fires_after_per_instr_shape` /
+        // `validate_cleanup_singularity_fires_after_per_instr_shape`
+        // pins on the sibling singularity gates.
+        //
+        // Two empty-path `:state-change` would *otherwise* duplicate
+        // (both scripts are the same empty PathBuf), so this pin double-
+        // locks the precedence: the per-instr shape gate must win on the
+        // first malformed instruction before the duplicate scan even
+        // reaches the second.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::new(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::new(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::EmptyScript,
+            "malformed instruction must surface its narrower diagnostic before the \
+             state-change-singularity gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_fires_after_load_singularity() {
+        // Diagnostic-precedence pin: an entry that violates *both*
+        // singularities — duplicate load on "x" *and* duplicate
+        // state-change on "m.lisp" — must surface the load-side
+        // diagnostic first. The load axis precedes the migration axis
+        // in the canonical OTP sequence (`code:load_module/1` then
+        // `gen_server:code_change/3`) and in [`UpgradeInstruction`]
+        // declaration order (LoadModule before StateChange), so the
+        // load-side singularity is the load-bearing diagnostic when
+        // both fire — the migration-side duplicate is meaningless
+        // either way without a coherent load. Guards the call order in
+        // `validate`: `validate_load_singularity` runs before
+        // `validate_state_change_singularity`.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateLoadModule {
+                from: "0.1.0".into(),
+                module: "x".into(),
+            },
+            "duplicate-load must surface before duplicate-state-change, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_fires_before_cleanup_singularity() {
+        // Diagnostic-precedence pin: an entry that violates *both*
+        // singularities — duplicate state-change on "m.lisp" *and*
+        // duplicate cleanup on "y-old" — must surface the migration-
+        // side diagnostic first. The migration axis precedes the
+        // cleanup axis in the canonical OTP sequence
+        // (`gen_server:code_change/3` then `code:soft_purge/1`) and in
+        // [`UpgradeInstruction`] declaration order (StateChange before
+        // SoftPurge/Purge), so the migration-side singularity is the
+        // load-bearing diagnostic when both fire — the cleanup-side
+        // duplicate is irrelevant once the migration has corrupted
+        // state by double-applying. Guards the call order in
+        // `validate`: `validate_state_change_singularity` runs before
+        // `validate_cleanup_singularity`.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "y-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "y-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateStateChange {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            "duplicate-state-change must surface before duplicate-cleanup, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_reports_first_collision() {
+        // Determinism pin: with three state-changes on the same script
+        // the gate reports the *first* collision (the second
+        // occurrence) and stops — the third's duplicate is masked by
+        // the first surfaced one. Mirrors
+        // `validate_load_singularity_reports_first_collision` /
+        // `validate_cleanup_singularity_reports_first_collision` on the
+        // sibling singularity axes and every peer duplicate gate's
+        // first-collision discipline.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateStateChange {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            "the first colliding occurrence must surface, not the later third-migration collision"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_threads_through_validate_upgrade_from() {
+        // The whole-list entry-point surfaces the per-entry singularity
+        // error (mirrors
+        // `validate_load_singularity_threads_through_validate_upgrade_from`
+        // / `validate_cleanup_singularity_threads_through_validate_upgrade_from`):
+        // the gate is reachable from the LayoutInvariants call site,
+        // not only from a direct `entry.validate()`.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        )];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::DuplicateStateChange { .. }),
+            "validate_upgrade_from must thread the state-change-singularity error, got {err:?}"
         );
     }
 
