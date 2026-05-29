@@ -100,10 +100,13 @@ impl UpgradeFromEntry {
     /// [`Self::validate_restart_exclusive`]), the within-entry
     /// state-change-ordering invariant (every `(:state-change …)` must
     /// be preceded by a `(:load-module …)` — see
-    /// [`Self::validate_state_change_ordering`]), and the within-entry
+    /// [`Self::validate_state_change_ordering`]), the within-entry
     /// purge-ordering invariant (every `(:soft-purge …)` / `(:purge …)`
     /// must be preceded by a `(:load-module …)` — see
-    /// [`Self::validate_purge_ordering`]).
+    /// [`Self::validate_purge_ordering`]), and the within-entry
+    /// cleanup-singularity invariant (no module appears as the target
+    /// of `(:soft-purge …)` or `(:purge …)` more than once total — see
+    /// [`Self::validate_cleanup_singularity`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
         Version::parse(&self.from).map_err(|_| UpgradeError::BadFromVersion(self.from.clone()))?;
@@ -126,6 +129,7 @@ impl UpgradeFromEntry {
         self.validate_restart_exclusive()?;
         self.validate_state_change_ordering()?;
         self.validate_purge_ordering()?;
+        self.validate_cleanup_singularity()?;
         Ok(())
     }
 
@@ -325,6 +329,113 @@ impl UpgradeFromEntry {
                 }
                 _ => {}
             }
+        }
+        Ok(())
+    }
+
+    /// Reject an entry whose `:instructions` list names the same module
+    /// as the target of more than one cleanup instruction (`:soft-purge`
+    /// or `:purge`) in total — set-not-multiset on the (cleanup-class,
+    /// module) axis, narrowed to the cleanup class.
+    ///
+    /// `SoftPurge` and `Purge` are the `code:soft_purge/1` /
+    /// `code:purge/1` analogs (INSPIRATIONS §II.4 verbatim: "1.
+    /// `code:load_module/1` — load v2 alongside v1 … 2.
+    /// `code:soft_purge/1` — wait until no process is running v1, then
+    /// discard. (`code:purge/1` kills v1 immediately if you don't
+    /// care.)"). The author picks *one* cleanup semantic per old
+    /// module — `:soft-purge` (preferred: waits for in-flight callers
+    /// to drain) or `:purge` (when the drain isn't possible) — and the
+    /// operator runs that one in declared order alongside any other
+    /// distinct-module cleanups. systools-generated `.relup` files
+    /// always emit at most one purge per module for this reason; any
+    /// retry / fallback decision is the operator's job on
+    /// instruction failure, not authored into the entry. Three
+    /// authoring footguns close here:
+    ///
+    ///   - `((:load-module "x") (:soft-purge "x-old") (:soft-purge "x-old"))`
+    ///     — the "I copy-pasted the cleanup line twice" footgun. The
+    ///     second `:soft-purge` is a no-op (the module is already gone
+    ///     after the first drain-and-discard) or undefined depending
+    ///     on the operator's handling of a non-resident-module purge
+    ///     request; either way the second instruction carries no
+    ///     observable semantic, far from the source caixa.lisp.
+    ///   - `((:load-module "x") (:soft-purge "x-old") (:purge "x-old"))`
+    ///     — the "soft-then-hard fallback" footgun. The author wrote
+    ///     "drain, and if drain didn't clean it up, force-discard",
+    ///     but the operator runs instructions unconditionally in
+    ///     declared order — the `:purge` fires whether the
+    ///     `:soft-purge` already discarded the module or not, so the
+    ///     fallback semantic the author imagined is missing; the
+    ///     pair is incoherent (drain *and* force-discard semantics
+    ///     on one module is two contradictory dispositions). The
+    ///     operator's failure-handling surface is its own
+    ///     responsibility: if `:soft-purge` doesn't drain within its
+    ///     cooldown the operator escalates, not the author's entry.
+    ///   - `((:load-module "x") (:purge "x-old") (:soft-purge "x-old"))`
+    ///     — same shape on the reversed ordering. The `:purge`
+    ///     discards immediately; the trailing `:soft-purge` has no
+    ///     module to drain.
+    ///
+    /// Same within-entry exclusivity discipline as
+    /// [`Self::validate_restart_exclusive`] (the `(:restart)` terminal-
+    /// exclusivity gate it joins on the per-module cleanup axis): both
+    /// reject an `:instructions` list whose instructions are
+    /// individually well-shaped but jointly incoherent on a chosen
+    /// semantic axis (restart-fallback for the whole entry there;
+    /// cleanup-semantic for one module here), at the typed build
+    /// surface rather than as a runtime surprise. Runs *after*
+    /// [`Self::validate_purge_ordering`] (the load-before-cleanup
+    /// ordering gate) so an entry like `((:soft-purge "x-old")
+    /// (:soft-purge "x-old"))` surfaces the more-fundamental
+    /// `PurgeWithoutPriorLoad` first (both cleanups are load-less, and
+    /// the missing-load defect is the load-bearing one — the duplicate
+    /// is meaningless either way without the preceding load).
+    ///
+    /// Same set-not-multiset discipline applied to every peer
+    /// duplicate-target axis: `:children :caixa` (dbf50a9 —
+    /// `SupervisorError::DuplicateChildCaixa`), `:membros :caixa`
+    /// (4bb3f3d — `AplicacaoError::MembroDuplicate`), `:contratos`
+    /// (5dbcfaf — `AplicacaoError::ContratoDuplicate`), `:placement
+    /// :clusters` (c7c7799 — `AplicacaoError::PlacementClusterDuplicate`),
+    /// `:entrada :paths` (eb3456d — `AplicacaoError::EntradaPathDuplicate`),
+    /// and `:upgrade-from :from` ([`UpgradeError::DuplicateFrom`]).
+    /// Each closes the same authoring footgun: a Vec authoring surface
+    /// that silently accepts duplicate entries and renders the "second
+    /// wins" (or "operator processes both, second is a no-op or
+    /// errors") shape downstream, far from the source caixa.lisp.
+    /// This gate extends the discipline onto the within-entry
+    /// instruction-target axis — duplicate cleanup targets *within*
+    /// one `:upgrade-from` entry — the peer of the cross-entry
+    /// duplicate-`:from` axis at one level of nesting deeper.
+    ///
+    /// Detection: linear scan of the instructions list collecting
+    /// the (module, kind) pair from every `SoftPurge` / `Purge`
+    /// encountered; on the second occurrence of any module the gate
+    /// fires with the prior kind and the colliding kind in declaration
+    /// order. Diagnostic-order pin: the first colliding pair surfaces,
+    /// not the last — mirrors
+    /// [`validate_upgrade_from`]'s
+    /// `validate_upgrade_from_duplicate_diagnostic_names_second_collision`
+    /// posture (the first detected collision wins) and every peer
+    /// duplicate gate's first-collision discipline.
+    fn validate_cleanup_singularity(&self) -> Result<(), UpgradeError> {
+        let mut seen: Vec<(&str, &'static str)> = Vec::new();
+        for instr in &self.instructions {
+            let (module, kind) = match instr {
+                UpgradeInstruction::SoftPurge { module } => (module.as_str(), ":soft-purge"),
+                UpgradeInstruction::Purge { module } => (module.as_str(), ":purge"),
+                _ => continue,
+            };
+            if let Some(prior_idx) = seen.iter().position(|(m, _)| *m == module) {
+                let prior_kind = seen[prior_idx].1;
+                return Err(UpgradeError::DuplicateCleanup {
+                    from: self.from.clone(),
+                    module: module.to_string(),
+                    kinds: vec![prior_kind, kind],
+                });
+            }
+            seen.push((module, kind));
         }
         Ok(())
     }
@@ -723,6 +834,30 @@ pub enum UpgradeError {
         from: String,
         kind: &'static str,
         module: String,
+    },
+    #[error(
+        ":upgrade-from `(:from {from:?})` :instructions list targets module {module:?} with \
+         more than one cleanup instruction ({kinds:?}) — `:soft-purge` and `:purge` are the \
+         code:soft_purge/1 / code:purge/1 analogs (INSPIRATIONS §II.4: \"`code:soft_purge/1` — \
+         wait until no process is running v1, then discard. (`code:purge/1` kills v1 immediately \
+         if you don't care.)\"), and each module's old version is cleaned up by exactly one of \
+         them: either drain-then-discard (`:soft-purge`) or immediate-discard (`:purge`), never \
+         both, never repeated. systools-generated `.relup` files emit at most one purge per \
+         module for this reason. A second cleanup on the same module is at best redundant (the \
+         module is already gone after the first cleanup, so the second is a no-op or undefined \
+         depending on the operator's handling of a non-resident-module purge request) and at \
+         worst incoherent (mixing drain and discard semantics on one module suggests the author \
+         wanted a fallback, but the operator runs declared instructions unconditionally — \
+         fallback on cleanup failure is the operator's job, not authored into the entry). \
+         Author one cleanup per module: prefer `(:soft-purge {module:?})` (waits for in-flight \
+         callers to drain before GC); fall back to `(:purge {module:?})` only when the drain \
+         can't complete (cron / oneShot / stuck callers). If two distinct old versions need \
+         cleanup, name them distinctly (e.g. `(:soft-purge {module:?}) (:soft-purge \"…-older\")`)."
+    )]
+    DuplicateCleanup {
+        from: String,
+        module: String,
+        kinds: Vec<&'static str>,
     },
 }
 
@@ -1932,6 +2067,336 @@ mod tests {
         assert!(
             matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
             "validate_upgrade_from must thread the ordering error, got {err:?}"
+        );
+    }
+
+    // ── within-entry cleanup-singularity invariant ─────────────────────
+
+    #[test]
+    fn validate_rejects_duplicate_soft_purge_for_same_module() {
+        // Fail-before-pass-after pin: `:soft-purge` drains-then-GCs
+        // its target module (code:soft_purge/1 analog); after the
+        // first the module is gone, so a second `:soft-purge` of the
+        // same module is at best a no-op and at worst undefined
+        // (depending on the operator's handling of a non-resident-
+        // module purge). Author one cleanup per module.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateCleanup {
+                from: "0.1.0".into(),
+                module: "x-old".into(),
+                kinds: vec![":soft-purge", ":soft-purge"],
+            },
+            "two `:soft-purge` of the same module must surface as DuplicateCleanup naming the \
+             module + both kinds in declaration order, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_purge_for_same_module() {
+        // Per-arm coverage: `:purge` (immediate discard, no drain) is
+        // the more catastrophic peer of `:soft-purge`; same gate, same
+        // shape, kind-tag distinguishes so the author can grep their
+        // caixa.lisp for the offending `(:purge …)` form.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateCleanup {
+                from: "0.1.0".into(),
+                module: "x-old".into(),
+                kinds: vec![":purge", ":purge"],
+            },
+        );
+    }
+
+    #[test]
+    fn validate_rejects_soft_purge_then_purge_for_same_module() {
+        // Soft-then-hard footgun: the author wrote "drain, and if
+        // drain doesn't clean up, force-discard", but the operator
+        // runs declared instructions unconditionally — the `:purge`
+        // fires whether the `:soft-purge` already discarded the
+        // module or not, so the imagined fallback semantic is
+        // missing. Fallback on cleanup failure is the operator's
+        // job, not authored into the entry. Both kinds carry in
+        // declaration order so the author can grep for either side
+        // and pick one.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateCleanup {
+                from: "0.1.0".into(),
+                module: "x-old".into(),
+                kinds: vec![":soft-purge", ":purge"],
+            },
+        );
+    }
+
+    #[test]
+    fn validate_rejects_purge_then_soft_purge_for_same_module() {
+        // Reversed-ordering arm: `:purge` discards immediately; the
+        // trailing `:soft-purge` has no module to drain. The kinds
+        // list reflects declaration order so the diagnostic locates
+        // both forms in the source.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateCleanup {
+                from: "0.1.0".into(),
+                module: "x-old".into(),
+                kinds: vec![":purge", ":soft-purge"],
+            },
+        );
+    }
+
+    #[test]
+    fn validate_accepts_distinct_cleanup_modules() {
+        // Positive control: `:soft-purge` and `:purge` on *different*
+        // modules pass the gate. Mirrors
+        // `validate_accepts_multiple_purges_after_one_load` — the
+        // cleanup-singularity gate is keyed on (module), not on
+        // (kind, module) pair, so distinct old-version names render
+        // distinct cleanup targets and don't collide. Sweep both
+        // same-class (two `:soft-purge` distinct modules) and cross-
+        // class (`:soft-purge` then `:purge` distinct modules) so a
+        // future tighten to a kind-only key (which would over-fire on
+        // distinct modules) surfaces here.
+        let two_soft = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-older".into(),
+                },
+            ],
+        );
+        two_soft.validate().unwrap();
+        let mixed = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-oldest".into(),
+                },
+            ],
+        );
+        mixed.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_single_cleanup_per_module() {
+        // Boundary control: a list with exactly one `:soft-purge` and
+        // one `:purge` (distinct modules, the canonical "drain one,
+        // hard-discard the other" shape) is the gate's identity
+        // element. Pin so a future off-by-one in the duplicate-detection
+        // scan doesn't accidentally flag a single occurrence as
+        // duplicating itself — mirrors
+        // `validate_upgrade_from_single_entry_never_duplicates` on
+        // the peer cross-entry duplicate axis.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "y-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_cleanup_singularity_fires_after_purge_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:soft-purge "x")
+        // (:soft-purge "x"))` is *both* purge-without-load and
+        // duplicate-cleanup. The more-fundamental ordering gate must
+        // win — the missing-load defect is load-bearing (the canonical
+        // OTP shape requires the new code be resident before any
+        // cleanup runs), and surfacing the duplicate diagnostic first
+        // would mask the no-replacement-window defect the ordering
+        // gate exists to close. Guards the call order in `validate`
+        // against silent reordering. Same posture as
+        // `validate_purge_ordering_fires_after_state_change_ordering`
+        // on the sibling ordering gate.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: ":soft-purge",
+                    ..
+                }
+            ),
+            "purge-without-load must surface before duplicate-cleanup, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_cleanup_singularity_fires_after_per_instr_shape() {
+        // Order pin: a malformed `:module` value on a `:soft-purge`
+        // (an empty string) surfaces its narrower kind-tagged
+        // `ModuleEmpty` diagnostic *before* the within-entry cleanup-
+        // singularity gate fires. The per-instruction shape pass walks
+        // the list inline before the singularity check, so the
+        // narrower self-locating diagnostic surfaces first — mirrors
+        // the empty-first cascade on every peer DNS-1123 gate and the
+        // `validate_purge_ordering_fires_after_per_instr_shape` pin on
+        // the sibling ordering gate.
+        //
+        // Two empty-string `:soft-purge` would *otherwise* duplicate
+        // (both modules are the same empty string), so this pin
+        // double-locks the precedence: the per-instr shape gate must
+        // win on the first malformed instruction before the duplicate
+        // scan even reaches the second.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: String::new(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: String::new(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::ModuleEmpty {
+                kind: ":soft-purge"
+            },
+            "malformed instruction must surface its kind-tagged diagnostic before the \
+             cleanup-singularity gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_cleanup_singularity_reports_first_collision() {
+        // Determinism pin: with three cleanups of the same module the
+        // gate reports the *first* collision (the second occurrence)
+        // and stops — the third's duplicate is masked by the first
+        // surfaced one. Mirrors
+        // `validate_upgrade_from_duplicate_diagnostic_names_second_collision`
+        // on the peer cross-entry duplicate axis.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::DuplicateCleanup {
+                from: "0.1.0".into(),
+                module: "x-old".into(),
+                kinds: vec![":soft-purge", ":soft-purge"],
+            },
+            "the first colliding pair must surface, not the later `:purge` collision"
+        );
+    }
+
+    #[test]
+    fn validate_cleanup_singularity_threads_through_validate_upgrade_from() {
+        // The whole-list entry-point surfaces the per-entry singularity
+        // error (mirrors
+        // `validate_purge_ordering_threads_through_validate_upgrade_from`):
+        // the gate is reachable from the LayoutInvariants call site,
+        // not only from a direct `entry.validate()`.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+        )];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::DuplicateCleanup { .. }),
+            "validate_upgrade_from must thread the cleanup-singularity error, got {err:?}"
         );
     }
 
