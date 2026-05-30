@@ -376,6 +376,44 @@ impl LayoutInvariants for StandardLayout {
                 caixa: caixa.nome.clone(),
                 issue: err.to_string(),
             })?;
+        // Cross-slot composition gate: every `:upgrade-from` entry whose
+        // `:instructions` list carries a `(:state-change …)` instruction
+        // must also have `:behavior :on-state-change` declared on the
+        // same caixa. The per-version migration script is the
+        // `gen_server:code_change/3` analog and the runtime hook it is
+        // delivered through during hot upgrade is the `:on-state-change`
+        // callback (upgrade.rs module doc verbatim: "Composes with the
+        // `:behavior :on-state-change` callback to deliver state
+        // migration during hot upgrades"; behavior.rs module doc on
+        // `:on-state-change` mirrors the promise from the callback side
+        // — "Composes with the `:upgrade-from` slot declared at the
+        // Caixa root"). Without the callback the per-version script has
+        // no runtime delivery path and the operator's hot-upgrade
+        // dispatch either fails the upgrade mid-flight or silently
+        // skips the migration, far from the source caixa.lisp.
+        //
+        // Same cross-slot value-shape discipline as the peer
+        // `validate_upgrade_from_against_versao` gate at this wire-up
+        // site (the `:from` ↔ `:versao` precedence partition) and the
+        // typed `:placement` strategy ↔ `:shard-key` partition
+        // (934bc58): one slot's value constrains the valid set of
+        // another's, and the constraint becomes a structural property
+        // visible at validate time. Runs *after*
+        // `validate_upgrade_from_against_versao` (and therefore after
+        // `validate_upgrade_from` and `BehaviorSpec::validate`) so
+        // narrower per-entry / per-callback diagnostics surface first;
+        // a `:state-change` instruction with a malformed `:script`
+        // (EmptyScript, AbsoluteScript, ParentEscapeScript) lands on
+        // its narrower per-instruction-shape diagnostic before the
+        // missing-callback gate fires.
+        crate::upgrade::validate_upgrade_from_against_behavior(
+            &caixa.upgrade_from,
+            caixa.behavior.as_ref(),
+        )
+        .map_err(|err| LayoutError::UpgradeViolation {
+            caixa: caixa.nome.clone(),
+            issue: err.to_string(),
+        })?;
         for entry in &caixa.upgrade_from {
             for instr in &entry.instructions {
                 if let Some(p) = instr.declared_path() {
@@ -412,11 +450,12 @@ impl LayoutInvariants for StandardLayout {
             // diagnostics surface first; a self-referential child is
             // always a valid DNS-1123 label (it equals the already-valid
             // `:nome`), so this ordering never masks a narrower defect.
-            crate::supervisor::validate_no_self_supervision(&caixa.children, &caixa.nome)
-                .map_err(|err| LayoutError::SupervisorViolation {
+            crate::supervisor::validate_no_self_supervision(&caixa.children, &caixa.nome).map_err(
+                |err| LayoutError::SupervisorViolation {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),
-                })?;
+                },
+            )?;
         }
 
         // Aplicacao invariants — typed graph composition. Like
@@ -853,17 +892,28 @@ mod tests {
 
     #[test]
     fn upgrade_script_path_must_exist() {
-        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use crate::{BehaviorSpec, UpgradeFromEntry, UpgradeInstruction};
         use std::path::PathBuf;
         let root = PathBuf::from("/tmp/x");
         let manifest = root.join("caixa.lisp");
         let svc = root.join("servicos/demo.computeunit.yaml");
+        let on_state_change = root.join("lib/migrations.lisp");
         let mut c = caixa(CaixaKind::Servico);
         // `:versao` past the entry's `:from` so the cross-slot
         // precedence gate (`FromNotBeforeVersao`) lets this case
         // through to the path-existence pass under test.
         c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        // `:on-state-change` declared so the cross-slot composition
+        // gate (`validate_upgrade_from_against_behavior`) lets the
+        // `:state-change` entry through to the path-existence pass
+        // under test. Without the callback the missing-callback gate
+        // would surface first and the path-existence pass wouldn't be
+        // exercised.
+        c.behavior = Some(BehaviorSpec {
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..Default::default()
+        });
         // A `:load-module` precedes the `:state-change` so the entry
         // satisfies the within-entry state-change-ordering gate
         // (`StateChangeWithoutPriorLoad`) and the path-existence pass
@@ -882,8 +932,10 @@ mod tests {
         }];
         let manifest_clone = manifest.clone();
         let svc_clone = svc.clone();
-        let layout =
-            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let on_state_change_clone = on_state_change.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| {
+            p == manifest_clone || p == svc_clone || p == on_state_change_clone
+        });
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(
             err,
@@ -892,6 +944,69 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn upgrade_state_change_without_behavior_callback_surfaces_as_upgrade_violation() {
+        // Wiring pin for the cross-slot composition gate
+        // (`validate_upgrade_from_against_behavior`): a caixa whose
+        // `:upgrade-from` declares a `(:state-change "lib/m.lisp")`
+        // instruction but does not declare `:behavior :on-state-change`
+        // surfaces at `feira build` time as a `LayoutError::UpgradeViolation`
+        // naming the offending caixa + the entry's `:from` + the
+        // offending script — not at hot-upgrade dispatch when the
+        // operator reaches for the missing callback. Mirrors
+        // `upgrade_from_downgrade_surfaces_as_upgrade_violation` on the
+        // peer `:from` ↔ `:versao` cross-slot precedence gate.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let svc = root.join("servicos/demo.computeunit.yaml");
+        let mut c = caixa(CaixaKind::Servico);
+        c.versao = "0.2.0".into();
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        // `:behavior` is None (the canonical "I added the upgrade path
+        // but never declared :behavior" footgun the gate closes); a
+        // peer arm covers the BehaviorSpec-Some-but-on-state-change-
+        // None shape in `upgrade::tests::behavior_gate_rejects_state_
+        // change_when_on_state_change_is_none`.
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![
+                UpgradeInstruction::LoadModule {
+                    module: "demo".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+            ],
+        }];
+        let manifest_clone = manifest.clone();
+        let svc_clone = svc.clone();
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest_clone || p == svc_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::UpgradeViolation { caixa, issue } => {
+                assert_eq!(caixa, "demo", "diagnostic must name the offending caixa");
+                assert!(
+                    issue.contains(":on-state-change"),
+                    "diagnostic must name the missing callback slot for self-locating fix, \
+                     got {issue:?}"
+                );
+                assert!(
+                    issue.contains("0.1.0"),
+                    "diagnostic must name the offending entry's :from, got {issue:?}"
+                );
+                assert!(
+                    issue.contains("v01-to-v02.lisp"),
+                    "diagnostic must name the offending :script for self-locating fix, \
+                     got {issue:?}"
+                );
+            }
+            other => panic!("expected UpgradeViolation, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1471,8 +1586,8 @@ mod tests {
         let manifest = root.join("caixa.lisp");
         let svc = root.join("servicos/demo.computeunit.yaml");
         let init = root.join("lib/init.lisp");
-        let layout = StandardLayout::new()
-            .with_path_exists(move |p| p == manifest || p == svc || p == init);
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == svc || p == init);
         let mut c = caixa(CaixaKind::Servico);
         c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
@@ -1557,8 +1672,8 @@ mod tests {
         let manifest = root.join("caixa.lisp");
         let lib = root.join("lib").join("demo.lisp");
         let svc = root.join("servicos").join("demo.computeunit.yaml");
-        let layout = StandardLayout::new()
-            .with_path_exists(move |p| p == manifest || p == lib || p == svc);
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == lib || p == svc);
         let mut c = caixa(CaixaKind::Biblioteca);
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
         let err = layout.verify(&c, &root).unwrap_err();
@@ -2029,18 +2144,32 @@ mod tests {
         // the legitimate "drain a recent old, hard-discard an
         // older-still" shape — both authoring forms remain load-
         // bearing in this positive-control enumeration.
-        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        use crate::{BehaviorSpec, UpgradeFromEntry, UpgradeInstruction};
         use std::path::PathBuf;
         let root = PathBuf::from("/tmp/x");
         let manifest = root.join("caixa.lisp");
         let svc = root.join("servicos/demo.computeunit.yaml");
         let migration = root.join("lib/migrations/v01-to-v02.lisp");
+        let on_state_change = root.join("lib/migrations.lisp");
         let mut c = caixa(CaixaKind::Servico);
         // `:versao` past both entries' `:from` so the cross-slot
         // precedence gate (`FromNotBeforeVersao`) lets this canonical
         // authoring shape through to the positive-control assertion.
         c.versao = "0.2.0".into();
         c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        // `:on-state-change` declared alongside the `(:state-change …)`
+        // instruction below — the cross-slot composition gate
+        // (`validate_upgrade_from_against_behavior`) rejects a
+        // `:state-change` without the callback, so the canonical
+        // authoring shape this positive control pins now includes the
+        // runtime delivery hook (the `gen_server:code_change/3` analog
+        // that the per-version script is invoked through during hot
+        // upgrade per the upgrade.rs module doc "Composes with"
+        // promise).
+        c.behavior = Some(BehaviorSpec {
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..Default::default()
+        });
         c.upgrade_from = vec![
             UpgradeFromEntry {
                 from: "0.1.0".into(),
@@ -2067,8 +2196,12 @@ mod tests {
         let manifest_clone = manifest.clone();
         let svc_clone = svc.clone();
         let migration_clone = migration.clone();
+        let on_state_change_clone = on_state_change.clone();
         let layout = StandardLayout::new().with_path_exists(move |p| {
-            p == manifest_clone || p == svc_clone || p == migration_clone
+            p == manifest_clone
+                || p == svc_clone
+                || p == migration_clone
+                || p == on_state_change_clone
         });
         layout.verify(&c, &root).unwrap();
     }

@@ -974,6 +974,140 @@ pub fn validate_upgrade_from_against_versao(
     Ok(())
 }
 
+/// Reject `:upgrade-from` entries whose `:instructions` list carries any
+/// `(:state-change <script>)` instruction unless the caixa also declares
+/// `:behavior :on-state-change` — the runtime callback the per-version
+/// migration script is delivered through during hot upgrade.
+///
+/// The module doc on [`crate::upgrade`] pins the composition verbatim:
+/// the `:upgrade-from` slot "Composes with the `:behavior :on-state-change`
+/// callback to deliver state migration during hot upgrades." The peer
+/// module doc on [`crate::BehaviorSpec::on_state_change`] mirrors the
+/// promise from the callback side: the slot is the
+/// `gen_server:code_change/3` analog — "receives old state + version,
+/// returns new state. Composes with the `:upgrade-from` slot declared at
+/// the Caixa root." OTP's `release_handler:install_release/1` realizes
+/// the composition by invoking the running `gen_server`'s
+/// `code_change/3` callback during the appup's `code_change` /
+/// `update, m, soft` step — the appup's instruction triggers the
+/// callback, the callback folds the prior-version state shape into the
+/// current-version shape, and the operator advances to the next
+/// instruction only after the callback returns successfully. caixa
+/// decomposes the same composition into two typed slots: the per-version
+/// migration logic lives in the `(:state-change "lib/migrations/v01-to-v02.lisp")`
+/// instruction's `:script` (the `:upgrade-from` author surface), and the
+/// runtime hook the operator dispatches the migration through lives in
+/// the `:behavior :on-state-change` callback (the `:behavior` author
+/// surface). A `:state-change` instruction declared without the callback
+/// is half the composition: the per-version script the author wrote has
+/// no runtime delivery path, and the operator's hot-upgrade dispatch
+/// reaches for `caixa.behavior.on_state_change` at the migration step,
+/// finds `None`, and either fails the upgrade mid-flight (the
+/// transactional rollback the module doc names — "On any failure, the
+/// current version stays load-bearing — a typed atomic upgrade") or
+/// silently skips the migration depending on the operator's handling of
+/// a missing callback, both far from the source caixa.lisp.
+///
+/// Two authoring footguns close here:
+///
+///   - `(:behavior ((:on-init …)))` + `(:upgrade-from ((:from "0.1.0"
+///     :instructions ((:load-module "x") (:state-change "lib/m.lisp")
+///     (:soft-purge "x-old")))))` — the "I declared the migration script
+///     but forgot the callback" footgun. The author wrote the per-version
+///     fold against the prior state shape, the typed `:upgrade-from`
+///     slot validated every per-instruction shape + ordering + singularity
+///     gate, and the missing callback only surfaces at upgrade time as
+///     either a transactional rollback to the prior version (no progress
+///     across the upgrade) or as a silently-skipped migration that leaves
+///     v0.2.0 code running against unmigrated v0.1.0 state (corrupted
+///     state shape).
+///   - `:behavior` absent entirely + `:upgrade-from` carrying any
+///     `:state-change` — the "I added the upgrade path but never declared
+///     `:behavior`" footgun. `:behavior` is optional at the typed root
+///     ([`crate::Caixa::behavior: Option<BehaviorSpec>`]) so the typed
+///     `:upgrade-from` slot validates on its own merits, but a `Caixa`
+///     with `behavior: None` and a `:state-change` instruction is the
+///     same missing-callback shape — the operator's dispatch can't reach
+///     a callback that doesn't exist.
+///
+/// Same cross-slot composition discipline as
+/// [`validate_upgrade_from_against_versao`] (the `:from` ↔ `:versao`
+/// precedence gate at the peer wire-up site): one slot's value
+/// (`:from` < `:versao` there; `:state-change` declared here) constrains
+/// the valid set of another's (the entry must be dispatchable there; the
+/// callback must be declared here), and the constraint is a structural
+/// property visible at validate time. The validated set after this gate
+/// satisfies the documented composition: every `:state-change`
+/// instruction the operator iterates at hot-upgrade time has a
+/// corresponding `:on-state-change` callback declared on the same caixa,
+/// so the future wasm-operator's hot-upgrade dispatch (the OTP
+/// `release_handler` canonical-sequence loop) can reach for
+/// `behavior.on_state_change` at the migration step knowing the
+/// `Option<PathBuf>` is `Some(_)` without re-deriving the precondition
+/// from inline checks.
+///
+/// Diagnostic-precedence:
+///
+///   - Runs *after* [`UpgradeFromEntry::validate`] (per-instruction
+///     shape + the within-entry ordering / singularity gates) and
+///     [`validate_upgrade_from`] (the cross-entry duplicate-`:from`
+///     gate), so a malformed `:state-change` (`EmptyScript`,
+///     `AbsoluteScript`, `ParentEscapeScript`) or an ill-ordered entry
+///     (`StateChangeWithoutPriorLoad`, `StateChangeAfterCleanup`) or a
+///     duplicate `:from` (`DuplicateFrom`) surfaces its narrower
+///     self-locating diagnostic first — the canonical "per-instr-shape +
+///     within-entry ordering + cross-entry uniqueness before
+///     cross-slot composition" precedence the peer
+///     `validate_upgrade_from_against_versao` gate establishes at the
+///     same wire-up site. Without this precedence pin a malformed
+///     `:state-change` instruction would surface this gate's
+///     missing-callback diagnostic over the narrower
+///     `EmptyScript` / `StateChangeWithoutPriorLoad`, masking the
+///     load-bearing per-instruction defect with a cross-slot composition
+///     diagnostic.
+///   - Within the entries, walks the list in declaration order and
+///     surfaces the *first* `:state-change` instruction encountered —
+///     mirrors every peer first-collision diagnostic posture on this
+///     module (`validate_state_change_ordering` returns on the first
+///     `StateChange` without prior load,
+///     `validate_load_singularity` returns on the second matching
+///     module, etc.). A future entry's later `:state-change` doesn't
+///     surface a different diagnostic — the missing callback is the same
+///     defect regardless of which entry's `:state-change` exposes it.
+///
+/// Silent-pass semantics:
+///
+///   - Entries carrying no `:state-change` instruction (load-only,
+///     cleanup-only, restart-only, or empty `:instructions`) leave the
+///     gate vacuous — no per-version migration means no callback to
+///     dispatch through, so the absence of `:on-state-change` is
+///     coherent. Pins the gate's identity element on the empty-set side
+///     of the composition.
+///   - `behavior: None` is *not* a free pass when a `:state-change`
+///     instruction is present — the same missing-callback shape as
+///     `behavior: Some(_)` with `on_state_change: None`. The gate reads
+///     `behavior.and_then(|b| b.on_state_change.as_ref())` so both shapes
+///     surface the same diagnostic.
+pub fn validate_upgrade_from_against_behavior(
+    entries: &[UpgradeFromEntry],
+    behavior: Option<&crate::BehaviorSpec>,
+) -> Result<(), UpgradeError> {
+    if behavior.and_then(|b| b.on_state_change.as_ref()).is_some() {
+        return Ok(());
+    }
+    for entry in entries {
+        for instr in &entry.instructions {
+            if let UpgradeInstruction::StateChange { script } = instr {
+                return Err(UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                    from: entry.from.clone(),
+                    script: script.clone(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 impl UpgradeInstruction {
     /// Kebab-case lisp form name for this instruction, used as the
     /// `:kind` tag in [`UpgradeError::ModuleEmpty`] /
@@ -1289,6 +1423,32 @@ pub enum UpgradeError {
         prior_cleanup_kind: &'static str,
         prior_cleanup_module: String,
     },
+    #[error(
+        ":upgrade-from `(:from {from:?})` declares `(:state-change {})` but the caixa does not \
+         declare `:behavior :on-state-change` — the per-version migration script is the \
+         gen_server:code_change/3 analog and the runtime hook it is delivered through during \
+         hot upgrade is the `:on-state-change` callback. OTP's release_handler:install_release/1 \
+         realizes the composition by invoking the running gen_server's code_change/3 callback \
+         during the appup's `code_change` / `update, m, soft` step; caixa decomposes the same \
+         composition into two typed slots, the per-version migration logic in this \
+         `(:state-change …)` instruction's `:script` and the runtime dispatch hook in the \
+         `:behavior :on-state-change` callback (the upgrade.rs module doc pins the composition \
+         verbatim: \"Composes with the `:behavior :on-state-change` callback to deliver state \
+         migration during hot upgrades\"). The missing callback leaves the per-version script \
+         with no runtime delivery path: the operator's hot-upgrade dispatch reaches for the \
+         callback at the migration step, finds it absent, and either fails the upgrade \
+         mid-flight (the transactional rollback the module doc names — \"On any failure, the \
+         current version stays load-bearing\") or silently skips the migration leaving the \
+         new code running against unmigrated prior-version state. Add the callback: \
+         `(:behavior ((:on-state-change \"lib/migrations.lisp\") …))` (the runtime delivery \
+         path) alongside the existing `(:state-change {})` instruction (the per-version \
+         script). If the upgrade truly carries no state migration, drop the `(:state-change \
+         …)` instruction from the entry (a metadata-only upgrade — load + cleanup, no \
+         migration — is the canonical shape).",
+        script.display(),
+        script.display()
+    )]
+    StateChangeWithoutOnStateChangeCallback { from: String, script: PathBuf },
 }
 
 #[cfg(test)]
@@ -3960,6 +4120,297 @@ mod tests {
             "malformed instruction must surface its kind-tagged diagnostic before the \
              restart-exclusivity gate fires, got {err:?}"
         );
+    }
+
+    fn behavior_with_state_change_callback() -> crate::BehaviorSpec {
+        // Helper for the cross-slot composition gate's pass arm: a
+        // BehaviorSpec carrying just the `:on-state-change` callback,
+        // the runtime hook the per-version `(:state-change "…")`
+        // instruction is delivered through during hot upgrade. Mirrors
+        // the canonical authoring shape pinned in the module doc.
+        crate::BehaviorSpec {
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn behavior_gate_rejects_state_change_without_any_behavior() {
+        // `:upgrade-from` with a `(:state-change "lib/m.lisp")` and the
+        // caixa carries no `:behavior` at all surfaces the missing-
+        // callback diagnostic naming the offending entry's `:from` +
+        // script. The "I added the upgrade path but never declared
+        // `:behavior`" footgun: `:behavior` is optional at the typed
+        // root, the typed `:upgrade-from` slot validates on its own
+        // merits, and the operator's hot-upgrade dispatch reaches for
+        // a callback that doesn't exist.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        )];
+        let err = validate_upgrade_from_against_behavior(&entries, None).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            },
+        );
+    }
+
+    #[test]
+    fn behavior_gate_rejects_state_change_when_on_state_change_is_none() {
+        // `:behavior` declared with *other* callbacks set
+        // (`:on-init`, `:on-terminate`, etc.) but `:on-state-change`
+        // None still surfaces the missing-callback diagnostic — only
+        // the `:on-state-change` axis matters for this gate. The
+        // "I declared `:behavior` but missed the migration callback"
+        // footgun: a caixa that registers its lifecycle hooks but
+        // forgets the migration delivery path leaves the
+        // `:state-change` instruction with no runtime hook to
+        // dispatch through.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        )];
+        let b = crate::BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            ..Default::default()
+        };
+        let err = validate_upgrade_from_against_behavior(&entries, Some(&b)).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            "only `:on-state-change` satisfies the composition; other callbacks must not mask \
+             the missing migration hook"
+        );
+    }
+
+    #[test]
+    fn behavior_gate_accepts_state_change_with_on_state_change_callback() {
+        // The canonical composition shape: a per-version
+        // `(:state-change "lib/m.lisp")` instruction paired with the
+        // `:behavior :on-state-change "lib/migrations.lisp"` callback
+        // it is delivered through at hot-upgrade time. Pins the gate's
+        // pass arm — drift here = a future tighten that rejects the
+        // canonical OTP-shape composition surfaces as a regression at
+        // this positive-control pin.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        )];
+        let b = behavior_with_state_change_callback();
+        validate_upgrade_from_against_behavior(&entries, Some(&b)).unwrap();
+    }
+
+    #[test]
+    fn behavior_gate_accepts_entries_without_any_state_change() {
+        // Empty-set identity: entries carrying no `:state-change`
+        // instruction at all (load + cleanup only — the metadata-only
+        // upgrade shape the module doc names, "On any failure, the
+        // current version stays load-bearing — a typed atomic
+        // upgrade") leave the gate vacuous. The composition only
+        // requires a callback when the per-version script exists; a
+        // load + cleanup pair has no migration to deliver, so the
+        // absence of `:on-state-change` is coherent.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        )];
+        validate_upgrade_from_against_behavior(&entries, None).unwrap();
+    }
+
+    #[test]
+    fn behavior_gate_accepts_restart_only_entry() {
+        // The terminal-fallback `((:restart))` shape carries no
+        // `:state-change` — the operator restarts the pod and the
+        // new version comes up fresh against its initial state, no
+        // migration. Pinned alongside the metadata-only positive
+        // control above as the second empty-state-change shape.
+        let entries = vec![entry("0.1.0", vec![UpgradeInstruction::Restart])];
+        validate_upgrade_from_against_behavior(&entries, None).unwrap();
+    }
+
+    #[test]
+    fn behavior_gate_accepts_empty_entries_list() {
+        // Empty `:upgrade-from` (a caixa with no declared upgrade
+        // paths — the v0.1.0 caixa before any upgrade entries are
+        // added) trivially passes the gate. Pinned so the gate
+        // doesn't accidentally fire on a caixa that hasn't yet
+        // declared any upgrades.
+        let entries: Vec<UpgradeFromEntry> = vec![];
+        validate_upgrade_from_against_behavior(&entries, None).unwrap();
+    }
+
+    #[test]
+    fn behavior_gate_reports_first_state_change_in_first_entry() {
+        // First-collision determinism: with multiple `:state-change`
+        // instructions across multiple entries, the gate reports the
+        // *first* one encountered in declaration order — the entry's
+        // declaration order first, then the within-entry instruction
+        // order. Mirrors every peer first-collision diagnostic posture
+        // on this module (`validate_state_change_ordering`,
+        // `validate_purge_ordering`, the singularity gates), so a
+        // future shortcut that walks the list in reverse or returns
+        // the last collision surfaces as a regression here.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m1.lisp"),
+                    },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m2.lisp"),
+                    },
+                ],
+            ),
+            entry(
+                "0.1.5",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m3.lisp"),
+                    },
+                ],
+            ),
+        ];
+        let err = validate_upgrade_from_against_behavior(&entries, None).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m1.lisp"),
+            },
+            "the first :state-change in the first entry must surface, not later collisions"
+        );
+    }
+
+    #[test]
+    fn behavior_gate_reports_second_entry_when_first_has_no_state_change() {
+        // Cross-entry pin: a first entry with no `:state-change` (just
+        // a load + cleanup) leaves the gate's per-entry walk continuing
+        // to the second entry, where the offending instruction lives.
+        // The diagnostic names the *second* entry's `:from` because
+        // that's where the missing-callback shape is exposed — pinned
+        // so a shortcut that bails on the first entry without a
+        // `:state-change` (rather than continuing) doesn't mask the
+        // defect in a later entry.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::SoftPurge {
+                        module: "x-old".into(),
+                    },
+                ],
+            ),
+            entry(
+                "0.1.5",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m.lisp"),
+                    },
+                ],
+            ),
+        ];
+        let err = validate_upgrade_from_against_behavior(&entries, None).unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                from: "0.1.5".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            "the offending entry's `:from` must surface even when an earlier entry carries no \
+             :state-change"
+        );
+    }
+
+    #[test]
+    fn behavior_gate_does_not_fire_when_callback_is_declared_across_many_entries() {
+        // Positive control: a multi-entry `:upgrade-from` (chained
+        // upgrades from v0.1.0 *and* v0.1.5) where every entry carries
+        // a `:state-change` passes when the callback is declared once
+        // at the caixa root. The callback is a single per-caixa
+        // runtime hook; one declaration covers every entry's
+        // `:state-change`, mirroring OTP's
+        // `release_handler:install_release/1` which dispatches every
+        // appup's `code_change` instruction through the single
+        // `gen_server:code_change/3` callback registered on the
+        // module.
+        let entries = vec![
+            entry(
+                "0.1.0",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m1.lisp"),
+                    },
+                ],
+            ),
+            entry(
+                "0.1.5",
+                vec![
+                    UpgradeInstruction::LoadModule { module: "x".into() },
+                    UpgradeInstruction::StateChange {
+                        script: PathBuf::from("lib/m2.lisp"),
+                    },
+                ],
+            ),
+        ];
+        let b = behavior_with_state_change_callback();
+        validate_upgrade_from_against_behavior(&entries, Some(&b)).unwrap();
+    }
+
+    #[test]
+    fn behavior_gate_accepts_load_and_cleanup_only_when_behavior_carries_on_state_change() {
+        // Symmetry pin: the gate's pass arm doesn't depend on the
+        // entry actually carrying a `:state-change` — if no
+        // `:state-change` is declared, the gate is vacuous regardless
+        // of the callback (an `:on-state-change` declared without a
+        // matching per-version script is fine, the callback is the
+        // runtime default for any *future* migration the author hasn't
+        // yet added). Pins that a caixa author can declare the
+        // callback ahead of any migration without the gate
+        // complaining.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        )];
+        let b = behavior_with_state_change_callback();
+        validate_upgrade_from_against_behavior(&entries, Some(&b)).unwrap();
     }
 
     #[test]
