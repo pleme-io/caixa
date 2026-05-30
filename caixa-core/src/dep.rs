@@ -548,6 +548,22 @@ pub enum DepError {
          resolver convention)"
     )]
     FonteCaminhoEmpty { nome: String },
+    #[error(
+        "{list} carries duplicate entry :nome {nome:?} — every dep list keys its \
+         entries by caixa name (Cargo's [dependencies] / [dev-dependencies] tables \
+         apply the same set-not-multiset discipline; one package per table), and \
+         two entries naming the same caixa carry two version constraints / source \
+         pins / feature sets for one identity. The caixa-resolver's lacre pipeline \
+         consumes the list as a `HashMap`-keyed-by-`:nome` lookup: the second entry \
+         silently overwrites the first at the resolver-side `concrete_versao` step, \
+         and the dropped entry's pin / features never reach the closure — far from \
+         the source caixa.lisp, with no field naming which `:deps` entry was the \
+         silent loser. If two version constraints are genuinely needed (the rare \
+         multi-version closure case the lacre pipeline doesn't yet support), the \
+         author surface is two distinct caixa names (e.g. a `caixa-teia-v01` / \
+         `caixa-teia-v02` aliased pair); within one list, one entry per caixa name."
+    )]
+    DuplicateNome { nome: String, list: &'static str },
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
