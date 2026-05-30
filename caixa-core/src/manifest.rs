@@ -4,8 +4,8 @@ use tatara_lisp::DeriveTataraDomain;
 use thiserror::Error;
 
 use crate::{
-    behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec, render::is_dns_1123_label,
-    supervisor::SupervisorSpec, upgrade::UpgradeFromEntry, CaixaKind, Dep,
+    CaixaKind, Dep, behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec,
+    render::is_dns_1123_label, supervisor::SupervisorSpec, upgrade::UpgradeFromEntry,
 };
 
 /// Top-level manifest for a caixa (a tatara-lisp package).
@@ -111,7 +111,6 @@ pub struct Caixa {
     // SupervisorSpec sub-form) to keep tatara-lisp authoring at one
     // level of nesting; SupervisorSpec exists for validation +
     // composition convenience (`Caixa::supervisor_view()`).
-
     /// Lunatic-style per-process resource limits. None = unbounded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limits: Option<LimitsSpec>,
@@ -151,7 +150,6 @@ pub struct Caixa {
     //
     // Required when :kind Aplicacao; ignored otherwise.
     // Composed into a typed AplicacaoSpec via Caixa::aplicacao_view().
-
     /// Member Servicos that make up this Aplicacao. Each is a
     /// caixa-name + version-constraint pair. Required for Aplicacao.
     #[serde(default)]
@@ -443,12 +441,61 @@ impl Caixa {
     /// in `:deps-dev` surfaces with the same diagnostic as one in
     /// `:deps` — neither axis is a second-class citizen of the typed
     /// surface.
+    ///
+    /// Within each list, [`DepError::DuplicateNome`] closes the
+    /// set-not-multiset discipline on the `:nome` axis: two entries
+    /// naming the same caixa carry two `:versao` / `:fonte` / feature
+    /// triples that the caixa-resolver's lacre pipeline collapses to one
+    /// via its `HashMap`-keyed-by-`:nome` consumption — the second entry
+    /// silently overwrites the first at `concrete_versao`-resolve time
+    /// (the same "second wins / one silently overwrites the other"
+    /// shape the peer typed-graph duplicate gates already close on every
+    /// other Vec-shaped authoring surface that keys by name). The
+    /// duplicate check fires per-list and runs *after* each per-entry
+    /// [`Dep::validate`] call so a malformed-and-duplicated entry
+    /// surfaces its narrower per-entry diagnostic
+    /// ([`DepError::NomeInvalid`], [`DepError::VersaoInvalid`],
+    /// [`DepError::FonteRepoEmpty`], …) before the cross-entry duplicate
+    /// diagnostic — the canonical "per-entry shape before cross-entry
+    /// uniqueness" precedence the peer `:children :caixa`
+    /// ([`crate::SupervisorSpec::validate`]), `:membros :caixa`
+    /// ([`crate::AplicacaoSpec::validate_membros`]), `:contratos`
+    /// ([`crate::AplicacaoSpec::validate`]), `:placement :clusters`
+    /// ([`crate::AplicacaoSpec::validate_placement`]),
+    /// `:entrada :paths` ([`crate::AplicacaoSpec::validate`]),
+    /// `:upgrade-from :from` ([`crate::upgrade::validate_upgrade_from`]),
+    /// and the within-`:upgrade-from`-entry per-instruction-class
+    /// singularity gates ([`crate::UpgradeError::DuplicateLoadModule`],
+    /// [`crate::UpgradeError::DuplicateStateChange`],
+    /// [`crate::UpgradeError::DuplicateCleanup`]) all establish.
+    ///
+    /// Cross-list (`:deps` ↔ `:deps-dev`) coincidence is *not* gated
+    /// here: Cargo's `[dependencies]` + `[dev-dependencies]` accept the
+    /// same name in both tables (the dev table's pin overrides the
+    /// runtime table's pin in test/dev contexts), and caixa's surface
+    /// mirrors that convention until a deliberate choice retires the
+    /// override pattern. Only within-list duplicates are structurally
+    /// incoherent — those are what this gate closes.
     pub fn validate_deps(&self) -> Result<(), DepError> {
+        let mut seen = std::collections::HashSet::new();
         for dep in &self.deps {
             dep.validate()?;
+            if !seen.insert(dep.nome.as_str()) {
+                return Err(DepError::DuplicateNome {
+                    nome: dep.nome.clone(),
+                    list: ":deps",
+                });
+            }
         }
+        let mut seen_dev = std::collections::HashSet::new();
         for dep in &self.deps_dev {
             dep.validate()?;
+            if !seen_dev.insert(dep.nome.as_str()) {
+                return Err(DepError::DuplicateNome {
+                    nome: dep.nome.clone(),
+                    list: ":deps-dev",
+                });
+            }
         }
         Ok(())
     }
@@ -636,12 +683,12 @@ impl Caixa {
         let Some(s) = self.restart_window.as_deref() else {
             return Ok(());
         };
-        crate::supervisor::duration_codec::parse(s).map(|_| ()).map_err(|reason| {
-            ManifestError::RestartWindowMalformed {
+        crate::supervisor::duration_codec::parse(s)
+            .map(|_| ())
+            .map_err(|reason| ManifestError::RestartWindowMalformed {
                 restart_window: s.to_string(),
                 reason,
-            }
-        })
+            })
     }
 
     /// Compose the supervisor-related flat slots into a single
@@ -919,7 +966,10 @@ mod tests {
         let view = c.supervisor_view().expect("Supervisor kind has a view");
         assert_eq!(view.estrategia, RestartStrategy::OneForOne);
         assert_eq!(view.max_restarts, 5);
-        assert_eq!(view.restart_window, Some(std::time::Duration::from_secs(60)));
+        assert_eq!(
+            view.restart_window,
+            Some(std::time::Duration::from_secs(60))
+        );
         assert_eq!(view.children.len(), 1);
         view.validate().unwrap();
     }
@@ -1197,6 +1247,197 @@ mod tests {
             ),
             "got {err:?}"
         );
+    }
+
+    // ── validate_deps: within-list :nome set-not-multiset gate ─────────
+
+    #[test]
+    fn validate_deps_rejects_duplicate_nome_in_deps() {
+        // Fail-before-pass-after pin: two `:deps` entries naming the same
+        // caixa carry two `:versao` / `:fonte` / feature triples that the
+        // caixa-resolver's lacre pipeline collapses (the second silently
+        // overwrites the first at `concrete_versao`-resolve time). The
+        // gate surfaces the duplicate at validate-time, naming the
+        // offending caixa + the list, before the resolver-side silent
+        // drop. Mirrors the peer typed-graph duplicate gates
+        // (`DuplicateChildCaixa`, `MembroDuplicate`, `DuplicateFrom`, …).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("caixa-teia", "^0.2"),
+        ];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::DuplicateNome { ref nome, list }
+                    if nome == "caixa-teia" && list == ":deps"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_rejects_duplicate_nome_in_deps_dev() {
+        // Parity pin: `:deps-dev` runs through the same per-list
+        // duplicate check as `:deps` — neither axis is a second-class
+        // citizen of the set-not-multiset discipline.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![
+            Dep::simple("tatara-check", "*"),
+            Dep::simple("tatara-check", "^0.1"),
+        ];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::DuplicateNome { ref nome, list }
+                    if nome == "tatara-check" && list == ":deps-dev"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_accepts_cross_list_same_nome() {
+        // The Cargo `[dependencies]` + `[dev-dependencies]` override
+        // convention is preserved: a name appearing in *both* lists is
+        // valid (the dev-pin overrides at test/dev time). Only
+        // within-list duplicates are structurally incoherent — pin the
+        // permissive cross-list semantics so a future shortcut that
+        // collapses the two seen-sets into one surfaces here as a test
+        // failure.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("caixa-teia", "^0.1")];
+        c.deps_dev = vec![Dep::simple("caixa-teia", "^0.2")];
+        c.validate_deps().unwrap();
+    }
+
+    #[test]
+    fn validate_deps_accepts_distinct_nome_in_both_lists() {
+        // Positive control: distinct names within each list pass — the
+        // gate's identity element on the canonical authoring shape.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("pleme-mesh", "*"),
+        ];
+        c.deps_dev = vec![
+            Dep::simple("tatara-check", "*"),
+            Dep::simple("dev-shim", "^0.1"),
+        ];
+        c.validate_deps().unwrap();
+    }
+
+    #[test]
+    fn validate_deps_per_entry_validate_fires_before_duplicate_in_deps() {
+        // Diagnostic-precedence pin: a malformed `:versao` on the
+        // duplicating entry surfaces its narrower `VersaoInvalid`
+        // diagnostic first, before the cross-entry duplicate gate fires
+        // — the canonical "per-entry shape before cross-entry uniqueness"
+        // precedence every peer set-not-multiset gate establishes
+        // (`*_invalid_fires_before_duplicate_check` pins on
+        // `SupervisorSpec::validate`, `AplicacaoSpec::validate_membros`,
+        // `validate_upgrade_from`).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("caixa-teia", "^bad-version"),
+        ];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::VersaoInvalid { ref nome, ref versao, .. }
+                    if nome == "caixa-teia" && versao == "^bad-version"
+            ),
+            "expected VersaoInvalid to surface before DuplicateNome, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_duplicate_diagnostic_names_first_collision() {
+        // First-collision determinism pin: with three entries naming the
+        // same caixa, the first colliding pair surfaces — not the last.
+        // Mirrors the peer first-collision posture on every
+        // duplicate-target gate
+        // (`validate_upgrade_from_duplicate_diagnostic_names_second_collision`
+        // — the second entry is the first collision; this gate uses the
+        // same shape: the second entry's `:nome` lands in the diagnostic
+        // because `seen.insert(first.nome)` already populated the set).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("caixa-teia", "^0.2"),
+            Dep::simple("caixa-teia", "^0.3"),
+        ];
+        let err = c.validate_deps().unwrap_err();
+        // The diagnostic carries the offending caixa name; the
+        // implementation surfaces on the *second* entry (the first
+        // collision), so the test pins the `:nome` value.
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::DuplicateNome { ref nome, list: ":deps" }
+                    if nome == "caixa-teia"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_duplicate_in_deps_fires_before_duplicate_in_deps_dev() {
+        // Cross-list precedence pin: when both lists carry duplicates,
+        // the `:deps` diagnostic surfaces first — same author-mental-
+        // model ordering the `validate_deps_runs_deps_before_deps_dev`
+        // pin establishes for malformed `:versao` (runtime axis before
+        // dev axis).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![
+            Dep::simple("runtime-dep", "^0.1"),
+            Dep::simple("runtime-dep", "^0.2"),
+        ];
+        c.deps_dev = vec![Dep::simple("dev-dep", "*"), Dep::simple("dev-dep", "^0.1")];
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                crate::dep::DepError::DuplicateNome { ref nome, list: ":deps" }
+                    if nome == "runtime-dep"
+            ),
+            "expected :deps duplicate to surface before :deps-dev duplicate, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_deps_empty_lists_pass_duplicate_gate() {
+        // Empty-set identity pin: the bare template (zero deps, zero
+        // deps_dev) passes the duplicate gate as the gate's identity
+        // element. A future tighten that conflates "empty" with
+        // "missing" would regress this baseline.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_deps().unwrap();
+    }
+
+    #[test]
+    fn validate_deps_duplicate_diagnostic_carries_list_tag() {
+        // Diagnostic-shape pin: the `list:` field tags which list the
+        // duplicate landed in (`:deps` vs `:deps-dev`) verbatim, so a
+        // `feira lint` run can route the author to the right block in
+        // their caixa.lisp without re-deriving the list from context.
+        // Same self-locating shape every peer per-axis diagnostic
+        // already exposes.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![
+            Dep::simple("dev-thing", "*"),
+            Dep::simple("dev-thing", "^0.1"),
+        ];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::DuplicateNome { nome, list } = err else {
+            panic!("expected DuplicateNome from :deps-dev walk");
+        };
+        assert_eq!(nome, "dev-thing");
+        assert_eq!(list, ":deps-dev");
     }
 
     #[test]
@@ -1675,7 +1916,9 @@ mod tests {
         // future tightening that rejected `None` would force every
         // supervisor caixa to authoring-time pin a window even when
         // the OTP semantics call for none.
-        caixa_with_restart_window(None).validate_restart_window().unwrap();
+        caixa_with_restart_window(None)
+            .validate_restart_window()
+            .unwrap();
     }
 
     #[test]
@@ -1889,7 +2132,10 @@ mod tests {
         // pin, narrowed to the parser-side contract.
         let c = caixa_with_restart_window(Some("60s"));
         let view = c.supervisor_view().expect("Supervisor kind has a view");
-        assert_eq!(view.restart_window, Some(std::time::Duration::from_secs(60)));
+        assert_eq!(
+            view.restart_window,
+            Some(std::time::Duration::from_secs(60))
+        );
     }
 
     #[test]
