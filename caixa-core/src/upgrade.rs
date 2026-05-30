@@ -114,8 +114,12 @@ impl UpgradeFromEntry {
     /// purge-ordering invariant (every `(:soft-purge …)` / `(:purge …)`
     /// must be preceded by a `(:load-module …)` — see
     /// [`Self::validate_purge_ordering`]), the within-entry
-    /// load-singularity invariant (no module appears as the target of
-    /// `(:load-module …)` more than once — see
+    /// state-change-before-cleanup ordering invariant (no
+    /// `(:state-change …)` may appear after any `(:soft-purge …)` /
+    /// `(:purge …)` — see
+    /// [`Self::validate_state_change_before_cleanup`]), the within-
+    /// entry load-singularity invariant (no module appears as the
+    /// target of `(:load-module …)` more than once — see
     /// [`Self::validate_load_singularity`]), the within-entry
     /// state-change-singularity invariant (no script appears as the
     /// target of `(:state-change …)` more than once — see
@@ -145,6 +149,7 @@ impl UpgradeFromEntry {
         self.validate_restart_exclusive()?;
         self.validate_state_change_ordering()?;
         self.validate_purge_ordering()?;
+        self.validate_state_change_before_cleanup()?;
         self.validate_load_singularity()?;
         self.validate_state_change_singularity()?;
         self.validate_cleanup_singularity()?;
@@ -344,6 +349,131 @@ impl UpgradeFromEntry {
                         kind: instr.lisp_form(),
                         module: module.clone(),
                     });
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Reject an entry whose `(:state-change …)` appears after any
+    /// `(:soft-purge …)` / `(:purge …)` in the same `:instructions`
+    /// list — completing the canonical OTP appup `code:load_module/1`
+    /// → `gen_server:code_change/3` → `code:soft_purge/1` ordering
+    /// chain on the typed `:upgrade-from` slot.
+    ///
+    /// `StateChange` is the `gen_server:code_change/3` analog
+    /// ([`UpgradeInstruction::StateChange`] doc; INSPIRATIONS §II.4
+    /// verbatim: "State migration uses `gen_server:code_change/3` …
+    /// migrate state from v0.1.0 shape to current shape"). The
+    /// callback's input is the *prior* version's state shape, which
+    /// only exists while the prior code is still resident — the running
+    /// `gen_server` processes hold the v0.1.0 state, and the operator's
+    /// dispatch invokes `code_change/3` to fold that state into the
+    /// current shape. `SoftPurge` / `Purge` are the `code:soft_purge/1`
+    /// / `code:purge/1` analogs ([`UpgradeInstruction::SoftPurge`] /
+    /// [`UpgradeInstruction::Purge`] docs): they drain or discard the
+    /// *old* module after the new one is resident. The operator runs
+    /// instructions in declared order (module doc), so a cleanup ahead
+    /// of a state-change discards the prior code before the migration
+    /// fold runs against the state it held — the canonical OTP error
+    /// mode "`code_change/3` invoked on a purged module" the
+    /// `release_handler` enforces by always emitting the migration
+    /// callback before the soft-purge step.
+    ///
+    /// `systools`-generated `.relup` files always emit `code_change`
+    /// before `soft_purge` for this reason; the appup cookbook's
+    /// canonical pattern (`[{load_module, m}, {update, m, soft},
+    /// {soft_purge, m}]`) places the migration-triggering `update`
+    /// strictly between the load and the cleanup. The caixa module
+    /// doc pins the same canonical order verbatim — `(:load-module
+    /// …) (:state-change …) (:soft-purge …)` — and this gate makes
+    /// that ordering a structural property at build time. Three
+    /// authoring footguns close here:
+    ///
+    ///   - `((:load-module "x") (:soft-purge "x-old") (:state-change
+    ///     "lib/m.lisp"))` — the right-instructions-wrong-order
+    ///     footgun on the migrate ↔ cleanup axis. Because the operator
+    ///     executes in declared order, the cleanup drains the v0.1.0
+    ///     module to nothing before the migration callback runs, and
+    ///     the script either no-ops (no v0.1.0 state left to fold) or
+    ///     crashes (`code_change/3` invoked on an unloaded version).
+    ///     The canonical order is `(:load-module …) (:state-change
+    ///     …) (:soft-purge …)` (module doc example).
+    ///   - `((:load-module "x") (:purge "x-old") (:state-change
+    ///     "lib/m.lisp"))` — same shape on the more catastrophic
+    ///     `:purge` variant. The immediate-discard semantic destroys
+    ///     v0.1.0 state mid-request; the trailing migration script
+    ///     has nothing to fold from and the `gen_server` processes that
+    ///     held v0.1.0 state were killed by the `:purge`.
+    ///   - `((:load-module "x") (:soft-purge "x-old") (:state-change
+    ///     "lib/m1.lisp") (:soft-purge "y-old"))` — the "migration
+    ///     sandwiched between two cleanups" footgun. The first
+    ///     cleanup discards v0.1.0; the migration runs against
+    ///     drained state; the second cleanup is irrelevant. The first
+    ///     cleanup → state-change boundary is the load-bearing defect
+    ///     surfaced.
+    ///
+    /// Same within-entry cross-instruction discipline as
+    /// [`Self::validate_state_change_ordering`] (the load → state-
+    /// change ordering gate it runs after) and
+    /// [`Self::validate_purge_ordering`] (the load → cleanup ordering
+    /// gate it runs after): all three close one boundary of the OTP
+    /// canonical sequence `code:load_module/1` →
+    /// `gen_server:code_change/3` → `code:soft_purge/1`. The
+    /// state-change-ordering gate closes the load → migrate boundary;
+    /// the purge-ordering gate closes the load → cleanup boundary;
+    /// this gate closes the migrate → cleanup boundary, completing
+    /// the typed coverage of the canonical sequence. Runs *after*
+    /// [`Self::validate_purge_ordering`] (and therefore after
+    /// [`Self::validate_state_change_ordering`]) so an entry like
+    /// `((:soft-purge "x-old") (:state-change "lib/m.lisp"))` —
+    /// which violates *both* the purge-without-load gate and this
+    /// state-change-after-cleanup gate — surfaces the more-
+    /// fundamental `PurgeWithoutPriorLoad` first (the missing-load
+    /// defect is load-bearing; once a coherent `(:load-module …)`
+    /// precedes both, the migrate ↔ cleanup ordering becomes the
+    /// next live defect). Runs *before* the per-instruction-class
+    /// singularity gates ([`Self::validate_load_singularity`],
+    /// [`Self::validate_state_change_singularity`],
+    /// [`Self::validate_cleanup_singularity`]) so an entry like
+    /// `((:load-module "x") (:soft-purge "x-old") (:state-change
+    /// "lib/m.lisp") (:state-change "lib/m.lisp"))` — which violates
+    /// *both* this ordering gate and the state-change-singularity
+    /// gate — surfaces the ordering defect first; the canonical
+    /// "ordering before singularity" precedence the peer
+    /// `validate_state_change_ordering` / `validate_purge_ordering`
+    /// gates already establish.
+    ///
+    /// Detection: linear scan of the instructions list with a
+    /// `prior_cleanup: Option<(module, kind)>` sticky-once latch
+    /// recording the first cleanup encountered; on any subsequent
+    /// `StateChange` the gate fires with the script + the prior
+    /// cleanup's kind/module. Diagnostic-order pin: the first
+    /// colliding state-change-after-cleanup pair surfaces, not the
+    /// last — mirrors every peer ordering gate's first-collision
+    /// posture ([`Self::validate_state_change_ordering`] returns on
+    /// the first `StateChange` without prior load,
+    /// [`Self::validate_purge_ordering`] on the first cleanup
+    /// without prior load).
+    fn validate_state_change_before_cleanup(&self) -> Result<(), UpgradeError> {
+        let mut prior_cleanup: Option<(&str, &'static str)> = None;
+        for instr in &self.instructions {
+            match instr {
+                UpgradeInstruction::SoftPurge { module } | UpgradeInstruction::Purge { module } => {
+                    if prior_cleanup.is_none() {
+                        prior_cleanup = Some((module.as_str(), instr.lisp_form()));
+                    }
+                }
+                UpgradeInstruction::StateChange { script } => {
+                    if let Some((prior_module, prior_kind)) = prior_cleanup {
+                        return Err(UpgradeError::StateChangeAfterCleanup {
+                            from: self.from.clone(),
+                            script: script.clone(),
+                            prior_cleanup_kind: prior_kind,
+                            prior_cleanup_module: prior_module.to_string(),
+                        });
+                    }
                 }
                 _ => {}
             }
@@ -1133,6 +1263,32 @@ pub enum UpgradeError {
         script.display()
     )]
     DuplicateStateChange { from: String, script: PathBuf },
+    #[error(
+        ":upgrade-from `(:from {from:?})` runs `(:state-change {})` after `({prior_cleanup_kind} \
+         {prior_cleanup_module:?})` in its :instructions list — `:state-change` is the \
+         gen_server:code_change/3 analog and folds the prior-version state shape into the \
+         current shape, but the prior version's state only exists while the prior code is \
+         still resident; `:soft-purge` and `:purge` are the code:soft_purge/1 / code:purge/1 \
+         analogs and drain or discard that prior code. The operator executes instructions in \
+         declared order, so a cleanup ahead of a state-change has already drained the prior \
+         module to nothing (`:soft-purge`) or discarded it mid-request (`:purge`) by the time \
+         the migration script runs, leaving the script either no-op (no prior-version state \
+         left to fold) or crashing (`code_change/3` invoked on an unloaded version). The OTP \
+         canonical sequence is `code:load_module/1` → `gen_server:code_change/3` → \
+         `code:soft_purge/1`; the appup cookbook's recommended pattern is `[{{load_module, m}}, \
+         {{update, m, soft}}, {{soft_purge, m}}]` with the migration-triggering `update` \
+         strictly between load and cleanup. Author the canonical `(:load-module …) \
+         (:state-change {}) ({prior_cleanup_kind} {prior_cleanup_module:?})` order so the \
+         migration runs against the prior-version state before the cleanup drains it.",
+        script.display(),
+        script.display()
+    )]
+    StateChangeAfterCleanup {
+        from: String,
+        script: PathBuf,
+        prior_cleanup_kind: &'static str,
+        prior_cleanup_module: String,
+    },
 }
 
 #[cfg(test)]
@@ -3325,6 +3481,397 @@ mod tests {
         assert!(
             matches!(err, UpgradeError::DuplicateStateChange { .. }),
             "validate_upgrade_from must thread the state-change-singularity error, got {err:?}"
+        );
+    }
+
+    // ── within-entry state-change-before-cleanup ordering invariant ──
+
+    #[test]
+    fn validate_rejects_state_change_after_soft_purge() {
+        // Fail-before-pass-after pin: `:state-change` is the
+        // gen_server:code_change/3 analog and folds the prior-version
+        // state shape into the current shape; `:soft-purge` drains the
+        // prior code. The operator runs instructions in declared order,
+        // so a `:soft-purge` ahead of a `:state-change` drains the
+        // prior module before the migration callback runs against the
+        // state it held — the canonical OTP error mode
+        // "`code_change/3` invoked on a purged module" the
+        // release_handler closes by always ordering the migration
+        // before the cleanup.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeAfterCleanup {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+                prior_cleanup_kind: ":soft-purge",
+                prior_cleanup_module: "x-old".into(),
+            },
+            "a `:state-change` after a `:soft-purge` must surface as StateChangeAfterCleanup \
+             naming the offending entry + script + the prior cleanup's kind/module, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_state_change_after_purge() {
+        // Per-arm coverage: `:purge` (immediate discard, no drain) is
+        // the more catastrophic peer of `:soft-purge` on the cleanup
+        // axis; same gate, same shape, the `prior_cleanup_kind` field
+        // distinguishes the diagnostic so the author can grep their
+        // caixa.lisp for the offending `(:purge …)` form.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeAfterCleanup {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+                prior_cleanup_kind: ":purge",
+                prior_cleanup_module: "x-old".into(),
+            },
+            "a `:state-change` after a `:purge` must surface as StateChangeAfterCleanup with \
+             `prior_cleanup_kind: \":purge\"`, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_accepts_state_change_before_cleanup() {
+        // Positive control: the canonical `(:load-module …)
+        // (:state-change …) (:soft-purge …)` order validates — the
+        // exact shape the module doc example and `validate_accepts_
+        // well_formed` already pin, restated here on the new gate's
+        // identity element so a future shortcut that runs the
+        // singularity gates first doesn't silently mask a regression
+        // here.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_cleanup_without_state_change() {
+        // Empty-set identity: an entry that carries no `:state-change`
+        // at all has nothing to order against the cleanup, so the gate
+        // passes regardless of how the cleanups are placed (after the
+        // single required `:load-module`). Mirrors the
+        // `validate_accepts_multiple_purges_after_one_load` positive
+        // control on the peer purge-ordering gate; metadata-only
+        // upgrades with cleanup-but-no-migration land here.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::Purge {
+                    module: "x-oldest".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_state_change_without_cleanup() {
+        // Empty-set identity on the dual axis: an entry that carries no
+        // cleanup at all has nothing to order against the state-change,
+        // so the gate passes — additive-upgrade shapes (load new code,
+        // migrate state, leave old code resident for in-flight callers
+        // to drain naturally) land here.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_multiple_state_changes_before_cleanup() {
+        // Coverage: every state-change must precede every cleanup, not
+        // just the first. A chain `(load) (sc) (sc) (sp)` is the
+        // canonical "two distinct migration scripts on a chained
+        // upgrade" shape (one module's schema *and* another's
+        // projection per the DuplicateStateChange diagnostic), and
+        // it must pass when each state-change has distinct script
+        // paths. Pinned here so a future shortcut that only checks
+        // the first state-change doesn't silently accept a
+        // `(load) (sc-1) (sp) (sc-2)` regression.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m1.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m2.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_rejects_state_change_sandwiched_between_cleanups() {
+        // First-cleanup-wins pin: an entry like `(load) (sp-1) (sc)
+        // (sp-2)` violates the gate because the state-change runs
+        // after the first cleanup. The reported `prior_cleanup_*`
+        // names the *first* cleanup (the load-bearing one), not the
+        // last — mirrors every peer first-collision diagnostic
+        // posture on this module (`validate_state_change_ordering`,
+        // `validate_purge_ordering`, `validate_load_singularity`,
+        // `validate_state_change_singularity`,
+        // `validate_cleanup_singularity` all report the first
+        // colliding instruction, not the last).
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::Purge {
+                    module: "y-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::StateChangeAfterCleanup {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+                prior_cleanup_kind: ":soft-purge",
+                prior_cleanup_module: "x-old".into(),
+            },
+            "the first cleanup the state-change follows must surface (not the trailing one), \
+             got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_fires_after_purge_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:soft-purge
+        // "x-old") (:load-module "x") (:state-change "m.lisp"))` is
+        // *both* purge-without-load (the cleanup runs before the
+        // load) and state-change-after-cleanup (the state-change
+        // runs after the cleanup). The more-fundamental ordering
+        // gate must win — the missing-load defect (a cleanup that
+        // drains the only resident version to nothing) is load-
+        // bearing, and surfacing the state-change-after-cleanup
+        // diagnostic first would mask the drain-to-nothing defect
+        // the peer purge-ordering gate exists to close. Guards the
+        // call order in `validate` against silent reordering. Same
+        // posture as `validate_purge_ordering_fires_after_state_
+        // change_ordering` on the sibling ordering gate.
+        //
+        // Pin specifically uses the load-after-cleanup shape (rather
+        // than load-less) so the state-change-ordering gate (which
+        // would otherwise fire first on a `((:soft-purge …)
+        // (:state-change …))` shape with no leading load) is
+        // sidestepped: with the load present after the cleanup,
+        // state-change-ordering passes (its `loaded` latch is set
+        // before the state-change is encountered) but purge-ordering
+        // still fails (the cleanup precedes the load). That isolates
+        // the precedence between purge-ordering and this gate
+        // cleanly.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: ":soft-purge",
+                    ..
+                }
+            ),
+            "purge-without-load must surface before state-change-after-cleanup, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_fires_after_state_change_ordering() {
+        // Diagnostic-precedence pin: an entry like `((:state-change
+        // "m.lisp") (:soft-purge "x-old"))` is state-change-without-
+        // load (because no `:load-module` precedes the state-change)
+        // but *not* state-change-after-cleanup (the state-change
+        // precedes the cleanup textually). The state-change-ordering
+        // gate must surface first regardless — the missing-load
+        // defect on the migration axis is the load-bearing semantic
+        // and surfacing a different ordering diagnostic would mask
+        // the migration-against-stale-code defect. Guards the call
+        // order in `validate` against silent reordering on a shape
+        // that fires only the state-change-ordering gate (not this
+        // one), pinning that the state-change-ordering gate wins
+        // ahead of this gate's chance to look at the list.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeWithoutPriorLoad { .. }),
+            "state-change-without-load must surface before purge-without-load (the canonical \
+             validate_purge_ordering_fires_after_state_change_ordering pin), got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_fires_after_per_instr_shape() {
+        // Order pin: a malformed `:script` value on a `:state-change`
+        // (an empty path) surfaces its narrower `EmptyScript`
+        // diagnostic *before* the within-entry state-change-before-
+        // cleanup gate fires. The per-instruction shape pass walks
+        // the list inline before the ordering check, so the narrower
+        // self-locating diagnostic surfaces first — mirrors the
+        // empty-first cascade on every peer path-shape gate and the
+        // `validate_purge_ordering_fires_after_per_instr_shape` pin
+        // on the sibling ordering gate.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::new(),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert_eq!(
+            err,
+            UpgradeError::EmptyScript,
+            "malformed instruction must surface its narrower diagnostic before the \
+             state-change-before-cleanup gate fires, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_fires_before_state_change_singularity() {
+        // Diagnostic-precedence pin: an entry like `((:load-module
+        // "x") (:soft-purge "x-old") (:state-change "m.lisp")
+        // (:state-change "m.lisp"))` violates *both* this ordering
+        // gate (the first state-change follows the cleanup) and the
+        // state-change-singularity gate (the same script appears
+        // twice). The ordering gate must win — the canonical
+        // "ordering before singularity" precedence the peer
+        // `validate_state_change_ordering` / `validate_purge_
+        // ordering` gates already establish over their own singularity
+        // gates, applied uniformly across the OTP canonical-sequence
+        // ordering axis here. Guards the call order in `validate`:
+        // `validate_state_change_before_cleanup` runs before the
+        // per-instruction-class singularity gates.
+        let e = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        let err = e.validate().unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeAfterCleanup { .. }),
+            "state-change-after-cleanup must surface before duplicate-state-change, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_threads_through_validate_upgrade_from() {
+        // The whole-list entry-point surfaces the per-entry ordering
+        // error (mirrors `validate_purge_ordering_threads_through_
+        // validate_upgrade_from` and every peer wiring pin): the gate
+        // is reachable from the LayoutInvariants call site, not only
+        // from a direct `entry.validate()`.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        )];
+        let err = validate_upgrade_from(&entries).unwrap_err();
+        assert!(
+            matches!(err, UpgradeError::StateChangeAfterCleanup { .. }),
+            "validate_upgrade_from must thread the state-change-before-cleanup error, \
+             got {err:?}"
         );
     }
 
