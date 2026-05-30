@@ -49,6 +49,6 @@ pub use render::{
 pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
 pub use upgrade::{
     UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from,
-    validate_upgrade_from_against_versao,
+    validate_upgrade_from_against_behavior, validate_upgrade_from_against_versao,
 };
 pub use version::{CaixaVersion, VersionError, parse_requirement};
