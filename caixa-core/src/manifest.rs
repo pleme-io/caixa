@@ -1440,6 +1440,62 @@ mod tests {
         assert_eq!(list, ":deps-dev");
     }
 
+    // ── validate_deps: per-entry :caracteristicas set-discipline gate ──
+
+    #[test]
+    fn validate_deps_surfaces_caracteristicas_duplicate_in_deps_list() {
+        // Thread-through pin on `:deps`: the per-entry
+        // `Dep::validate_caracteristicas` gate fires inside
+        // `Caixa::validate_deps`'s linear walk, so a malformed feature
+        // list on any `:deps` entry surfaces as a `DepError` from
+        // `validate_deps` — the same reachability shape every per-entry
+        // `Dep::validate` arm threads through. Without this pin a future
+        // shortcut that skips the per-entry `Dep::validate` call on the
+        // cross-entry-uniqueness path would mask the within-entry
+        // `:caracteristicas` gates.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep {
+            nome: "caixa-teia".into(),
+            versao: "^0.1".into(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".into(), "http".into()],
+        }];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::CaracteristicaDuplicate {
+            nome,
+            caracteristica,
+        } = err
+        else {
+            panic!("expected CaracteristicaDuplicate from :deps walk, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caracteristica, "http");
+    }
+
+    #[test]
+    fn validate_deps_surfaces_caracteristicas_empty_in_deps_dev_list() {
+        // Peer thread-through pin on `:deps-dev`: same reachability as
+        // the `:deps` arm above, on the dev-only authoring axis. Pins
+        // that the `validate_deps` walk visits both lists' per-entry
+        // gates uniformly. The empty-feature arm carries here so both
+        // new `:caracteristicas` arms are surfaced via at least one
+        // `validate_deps` thread-through.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![Dep {
+            nome: "caixa-teia".into(),
+            versao: "^0.1".into(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec![String::new()],
+        }];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::CaracteristicaEmpty { nome } = err else {
+            panic!("expected CaracteristicaEmpty from :deps-dev walk, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+    }
+
     #[test]
     fn to_lisp_preserves_deps() {
         let src = r#"

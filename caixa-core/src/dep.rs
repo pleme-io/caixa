@@ -433,6 +433,67 @@ impl Dep {
         if let Some(ref fonte) = self.fonte {
             fonte.validate(&self.nome)?;
         }
+        self.validate_caracteristicas()?;
+        Ok(())
+    }
+
+    /// Reject per-entry `:caracteristicas` (feature-flag) values that
+    /// are operationally meaningless. The `:caracteristicas` slot is
+    /// a set of feature toggles to enable on the target caixa — same
+    /// shape as Cargo's `[dependencies.<dep>.features]` list — and
+    /// two structural footguns close here:
+    ///
+    ///   - empty-string entry (`(:caracteristicas (""))`): the future
+    ///     caixa-resolver lacre pipeline would consume the empty
+    ///     identifier as a no-op feature enable, silently dropping the
+    ///     author's intent far from the source `caixa.lisp`;
+    ///   - duplicate entry within one dep (`(:caracteristicas ("http"
+    ///     "http"))`): the feature-toggle slot is set-shaped (enabling
+    ///     a feature twice has no additional semantic — there is no
+    ///     `feature × 2`), so two entries naming the same feature are
+    ///     a silent miscount, the same set-not-multiset distinction
+    ///     every peer Vec-keyed-by-name axis already closes
+    ///     ([`crate::SupervisorError::DuplicateChildCaixa`] on
+    ///     `:children :caixa`, [`crate::AplicacaoError::MembroDuplicate`]
+    ///     on `:membros :caixa`, [`crate::AplicacaoError::ContratoDuplicate`]
+    ///     on `:contratos`, [`crate::AplicacaoError::PlacementClusterDuplicate`]
+    ///     on `:placement :clusters`, [`crate::AplicacaoError::EntradaPathDuplicate`]
+    ///     on `:entrada :paths`, [`crate::UpgradeError::DuplicateFrom`]
+    ///     on `:upgrade-from :from`, [`crate::UpgradeError::DuplicateLoadModule`]
+    ///     / [`crate::UpgradeError::DuplicateStateChange`] /
+    ///     [`crate::UpgradeError::DuplicateCleanup`] on the within-
+    ///     entry `:upgrade-from` axes, and [`DepError::DuplicateNome`]
+    ///     on the cross-entry `:deps`/`:deps-dev` `:nome` axis the
+    ///     immediate-predecessor 359fba5 closed).
+    ///
+    /// Same linear-walk + `HashSet` + first-collision diagnostic shape
+    /// every peer set-not-multiset gate uses; the empty arm fires
+    /// before the duplicate arm so an entry with both an empty feature
+    /// *and* a duplicate of some later feature surfaces the empty-
+    /// shape diagnostic first (the empty-feature axis is the
+    /// more-actionable defect since the missing-name renders the
+    /// duplicate-key arm ambiguous: two `""` entries would both report
+    /// `caracteristica: ""` with no way to distinguish the offending
+    /// site). Empty-first cascade discipline mirrors every peer per-
+    /// entry shape + duplicate gate
+    /// (`SupervisorSpec::validate`'s `EmptyChildName` before
+    /// `DuplicateChildCaixa`; `validate_membros`'s `MembroCaixaEmpty`
+    /// before `MembroDuplicate`).
+    fn validate_caracteristicas(&self) -> Result<(), DepError> {
+        let mut seen = std::collections::HashSet::new();
+        for c in &self.caracteristicas {
+            if c.is_empty() {
+                return Err(DepError::CaracteristicaEmpty {
+                    nome: self.nome.clone(),
+                });
+            }
+            if !seen.insert(c.as_str()) {
+                return Err(DepError::CaracteristicaDuplicate {
+                    nome: self.nome.clone(),
+                    caracteristica: c.clone(),
+                });
+            }
+        }
         Ok(())
     }
 }
@@ -564,6 +625,31 @@ pub enum DepError {
          `caixa-teia-v02` aliased pair); within one list, one entry per caixa name."
     )]
     DuplicateNome { nome: String, list: &'static str },
+    #[error(
+        ":deps entry {nome:?} has empty :caracteristicas entry — every feature flag must \
+         name a non-empty identifier on the target caixa (Cargo's [dependencies.<dep>.features] \
+         applies the same per-entry non-empty discipline). An empty feature flag reaches the \
+         caixa-resolver's lacre pipeline as a no-op feature enable, silently dropping the \
+         author's intent far from the source caixa.lisp; drop the empty entry, or replace it \
+         with the canonical kebab-case feature name the target caixa declares."
+    )]
+    CaracteristicaEmpty { nome: String },
+    #[error(
+        ":deps entry {nome:?} :caracteristicas carries duplicate feature {caracteristica:?} — \
+         every feature-flag list keys its entries by name (Cargo's \
+         [dependencies.<dep>.features] applies the same set-not-multiset discipline; one entry \
+         per feature per dep), and two entries naming the same feature are a redundant \
+         set-membership declaration for one identity (the feature-toggle slot is set-shaped; \
+         enabling a feature twice has no additional semantic). The caixa-resolver's lacre \
+         pipeline consumes the list as a set-shaped feature toggle — the resolver enables the \
+         feature once regardless of declaration count, so the duplicate's pin / position never \
+         reaches the closure with no field naming the silent loser. One entry per feature per \
+         dep; if two distinct features are intended, name each verbatim."
+    )]
+    CaracteristicaDuplicate {
+        nome: String,
+        caracteristica: String,
+    },
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -2377,5 +2463,170 @@ mod tests {
         assert!(!s.contains("branch"));
         let round: DepSource = serde_json::from_str(&s).unwrap();
         assert_eq!(round, src);
+    }
+
+    // ── per-entry :caracteristicas set-not-multiset gate ────────────
+    //
+    // Every Vec-keyed-by-name authoring surface on the typed Caixa
+    // surface that identifies its entries by a name field now uniformly
+    // closes the set-not-multiset discipline at build time (cite
+    // `validate_caracteristicas`'s peer-axis enumeration). The
+    // `:caracteristicas` axis is per-`Dep`: the feature-toggle slot is
+    // set-shaped (a feature is either enabled or not — there is no
+    // `feature × 2` semantic), so two entries naming the same feature
+    // are a redundant declaration the caixa-resolver's lacre pipeline
+    // would silently dedup at resolve time. The empty-feature arm
+    // closes the parallel "operationally-meaningless value" axis on
+    // the same slot. Same linear-walk + `HashSet` + first-collision
+    // shape every peer set gate uses; same empty-first cascade every
+    // peer per-entry shape + duplicate gate uses (the empty-feature
+    // axis is the more-actionable defect since two `""` entries would
+    // both report `caracteristica: ""` under a duplicate-first
+    // ordering, with no way to distinguish the offending site).
+
+    fn dep_with_features(features: &[&str]) -> Dep {
+        Dep {
+            nome: "caixa-teia".into(),
+            versao: "^0.1".into(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: features.iter().map(|s| (*s).into()).collect(),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_empty_caracteristica() {
+        // Fail-before-pass-after pin: every pre-gate codebase accepted
+        // `(:caracteristicas (""))` cleanly (the `Vec<String>` field
+        // imposed no per-entry shape contract), the dep validated, and
+        // the empty feature would have reached the future caixa-resolver
+        // lacre pipeline as a no-op feature enable — silently dropping
+        // the author's intent far from the source `caixa.lisp`. The new
+        // gate surfaces the structural defect at the typed-validate
+        // surface with a self-locating diagnostic naming the offending
+        // dep's `:nome`.
+        let d = dep_with_features(&[""]);
+        assert!(
+            matches!(d.validate().unwrap_err(), DepError::CaracteristicaEmpty { ref nome } if nome == "caixa-teia"),
+            "expected CaracteristicaEmpty, got {:?}",
+            d.validate(),
+        );
+    }
+
+    #[test]
+    fn validate_rejects_duplicate_caracteristica() {
+        // Fail-before-pass-after pin on the set-not-multiset arm: the
+        // feature-toggle slot is set-shaped, so `(:caracteristicas
+        // ("http" "http"))` is a redundant declaration the lacre
+        // pipeline dedupes silently at resolve time. The diagnostic
+        // names the offending dep + the colliding feature verbatim so
+        // the author can grep their caixa.lisp for `:caracteristicas`
+        // and fix it in one edit. First-collision determinism is
+        // pinned separately below.
+        let d = dep_with_features(&["http", "http"]);
+        assert!(
+            matches!(
+                d.validate().unwrap_err(),
+                DepError::CaracteristicaDuplicate { ref nome, ref caracteristica }
+                    if nome == "caixa-teia" && caracteristica == "http"
+            ),
+            "expected CaracteristicaDuplicate, got {:?}",
+            d.validate(),
+        );
+    }
+
+    #[test]
+    fn validate_accepts_distinct_caracteristicas() {
+        // The canonical authoring shape — every feature distinct — must
+        // remain a clean pass (positive control sweep). Covers the
+        // canonical kebab-case feature names a target caixa typically
+        // declares.
+        dep_with_features(&["http", "json", "tls"])
+            .validate()
+            .unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_single_caracteristica() {
+        // Single-element list is the minimum non-empty shape; passes
+        // the gate as the identity of the duplicate check (no second
+        // entry to collide with).
+        dep_with_features(&["http"]).validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_empty_caracteristicas_list() {
+        // The bare-dep authoring shape (`Dep::simple` / `Dep::git`)
+        // produces `caracteristicas: Vec::new()`; the empty list is
+        // the gate's empty-set identity and passes vacuously. Pin
+        // this so a future tightening that requires ≥1 feature
+        // surfaces here as a test failure rather than a silent
+        // contract narrowing.
+        Dep::simple("caixa-teia", "^0.1").validate().unwrap();
+        assert!(dep_with_features(&[]).validate().is_ok());
+    }
+
+    #[test]
+    fn validate_caracteristica_empty_fires_before_duplicate() {
+        // Empty-first cascade: an entry with an empty feature *and*
+        // duplicate entries surfaces the empty diagnostic first. The
+        // empty-feature axis is the more-actionable defect since
+        // `caracteristica: ""` is unambiguous; under duplicate-first
+        // ordering the diagnostic could report the empty string from
+        // either of two empty entries with no way to distinguish.
+        // Mirrors the peer empty-before-duplicate ordering
+        // discipline every per-entry shape + duplicate gate establishes
+        // (`SupervisorSpec::validate`'s `EmptyChildName` arm before
+        // `DuplicateChildCaixa`, `validate_membros`'s
+        // `MembroCaixaEmpty` arm before `MembroDuplicate`).
+        let d = dep_with_features(&["", "http", "http"]);
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::CaracteristicaEmpty { .. }
+        ));
+    }
+
+    #[test]
+    fn validate_caracteristica_duplicate_first_collision_determinism() {
+        // Three matching entries: the second occurrence surfaces the
+        // diagnostic (the second is the first *collision* — the first
+        // entry is the establishing one, not a duplicate). Mirrors
+        // every peer first-collision posture
+        // (`SupervisorError::DuplicateChildCaixa` reports the second
+        // collision, `AplicacaoError::MembroDuplicate` reports the
+        // second, `DepError::DuplicateNome` reports the second).
+        // Pinning this so a future shortcut that flips to last-
+        // collision (or non-deterministic) surfaces here.
+        let d = dep_with_features(&["http", "http", "http"]);
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::CaracteristicaDuplicate { ref caracteristica, .. } if caracteristica == "http"
+        ));
+    }
+
+    #[test]
+    fn validate_per_entry_shape_fires_before_caracteristicas() {
+        // Per-entry shape precedence: a dep with a malformed `:nome`
+        // (uppercase) AND duplicate `:caracteristicas` surfaces the
+        // narrower `NomeInvalid` diagnostic first, not the set-gate
+        // diagnostic. The `:nome` is the self-locating axis (every
+        // diagnostic from the caracteristicas gate quotes the
+        // offending dep's `:nome` to anchor the grep target —
+        // surfacing the malformed name first keeps that anchor
+        // valid). Same precedence shape every peer per-entry-shape
+        // arm establishes against its peer set-gate
+        // (`validate_deps_per_entry_validate_fires_before_duplicate_in_deps`
+        // on the cross-entry `:nome` axis).
+        let d = Dep {
+            nome: "Caixa-Teia".into(), // uppercase — DNS-1123 violation
+            versao: "^0.1".into(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".into(), "http".into()],
+        };
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::NomeInvalid { .. }
+        ));
     }
 }
