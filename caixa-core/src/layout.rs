@@ -218,6 +218,27 @@ impl LayoutInvariants for StandardLayout {
             });
         }
 
+        // Per-entry path-shape gate on the three Caixa-level code-surface
+        // path lists (`:bibliotecas`, `:exe`, `:servicos`): each entry must
+        // be non-empty, relative, and free of `..` components — the same
+        // [`crate::render::is_sandboxed_relative_path`] discipline the
+        // peer `:behavior :on-*` (b0c8389) and
+        // `:upgrade-from :state-change :script` (26da2c7) axes already
+        // route through. Runs *after* the kind-coherence gates above (so
+        // a `:exe` on a Servico surfaces ForeignCodeSlot rather than a
+        // per-entry shape diagnostic, and a Supervisor/Aplicacao with any
+        // code surface surfaces OwnCode first) and *before* the existence
+        // loops below (so an empty / absolute / parent-escaping entry
+        // surfaces its self-locating per-slot diagnostic rather than a
+        // downstream `MissingEntry` / `ExeOutsideDir` /
+        // `ServicoOutsideDir` against the resolved sandbox-escape path).
+        caixa
+            .validate_code_paths()
+            .map_err(|err| LayoutError::CodePathViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
@@ -513,6 +534,8 @@ pub enum LayoutError {
     ExeOutsideDir(PathBuf),
     #[error("servico entry outside servicos/ directory: {}", .0.display())]
     ServicoOutsideDir(PathBuf),
+    #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
+    CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
     LimitsViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :behavior callback: {issue}")]
@@ -666,14 +689,121 @@ mod tests {
 
     #[test]
     fn exe_outside_dir_errors() {
+        // A relative entry that lives under the caixa root but *not*
+        // under `exe/` — the canonical case the `starts_with(exe_dir)`
+        // fence catches. The prior parent-escape shape this test used
+        // (`"../sibling/tool"`) is now caught at validate time by
+        // [`Caixa::validate_code_paths`] with the narrower
+        // [`crate::ManifestError::CodePathParentEscape`] diagnostic
+        // (see the layout-level integration pin
+        // `code_path_violation_on_parent_escape_fires_before_existence_check`),
+        // so this fence pin uses a non-`..` non-absolute shape outside
+        // `exe/` to preserve coverage of the ExeOutsideDir surface.
         let root = PathBuf::from("/tmp/x");
         let manifest = root.join("caixa.lisp");
-        let outside = root.join("../sibling/tool");
+        let outside = root.join("lib/tool");
         let layout = StandardLayout::new().with_path_exists(move |p| p == manifest || p == outside);
         let mut c = caixa(CaixaKind::Binario);
-        c.exe = vec!["../sibling/tool".into()];
+        c.exe = vec!["lib/tool".into()];
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::ExeOutsideDir(_)));
+    }
+
+    // ── code-path shape gate (lifted to layout-level verify) ─────────────
+
+    #[test]
+    fn code_path_violation_on_empty_bibliotecas_entry() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.bibliotecas = vec!["".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        // The wire-up wraps `ManifestError` Display into the
+        // CodePathViolation envelope (peer of LimitsViolation /
+        // BehaviorViolation / UpgradeViolation), so the issue string
+        // names the offending slot at the source.
+        let LayoutError::CodePathViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::CodePathViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":bibliotecas"),
+            "issue must name the offending slot: {issue}",
+        );
+    }
+
+    #[test]
+    fn code_path_violation_on_absolute_servicos_entry() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["/etc/servicos/escape.yaml".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::CodePathViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::CodePathViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":servicos"),
+            "issue must name the offending slot: {issue}",
+        );
+        assert!(
+            issue.contains("/etc/servicos/escape.yaml"),
+            "issue must quote the offending path: {issue}",
+        );
+    }
+
+    #[test]
+    fn code_path_violation_on_parent_escape_fires_before_existence_check() {
+        // The new gate runs BEFORE the existence loops, so a
+        // parent-escaping `:exe` entry surfaces CodePathViolation
+        // (naming `:exe` at the source) rather than the downstream
+        // ExeOutsideDir / MissingEntry against the resolved sandbox-
+        // escape path. Even if the resolved escape target exists
+        // on disk (which we simulate here by claiming it does), the
+        // shape diagnostic wins.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let resolved_escape = root.join("exe/../../escape.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == resolved_escape);
+        let mut c = caixa(CaixaKind::Binario);
+        c.exe = vec!["exe/../../escape.lisp".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::CodePathViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::CodePathViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":exe"),
+            "issue must name the offending slot: {issue}",
+        );
+    }
+
+    #[test]
+    fn code_path_gate_runs_after_foreign_code_slot_gate() {
+        // Precedence pin: a Servico that declares `:exe` (foreign code
+        // surface) surfaces ForeignCodeSlot, *not* a per-entry path
+        // shape diagnostic, even when the `:exe` entry is itself
+        // malformed. The kind-coherence gate is the load-bearing
+        // diagnostic at this site — once the slot is moved off the
+        // wrong kind, the per-entry shape gate becomes the next live
+        // diagnostic.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/ok.yaml".into()];
+        c.exe = vec!["/etc/foreign".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::ForeignCodeSlot { .. }),
+            "expected ForeignCodeSlot (kind-coherence wins over per-entry shape), got {err:?}",
+        );
     }
 
     // ── M2 typed-substrate invariants ────────────────────────────────────

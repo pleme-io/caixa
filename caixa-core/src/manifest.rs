@@ -1,11 +1,18 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
 use tatara_lisp::DeriveTataraDomain;
 
 use thiserror::Error;
 
 use crate::{
-    CaixaKind, Dep, behavior::BehaviorSpec, dep::DepError, limits::LimitsSpec,
-    render::is_dns_1123_label, supervisor::SupervisorSpec, upgrade::UpgradeFromEntry,
+    CaixaKind, Dep,
+    behavior::BehaviorSpec,
+    dep::DepError,
+    limits::LimitsSpec,
+    render::{PathShapeViolation, is_dns_1123_label, is_sandboxed_relative_path},
+    supervisor::SupervisorSpec,
+    upgrade::UpgradeFromEntry,
 };
 
 /// Top-level manifest for a caixa (a tatara-lisp package).
@@ -691,6 +698,112 @@ impl Caixa {
             })
     }
 
+    /// Reject per-entry values on the three Caixa-level code-surface
+    /// path lists (`:bibliotecas`, `:exe`, `:servicos`) that the
+    /// layout checker's `root.join(p)` sandbox would silently subvert.
+    /// Same three structural footguns the peer
+    /// [`BehaviorSpec::validate`] (b0c8389) and
+    /// [`crate::UpgradeInstruction::validate`] `StateChange` arm
+    /// (26da2c7) already close on the M2 `:behavior :on-*` and
+    /// `:upgrade-from :state-change :script` axes, here lifted onto
+    /// the three top-level code-path axes through the shared
+    /// [`is_sandboxed_relative_path`] predicate:
+    ///
+    ///   - empty entry (`(:bibliotecas (""))` / `(:exe (""))` /
+    ///     `(:servicos (""))`): `PathBuf::new()` round-trips through
+    ///     [`Path::join`] as the base itself — `root.join("")` ==
+    ///     `root`, so the existence check (`self.exists(&root)`)
+    ///     trivially passes (the project root exists), and the layout
+    ///     silently treats the project root as a biblioteca / exe /
+    ///     servico entry. The `:bibliotecas` loop then hands the root
+    ///     to `tatara_lisp::read` at `feira build` time as if the root
+    ///     directory itself were a Lisp source file — a parse error
+    ///     far from the source `caixa.lisp` with no field naming the
+    ///     offending entry.
+    ///   - absolute path (`(:bibliotecas ("/etc/passwd"))`):
+    ///     [`Path::join`] *replaces* the base when the right-hand side
+    ///     is absolute, so `root.join("/etc/passwd")` resolves to
+    ///     `"/etc/passwd"` and escapes the project sandbox entirely.
+    ///     The existence check then silently consults whatever the
+    ///     escaped path resolves to — for `:bibliotecas`, the layout
+    ///     has no `starts_with`-fence (only `:exe` is fenced under
+    ///     `exe/` and `:servicos` under `servicos/`), so an absolute
+    ///     `:bibliotecas` entry that happens to resolve on disk
+    ///     silently passes. For `:exe` / `:servicos` the fence catches
+    ///     the absolute case downstream as `ExeOutsideDir` /
+    ///     `ServicoOutsideDir` (or `MissingEntry` if the absolute path
+    ///     doesn't exist), but with a downstream-shaped diagnostic
+    ///     that names the resolved escape path rather than the
+    ///     authoring footgun at the source.
+    ///   - parent-escape (`(:bibliotecas ("../sibling/x.lisp"))` /
+    ///     `(:exe ("exe/../../escape.lisp"))`): a [`PathBuf`] with any
+    ///     [`std::path::Component::ParentDir`] anywhere round-trips
+    ///     through [`Path::join`] as a traversal above the caixa root.
+    ///     The `:exe` / `:servicos` `starts_with(<dir>)` fence is
+    ///     *component-aware* (not canonical-path-aware), so
+    ///     `root.join("exe/../../escape.lisp")` `starts_with(exe_dir)`
+    ///     is **true** even though the canonical resolution
+    ///     `{parent of root}/escape.lisp` lives outside the caixa root
+    ///     — the fence silently lets the parent-escape through, and
+    ///     the existence check passes if that escape-target happens
+    ///     to exist. Caught regardless of where the `..` sits
+    ///     (leading, mid-path, trailing) so the gate matches the peer
+    ///     predicate's full coverage.
+    ///
+    /// Same `Empty` → `Absolute` → `ParentEscape` arm-ordering every peer
+    /// `is_sandboxed_relative_path` consumer follows (b0c8389 / 26da2c7);
+    /// same per-slot diagnostic shape every peer per-axis path-gate
+    /// exposes (`*Empty { slot }` / `*Absolute { slot, path }` /
+    /// `*ParentEscape { slot, path }`). Cross-slot precedence is
+    /// `:bibliotecas` → `:exe` → `:servicos` — the same declaration
+    /// order [`Caixa::declared_foreign_code_slots`] uses for its
+    /// canonical foreign-code-slot diagnostic, so a manifest with
+    /// multiple malformed slots surfaces the lexicographically-earliest
+    /// slot's diagnostic deterministically.
+    ///
+    /// Lifted to the typed surface as a Caixa-level validator (peer
+    /// of [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_restart_window`])
+    /// and wired into [`crate::StandardLayout::verify`] before the
+    /// existence-check loops so the diagnostic names the offending
+    /// slot at the source caixa.lisp rather than reporting a
+    /// downstream `MissingEntry` / `ExeOutsideDir` /
+    /// `ServicoOutsideDir` against the resolved sandbox-escape path.
+    /// The fourth typed code-path surface — every author-supplied
+    /// path on the manifest — is now structurally accept-shaped
+    /// past validate, peer with `:behavior :on-*` and
+    /// `:upgrade-from :state-change :script`.
+    pub fn validate_code_paths(&self) -> Result<(), ManifestError> {
+        for (slot, list) in [
+            (":bibliotecas", &self.bibliotecas),
+            (":exe", &self.exe),
+            (":servicos", &self.servicos),
+        ] {
+            for entry in list {
+                let path = Path::new(entry);
+                match is_sandboxed_relative_path(path) {
+                    Ok(()) => {}
+                    Err(PathShapeViolation::Empty) => {
+                        return Err(ManifestError::CodePathEmpty { slot });
+                    }
+                    Err(PathShapeViolation::Absolute) => {
+                        return Err(ManifestError::CodePathAbsolute {
+                            slot,
+                            path: path.to_path_buf(),
+                        });
+                    }
+                    Err(PathShapeViolation::ParentEscape) => {
+                        return Err(ManifestError::CodePathParentEscape {
+                            slot,
+                            path: path.to_path_buf(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -854,6 +967,36 @@ pub enum ManifestError {
         restart_window: String,
         reason: String,
     },
+    #[error(
+        "{slot} entry is an empty path string — every {slot} entry must name \
+         a file relative to the caixa root; omit the entry to omit the file \
+         (the layout checker's `root.join(\"\")` resolves to the caixa root \
+         itself, so an empty entry silently aliases the project root as a \
+         declared {slot} file, then fails downstream at parse / existence \
+         time with a diagnostic that names the root rather than the offending \
+         entry)"
+    )]
+    CodePathEmpty { slot: &'static str },
+    #[error(
+        "{slot} entry {} is an absolute path — entries must be relative to \
+         the caixa root, since `Path::join` replaces the base with an absolute \
+         right-hand side and `root.join(\"/abs/...\")` resolves to \"/abs/...\" \
+         outside the caixa root sandbox; rewrite the entry as a relative path \
+         under the caixa root (e.g. `\"lib/<name>.lisp\"`, `\"exe/<name>\"`, \
+         `\"servicos/<name>.computeunit.yaml\"`)",
+        path.display()
+    )]
+    CodePathAbsolute { slot: &'static str, path: PathBuf },
+    #[error(
+        "{slot} entry {} contains a `..` component — entries must not traverse \
+         above the caixa root (the layout's `starts_with(<dir>)` fence on \
+         `:exe` / `:servicos` is component-aware, not canonical-path-aware, \
+         so a mid-path `..` silently traverses the sandbox; `:bibliotecas` \
+         has no such fence, so a leading `..` escapes unconditionally if the \
+         resolved target happens to exist)",
+        path.display()
+    )]
+    CodePathParentEscape { slot: &'static str, path: PathBuf },
 }
 
 #[cfg(test)]
@@ -2220,6 +2363,247 @@ mod tests {
                     if restart_window == "1.5s"
             ),
             "validator must surface the offending value",
+        );
+    }
+
+    // ── validate_code_paths — per-entry shape on :bibliotecas / :exe / :servicos ──
+
+    fn caixa_with_code_paths(bibliotecas: Vec<&str>, exe: Vec<&str>, servicos: Vec<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.bibliotecas = bibliotecas.into_iter().map(String::from).collect();
+        c.exe = exe.into_iter().map(String::from).collect();
+        c.servicos = servicos.into_iter().map(String::from).collect();
+        c
+    }
+
+    #[test]
+    fn validate_code_paths_accepts_canonical_template() {
+        // The bare `Caixa::template` shape is the gate's identity element
+        // on the canonical authoring shape — `:bibliotecas
+        // ("lib/demo.lisp")` + empty `:exe` + empty `:servicos`. Pins
+        // that the gate is non-disruptive against every existing caixa.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn validate_code_paths_accepts_explicit_relative_paths_on_every_slot() {
+        // Positive control sweep: a canonical-shaped path on every slot
+        // passes. Mirrors the peer
+        // `behavior::validate_every_slot_relative_is_ok` pin.
+        let c = caixa_with_code_paths(
+            vec!["lib/demo.lisp", "lib/helpers.lisp"],
+            vec!["exe/demo", "exe/tool"],
+            vec!["servicos/demo.computeunit.yaml"],
+        );
+        c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn validate_code_paths_accepts_all_empty_lists() {
+        // The empty-list identity element: every Caixa with no declared
+        // code paths trivially passes (Supervisor / Aplicacao kinds rely
+        // on this — the OwnCode gate already rejected them before the
+        // path-shape gate runs in the layout, but the validator itself
+        // must accept the empty shape).
+        let c = caixa_with_code_paths(vec![], vec![], vec![]);
+        c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_empty_bibliotecas_entry() {
+        let c = caixa_with_code_paths(vec![""], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::CodePathEmpty {
+                    slot: ":bibliotecas"
+                }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_empty_exe_entry() {
+        let c = caixa_with_code_paths(vec![], vec![""], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::CodePathEmpty { slot: ":exe" }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_empty_servicos_entry() {
+        let c = caixa_with_code_paths(vec![], vec![], vec![""]);
+        let err = c.validate_code_paths().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::CodePathEmpty { slot: ":servicos" }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_absolute_bibliotecas_entry() {
+        // `:bibliotecas` has no `starts_with(<dir>)` fence downstream,
+        // so an absolute path that resolves on disk silently passes the
+        // layout's existence check — the canonical sandbox-escape on
+        // the biblioteca axis.
+        let c = caixa_with_code_paths(vec!["/etc/passwd"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathAbsolute { slot, path } = err else {
+            panic!("expected CodePathAbsolute, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        assert_eq!(path, PathBuf::from("/etc/passwd"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_absolute_exe_entry() {
+        let c = caixa_with_code_paths(vec![], vec!["/usr/bin/env"], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathAbsolute { slot, path } = err else {
+            panic!("expected CodePathAbsolute, got {err:?}");
+        };
+        assert_eq!(slot, ":exe");
+        assert_eq!(path, PathBuf::from("/usr/bin/env"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_absolute_servicos_entry() {
+        let c = caixa_with_code_paths(vec![], vec![], vec!["/var/servicos/x.yaml"]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathAbsolute { slot, path } = err else {
+            panic!("expected CodePathAbsolute, got {err:?}");
+        };
+        assert_eq!(slot, ":servicos");
+        assert_eq!(path, PathBuf::from("/var/servicos/x.yaml"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_parent_escape_bibliotecas_leading() {
+        // Canonical "I want a lib from a sibling caixa" footgun on the
+        // biblioteca axis. `:bibliotecas` has no `starts_with` fence
+        // downstream, so a leading `..` traverses to the parent of the
+        // caixa root with no diagnostic at layout time if the resolved
+        // target exists.
+        let c = caixa_with_code_paths(vec!["../sibling/x.lisp"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathParentEscape { slot, path } = err else {
+            panic!("expected CodePathParentEscape, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        assert_eq!(path, PathBuf::from("../sibling/x.lisp"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_parent_escape_exe_mid_path() {
+        // Mid-path `..` defeats the layout's component-aware
+        // `starts_with(exe_dir)` fence — `root.join("exe/../../escape")`
+        // `starts_with(<root>/exe)` is true, but the canonical resolution
+        // lives outside the caixa root. Caught regardless of where the
+        // `..` sits — mirrors the peer
+        // `behavior::validate_rejects_parent_escape_mid_path` pin.
+        let c = caixa_with_code_paths(vec![], vec!["exe/../../escape"], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathParentEscape { slot, path } = err else {
+            panic!("expected CodePathParentEscape, got {err:?}");
+        };
+        assert_eq!(slot, ":exe");
+        assert_eq!(path, PathBuf::from("exe/../../escape"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_parent_escape_servicos_trailing() {
+        let c = caixa_with_code_paths(vec![], vec![], vec!["servicos/foo/../../escape.yaml"]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathParentEscape { slot, path } = err else {
+            panic!("expected CodePathParentEscape, got {err:?}");
+        };
+        assert_eq!(slot, ":servicos");
+        assert_eq!(path, PathBuf::from("servicos/foo/../../escape.yaml"));
+    }
+
+    #[test]
+    fn validate_code_paths_cross_slot_precedence_bibliotecas_before_exe_before_servicos() {
+        // Cross-slot precedence pin: `:bibliotecas` → `:exe` →
+        // `:servicos`. A manifest with malformed entries on all three
+        // surfaces surfaces the `:bibliotecas` defect first, mirroring
+        // the canonical declaration order
+        // `Caixa::declared_foreign_code_slots` already establishes for
+        // the foreign-code-slot diagnostic.
+        let c = caixa_with_code_paths(vec![""], vec![""], vec![""]);
+        let err = c.validate_code_paths().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::CodePathEmpty {
+                    slot: ":bibliotecas"
+                }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_within_slot_precedence_empty_before_absolute_before_parent_escape() {
+        // Within-slot precedence pin: empty → absolute → parent-escape,
+        // matching the [`PathShapeViolation`] arm-ordering every peer
+        // `is_sandboxed_relative_path` caller follows (b0c8389
+        // BehaviorSpec, 26da2c7 UpgradeInstruction::StateChange). A
+        // `:bibliotecas` list whose first entry is empty *and* whose
+        // later entries are absolute/parent-escape surfaces the empty
+        // arm first, on the lexicographically-earliest offending entry.
+        let c = caixa_with_code_paths(vec!["", "/etc/passwd", "../escape.lisp"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::CodePathEmpty {
+                    slot: ":bibliotecas"
+                }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_first_offender_per_slot_wins() {
+        // Within a single slot, the first declaration-order offender
+        // surfaces — pins that the gate is left-to-right deterministic
+        // (peer of every `*_first_collision_*` pin on duplicate gates).
+        let c = caixa_with_code_paths(
+            vec!["lib/ok.lisp", "/etc/escape", "../also-escape"],
+            vec![],
+            vec![],
+        );
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathAbsolute { slot, path } = err else {
+            panic!("expected CodePathAbsolute, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        assert_eq!(path, PathBuf::from("/etc/escape"));
+    }
+
+    #[test]
+    fn validate_code_paths_diagnostic_carries_offending_slot_and_path() {
+        // Diagnostic-shape pin (peer with
+        // `nome_invalid_diagnostic_carries_offending_nome` /
+        // `versao_invalid_diagnostic_carries_offending_versao`): the
+        // error's Display surfaces both the offending `:slot` tag and
+        // the offending path verbatim, so a `feira lint` run can render
+        // the diagnostic without re-parsing.
+        let c = caixa_with_code_paths(vec!["/etc/passwd"], vec![], vec![]);
+        let rendered = c.validate_code_paths().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":bibliotecas"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("/etc/passwd"),
+            "diagnostic must quote the offending path: {rendered}",
         );
     }
 }
