@@ -1640,6 +1640,70 @@ mod tests {
     }
 
     #[test]
+    fn validate_deps_surfaces_caracteristicas_invalid_in_deps_list() {
+        // Thread-through pin on `:deps`: the per-entry
+        // `Dep::validate_caracteristicas` value-shape gate (lifted via
+        // `crate::render::is_cargo_feature_name`) fires inside
+        // `Caixa::validate_deps`'s linear walk on the `:deps` list, so
+        // a structurally invalid feature name on any `:deps` entry
+        // surfaces as `DepError::CaracteristicaInvalid` from
+        // `validate_deps` — the same reachability shape every per-entry
+        // `Dep::validate` arm threads through. Without this pin a
+        // future shortcut that skips the per-entry `Dep::validate` call
+        // on the cross-entry-uniqueness path would mask the within-
+        // entry `:caracteristicas` value-shape gate.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep {
+            nome: "caixa-teia".into(),
+            versao: "^0.1".into(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["+http".into()],
+        }];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::CaracteristicaInvalid {
+            nome,
+            caracteristica,
+            ..
+        } = err
+        else {
+            panic!("expected CaracteristicaInvalid from :deps walk, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caracteristica, "+http");
+    }
+
+    #[test]
+    fn validate_deps_surfaces_caracteristicas_invalid_in_deps_dev_list() {
+        // Peer thread-through pin on `:deps-dev`: same reachability as
+        // the `:deps` arm above, on the dev-only authoring axis. The
+        // `http/json` shape carries here so the segment-separator
+        // diagnostic (the canonical Cargo `dep/feat` namespaced-dep
+        // confusion footgun) is surfaced via the cross-entry walk too —
+        // pinning that the `:deps-dev` list visits the same per-entry
+        // value-shape gate as the `:deps` list.
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![Dep {
+            nome: "caixa-teia".into(),
+            versao: "^0.1".into(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http/json".into()],
+        }];
+        let err = c.validate_deps().unwrap_err();
+        let crate::dep::DepError::CaracteristicaInvalid {
+            nome,
+            caracteristica,
+            ..
+        } = err
+        else {
+            panic!("expected CaracteristicaInvalid from :deps-dev walk, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caracteristica, "http/json");
+    }
+
+    #[test]
     fn to_lisp_preserves_deps() {
         let src = r#"
 (defcaixa

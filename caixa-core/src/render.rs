@@ -1727,6 +1727,214 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Practical cap on a `:caracteristicas` (Cargo-feature-name-shaped)
+/// entry, in bytes. Cargo itself enforces no length cap on feature
+/// names — its `restricted_names::validate_feature_name` accepts any
+/// length — but every realistic feature in the Cargo ecosystem is
+/// well under this bound (`derive` 6, `serde_json` 10, the
+/// `__private_…` doubled-underscore convention rarely exceeds 32).
+/// 64 bytes is the substrate's catch-the-paste-from-binary cap on the
+/// peer trajectory `is_dns_1123_label` (63), `is_wit_world_ref` (128),
+/// `is_nats_subject` (256), `is_wasi_keyvalue_slot` (512),
+/// `is_git_ref_name` (255), `is_git_oid` (40/64),
+/// `is_git_repo_url` (2048) carry: an axis-appropriate ceiling above
+/// every legitimate authoring shape, tight enough to surface the
+/// "paste-from-binary" / "multi-line blob landed in a single-token
+/// slot" footgun at validate time.
+pub const CARGO_FEATURE_NAME_MAX_LEN: usize = 64;
+
+/// Predicate: assert that `s` is a valid Cargo feature name. The
+/// contract — modeled on Cargo's
+/// `restricted_names::validate_feature_name` grammar (the parser the
+/// Cargo resolver routes every `[dependencies.<dep>.features]` entry
+/// through at `cargo metadata` time), narrowed to the strict ASCII
+/// subset every realistic feature in the Cargo ecosystem uses:
+///
+///   - 1..=[`CARGO_FEATURE_NAME_MAX_LEN`] (64) bytes;
+///   - first byte: ASCII alphanumeric or `_` (Cargo's parser admits
+///     Unicode XID-start characters too; pleme-io narrows to the
+///     ASCII subset for the same reason every peer value-shape
+///     predicate above narrows — drift between NFC-vs-NFD
+///     normalization across filesystems silently rewrites the
+///     feature-key, breaking the lacre's content-addressing
+///     invariant). Leading `-` / `+` / `.` are explicitly named —
+///     each is the canonical "I copy-pasted the
+///     `+optional-feature` enablement form from a Cargo doc" /
+///     "I confused the dotted-form with feature-name shape"
+///     footgun the predicate's diagnostic remediation points at;
+///   - remaining bytes: ASCII alphanumeric, `_`, `-`, `+`, or `.`
+///     (the Cargo-accepted continuation set). Whitespace, control
+///     characters, non-ASCII bytes, `/` / `?` / `#` / `,` /
+///     other punctuation are each surfaced with a self-locating
+///     reason naming the canonical authoring footgun (multi-token
+///     blob, CR/LF paste-from-doc, `/` segment-separator confusion
+///     with namespaced-dep features the predicate's call site
+///     explicitly does not enable, list-separator-belongs-to-list-
+///     grammar miscomprehension).
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller — [`crate::Dep::validate`]
+/// for the `:deps`/`:deps-dev :caracteristicas` axis at validate time,
+/// every future per-feature axis (M4 caixa-resolver's `lacre.lisp`
+/// resolved-feature-set materializer, the future per-WitContract
+/// `:caracteristicas`-shaped capability-set axis if WIT worlds grow a
+/// typed feature toggle, the future per-`UpgradeInstruction` per-
+/// capability set axis the §V.2 mes-build extension would carry) —
+/// wraps the same reason in its own typed `*Invalid { <axis>, reason }`
+/// variant. The reason wording is axis-agnostic ("Cargo feature names
+/// reject leading `-`") so every call site reading the same diagnostic
+/// points at the same rule; drift between any two axes' rule
+/// enforcement is a build error visible at this predicate, not a
+/// per-renderer "this passed validate but Cargo rejected at metadata
+/// time" surprise.
+///
+/// Empty input is rejected here (defensively) and at each call site
+/// via the narrower [`crate::DepError::CaracteristicaEmpty`] variant —
+/// the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], [`is_wasi_keyvalue_slot`], [`is_git_ref_name`],
+/// [`is_git_oid`], and [`is_git_repo_url`] all carry.
+///
+/// Lifted as a typed substrate-side primitive on the same trajectory
+/// the peer value-shape predicates already follow — the typed slot's
+/// valid set matches the downstream consumer's accepted set (here,
+/// Cargo's TOML-feature-name parser at `cargo metadata` time),
+/// structurally. The ninth value-shape primitive to land in
+/// [`crate::render`], closing the typed `:deps`/`:deps-dev` surface
+/// value-shape trajectory on its last unsealed axis (`:caracteristicas`
+/// entries; the per-entry `:nome` / `:versao` / `:fonte` axes are
+/// already routed through their respective shape predicates).
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / first-byte-class / continuation-byte-class / whitespace /
+/// control-char / non-ASCII / `/`-segment-separator-confusion /
+/// `,`-list-separator-confusion), without wrapping in any error
+/// variant — every caller maps the same `String` into its own typed
+/// `*Invalid { <axis>, reason }` enum variant.
+pub fn is_cargo_feature_name(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > CARGO_FEATURE_NAME_MAX_LEN {
+        return Err(format!(
+            "exceeds Cargo feature name max length of {CARGO_FEATURE_NAME_MAX_LEN} bytes \
+             (got {} bytes; legitimate Cargo feature names rarely exceed ~24 bytes — \
+             this length suggests a paste-from-binary or multi-token blob landed in \
+             the `:caracteristicas` slot)",
+            s.len()
+        ));
+    }
+    let bytes = s.as_bytes();
+    let first = bytes[0];
+    if !(first.is_ascii_alphanumeric() || first == b'_') {
+        let msg = if first == b'+' {
+            "must not start with `+` (Cargo's feature-name grammar reserves a leading \
+             `+` for the activation-syntax inside a `[dependencies.<dep>.features]` \
+             list — `:caracteristicas` entries name the feature itself, not its \
+             enablement form; drop the leading `+` and author the bare feature name, \
+             e.g. `\"http\"` not `\"+http\"`)"
+                .to_string()
+        } else if first == b'-' {
+            "must not start with `-` (Cargo's feature-name grammar rejects a leading \
+             hyphen — `-` is a legitimate continuation character between alphanumeric \
+             segments but the canonical CLI-argument-injection / kebab-leak footgun at \
+             the start; drop the leading `-`, e.g. `\"json\"` not `\"-json\"`)"
+                .to_string()
+        } else if first == b'.' {
+            "must not start with `.` (Cargo's feature-name grammar rejects a leading \
+             dot; `.` is a legitimate continuation character but the canonical \
+             leading-dot-as-version-suffix / hidden-file footgun at the start. Drop \
+             the leading `.`)"
+                .to_string()
+        } else if first == b' ' || first == b'\t' {
+            "must not start with whitespace (Cargo's feature-name grammar rejects \
+             whitespace anywhere; the leading-whitespace arm is the canonical \
+             paste-from-aligned-doc footgun)"
+                .to_string()
+        } else if first < 0x20 || first == 0x7F {
+            format!(
+                "must not start with control character 0x{first:02x} (Cargo's feature-name \
+                 grammar rejects ASCII control characters; the CR/LF arm is the canonical \
+                 paste-from-multiline-doc footgun)"
+            )
+        } else if first >= 0x80 {
+            format!(
+                "must not start with non-ASCII byte 0x{first:02x} (Cargo accepts Unicode \
+                 XID-start characters but pleme-io narrows to the strict ASCII subset every \
+                 realistic feature name uses; legitimate features are kebab-case ASCII \
+                 identifiers like `\"http\"`, `\"json\"`, `\"derive\"`)"
+            )
+        } else {
+            format!(
+                "must start with an ASCII alphanumeric character or `_`, got {ch:?} \
+                 (Cargo's `restricted_names::validate_feature_name` rejects feature names \
+                 whose first character is outside the XID-start + `_` + digit set; \
+                 pleme-io narrows to the strict ASCII alphanumeric + `_` subset)",
+                ch = first as char
+            )
+        };
+        return Err(msg);
+    }
+    for &b in &bytes[1..] {
+        let valid = b.is_ascii_alphanumeric() || b == b'_' || b == b'-' || b == b'+' || b == b'.';
+        if !valid {
+            let msg = if b == b' ' || b == b'\t' {
+                format!(
+                    "must not contain whitespace character {ch:?} (Cargo's feature-name \
+                     grammar rejects whitespace; feature names are single-token identifiers \
+                     — use `-` or `_` to separate kebab-case / snake-case segments instead)",
+                    ch = b as char
+                )
+            } else if b == b',' {
+                "must not contain `,` (the comma separator belongs to the \
+                 `:caracteristicas` list grammar between entries, not to the feature-name \
+                 grammar within an entry — split the value into two separate list entries)"
+                    .to_string()
+            } else if b == b'/' {
+                "must not contain `/` (Cargo's `dep/feat` syntax for namespaced-dep \
+                 features applies inside `[dependencies.<dep>.features]` list entries that \
+                 already name the parent dep — `:caracteristicas` entries are per-dep \
+                 already, so the segment separator within a feature name must be `-`, \
+                 `_`, `+`, or `.`)"
+                    .to_string()
+            } else if b == b'?' {
+                "must not contain `?` (Cargo's feature-name grammar rejects URL-reserved \
+                 punctuation; use `-`, `_`, `+`, or `.` as a segment separator instead)"
+                    .to_string()
+            } else if b == b'#' {
+                "must not contain `#` (Cargo's feature-name grammar rejects URL-reserved \
+                 punctuation; use `-`, `_`, `+`, or `.` as a segment separator instead)"
+                    .to_string()
+            } else if b < 0x20 || b == 0x7F {
+                format!(
+                    "must not contain control character 0x{b:02x} (Cargo's feature-name \
+                     grammar rejects ASCII control characters; the CR/LF arm is the \
+                     canonical paste-from-multiline-doc footgun)"
+                )
+            } else if b >= 0x80 {
+                format!(
+                    "must not contain non-ASCII byte 0x{b:02x} (Cargo accepts Unicode \
+                     XID-continue characters but pleme-io narrows to the strict ASCII \
+                     subset every realistic feature name uses; raw non-ASCII silently \
+                     round-trips inconsistently across NFC/NFD normalization on APFS / \
+                     case-folding filesystems, breaking the lacre's content-addressing \
+                     invariant)"
+                )
+            } else {
+                format!(
+                    "contains invalid character {ch:?} (Cargo's feature-name grammar \
+                     allows only `[A-Za-z0-9_+\\-.]` after the first character)",
+                    ch = b as char
+                )
+            };
+            return Err(msg);
+        }
+    }
+    Ok(())
+}
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
@@ -4473,5 +4681,159 @@ mod tests {
                 "pre-lift reject {reject:?} must classify as {expected:?}"
             );
         }
+    }
+
+    // ── is_cargo_feature_name — shared `:caracteristicas` feature-name predicate ──
+
+    #[test]
+    fn cargo_feature_name_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical Cargo
+        // feature name shape `:caracteristicas` entries carry. Drift between
+        // this list and the per-axis `dep::tests::validate_accepts_canonical_caracteristicas`
+        // positive-set sweep surfaces here — one source of truth for the
+        // rule. Includes single-token (`http`), kebab-case (`runtime-tokio`),
+        // snake-case (`derive_macros`), namespaced-dot (`tokio.full`),
+        // version-suffix (`v0.1`), `+`-separated (`http+json`), leading
+        // underscore (`_internal`), doubled-underscore (`__private`),
+        // and digit-starting (`v0_1`) — the canonical authoring shapes
+        // every realistic Cargo feature in the pleme-io ecosystem uses.
+        for s in [
+            "http",
+            "json",
+            "derive",
+            "serde",
+            "serde_json",
+            "runtime-tokio",
+            "tokio.full",
+            "v0.1",
+            "v1",
+            "http+json",
+            "_internal",
+            "__private",
+            "default",
+            "rt-multi-thread",
+            "12factor",
+            "feat.v2",
+            "client+server",
+        ] {
+            is_cargo_feature_name(s)
+                .unwrap_or_else(|e| panic!("canonical Cargo feature name {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn cargo_feature_name_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each grammar arm
+        // surfaces its own distinct reason substring. Pinned here so a
+        // future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `git_repo_url`'s and `git_ref_name`'s arm-substring sweeps
+        // on the peer predicates.
+        for (s, needle) in [
+            // Leading `+` — the canonical paste-from-`+optional-feature`
+            // activation-form-in-feature-name-slot footgun.
+            ("+http", "`+`"),
+            // Leading `-` — kebab-leak / CLI-arg-injection adjacent.
+            ("-json", "`-`"),
+            // Leading `.` — dotted-version-suffix-as-feature-name typo.
+            (".feat", "`.`"),
+            // Whitespace inside — multi-token blob.
+            ("http feature", "whitespace"),
+            // Tab inside.
+            ("http\tjson", "whitespace"),
+            // Leading whitespace — paste-from-aligned-doc.
+            (" http", "whitespace"),
+            // Comma — list-separator-belongs-to-list-grammar.
+            ("http,json", "`,`"),
+            // Forward slash — Cargo's `dep/feat` namespaced-dep syntax.
+            ("http/json", "`/`"),
+            // Question mark — URL-reserved.
+            ("http?", "`?`"),
+            // Hash — URL-reserved.
+            ("http#frag", "`#`"),
+            // Embedded control character.
+            ("http\x01json", "control character"),
+            // Newline — paste-from-multiline-doc.
+            ("http\njson", "control character"),
+            // DEL byte (0x7F).
+            ("http\x7fjson", "control character"),
+            // Non-ASCII byte — un-percent-encoded character.
+            ("caf\u{e9}", "non-ASCII"),
+            // Non-ASCII at first byte.
+            ("\u{e9}feat", "non-ASCII"),
+            // Forbidden punctuation in the continuation set.
+            ("http@1", "invalid character"),
+            ("http&json", "invalid character"),
+            ("http=v1", "invalid character"),
+        ] {
+            let err = is_cargo_feature_name(s)
+                .err()
+                .unwrap_or_else(|| panic!("Cargo feature name {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "Cargo feature name {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn cargo_feature_name_rejects_empty_defensively() {
+        // The predicate is called from `crate::dep::Dep::validate_caracteristicas`
+        // only after the per-axis `CaracteristicaEmpty` arm has fired
+        // at validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`, `is_git_ref_name`,
+        // `is_git_oid`, and `is_git_repo_url` carry at their call sites.
+        let err = is_cargo_feature_name("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn cargo_feature_name_rejects_at_65_byte_boundary() {
+        // The 64-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring
+        // `dns_1123_label_rejects_at_64_byte_boundary`,
+        // `gateway_api_http_path_rejects_at_1025_byte_boundary`,
+        // `wit_world_ref_rejects_at_129_byte_boundary`,
+        // `nats_subject_rejects_at_257_byte_boundary`,
+        // `wasi_kv_slot_rejects_at_513_byte_boundary`, and
+        // `git_ref_name_rejects_at_256_byte_boundary` on the peer
+        // predicates. Constructed as a single all-`a` token so only
+        // the cap arm fires.
+        let max_ok = "a".repeat(CARGO_FEATURE_NAME_MAX_LEN);
+        assert_eq!(max_ok.len(), 64);
+        is_cargo_feature_name(&max_ok).unwrap();
+        let too_long = "a".repeat(CARGO_FEATURE_NAME_MAX_LEN + 1);
+        assert_eq!(too_long.len(), 65);
+        let err = is_cargo_feature_name(&too_long).unwrap_err();
+        assert!(err.contains("64"), "got: {err:?}");
+        assert!(err.contains("65"), "got: {err:?}");
+    }
+
+    #[test]
+    fn cargo_feature_name_first_byte_diagnostics_name_the_leading_char() {
+        // Diagnostic-shape pin: the leading-character rejection arms
+        // name the specific punctuation (`+`, `-`, `.`) verbatim so the
+        // author's grep target is unambiguous. Pinned across the three
+        // canonical leading-char footguns so a future relaxation that
+        // drops any of the three surfaces here. The `+`-arm's wording
+        // additionally points the author at the canonical Cargo
+        // `+<feature>` activation-form-vs-feature-name discipline so
+        // the paste-from-doc footgun lands its remediation in the
+        // diagnostic itself.
+        let err_plus = is_cargo_feature_name("+http").unwrap_err();
+        assert!(err_plus.contains("`+`"), "got: {err_plus:?}");
+        assert!(
+            err_plus.contains("activation"),
+            "got: {err_plus:?} (must name the Cargo +<feature> activation-form)"
+        );
+        let err_hyphen = is_cargo_feature_name("-json").unwrap_err();
+        assert!(err_hyphen.contains("`-`"), "got: {err_hyphen:?}");
+        let err_dot = is_cargo_feature_name(".feat").unwrap_err();
+        assert!(err_dot.contains("`.`"), "got: {err_dot:?}");
     }
 }
