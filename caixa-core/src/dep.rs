@@ -479,12 +479,58 @@ impl Dep {
     /// (`SupervisorSpec::validate`'s `EmptyChildName` before
     /// `DuplicateChildCaixa`; `validate_membros`'s `MembroCaixaEmpty`
     /// before `MembroDuplicate`).
+    ///
+    /// The per-entry value-shape gate (Cargo-feature-name grammar via
+    /// the lifted [`crate::render::is_cargo_feature_name`] predicate)
+    /// fires between the empty arm and the duplicate arm — the
+    /// canonical per-entry-shape-before-cross-entry-uniqueness
+    /// precedence every peer two-arm + value-shape gate establishes
+    /// ([`crate::SupervisorSpec::validate`]'s `EmptyChildName` →
+    /// `ChildCaixaInvalid` → `DuplicateChildCaixa`,
+    /// [`crate::AplicacaoSpec::validate_membros`]'s `MembroCaixaEmpty`
+    /// → `MembroCaixaInvalid` → `MembroDuplicate`, [`Dep::validate`]'s
+    /// `NomeEmpty` → `NomeInvalid` → cross-list `DuplicateNome`).
+    /// Until the value-shape arm landed `:caracteristicas` accepted
+    /// every non-empty distinct string — a structurally invalid
+    /// feature name (`"http feature"` whitespace, `"+http"` the
+    /// canonical paste-from-`+optional-feature` doc activation-form
+    /// footgun, `"-flag"` leading hyphen, `".feat"` leading dot,
+    /// `"http/json"` Cargo's `dep/feat` namespaced-dep syntax that
+    /// only applies inside list-grammar contexts, `"http,json"`
+    /// list-separator-belongs-to-the-list-grammar miscomprehension,
+    /// `"café"` un-percent-encoded non-ASCII silently round-tripping
+    /// inconsistently across NFC/NFD normalization, the 65-byte
+    /// paste-from-binary slug) silently passed validate and the
+    /// failure surfaced at `cargo metadata` time as the
+    /// `restricted_names::validate_feature_name` parser's rejection,
+    /// far from the source `caixa.lisp`, with no field naming which
+    /// `:deps` entry's `:caracteristicas` carried the typo. The
+    /// lifted predicate makes the Cargo-feature-name-grammar
+    /// intersection-floor a substrate-level invariant at validate
+    /// time — same trajectory as the eight peer
+    /// [`crate::render`] value-shape predicates each typed surface
+    /// downstream of a structured grammar already follows
+    /// ([`is_dns_1123_label`](crate::render::is_dns_1123_label),
+    /// [`is_gateway_api_http_path`](crate::render::is_gateway_api_http_path),
+    /// [`is_wit_world_ref`](crate::render::is_wit_world_ref),
+    /// [`is_nats_subject`](crate::render::is_nats_subject),
+    /// [`is_wasi_keyvalue_slot`](crate::render::is_wasi_keyvalue_slot),
+    /// [`is_git_ref_name`](crate::render::is_git_ref_name),
+    /// [`is_git_oid`](crate::render::is_git_oid),
+    /// [`is_git_repo_url`](crate::render::is_git_repo_url)).
     fn validate_caracteristicas(&self) -> Result<(), DepError> {
         let mut seen = std::collections::HashSet::new();
         for c in &self.caracteristicas {
             if c.is_empty() {
                 return Err(DepError::CaracteristicaEmpty {
                     nome: self.nome.clone(),
+                });
+            }
+            if let Err(reason) = crate::render::is_cargo_feature_name(c) {
+                return Err(DepError::CaracteristicaInvalid {
+                    nome: self.nome.clone(),
+                    caracteristica: c.clone(),
+                    reason,
                 });
             }
             if !seen.insert(c.as_str()) {
@@ -634,6 +680,20 @@ pub enum DepError {
          with the canonical kebab-case feature name the target caixa declares."
     )]
     CaracteristicaEmpty { nome: String },
+    #[error(
+        ":deps entry {nome:?} :caracteristicas entry {caracteristica:?} is not a valid Cargo \
+         feature name: {reason} (the value flows verbatim into Cargo's \
+         [dependencies.<dep>.features] list and Cargo's `restricted_names::validate_feature_name` \
+         parser enforces the same shape at `cargo metadata` time; use a single-token \
+         identifier like `\"http\"`, `\"derive\"`, or `\"runtime-tokio\"` — kebab-case ASCII \
+         alphanumeric with `-`, `_`, `+`, or `.` as continuation characters, starting with \
+         an ASCII alphanumeric or `_`)"
+    )]
+    CaracteristicaInvalid {
+        nome: String,
+        caracteristica: String,
+        reason: String,
+    },
     #[error(
         ":deps entry {nome:?} :caracteristicas carries duplicate feature {caracteristica:?} — \
          every feature-flag list keys its entries by name (Cargo's \
@@ -2627,6 +2687,240 @@ mod tests {
         assert!(matches!(
             d.validate().unwrap_err(),
             DepError::NomeInvalid { .. }
+        ));
+    }
+
+    // ── per-entry :caracteristicas value-shape gate ──────────────────
+    //
+    // Until this gate landed `:caracteristicas` only refused the empty
+    // string and cross-entry duplicates: a non-empty distinct but
+    // structurally invalid feature name silently passed validate and the
+    // failure surfaced at `cargo metadata` time as Cargo's
+    // `restricted_names::validate_feature_name` parser rejection, far from
+    // the source `caixa.lisp` with no field naming which `:deps` entry's
+    // `:caracteristicas` carried the typo. The lifted predicate makes the
+    // Cargo-feature-name-grammar intersection-floor a substrate-level
+    // invariant at validate time. Same trajectory as the eight peer
+    // value-shape predicates each typed surface downstream of a structured
+    // grammar already follows.
+
+    #[test]
+    fn validate_rejects_caracteristica_with_leading_plus() {
+        // Fail-before-pass-after pin on the canonical Cargo
+        // `+<feature>` activation-form-in-feature-name-slot footgun.
+        // Cargo's `[dependencies.<dep>.features]` list grammar accepts
+        // `+optional-feature` as an enablement of a previously-disabled
+        // feature; pasting that activation form into `:caracteristicas`
+        // (which names the feature itself) silently passed pre-gate and
+        // failed at `cargo metadata` parse time.
+        let d = dep_with_features(&["+http"]);
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::CaracteristicaInvalid { ref nome, ref caracteristica, .. }
+                    if nome == "caixa-teia" && caracteristica == "+http"
+            ),
+            "expected CaracteristicaInvalid, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_leading_hyphen() {
+        // Fail-before-pass-after pin on the leading-hyphen footgun. `-`
+        // is a legitimate continuation character (kebab-case feature
+        // names like `runtime-tokio` pass) but Cargo rejects it at the
+        // start; the structural defect — and its CLI-argument-injection
+        // adjacency at any downstream Cargo subprocess invocation — is
+        // closed at validate time, not at `cargo metadata` time.
+        let d = dep_with_features(&["-json"]);
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == "-json"
+            ),
+            "expected CaracteristicaInvalid, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_leading_dot() {
+        // Fail-before-pass-after pin on the leading-dot footgun. `.` is
+        // a legitimate continuation character (version-suffix shapes
+        // like `feat.v2` pass) but the leading-dot form is the
+        // canonical dotted-version-suffix-as-feature-name confusion.
+        let d = dep_with_features(&[".feat"]);
+        let err = d.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == ".feat"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_whitespace() {
+        // Fail-before-pass-after pin on the embedded-whitespace footgun:
+        // a feature name with a space inside is structurally a multi-
+        // token blob (the canonical paste-from-doc footgun, or an
+        // accidental `"http server"` where the author meant
+        // `"http-server"`).
+        let d = dep_with_features(&["http feature"]);
+        let err = d.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == "http feature"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_comma() {
+        // Fail-before-pass-after pin on the embedded-comma footgun:
+        // the list-separator-belongs-to-the-list-grammar
+        // miscomprehension where the author writes
+        // `:caracteristicas ("http,json")` intending two features but
+        // the `Vec<String>` field consumes the bare token as one entry.
+        let d = dep_with_features(&["http,json"]);
+        let err = d.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == "http,json"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_slash() {
+        // Fail-before-pass-after pin on the embedded-slash footgun:
+        // Cargo's `dep/feat` namespaced-dep syntax applies inside
+        // `[dependencies.<dep>.features]` list entries that already
+        // name the parent dep (so the syntax says "enable feature
+        // `feat` on a transitive dep `dep`"); `:caracteristicas` is
+        // per-dep already (a sibling slot on the `Dep` itself), so the
+        // segment separator within an entry must be `-`, `_`, `+`,
+        // or `.`. The diagnostic remediation points at the canonical
+        // Cargo namespaced-dep discipline.
+        let d = dep_with_features(&["http/json"]);
+        let err = d.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == "http/json"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_non_ascii() {
+        // Fail-before-pass-after pin on the un-percent-encoded non-ASCII
+        // byte footgun: NFC-vs-NFD normalization across filesystems
+        // silently rewrites the feature-key, breaking the lacre's
+        // content-addressing invariant. Pinned at a canonical
+        // smart-quote-paste shape (`café`) where the raw `é` byte is the
+        // documented APFS round-trip break.
+        let d = dep_with_features(&["caf\u{e9}"]);
+        let err = d.validate().unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == "caf\u{e9}"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_with_control_character() {
+        // Fail-before-pass-after pin on the embedded-control-character
+        // footgun: a CR/LF or any 0x00..0x1F / 0x7F byte landing in a
+        // feature name is the canonical paste-from-multiline-doc
+        // footgun the predicate's reason wording specifically calls out.
+        let d = dep_with_features(&["http\njson"]);
+        let err = d.validate().unwrap_err();
+        assert!(matches!(err, DepError::CaracteristicaInvalid { .. }));
+    }
+
+    #[test]
+    fn validate_accepts_canonical_caracteristicas_shapes() {
+        // Positive control sweep: every canonical Cargo feature name
+        // shape the pleme-io ecosystem uses must still pass. Mirrors
+        // the substrate-side `cargo_feature_name_accepts_canonical_forms`
+        // sweep — drift between either landing site and the predicate's
+        // accepted set is a build error visible at this pair of tests,
+        // not a per-renderer "this passed validate but failed at
+        // cargo metadata time" surprise on the next acceptance.
+        for s in [
+            "http",
+            "json",
+            "derive",
+            "serde_json",
+            "runtime-tokio",
+            "tokio.full",
+            "v0.1",
+            "http+json",
+            "_internal",
+            "__private",
+            "default",
+            "rt-multi-thread",
+            "feat.v2",
+        ] {
+            let d = dep_with_features(&[s]);
+            d.validate().unwrap_or_else(|e| {
+                panic!("canonical Cargo feature name {s:?} must pass validate: {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn validate_caracteristica_empty_fires_before_invalid() {
+        // Cascade precedence pin: an entry list with both an empty
+        // feature AND an invalid-shape feature surfaces the
+        // `CaracteristicaEmpty` arm first (the empty value carries no
+        // self-locating data — `caracteristica: ""` is the diagnostic
+        // with no way to anchor a grep target — so closing the empty
+        // axis first preserves the per-entry-shape diagnostic's
+        // self-locating discipline). Same empty-first cascade every
+        // peer per-entry shape gate establishes
+        // (`SupervisorSpec::validate`'s `EmptyChildName` before
+        // `ChildCaixaInvalid`, `validate_membros`'s `MembroCaixaEmpty`
+        // before `MembroCaixaInvalid`).
+        let d = dep_with_features(&["", "+http"]);
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::CaracteristicaEmpty { .. }
+        ));
+    }
+
+    #[test]
+    fn validate_caracteristica_invalid_fires_before_duplicate() {
+        // Per-entry-shape precedence pin: an entry list with the same
+        // invalid feature shape declared twice surfaces the
+        // `CaracteristicaInvalid` diagnostic on the first entry, not
+        // the `CaracteristicaDuplicate` on the second collision. The
+        // per-entry shape gate fires before the cross-entry set gate
+        // — same precedence shape every peer two-arm-plus-set gate
+        // establishes (`SupervisorSpec::validate`'s
+        // `ChildCaixaInvalid` before `DuplicateChildCaixa`,
+        // `validate_membros`'s `MembroCaixaInvalid` before
+        // `MembroDuplicate`, `Dep::validate`'s `NomeInvalid` before
+        // cross-list `DuplicateNome`).
+        let d = dep_with_features(&["+http", "+http"]);
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::CaracteristicaInvalid { ref caracteristica, .. } if caracteristica == "+http"
+        ));
+    }
+
+    #[test]
+    fn validate_rejects_caracteristica_at_65_byte_boundary() {
+        // Boundary pin on the 64-byte cap — both the boundary-accepting
+        // case and the boundary-exceeding case in one place, so a
+        // future cap shift surfaces both arms simultaneously, mirroring
+        // the peer `cargo_feature_name_rejects_at_65_byte_boundary`
+        // predicate-level pin at the dep-axis landing site.
+        let max_ok = "a".repeat(64);
+        dep_with_features(&[&max_ok])
+            .validate()
+            .unwrap_or_else(|e| panic!("64-byte feature name must pass: {e:?}"));
+        let too_long = "a".repeat(65);
+        let d = dep_with_features(&[&too_long]);
+        assert!(matches!(
+            d.validate().unwrap_err(),
+            DepError::CaracteristicaInvalid { .. }
         ));
     }
 }
