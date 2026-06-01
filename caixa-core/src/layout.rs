@@ -123,6 +123,69 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
+        // `:deps` / `:deps-dev` per-entry shape gate. The third Caixa-
+        // level orphan validator on the universal authoring surface (peer
+        // of [`Caixa::validate_nome`] / [`Caixa::validate_versao`] wired
+        // immediately above): [`Caixa::validate_deps`] walks every
+        // [`Dep::validate`] arm — empty / non-DNS-1123 `:nome`, empty /
+        // unparseable `:versao` requirement, malformed `:fonte` repo /
+        // pin / `:caminho`, malformed `:caracteristicas` Cargo-feature
+        // name (de68c0c) — and then closes the per-list set-not-multiset
+        // duplicate-`:nome` invariant on each of `:deps` and `:deps-dev`
+        // (359fba5). Until this wire-up landed `validate_deps` existed as
+        // `pub fn` on [`Caixa`] with full per-arm unit coverage in
+        // `manifest::tests` + `dep::tests` (validate_deps_rejects_*,
+        // 53 dep-axis tests) but no production code path called it —
+        // `feira build` (the canonical author-time gate;
+        // `caixa-feira/src/cmd/build.rs:29` routes through
+        // `StandardLayout::verify`) silently accepted a malformed `:deps`
+        // entry and the failure surfaced at the *first* downstream
+        // consumer to strict-parse it: at lacre-resolve time as a
+        // `semver::Error` not naming the offending dep (`:versao` per-
+        // entry); at `git clone` time as a fetch failure quoting the
+        // shell-escape `repo` (`:fonte :repo`); at the resolver's
+        // `HashMap<:nome>` collapse as a silent "second-wins" overwrite
+        // (within-list `:nome` duplicate); at `cargo metadata` time as a
+        // feature-name rejection on the *target* caixa rather than the
+        // dep entry referencing it (`:caracteristicas`); at `helm
+        // install` / `kubectl apply` time as an apiserver `metadata.name`
+        // rejection on the rendered `lareira-<nome>` chart's per-dep
+        // derivation (DNS-1123-violating `:deps :nome`) — each far from
+        // the source `caixa.lisp`, none naming the offending `:deps` /
+        // `:deps-dev` axis. Runs *after* the Caixa-identity gates (the
+        // diagnostic carries `caixa.nome.clone()` verbatim, which the
+        // peer [`Caixa::validate_nome`] gate above has just guaranteed is
+        // a valid DNS-1123 label) and *before* every kind-coherence gate
+        // (the dep surface is universal — every kind has `:deps` /
+        // `:deps-dev` — so its shape diagnostic is more fundamental than
+        // the kind-coherence partitions on `:bibliotecas` / `:exe` /
+        // `:servicos` / `:membros` / `:children` / M2 slots that follow).
+        // Same per-axis `*Violation { caixa, issue }` envelope every peer
+        // per-axis wrap exposes ([`LayoutError::NomeViolation`] /
+        // [`LayoutError::VersaoViolation`] (1f74a5f),
+        // [`LayoutError::CodePathViolation`] (b868442),
+        // [`LayoutError::LimitsViolation`] / [`LayoutError::BehaviorViolation`]
+        // / [`LayoutError::UpgradeViolation`] / [`LayoutError::SupervisorViolation`]
+        // / [`LayoutError::AplicacaoViolation`]). Threads [`DepError`]
+        // Display through verbatim — every per-arm reason already names
+        // the offending dep's `:nome` (e.g. `":deps entry "caixa-teia"
+        // :versao "^bad" is not a valid semver requirement: …"`), so the
+        // wrap envelope's `issue` carries a self-locating "which dep,
+        // which axis, why" without re-shaping the per-arm parser-side
+        // reason. With this wire-up the canonical author-time gate
+        // refuses every ill-formed `:deps` / `:deps-dev` value-shape by
+        // construction — closing the second-to-last orphan-validator gap
+        // on the typed Caixa surface (`validate_restart_window` is the
+        // remaining orphan, Supervisor-axis specific and gated upstream
+        // by the kind-coherence [`Self::SupervisorSlotsOnNonSupervisor`]
+        // for non-Supervisor kinds — a future-run copy of this pattern).
+        caixa
+            .validate_deps()
+            .map_err(|err| LayoutError::DepsViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -587,6 +650,8 @@ pub enum LayoutError {
     NomeViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :versao: {issue}")]
     VersaoViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :deps / :deps-dev entry: {issue}")]
+    DepsViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
     CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
@@ -1092,6 +1157,248 @@ mod tests {
         assert!(
             matches!(err, LayoutError::MissingLib { .. }),
             "got {err:?} — valid identity must pass to MissingLib",
+        );
+    }
+
+    // ── :deps / :deps-dev shape gate (lifted to layout-level verify) ─────
+    //
+    // Until this wire-up landed `Caixa::validate_deps` lived as `pub fn`
+    // on `Caixa` with full per-arm unit coverage in `manifest::tests` +
+    // `dep::tests` but no production path called it — `feira build`
+    // silently accepted a malformed `:deps` / `:deps-dev` entry and the
+    // failure surfaced at lacre-resolve / `git clone` / `cargo metadata`
+    // / `helm install` time on the *first* downstream consumer to
+    // strict-parse the value, far from the source `caixa.lisp` and
+    // without any field naming the offending `:deps` axis. The following
+    // pins fence the layout-pipeline wire-up: every layout verify on a
+    // structurally-invalid `:deps` value-shape surfaces the per-axis
+    // `DepsViolation { caixa, issue }` envelope (peer of
+    // `NomeViolation` / `VersaoViolation` / `CodePathViolation` /
+    // `LimitsViolation` / `BehaviorViolation` / `UpgradeViolation` /
+    // `SupervisorViolation` / `AplicacaoViolation`) before any kind-
+    // coherence, code-path, or downstream gate sees it.
+
+    #[test]
+    fn deps_violation_on_empty_dep_nome() {
+        // Empty `:nome` on a `:deps` entry surfaces the narrower
+        // `DepError::NomeEmpty` arm through the wrap envelope.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":deps") && issue.contains(":nome"),
+            "issue must name the offending slot + axis: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_on_uppercase_dep_nome() {
+        // Uppercase `:nome` on a `:deps` entry surfaces
+        // `DepError::NomeInvalid` (DNS-1123 violation) through the wrap.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("Caixa-Teia", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("Caixa-Teia"),
+            "issue must quote the offending dep nome verbatim: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_on_unparseable_dep_versao() {
+        // Unparseable `:versao` requirement on a `:deps` entry surfaces
+        // `DepError::VersaoInvalid` through the wrap — the canonical
+        // "the semver::Error reached the resolver, far from the source"
+        // footgun closed at author time.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("caixa-teia", "not-a-req")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("caixa-teia") && issue.contains("not-a-req"),
+            "issue must quote the dep nome + offending versao: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_on_duplicate_nome_in_deps() {
+        // Within-list `:deps :nome` duplicate surfaces
+        // `DepError::DuplicateNome { list: ":deps" }` through the wrap.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("caixa-teia", "^0.2"),
+        ];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("caixa-teia") && issue.contains(":deps"),
+            "issue must quote the duplicated nome + list: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_on_duplicate_nome_in_deps_dev() {
+        // Within-list `:deps-dev :nome` duplicate surfaces the same
+        // diagnostic on the dev-only axis — neither list is a
+        // second-class citizen of the typed surface.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps_dev = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("caixa-teia", "^0.2"),
+        ];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":deps-dev"),
+            "issue must name the offending list: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_in_deps_fires_before_deps_dev() {
+        // Precedence pin: when *both* `:deps` and `:deps-dev` carry a
+        // malformed entry, the `:deps` walk fires first — the canonical
+        // declaration-order precedence `Caixa::validate_deps` establishes
+        // (the same author-grep ordering the typed-graph peers use on
+        // every other Vec-shaped surface).
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("Bad-In-Deps", "^0.1")];
+        c.deps_dev = vec![Dep::simple("Bad-In-Deps-Dev", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa: _, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert!(
+            issue.contains("Bad-In-Deps") && !issue.contains("Bad-In-Deps-Dev"),
+            "issue must name the :deps offender, not :deps-dev: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_fires_after_versao_violation() {
+        // Precedence pin: when both the top-level `:versao` and a `:deps`
+        // entry are malformed, the Caixa-identity gate fires first — the
+        // canonical declaration order on `Caixa` (`:nome` → `:versao` →
+        // ... → `:deps`) and the same identity-axis-dominates-content-
+        // axis discipline the peer `validate_nome` / `validate_versao`
+        // wire-up established (1f74a5f). A malformed `:versao` would
+        // otherwise quote `caixa.nome` against a downstream-shaped
+        // diagnostic.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.versao = "v0.1.0".into();
+        c.deps = vec![Dep::simple("Bad-Dep", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::VersaoViolation { .. }),
+            "got {err:?} — versao must fire before DepsViolation",
+        );
+    }
+
+    #[test]
+    fn deps_violation_fires_before_kind_coherence() {
+        // Precedence pin: a Supervisor with a malformed `:deps` entry
+        // AND declared `:bibliotecas` (the canonical SupervisorOwnsCode
+        // shape) surfaces DepsViolation, not SupervisorOwnsCode — the
+        // dep surface is universal across all kinds and its shape gate
+        // is more fundamental than the kind-coherence partitions on
+        // `:bibliotecas` / `:exe` / `:servicos`. The author can fix the
+        // dep typo without first being told to move their `:bibliotecas`
+        // off a Supervisor.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.deps = vec![Dep::simple("Bad-Dep", "^0.1")];
+        c.bibliotecas = vec!["lib/x.lisp".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::DepsViolation { .. }),
+            "got {err:?} — DepsViolation must fire before SupervisorOwnsCode",
+        );
+    }
+
+    #[test]
+    fn deps_violation_fires_after_missing_manifest() {
+        // Precedence pin: `MissingManifest` still dominates — there's no
+        // caixa to deps-check when the manifest is missing.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("Bad-Dep", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::MissingManifest(_)),
+            "got {err:?} — MissingManifest must dominate the deps gate",
+        );
+    }
+
+    #[test]
+    fn valid_deps_pass_to_downstream_gates() {
+        // Positive control pin: the canonical authoring shape (one
+        // `:deps` entry naming a DNS-1123 nome + Cargo-shaped requirement,
+        // one `:deps-dev` entry on a distinct nome) passes the dep gate;
+        // downstream gates (MissingLib here) take over. Drift here =
+        // a future tighten that rejects any canonical shape surfaces as
+        // a regression at this layout-level pin.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("caixa-teia", "^0.1")];
+        c.deps_dev = vec![Dep::simple("caixa-lint", "^0.2")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::MissingLib { .. }),
+            "got {err:?} — valid deps must pass to MissingLib",
         );
     }
 
