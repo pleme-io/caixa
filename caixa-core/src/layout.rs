@@ -74,6 +74,55 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::MissingManifest(manifest));
         }
 
+        // Caixa-identity value-shape gates on the two universal axes
+        // (`:nome`, `:versao`) every substrate-side artifact's
+        // `metadata.name` / version derivation flows through. The
+        // [`Caixa::validate_nome`] / [`Caixa::validate_versao`] doc-
+        // comments name the canonical authoring footguns verbatim —
+        // `:nome` "MyApp" / "my_app" / "team.app" / "-app" / "café"
+        // (DNS-1123 violations the K8s apiserver refuses at admission
+        // time on every derived `metadata.name`: `lareira-<nome>`,
+        // programs.yaml entry, CiliumNetworkPolicy / HTTPRoute names,
+        // `LABEL_APLICACAO` value); `:versao` "0.1" / "v0.1.0" / "latest"
+        // / "^0.1" / "0.1.0.0" (SemVer-2 violations Helm / OCI tag /
+        // `feira publish` git tag / lacre `concrete_versao` /
+        // `:upgrade-from :from` peer matching each refuse downstream).
+        // Until this wire-up landed both validators existed as `pub fn`
+        // on [`Caixa`] (with full per-arm test coverage in
+        // `manifest::tests`) but no production code path called them —
+        // `feira build` (the canonical author-time gate) silently
+        // accepted a malformed `:nome` / `:versao` and the failure
+        // surfaced at `helm install` / `kubectl apply` / `feira publish`
+        // time on the *first* downstream consumer to strict-parse the
+        // value, far from the source `caixa.lisp` and without any field
+        // naming the offending Caixa identity axis. The gate runs
+        // *after* [`LayoutError::MissingManifest`] (no caixa to check
+        // when the manifest is missing) and *before* every kind-coherence
+        // gate (each of which carries `caixa.nome` verbatim in its
+        // diagnostic — running them first on a structurally-invalid
+        // identity would surface a "this kind has slot X" diagnostic
+        // against an unrecoverable name). Cross-axis precedence is
+        // `:nome` → `:versao` — the canonical declaration order on
+        // [`Caixa`] and the same author-grep ordering the
+        // [`ManifestError`] family uses. Same per-axis `*Violation
+        // { caixa, issue }` envelope every peer per-axis wrap exposes
+        // ([`LayoutError::CodePathViolation`] b868442,
+        // [`LayoutError::LimitsViolation`] / [`LayoutError::BehaviorViolation`]
+        // / [`LayoutError::UpgradeViolation`] / [`LayoutError::SupervisorViolation`]
+        // / [`LayoutError::AplicacaoViolation`]).
+        caixa
+            .validate_nome()
+            .map_err(|err| LayoutError::NomeViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+        caixa
+            .validate_versao()
+            .map_err(|err| LayoutError::VersaoViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -534,6 +583,10 @@ pub enum LayoutError {
     ExeOutsideDir(PathBuf),
     #[error("servico entry outside servicos/ directory: {}", .0.display())]
     ServicoOutsideDir(PathBuf),
+    #[error("caixa '{caixa}' has invalid :nome: {issue}")]
+    NomeViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :versao: {issue}")]
+    VersaoViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
     CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
@@ -781,6 +834,264 @@ mod tests {
         assert!(
             issue.contains(":exe"),
             "issue must name the offending slot: {issue}",
+        );
+    }
+
+    // ── Caixa-identity gates (`:nome`, `:versao`) wired into verify ────
+    //
+    // Until this wire-up landed `Caixa::validate_nome` and
+    // `Caixa::validate_versao` lived as `pub fn` on `Caixa` with full
+    // per-arm unit coverage in `manifest::tests`, but no production
+    // path called them — `feira build` silently accepted malformed
+    // `:nome` / `:versao` and the failure surfaced at `helm install` /
+    // `kubectl apply` / `feira publish` / lacre-resolve / `:upgrade-from
+    // :from` matching time, far from the source `caixa.lisp`. The
+    // following pins fence the layout-pipeline wire-up: every layout
+    // verify on a structurally-invalid Caixa identity axis surfaces
+    // the per-axis `*Violation { caixa, issue }` envelope before any
+    // kind-coherence, code-path, or downstream gate sees it.
+
+    #[test]
+    fn nome_violation_on_uppercase() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "MyApp".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::NomeViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::NomeViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "MyApp");
+        assert!(
+            issue.contains("MyApp"),
+            "issue must quote the offending nome: {issue}",
+        );
+    }
+
+    #[test]
+    fn nome_violation_on_underscore() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "my_app".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeViolation { ref caixa, .. } if caixa == "my_app"),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn nome_violation_on_empty() {
+        // Empty `:nome` surfaces NomeViolation wrapping the narrower
+        // `ManifestError::NomeEmpty` arm — the empty-first cascade the
+        // peer per-axis name gates already use.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = String::new();
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::NomeViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::NomeViolation, got {err:?}");
+        };
+        assert!(caixa.is_empty());
+        assert!(
+            issue.contains(":nome is empty"),
+            "issue must surface the empty-arm diagnostic: {issue}",
+        );
+    }
+
+    #[test]
+    fn versao_violation_on_missing_patch() {
+        // `"0.1"` — the canonical "I shortened it" footgun. Helm /
+        // OCI / lacre-resolve / `:upgrade-from :from` all strict-parse
+        // through `semver::Version::parse`, which refuses a two-part
+        // shape.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.versao = "0.1".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::VersaoViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::VersaoViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.1"),
+            "issue must quote the offending versao: {issue}",
+        );
+    }
+
+    #[test]
+    fn versao_violation_on_git_tag_shape() {
+        // `"v0.1.0"` — the git-tag-shape-leaking-into-versao typo.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.versao = "v0.1.0".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::VersaoViolation { ref issue, .. }
+                if issue.contains("v0.1.0")),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn versao_violation_on_empty() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.versao = String::new();
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::VersaoViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::VersaoViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":versao is empty"),
+            "issue must surface the empty-arm diagnostic: {issue}",
+        );
+    }
+
+    #[test]
+    fn nome_violation_fires_before_versao_violation() {
+        // Precedence pin: when both `:nome` and `:versao` are malformed,
+        // `:nome` surfaces first — the canonical declaration-order
+        // precedence the `ManifestError` family establishes, the same
+        // grep-order the author follows when fixing in `caixa.lisp`.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "MyApp".into();
+        c.versao = "0.1".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeViolation { .. }),
+            "got {err:?} — nome must fire before versao",
+        );
+    }
+
+    #[test]
+    fn nome_violation_fires_before_kind_coherence() {
+        // Precedence pin: a Biblioteca caixa with a malformed `:nome`
+        // AND a declared mesh slot surfaces NomeViolation, not
+        // MeshSlotsOnNonAplicacao — the identity-axis gate is more
+        // fundamental than the kind-coherence gate (which carries
+        // `caixa.nome` verbatim in its diagnostic, and so depends on the
+        // name being structurally valid to render a useful message).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "MyApp".into();
+        c.membros = vec![crate::aplicacao::Membro {
+            caixa: "x".into(),
+            versao: "^0.1".into(),
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeViolation { .. }),
+            "got {err:?} — nome must fire before MeshSlotsOnNonAplicacao",
+        );
+    }
+
+    #[test]
+    fn nome_violation_fires_before_owncode() {
+        // Precedence pin: a Supervisor with a malformed `:nome` AND
+        // declared `:bibliotecas` surfaces NomeViolation, not
+        // SupervisorOwnsCode — same rationale as above.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.nome = "MyApp".into();
+        c.bibliotecas = vec!["lib/x.lisp".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeViolation { .. }),
+            "got {err:?} — nome must fire before SupervisorOwnsCode",
+        );
+    }
+
+    #[test]
+    fn versao_violation_fires_before_kind_coherence() {
+        // Precedence pin: a Biblioteca with a valid `:nome` but a
+        // malformed `:versao` AND a declared servico slot surfaces
+        // VersaoViolation before ServicoSlotsOnNonServico.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.versao = "v0.1.0".into();
+        c.limits = Some(crate::LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            ..Default::default()
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::VersaoViolation { .. }),
+            "got {err:?} — versao must fire before ServicoSlotsOnNonServico",
+        );
+    }
+
+    #[test]
+    fn nome_violation_fires_before_missing_lib() {
+        // Precedence pin: a Biblioteca with a malformed `:nome` and no
+        // lib entry surfaces NomeViolation, not MissingLib — the
+        // identity-axis gate is more fundamental than the layout's
+        // `lib/<nome>.lisp` default-path check (which derives the
+        // expected path from `:nome` itself, so would surface a
+        // misleading "expected lib/MyApp.lisp" diagnostic against an
+        // unrecoverable name).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "MyApp".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::NomeViolation { .. }),
+            "got {err:?} — nome must fire before MissingLib",
+        );
+    }
+
+    #[test]
+    fn nome_versao_violations_fire_after_missing_manifest() {
+        // Precedence pin: `MissingManifest` still dominates — there's
+        // no caixa to identity-check when the manifest is missing.
+        let root = PathBuf::from("/tmp/x");
+        let layout = StandardLayout::new().with_path_exists(|_| false);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "MyApp".into();
+        c.versao = "0.1".into();
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::MissingManifest(_)),
+            "got {err:?} — MissingManifest must dominate identity gates",
+        );
+    }
+
+    #[test]
+    fn valid_nome_versao_passes_to_downstream_gates() {
+        // Sanity pin: the canonical "demo" / "0.1.0" identity passes
+        // both axes; downstream gates (MissingLib here) take over.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let err = layout
+            .verify(&caixa(CaixaKind::Biblioteca), &root)
+            .unwrap_err();
+        assert!(
+            matches!(err, LayoutError::MissingLib { .. }),
+            "got {err:?} — valid identity must pass to MissingLib",
         );
     }
 
