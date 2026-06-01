@@ -176,9 +176,8 @@ impl LayoutInvariants for StandardLayout {
         // refuses every ill-formed `:deps` / `:deps-dev` value-shape by
         // construction — closing the second-to-last orphan-validator gap
         // on the typed Caixa surface (`validate_restart_window` is the
-        // remaining orphan, Supervisor-axis specific and gated upstream
-        // by the kind-coherence [`Self::SupervisorSlotsOnNonSupervisor`]
-        // for non-Supervisor kinds — a future-run copy of this pattern).
+        // remaining orphan, Supervisor-axis specific and wired into the
+        // Supervisor branch below alongside `view.validate()`).
         caixa
             .validate_deps()
             .map_err(|err| LayoutError::DepsViolation {
@@ -565,6 +564,72 @@ impl LayoutInvariants for StandardLayout {
         // The "supervisor doesn't own code" check is at the top of verify()
         // so it fires before the existence-check loops.
         if caixa.kind == CaixaKind::Supervisor {
+            // Raw `:restart-window` parse gate on the flat
+            // `Caixa::restart_window: Option<String>` axis — the last
+            // orphan-validator on the typed Caixa surface flagged by the
+            // [`Self::validate_deps`] wire-up's closing comment (the
+            // "Supervisor-axis specific" remainder) and the
+            // [`Caixa::supervisor_view`] doc-comment's "the future
+            // layout-side wire-up" pin. Until this gate landed
+            // [`Caixa::validate_restart_window`] existed as `pub fn` on
+            // [`Caixa`] with full per-arm unit coverage in `manifest::tests`
+            // (`validate_restart_window_rejects_*` — fractional seconds,
+            // decimal-shaped integer, half-unit minute, leading sign,
+            // unknown unit, garbage, empty-after-trim; eight rejection
+            // arms total), but no production code path called it —
+            // `feira build` (the canonical author-time gate; routes
+            // through [`StandardLayout::verify`]) silently accepted a
+            // malformed `:restart-window` and [`Caixa::supervisor_view`]
+            // soft-swallowed the parse failure as `restart_window: None`
+            // (i.e. the canonical "omit the slot to express no reset"
+            // sentinel), turning every malformed window into a never-reset
+            // supervisor far from the source `caixa.lisp`, with no field
+            // naming the offending `:restart-window`. The Erlang/OTP
+            // `MaxIntensity / Period` invariant the typed [`SupervisorSpec`]
+            // gate (`view.validate()` immediately below) enforces on the
+            // `Option<Duration>` value never reached the gate at all on
+            // these inputs: the parse error was already laundered to
+            // `None`, and `None` is the canonical "never reset" shape
+            // that always validates cleanly. Lifting the parse gate to
+            // the layout-pipeline wire-up closes the laundering — every
+            // value past this gate either parses through the shared
+            // `crate::supervisor::duration_codec::parse` (and therefore
+            // round-trips canonically) or fires the new
+            // [`Self::RestartWindowViolation`] envelope at the source.
+            //
+            // Runs *inside* the `kind == Supervisor` branch (rather than
+            // alongside the peer flat-Caixa gates `validate_nome` /
+            // `validate_versao` / `validate_deps` / `validate_code_paths`
+            // above the kind dispatch) because `:restart-window` is in
+            // the Supervisor slot set per [`Caixa::declared_supervisor_slots`]
+            // — every non-Supervisor caixa with `:restart-window` set
+            // already errors upstream via the
+            // [`Self::SupervisorSlotsOnNonSupervisor`] kind-coherence gate
+            // (line 243-252), so reaching this gate on a non-Supervisor
+            // kind would be a no-op (the field is `None` by construction).
+            // Runs *before* `view.validate()` so the parse-side diagnostic
+            // surfaces first on the raw-string axis — a `:restart-window
+            // "1.5s"` lands on the more self-locating
+            // `RestartWindowViolation` (which names the offending raw
+            // string verbatim) rather than the laundered-to-`None`
+            // soft-pass that the typed view would silently let through.
+            //
+            // Same per-axis `*Violation { caixa, issue }` envelope every
+            // peer flat-Caixa wrap exposes ([`Self::NomeViolation`] /
+            // [`Self::VersaoViolation`] 1f74a5f,
+            // [`Self::DepsViolation`] aa77d0f, [`Self::CodePathViolation`]
+            // b868442). Threads [`ManifestError::RestartWindowMalformed`]
+            // Display through verbatim — the per-arm reason already names
+            // the offending raw value (e.g. `":restart-window \"1.5s\" is
+            // not a canonical duration: …"`), so the wrap's `issue`
+            // carries a self-locating "which axis, which value, why"
+            // without re-shaping the parser-side reason.
+            caixa
+                .validate_restart_window()
+                .map_err(|err| LayoutError::RestartWindowViolation {
+                    caixa: caixa.nome.clone(),
+                    issue: err.to_string(),
+                })?;
             let view = caixa
                 .supervisor_view()
                 .expect("Supervisor kind must have a supervisor_view");
@@ -662,6 +727,8 @@ pub enum LayoutError {
     UpgradeViolation { caixa: String, issue: String },
     #[error("supervisor caixa '{caixa}' violates typed shape: {issue}")]
     SupervisorViolation { caixa: String, issue: String },
+    #[error("supervisor caixa '{caixa}' has invalid :restart-window: {issue}")]
+    RestartWindowViolation { caixa: String, issue: String },
     #[error(
         "supervisor caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — supervisors don't run code, they orchestrate other caixas"
     )]
@@ -1848,6 +1915,274 @@ mod tests {
         }];
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::SupervisorOwnsCode(_)));
+    }
+
+    // ── Caixa::validate_restart_window wired into Supervisor verify ─────
+    //
+    // Until this wire-up landed `Caixa::validate_restart_window` lived as
+    // `pub fn` on `Caixa` with full per-arm unit coverage in
+    // `manifest::tests` (`validate_restart_window_rejects_*` — fractional,
+    // decimal-shaped integer, half-unit minute, leading sign, unknown
+    // unit, garbage, empty-after-trim) but no production path called it;
+    // `feira build` silently accepted malformed `:restart-window` and
+    // `Caixa::supervisor_view` soft-swallowed the parse failure as
+    // `restart_window: None` (the canonical "no reset" sentinel), turning
+    // every authoring footgun into a never-reset supervisor far from the
+    // source caixa.lisp. The following pins fence the layout-pipeline
+    // wire-up: every layout verify on a structurally-invalid `:restart-
+    // window` axis surfaces the per-axis `RestartWindowViolation { caixa,
+    // issue }` envelope before the typed `SupervisorSpec::validate` gate
+    // sees the laundered `None`.
+
+    fn supervisor_with_window(window: Option<&str>) -> Caixa {
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.restart_window = window.map(str::to_string);
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        c
+    }
+
+    #[test]
+    fn restart_window_violation_on_fractional_seconds() {
+        // `"1.5s"` is the canonical fractional-seconds drift footgun the
+        // shared integer-magnitude codec (1c55a2a) rejects: round-trips
+        // through `render` as `"1500ms"` on first serialize, breaking
+        // THEORY.md §V.2.7 render-determinism. Before this wire-up
+        // `supervisor_view` soft-swallowed the parse error as
+        // `restart_window: None`, masking the drift as a never-reset
+        // supervisor.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(Some("1.5s"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::RestartWindowViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::RestartWindowViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("1.5s"),
+            "issue must quote the offending raw value: {issue}",
+        );
+    }
+
+    #[test]
+    fn restart_window_violation_on_decimal_shaped_integer() {
+        // `"1.0s"` — decimal-shaped integer the codec also rejects (a
+        // canonical authoring form is `"1s"`). Sibling of the fractional
+        // case; same codec arm.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(Some("1.0s"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                LayoutError::RestartWindowViolation { ref caixa, ref issue }
+                    if caixa == "demo" && issue.contains("1.0s")
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn restart_window_violation_on_leading_sign() {
+        // `"+30s"` / `"-30s"` — leading-sign drift the codec rejects.
+        // Canonical form is `"30s"`. Pin both signs separately because
+        // a future relaxation might accept one but not the other.
+        for raw in ["+30s", "-30s"] {
+            let root = PathBuf::from("/tmp/x");
+            let manifest = root.join("caixa.lisp");
+            let manifest_clone = manifest.clone();
+            let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+            let c = supervisor_with_window(Some(raw));
+            let err = layout.verify(&c, &root).unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    LayoutError::RestartWindowViolation { ref caixa, ref issue }
+                        if caixa == "demo" && issue.contains(raw)
+                ),
+                "leading-sign {raw:?} got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn restart_window_violation_on_unknown_unit() {
+        // `"30x"` — unknown duration unit. The codec admits only
+        // `ms`/`s`/`m`/`h`.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(Some("30x"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                LayoutError::RestartWindowViolation { ref caixa, .. } if caixa == "demo"
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn restart_window_violation_on_garbage() {
+        // `"abc"` — pure garbage. The codec's parse fails before the
+        // unit dispatch; the wrap envelope still surfaces the
+        // self-locating diagnostic at the source.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(Some("abc"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::RestartWindowViolation { ref caixa, .. } if caixa == "demo"),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn restart_window_violation_on_empty_string() {
+        // `""` — empty after trim. The shared codec's digit-only gate
+        // refuses an empty magnitude. Distinguished here from the
+        // `None` ("omit the slot") canonical authoring shape: an empty
+        // string is an authored-but-empty slot, never the author's
+        // intent.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(Some(""));
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::RestartWindowViolation { ref caixa, .. } if caixa == "demo"),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn verify_accepts_supervisor_without_restart_window() {
+        // `None` is the canonical "omit the slot to express no reset"
+        // shape — never reaches the codec, validates cleanly.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(None);
+        layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn verify_accepts_supervisor_with_canonical_restart_window() {
+        // Every canonical form the shared codec round-trips losslessly
+        // must pass — `"500ms"`, `"30s"`, `"60s"`, `"1m"`, `"2m"`,
+        // `"1h"`. Pin every form so a future tightening of the codec's
+        // accepted set surfaces here as a test failure.
+        for form in ["500ms", "30s", "60s", "1m", "2m", "1h"] {
+            let root = PathBuf::from("/tmp/x");
+            let manifest = root.join("caixa.lisp");
+            let manifest_clone = manifest.clone();
+            let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+            let c = supervisor_with_window(Some(form));
+            layout
+                .verify(&c, &root)
+                .unwrap_or_else(|e| panic!("canonical {form:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn restart_window_violation_fires_before_supervisor_view_validate() {
+        // Diagnostic-precedence pin: a Supervisor with a malformed
+        // `:restart-window` AND a typed-shape defect on the typed view
+        // (zero `:max-restarts`, which `SupervisorSpec::validate`'s
+        // `ZeroMaxRestarts` arm rejects) surfaces the raw-string
+        // diagnostic first — the narrower self-locating gate wins. Until
+        // this wire-up landed `supervisor_view` would silently launder
+        // the malformed `:restart-window` to `None` and then the typed
+        // view's `ZeroMaxRestarts` gate would surface, masking the
+        // raw-string footgun.
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Supervisor);
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(0);
+        c.restart_window = Some("1.5s".into());
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::RestartWindowViolation { .. }),
+            "got {err:?} — RestartWindowViolation must fire before SupervisorViolation",
+        );
+    }
+
+    #[test]
+    fn supervisor_slots_on_non_supervisor_fires_before_restart_window_violation() {
+        // Order pin: a non-Supervisor caixa with a malformed
+        // `:restart-window` surfaces `SupervisorSlotsOnNonSupervisor`
+        // (the kind-coherence gate at the top of verify) before the
+        // raw-string parse gate inside the Supervisor branch — because
+        // `:restart-window` is foreign to non-Supervisor kinds, the
+        // kind-coherence diagnostic is the load-bearing one. Mirrors
+        // the existing `nome_violation_on_*` ordering tests that fence
+        // the precedence between universal and kind-specific gates.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.restart_window = Some("1.5s".into());
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::SupervisorSlotsOnNonSupervisor { .. }),
+            "got {err:?} — kind-coherence must fire before RestartWindowViolation",
+        );
+    }
+
+    #[test]
+    fn restart_window_violation_diagnostic_carries_offending_value() {
+        // Diagnostic-shape pin: the wrap envelope's `issue` carries the
+        // codec's parser-shaped reason verbatim (which names the
+        // offending raw value), so the author can grep their caixa.lisp
+        // for `:restart-window "<value>"` and fix in one edit. Mirrors
+        // `nome_violation_*_carries_offending_*` shape pins.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let c = supervisor_with_window(Some("0.5m"));
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::RestartWindowViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::RestartWindowViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("0.5m"),
+            "issue must quote the offending raw value verbatim: {issue}",
+        );
+        assert!(
+            !issue.is_empty(),
+            "issue must carry the codec's parser-shaped reason",
+        );
     }
 
     // ── Aplicacao layout tests ──────────────────────────────────────────
