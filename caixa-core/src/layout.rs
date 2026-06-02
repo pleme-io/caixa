@@ -300,6 +300,80 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
+        // `:repositorio` git-repo-URL shape gate. The sixth
+        // universal-axis Caixa-level value-shape gate (peer of
+        // [`Caixa::validate_nome`] / [`Caixa::validate_versao`] /
+        // [`Caixa::validate_deps`] / [`Caixa::validate_etiquetas`] /
+        // [`Caixa::validate_autores`] wired immediately above and
+        // [`Caixa::validate_code_paths`] wired below the kind-coherence
+        // gates) on the typed Caixa surface. `:repositorio` is the
+        // universal git-shaped homepage axis every kind carries
+        // (universal `Option<String>` slot on [`Caixa`]) and routes
+        // through two load-bearing substrate consumers:
+        // [`caixa-helm`] folds it verbatim into the rendered
+        // `lareira-<nome>` Helm chart's `Chart.yaml` `home:` field
+        // (`build_chart_yaml` at `caixa-helm/src/lib.rs:268`) and into
+        // the chart `README.md` `repo = …` interpolation
+        // (`caixa-helm/src/lib.rs:359`); [`caixa-flux`] folds it
+        // verbatim into the standalone `ClusterBundleOpts::for_caixa`
+        // `git_url:` field (`caixa-flux/src/lib.rs:293`), which
+        // becomes the FluxCD `GitRepository.spec.url` the cluster's
+        // source-controller polls — the load-bearing deploy-time axis.
+        // Both consumers use `Option::unwrap_or_else(|| <fallback>)`
+        // to substitute a placeholder when the slot is absent (`None`
+        // → the fallback fires); a `Some("")` *skips the fallback*
+        // and silently passes the empty string through to
+        // `Chart.yaml home: ""` / `GitRepository url: ""`. Until this
+        // wire-up landed `:repositorio` had no shape gate at any
+        // layer — empty (`(:repositorio "")` — the canonical
+        // paste-from-blank-doc footgun) and malformed (whitespace,
+        // control char / CRLF, leading `-` CLI-arg-injection,
+        // missing `:` separator) values silently landed in the
+        // rendered artifacts and broke at `helm template` / FluxCD
+        // reconcile time far from the source `caixa.lisp`.
+        //
+        // Runs *after* the peer universal `:nome` / `:versao` /
+        // `:deps` / `:etiquetas` / `:autores` gates (the gate order
+        // follows the canonical identity-axis-first cascade the peer
+        // gates establish; `:repositorio` is the universal git-URL
+        // axis — it sits adjacent to `:autores` in the cascade after
+        // the load-bearing identity + dep trio + the two Vec-shaped
+        // universal metadata axes) and *before* the kind-coherence
+        // gates ([`Self::MeshSlotsOnNonAplicacao`] /
+        // [`Self::SupervisorSlotsOnNonSupervisor`] /
+        // [`Self::ServicoSlotsOnNonServico`] / [`Self::ForeignCodeSlot`])
+        // — `:repositorio` is universal so its shape diagnostic is
+        // more fundamental than the kind-coherence partitions on
+        // kind-exclusive slot sets.
+        //
+        // Same per-axis `*Violation { caixa, issue }` envelope every
+        // peer per-axis wrap exposes ([`Self::NomeViolation`] /
+        // [`Self::VersaoViolation`] 1f74a5f, [`Self::DepsViolation`]
+        // aa77d0f, [`Self::EtiquetasViolation`] 360a499,
+        // [`Self::AutoresViolation`] 86c769b, [`Self::CodePathViolation`]
+        // b868442, [`Self::RestartWindowViolation`] 10e321a). Threads
+        // [`ManifestError::RepositorioEmpty`] /
+        // [`ManifestError::RepositorioInvalid`] Display through
+        // verbatim — each per-arm reason already names the offending
+        // `:repositorio` value (for the invalid arm) or the
+        // structural "empty entry" defect (for the empty arm), so
+        // the wrap envelope's `issue` carries a self-locating "which
+        // axis, which value, why" without re-shaping the per-arm
+        // reason. With this gate the two `git URL`-shaped surfaces on
+        // the typed Caixa (`:repositorio` here, `:deps :fonte :repo`
+        // peer routed through the same shared
+        // [`crate::render::is_git_repo_url`] predicate via
+        // [`crate::DepSource::validate`]) are now structurally
+        // equivalent — every value past validate is
+        // guaranteed-acceptable by the shared predicate's constraint
+        // union, by construction.
+        caixa
+            .validate_repositorio()
+            .map_err(|err| LayoutError::RepositorioViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -836,6 +910,8 @@ pub enum LayoutError {
     EtiquetasViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :autores entry: {issue}")]
     AutoresViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :repositorio: {issue}")]
+    RepositorioViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
     CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
@@ -1382,6 +1458,180 @@ mod tests {
             StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
         let c = caixa(CaixaKind::Biblioteca);
         layout.verify(&c, &root).expect("template must pass");
+    }
+
+    // ── repositorio universal-axis gate wired into verify ────────────────
+    //
+    // Pins the layout-pipeline wire-up of [`Caixa::validate_repositorio`]:
+    // the sixth universal-axis Caixa-level value-shape gate (peer of
+    // `validate_nome` / `validate_versao` / `validate_deps` /
+    // `validate_etiquetas` / `validate_autores` / `validate_code_paths`),
+    // wired immediately after `validate_autores` so the universal
+    // git-URL axis sits adjacent to the two Vec-shaped universal
+    // metadata axes (`:etiquetas`, `:autores`) in the cascade. Until
+    // this wire-up landed `:repositorio` had no shape gate at any
+    // layer — the universal git-shaped homepage axis was the third
+    // largest universal authoring surface on the typed Caixa with no
+    // validate discipline, routing the same string through two
+    // load-bearing substrate consumers (`caixa-helm`'s `Chart.yaml
+    // home:` field and `caixa-flux`'s FluxCD `GitRepository.spec.url`)
+    // via `Option::unwrap_or_else` fallbacks that only fire on `None` —
+    // a `Some("")` silently passed every fallback and rendered as an
+    // empty URL in both consumers, breaking at `helm template` /
+    // FluxCD reconcile time far from the source `caixa.lisp`. The
+    // gate closes the divergence and makes the two `git URL`-shaped
+    // surfaces on the typed Caixa (`:repositorio` here, `:deps :fonte
+    // :repo` peer routed through the same shared
+    // `crate::render::is_git_repo_url` predicate) structurally
+    // equivalent by construction.
+
+    #[test]
+    fn repositorio_violation_on_empty_some() {
+        // Canonical paste-from-blank-doc footgun on every kind. The
+        // wrap envelope wraps [`ManifestError::RepositorioEmpty`]'s
+        // Display through verbatim, so the issue string names the
+        // offending `:repositorio` axis at the source — the author
+        // can grep their caixa.lisp for `:repositorio ""` and fix the
+        // empty value in one edit. Mirrors the peer
+        // `autores_violation_on_empty_entry` shape (86c769b) on the
+        // `:autores` axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.repositorio = Some(String::new());
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::RepositorioViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::RepositorioViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":repositorio"),
+            "issue must name the offending slot: {issue}",
+        );
+    }
+
+    #[test]
+    fn repositorio_violation_on_malformed_shape() {
+        // Canonical CLI-argument-injection footgun: a leading `-`
+        // value (`-upload-pack=evil`) escapes the `git clone <repo>`
+        // subprocess argument boundary at clone time. The shared
+        // `is_git_repo_url` predicate — the same parser the peer
+        // `:deps :fonte :repo` axis routes through via
+        // `DepSource::validate` — refuses every leading-`-` shape at
+        // validate time. The wrap envelope names the offending value
+        // verbatim through the inner [`ManifestError::RepositorioInvalid`]'s
+        // Display.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.repositorio = Some("-upload-pack=evil".into());
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::RepositorioViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::RepositorioViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("-upload-pack=evil"),
+            "issue must quote the offending value: {issue}",
+        );
+    }
+
+    #[test]
+    fn repositorio_violation_fires_before_kind_coherence_mesh_slot() {
+        // Cross-axis precedence pin: a Biblioteca with malformed
+        // `:repositorio` *and* declared mesh slots (`:membros`)
+        // surfaces the universal `:repositorio` diagnostic first, not
+        // the kind-coherence `MeshSlotsOnNonAplicacao` diagnostic.
+        // `:repositorio` is universal (every kind owns the slot), so
+        // its shape diagnostic is more fundamental than the
+        // partition-on-kind diagnostic. Mirrors the peer
+        // `autores_violation_fires_before_kind_coherence_mesh_slot`
+        // pin (86c769b) on the `:autores` axis vs the same
+        // kind-coherence gates.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.repositorio = Some(String::new());
+        c.membros = vec![crate::aplicacao::Membro {
+            caixa: "x".into(),
+            versao: "^0.1".into(),
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::RepositorioViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn repositorio_violation_fires_after_autores_violation() {
+        // Cross-axis precedence pin (inside the universal metadata
+        // trio): a caixa with both a malformed `:autores` entry *and*
+        // a malformed `:repositorio` value surfaces `AutoresViolation`
+        // first — `:autores` is the fifth universal axis in the
+        // cascade and runs before `:repositorio`, peer with the
+        // canonical identity-axis-first cascade the peer gates
+        // establish. Mirrors the peer
+        // `autores_violation_fires_after_etiquetas_violation`
+        // precedence pin (86c769b) on the tag-axis-before-author-axis
+        // pair.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.autores = vec![String::new()];
+        c.repositorio = Some(String::new());
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::AutoresViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn repositorio_violation_accepts_canonical_template() {
+        // Positive control sanity pin: the canonical `Caixa::template`
+        // shape (omits `:repositorio` entirely → `None` on the typed
+        // surface) passes the gate trivially — the gate is a no-op
+        // when the author didn't author a value. Mirrors the peer
+        // `autores_violation_accepts_canonical_template` pin (86c769b).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let c = caixa(CaixaKind::Biblioteca);
+        layout.verify(&c, &root).expect("template must pass");
+    }
+
+    #[test]
+    fn repositorio_violation_accepts_canonical_github_shorthand() {
+        // Positive control pin on the canonical pleme-io `:repositorio`
+        // shape: the `github:org/repo` shorthand the README quickstart
+        // and the `caixa-helm` / `caixa-mesh` / `caixa-flux` fixtures
+        // all use passes the gate end-to-end. Closes the structural
+        // equivalence between this surface and the peer `:deps :fonte
+        // :repo` axis — both consume `crate::render::is_git_repo_url`
+        // and both must agree on the same accepted shape set.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.repositorio = Some("github:pleme-io/hello-rio".into());
+        layout.verify(&c, &root).expect("canonical shape must pass");
     }
 
     // ── Caixa-identity gates (`:nome`, `:versao`) wired into verify ────
