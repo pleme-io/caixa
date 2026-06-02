@@ -875,6 +875,70 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:autores` lists with an empty entry or with two entries
+    /// agreeing on the same string. `:autores` is the universal
+    /// maintainer-axis on [`Caixa`] (every kind carries the
+    /// `Vec<String>` slot) and lands verbatim as the Helm chart
+    /// `Chart.yaml` `maintainers:` array on every Servico (caixa-helm's
+    /// `build_chart_yaml` at `caixa-helm/src/lib.rs:251` maps each entry
+    /// to a `Maintainer { name, email: None }` without dedup). Two
+    /// authoring footguns silently passed validate without this gate:
+    ///
+    ///   - Empty entry (`(:autores (""))` — the canonical paste-from-
+    ///     blank-doc footgun) rendered as
+    ///     `maintainers: [{name: "", email: null}]` in `Chart.yaml`. The
+    ///     empty maintainer name has no operational meaning — it
+    ///     identifies no one in the substrate's authorship index and
+    ///     clutters the rendered chart with a no-op maintainer.
+    ///   - Duplicate entries (`(:autores ("pleme-io" "pleme-io"))` —
+    ///     the copy-paste-the-wrong-author footgun) silently passed
+    ///     validate and rendered as two identical maintainer entries.
+    ///     Unlike the [`Self::validate_etiquetas`] peer (caixa-helm's
+    ///     `BTreeSet`-collect on `:etiquetas` silently dedups the
+    ///     rendered `keywords:` array at chart-render time), the
+    ///     `maintainers:` rendering has *no* dedup — duplicate `:autores`
+    ///     entries stack verbatim in the chart, divergent from every
+    ///     peer typed-graph set gate ([`crate::AplicacaoError::MembroDuplicate`]
+    ///     on `:membros`, [`crate::AplicacaoError::PlacementClusterDuplicate`]
+    ///     on `:placement :clusters`, [`crate::AplicacaoError::EntradaPathDuplicate`]
+    ///     on `:entrada :paths`, [`crate::AplicacaoError::ContratoDuplicate`]
+    ///     on `:contratos`, [`crate::DepError::DuplicateNome`] on
+    ///     `:deps` / `:deps-dev`, [`crate::UpgradeError::DuplicateFrom`]
+    ///     on `:upgrade-from`, [`ManifestError::EtiquetaDuplicate`] on
+    ///     `:etiquetas`).
+    ///
+    /// Same empty-first cascade discipline every peer per-axis gate
+    /// uses: the per-entry empty arm fires before the cross-entry
+    /// duplicate arm. Walks the list in declaration order so the
+    /// first-collision diagnostic surfaces the lexicographically-
+    /// earliest offending position, peer with every other duplicate
+    /// gate on this surface.
+    ///
+    /// Universal-axis (every kind carries `:autores`), so wired at the
+    /// caixa-build gate alongside the peer universal gates
+    /// [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_etiquetas`] /
+    /// [`Self::validate_code_paths`] — before the kind-coherence gates
+    /// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
+    /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-specific
+    /// slot sets.
+    pub fn validate_autores(&self) -> Result<(), ManifestError> {
+        let mut seen = std::collections::HashSet::new();
+        for autor in &self.autores {
+            if autor.is_empty() {
+                return Err(ManifestError::AutorEmpty);
+            }
+            if !seen.insert(autor.as_str()) {
+                return Err(ManifestError::AutorDuplicate {
+                    autor: autor.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -1088,6 +1152,27 @@ pub enum ManifestError {
          duplicate or rename it to the actual tag intended)"
     )]
     EtiquetaDuplicate { etiqueta: String },
+    #[error(
+        ":autores entry is empty (every maintainer must carry a non-empty \
+         identifier; the empty entry has no operational meaning — it \
+         identifies no one in the substrate's authorship index and renders \
+         as `maintainers: [{{name: \"\", email: null}}]` in the Helm chart's \
+         `Chart.yaml`, a no-op maintainer the substrate cannot route to; \
+         omit the entry to express \"no maintainer on this position\")"
+    )]
+    AutorEmpty,
+    #[error(
+        ":autores entry {autor:?} appears more than once (the maintainer \
+         set is a set, not a multiset; unlike `:etiquetas`, caixa-helm's \
+         `maintainers:` rendering does *no* dedup — duplicate entries \
+         stack verbatim in `Chart.yaml` as two identical \
+         `Maintainer {{ name, email: None }}` records, divergent from every \
+         peer typed-graph set gate (`:etiquetas`, `:membros :caixa`, \
+         `:placement :clusters`, `:entrada :paths`, `:contratos`, \
+         `:deps :nome`, `:upgrade-from :from`); drop the duplicate or \
+         rename it to the actual author intended)"
+    )]
+    AutorDuplicate { autor: String },
 }
 
 #[cfg(test)]
@@ -2876,6 +2961,121 @@ mod tests {
         assert!(
             rendered.contains("demo"),
             "diagnostic must quote the offending tag: {rendered}",
+        );
+    }
+
+    // ── validate_autores — universal-axis maintainer shape ────────────
+
+    fn caixa_with_autores(autores: Vec<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.autores = autores.into_iter().map(String::from).collect();
+        c
+    }
+
+    #[test]
+    fn validate_autores_accepts_empty_list() {
+        // The empty-list identity: `Caixa::template` emits `:autores ()`,
+        // so the gate is non-disruptive against every existing manifest.
+        let c = caixa_with_autores(vec![]);
+        c.validate_autores().unwrap();
+    }
+
+    #[test]
+    fn validate_autores_accepts_canonical_forms() {
+        // Positive control sweep: every canonical-shaped non-empty
+        // distinct maintainer list passes — the hello-rio / checkout-
+        // aplicacao fixtures' `:autores ("pleme-io")` shape, plus the
+        // multi-author shape downstream packaging surfaces emit.
+        let c = caixa_with_autores(vec!["pleme-io"]);
+        c.validate_autores().unwrap();
+        let c = caixa_with_autores(vec!["alice <alice@example.com>", "bob <bob@example.com>"]);
+        c.validate_autores().unwrap();
+    }
+
+    #[test]
+    fn validate_autores_rejects_empty_entry() {
+        // Canonical paste-from-blank-doc footgun. Without the gate the
+        // empty entry rendered as `maintainers: [{name: "", email: null}]`
+        // in `Chart.yaml`, a no-op maintainer the substrate cannot route
+        // to.
+        let c = caixa_with_autores(vec![""]);
+        let err = c.validate_autores().unwrap_err();
+        assert!(matches!(err, ManifestError::AutorEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_autores_rejects_duplicate_entry() {
+        // Canonical copy-paste-the-wrong-author footgun. Unlike the
+        // `:etiquetas` peer (caixa-helm's `BTreeSet` collect silently
+        // dedups the rendered `keywords:` array), the `maintainers:`
+        // rendering has *no* dedup — duplicates stack verbatim. The
+        // duplicate-arm names the offending author verbatim.
+        let c = caixa_with_autores(vec!["pleme-io", "pleme-io"]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorDuplicate { autor } = err else {
+            panic!("expected AutorDuplicate, got {err:?}");
+        };
+        assert_eq!(autor, "pleme-io");
+    }
+
+    #[test]
+    fn validate_autores_empty_takes_precedence_over_duplicate() {
+        // Empty-first cascade pin: `("" "pleme-io" "pleme-io")` surfaces
+        // `AutorEmpty` not `AutorDuplicate` — the narrower structural
+        // "this entry has no value" defect dominates the cross-entry
+        // uniqueness diagnostic. Mirrors the peer empty-before-duplicate
+        // cascades on `:etiquetas` (`EtiquetaEmpty` before
+        // `EtiquetaDuplicate`, 360a499), `:caracteristicas`
+        // (`CaracteristicaEmpty` before `CaracteristicaDuplicate`,
+        // fc3b4d5), and `:membros :caixa` (`MembroCaixaEmpty` before
+        // `MembroDuplicate`).
+        let c = caixa_with_autores(vec!["", "pleme-io", "pleme-io"]);
+        let err = c.validate_autores().unwrap_err();
+        assert!(matches!(err, ManifestError::AutorEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_autores_duplicate_reports_first_collision() {
+        // First-collision pin: `("a" "b" "a" "b")` surfaces the `"a"`
+        // duplicate (the lexicographically-earliest offending position
+        // — the second `"a"` at index 2 collides with the first `"a"`
+        // at index 0), not the later `"b"` collision at index 3,
+        // peer with every other first-collision diagnostic posture on
+        // this surface.
+        let c = caixa_with_autores(vec!["a", "b", "a", "b"]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorDuplicate { autor } = err else {
+            panic!("expected AutorDuplicate, got {err:?}");
+        };
+        assert_eq!(autor, "a");
+    }
+
+    #[test]
+    fn validate_autores_case_sensitive() {
+        // Case-sensitivity pin: `("Pleme-io" "pleme-io")` is two distinct
+        // entries, mirroring the peer `:etiquetas` / `:membros :caixa`
+        // / `:children :caixa` exact-string-match discipline.
+        let c = caixa_with_autores(vec!["Pleme-io", "pleme-io"]);
+        c.validate_autores().unwrap();
+    }
+
+    #[test]
+    fn validate_autores_diagnostic_carries_offending_author() {
+        // Diagnostic-shape pin (peer with
+        // `validate_etiquetas_diagnostic_carries_offending_tag`): the
+        // error's Display surfaces the offending author verbatim, so a
+        // `feira lint` run can render the diagnostic without re-parsing
+        // and the author can grep their caixa.lisp for the offending
+        // value.
+        let c = caixa_with_autores(vec!["pleme-io", "pleme-io"]);
+        let rendered = c.validate_autores().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":autores"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("pleme-io"),
+            "diagnostic must quote the offending author: {rendered}",
         );
     }
 }

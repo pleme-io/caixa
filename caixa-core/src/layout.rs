@@ -244,6 +244,62 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
+        // `:autores` per-entry empty + cross-entry duplicate gate. The
+        // fifth universal-axis Caixa-level value-shape gate (peer of
+        // [`Caixa::validate_nome`] / [`Caixa::validate_versao`] /
+        // [`Caixa::validate_deps`] / [`Caixa::validate_etiquetas`] wired
+        // immediately above and [`Caixa::validate_code_paths`] wired
+        // below the kind-coherence gates) on the typed Caixa surface.
+        // `:autores` is the maintainer-axis every kind carries
+        // (universal `Vec<String>` slot on [`Caixa`]) and lands verbatim
+        // as the Helm chart `Chart.yaml` `maintainers:` array on every
+        // Servico (`caixa-helm/src/lib.rs:251` maps each entry to a
+        // `Maintainer { name, email: None }` without dedup). Until this
+        // wire-up landed `:autores` had no shape gate at any layer — an
+        // empty entry (`(:autores (""))` — the canonical paste-from-
+        // blank-doc footgun) silently rendered as
+        // `maintainers: [{name: "", email: null}]` in `Chart.yaml`, and
+        // duplicate entries (`(:autores ("pleme-io" "pleme-io"))` —
+        // the copy-paste-the-wrong-author footgun) stacked verbatim in
+        // the chart. Unlike the peer `:etiquetas` axis (where the
+        // renderer's `BTreeSet` collect silently dedups the `keywords:`
+        // array at chart render — a "second wins / one silently
+        // disappears" shape), `maintainers:` has *no* renderer-side
+        // dedup, so duplicate `:autores` entries render as two identical
+        // maintainer records by construction — a strictly worse footgun
+        // than the peer `:etiquetas` shape. Runs *after* the peer
+        // universal `:nome` / `:versao` / `:deps` / `:etiquetas` gates
+        // (the gate order follows the canonical identity-axis-first
+        // cascade the peer gates establish; `:autores` and `:etiquetas`
+        // are the two Vec-shaped universal metadata axes — they sit
+        // adjacent in the cascade after the load-bearing identity +
+        // dep trio) and *before* the kind-coherence gates
+        // ([`Self::MeshSlotsOnNonAplicacao`] /
+        // [`Self::SupervisorSlotsOnNonSupervisor`] /
+        // [`Self::ServicoSlotsOnNonServico`] / [`Self::ForeignCodeSlot`])
+        // — `:autores` is universal so its shape diagnostic is more
+        // fundamental than the kind-coherence partitions on kind-
+        // exclusive slot sets.
+        //
+        // Same per-axis `*Violation { caixa, issue }` envelope every peer
+        // per-axis wrap exposes ([`Self::NomeViolation`] /
+        // [`Self::VersaoViolation`] 1f74a5f, [`Self::DepsViolation`]
+        // aa77d0f, [`Self::EtiquetasViolation`] 360a499,
+        // [`Self::CodePathViolation`] b868442,
+        // [`Self::RestartWindowViolation`] 10e321a). Threads
+        // [`ManifestError::AutorEmpty`] / [`ManifestError::AutorDuplicate`]
+        // Display through verbatim — each per-arm reason already names
+        // the offending author (for the duplicate arm) or the structural
+        // "empty entry" defect (for the empty arm), so the wrap
+        // envelope's `issue` carries a self-locating "which axis, which
+        // entry, why" without re-shaping the per-arm reason.
+        caixa
+            .validate_autores()
+            .map_err(|err| LayoutError::AutoresViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -778,6 +834,8 @@ pub enum LayoutError {
     DepsViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :etiquetas entry: {issue}")]
     EtiquetasViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :autores entry: {issue}")]
+    AutoresViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
     CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
@@ -1170,6 +1228,153 @@ mod tests {
         // shape (`:etiquetas ()` — empty list) passes the gate
         // trivially. Mirrors the peer
         // `validate_code_paths_accepts_canonical_template` pin.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let c = caixa(CaixaKind::Biblioteca);
+        layout.verify(&c, &root).expect("template must pass");
+    }
+
+    // ── autores universal-axis gate wired into verify ───────────────────
+    //
+    // Pins the layout-pipeline wire-up of [`Caixa::validate_autores`]:
+    // the fifth universal-axis Caixa-level value-shape gate (peer of
+    // `validate_nome` / `validate_versao` / `validate_deps` /
+    // `validate_etiquetas` / `validate_code_paths`), wired immediately
+    // after `validate_etiquetas` so the two Vec-shaped universal
+    // metadata axes sit adjacent in the cascade. Until this wire-up
+    // landed `:autores` had no shape gate at any layer — the
+    // maintainer-axis was the second largest universal authoring
+    // surface on the typed Caixa surface with no validate discipline,
+    // and unlike `:etiquetas` (caixa-helm dedups the rendered
+    // `keywords:` array via `BTreeSet` collect at chart render),
+    // `maintainers:` has *no* renderer-side dedup, so duplicate
+    // `:autores` entries render verbatim as two identical
+    // `Maintainer { name, email: None }` records — a strictly worse
+    // footgun than the peer `:etiquetas` shape.
+
+    #[test]
+    fn autores_violation_on_empty_entry() {
+        // Canonical paste-from-blank-doc footgun on every kind. The
+        // wrap envelope wraps [`ManifestError::AutorEmpty`]'s Display
+        // through verbatim, so the issue string names the offending
+        // `:autores` axis at the source — the author can grep their
+        // caixa.lisp for `:autores` and fix the empty entry in one
+        // edit. Mirrors the peer `etiquetas_violation_on_empty_entry`
+        // shape (360a499) on the `:etiquetas` axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.autores = vec!["".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::AutoresViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::AutoresViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":autores"),
+            "issue must name the offending slot: {issue}",
+        );
+    }
+
+    #[test]
+    fn autores_violation_on_duplicate_entry() {
+        // Canonical copy-paste-the-wrong-author footgun. Unlike the
+        // peer `:etiquetas` axis (silently dedup'd by caixa-helm's
+        // `BTreeSet` collect at chart render), `:autores` duplicates
+        // stack verbatim in the rendered `maintainers:` — the gate
+        // closes the footgun at validate time before any renderer
+        // sees it. The wrap envelope names the offending author
+        // verbatim through the inner [`ManifestError::AutorDuplicate`]'s
+        // Display.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.autores = vec!["pleme-io".into(), "pleme-io".into()];
+        // The servicos path doesn't exist in this fixture, but the
+        // `:autores` gate fires before the existence loop (universal
+        // axis dominates kind-specific existence checks). Wire is
+        // intact iff the wrap envelope surfaces first.
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::AutoresViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::AutoresViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("pleme-io"),
+            "issue must quote the offending author: {issue}",
+        );
+    }
+
+    #[test]
+    fn autores_violation_fires_before_kind_coherence_mesh_slot() {
+        // Cross-axis precedence pin: a Biblioteca with malformed
+        // `:autores` *and* declared mesh slots (`:membros`) surfaces
+        // the universal `:autores` diagnostic first, not the
+        // kind-coherence `MeshSlotsOnNonAplicacao` diagnostic.
+        // `:autores` is universal (every kind owns the slot), so its
+        // shape diagnostic is more fundamental than the partition-on-
+        // kind diagnostic. Mirrors the peer
+        // `etiquetas_violation_fires_before_kind_coherence_mesh_slot`
+        // pin (360a499) on the `:etiquetas` axis vs the same kind-
+        // coherence gates.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.autores = vec!["".into()];
+        c.membros = vec![crate::aplicacao::Membro {
+            caixa: "x".into(),
+            versao: "^0.1".into(),
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::AutoresViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn autores_violation_fires_after_etiquetas_violation() {
+        // Cross-axis precedence pin (inside the Vec-shaped universal
+        // metadata pair): a caixa with both a malformed `:etiquetas`
+        // entry *and* a malformed `:autores` entry surfaces
+        // `EtiquetasViolation` first — `:etiquetas` is the fourth
+        // universal axis in the cascade and runs before `:autores`,
+        // peer with the canonical identity-axis-first cascade the
+        // peer gates establish. Mirrors the peer
+        // `etiquetas_violation_fires_after_deps_violation` precedence
+        // pin (360a499) on the dep-axis-before-tag-axis pair.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.etiquetas = vec!["".into()];
+        c.autores = vec!["".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::EtiquetasViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn autores_violation_accepts_canonical_template() {
+        // Positive control sanity pin: the canonical `Caixa::template`
+        // shape (`:autores ()` — empty list) passes the gate trivially.
+        // Mirrors the peer `etiquetas_violation_accepts_canonical_template`
+        // pin (360a499).
         let root = PathBuf::from("/tmp/x");
         let manifest = root.join("caixa.lisp");
         let default_lib = root.join("lib").join("demo.lisp");
