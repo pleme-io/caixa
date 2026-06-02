@@ -185,6 +185,65 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
+        // `:etiquetas` per-entry empty + cross-entry duplicate gate. The
+        // fourth universal-axis Caixa-level value-shape gate (peer of
+        // [`Caixa::validate_nome`] / [`Caixa::validate_versao`] /
+        // [`Caixa::validate_deps`] wired immediately above and
+        // [`Caixa::validate_code_paths`] wired below the kind-coherence
+        // gates) on the typed Caixa surface. `:etiquetas` is the
+        // registry-search-tag axis every kind carries (universal
+        // `Vec<String>` slot on [`Caixa`]) and lands verbatim as the
+        // Helm chart `Chart.yaml` `keywords:` array on every Servico
+        // (`caixa-helm/src/lib.rs:236` folds it through a
+        // [`std::collections::BTreeSet`]). Until this wire-up landed
+        // `:etiquetas` had no shape gate at any layer — an empty entry
+        // (`(:etiquetas (""))` — the canonical paste-from-blank-doc
+        // footgun) silently rendered as `keywords: [""]` in `Chart.yaml`,
+        // and duplicate entries (`(:etiquetas ("demo" "demo"))` — the
+        // copy-paste-the-wrong-tag footgun) were silently dedup'd by
+        // the renderer's `BTreeSet` collect — a "second wins / one
+        // silently disappears" shape divergent from every peer typed-
+        // graph set gate (`:membros :caixa`, `:placement :clusters`,
+        // `:entrada :paths`, `:contratos`, `:deps :nome`,
+        // `:upgrade-from :from`, the per-instruction-class singularity
+        // gates on `:upgrade-from :instructions`). Runs *after* the
+        // peer universal `:nome` / `:versao` / `:deps` gates (declaration
+        // order on [`Caixa`] is `:nome` → `:versao` → `:edicao` →
+        // `:descricao` → `:repositorio` → `:licenca` → `:autores` →
+        // `:etiquetas` → `:deps` → `:deps-dev`, but the gate order
+        // follows the same identity-axis-first cascade the peer gates
+        // establish: `:nome` → `:versao` are the load-bearing identity
+        // axes that flow into every diagnostic's caixa prefix, and
+        // `:deps` is the universal dep surface that dominates every
+        // kind-coherence gate; `:etiquetas` runs after this trio so the
+        // diagnostic carries an already-validated `:nome` and the
+        // peer universal axes' narrower diagnostics surface first when
+        // multiple axes are malformed) and *before* the kind-coherence
+        // gates ([`Self::MeshSlotsOnNonAplicacao`] /
+        // [`Self::SupervisorSlotsOnNonSupervisor`] /
+        // [`Self::ServicoSlotsOnNonServico`] / [`Self::ForeignCodeSlot`])
+        // — `:etiquetas` is universal so its shape diagnostic is more
+        // fundamental than the kind-coherence partitions on kind-
+        // exclusive slot sets.
+        //
+        // Same per-axis `*Violation { caixa, issue }` envelope every peer
+        // per-axis wrap exposes ([`Self::NomeViolation`] /
+        // [`Self::VersaoViolation`] 1f74a5f, [`Self::DepsViolation`]
+        // aa77d0f, [`Self::CodePathViolation`] b868442,
+        // [`Self::RestartWindowViolation`] 10e321a). Threads
+        // [`ManifestError::EtiquetaEmpty`] / [`ManifestError::EtiquetaDuplicate`]
+        // Display through verbatim — each per-arm reason already names
+        // the offending tag (for the duplicate arm) or the structural
+        // "empty entry" defect (for the empty arm), so the wrap
+        // envelope's `issue` carries a self-locating "which axis, which
+        // entry, why" without re-shaping the per-arm reason.
+        caixa
+            .validate_etiquetas()
+            .map_err(|err| LayoutError::EtiquetasViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -717,6 +776,8 @@ pub enum LayoutError {
     VersaoViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :deps / :deps-dev entry: {issue}")]
     DepsViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :etiquetas entry: {issue}")]
+    EtiquetasViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
     CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
@@ -967,6 +1028,155 @@ mod tests {
             issue.contains(":exe"),
             "issue must name the offending slot: {issue}",
         );
+    }
+
+    // ── etiquetas universal-axis gate wired into verify ─────────────────
+    //
+    // Pins the layout-pipeline wire-up of [`Caixa::validate_etiquetas`]:
+    // the fourth universal-axis Caixa-level value-shape gate (peer of
+    // `validate_nome` / `validate_versao` / `validate_deps` /
+    // `validate_code_paths`), wired before the kind-coherence gates so
+    // a structurally-invalid `:etiquetas` entry on any kind surfaces
+    // the per-axis `EtiquetasViolation { caixa, issue }` envelope at
+    // the source rather than silently rendering as `keywords: [""]`
+    // in `Chart.yaml` (Servico kind, via caixa-helm's `BTreeSet`
+    // collect) or silently dedup'ing at chart render (every kind).
+    // Until this wire-up landed `:etiquetas` had no shape gate at any
+    // layer — the registry-search-tag axis was the largest universal
+    // authoring surface on the typed Caixa surface with no validate
+    // discipline.
+    //
+    // Same per-axis `*Violation { caixa, issue }` envelope every peer
+    // per-axis wrap exposes; the wire-up runs after `validate_deps`
+    // (universal axis ordering: `:nome` → `:versao` → `:deps` →
+    // `:etiquetas`) and before every kind-coherence gate
+    // (`:etiquetas` is universal so its shape diagnostic is more
+    // fundamental than the partition-on-kind diagnostics).
+
+    #[test]
+    fn etiquetas_violation_on_empty_entry() {
+        // Canonical paste-from-blank-doc footgun on every kind. The
+        // wrap envelope wraps [`ManifestError::EtiquetaEmpty`]'s
+        // Display through verbatim, so the issue string names the
+        // offending `:etiquetas` axis at the source — the author can
+        // grep their caixa.lisp for `:etiquetas` and fix the empty
+        // entry in one edit. Mirrors the peer
+        // `code_path_violation_on_empty_bibliotecas_entry` shape
+        // (b868442) on the `:bibliotecas` axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.etiquetas = vec!["".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::EtiquetasViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::EtiquetasViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":etiquetas"),
+            "issue must name the offending slot: {issue}",
+        );
+    }
+
+    #[test]
+    fn etiquetas_violation_on_duplicate_entry() {
+        // Canonical copy-paste-the-wrong-tag footgun. Without the wire-
+        // up the duplicate was silently dedup'd by caixa-helm's
+        // `BTreeSet` collect at chart render — a "second wins / one
+        // silently disappears" shape. The wrap envelope names the
+        // offending tag verbatim through the inner
+        // [`ManifestError::EtiquetaDuplicate`]'s Display.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Servico);
+        c.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        c.etiquetas = vec!["demo".into(), "demo".into()];
+        // The servicos path doesn't exist in this fixture, but the
+        // `:etiquetas` gate fires before the existence loop (universal
+        // axis dominates kind-specific existence checks). Wire is
+        // intact iff the wrap envelope surfaces first.
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::EtiquetasViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::EtiquetasViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains("demo"),
+            "issue must quote the offending tag: {issue}",
+        );
+    }
+
+    #[test]
+    fn etiquetas_violation_fires_before_kind_coherence_mesh_slot() {
+        // Cross-axis precedence pin: a Biblioteca with malformed
+        // `:etiquetas` *and* declared mesh slots (`:membros`) surfaces
+        // the universal `:etiquetas` diagnostic first, not the
+        // kind-coherence `MeshSlotsOnNonAplicacao` diagnostic.
+        // `:etiquetas` is universal (every kind owns the slot), so its
+        // shape diagnostic is more fundamental than the partition-on-
+        // kind diagnostic. Mirrors the peer
+        // `deps_violation_fires_before_*` precedence pins (aa77d0f) on
+        // the universal `:deps` axis vs the same kind-coherence gates.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.etiquetas = vec!["".into()];
+        c.membros = vec![crate::aplicacao::Membro {
+            caixa: "x".into(),
+            versao: "^0.1".into(),
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::EtiquetasViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn etiquetas_violation_fires_after_deps_violation() {
+        // Cross-axis precedence pin (inside the universal-axis trio):
+        // a caixa with both a malformed `:deps` entry *and* a malformed
+        // `:etiquetas` entry surfaces `DepsViolation` first — `:deps`
+        // is the third universal axis in declaration order
+        // (`:nome` → `:versao` → `:deps` → `:etiquetas`) and runs first
+        // in `verify`. Mirrors the peer
+        // `nome_violation_fires_before_versao_violation` shape on the
+        // identity-axis pair.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![crate::Dep::simple("Caixa-Teia", "^0.1")]; // uppercase :nome
+        c.etiquetas = vec!["".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::DepsViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn etiquetas_violation_accepts_canonical_template() {
+        // Positive control sanity pin: the canonical `Caixa::template`
+        // shape (`:etiquetas ()` — empty list) passes the gate
+        // trivially. Mirrors the peer
+        // `validate_code_paths_accepts_canonical_template` pin.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let c = caixa(CaixaKind::Biblioteca);
+        layout.verify(&c, &root).expect("template must pass");
     }
 
     // ── Caixa-identity gates (`:nome`, `:versao`) wired into verify ────

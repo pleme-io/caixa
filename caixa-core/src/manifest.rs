@@ -804,6 +804,77 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:etiquetas` lists with an empty entry or with two entries
+    /// agreeing on the same string. `:etiquetas` is the universal
+    /// registry-search-tag axis on [`Caixa`] (every kind carries the
+    /// `Vec<String>` slot) and lands verbatim as the Helm chart
+    /// `Chart.yaml` `keywords:` array on every Servico (caixa-helm's
+    /// `build_chart_yaml` at `caixa-helm/src/lib.rs:236` folds it through
+    /// a [`std::collections::BTreeSet`] alongside the four substrate-
+    /// fixed tags `lareira` / `wasm` / `tatara-lisp` / `caixa-servico`).
+    /// Two authoring footguns silently passed validate without this gate:
+    ///
+    ///   - Empty entry (`(:etiquetas (""))` — the canonical paste-from-
+    ///     blank-doc footgun) rendered as `keywords: ["", "caixa-servico",
+    ///     "lareira", "tatara-lisp", "wasm"]` in `Chart.yaml`. Helm's
+    ///     `chart.metadata.keywords` admits the value without a strict
+    ///     parser-side gate, but the empty keyword has no operational
+    ///     meaning — it indexes nothing in the future caixa-registry
+    ///     search axis and clutters the rendered chart with a no-op tag.
+    ///   - Duplicate entries (`(:etiquetas ("demo" "demo"))` — the
+    ///     copy-paste-the-wrong-tag footgun) silently passed validate
+    ///     and were silently dedup'd by caixa-helm's `BTreeSet` collect
+    ///     at chart render — a "second wins / one silently disappears"
+    ///     shape divergent from every peer typed-graph set gate
+    ///     ([`crate::AplicacaoError::MembroDuplicate`] on `:membros`,
+    ///     [`crate::AplicacaoError::PlacementClusterDuplicate`] on
+    ///     `:placement :clusters`, [`crate::AplicacaoError::EntradaPathDuplicate`]
+    ///     on `:entrada :paths`, [`crate::AplicacaoError::ContratoDuplicate`]
+    ///     on `:contratos`, [`crate::DepError::DuplicateNome`] on
+    ///     `:deps` / `:deps-dev` per 359fba5, [`crate::UpgradeError::DuplicateFrom`]
+    ///     on `:upgrade-from`, the per-instruction-class singularity
+    ///     gates [`crate::UpgradeError::DuplicateLoadModule`] /
+    ///     [`crate::UpgradeError::DuplicateStateChange`] /
+    ///     [`crate::UpgradeError::DuplicateCleanup`]). The typed-graph
+    ///     discipline is uniform: every Vec-shaped author-supplied list
+    ///     past validate is set-not-multiset, by construction.
+    ///
+    /// Same empty-first cascade discipline every peer per-axis gate
+    /// uses: the per-entry empty arm fires before the cross-entry
+    /// duplicate arm, so an `("" "" "demo")` authoring shape surfaces
+    /// the narrower [`ManifestError::EtiquetaEmpty`] (the structural
+    /// "this entry has no value" defect) rather than collapsing two
+    /// unrelated authoring errors into the duplicate diagnostic.
+    /// Walks the list in declaration order so the first-collision
+    /// diagnostic surfaces the lexicographically-earliest offending
+    /// position, peer with every other duplicate gate on this surface.
+    ///
+    /// Universal-axis (every kind carries `:etiquetas`), so wired at the
+    /// caixa-build gate alongside the peer universal gates
+    /// [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_code_paths`] — before
+    /// the kind-coherence gates ([`crate::LayoutError::MeshSlotsOnNonAplicacao`]
+    /// / [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
+    /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-specific
+    /// slot sets. The future caixa-registry search axis can reach for
+    /// `caixa.etiquetas` knowing every entry is a non-empty distinct
+    /// string without re-deriving the precondition.
+    pub fn validate_etiquetas(&self) -> Result<(), ManifestError> {
+        let mut seen = std::collections::HashSet::new();
+        for etiqueta in &self.etiquetas {
+            if etiqueta.is_empty() {
+                return Err(ManifestError::EtiquetaEmpty);
+            }
+            if !seen.insert(etiqueta.as_str()) {
+                return Err(ManifestError::EtiquetaDuplicate {
+                    etiqueta: etiqueta.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -997,6 +1068,26 @@ pub enum ManifestError {
         path.display()
     )]
     CodePathParentEscape { slot: &'static str, path: PathBuf },
+    #[error(
+        ":etiquetas entry is empty (every tag must carry a non-empty \
+         registry-search identifier; the empty entry has no operational \
+         meaning — it indexes nothing in the future caixa-registry search \
+         axis and clutters the rendered Helm `Chart.yaml` `keywords:` array \
+         with a no-op tag; omit the entry to express \"no tag on this \
+         position\")"
+    )]
+    EtiquetaEmpty,
+    #[error(
+        ":etiquetas entry {etiqueta:?} appears more than once (the \
+         registry-search tag set is a set, not a multiset; duplicate \
+         entries are silently dedup'd by caixa-helm's `BTreeSet` collect \
+         at chart render — a \"second wins / one silently disappears\" \
+         shape divergent from every peer typed-graph set gate \
+         (`:membros :caixa`, `:placement :clusters`, `:entrada :paths`, \
+         `:contratos`, `:deps :nome`, `:upgrade-from :from`); drop the \
+         duplicate or rename it to the actual tag intended)"
+    )]
+    EtiquetaDuplicate { etiqueta: String },
 }
 
 #[cfg(test)]
@@ -2668,6 +2759,123 @@ mod tests {
         assert!(
             rendered.contains("/etc/passwd"),
             "diagnostic must quote the offending path: {rendered}",
+        );
+    }
+
+    // ── validate_etiquetas — universal-axis registry-search-tag shape ──
+
+    fn caixa_with_etiquetas(etiquetas: Vec<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.etiquetas = etiquetas.into_iter().map(String::from).collect();
+        c
+    }
+
+    #[test]
+    fn validate_etiquetas_accepts_empty_list() {
+        // The empty-list identity: every caixa with no declared tags
+        // trivially passes — `Caixa::template` emits `:etiquetas ()`,
+        // so the gate is non-disruptive against every existing manifest.
+        let c = caixa_with_etiquetas(vec![]);
+        c.validate_etiquetas().unwrap();
+    }
+
+    #[test]
+    fn validate_etiquetas_accepts_canonical_forms() {
+        // Positive control sweep: a canonical-shaped non-empty distinct
+        // tag list passes, mirroring the example checkout-aplicacao
+        // (`:etiquetas ("example" "aplicacao" "mesh" "ecommerce" "demo")`)
+        // and the hello-rio fixture (`("hello-world" "wasm" "rust")`).
+        let c = caixa_with_etiquetas(vec!["example", "aplicacao", "mesh", "ecommerce", "demo"]);
+        c.validate_etiquetas().unwrap();
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_empty_entry() {
+        // Canonical paste-from-blank-doc footgun. Without the gate the
+        // empty entry rendered as `keywords: [""]` in `Chart.yaml`, a
+        // no-op tag indexing nothing in the future caixa-registry.
+        let c = caixa_with_etiquetas(vec![""]);
+        let err = c.validate_etiquetas().unwrap_err();
+        assert!(matches!(err, ManifestError::EtiquetaEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_duplicate_entry() {
+        // Canonical copy-paste-the-wrong-tag footgun. Without the gate
+        // the duplicate was silently dedup'd by caixa-helm's BTreeSet
+        // collect at chart render — a "second wins / one silently
+        // disappears" shape divergent from every peer typed-graph set
+        // gate. The duplicate-arm names the offending tag verbatim.
+        let c = caixa_with_etiquetas(vec!["demo", "demo"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaDuplicate { etiqueta } = err else {
+            panic!("expected EtiquetaDuplicate, got {err:?}");
+        };
+        assert_eq!(etiqueta, "demo");
+    }
+
+    #[test]
+    fn validate_etiquetas_empty_takes_precedence_over_duplicate() {
+        // Empty-first cascade pin: `("" "demo" "demo")` surfaces
+        // `EtiquetaEmpty` not `EtiquetaDuplicate` — the narrower
+        // structural "this entry has no value" defect dominates the
+        // cross-entry uniqueness diagnostic. Mirrors the peer
+        // empty-before-duplicate cascades on `:caracteristicas`
+        // (`CaracteristicaEmpty` before `CaracteristicaDuplicate`,
+        // fc3b4d5) and `:membros :caixa` (`MembroCaixaEmpty` before
+        // `MembroDuplicate`).
+        let c = caixa_with_etiquetas(vec!["", "demo", "demo"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        assert!(matches!(err, ManifestError::EtiquetaEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_etiquetas_duplicate_reports_first_collision() {
+        // First-collision pin: `("a" "b" "a" "b")` surfaces the `"a"`
+        // duplicate (the lexicographically-earliest offending position
+        // — the second `"a"` at index 2 collides with the first `"a"`
+        // at index 0), not the later `"b"` collision at index 3,
+        // peer with every other first-collision diagnostic posture on
+        // this surface (`validate_load_singularity_reports_first_collision`,
+        // `validate_cleanup_singularity_reports_first_collision`).
+        let c = caixa_with_etiquetas(vec!["a", "b", "a", "b"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaDuplicate { etiqueta } = err else {
+            panic!("expected EtiquetaDuplicate, got {err:?}");
+        };
+        assert_eq!(etiqueta, "a");
+    }
+
+    #[test]
+    fn validate_etiquetas_case_sensitive() {
+        // Case-sensitivity pin: `("Foo" "foo")` is two distinct entries,
+        // mirroring the peer `:membros :caixa` / `:children :caixa`
+        // exact-string-match discipline. The downstream
+        // `is_dns_1123_label` predicate would catch `"Foo"` as
+        // uppercase if `:etiquetas` ever gained a per-entry shape gate,
+        // but case-sensitivity at the duplicate-set layer is structural
+        // — two distinct strings are two distinct entries.
+        let c = caixa_with_etiquetas(vec!["Foo", "foo"]);
+        c.validate_etiquetas().unwrap();
+    }
+
+    #[test]
+    fn validate_etiquetas_diagnostic_carries_offending_tag() {
+        // Diagnostic-shape pin (peer with
+        // `validate_code_paths_diagnostic_carries_offending_slot_and_path`):
+        // the error's Display surfaces the offending tag verbatim, so a
+        // `feira lint` run can render the diagnostic without re-parsing
+        // and the author can grep their caixa.lisp for the offending
+        // value.
+        let c = caixa_with_etiquetas(vec!["demo", "demo"]);
+        let rendered = c.validate_etiquetas().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":etiquetas"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("demo"),
+            "diagnostic must quote the offending tag: {rendered}",
         );
     }
 }
