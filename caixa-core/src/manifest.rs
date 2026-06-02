@@ -10,7 +10,7 @@ use crate::{
     behavior::BehaviorSpec,
     dep::DepError,
     limits::LimitsSpec,
-    render::{PathShapeViolation, is_dns_1123_label, is_sandboxed_relative_path},
+    render::{PathShapeViolation, is_dns_1123_label, is_git_repo_url, is_sandboxed_relative_path},
     supervisor::SupervisorSpec,
     upgrade::UpgradeFromEntry,
 };
@@ -939,6 +939,92 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:repositorio` values whose shape the shared
+    /// [`crate::render::is_git_repo_url`] predicate refuses. The flat
+    /// `repositorio: Option<String>` slot on [`Caixa`] is the
+    /// universal git-shaped homepage axis every kind carries — the
+    /// substrate routes the same string through two load-bearing
+    /// consumers:
+    ///
+    ///   - [`caixa-helm`] folds it verbatim into the rendered
+    ///     `lareira-<nome>` Helm chart's `Chart.yaml` `home:` field
+    ///     (`build_chart_yaml` at `caixa-helm/src/lib.rs:268`) and into
+    ///     the chart `README.md` `repo = …` interpolation
+    ///     (`caixa-helm/src/lib.rs:359`).
+    ///   - [`caixa-flux`] folds it verbatim into the standalone
+    ///     `ClusterBundleOpts::for_caixa` `git_url:` field
+    ///     (`caixa-flux/src/lib.rs:293`), which becomes the `FluxCD`
+    ///     `GitRepository.spec.url` the cluster's source-controller
+    ///     polls — the load-bearing deploy-time axis.
+    ///
+    /// Both consumers use `Option::unwrap_or_else(|| <fallback>)` to
+    /// substitute a placeholder when the slot is absent (`None` → the
+    /// fallback fires); a `Some("")` *skips the fallback* and silently
+    /// passes the empty string through to `Chart.yaml home: ""` /
+    /// `GitRepository url: ""` — Helm's chart lint and `FluxCD`'s source
+    /// controller both reject the empty URL far from the source
+    /// `caixa.lisp`, with no field naming the offending `:repositorio`.
+    /// Similarly a malformed `:repositorio` (whitespace, control char,
+    /// missing `:` separator, leading `-`) silently lands in the
+    /// rendered artifacts and breaks at `git clone` / `helm template`
+    /// / `flux reconcile` time.
+    ///
+    /// Thin wrapper around [`crate::render::is_git_repo_url`] — the
+    /// same shared predicate the peer [`crate::DepSource::validate`]
+    /// routes the `:fonte (:tipo git :repo …)` axis through. With this
+    /// gate the two `git URL`-shaped surfaces on the typed Caixa
+    /// (`:repositorio` here, `:deps :fonte :repo` peer) are
+    /// structurally equivalent: every value past validate is
+    /// guaranteed-acceptable by the predicate's union of constraints
+    /// (non-empty, length-bounded, no leading `-`, no whitespace, no
+    /// control chars, ASCII only, no leading `:`, contains a `:`
+    /// separator). The predicate accepts every documented authoring
+    /// shape — `github:org/repo` shorthand, `https://host/path`,
+    /// `ssh://[user@]host/path`, `git://host/path`, `git@host:path`
+    /// scp-style SSH, `file:///path` — and refuses the canonical
+    /// paste-from-blank-doc / paste-from-multiline-doc / CLI-arg-
+    /// injection footguns at validate time. Maps the predicate's
+    /// `String` reason verbatim into the
+    /// [`ManifestError::RepositorioInvalid`] variant, carrying the
+    /// offending value + parser-shaped reason so the diagnostic is
+    /// self-locating (the author can grep their `caixa.lisp` for
+    /// `:repositorio "<value>"` and fix it in one edit).
+    ///
+    /// `None` (the canonical "omit the slot to express no published
+    /// homepage" shape) is accepted trivially — the gate is a no-op
+    /// when the author didn't declare a value. `Some("")` is gated by
+    /// the narrower [`ManifestError::RepositorioEmpty`] arm before the
+    /// shape predicate is consulted, mirroring the empty-first cascade
+    /// every peer per-axis identity gate uses
+    /// ([`ManifestError::NomeEmpty`] → [`ManifestError::NomeInvalid`],
+    /// [`ManifestError::VersaoEmpty`] → [`ManifestError::VersaoInvalid`],
+    /// [`crate::DepError::FonteRepoEmpty`] →
+    /// [`crate::DepError::FonteRepoInvalid`]).
+    ///
+    /// Universal-axis (every kind carries `:repositorio`), so wired at
+    /// the caixa-build gate alongside the peer universal gates
+    /// [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_etiquetas`] /
+    /// [`Self::validate_autores`] / [`Self::validate_code_paths`] —
+    /// before the kind-coherence gates
+    /// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
+    /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
+    /// specific slot sets.
+    pub fn validate_repositorio(&self) -> Result<(), ManifestError> {
+        let Some(s) = self.repositorio.as_deref() else {
+            return Ok(());
+        };
+        if s.is_empty() {
+            return Err(ManifestError::RepositorioEmpty);
+        }
+        is_git_repo_url(s).map_err(|reason| ManifestError::RepositorioInvalid {
+            repositorio: s.to_string(),
+            reason,
+        })
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -1173,6 +1259,46 @@ pub enum ManifestError {
          rename it to the actual author intended)"
     )]
     AutorDuplicate { autor: String },
+    #[error(
+        ":repositorio is the empty string (every published caixa names its \
+         git source via a non-empty `:repositorio` locator — the value \
+         flows verbatim into the rendered `lareira-<nome>` Helm chart's \
+         `Chart.yaml` `home:` field via `caixa-helm` and into the FluxCD \
+         `GitRepository.spec.url` via `caixa-flux`'s \
+         `ClusterBundleOpts::for_caixa`; both consumers' \
+         `Option::unwrap_or_else` fallbacks only fire when the slot is \
+         `None`, so an empty `Some(\"\")` silently lands as `home: \"\"` / \
+         `url: \"\"` in the rendered artifacts and breaks at `helm \
+         template` / FluxCD source-controller reconcile time far from the \
+         source caixa.lisp; omit the slot entirely to defer to the \
+         renderer's `https://github.com/pleme-io/<nome>` / \
+         `caixa.nome`-derived fallback, or carry a canonical authoring \
+         shape like `\"github:org/repo\"`, `\"https://host/path\"`, \
+         `\"ssh://[user@]host/path\"`, `\"git@host:path\"`, or \
+         `\"file:///path\"`)"
+    )]
+    RepositorioEmpty,
+    #[error(
+        ":repositorio {repositorio:?} is not a valid git repo URL: {reason} \
+         (the substrate consumes this string through the shared \
+         `crate::render::is_git_repo_url` predicate — the same parser the \
+         peer `:deps :fonte (:tipo git :repo …)` axis routes its `:repo` \
+         value through via `DepSource::validate`; the canonical authoring \
+         shapes are `\"github:org/repo\"` shorthand, `\"https://host/path\"` \
+         / `\"ssh://[user@]host/path\"` / `\"git://host/path\"` / \
+         `\"file:///path\"` URL schemes, or the `\"git@host:path\"` \
+         scp-style SSH form. Without this gate a malformed `:repositorio` \
+         (whitespace from a paste-from-doc; control characters / CRLF \
+         from a paste-from-multiline-doc; a leading `-` from a \
+         CLI-argument-injection footgun; a missing `:` separator from a \
+         bare `org/repo` shape git treats as a relative filesystem path) \
+         silently landed in the rendered `Chart.yaml home:` and the \
+         FluxCD `GitRepository.spec.url` and broke at `git clone` / \
+         FluxCD reconcile time far from the source caixa.lisp; the gate \
+         moves the diagnostic to the manifest layer with the offending \
+         value named verbatim)"
+    )]
+    RepositorioInvalid { repositorio: String, reason: String },
 }
 
 #[cfg(test)]
@@ -3076,6 +3202,172 @@ mod tests {
         assert!(
             rendered.contains("pleme-io"),
             "diagnostic must quote the offending author: {rendered}",
+        );
+    }
+
+    // ── validate_repositorio — universal-axis git-repo-URL shape ──────
+
+    fn caixa_with_repositorio(repositorio: Option<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.repositorio = repositorio.map(String::from);
+        c
+    }
+
+    #[test]
+    fn validate_repositorio_accepts_none() {
+        // The omit-the-slot identity: `:repositorio` is optional. The
+        // gate is a no-op when the author didn't declare a value —
+        // every caixa without a `:repositorio` line trivially passes,
+        // and the substrate-side renderers fall back to their
+        // documented placeholder (`caixa-helm`'s `home: None`,
+        // `caixa-flux`'s `https://github.com/pleme-io/<nome>` derived
+        // URL). Mirrors the peer `validate_restart_window_accepts_none`
+        // posture on the other `Option<String>` Caixa slot.
+        let c = caixa_with_repositorio(None);
+        c.validate_repositorio().unwrap();
+    }
+
+    #[test]
+    fn validate_repositorio_accepts_canonical_forms() {
+        // Positive control sweep across every documented `:repositorio`
+        // authoring shape — the same union the shared
+        // `crate::render::is_git_repo_url` predicate accepts and the
+        // peer `:deps :fonte :repo` axis already routes through.
+        // Covers the `github:` shorthand (the canonical pleme-io
+        // convention used in the `:repositorio` field of every
+        // manifest fixture across `caixa-helm` / `caixa-mesh` and the
+        // `examples/`), the `https://…` URL the README quickstart uses,
+        // the `ssh://`, `git://`, `git@host:path` scp-style SSH, and
+        // `file://` URL schemes the shared predicate documents.
+        for repo in [
+            "github:pleme-io/hello-rio",
+            "github:pleme-io/checkout",
+            "https://github.com/pleme-io/hello-rio",
+            "ssh://git@github.com/pleme-io/hello-rio.git",
+            "git://github.com/pleme-io/hello-rio.git",
+            "git@github.com:pleme-io/hello-rio.git",
+            "file:///srv/pleme/hello-rio",
+        ] {
+            let c = caixa_with_repositorio(Some(repo));
+            c.validate_repositorio()
+                .unwrap_or_else(|err| panic!("canonical {repo:?} must pass: {err:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_repositorio_rejects_empty_some() {
+        // Canonical paste-from-blank-doc footgun. The narrower
+        // [`ManifestError::RepositorioEmpty`] arm fires before the
+        // shape predicate is consulted, mirroring the empty-first
+        // cascade every peer per-axis identity gate uses
+        // (`NomeEmpty` → `NomeInvalid`, `VersaoEmpty` → `VersaoInvalid`,
+        // `FonteRepoEmpty` → `FonteRepoInvalid`). Without this gate
+        // the empty `Some("")` silently passed the renderer's
+        // `Option::unwrap_or_else(|| <fallback>)` (which only fires
+        // on `None`) and landed as `home: ""` in `Chart.yaml` /
+        // `url: ""` in the FluxCD `GitRepository`.
+        let c = caixa_with_repositorio(Some(""));
+        let err = c.validate_repositorio().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::RepositorioEmpty),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_repositorio_rejects_whitespace() {
+        // Paste-from-doc whitespace footgun. The shared
+        // `is_git_repo_url` predicate refuses any whitespace byte; a
+        // trailing space in a `:repositorio` value silently broke
+        // `git clone '<value> '` at clone time. The diagnostic names
+        // the offending value verbatim.
+        let c = caixa_with_repositorio(Some("github:pleme-io/hello-rio "));
+        let err = c.validate_repositorio().unwrap_err();
+        let ManifestError::RepositorioInvalid { repositorio, .. } = err else {
+            panic!("expected RepositorioInvalid, got {err:?}");
+        };
+        assert_eq!(repositorio, "github:pleme-io/hello-rio ");
+    }
+
+    #[test]
+    fn validate_repositorio_rejects_control_char() {
+        // Paste-from-multiline-doc CRLF footgun — control characters
+        // at the URL boundary are a class of subprocess-arg injection
+        // and break git's URL parser at every porcelain entry point.
+        let c = caixa_with_repositorio(Some("https://example.com/repo\n"));
+        let err = c.validate_repositorio().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::RepositorioInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_repositorio_rejects_leading_dash() {
+        // Canonical CLI-argument-injection footgun: `git clone <repo>`
+        // interprets a leading `-` as a CLI flag, so a
+        // `-upload-pack=…` value escapes the subprocess argument
+        // boundary. The shared predicate refuses every leading-`-`
+        // shape at validate time.
+        let c = caixa_with_repositorio(Some("-upload-pack=evil"));
+        let err = c.validate_repositorio().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::RepositorioInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_repositorio_rejects_missing_colon_separator() {
+        // The bare `org/repo` ambiguity footgun — `git clone` reads
+        // a no-`:` form as a relative filesystem path rather than the
+        // GitHub-shorthand expansion the author probably intended.
+        // The shared predicate refuses every shape without a `:`
+        // separator.
+        let c = caixa_with_repositorio(Some("pleme-io/hello-rio"));
+        let err = c.validate_repositorio().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::RepositorioInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_repositorio_empty_takes_precedence_over_shape() {
+        // Empty-first cascade pin: the empty `Some("")` surfaces the
+        // narrower `RepositorioEmpty` not the shape-predicate-wrapped
+        // `RepositorioInvalid`, mirroring the peer
+        // `NomeEmpty` → `NomeInvalid`, `VersaoEmpty` → `VersaoInvalid`,
+        // `FonteRepoEmpty` → `FonteRepoInvalid` cascades. The shared
+        // `is_git_repo_url` predicate also rejects the empty input
+        // (defensively, with its own `"must not be empty"` reason),
+        // but the manifest-layer empty arm runs first to surface the
+        // narrower diagnostic verbatim.
+        let c = caixa_with_repositorio(Some(""));
+        let err = c.validate_repositorio().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::RepositorioEmpty),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_repositorio_diagnostic_carries_offending_value() {
+        // Diagnostic-shape pin (peer with
+        // `validate_autores_diagnostic_carries_offending_author`): the
+        // error's Display surfaces the offending value + slot name
+        // verbatim, so a `feira lint` run can render the diagnostic
+        // without re-parsing and the author can grep their caixa.lisp
+        // for the offending `:repositorio` value.
+        let c = caixa_with_repositorio(Some("pleme-io/hello-rio"));
+        let rendered = c.validate_repositorio().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":repositorio"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("pleme-io/hello-rio"),
+            "diagnostic must quote the offending value: {rendered}",
         );
     }
 }
