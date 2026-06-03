@@ -501,6 +501,80 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
+        // `:edicao` non-empty shape gate. The ninth (and last
+        // un-gated) universal-axis Caixa-level value-shape gate
+        // (peer of [`Caixa::validate_nome`] / [`Caixa::validate_versao`]
+        // / [`Caixa::validate_deps`] / [`Caixa::validate_etiquetas`] /
+        // [`Caixa::validate_autores`] / [`Caixa::validate_repositorio`]
+        // / [`Caixa::validate_descricao`] / [`Caixa::validate_licenca`]
+        // wired immediately above and [`Caixa::validate_code_paths`]
+        // wired below the kind-coherence gates) on the typed Caixa
+        // surface. `:edicao` is the universal language-edition axis
+        // every kind carries (universal `Option<String>` slot on
+        // [`Caixa`]) that selects the tatara-lisp macro surface +
+        // compatibility flags the substrate applies when building
+        // the caixa. The canonical [`Caixa::template`] scaffold every
+        // `feira init` emits carries `:edicao "2026"` verbatim
+        // (`caixa-core/src/manifest.rs:1193`) and every renderer-side
+        // fixture carries `edicao: Some("2026".into())` by
+        // construction (`caixa-helm/src/lib.rs:375`,
+        // `caixa-flux/src/lib.rs:445`, `caixa-mesh/src/lib.rs:629`,
+        // `caixa-core/src/render.rs:2510`). Until this wire-up landed
+        // `:edicao` had no shape gate at any layer — the empty
+        // (`(:edicao "")` — the canonical paste-from-blank-doc
+        // footgun) silently landed as a bare `(:edicao "")` line
+        // in the rendered caixa.lisp and a future renderer-side
+        // consumer that folds the value through
+        // `Option::unwrap_or_else` would skip its fallback (which
+        // only fires on `None`) and pass the empty edition through
+        // to the substrate's build-time edition selector far from
+        // the source `caixa.lisp` — exact same
+        // `Some("")`-skips-`unwrap_or_else` footgun shape as the
+        // peer `:repositorio` (577b0a9), `:descricao` (4e6db38),
+        // and `:licenca` (3d1e535) surfaces above.
+        //
+        // Runs *after* the peer universal `:nome` / `:versao` /
+        // `:deps` / `:etiquetas` / `:autores` / `:repositorio` /
+        // `:descricao` / `:licenca` gates (the gate order follows
+        // the canonical identity-axis-first cascade the peer gates
+        // establish; `:edicao` sits at the tail of the cascade
+        // after the load-bearing identity + dep trio + the two
+        // Vec-shaped universal metadata axes + the three universal
+        // `Option<String>` chart-metadata axes) and *before* the
+        // kind-coherence gates ([`Self::MeshSlotsOnNonAplicacao`] /
+        // [`Self::SupervisorSlotsOnNonSupervisor`] /
+        // [`Self::ServicoSlotsOnNonServico`] /
+        // [`Self::ForeignCodeSlot`]) — `:edicao` is universal so
+        // its shape diagnostic is more fundamental than the kind-
+        // coherence partitions on kind-exclusive slot sets.
+        //
+        // Same per-axis `*Violation { caixa, issue }` envelope every
+        // peer per-axis wrap exposes ([`Self::NomeViolation`] /
+        // [`Self::VersaoViolation`] 1f74a5f, [`Self::DepsViolation`]
+        // aa77d0f, [`Self::EtiquetasViolation`] 360a499,
+        // [`Self::AutoresViolation`] 86c769b,
+        // [`Self::RepositorioViolation`] 577b0a9,
+        // [`Self::DescricaoViolation`] 4e6db38,
+        // [`Self::LicencaViolation`] 3d1e535,
+        // [`Self::CodePathViolation`] b868442,
+        // [`Self::RestartWindowViolation`] 10e321a). Threads
+        // [`ManifestError::EdicaoEmpty`] Display through verbatim
+        // — the per-arm reason already names the offending
+        // `:edicao` slot + cites the renderer-side footgun, so
+        // the wrap envelope's `issue` carries a self-locating
+        // "which axis, why" without re-shaping the per-arm reason.
+        // With this gate every universal-axis `Option<String>`
+        // surface on the typed Caixa (`:repositorio` 577b0a9,
+        // `:descricao` 4e6db38, `:licenca` 3d1e535, `:edicao` here)
+        // now carries the same structural empty-arm gate by
+        // construction.
+        caixa
+            .validate_edicao()
+            .map_err(|err| LayoutError::EdicaoViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
+
         // Supervisors and Aplicacaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
@@ -1043,6 +1117,8 @@ pub enum LayoutError {
     DescricaoViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :licenca: {issue}")]
     LicencaViolation { caixa: String, issue: String },
+    #[error("caixa '{caixa}' has invalid :edicao: {issue}")]
+    EdicaoViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid code-path entry: {issue}")]
     CodePathViolation { caixa: String, issue: String },
     #[error("caixa '{caixa}' has invalid :limits: {issue}")]
@@ -2039,6 +2115,140 @@ mod tests {
         layout
             .verify(&c, &root)
             .expect("canonical SPDX expression must pass");
+    }
+
+    // ── :edicao empty-Some shape wired into verify (universal axis) ──
+    //
+    // Until this wire-up landed `Caixa::validate_edicao` did not
+    // exist — the universal language-edition axis had no shape gate
+    // at any layer, so an empty `Some("")` silently passed
+    // `Caixa::from_lisp` and `StandardLayout::verify` and landed as a
+    // bare `(:edicao "")` line in the rendered caixa.lisp, ready for
+    // a future renderer-side consumer's `Option::unwrap_or_else`
+    // (which only fires on `None`) to skip its fallback. Closes the
+    // same `Some("")`-skips-`unwrap_or_else` footgun the peer
+    // `:repositorio` (577b0a9), `:descricao` (4e6db38), and
+    // `:licenca` (3d1e535) gates closed, on the universal language-
+    // edition axis — the last un-gated universal-axis
+    // `Option<String>` Caixa-level value-shape surface.
+
+    #[test]
+    fn edicao_violation_on_empty_some() {
+        // Canonical paste-from-blank-doc footgun on every kind. The
+        // wrap envelope wraps [`ManifestError::EdicaoEmpty`]'s
+        // Display through verbatim, so the issue string names the
+        // offending `:edicao` axis at the source — the author can
+        // grep their caixa.lisp for `:edicao ""` and fix the empty
+        // value in one edit. Mirrors the peer
+        // `licenca_violation_on_empty_some` shape (3d1e535) on the
+        // sibling `Option<String>` `:edicao` axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.edicao = Some(String::new());
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::EdicaoViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::EdicaoViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":edicao"),
+            "issue must name the offending slot: {issue}",
+        );
+    }
+
+    #[test]
+    fn edicao_violation_fires_before_kind_coherence_mesh_slot() {
+        // Cross-axis precedence pin: a Biblioteca with empty
+        // `:edicao` *and* declared mesh slots (`:membros`) surfaces
+        // the universal `:edicao` diagnostic first, not the
+        // kind-coherence `MeshSlotsOnNonAplicacao` diagnostic.
+        // `:edicao` is universal (every kind owns the slot), so
+        // its shape diagnostic is more fundamental than the
+        // partition-on-kind diagnostic. Mirrors the peer
+        // `licenca_violation_fires_before_kind_coherence_mesh_slot`
+        // pin (3d1e535) on the `:licenca` axis vs the same
+        // kind-coherence gates.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.edicao = Some(String::new());
+        c.membros = vec![crate::aplicacao::Membro {
+            caixa: "x".into(),
+            versao: "^0.1".into(),
+        }];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::EdicaoViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn edicao_violation_fires_after_licenca_violation() {
+        // Cross-axis precedence pin (inside the universal metadata
+        // cascade): a caixa with both an empty `:licenca` *and* an
+        // empty `:edicao` surfaces `LicencaViolation` first —
+        // `:licenca` is the eighth universal axis in the cascade
+        // and runs before `:edicao`, peer with the canonical
+        // identity-axis-first cascade the peer gates establish.
+        // Mirrors the peer
+        // `licenca_violation_fires_after_descricao_violation`
+        // precedence pin (3d1e535) on the descricao-axis-before-
+        // licenca-axis pair.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.licenca = Some(String::new());
+        c.edicao = Some(String::new());
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(
+            matches!(err, LayoutError::LicencaViolation { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn edicao_violation_accepts_none() {
+        // Positive control sanity pin: a caixa that omits `:edicao`
+        // entirely (the layout-test fixture defaults to `None`)
+        // passes the gate trivially — the gate is a no-op when the
+        // author didn't author a value. Mirrors the peer
+        // `licenca_violation_accepts_none` pin (3d1e535).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let c = caixa(CaixaKind::Biblioteca);
+        layout.verify(&c, &root).expect("None must pass");
+    }
+
+    #[test]
+    fn edicao_violation_accepts_canonical_value() {
+        // Positive control pin on the canonical pleme-io `:edicao`
+        // shape: the `"2026"` edition every `caixa-helm` /
+        // `caixa-flux` / `caixa-mesh` / `caixa-core/src/render.rs`
+        // fixture carries by construction passes the gate end-to-end.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.edicao = Some("2026".into());
+        layout
+            .verify(&c, &root)
+            .expect("canonical edition must pass");
     }
 
     // ── Caixa-identity gates (`:nome`, `:versao`) wired into verify ────
