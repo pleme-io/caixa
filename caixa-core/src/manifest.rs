@@ -1136,6 +1136,61 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:edicao` values that are the empty string. The flat
+    /// `edicao: Option<String>` slot on [`Caixa`] is the universal
+    /// language-edition axis every kind carries — it determines the
+    /// tatara-lisp macro surface + compatibility flags the substrate
+    /// applies when building a caixa, and lands verbatim in the
+    /// `Caixa::template` author-time scaffold (the canonical
+    /// `:edicao "2026"` line every `feira init` emits via
+    /// [`Caixa::template`] at `caixa-core/src/manifest.rs:1193`) and
+    /// in every renderer-side fixture (`caixa-helm/src/lib.rs:375`,
+    /// `caixa-flux/src/lib.rs:445`, `caixa-mesh/src/lib.rs:629`,
+    /// `caixa-core/src/render.rs:2510`) via
+    /// `edicao: Some("2026".into())`.
+    ///
+    /// `None` (the canonical "omit the slot to defer to the
+    /// substrate's default edition" shape every existing
+    /// [`caixa-resolver`] integration test fixture carries via
+    /// `edicao: None` — see `caixa-resolver/tests/git_integration.rs`)
+    /// is accepted trivially — the gate is a no-op when the author
+    /// didn't declare a value. `Some("")` is gated by the narrower
+    /// [`ManifestError::EdicaoEmpty`] arm, mirroring the empty-arm
+    /// shape every peer per-axis empty gate uses
+    /// ([`ManifestError::NomeEmpty`], [`ManifestError::VersaoEmpty`],
+    /// [`ManifestError::EtiquetaEmpty`], [`ManifestError::AutorEmpty`],
+    /// [`ManifestError::RepositorioEmpty`],
+    /// [`ManifestError::DescricaoEmpty`], [`ManifestError::LicencaEmpty`]).
+    ///
+    /// Universal-axis (every kind carries `:edicao`), so wired at
+    /// the caixa-build gate alongside the peer universal gates
+    /// [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_etiquetas`] /
+    /// [`Self::validate_autores`] / [`Self::validate_repositorio`] /
+    /// [`Self::validate_descricao`] / [`Self::validate_licenca`] /
+    /// [`Self::validate_code_paths`] — before the kind-coherence
+    /// gates ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
+    /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
+    /// specific slot sets. Edition-grammar shape parsing (validate
+    /// the value names a known tatara-lisp edition: `"2026"` and
+    /// any future-introduced sibling) is a follow-up tightening on
+    /// this axis: this gate closes only the empty-string footgun
+    /// structurally; a follow-up routine can route `Some(s)` through
+    /// a known-edition predicate (peer with how
+    /// [`Self::validate_repositorio`] extends past the empty arm
+    /// into the [`crate::render::is_git_repo_url`] predicate).
+    pub fn validate_edicao(&self) -> Result<(), ManifestError> {
+        let Some(s) = self.edicao.as_deref() else {
+            return Ok(());
+        };
+        if s.is_empty() {
+            return Err(ManifestError::EdicaoEmpty);
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -1446,6 +1501,25 @@ pub enum ManifestError {
          `\"Apache-2.0 OR MIT\"`)"
     )]
     LicencaEmpty,
+    #[error(
+        ":edicao is the empty string (every published caixa names \
+         its language edition via a non-empty `:edicao` value — the \
+         edition determines the tatara-lisp macro surface + \
+         compatibility flags the substrate applies when building \
+         the caixa; the canonical `Caixa::template` scaffold every \
+         `feira init` emits carries `:edicao \"2026\"` verbatim and \
+         every renderer-side fixture (`caixa-helm`, `caixa-flux`, \
+         `caixa-mesh`) carries `edicao: Some(\"2026\".into())` by \
+         construction, so an empty `Some(\"\")` silently lands as a \
+         bare `(:edicao \"\")` line in the rendered `caixa.lisp` and \
+         a future renderer-side consumer that folds it through \
+         `Option::unwrap_or_else` will skip the fallback and pass the \
+         empty edition through to the substrate's build-time edition \
+         selector far from the source caixa.lisp; omit the slot \
+         entirely to defer to the substrate's default edition, or \
+         carry a canonical edition like `\"2026\"`)"
+    )]
+    EdicaoEmpty,
 }
 
 #[cfg(test)]
@@ -3685,6 +3759,87 @@ mod tests {
         let rendered = c.validate_licenca().unwrap_err().to_string();
         assert!(
             rendered.contains(":licenca"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+    }
+
+    // ── validate_edicao — universal-axis language-edition shape ──
+
+    fn caixa_with_edicao(edicao: Option<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.edicao = edicao.map(String::from);
+        c
+    }
+
+    #[test]
+    fn validate_edicao_accepts_none() {
+        // The omit-the-slot identity: `:edicao` is optional. The
+        // gate is a no-op when the author didn't declare a value —
+        // every caixa without an `:edicao` line trivially passes,
+        // and the substrate-side build pipeline falls back to the
+        // documented default edition. Mirrors the peer
+        // `validate_licenca_accepts_none` posture on the sibling
+        // `Option<String>` Caixa slot.
+        let c = caixa_with_edicao(None);
+        c.validate_edicao().unwrap();
+    }
+
+    #[test]
+    fn validate_edicao_accepts_canonical_value() {
+        // Positive control: the canonical `"2026"` edition every
+        // existing renderer-side fixture (`caixa-helm`, `caixa-flux`,
+        // `caixa-mesh`) carries by construction passes the gate.
+        // A future tatara-lisp edition (`"2027"`, `"2030"`, …) the
+        // gate doesn't reason about yet must also trivially pass
+        // until the follow-up known-edition predicate routine
+        // extends `validate_edicao` past the empty arm (peer with
+        // how `validate_repositorio` extends past the empty arm
+        // into the predicate).
+        for ed in ["2026", "2027", "2030", "x"] {
+            let c = caixa_with_edicao(Some(ed));
+            c.validate_edicao()
+                .unwrap_or_else(|err| panic!("canonical {ed:?} must pass: {err:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_edicao_rejects_empty_some() {
+        // Canonical paste-from-blank-doc footgun. Without this gate
+        // the empty `Some("")` silently lands as `(:edicao "")` in
+        // the rendered caixa.lisp and a future renderer-side
+        // consumer's `Option::unwrap_or_else` (which only fires on
+        // `None`) skips its fallback. Mirrors the peer
+        // [`ManifestError::LicencaEmpty`] empty-arm on the sibling
+        // `Option<String>` Caixa slot.
+        let c = caixa_with_edicao(Some(""));
+        let err = c.validate_edicao().unwrap_err();
+        assert!(matches!(err, ManifestError::EdicaoEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_edicao_template_passes() {
+        // Round-trip pin: the bare `Caixa::template` shape (which
+        // carries `:edicao "2026"` verbatim) passes the gate by
+        // construction. A future template-shape change that
+        // introduced `(:edicao "")` would surface here as a
+        // regression. Mirrors the peer
+        // `validate_licenca_template_passes` pin.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_edicao().unwrap();
+    }
+
+    #[test]
+    fn validate_edicao_diagnostic_names_offending_slot() {
+        // Diagnostic-shape pin (peer with
+        // `validate_licenca_diagnostic_names_offending_slot`): the
+        // error's Display surfaces the `:edicao` slot name verbatim,
+        // so a `feira lint` run can render the diagnostic without
+        // re-parsing and the author can grep their caixa.lisp for
+        // the offending `:edicao` line.
+        let c = caixa_with_edicao(Some(""));
+        let rendered = c.validate_edicao().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":edicao"),
             "diagnostic must name the offending slot: {rendered}",
         );
     }
