@@ -1211,8 +1211,8 @@ dependencies = [
 
 [[package]]
 name = "gen-macros"
-version = "0.1.0"
-source = "git+https://github.com/pleme-io/gen#0d9df5087f3b9c1a30988b9dfe08e280f72df83f"
+version = "0.1.4"
+source = "git+https://github.com/pleme-io/gen#2684ab51c68dad10b4bc59c685c123925990bc2a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1221,8 +1221,8 @@ dependencies = [
 
 [[package]]
 name = "gen-platform"
-version = "0.1.0"
-source = "git+https://github.com/pleme-io/gen#0d9df5087f3b9c1a30988b9dfe08e280f72df83f"
+version = "0.1.4"
+source = "git+https://github.com/pleme-io/gen#2684ab51c68dad10b4bc59c685c123925990bc2a"
 dependencies = [
  "gen-macros",
  "gen-types",
@@ -1234,8 +1234,8 @@ dependencies = [
 
 [[package]]
 name = "gen-types"
-version = "0.1.0"
-source = "git+https://github.com/pleme-io/gen#0d9df5087f3b9c1a30988b9dfe08e280f72df83f"
+version = "0.1.4"
+source = "git+https://github.com/pleme-io/gen#2684ab51c68dad10b4bc59c685c123925990bc2a"
 dependencies = [
  "blake3",
  "chrono",
@@ -1536,7 +1536,7 @@ dependencies = [
 [[package]]
 name = "iac-forge"
 version = "0.1.0"
-source = "git+https://github.com/pleme-io/iac-forge#b2db8c7e5f98ff9064811268132ecd91ede88fbe"
+source = "git+https://github.com/pleme-io/iac-forge#c592b447755b62f9c3c7c5181cdd7b4508cae3df"
 dependencies = [
  "blake3",
  "meimei",
@@ -2054,7 +2054,7 @@ dependencies = [
 [[package]]
 name = "meimei"
 version = "0.1.1"
-source = "git+https://github.com/pleme-io/meimei#5fee14b2650fd05e3f1385fe993450c44cadfde6"
+source = "git+https://github.com/pleme-io/meimei#a3865aca03012893719fa4d093e20de4065fa58b"
 
 [[package]]
 name = "memchr"
@@ -2139,7 +2139,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "openapi-forge"
 version = "0.1.1"
-source = "git+https://github.com/pleme-io/openapi-forge#48626e0ce32c23e90aeb9b05033ddf9ad40bde77"
+source = "git+https://github.com/pleme-io/openapi-forge#2b954c275a4866ff2308ca17638a530523ce5674"
 dependencies = [
  "indexmap",
  "sekkei",
@@ -2152,9 +2152,9 @@ dependencies = [
 
 [[package]]
 name = "openraft"
-version = "0.9.24"
+version = "0.9.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d35e2f60cdf9bcfc39a020966091017c6dc2a4b43b355a22ca3e76106f4a0a"
+checksum = "cc2f40b0e23149ea8673591325bff055939f7a59f4f9a28476f0854282444ab3"
 dependencies = [
  "anyerror",
  "byte-unit",
@@ -2939,7 +2939,7 @@ dependencies = [
 [[package]]
 name = "sekkei"
 version = "0.1.1"
-source = "git+https://github.com/pleme-io/sekkei#3899595ad67fb8c355938142939a0b1b9122d9f8"
+source = "git+https://github.com/pleme-io/sekkei#f9d27e9971bd0be7729a492797efa65711cb6171"
 dependencies = [
  "serde",
  "serde_json",
@@ -3101,7 +3101,7 @@ dependencies = [
 [[package]]
 name = "shikumi"
 version = "0.1.0"
-source = "git+https://github.com/pleme-io/shikumi?branch=main#14ba02ab0dc28e88507181dcb6380db3911ec200"
+source = "git+https://github.com/pleme-io/shikumi?branch=main#d75ca144b14dbc2fd5d2dd2c763181ae41ddf4c4"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -3226,7 +3226,7 @@ dependencies = [
 [[package]]
 name = "takumi"
 version = "0.1.0"
-source = "git+https://github.com/pleme-io/takumi#202d2b717cda4d23c237df5408a902ddd3e5ca3f"
+source = "git+https://github.com/pleme-io/takumi#234adbbe0e3f75239cba39b7fe033d9d6806b162"
 dependencies = [
  "indexmap",
  "sekkei",
@@ -3243,7 +3243,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "tatara-core"
 version = "0.2.1"
-source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
+source = "git+https://github.com/pleme-io/tatara#c99fdb36b625bd5ec96dc31af33cf4d965d608b6"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3265,7 +3265,7 @@ dependencies = [
 [[package]]
 name = "tatara-lisp"
 version = "0.2.1"
-source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
+source = "git+https://github.com/pleme-io/tatara#c99fdb36b625bd5ec96dc31af33cf4d965d608b6"
 dependencies = [
  "blake3",
  "serde",
@@ -3277,7 +3277,7 @@ dependencies = [
 [[package]]
 name = "tatara-lisp-derive"
 version = "0.2.1"
-source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
+source = "git+https://github.com/pleme-io/tatara#c99fdb36b625bd5ec96dc31af33cf4d965d608b6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3287,7 +3287,7 @@ dependencies = [
 [[package]]
 name = "tatara-process"
 version = "0.2.1"
-source = "git+https://github.com/pleme-io/tatara#ceaab25b5e7c0fcb48668b0ec02a63a707fcf604"
+source = "git+https://github.com/pleme-io/tatara#c99fdb36b625bd5ec96dc31af33cf4d965d608b6"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3954,7 +3954,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "cargo_lock_sha256": "dff7f898bf2037ecaa8fde87687a7b4ebf407ff6e285d535b38a190988584a81",
+  "cargo_lock_sha256": "f866c05d189fdd051b787e9a6a5118369431be8acbd9c6609364aa19ac019854",
   "target_resolves": {
     "base": {
       "ahash-0.7.8": {
@@ -1023,7 +1023,7 @@
         "runtime_dependencies": [
           {
             "name": "gen_platform",
-            "package_key": "gen-platform-0.1.0",
+            "package_key": "gen-platform-0.1.4",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1033,7 +1033,7 @@
           },
           {
             "name": "gen_types",
-            "package_key": "gen-types-0.1.0",
+            "package_key": "gen-types-0.1.4",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -4209,7 +4209,7 @@
           "std"
         ]
       },
-      "gen-macros-0.1.0": {
+      "gen-macros-0.1.4": {
         "runtime_dependencies": [
           {
             "name": "proc_macro2",
@@ -4248,11 +4248,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "gen-platform-0.1.0": {
+      "gen-platform-0.1.4": {
         "runtime_dependencies": [
           {
             "name": "gen_macros",
-            "package_key": "gen-macros-0.1.0",
+            "package_key": "gen-macros-0.1.4",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -4262,7 +4262,7 @@
           },
           {
             "name": "gen_types",
-            "package_key": "gen-types-0.1.0",
+            "package_key": "gen-types-0.1.4",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -4316,7 +4316,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "gen-types-0.1.0": {
+      "gen-types-0.1.4": {
         "runtime_dependencies": [
           {
             "name": "blake3",
@@ -7601,7 +7601,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "openraft-0.9.24": {
+      "openraft-0.9.22": {
         "runtime_dependencies": [
           {
             "name": "anyerror",
@@ -10315,7 +10315,7 @@
           },
           {
             "name": "gen_platform",
-            "package_key": "gen-platform-0.1.0",
+            "package_key": "gen-platform-0.1.4",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -10325,7 +10325,7 @@
           },
           {
             "name": "gen_types",
-            "package_key": "gen-types-0.1.0",
+            "package_key": "gen-types-0.1.4",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -10337,12 +10337,20 @@
             "name": "notify",
             "package_key": "notify-8.2.0",
             "kind": "normal",
-            "features": [
-              "macos_kqueue"
-            ],
+            "features": [],
             "uses_default_features": false,
             "optional": false,
             "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "notify",
+            "package_key": "notify-8.2.0",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": false,
+            "optional": false,
+            "target": "cfg(target_os = \"macos\")",
             "tree": "target"
           },
           {
@@ -10765,7 +10773,7 @@
           },
           {
             "name": "openraft",
-            "package_key": "openraft-0.9.24",
+            "package_key": "openraft-0.9.22",
             "kind": "normal",
             "features": [
               "serde",
@@ -17197,14 +17205,14 @@
     "futures-util-0.3.32": {
       "edition": "2018"
     },
-    "gen-macros-0.1.0": {
+    "gen-macros-0.1.4": {
       "edition": "2024",
       "proc_macro": true
     },
-    "gen-platform-0.1.0": {
+    "gen-platform-0.1.4": {
       "edition": "2024"
     },
-    "gen-types-0.1.0": {
+    "gen-types-0.1.4": {
       "edition": "2024"
     },
     "generic-array-0.14.7": {
@@ -17441,7 +17449,7 @@
     "openapi-forge-0.1.1": {
       "edition": "2024"
     },
-    "openraft-0.9.24": {
+    "openraft-0.9.22": {
       "edition": "2021",
       "quirks": [
         {
@@ -18067,19 +18075,19 @@
     }
   },
   "git_nar_sha256": {
-    "gen-macros-0.1.0": "sha256-sQCrY9vhjIBJB+XYIDtGCTds5LiJMS7PA1ghJ2MQwB0=",
-    "gen-platform-0.1.0": "sha256-sQCrY9vhjIBJB+XYIDtGCTds5LiJMS7PA1ghJ2MQwB0=",
-    "gen-types-0.1.0": "sha256-sQCrY9vhjIBJB+XYIDtGCTds5LiJMS7PA1ghJ2MQwB0=",
-    "iac-forge-0.1.0": "sha256-AVEcibuR+/64LXCsjMbrf8sjd+XMkJMscHriFUm5pP0=",
-    "meimei-0.1.1": "sha256-KNRXLc9lh/lbZMl7/7bY0Y0lJ2NpZkN+rveFzKAglOM=",
-    "openapi-forge-0.1.1": "sha256-e0YVHIDdYSmr2vHrgeHbo/3azqeMmN3kQML+tbJ4VIw=",
-    "sekkei-0.1.1": "sha256-wvrG3D0KOj2833OrTp2ANOgiwF/t6TAc+0Gdw9Upjm4=",
-    "shikumi-0.1.0": "sha256-kP/dghnfBmleQNR/yy6CblN3mmpoyBvF+KQ3sDKPJAg=",
-    "takumi-0.1.0": "sha256-74FOK+3Eg5pdDrT9Sg+AsOcIzE2GqQrXO8BEOj9veDY=",
-    "tatara-core-0.2.1": "sha256-WDSsaoCPVzfSz2ntocPQW6tjttB/9mTYCEBUZ21sxzA=",
-    "tatara-lisp-0.2.1": "sha256-WDSsaoCPVzfSz2ntocPQW6tjttB/9mTYCEBUZ21sxzA=",
-    "tatara-lisp-derive-0.2.1": "sha256-WDSsaoCPVzfSz2ntocPQW6tjttB/9mTYCEBUZ21sxzA=",
-    "tatara-process-0.2.1": "sha256-WDSsaoCPVzfSz2ntocPQW6tjttB/9mTYCEBUZ21sxzA="
+    "gen-macros-0.1.4": "sha256-bGme6/leyfrg/PYL69idPfBpYaU8eCLdThMiyPNG+s0=",
+    "gen-platform-0.1.4": "sha256-bGme6/leyfrg/PYL69idPfBpYaU8eCLdThMiyPNG+s0=",
+    "gen-types-0.1.4": "sha256-bGme6/leyfrg/PYL69idPfBpYaU8eCLdThMiyPNG+s0=",
+    "iac-forge-0.1.0": "sha256-JJLxk1jpaQtPyfHJLA1McpTd0llFQ9aKk9LbBxePyeI=",
+    "meimei-0.1.1": "sha256-GRqKw63sl3lo36lgwtYiMCk7A/egtmKts9UVGvK6WlI=",
+    "openapi-forge-0.1.1": "sha256-L1LtqviDDUYQAB78kRguJ+3N/G5QSspV+0CEmCrElG4=",
+    "sekkei-0.1.1": "sha256-qOa3MHGqWVhvbjmjHg0RJo0pfNSOXqEArNAQ0xfQNXw=",
+    "shikumi-0.1.0": "sha256-W6RMl4OB6sTFnAqLrcCk+NLF+dji1RQV9yYsVrtE9ek=",
+    "takumi-0.1.0": "sha256-neqseMVFLwd6TWIZAF4ylEkbAYzWUTzYYeDBDzYShNg=",
+    "tatara-core-0.2.1": "sha256-c279S1jTlTQYAIU+7VI1+F0b/QbcYDmr3CtRYyKmwkA=",
+    "tatara-lisp-0.2.1": "sha256-c279S1jTlTQYAIU+7VI1+F0b/QbcYDmr3CtRYyKmwkA=",
+    "tatara-lisp-derive-0.2.1": "sha256-c279S1jTlTQYAIU+7VI1+F0b/QbcYDmr3CtRYyKmwkA=",
+    "tatara-process-0.2.1": "sha256-c279S1jTlTQYAIU+7VI1+F0b/QbcYDmr3CtRYyKmwkA="
   },
   "flake_metadata": {}
 }
