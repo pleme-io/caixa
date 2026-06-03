@@ -1081,6 +1081,61 @@ impl Caixa {
         Ok(())
     }
 
+    /// Reject `:licenca` values that are the empty string. The flat
+    /// `licenca: Option<String>` slot on [`Caixa`] is the universal
+    /// SPDX-shaped license-expression axis every kind carries — the
+    /// substrate routes the same string through the [`caixa-helm`]
+    /// renderer's `build_readme` which folds it verbatim into the
+    /// rendered `lareira-<nome>` Helm chart's `README.md` `## License`
+    /// section (`caixa-helm/src/lib.rs:361`) via
+    /// `caixa.licenca.clone().unwrap_or_else(|| "MIT".into())`. The
+    /// fallback only fires on `None`; a `Some("")` *skips the
+    /// fallback* and silently passes the empty string through to a
+    /// chart `README.md` whose `License` section renders as the bare
+    /// trailing period (`.\n`) — peer footgun with the
+    /// `Some("")`-skips-`unwrap_or_else` shape the
+    /// [`Self::validate_descricao`] and [`Self::validate_repositorio`]
+    /// gates close on the sibling free-form-prose and git-URL axes.
+    ///
+    /// `None` (the canonical "omit the slot to defer to the
+    /// renderer's `MIT` fallback" shape every existing fixture
+    /// carries) is accepted trivially — the gate is a no-op when the
+    /// author didn't declare a value. `Some("")` is gated by the
+    /// narrower [`ManifestError::LicencaEmpty`] arm, mirroring the
+    /// empty-arm shape every peer per-axis empty gate uses
+    /// ([`ManifestError::NomeEmpty`], [`ManifestError::VersaoEmpty`],
+    /// [`ManifestError::EtiquetaEmpty`], [`ManifestError::AutorEmpty`],
+    /// [`ManifestError::RepositorioEmpty`],
+    /// [`ManifestError::DescricaoEmpty`]).
+    ///
+    /// Universal-axis (every kind carries `:licenca`), so wired at
+    /// the caixa-build gate alongside the peer universal gates
+    /// [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_etiquetas`] /
+    /// [`Self::validate_autores`] / [`Self::validate_repositorio`] /
+    /// [`Self::validate_descricao`] / [`Self::validate_code_paths`]
+    /// — before the kind-coherence gates
+    /// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
+    /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
+    /// specific slot sets. SPDX-expression shape parsing is a future
+    /// tightening on this axis: this gate closes only the
+    /// `Some("")`-skips-`unwrap_or_else` footgun structurally; a
+    /// follow-up routine can route `Some(s)` through an SPDX
+    /// expression predicate (peer with how `validate_repositorio`
+    /// extends past the empty arm into the
+    /// [`crate::render::is_git_repo_url`] predicate).
+    pub fn validate_licenca(&self) -> Result<(), ManifestError> {
+        let Some(s) = self.licenca.as_deref() else {
+            return Ok(());
+        };
+        if s.is_empty() {
+            return Err(ManifestError::LicencaEmpty);
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -1375,6 +1430,22 @@ pub enum ManifestError {
          Servico.\"`)"
     )]
     DescricaoEmpty,
+    #[error(
+        ":licenca is the empty string (every published caixa names \
+         its license via a non-empty `:licenca` SPDX expression — the \
+         value flows verbatim into the rendered `lareira-<nome>` Helm \
+         chart's `README.md` `## License` section via `caixa-helm`'s \
+         `build_readme` at `caixa-helm/src/lib.rs:361`; the consumer's \
+         `Option::unwrap_or_else(|| \"MIT\".into())` `MIT` fallback \
+         only fires when the slot is `None`, so an empty `Some(\"\")` \
+         silently lands as a bare trailing period in the rendered \
+         chart `README.md` `License` section far from the source \
+         caixa.lisp; omit the slot entirely to defer to the \
+         renderer's `MIT` fallback, or carry a canonical SPDX \
+         expression like `\"MIT\"`, `\"Apache-2.0\"`, \
+         `\"Apache-2.0 OR MIT\"`)"
+    )]
+    LicencaEmpty,
 }
 
 #[cfg(test)]
@@ -3524,6 +3595,96 @@ mod tests {
         let rendered = c.validate_descricao().unwrap_err().to_string();
         assert!(
             rendered.contains(":descricao"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+    }
+
+    // ── validate_licenca — universal-axis chart README license shape ──
+
+    fn caixa_with_licenca(licenca: Option<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.licenca = licenca.map(String::from);
+        c
+    }
+
+    #[test]
+    fn validate_licenca_accepts_none() {
+        // The omit-the-slot identity: `:licenca` is optional. The
+        // gate is a no-op when the author didn't declare a value —
+        // every caixa without a `:licenca` line trivially passes,
+        // and the substrate-side `caixa-helm` renderer falls back to
+        // the documented `"MIT"` placeholder. Mirrors the peer
+        // `validate_descricao_accepts_none` posture on the sibling
+        // `Option<String>` Caixa slot.
+        let c = caixa_with_licenca(None);
+        c.validate_licenca().unwrap();
+    }
+
+    #[test]
+    fn validate_licenca_accepts_canonical_expressions() {
+        // Positive control: every canonical SPDX expression shape
+        // pleme-io carries in its existing fixtures + the
+        // dual-license shape passes the gate. Covers the SPDX
+        // single-license, `OR`-compound, and `AND`-compound shapes
+        // — none of which the gate reasons about yet, but every
+        // non-empty `Some(s)` must trivially pass until the
+        // follow-up SPDX-shape routine extends `validate_licenca`
+        // (peer with how `validate_repositorio` extends past the
+        // empty arm into the predicate).
+        for lic in [
+            "MIT",
+            "Apache-2.0",
+            "Apache-2.0 OR MIT",
+            "Apache-2.0 AND MIT",
+            "BSD-3-Clause",
+            "MPL-2.0",
+            "GPL-3.0-or-later",
+            "x",
+        ] {
+            let c = caixa_with_licenca(Some(lic));
+            c.validate_licenca()
+                .unwrap_or_else(|err| panic!("canonical {lic:?} must pass: {err:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_empty_some() {
+        // Canonical paste-from-blank-doc footgun. Without this gate
+        // the empty `Some("")` silently passed the renderer's
+        // `Option::unwrap_or_else(|| "MIT".into())` (which only
+        // fires on `None`) and landed as a bare trailing period in
+        // the rendered chart `README.md` `## License` section.
+        // Mirrors the peer [`ManifestError::DescricaoEmpty`] empty-
+        // arm on the sibling `Option<String>` Caixa slot.
+        let c = caixa_with_licenca(Some(""));
+        let err = c.validate_licenca().unwrap_err();
+        assert!(matches!(err, ManifestError::LicencaEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_licenca_template_passes() {
+        // Round-trip pin: the bare `Caixa::template` shape (whether
+        // it carries `:licenca` or omits it) passes the gate by
+        // construction. A future template-shape change that
+        // introduced `(:licenca "")` would surface here as a
+        // regression. Mirrors the peer
+        // `validate_descricao_template_passes` pin.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_licenca().unwrap();
+    }
+
+    #[test]
+    fn validate_licenca_diagnostic_names_offending_slot() {
+        // Diagnostic-shape pin (peer with
+        // `validate_descricao_diagnostic_names_offending_slot`):
+        // the error's Display surfaces the `:licenca` slot name
+        // verbatim, so a `feira lint` run can render the diagnostic
+        // without re-parsing and the author can grep their caixa.lisp
+        // for the offending `:licenca` line.
+        let c = caixa_with_licenca(Some(""));
+        let rendered = c.validate_licenca().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":licenca"),
             "diagnostic must name the offending slot: {rendered}",
         );
     }
