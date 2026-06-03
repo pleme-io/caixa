@@ -1025,6 +1025,62 @@ impl Caixa {
         })
     }
 
+    /// Reject `:descricao` values that are the empty string. The flat
+    /// `descricao: Option<String>` slot on [`Caixa`] is the universal
+    /// free-form-prose homepage axis every kind carries — the
+    /// substrate routes the same string through two load-bearing
+    /// consumers in the [`caixa-helm`] renderer:
+    ///
+    ///   - `build_chart_yaml` folds it verbatim into the rendered
+    ///     `lareira-<nome>` Helm chart's `Chart.yaml` `description:`
+    ///     field (`caixa-helm/src/lib.rs:232-235`).
+    ///   - `build_readme` folds it verbatim into the rendered chart
+    ///     `README.md` header (`caixa-helm/src/lib.rs:333-336`).
+    ///
+    /// Both consumers use `Option::unwrap_or_else(|| <fallback>)` to
+    /// substitute a `caixa.nome`-derived placeholder when the slot is
+    /// absent (`None` → the fallback fires); a `Some("")` *skips the
+    /// fallback* and silently passes the empty string through to
+    /// `Chart.yaml description: ""` / a blank chart `README.md`
+    /// header. Helm's chart spec requires a non-empty `description:`
+    /// field on `apiVersion: v2` charts (`helm lint` surfaces it as
+    /// `WARNING [chart.metadata.description]: description is required`),
+    /// so the empty `Some("")` silently lands in the rendered
+    /// artifacts and breaks at `helm lint` / `helm install` time far
+    /// from the source `caixa.lisp`, with no field naming the
+    /// offending `:descricao`.
+    ///
+    /// `None` (the canonical "omit the slot to defer to the renderer's
+    /// `caixa.nome`-derived fallback" shape) is accepted trivially —
+    /// the gate is a no-op when the author didn't declare a value.
+    /// `Some("")` is gated by the narrower
+    /// [`ManifestError::DescricaoEmpty`] arm, mirroring the empty-arm
+    /// shape every peer per-axis empty gate uses
+    /// ([`ManifestError::NomeEmpty`], [`ManifestError::VersaoEmpty`],
+    /// [`ManifestError::EtiquetaEmpty`], [`ManifestError::AutorEmpty`],
+    /// [`ManifestError::RepositorioEmpty`]).
+    ///
+    /// Universal-axis (every kind carries `:descricao`), so wired at
+    /// the caixa-build gate alongside the peer universal gates
+    /// [`Self::validate_nome`] / [`Self::validate_versao`] /
+    /// [`Self::validate_deps`] / [`Self::validate_etiquetas`] /
+    /// [`Self::validate_autores`] / [`Self::validate_repositorio`] /
+    /// [`Self::validate_code_paths`] — before the kind-coherence
+    /// gates ([`crate::LayoutError::MeshSlotsOnNonAplicacao`] /
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
+    /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
+    /// specific slot sets.
+    pub fn validate_descricao(&self) -> Result<(), ManifestError> {
+        let Some(s) = self.descricao.as_deref() else {
+            return Ok(());
+        };
+        if s.is_empty() {
+            return Err(ManifestError::DescricaoEmpty);
+        }
+        Ok(())
+    }
+
     /// Compose the supervisor-related flat slots into a single
     /// [`SupervisorSpec`] for validation. Returns `None` when the
     /// caixa isn't a `:kind Supervisor`.
@@ -1299,6 +1355,26 @@ pub enum ManifestError {
          value named verbatim)"
     )]
     RepositorioInvalid { repositorio: String, reason: String },
+    #[error(
+        ":descricao is the empty string (every published caixa names \
+         its purpose via a non-empty `:descricao` summary — the value \
+         flows verbatim into the rendered `lareira-<nome>` Helm \
+         chart's `Chart.yaml` `description:` field via `caixa-helm`'s \
+         `build_chart_yaml` and into the chart `README.md` header via \
+         `build_readme`; both consumers' `Option::unwrap_or_else` \
+         `caixa.nome`-derived fallbacks only fire when the slot is \
+         `None`, so an empty `Some(\"\")` silently lands as \
+         `description: \"\"` / a blank `README.md` header in the \
+         rendered artifacts and breaks at `helm lint` time \
+         (`WARNING [chart.metadata.description]: description is \
+         required` on `apiVersion: v2` charts) far from the source \
+         caixa.lisp; omit the slot entirely to defer to the \
+         renderer's `\"Generated chart for caixa Servico <nome>\"` / \
+         `\"caixa Servico <nome>\"` fallbacks, or carry a non-empty \
+         summary like `\"Canonical Rust→wasm32-wasip2 caixa \
+         Servico.\"`)"
+    )]
+    DescricaoEmpty,
 }
 
 #[cfg(test)]
@@ -3368,6 +3444,87 @@ mod tests {
         assert!(
             rendered.contains("pleme-io/hello-rio"),
             "diagnostic must quote the offending value: {rendered}",
+        );
+    }
+
+    // ── validate_descricao — universal-axis Chart.yaml description shape ──
+
+    fn caixa_with_descricao(descricao: Option<&str>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.descricao = descricao.map(String::from);
+        c
+    }
+
+    #[test]
+    fn validate_descricao_accepts_none() {
+        // The omit-the-slot identity: `:descricao` is optional. The
+        // gate is a no-op when the author didn't declare a value —
+        // every caixa without a `:descricao` line trivially passes,
+        // and the substrate-side renderers fall back to their
+        // documented `caixa.nome`-derived placeholder. Mirrors the
+        // peer `validate_repositorio_accepts_none` posture on the
+        // sibling `Option<String>` Caixa slot.
+        let c = caixa_with_descricao(None);
+        c.validate_descricao().unwrap();
+    }
+
+    #[test]
+    fn validate_descricao_accepts_canonical_summary() {
+        // Positive control: the canonical pleme-io descricao shape —
+        // a short free-form prose summary — passes the gate. Covers
+        // the fixture shapes the `caixa-helm` / `caixa-flux` /
+        // `caixa-mesh` test fixtures use (`"Canonical Rust→wasm32-
+        // wasip2 caixa Servico."`, `"Checkout flow."`).
+        for desc in [
+            "Canonical Rust→wasm32-wasip2 caixa Servico.",
+            "Checkout flow.",
+            "AWS provider caixa for tatara-lisp",
+            "x",
+        ] {
+            let c = caixa_with_descricao(Some(desc));
+            c.validate_descricao()
+                .unwrap_or_else(|err| panic!("canonical {desc:?} must pass: {err:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_descricao_rejects_empty_some() {
+        // Canonical paste-from-blank-doc footgun. Without this gate
+        // the empty `Some("")` silently passed the renderer's
+        // `Option::unwrap_or_else(|| <fallback>)` (which only fires
+        // on `None`) and landed as `description: ""` in `Chart.yaml`
+        // and a blank `README.md` header. Mirrors the peer
+        // [`ManifestError::RepositorioEmpty`] empty-arm on the
+        // sibling `Option<String>` Caixa slot.
+        let c = caixa_with_descricao(Some(""));
+        let err = c.validate_descricao().unwrap_err();
+        assert!(matches!(err, ManifestError::DescricaoEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_descricao_template_passes() {
+        // Round-trip pin: the bare `Caixa::template` shape carries
+        // `:descricao "FIXME — describe this caixa"` (a non-empty
+        // sentinel), so the template-derived Caixa passes the gate by
+        // construction. A future template-shape change that omits or
+        // empties `:descricao` would surface here as a regression.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_descricao().unwrap();
+    }
+
+    #[test]
+    fn validate_descricao_diagnostic_names_offending_slot() {
+        // Diagnostic-shape pin (peer with
+        // `validate_repositorio_diagnostic_carries_offending_value`):
+        // the error's Display surfaces the `:descricao` slot name
+        // verbatim, so a `feira lint` run can render the diagnostic
+        // without re-parsing and the author can grep their caixa.lisp
+        // for the offending `:descricao` line.
+        let c = caixa_with_descricao(Some(""));
+        let rendered = c.validate_descricao().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":descricao"),
+            "diagnostic must name the offending slot: {rendered}",
         );
     }
 }
