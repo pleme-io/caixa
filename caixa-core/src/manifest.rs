@@ -1173,20 +1173,80 @@ impl Caixa {
     /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
     /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
     /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
-    /// specific slot sets. Edition-grammar shape parsing (validate
-    /// the value names a known tatara-lisp edition: `"2026"` and
-    /// any future-introduced sibling) is a follow-up tightening on
-    /// this axis: this gate closes only the empty-string footgun
-    /// structurally; a follow-up routine can route `Some(s)` through
-    /// a known-edition predicate (peer with how
-    /// [`Self::validate_repositorio`] extends past the empty arm
-    /// into the [`crate::render::is_git_repo_url`] predicate).
+    /// specific slot sets.
+    ///
+    /// Past the empty arm the gate enforces the canonical year-shape
+    /// predicate: every documented tatara-lisp edition is a 4-digit
+    /// ASCII decimal year (`"2026"` is the only edition currently
+    /// minted; future-introduced siblings will follow the same
+    /// shape, peer with Cargo's `[package] edition` grammar which
+    /// every value Cargo has ever accepted matches — `"2015"`,
+    /// `"2018"`, `"2021"`, `"2024"`). Any value that's not exactly
+    /// 4 ASCII decimal bytes is rejected with the narrower
+    /// [`ManifestError::EdicaoInvalid`] arm, mirroring the
+    /// shape-predicate cascade [`Self::validate_repositorio`]
+    /// establishes past its own empty arm
+    /// ([`ManifestError::RepositorioEmpty`] →
+    /// [`ManifestError::RepositorioInvalid`]). Closes the canonical
+    /// paste-from-doc footguns the bare empty-arm gate left open:
+    ///
+    ///   - leading / trailing whitespace from a paste-from-doc
+    ///     (`"2026 "`, `" 2026"`)
+    ///   - control characters / CRLF from a paste-from-multiline-doc
+    ///     (`"2026\n"`)
+    ///   - non-ASCII look-alikes from a fullwidth keyboard
+    ///     (`"２０２６"`) which would silently land as a non-ASCII
+    ///     string in the rendered caixa.lisp
+    ///   - free-form non-year values (`"x"`, `"latest"`,
+    ///     `"nightly"`) that have no operational meaning on the
+    ///     substrate's build-time edition selector
+    ///   - leading non-digit prefixes (`"v2026"`, `"e2026"`,
+    ///     `"r2026"`) — common version-tag idioms that don't apply
+    ///     to the year-shaped edition axis
+    ///   - decimal-shaped values (`"2026.1"`, `"2026.0"`) — every
+    ///     edition is a year, not a fractional version
+    ///   - wrong-length numeric values (`"26"`, `"202"`, `"20260"`,
+    ///     `"00026"`) that don't name a year
+    ///
+    /// `None` (the canonical "omit the slot to defer to the
+    /// substrate's default edition" shape every existing
+    /// [`caixa-resolver`] integration test fixture carries via
+    /// `edicao: None` — see `caixa-resolver/tests/git_integration.rs`)
+    /// is accepted trivially — the gate is a no-op when the author
+    /// didn't declare a value. The empty-first cascade discipline
+    /// mirrors every peer per-axis identity gate:
+    /// [`ManifestError::EdicaoEmpty`] runs before
+    /// [`ManifestError::EdicaoInvalid`], so the narrower empty
+    /// diagnostic surfaces on `Some("")` rather than the broader
+    /// shape-predicate diagnostic — peer with how
+    /// [`ManifestError::NomeEmpty`] runs before
+    /// [`ManifestError::NomeInvalid`],
+    /// [`ManifestError::VersaoEmpty`] runs before
+    /// [`ManifestError::VersaoInvalid`],
+    /// [`ManifestError::RepositorioEmpty`] runs before
+    /// [`ManifestError::RepositorioInvalid`].
+    ///
+    /// A future tightening on this axis can extend the shape
+    /// predicate into a known-edition allowlist (rejecting
+    /// year-shaped values that don't name a tatara-lisp edition
+    /// the substrate actually understands — e.g., `"1999"` is
+    /// year-shaped but no `1999` edition exists). That allowlist
+    /// only becomes meaningful past the introduction of a sibling
+    /// edition to `"2026"`; this gate establishes the structural
+    /// floor by refusing every non-year-shaped value at validate
+    /// time.
     pub fn validate_edicao(&self) -> Result<(), ManifestError> {
         let Some(s) = self.edicao.as_deref() else {
             return Ok(());
         };
         if s.is_empty() {
             return Err(ManifestError::EdicaoEmpty);
+        }
+        if s.len() != 4 || !s.bytes().all(|b| b.is_ascii_digit()) {
+            return Err(ManifestError::EdicaoInvalid {
+                edicao: s.to_string(),
+                reason: "must be a 4-digit ASCII decimal year (canonical \"2026\")".to_string(),
+            });
         }
         Ok(())
     }
@@ -1520,6 +1580,30 @@ pub enum ManifestError {
          carry a canonical edition like `\"2026\"`)"
     )]
     EdicaoEmpty,
+    #[error(
+        ":edicao {edicao:?} is not a valid edition: {reason} (every \
+         documented tatara-lisp edition is a 4-digit ASCII decimal \
+         year — `\"2026\"` is the only edition currently minted; \
+         future-introduced siblings will follow the same shape, peer \
+         with Cargo's `[package] edition` grammar which every value \
+         Cargo has ever accepted matches: `\"2015\"`, `\"2018\"`, \
+         `\"2021\"`, `\"2024\"`. Without this gate the canonical \
+         paste-from-doc footguns silently passed: a trailing space \
+         (`\"2026 \"`) from a paste-from-doc, a CRLF (`\"2026\\n\"`) \
+         from a paste-from-multiline-doc, a fullwidth-keyboard \
+         look-alike (`\"２０２６\"`), a free-form non-year value \
+         (`\"x\"`, `\"latest\"`, `\"nightly\"`), a leading non-digit \
+         version-tag prefix (`\"v2026\"`, `\"e2026\"`), a \
+         decimal-shaped pseudo-version (`\"2026.1\"`), or a \
+         wrong-length numeric value (`\"26\"`, `\"202\"`, \
+         `\"20260\"`) all landed as `(:edicao \"<garbage>\")` in the \
+         rendered caixa.lisp and broke at the substrate's \
+         build-time edition selector far from the source caixa.lisp; \
+         omit the slot entirely to defer to the substrate's default \
+         edition, or carry a canonical 4-digit ASCII decimal year \
+         like `\"2026\"`)"
+    )]
+    EdicaoInvalid { edicao: String, reason: String },
 }
 
 #[cfg(test)]
@@ -3789,13 +3873,13 @@ mod tests {
         // Positive control: the canonical `"2026"` edition every
         // existing renderer-side fixture (`caixa-helm`, `caixa-flux`,
         // `caixa-mesh`) carries by construction passes the gate.
-        // A future tatara-lisp edition (`"2027"`, `"2030"`, …) the
-        // gate doesn't reason about yet must also trivially pass
-        // until the follow-up known-edition predicate routine
-        // extends `validate_edicao` past the empty arm (peer with
-        // how `validate_repositorio` extends past the empty arm
-        // into the predicate).
-        for ed in ["2026", "2027", "2030", "x"] {
+        // Future-introduced sibling editions (`"2027"`, `"2030"`,
+        // `"2049"`) that match the same 4-digit ASCII decimal year
+        // shape must also trivially pass — the structural shape
+        // predicate accepts every well-formed year regardless of
+        // whether the substrate yet understands the specific value
+        // (a future known-edition allowlist tightens that).
+        for ed in ["2026", "2027", "2030", "2049"] {
             let c = caixa_with_edicao(Some(ed));
             c.validate_edicao()
                 .unwrap_or_else(|err| panic!("canonical {ed:?} must pass: {err:?}"));
@@ -3817,12 +3901,162 @@ mod tests {
     }
 
     #[test]
+    fn validate_edicao_rejects_free_form_non_year() {
+        // Free-form non-year footgun: the bare `"x"` / `"latest"` /
+        // `"nightly"` shapes carry no operational meaning on the
+        // substrate's build-time edition selector. Until this gate
+        // landed the bare empty-arm check let every such value
+        // through and broke far from the source caixa.lisp. Peer
+        // with the shape-predicate cascade
+        // `validate_repositorio_rejects_missing_colon_separator`
+        // establishes past its own empty arm.
+        for ed in ["x", "latest", "nightly", "stable"] {
+            let c = caixa_with_edicao(Some(ed));
+            let err = c.validate_edicao().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::EdicaoInvalid { .. }),
+                "expected EdicaoInvalid on {ed:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_edicao_rejects_trailing_whitespace() {
+        // Paste-from-doc whitespace footgun. A trailing space in
+        // the `:edicao` value would silently break the substrate's
+        // build-time edition match-table lookup at the rendered
+        // artifact's edition-selector consumer. The shape predicate
+        // refuses every whitespace byte by construction (any byte
+        // outside `0-9` fails `is_ascii_digit`). Peer with
+        // `validate_repositorio_rejects_whitespace`.
+        let c = caixa_with_edicao(Some("2026 "));
+        let err = c.validate_edicao().unwrap_err();
+        let ManifestError::EdicaoInvalid { edicao, .. } = err else {
+            panic!("expected EdicaoInvalid, got {err:?}");
+        };
+        assert_eq!(edicao, "2026 ");
+    }
+
+    #[test]
+    fn validate_edicao_rejects_leading_whitespace() {
+        // Symmetric paste-from-doc whitespace footgun on the leading
+        // boundary — the gate refuses every shape with a non-digit
+        // byte by construction.
+        let c = caixa_with_edicao(Some(" 2026"));
+        let err = c.validate_edicao().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::EdicaoInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_edicao_rejects_control_char() {
+        // Paste-from-multiline-doc CRLF footgun — control characters
+        // at the value boundary break the substrate's build-time
+        // edition-selector parser. Peer with
+        // `validate_repositorio_rejects_control_char`.
+        let c = caixa_with_edicao(Some("2026\n"));
+        let err = c.validate_edicao().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::EdicaoInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_edicao_rejects_non_ascii_lookalike() {
+        // Fullwidth-keyboard look-alike footgun — `"２０２６"` is
+        // the U+FF12 U+FF10 U+FF12 U+FF16 sequence (CJK fullwidth
+        // digits), 4 codepoints but 12 UTF-8 bytes; the substrate's
+        // edition selector wants an ASCII year, and the gate
+        // refuses every non-ASCII shape by construction (length in
+        // bytes is 12 ≠ 4, *and* every byte falls outside
+        // `is_ascii_digit`'s `0-9` range).
+        let c = caixa_with_edicao(Some("２０２６"));
+        let err = c.validate_edicao().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::EdicaoInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_edicao_rejects_version_tag_prefix() {
+        // Common version-tag idiom footgun — `"v2026"` / `"e2026"`
+        // / `"r2026"` are familiar shapes from git-tag / Rust
+        // edition / release-tag conventions that don't apply to
+        // the year-shaped edition axis. The shape predicate refuses
+        // every leading non-digit prefix.
+        for ed in ["v2026", "e2026", "r2026"] {
+            let c = caixa_with_edicao(Some(ed));
+            let err = c.validate_edicao().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::EdicaoInvalid { .. }),
+                "expected EdicaoInvalid on {ed:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_edicao_rejects_decimal_shape() {
+        // Decimal-shaped pseudo-version footgun — `"2026.1"` /
+        // `"2026.0"` are familiar shapes from semver / float
+        // conventions that don't apply to the year-shaped edition
+        // axis. The shape predicate refuses every non-digit byte
+        // (`.` falls outside `is_ascii_digit`).
+        for ed in ["2026.1", "2026.0", "2026.0.1"] {
+            let c = caixa_with_edicao(Some(ed));
+            let err = c.validate_edicao().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::EdicaoInvalid { .. }),
+                "expected EdicaoInvalid on {ed:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_edicao_rejects_wrong_length_numeric() {
+        // Wrong-length numeric footgun — `"26"` (truncated) /
+        // `"202"` (truncated) / `"20260"` (extra digit) / `"00026"`
+        // (zero-padded too wide) all parse as integers but don't
+        // name a 4-digit year. The shape predicate refuses every
+        // value whose length isn't exactly 4 bytes.
+        for ed in ["26", "202", "20260", "00026", "9"] {
+            let c = caixa_with_edicao(Some(ed));
+            let err = c.validate_edicao().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::EdicaoInvalid { .. }),
+                "expected EdicaoInvalid on {ed:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_edicao_empty_takes_precedence_over_shape() {
+        // Empty-first cascade pin: the empty `Some("")` surfaces
+        // the narrower `EdicaoEmpty` not the shape-predicate-
+        // wrapped `EdicaoInvalid`, mirroring the peer
+        // `validate_repositorio_empty_takes_precedence_over_shape`
+        // (`RepositorioEmpty` → `RepositorioInvalid`),
+        // `NomeEmpty` → `NomeInvalid`, `VersaoEmpty` →
+        // `VersaoInvalid`, `FonteRepoEmpty` → `FonteRepoInvalid`
+        // cascades. The shape predicate also refuses the empty
+        // input (defensively — `s.len() != 4`), but the
+        // manifest-layer empty arm runs first to surface the
+        // narrower diagnostic verbatim.
+        let c = caixa_with_edicao(Some(""));
+        let err = c.validate_edicao().unwrap_err();
+        assert!(matches!(err, ManifestError::EdicaoEmpty), "got {err:?}",);
+    }
+
+    #[test]
     fn validate_edicao_template_passes() {
         // Round-trip pin: the bare `Caixa::template` shape (which
         // carries `:edicao "2026"` verbatim) passes the gate by
         // construction. A future template-shape change that
-        // introduced `(:edicao "")` would surface here as a
-        // regression. Mirrors the peer
+        // introduced `(:edicao "")` or a non-year value would
+        // surface here as a regression. Mirrors the peer
         // `validate_licenca_template_passes` pin.
         let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
         c.validate_edicao().unwrap();
@@ -3841,6 +4075,26 @@ mod tests {
         assert!(
             rendered.contains(":edicao"),
             "diagnostic must name the offending slot: {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_edicao_invalid_diagnostic_carries_offending_value() {
+        // Diagnostic-shape pin on the shape-predicate arm (peer
+        // with `validate_repositorio_diagnostic_carries_offending_value`):
+        // the error's Display surfaces the offending value + slot
+        // name verbatim, so a `feira lint` run can render the
+        // diagnostic without re-parsing and the author can grep
+        // their caixa.lisp for the offending `:edicao` value.
+        let c = caixa_with_edicao(Some("v2026"));
+        let rendered = c.validate_edicao().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":edicao"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("v2026"),
+            "diagnostic must quote the offending value: {rendered}",
         );
     }
 }
