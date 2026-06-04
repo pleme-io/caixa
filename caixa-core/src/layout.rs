@@ -2251,6 +2251,41 @@ mod tests {
             .expect("canonical edition must pass");
     }
 
+    #[test]
+    fn edicao_violation_on_non_year_shape() {
+        // Shape-predicate wire-up pin: a malformed `:edicao` value
+        // that's a non-empty `Some(s)` but not a 4-digit ASCII
+        // decimal year surfaces the `EdicaoViolation` envelope via
+        // the manifest-layer `ManifestError::EdicaoInvalid` arm.
+        // Mirrors the peer `edicao_violation_on_empty_some` shape
+        // on the empty arm of the same axis. Until this gate landed
+        // a value like `"v2026"` (a familiar git-tag idiom that
+        // doesn't apply to the year-shaped edition axis) silently
+        // passed `StandardLayout::verify` and broke at the
+        // substrate's build-time edition selector far from the
+        // source caixa.lisp.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.edicao = Some("v2026".into());
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::EdicaoViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::EdicaoViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":edicao"),
+            "issue must name the offending slot: {issue}",
+        );
+        assert!(
+            issue.contains("v2026"),
+            "issue must quote the offending value: {issue}",
+        );
+    }
+
     // ── Caixa-identity gates (`:nome`, `:versao`) wired into verify ────
     //
     // Until this wire-up landed `Caixa::validate_nome` and
