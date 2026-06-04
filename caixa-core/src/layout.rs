@@ -2117,6 +2117,45 @@ mod tests {
             .expect("canonical SPDX expression must pass");
     }
 
+    #[test]
+    fn licenca_violation_on_non_spdx_shape() {
+        // Shape-predicate wire-up pin: a malformed `:licenca` value
+        // that's a non-empty `Some(s)` but falls outside the SPDX
+        // expression alphabet floor surfaces the `LicencaViolation`
+        // envelope via the manifest-layer `ManifestError::LicencaInvalid`
+        // arm. Mirrors the peer `licenca_violation_on_empty_some`
+        // shape on the empty arm of the same axis and the peer
+        // `edicao_violation_on_non_year_shape` shape on the sibling
+        // `:edicao` axis. Until this gate landed a value like
+        // `"Apache_2.0"` (an underscore-instead-of-hyphen typo) or
+        // `"MIT, Apache-2.0"` (a comma-instead-of-`OR`-keyword
+        // colloquial idiom) silently passed `StandardLayout::verify`
+        // and landed in the rendered chart `README.md` `## License`
+        // section + a future SPDX-aware Chart.yaml `license:`
+        // emitter would refuse the value at `helm lint` time far
+        // from the source caixa.lisp.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.licenca = Some("Apache_2.0".into());
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::LicencaViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::LicencaViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":licenca"),
+            "issue must name the offending slot: {issue}",
+        );
+        assert!(
+            issue.contains("Apache_2.0"),
+            "issue must quote the offending value: {issue}",
+        );
+    }
+
     // ── :edicao empty-Some shape wired into verify (universal axis) ──
     //
     // Until this wire-up landed `Caixa::validate_edicao` did not

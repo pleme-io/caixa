@@ -1935,6 +1935,212 @@ pub fn is_cargo_feature_name(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Practical cap on a `:licenca` (SPDX-expression-shaped) value, in
+/// bytes. The SPDX specification places no length cap on expressions
+/// — the grammar admits arbitrarily-nested composite expressions —
+/// but every realistic pleme-io fixture stays well under this bound
+/// (`MIT` 3, `Apache-2.0` 10, `Apache-2.0 OR MIT` 17, the longest
+/// SPDX dual-license-with-exception shape `Apache-2.0 WITH
+/// LLVM-exception` 31; a `(MIT OR Apache-2.0) AND BSD-3-Clause AND
+/// ISC` composite caps near 50). 256 bytes is the substrate's
+/// catch-the-paste-from-binary cap on the peer trajectory
+/// `is_dns_1123_label` (63), `is_cargo_feature_name` (64),
+/// `is_wit_world_ref` (128), `is_nats_subject` (256),
+/// `is_wasi_keyvalue_slot` (512), `is_git_ref_name` (255),
+/// `is_git_oid` (40/64), `is_git_repo_url` (2048) carry: an
+/// axis-appropriate ceiling above every legitimate authoring shape,
+/// tight enough to surface the "paste-from-license-text" /
+/// "multi-line license blob landed in the `:licenca` slot" footgun
+/// at validate time.
+pub const SPDX_EXPRESSION_MAX_LEN: usize = 256;
+
+/// Predicate: assert that `s` is a valid SPDX-expression shape. The
+/// contract — modeled on the SPDX 2.1 expression grammar
+/// (`compound-expression = simple-expression | "(" compound-expression
+/// ")" | compound-expression "WITH" exception-id | compound-expression
+/// "AND" compound-expression | compound-expression "OR"
+/// compound-expression`; `simple-expression = license-id | license-id
+/// "+" | "LicenseRef-" idstring | "DocumentRef-" idstring ":"
+/// "LicenseRef-" idstring`; `idstring = 1*(ALPHA / DIGIT / "-" /
+/// ".")`), narrowed to the structural alphabet floor every realistic
+/// SPDX expression in the wild uses:
+///
+///   - 1..=[`SPDX_EXPRESSION_MAX_LEN`] (256) bytes;
+///   - no leading whitespace (paste-from-aligned-doc footgun);
+///   - no trailing whitespace (paste-from-doc footgun — every
+///     downstream SPDX parser splits on exact token boundaries and
+///     a trailing space breaks the `WITH` / `AND` / `OR` keyword
+///     match);
+///   - every byte in the SPDX expression alphabet: ASCII alphanumeric
+///     plus `.`, `-`, `+`, `(`, `)`, `:` (the `DocumentRef-…:LicenseRef-…`
+///     separator), and a single ASCII space (token separator). Tabs,
+///     control characters, non-ASCII bytes, `_` (not in `idstring`),
+///     `,` (SPDX uses `AND` / `OR` keywords, not comma), `/` (the
+///     `dual-license/A` colloquial idiom is non-SPDX), and every other
+///     punctuation byte are each surfaced with a self-locating reason
+///     naming the canonical authoring footgun.
+///
+/// The predicate is a *structural* floor — it enforces the alphabet +
+/// length the SPDX grammar's character class admits, not the full
+/// expression-parse (compound-expression nesting, `AND`/`OR`/`WITH`
+/// keyword placement, parenthesis balance, idstring well-formedness
+/// per simple-expression production). A future tightening on the
+/// `:licenca` axis can extend past this shape predicate into a full
+/// SPDX parser + license-id allowlist (peer with how
+/// [`is_git_repo_url`] is the structural floor on `:repositorio` and
+/// a future flake-resolver might tighten the per-URL-scheme arm into
+/// scheme-specific shape predicates). This gate closes the
+/// `_`/`,`/`/`/tab/CR/LF/non-ASCII/multi-line-blob footguns
+/// structurally at the manifest layer; the parser-shape arms remain
+/// for a follow-up routine once a real SPDX-parser dep is justified.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller —
+/// [`crate::Caixa::validate_licenca`] for the universal `:licenca`
+/// axis at validate time, every future per-license axis (a future
+/// `:fonte :license` per-dep license-pin axis, a future
+/// per-`UpgradeInstruction` per-component license-compatibility axis,
+/// a future `Lacre` per-resolved-dep license-closure axis) — wraps the
+/// same reason in its own typed `*Invalid { <axis>, reason }` variant.
+/// The reason wording is axis-agnostic ("SPDX expressions reject
+/// leading whitespace") so every call site reading the same diagnostic
+/// points at the same rule; drift between any two axes' rule
+/// enforcement is a build error visible at this predicate, not a
+/// per-renderer "this passed validate but `helm lint` rejected the
+/// `Chart.yaml license:` value" surprise.
+///
+/// Empty input is rejected here (defensively) and at each call site
+/// via the narrower [`crate::ManifestError::LicencaEmpty`] variant —
+/// the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], [`is_wasi_keyvalue_slot`], [`is_git_ref_name`],
+/// [`is_git_oid`], [`is_git_repo_url`], and [`is_cargo_feature_name`]
+/// all carry.
+///
+/// Lifted as a typed substrate-side primitive on the same trajectory
+/// the peer value-shape predicates already follow — the typed slot's
+/// valid set matches the downstream consumer's accepted set (here,
+/// the `caixa-helm` chart `README.md` `## License` section + a
+/// future SPDX-aware Chart.yaml `license:` emitter + the future
+/// per-resolved-dep license-closure axis a forthcoming `Lacre`
+/// extension would carry), structurally.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / leading-whitespace / trailing-whitespace /
+/// alphabet-class / tab / control-char / non-ASCII / `_` /
+/// `,`-list-separator-confusion / `/`-dual-license-idiom), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_spdx_expression_shape(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > SPDX_EXPRESSION_MAX_LEN {
+        return Err(format!(
+            "exceeds SPDX expression max length of {SPDX_EXPRESSION_MAX_LEN} bytes \
+             (got {} bytes; realistic SPDX expressions like `\"Apache-2.0 WITH \
+             LLVM-exception\"` rarely exceed ~64 bytes — this length suggests a \
+             paste-from-license-text or multi-line blob landed in the `:licenca` \
+             slot)",
+            s.len()
+        ));
+    }
+    let bytes = s.as_bytes();
+    if bytes[0] == b' ' {
+        return Err(
+            "must not start with whitespace (SPDX expressions are single tokens \
+             or token sequences separated by *internal* single ASCII spaces; a \
+             leading space is the canonical paste-from-aligned-doc footgun and \
+             breaks every downstream SPDX parser that splits on exact token \
+             boundaries)"
+                .to_string(),
+        );
+    }
+    if *bytes.last().expect("non-empty checked above") == b' ' {
+        return Err(
+            "must not end with whitespace (SPDX expressions don't terminate with \
+             trailing whitespace; the trailing-space arm is the canonical \
+             paste-from-doc footgun that breaks downstream parsers which split \
+             on exact `AND` / `OR` / `WITH` keyword boundaries)"
+                .to_string(),
+        );
+    }
+    for &b in bytes {
+        let valid = b.is_ascii_alphanumeric()
+            || b == b'.'
+            || b == b'-'
+            || b == b'+'
+            || b == b'('
+            || b == b')'
+            || b == b':'
+            || b == b' ';
+        if !valid {
+            let msg = if b == b'\t' {
+                "must not contain tab character (SPDX expressions use a single \
+                 ASCII space between tokens — tabs are the canonical \
+                 paste-from-aligned-doc footgun and break downstream parsers \
+                 that split on exact `\" \"` boundaries)"
+                    .to_string()
+            } else if b < 0x20 || b == 0x7F {
+                format!(
+                    "must not contain control character 0x{b:02x} (SPDX \
+                     expressions are printable ASCII; the CR/LF arm is the \
+                     canonical paste-from-multiline-doc footgun and lands as a \
+                     malformed line in the rendered chart `README.md` `## \
+                     License` section)"
+                )
+            } else if b >= 0x80 {
+                format!(
+                    "must not contain non-ASCII byte 0x{b:02x} (SPDX identifiers \
+                     are ASCII per the `idstring = 1*(ALPHA / DIGIT / \"-\" / \
+                     \".\")` production; raw non-ASCII silently round-trips \
+                     inconsistently across NFC/NFD normalization on APFS / \
+                     case-folding filesystems and breaks at every downstream \
+                     SPDX-aware tool)"
+                )
+            } else if b == b'_' {
+                "must not contain `_` (SPDX `idstring` grammar — license-id, \
+                 LicenseRef, exception-id — is `1*(ALPHA / DIGIT / \"-\" / \
+                 \".\")`; `_` is not in the SPDX alphabet, use `-` as the \
+                 segment separator instead, e.g. `\"Apache-2.0\"` not \
+                 `\"Apache_2.0\"`)"
+                    .to_string()
+            } else if b == b',' {
+                "must not contain `,` (SPDX expressions compose multiple \
+                 licenses via the `AND` / `OR` keywords, not the comma \
+                 separator; e.g. `\"MIT OR Apache-2.0\"` not `\"MIT, \
+                 Apache-2.0\"`)"
+                    .to_string()
+            } else if b == b'/' {
+                "must not contain `/` (the `dual-license/A` slash form is a \
+                 non-SPDX colloquial idiom; SPDX uses the `OR` keyword to \
+                 compose: `\"MIT OR Apache-2.0\"` not `\"MIT/Apache-2.0\"`)"
+                    .to_string()
+            } else if b == b';' {
+                "must not contain `;` (SPDX expressions compose multiple \
+                 licenses via the `AND` / `OR` keywords, not the semicolon \
+                 separator; e.g. `\"MIT AND Apache-2.0\"` not `\"MIT; \
+                 Apache-2.0\"`)"
+                    .to_string()
+            } else {
+                format!(
+                    "contains invalid character {ch:?} (the SPDX expression \
+                     alphabet is `[A-Za-z0-9.+\\-():]` plus single ASCII space; \
+                     license IDs / exception IDs are `idstring` `1*(ALPHA / \
+                     DIGIT / \"-\" / \".\")`, composition uses `AND` / `OR` / \
+                     `WITH` keywords + `(`/`)` grouping)",
+                    ch = b as char
+                )
+            };
+            return Err(msg);
+        }
+    }
+    Ok(())
+}
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
@@ -4835,5 +5041,122 @@ mod tests {
         assert!(err_hyphen.contains("`-`"), "got: {err_hyphen:?}");
         let err_dot = is_cargo_feature_name(".feat").unwrap_err();
         assert!(err_dot.contains("`.`"), "got: {err_dot:?}");
+    }
+
+    // ── is_spdx_expression_shape — shared `:licenca` SPDX-expression predicate ──
+
+    #[test]
+    fn spdx_expression_shape_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // SPDX expression shape the `:licenca` axis carries. Drift
+        // between this list and the per-axis
+        // `manifest::tests::validate_licenca_accepts_canonical_expressions`
+        // positive-set sweep surfaces here — one source of truth for
+        // the rule. Covers single-license, `OR`/`AND`-compound,
+        // `WITH`-exception, parenthesis-grouped, `+`-suffix, and
+        // `LicenseRef-` / `DocumentRef-:LicenseRef-` shapes.
+        for s in [
+            "MIT",
+            "Apache-2.0",
+            "BSD-3-Clause",
+            "MPL-2.0",
+            "GPL-3.0-or-later",
+            "GPL-2.0+",
+            "Apache-2.0 OR MIT",
+            "Apache-2.0 AND MIT",
+            "Apache-2.0 WITH LLVM-exception",
+            "(MIT OR Apache-2.0) AND BSD-3-Clause",
+            "(MIT OR Apache-2.0) AND BSD-3-Clause AND ISC",
+            "LicenseRef-MyLicense",
+            "DocumentRef-spdx-tool:LicenseRef-MIT-Style",
+            "x",
+        ] {
+            is_spdx_expression_shape(s)
+                .unwrap_or_else(|e| panic!("canonical SPDX expression {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn spdx_expression_shape_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each alphabet arm
+        // surfaces its own distinct reason substring. Pinned here so a
+        // future reason-wording rephrase that drops any of these
+        // substrings surfaces at this one place, not piecemeal across
+        // every per-axis test sweep. Mirrors
+        // `cargo_feature_name_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicate.
+        for (s, needle) in [
+            // Leading whitespace — paste-from-aligned-doc.
+            (" MIT", "whitespace"),
+            // Trailing whitespace — paste-from-doc.
+            ("MIT ", "whitespace"),
+            // Tab inside — tab-from-aligned-doc.
+            ("MIT\tOR Apache-2.0", "tab"),
+            // Embedded control character.
+            ("MIT\x01OR Apache-2.0", "control character"),
+            // Newline — paste-from-multiline-doc.
+            ("MIT\nOR Apache-2.0", "control character"),
+            // CRLF — paste-from-multiline-doc.
+            ("MIT\rApache-2.0", "control character"),
+            // DEL byte (0x7F).
+            ("MIT\x7fApache-2.0", "control character"),
+            // Non-ASCII byte — smart-quote paste.
+            ("MIT\u{a0}OR Apache-2.0", "non-ASCII"),
+            // Non-ASCII at first byte — fullwidth letter.
+            ("\u{ff2d}IT", "non-ASCII"),
+            // Underscore — snake-case-instead-of-kebab-case typo.
+            ("Apache_2.0", "`_`"),
+            // Comma — list-separator-belongs-to-list-grammar.
+            ("MIT, Apache-2.0", "`,`"),
+            // Forward slash — colloquial dual-license idiom.
+            ("MIT/Apache-2.0", "`/`"),
+            // Semicolon — list-separator confusion.
+            ("MIT; Apache-2.0", "`;`"),
+            // Forbidden punctuation in the alphabet.
+            ("MIT@1.0", "invalid character"),
+            ("MIT&Apache-2.0", "invalid character"),
+            ("MIT=Apache-2.0", "invalid character"),
+            ("MIT*1.0", "invalid character"),
+        ] {
+            let err = is_spdx_expression_shape(s)
+                .err()
+                .unwrap_or_else(|| panic!("SPDX expression {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "SPDX expression {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn spdx_expression_shape_rejects_empty_defensively() {
+        // The predicate is called from `crate::Caixa::validate_licenca`
+        // only after the per-axis `LicencaEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`,
+        // `is_git_ref_name`, `is_git_oid`, `is_git_repo_url`, and
+        // `is_cargo_feature_name` carry at their call sites.
+        let err = is_spdx_expression_shape("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn spdx_expression_shape_rejects_at_257_byte_boundary() {
+        // The 256-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring the peer
+        // cap-boundary pins. Constructed as a single all-`a` token so
+        // only the cap arm fires (256 `a` bytes is alphabet-valid).
+        let max_ok = "a".repeat(SPDX_EXPRESSION_MAX_LEN);
+        assert_eq!(max_ok.len(), 256);
+        is_spdx_expression_shape(&max_ok).unwrap();
+        let too_long = "a".repeat(SPDX_EXPRESSION_MAX_LEN + 1);
+        assert_eq!(too_long.len(), 257);
+        let err = is_spdx_expression_shape(&too_long).unwrap_err();
+        assert!(err.contains("256"), "got: {err:?}");
+        assert!(err.contains("257"), "got: {err:?}");
     }
 }

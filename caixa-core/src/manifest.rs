@@ -1119,13 +1119,44 @@ impl Caixa {
     /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] /
     /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
     /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
-    /// specific slot sets. SPDX-expression shape parsing is a future
-    /// tightening on this axis: this gate closes only the
-    /// `Some("")`-skips-`unwrap_or_else` footgun structurally; a
-    /// follow-up routine can route `Some(s)` through an SPDX
-    /// expression predicate (peer with how `validate_repositorio`
-    /// extends past the empty arm into the
-    /// [`crate::render::is_git_repo_url`] predicate).
+    /// specific slot sets.
+    ///
+    /// Past the empty arm the gate enforces the SPDX-expression shape
+    /// predicate via [`crate::render::is_spdx_expression_shape`]: the
+    /// structural alphabet floor every realistic SPDX expression in
+    /// the wild uses — ASCII alphanumeric plus `.`, `-`, `+`, `(`,
+    /// `)`, `:` (the `DocumentRef-…:LicenseRef-…` separator), and a
+    /// single ASCII space (token separator). Closes the canonical
+    /// paste-from-doc footguns the bare empty-arm gate left open:
+    /// paste-from-doc whitespace (`"MIT "`, `" MIT"`), paste-from-
+    /// multiline-doc CRLF (`"MIT\n"`), tab-from-aligned-doc
+    /// (`"MIT\tOR Apache-2.0"`), non-ASCII smart-quote paste,
+    /// underscore-instead-of-hyphen typo (`"Apache_2.0"`),
+    /// comma-instead-of-`OR`-keyword colloquial idiom (`"MIT,
+    /// Apache-2.0"`), slash-dual-license colloquial idiom (`"MIT/
+    /// Apache-2.0"`), and semicolon-list-separator confusion
+    /// (`"MIT; Apache-2.0"`). Mirrors the shape-predicate cascade
+    /// [`Self::validate_repositorio`] / [`Self::validate_edicao`]
+    /// establish past their own empty arms.
+    ///
+    /// The empty-first cascade discipline mirrors every peer per-axis
+    /// identity gate: [`ManifestError::LicencaEmpty`] runs before
+    /// [`ManifestError::LicencaInvalid`], so the narrower empty
+    /// diagnostic surfaces on `Some("")` rather than the broader
+    /// shape-predicate diagnostic — peer with how
+    /// [`ManifestError::EdicaoEmpty`] runs before
+    /// [`ManifestError::EdicaoInvalid`],
+    /// [`ManifestError::RepositorioEmpty`] runs before
+    /// [`ManifestError::RepositorioInvalid`].
+    ///
+    /// A future tightening on this axis can extend the alphabet
+    /// floor into a full SPDX expression parser + license-id
+    /// allowlist (rejecting alphabet-valid values that don't name a
+    /// real SPDX license identifier — e.g., `"NotAReal"` is
+    /// alphabet-valid but no `NotAReal` license-id exists). That
+    /// parser only becomes meaningful past a real SPDX-spec
+    /// dependency; this gate establishes the structural floor by
+    /// refusing every non-SPDX-alphabet value at validate time.
     pub fn validate_licenca(&self) -> Result<(), ManifestError> {
         let Some(s) = self.licenca.as_deref() else {
             return Ok(());
@@ -1133,6 +1164,12 @@ impl Caixa {
         if s.is_empty() {
             return Err(ManifestError::LicencaEmpty);
         }
+        crate::render::is_spdx_expression_shape(s).map_err(|reason| {
+            ManifestError::LicencaInvalid {
+                licenca: s.to_string(),
+                reason,
+            }
+        })?;
         Ok(())
     }
 
@@ -1561,6 +1598,34 @@ pub enum ManifestError {
          `\"Apache-2.0 OR MIT\"`)"
     )]
     LicencaEmpty,
+    #[error(
+        ":licenca {licenca:?} is not a valid SPDX expression shape: {reason} \
+         (the substrate consumes this string through the shared \
+         `crate::render::is_spdx_expression_shape` predicate — the same \
+         alphabet-floor parser every peer per-axis value-shape gate routes \
+         its value through; the canonical authoring shapes are single \
+         license identifiers like `\"MIT\"`, `\"Apache-2.0\"`, `\"BSD-3-Clause\"`, \
+         compound expressions like `\"Apache-2.0 OR MIT\"`, \
+         `\"MIT AND BSD-3-Clause\"`, `\"(MIT OR Apache-2.0) AND ISC\"`, \
+         license-with-exception forms like `\"Apache-2.0 WITH LLVM-exception\"`, \
+         `+`-suffix variants like `\"GPL-2.0+\"`, and user-defined references \
+         like `\"LicenseRef-MyLicense\"` / \
+         `\"DocumentRef-doc:LicenseRef-MyLicense\"`. Without this gate a \
+         malformed `:licenca` (paste-from-doc whitespace `\"MIT \"` / \
+         `\" MIT\"`; paste-from-multiline-doc CRLF `\"MIT\\n\"`; \
+         tab-from-aligned-doc `\"MIT\\tOR Apache-2.0\"`; non-ASCII byte from \
+         a smart-quote paste; underscore-instead-of-hyphen typo \
+         `\"Apache_2.0\"`; comma-instead-of-`OR`-keyword colloquial idiom \
+         `\"MIT, Apache-2.0\"`; slash-dual-license colloquial idiom \
+         `\"MIT/Apache-2.0\"`; semicolon-list-separator confusion \
+         `\"MIT; Apache-2.0\"`) silently landed in the rendered chart \
+         `README.md` `## License` section + a future SPDX-aware \
+         `Chart.yaml license:` emitter would refuse the value at \
+         `helm lint` time far from the source caixa.lisp; the gate moves \
+         the diagnostic to the manifest layer with the offending value \
+         named verbatim)"
+    )]
+    LicencaInvalid { licenca: String, reason: String },
     #[error(
         ":edicao is the empty string (every published caixa names \
          its language edition via a non-empty `:edicao` value — the \
@@ -3781,14 +3846,15 @@ mod tests {
     #[test]
     fn validate_licenca_accepts_canonical_expressions() {
         // Positive control: every canonical SPDX expression shape
-        // pleme-io carries in its existing fixtures + the
-        // dual-license shape passes the gate. Covers the SPDX
-        // single-license, `OR`-compound, and `AND`-compound shapes
-        // — none of which the gate reasons about yet, but every
-        // non-empty `Some(s)` must trivially pass until the
-        // follow-up SPDX-shape routine extends `validate_licenca`
-        // (peer with how `validate_repositorio` extends past the
-        // empty arm into the predicate).
+        // pleme-io carries in its existing fixtures + the canonical
+        // SPDX dual-license / with-exception / `+`-suffix / grouped /
+        // user-defined-reference shapes all pass the gate. Covers
+        // the single-license, `OR`-compound, `AND`-compound,
+        // `WITH`-exception, parenthesis-grouped, `+`-suffix, and
+        // `LicenseRef-` / `DocumentRef-:LicenseRef-` shapes — every
+        // production the SPDX 2.1 expression grammar admits that
+        // sits within the alphabet floor the
+        // `is_spdx_expression_shape` predicate enforces.
         for lic in [
             "MIT",
             "Apache-2.0",
@@ -3797,12 +3863,200 @@ mod tests {
             "BSD-3-Clause",
             "MPL-2.0",
             "GPL-3.0-or-later",
+            "GPL-2.0+",
+            "Apache-2.0 WITH LLVM-exception",
+            "(MIT OR Apache-2.0) AND BSD-3-Clause",
+            "(MIT OR Apache-2.0) AND BSD-3-Clause AND ISC",
+            "LicenseRef-MyLicense",
+            "DocumentRef-spdx-tool:LicenseRef-MIT-Style",
             "x",
         ] {
             let c = caixa_with_licenca(Some(lic));
             c.validate_licenca()
                 .unwrap_or_else(|err| panic!("canonical {lic:?} must pass: {err:?}"));
         }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_trailing_whitespace() {
+        // Paste-from-doc whitespace footgun. A trailing space in the
+        // `:licenca` value would silently break a downstream SPDX
+        // parser that splits on exact `AND` / `OR` / `WITH` keyword
+        // boundaries. The shape predicate refuses every trailing
+        // whitespace byte by construction. Peer with
+        // `validate_repositorio_rejects_whitespace` and
+        // `validate_edicao_rejects_trailing_whitespace`.
+        let c = caixa_with_licenca(Some("MIT "));
+        let err = c.validate_licenca().unwrap_err();
+        let ManifestError::LicencaInvalid { licenca, .. } = err else {
+            panic!("expected LicencaInvalid, got {err:?}");
+        };
+        assert_eq!(licenca, "MIT ");
+    }
+
+    #[test]
+    fn validate_licenca_rejects_leading_whitespace() {
+        // Symmetric paste-from-doc whitespace footgun on the leading
+        // boundary — the gate refuses every shape that starts with a
+        // space byte by construction. Peer with
+        // `validate_edicao_rejects_leading_whitespace`.
+        let c = caixa_with_licenca(Some(" MIT"));
+        let err = c.validate_licenca().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::LicencaInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_licenca_rejects_control_char() {
+        // Paste-from-multiline-doc CRLF footgun — control characters
+        // at the value boundary land as a malformed line in the
+        // rendered chart `README.md` `## License` section. Peer with
+        // `validate_repositorio_rejects_control_char` and
+        // `validate_edicao_rejects_control_char`.
+        for lic in ["MIT\n", "MIT\r\n", "MIT\rApache-2.0"] {
+            let c = caixa_with_licenca(Some(lic));
+            let err = c.validate_licenca().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::LicencaInvalid { .. }),
+                "expected LicencaInvalid on {lic:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_tab() {
+        // Tab-from-aligned-doc footgun — SPDX expressions use a
+        // single ASCII space between tokens; a tab breaks every
+        // downstream SPDX parser that splits on exact `" "`
+        // boundaries.
+        let c = caixa_with_licenca(Some("MIT\tOR Apache-2.0"));
+        let err = c.validate_licenca().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::LicencaInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_licenca_rejects_non_ascii() {
+        // Smart-quote / non-ASCII paste footgun — SPDX identifiers
+        // are ASCII per the `idstring = 1*(ALPHA / DIGIT / "-" /
+        // ".")` production. The shape predicate refuses every
+        // non-ASCII byte by construction; peer with
+        // `validate_edicao_rejects_non_ascii_lookalike`.
+        for lic in ["MIT\u{a0}OR Apache-2.0", "MIT\u{2013}1.0", "Café-1.0"] {
+            let c = caixa_with_licenca(Some(lic));
+            let err = c.validate_licenca().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::LicencaInvalid { .. }),
+                "expected LicencaInvalid on {lic:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_underscore() {
+        // Underscore-instead-of-hyphen typo footgun — `Apache_2.0` /
+        // `MIT_Style` / `BSD_3_Clause` are familiar shapes from
+        // snake-case identifier conventions that don't apply to the
+        // SPDX `idstring` grammar (which admits only `ALPHA / DIGIT /
+        // "-" / "."`). The shape predicate refuses every underscore
+        // byte by construction.
+        for lic in ["Apache_2.0", "MIT_Style", "BSD_3_Clause"] {
+            let c = caixa_with_licenca(Some(lic));
+            let err = c.validate_licenca().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::LicencaInvalid { .. }),
+                "expected LicencaInvalid on {lic:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_comma_separator() {
+        // Comma-instead-of-`OR`-keyword colloquial idiom footgun —
+        // SPDX expressions compose multiple licenses via `AND` / `OR`
+        // keywords, not the comma separator. The shape predicate
+        // refuses every comma byte by construction.
+        for lic in ["MIT, Apache-2.0", "MIT,Apache-2.0"] {
+            let c = caixa_with_licenca(Some(lic));
+            let err = c.validate_licenca().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::LicencaInvalid { .. }),
+                "expected LicencaInvalid on {lic:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_slash_dual_license() {
+        // Slash-dual-license colloquial idiom footgun — the
+        // `MIT/Apache-2.0` shape is common in Cargo's pre-SPDX
+        // `package.license` field but non-SPDX; the SPDX equivalent
+        // is `MIT OR Apache-2.0`. The shape predicate refuses every
+        // forward-slash byte by construction.
+        for lic in ["MIT/Apache-2.0", "MIT/BSD-3-Clause"] {
+            let c = caixa_with_licenca(Some(lic));
+            let err = c.validate_licenca().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::LicencaInvalid { .. }),
+                "expected LicencaInvalid on {lic:?}, got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_licenca_rejects_semicolon_separator() {
+        // Semicolon-list-separator confusion footgun — adjacent to
+        // the comma-separator idiom, every list-separator-belongs-
+        // to-list-grammar confusion lands here.
+        let c = caixa_with_licenca(Some("MIT; Apache-2.0"));
+        let err = c.validate_licenca().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::LicencaInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_licenca_empty_takes_precedence_over_shape() {
+        // Empty-first cascade pin: the empty `Some("")` surfaces the
+        // narrower `LicencaEmpty` not the shape-predicate-wrapped
+        // `LicencaInvalid`, mirroring the peer
+        // `validate_edicao_empty_takes_precedence_over_shape` and
+        // `validate_repositorio_empty_takes_precedence_over_shape`
+        // (`RepositorioEmpty` → `RepositorioInvalid`), `NomeEmpty` →
+        // `NomeInvalid`, `VersaoEmpty` → `VersaoInvalid` cascades.
+        // The shape predicate also refuses the empty input
+        // (defensively — `"must not be empty"`), but the manifest-
+        // layer empty arm runs first to surface the narrower
+        // diagnostic verbatim.
+        let c = caixa_with_licenca(Some(""));
+        let err = c.validate_licenca().unwrap_err();
+        assert!(matches!(err, ManifestError::LicencaEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_licenca_invalid_diagnostic_carries_offending_value() {
+        // Diagnostic-shape pin on the shape-predicate arm (peer with
+        // `validate_edicao_invalid_diagnostic_carries_offending_value`
+        // and `validate_repositorio_diagnostic_carries_offending_value`):
+        // the error's Display surfaces the offending value + slot
+        // name verbatim, so a `feira lint` run can render the
+        // diagnostic without re-parsing and the author can grep
+        // their caixa.lisp for the offending `:licenca` value.
+        let c = caixa_with_licenca(Some("Apache_2.0"));
+        let rendered = c.validate_licenca().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":licenca"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("Apache_2.0"),
+            "diagnostic must quote the offending value: {rendered}",
+        );
     }
 
     #[test]
