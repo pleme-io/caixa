@@ -2141,6 +2141,182 @@ pub fn is_spdx_expression_shape(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Maximum byte length of a chart-description-shaped string. The
+/// 512-byte cap is the axis-appropriate ceiling for the free-form
+/// prose summary the `:descricao` axis carries: every realistic
+/// chart description in the wild (`"Canonical Rust→wasm32-wasip2
+/// caixa Servico."`, `"Checkout flow."`, `"AWS provider caixa for
+/// tatara-lisp"`) sits well under 256 bytes, and the 512-byte cap
+/// surfaces the "paste-from-doc multi-paragraph blob landed in the
+/// `:descricao` slot" footgun at validate time. Peer with
+/// [`WASI_KV_SLOT_MAX_LEN`] (512) on the sibling longer-than-
+/// identifier axis; tighter than [`GIT_REPO_URL_MAX_LEN`] (2048)
+/// which carries a different axis-class ceiling, and looser than
+/// [`SPDX_EXPRESSION_MAX_LEN`] (256) which is the canonical
+/// short-identifier-class axis.
+pub const CHART_DESCRIPTION_MAX_LEN: usize = 512;
+
+/// Predicate: assert that `s` is a valid chart-description shape.
+/// The `:descricao` axis is a free-form prose summary that lands in
+/// the rendered `lareira-<nome>` Helm chart's `Chart.yaml`
+/// `description:` field (a YAML scalar consumed by `helm list`,
+/// `helm search`, Artifact Hub, and every chart-aware UI) and in
+/// the chart's `README.md` header paragraph
+/// (`caixa-helm/src/lib.rs:232`, `caixa-helm/src/lib.rs:333`).
+/// The contract — modeled on the YAML 1.2 plain-style scalar
+/// grammar and the Helm chart spec's expectation that
+/// `description:` is a one-line summary:
+///
+///   - 1..=[`CHART_DESCRIPTION_MAX_LEN`] (512) bytes;
+///   - no leading whitespace (paste-from-aligned-doc footgun —
+///     YAML plain-style scalars round-trip trim-and-restore on
+///     leading whitespace, so an authored `" foo"` lands as `"foo"`
+///     in the rendered Chart.yaml and the round-trip back through
+///     `caixa.lisp` silently drops the space);
+///   - no trailing whitespace (paste-from-doc footgun — every YAML
+///     dumper trims trailing whitespace from plain-style scalars,
+///     so an authored `"foo "` round-trips inconsistently);
+///   - no ASCII control characters anywhere (`0x00..=0x1F` plus
+///     `0x7F` DEL) — tabs, newlines, carriage returns, and every
+///     other control byte break the single-line YAML scalar shape
+///     and the README header paragraph. The newline / CR arms are
+///     the canonical paste-from-multiline-doc footgun; the tab arm
+///     is the canonical paste-from-aligned-doc footgun; the
+///     other-control-byte arm catches every more-exotic
+///     paste-from-binary-blob shape (`0x00` NUL, `0x07` BEL,
+///     `0x1B` ESC) that would silently land in the rendered
+///     `Chart.yaml` as a YAML-illegal byte sequence and fail at
+///     `helm lint` time far from the source caixa.lisp;
+///   - non-ASCII bytes (UTF-8 continuation sequences) are
+///     accepted — the canonical author shapes (`"Canonical
+///     Rust→wasm32-wasip2 caixa Servico."`, `"FIXME — describe
+///     this caixa"`) carry `→` (U+2192) and `—` (U+2014) and every
+///     downstream consumer (YAML 1.2, Helm v3, every chart-aware
+///     UI) round-trips Unicode losslessly.
+///
+/// The predicate is a *structural* floor — it enforces the
+/// single-line printable-UTF-8 shape every realistic chart
+/// description carries, not a per-byte alphabet check (which would
+/// regress every non-ASCII canonical fixture). Same trajectory as
+/// [`is_spdx_expression_shape`] (the ASCII-alphabet floor on the
+/// `:licenca` axis) and [`is_git_repo_url`] (the URL-shape floor on
+/// the `:repositorio` axis): the typed validator refuses the
+/// downstream consumer's would-also-refuse shapes at the source
+/// caixa.lisp boundary with the offending value named verbatim.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping
+/// in any error variant) so each per-axis caller —
+/// [`crate::Caixa::validate_descricao`] for the universal
+/// `:descricao` axis at validate time, every future per-description
+/// axis (a future Aplicacao-level `:descricao` summary axis on
+/// `mesh.pleme.io/v1alpha1/Caixa` CRs, a future Servico-level
+/// per-`:contratos` edge `:descricao` annotation) — wraps the same
+/// reason in its own typed `*Invalid { <axis>, reason }` variant.
+/// The reason wording is axis-agnostic ("chart descriptions reject
+/// leading whitespace") so every call site reading the same
+/// diagnostic points at the same rule; drift between any two axes'
+/// rule enforcement is a build error visible at this predicate, not
+/// a per-renderer "this passed validate but `helm lint` rejected
+/// the Chart.yaml `description:` value" surprise.
+///
+/// Empty input is rejected here (defensively) and at each call
+/// site via the narrower [`crate::ManifestError::DescricaoEmpty`]
+/// variant — the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], [`is_wasi_keyvalue_slot`],
+/// [`is_git_ref_name`], [`is_git_oid`], [`is_git_repo_url`],
+/// [`is_cargo_feature_name`], and [`is_spdx_expression_shape`] all
+/// carry.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / leading-whitespace / trailing-whitespace /
+/// tab / newline / carriage-return / other-control-byte), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > CHART_DESCRIPTION_MAX_LEN {
+        return Err(format!(
+            "exceeds chart description max length of {CHART_DESCRIPTION_MAX_LEN} bytes \
+             (got {} bytes; realistic chart descriptions like `\"Canonical \
+             Rust→wasm32-wasip2 caixa Servico.\"` rarely exceed ~64 bytes — this \
+             length suggests a paste-from-doc multi-paragraph blob landed in the \
+             `:descricao` slot)",
+            s.len()
+        ));
+    }
+    let bytes = s.as_bytes();
+    if bytes[0] == b' ' {
+        return Err(
+            "must not start with whitespace (chart descriptions are single-line YAML \
+             plain-style scalars; a leading space is the canonical \
+             paste-from-aligned-doc footgun and round-trips inconsistently — every \
+             YAML dumper trims leading whitespace from plain-style scalars, so the \
+             authored space silently drops in the rendered Chart.yaml)"
+                .to_string(),
+        );
+    }
+    if *bytes.last().expect("non-empty checked above") == b' ' {
+        return Err(
+            "must not end with whitespace (chart descriptions don't terminate with \
+             trailing whitespace; every YAML dumper trims trailing whitespace from \
+             plain-style scalars, so the authored space round-trips inconsistently \
+             back through `caixa.lisp`)"
+                .to_string(),
+        );
+    }
+    for &b in bytes {
+        if b == b'\t' {
+            return Err(
+                "must not contain tab character (chart descriptions are single-line \
+                 YAML plain-style scalars; tabs are the canonical \
+                 paste-from-aligned-doc footgun and break the single-line scalar \
+                 shape — every downstream YAML 1.2 parser is forbidden from \
+                 emitting indentation tabs and tabs in plain-style scalars are \
+                 implementation-defined)"
+                    .to_string(),
+            );
+        }
+        if b == b'\n' {
+            return Err(
+                "must not contain newline (chart descriptions are single-line YAML \
+                 plain-style scalars; an embedded newline is the canonical \
+                 paste-from-multiline-doc footgun and lands as a multi-line YAML \
+                 block scalar in the rendered Chart.yaml — every chart-aware UI \
+                 (`helm list`, `helm search`, Artifact Hub) renders the description \
+                 in a single-line column, so the embedded newline is silently \
+                 dropped at every downstream consumer)"
+                    .to_string(),
+            );
+        }
+        if b == b'\r' {
+            return Err("must not contain carriage return (chart descriptions are \
+                 single-line YAML plain-style scalars; a `\\r` byte is the canonical \
+                 paste-from-Windows-CRLF-doc footgun and lands as a literal CR in \
+                 the rendered Chart.yaml — every YAML 1.2 parser treats CR as a \
+                 line terminator equivalent to LF, so the embedded CR is silently \
+                 normalized to a newline at every downstream consumer)"
+                .to_string());
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (chart descriptions \
+                 are printable UTF-8 single-line scalars; the control-byte arm \
+                 catches paste-from-binary-blob footguns like `0x00` NUL, `0x07` \
+                 BEL, `0x1b` ESC that would silently land in the rendered \
+                 Chart.yaml as a YAML-illegal byte sequence and fail at `helm lint` \
+                 time far from the source caixa.lisp)"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
@@ -5158,5 +5334,124 @@ mod tests {
         let err = is_spdx_expression_shape(&too_long).unwrap_err();
         assert!(err.contains("256"), "got: {err:?}");
         assert!(err.contains("257"), "got: {err:?}");
+    }
+
+    // ── is_chart_description_shape — shared `:descricao` chart-description predicate ──
+
+    #[test]
+    fn chart_description_shape_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // chart-description shape the `:descricao` axis carries.
+        // Drift between this list and the per-axis
+        // `manifest::tests::validate_descricao_accepts_canonical_summary`
+        // positive-set sweep surfaces here — one source of truth for
+        // the rule. Covers ASCII summaries, the Unicode `→` from the
+        // canonical Rust→wasm fixture, and the Unicode `—` em-dash
+        // from the `Caixa::template` scaffold every `feira init`
+        // emits.
+        for s in [
+            "Canonical Rust→wasm32-wasip2 caixa Servico.",
+            "Checkout flow.",
+            "AWS provider caixa for tatara-lisp",
+            "FIXME — describe this caixa",
+            "x",
+        ] {
+            is_chart_description_shape(s)
+                .unwrap_or_else(|e| panic!("canonical chart description {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn chart_description_shape_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each arm surfaces its
+        // own distinct reason substring. Pinned here so a future
+        // reason-wording rephrase that drops any of these substrings
+        // surfaces at this one place, not piecemeal across every
+        // per-axis test sweep. Mirrors
+        // `spdx_expression_shape_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicate.
+        for (s, needle) in [
+            // Leading whitespace — paste-from-aligned-doc.
+            (" Checkout flow.", "whitespace"),
+            // Trailing whitespace — paste-from-doc.
+            ("Checkout flow. ", "whitespace"),
+            // Tab inside — tab-from-aligned-doc.
+            ("Checkout\tflow.", "tab"),
+            // Newline — paste-from-multiline-doc.
+            ("Checkout\nflow.", "newline"),
+            // Carriage return — paste-from-Windows-CRLF-doc.
+            ("Checkout\rflow.", "carriage return"),
+            // NUL byte — paste-from-binary-blob.
+            ("Checkout\x00flow.", "control character"),
+            // BEL byte — paste-from-binary-blob.
+            ("Checkout\x07flow.", "control character"),
+            // ESC byte — paste-from-binary-blob.
+            ("Checkout\x1bflow.", "control character"),
+            // DEL byte (0x7F).
+            ("Checkout\x7fflow.", "control character"),
+        ] {
+            let err = is_chart_description_shape(s)
+                .err()
+                .unwrap_or_else(|| panic!("chart description {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "chart description {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_description_shape_accepts_unicode() {
+        // Positive control on the non-ASCII arm: the predicate must
+        // accept Unicode beyond the ASCII alphabet — the canonical
+        // pleme-io descricao fixtures carry `→` (U+2192) and `—`
+        // (U+2014), and every downstream consumer (YAML 1.2, Helm v3,
+        // every chart-aware UI) round-trips Unicode losslessly.
+        // Mirrors the spdx-rejects-non-ASCII arm by inverting it — a
+        // future tightening that bans non-ASCII bytes would regress
+        // every canonical fixture and surface here as a regression.
+        for s in [
+            "Canonical Rust→wasm32-wasip2",
+            "FIXME — describe this caixa",
+            "Caixa pour le projet tâche",
+            "日本語の説明",
+            "naïve",
+        ] {
+            is_chart_description_shape(s)
+                .unwrap_or_else(|e| panic!("Unicode chart description {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn chart_description_shape_rejects_empty_defensively() {
+        // The predicate is called from `crate::Caixa::validate_descricao`
+        // only after the per-axis `DescricaoEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`,
+        // `is_git_ref_name`, `is_git_oid`, `is_git_repo_url`,
+        // `is_cargo_feature_name`, and `is_spdx_expression_shape`
+        // carry at their call sites.
+        let err = is_chart_description_shape("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn chart_description_shape_rejects_at_513_byte_boundary() {
+        // The 512-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring the peer
+        // cap-boundary pins. Constructed as a single all-`a` token so
+        // only the cap arm fires (512 `a` bytes is alphabet-valid).
+        let max_ok = "a".repeat(CHART_DESCRIPTION_MAX_LEN);
+        assert_eq!(max_ok.len(), 512);
+        is_chart_description_shape(&max_ok).unwrap();
+        let too_long = "a".repeat(CHART_DESCRIPTION_MAX_LEN + 1);
+        assert_eq!(too_long.len(), 513);
+        let err = is_chart_description_shape(&too_long).unwrap_err();
+        assert!(err.contains("512"), "got: {err:?}");
+        assert!(err.contains("513"), "got: {err:?}");
     }
 }
