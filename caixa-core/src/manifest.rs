@@ -1071,6 +1071,39 @@ impl Caixa {
     /// [`crate::LayoutError::ServicoSlotsOnNonServico`] /
     /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
     /// specific slot sets.
+    ///
+    /// Past the empty arm the gate enforces the chart-description
+    /// shape predicate via [`crate::render::is_chart_description_shape`]:
+    /// the structural single-line UTF-8 floor every realistic chart
+    /// description in the wild matches — 1..=512 bytes, no leading
+    /// or trailing whitespace, no ASCII control characters anywhere
+    /// (`0x00..=0x1F` plus `0x7F` DEL — banning tab, newline,
+    /// carriage return, and every other control byte), Unicode
+    /// continuation bytes accepted (the canonical fixtures carry
+    /// `→` and `—`). Closes the canonical paste-from-doc footguns
+    /// the bare empty-arm gate left open: paste-from-aligned-doc
+    /// leading / trailing whitespace (`" Checkout flow."`,
+    /// `"Checkout flow. "`), paste-from-multiline-doc newline
+    /// (`"Checkout\nflow."`), paste-from-Windows-CRLF-doc CR
+    /// (`"Checkout\rflow."`), tab-from-aligned-doc
+    /// (`"Checkout\tflow."`), and paste-from-binary-blob NUL / BEL /
+    /// ESC / DEL bytes. Mirrors the shape-predicate cascade
+    /// [`Self::validate_repositorio`] / [`Self::validate_licenca`] /
+    /// [`Self::validate_edicao`] establish past their own empty arms
+    /// on the sibling universal-axis `Option<String>` Caixa-level
+    /// value-shape surfaces.
+    ///
+    /// The empty-first cascade discipline mirrors every peer per-axis
+    /// identity gate: [`ManifestError::DescricaoEmpty`] runs before
+    /// [`ManifestError::DescricaoInvalid`], so the narrower empty
+    /// diagnostic surfaces on `Some("")` rather than the broader
+    /// shape-predicate diagnostic — peer with how
+    /// [`ManifestError::LicencaEmpty`] runs before
+    /// [`ManifestError::LicencaInvalid`],
+    /// [`ManifestError::EdicaoEmpty`] runs before
+    /// [`ManifestError::EdicaoInvalid`],
+    /// [`ManifestError::RepositorioEmpty`] runs before
+    /// [`ManifestError::RepositorioInvalid`].
     pub fn validate_descricao(&self) -> Result<(), ManifestError> {
         let Some(s) = self.descricao.as_deref() else {
             return Ok(());
@@ -1078,6 +1111,12 @@ impl Caixa {
         if s.is_empty() {
             return Err(ManifestError::DescricaoEmpty);
         }
+        crate::render::is_chart_description_shape(s).map_err(|reason| {
+            ManifestError::DescricaoInvalid {
+                descricao: s.to_string(),
+                reason,
+            }
+        })?;
         Ok(())
     }
 
@@ -1582,6 +1621,32 @@ pub enum ManifestError {
          Servico.\"`)"
     )]
     DescricaoEmpty,
+    #[error(
+        ":descricao {descricao:?} is not a valid chart-description shape: \
+         {reason} (the substrate consumes this string through the shared \
+         `crate::render::is_chart_description_shape` predicate — the same \
+         single-line-UTF-8 floor every realistic chart description carries: \
+         1..=512 bytes, no leading or trailing whitespace, no ASCII control \
+         characters anywhere, Unicode prose bytes accepted. The canonical \
+         authoring shapes are short single-line summaries like `\"Canonical \
+         Rust→wasm32-wasip2 caixa Servico.\"`, `\"Checkout flow.\"`, \
+         `\"AWS provider caixa for tatara-lisp\"`. Without this gate a \
+         malformed `:descricao` (paste-from-aligned-doc leading whitespace \
+         `\" Checkout flow.\"` / trailing whitespace `\"Checkout flow. \"`; \
+         paste-from-multiline-doc newline `\"Checkout\\nflow.\"`; \
+         paste-from-Windows-CRLF-doc carriage return `\"Checkout\\rflow.\"`; \
+         tab-from-aligned-doc `\"Checkout\\tflow.\"`; paste-from-binary-blob \
+         NUL / BEL / ESC / DEL byte) silently passed `from_lisp` + \
+         `validate_descricao` + `StandardLayout::verify` and landed in the \
+         rendered `lareira-<nome>` Helm chart's `Chart.yaml description:` \
+         field + `README.md` header paragraph as a YAML-illegal multi-line \
+         scalar or a silently-trimmed whitespace round-trip — every \
+         chart-aware UI (`helm list`, `helm search`, Artifact Hub) would \
+         render the description in a single-line column far from the source \
+         caixa.lisp; the gate moves the diagnostic to the manifest layer \
+         with the offending value named verbatim)"
+    )]
+    DescricaoInvalid { descricao: String, reason: String },
     #[error(
         ":licenca is the empty string (every published caixa names \
          its license via a non-empty `:licenca` SPDX expression — the \
@@ -3773,6 +3838,7 @@ mod tests {
             "Canonical Rust→wasm32-wasip2 caixa Servico.",
             "Checkout flow.",
             "AWS provider caixa for tatara-lisp",
+            "FIXME — describe this caixa",
             "x",
         ] {
             let c = caixa_with_descricao(Some(desc));
@@ -3793,6 +3859,162 @@ mod tests {
         let c = caixa_with_descricao(Some(""));
         let err = c.validate_descricao().unwrap_err();
         assert!(matches!(err, ManifestError::DescricaoEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_descricao_rejects_leading_whitespace() {
+        // Paste-from-aligned-doc footgun: a leading ASCII space the
+        // bare empty-arm gate accepted, the shape predicate now
+        // refuses. The diagnostic carries the offending value
+        // verbatim (with the leading space preserved) so the author
+        // can grep their caixa.lisp for the exact `:descricao` line
+        // and fix the round-trip-inconsistent leading whitespace.
+        // Mirrors the peer
+        // `validate_licenca_rejects_leading_whitespace` arm on the
+        // sibling `:licenca` axis.
+        let c = caixa_with_descricao(Some(" Checkout flow."));
+        let err = c.validate_descricao().unwrap_err();
+        let ManifestError::DescricaoInvalid { descricao, reason } = err else {
+            panic!("expected DescricaoInvalid, got {err:?}");
+        };
+        assert_eq!(descricao, " Checkout flow.");
+        assert!(reason.contains("whitespace"), "got: {reason:?}");
+    }
+
+    #[test]
+    fn validate_descricao_rejects_trailing_whitespace() {
+        // Paste-from-doc footgun: a trailing ASCII space the bare
+        // empty-arm gate accepted, the shape predicate now refuses.
+        let c = caixa_with_descricao(Some("Checkout flow. "));
+        let err = c.validate_descricao().unwrap_err();
+        let ManifestError::DescricaoInvalid { descricao, reason } = err else {
+            panic!("expected DescricaoInvalid, got {err:?}");
+        };
+        assert_eq!(descricao, "Checkout flow. ");
+        assert!(reason.contains("whitespace"), "got: {reason:?}");
+    }
+
+    #[test]
+    fn validate_descricao_rejects_embedded_newline() {
+        // Paste-from-multiline-doc footgun: an embedded LF the bare
+        // empty-arm gate accepted, the shape predicate now refuses.
+        // Without this gate the embedded newline silently landed in
+        // the rendered Chart.yaml as a multi-line YAML block scalar,
+        // and every chart-aware UI (`helm list`, `helm search`,
+        // Artifact Hub) renders the description in a single-line
+        // column so the embedded newline is silently dropped at
+        // every downstream consumer.
+        let c = caixa_with_descricao(Some("Checkout\nflow."));
+        let err = c.validate_descricao().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::DescricaoInvalid { .. }),
+            "got {err:?}",
+        );
+        assert!(err.to_string().contains("newline"), "got {err}");
+    }
+
+    #[test]
+    fn validate_descricao_rejects_embedded_carriage_return() {
+        // Paste-from-Windows-CRLF-doc footgun.
+        let c = caixa_with_descricao(Some("Checkout\rflow."));
+        let err = c.validate_descricao().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::DescricaoInvalid { .. }),
+            "got {err:?}",
+        );
+        assert!(err.to_string().contains("carriage return"), "got {err}");
+    }
+
+    #[test]
+    fn validate_descricao_rejects_embedded_tab() {
+        // Tab-from-aligned-doc footgun.
+        let c = caixa_with_descricao(Some("Checkout\tflow."));
+        let err = c.validate_descricao().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::DescricaoInvalid { .. }),
+            "got {err:?}",
+        );
+        assert!(err.to_string().contains("tab"), "got {err}");
+    }
+
+    #[test]
+    fn validate_descricao_rejects_embedded_control_bytes() {
+        // Paste-from-binary-blob footgun: every other control byte
+        // (NUL, BEL, ESC, DEL) is refused at validate time. Mirrors
+        // the peer SPDX-expression control-byte arm.
+        for s in [
+            "Checkout\x00flow.",
+            "Checkout\x07flow.",
+            "Checkout\x1bflow.",
+            "Checkout\x7fflow.",
+        ] {
+            let c = caixa_with_descricao(Some(s));
+            let err = c.validate_descricao().unwrap_err();
+            assert!(
+                matches!(err, ManifestError::DescricaoInvalid { .. }),
+                "{s:?} got {err:?}",
+            );
+            assert!(
+                err.to_string().contains("control character"),
+                "{s:?} got {err}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_descricao_accepts_unicode_prose() {
+        // Positive control: Unicode prose is accepted — the
+        // canonical fixtures carry `→` (U+2192) and `—` (U+2014),
+        // and `Caixa::template`'s `"FIXME — describe this caixa"`
+        // scaffold every `feira init` emits must continue to pass.
+        for s in [
+            "Canonical Rust→wasm32-wasip2 caixa Servico.",
+            "FIXME — describe this caixa",
+            "Caixa pour le projet tâche",
+            "日本語の説明",
+        ] {
+            let c = caixa_with_descricao(Some(s));
+            c.validate_descricao()
+                .unwrap_or_else(|err| panic!("Unicode {s:?} must pass: {err:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_descricao_empty_takes_precedence_over_shape() {
+        // Cascade pin: a `Some("")` surfaces the narrower
+        // `DescricaoEmpty` arm, not the broader `DescricaoInvalid`
+        // shape-predicate arm. Mirrors the peer
+        // `validate_licenca_empty_takes_precedence_over_shape` pin
+        // on the sibling `:licenca` axis.
+        let c = caixa_with_descricao(Some(""));
+        let err = c.validate_descricao().unwrap_err();
+        assert!(matches!(err, ManifestError::DescricaoEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_descricao_invalid_diagnostic_carries_offending_value_and_slot() {
+        // Diagnostic-shape pin: the error's Display surfaces both
+        // the `:descricao` slot name and the offending value
+        // verbatim, so a `feira lint` run can render the diagnostic
+        // without re-parsing and the author can grep their caixa.lisp
+        // for the offending `:descricao` line. Mirrors the peer
+        // `validate_licenca_invalid_diagnostic_carries_offending_value_and_slot`
+        // pin (ee2e888) on the sibling `:licenca` axis.
+        // The `{descricao:?}` Debug format escapes embedded control
+        // bytes; the quoted offending value surfaces as
+        // `"Checkout\nflow."` (literal backslash-n) in the rendered
+        // diagnostic. The author can grep their caixa.lisp for the
+        // literal `Checkout` summary prefix.
+        let c = caixa_with_descricao(Some("Checkout\nflow."));
+        let rendered = c.validate_descricao().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":descricao"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("Checkout\\nflow."),
+            "diagnostic must quote the offending value (debug-escaped): {rendered}",
+        );
     }
 
     #[test]

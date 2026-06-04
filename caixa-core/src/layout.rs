@@ -1983,6 +1983,48 @@ mod tests {
             .expect("canonical summary must pass");
     }
 
+    #[test]
+    fn descricao_violation_on_non_chart_shape() {
+        // Shape-predicate wire-up pin: a malformed `:descricao` value
+        // that's a non-empty `Some(s)` but carries a paste-from-
+        // multiline-doc embedded newline surfaces the
+        // `DescricaoViolation` envelope via the manifest-layer
+        // `ManifestError::DescricaoInvalid` arm. Mirrors the peer
+        // `descricao_violation_on_empty_some` shape on the empty arm
+        // of the same axis and the peer
+        // `licenca_violation_on_non_spdx_shape` shape on the sibling
+        // `:licenca` axis. Until this gate landed a value like
+        // `"Checkout\nflow."` (an embedded newline) or `"Checkout
+        // flow. "` (a trailing whitespace) silently passed
+        // `StandardLayout::verify` and landed in the rendered
+        // Chart.yaml `description:` field as a YAML-illegal
+        // multi-line scalar or a silently-trimmed whitespace
+        // round-trip far from the source caixa.lisp.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.descricao = Some("Checkout\nflow.".into());
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DescricaoViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DescricaoViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":descricao"),
+            "issue must name the offending slot: {issue}",
+        );
+        // The wrapped `ManifestError::DescricaoInvalid` Display uses
+        // `{descricao:?}` (Debug) so the embedded newline surfaces
+        // debug-escaped as `\n` in the issue string.
+        assert!(
+            issue.contains("Checkout\\nflow."),
+            "issue must quote the offending value (debug-escaped): {issue}",
+        );
+    }
+
     // ── :licenca empty-Some shape wired into verify (universal axis) ──
     //
     // Until this wire-up landed `Caixa::validate_licenca` did not
