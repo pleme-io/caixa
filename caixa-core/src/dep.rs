@@ -544,6 +544,72 @@ impl Dep {
     }
 }
 
+/// Cross-slot coherence gate on the dep-graph axis: no `:deps` or
+/// `:deps-dev` entry may name the caixa's own `:nome`.
+///
+/// A caixa that lists itself as a dep is a degenerate self-edge in the
+/// lacre closure's dep-graph — the closure is a DAG rooted at the
+/// caixa's `:nome`, and the caixa-resolver's lacre pipeline traverses
+/// every `:deps` / `:deps-dev` entry's target by name. A self-dep
+/// hands the resolver a node that is its own parent: a one-node cycle
+/// it either rejects mid-traversal far from the source `caixa.lisp`
+/// (the resolver detecting infinite recursion on the closure walk) or,
+/// worse, recurses on until it exhausts its stack. Because every
+/// `:nome` is a globally-unique substrate identity (DNS-1123 label +
+/// lacre closure root), a dep entry whose `:nome` equals the caixa's
+/// own `:nome` *is* the caixa itself, not a coincidentally-named peer.
+///
+/// Lives outside [`Caixa::validate_deps`] because the dep-list view
+/// carries the entries but not the parent `:nome`; mirrors the
+/// cross-slot self-edge gates [`crate::supervisor::validate_no_self_supervision`]
+/// (ad4abf1) on the `:children :caixa` axis and
+/// [`crate::aplicacao::validate_no_self_membership`] on the
+/// `:membros :caixa` axis — the same "an edge from a graph node to
+/// itself is structurally not a tree/graph edge" discipline, here on
+/// the third typed-name-graph axis (the dep closure; the supervision
+/// tree and the Aplicacao membership set were the prior two).
+///
+/// Walks `:deps` first then `:deps-dev` so the diagnostic for a caixa
+/// that self-references on both axes surfaces the `:deps` arm first —
+/// the load-bearing axis the lacre closure resolves at every build,
+/// peer with the canonical [`Caixa::validate_deps`] walk order
+/// (`:deps` → `:deps-dev`).
+///
+/// Carries the offending list tag (`":deps"` or `":deps-dev"`)
+/// verbatim into the diagnostic so the author can grep their
+/// `caixa.lisp` for the offending block in one edit — same
+/// `list: &'static str` shape [`DepError::DuplicateNome`] (359fba5)
+/// uses on the cross-list duplicate-name axis.
+///
+/// `Code paths` (`:bibliotecas` / `:exe` / `:servicos`) are the
+/// substrate-blessed shape for referencing the caixa's *own* code, so
+/// the diagnostic names them as the corrective surface — every
+/// legitimate "I want to use code from this caixa" authoring intent
+/// routes through one of those three slots, not a self-dep.
+pub fn validate_no_self_dep(
+    deps: &[Dep],
+    deps_dev: &[Dep],
+    parent_nome: &str,
+) -> Result<(), DepError> {
+    for dep in deps {
+        if dep.nome == parent_nome {
+            return Err(DepError::DepIsSelf {
+                nome: parent_nome.to_string(),
+                list: ":deps",
+            });
+        }
+    }
+    for dep in deps_dev {
+        if dep.nome == parent_nome {
+            return Err(DepError::DepIsSelf {
+                nome: parent_nome.to_string(),
+                list: ":deps-dev",
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
@@ -710,6 +776,19 @@ pub enum DepError {
         nome: String,
         caracteristica: String,
     },
+    #[error(
+        "{list} entry :nome {nome:?} names the caixa itself — a caixa cannot depend \
+         on itself (the lacre closure's dep-graph traversal is rooted at the caixa's \
+         :nome, and a self-dep would be a one-node cycle the caixa-resolver either \
+         rejects mid-traversal far from the source caixa.lisp or recurses on until \
+         it exhausts its stack). Every :nome is globally-unique substrate identity, \
+         so a :deps / :deps-dev entry whose :nome equals the parent caixa's :nome \
+         *is* the parent itself, not a coincidentally-named peer. Drop the \
+         self-referential dep entry — to reference code from this caixa, use \
+         :bibliotecas / :exe / :servicos (the substrate-blessed shape for \
+         referencing the caixa's own code surface) instead."
+    )]
+    DepIsSelf { nome: String, list: &'static str },
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -2922,5 +3001,111 @@ mod tests {
             d.validate().unwrap_err(),
             DepError::CaracteristicaInvalid { .. }
         ));
+    }
+
+    // ── self-dep cross-slot gate ─────────────────────────────────────
+
+    #[test]
+    fn validate_no_self_dep_rejects_self_in_deps() {
+        // A caixa whose `:deps` lists its own `:nome` is a one-node
+        // cycle in the lacre closure's dep-graph traversal — rejected,
+        // naming the parent and the offending list tag.
+        let deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("orquestra", "^0.1"),
+        ];
+        let err = validate_no_self_dep(&deps, &[], "orquestra").unwrap_err();
+        assert!(
+            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == ":deps"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_no_self_dep_rejects_self_in_deps_dev() {
+        // Same gate on the `:deps-dev` axis — neither dep list is a
+        // second-class citizen on the self-edge invariant.
+        let deps_dev = vec![Dep::simple("orquestra", "^0.1")];
+        let err = validate_no_self_dep(&[], &deps_dev, "orquestra").unwrap_err();
+        assert!(
+            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == ":deps-dev"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_no_self_dep_deps_fires_before_deps_dev() {
+        // Walk order pin: a caixa that self-references on both lists
+        // surfaces the `:deps` arm first — the load-bearing axis the
+        // lacre closure resolves at every build. Mirrors the canonical
+        // [`Caixa::validate_deps`] cascade (`:deps` → `:deps-dev`).
+        let deps = vec![Dep::simple("orquestra", "^0.1")];
+        let deps_dev = vec![Dep::simple("orquestra", "^0.2")];
+        let err = validate_no_self_dep(&deps, &deps_dev, "orquestra").unwrap_err();
+        assert!(
+            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == ":deps"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_no_self_dep_accepts_distinct_names() {
+        // Positive control: every dep names a distinct caixa. The
+        // canonical author surface — peer of
+        // [`validate_no_self_supervision_accepts_distinct_children`].
+        let deps = vec![
+            Dep::simple("caixa-teia", "^0.1"),
+            Dep::simple("caixa-arch", "^0.1"),
+        ];
+        let deps_dev = vec![Dep::simple("caixa-test", "^0.1")];
+        validate_no_self_dep(&deps, &deps_dev, "orquestra").unwrap();
+    }
+
+    #[test]
+    fn validate_no_self_dep_empty_lists_pass() {
+        // A caixa with no declared deps has nothing to self-reference —
+        // the gate is vacuously satisfied. Peer of
+        // [`validate_no_self_supervision_empty_children_is_ok`].
+        validate_no_self_dep(&[], &[], "orquestra").unwrap();
+    }
+
+    #[test]
+    fn validate_no_self_dep_diagnostic_carries_offending_list_and_nome() {
+        // Diagnostic-shape pin (peer with
+        // [`validate_no_self_supervision`]'s diagnostic): the error's
+        // Display surfaces both the offending list tag and the
+        // parent's `:nome` verbatim, so the author can grep their
+        // caixa.lisp for the offending block in one edit. Names
+        // `:bibliotecas` / `:exe` / `:servicos` as the corrective
+        // surface — every legitimate "I want to use code from this
+        // caixa" intent routes through one of those three slots.
+        let deps_dev = vec![Dep::simple("orquestra", "^0.1")];
+        let rendered = validate_no_self_dep(&[], &deps_dev, "orquestra")
+            .unwrap_err()
+            .to_string();
+        assert!(
+            rendered.contains(":deps-dev"),
+            "diagnostic must name the offending list tag: {rendered}",
+        );
+        assert!(
+            rendered.contains("orquestra"),
+            "diagnostic must quote the parent caixa name: {rendered}",
+        );
+        assert!(
+            rendered.contains(":bibliotecas"),
+            "diagnostic must point at the corrective code-surface slot: {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_no_self_dep_accepts_coincidental_substring_match() {
+        // Identity is exact-string equality, not substring — a dep
+        // named `"orquestra-helper"` is a distinct caixa even when the
+        // parent is `"orquestra"`. Pin the exact-match discipline so a
+        // future relaxation that uses `contains` surfaces here, peer
+        // with the supervision-tree and Aplicacao-membership gates
+        // which all use exact-string equality on the typed identity.
+        let deps = vec![Dep::simple("orquestra-helper", "^0.1")];
+        validate_no_self_dep(&deps, &[], "orquestra").unwrap();
     }
 }
