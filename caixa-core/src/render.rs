@@ -2485,6 +2485,248 @@ pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Maximum byte length of a chart-keyword-shaped string. The 20-byte
+/// cap matches Cargo's `[package] keywords` rule
+/// (<https://doc.rust-lang.org/cargo/reference/manifest.html#the-keywords-field>:
+/// "Each keyword should be ASCII text, start with a letter, and only
+/// contain letters, numbers, _ or -. Keywords are case-insensitive and
+/// limited to a maximum length of 20 characters.") — the same parser
+/// crates.io routes its `keywords:` array entries through at publish
+/// time. Tighter than every peer length cap on the typed Caixa surface
+/// ([`CHART_MAINTAINER_NAME_MAX_LEN`] 128 on the sibling chart-metadata
+/// `Vec<String>` axis, [`CARGO_FEATURE_NAME_MAX_LEN`] 64 on the sibling
+/// `:caracteristicas` per-entry axis, [`CHART_DESCRIPTION_MAX_LEN`] 512
+/// on the free-form-prose axis); the search-tag class is the tightest
+/// short-identifier shape on the typed surface — every realistic
+/// `:etiquetas` entry in the wild (`"iac"`, `"aws"`, `"pangea"`,
+/// `"hello-world"`, `"tatara-lisp"`, `"caixa-servico"`,
+/// `"infrastructure"`, `"pangea-native"`) sits well under 20 bytes,
+/// and the 20-byte cap surfaces the "paste-from-doc multi-tag blob
+/// landed in a single `:etiquetas` entry" footgun (`"web-service web
+/// app"`, `"mesh,http,grpc"`) at validate time.
+pub const CHART_KEYWORD_MAX_LEN: usize = 20;
+
+/// Predicate: assert that `s` is a valid chart-keyword shape. The
+/// `:etiquetas` axis is a per-entry registry-search-tag identifier
+/// that lands in the rendered `lareira-<nome>` Helm chart's
+/// `Chart.yaml` `keywords:` array via [`caixa-helm`]'s
+/// `build_chart_yaml` (folded through a [`std::collections::BTreeSet`]
+/// alongside the four substrate-fixed tags `lareira` / `wasm` /
+/// `tatara-lisp` / `caixa-servico`) and indexes the chart through
+/// Artifact Hub's keyword-search axis + the future caixa-registry's
+/// keyword index. The contract — modeled on Cargo's crates.io
+/// `[package] keywords` grammar (the parser the crates.io publish API
+/// routes every `keywords:` entry through at publish time), narrowed
+/// to the strict ASCII subset every realistic search tag uses:
+///
+///   - 1..=[`CHART_KEYWORD_MAX_LEN`] (20) bytes;
+///   - first byte: ASCII letter (`A-Z` or `a-z`). Leading digit, `-`,
+///     `_`, whitespace, control, and non-ASCII are each surfaced with
+///     a self-locating reason naming the canonical authoring footgun
+///     (paste-from-numbered-list `"1foo"`, kebab-leak `"-foo"`,
+///     snake-leak `"_foo"`, paste-from-aligned-doc whitespace,
+///     paste-from-Unicode-doc non-ASCII);
+///   - remaining bytes: ASCII alphanumeric, `_`, or `-` (Cargo's
+///     crates.io-accepted continuation set; tighter than
+///     [`is_cargo_feature_name`]'s `_`/`-`/`+`/`.` continuation set —
+///     `+` and `.` are not part of the keyword grammar). Whitespace,
+///     `,` / `/` / `;` / `.` list-separator confusions, control bytes,
+///     and non-ASCII bytes are each surfaced with a self-locating
+///     reason naming the canonical authoring footgun (multi-tag blob
+///     in one entry, CSV-list-belongs-to-list-grammar miscomprehension,
+///     CR/LF paste-from-doc, NFC/NFD normalization drift).
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) so each per-axis caller —
+/// [`crate::Caixa::validate_etiquetas`] for the universal `:etiquetas`
+/// axis at validate time, every future per-keyword axis (a future
+/// caixa-registry keyword-index lookup, a future Artifact Hub-keyword
+/// scraper validator, a future per-Aplicacao aggregated keyword set)
+/// — wraps the same reason in its own typed `*Invalid { <axis>, reason }`
+/// variant.
+///
+/// Empty input is rejected here (defensively) and at each call site
+/// via the narrower [`crate::ManifestError::EtiquetaEmpty`] variant —
+/// the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], [`is_wasi_keyvalue_slot`], [`is_git_ref_name`],
+/// [`is_git_oid`], [`is_git_repo_url`], [`is_cargo_feature_name`],
+/// [`is_spdx_expression_shape`], [`is_chart_description_shape`], and
+/// [`is_chart_maintainer_name_shape`] all carry at their call sites.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / first-byte-class / continuation-byte-class / whitespace /
+/// control-char / non-ASCII / `,`-list-separator-confusion /
+/// `/`-path-separator-confusion / `;`-list-separator-confusion /
+/// `.`-namespace-confusion), without wrapping in any error variant —
+/// every caller maps the same `String` into its own typed
+/// `*Invalid { <axis>, reason }` enum variant.
+pub fn is_chart_keyword_shape(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > CHART_KEYWORD_MAX_LEN {
+        return Err(format!(
+            "exceeds chart keyword max length of {CHART_KEYWORD_MAX_LEN} bytes (got \
+             {} bytes; legitimate `:etiquetas` search tags rarely exceed ~12 bytes — \
+             this length suggests a paste-from-doc multi-tag blob landed in a single \
+             `:etiquetas` entry instead of being split into one entry per tag, e.g. \
+             `(\"mesh\" \"http\" \"grpc\")` not `(\"mesh-http-grpc-rpc-wasm\")`. \
+             Cargo's crates.io publish API enforces the same 20-byte cap on its \
+             `keywords:` array at publish time)",
+            s.len()
+        ));
+    }
+    let bytes = s.as_bytes();
+    let first = bytes[0];
+    if !first.is_ascii_alphabetic() {
+        let msg = if first == b' ' || first == b'\t' {
+            "must not start with whitespace (chart keywords are single-token \
+             search-tag identifiers; the leading-whitespace arm is the canonical \
+             paste-from-aligned-doc footgun and round-trips inconsistently — every \
+             YAML 1.2 dumper trims leading whitespace from plain-style scalars, so \
+             the authored space silently drops in the rendered Chart.yaml \
+             `keywords:` array)"
+                .to_string()
+        } else if first == b'-' {
+            "must not start with `-` (Cargo's crates.io keyword grammar rejects a \
+             leading hyphen — `-` is a legitimate continuation character between \
+             alphanumeric segments but the canonical CLI-argument-injection / \
+             kebab-leak footgun at the start; drop the leading `-`, e.g. \
+             `\"tatara-lisp\"` not `\"-tatara-lisp\"`)"
+                .to_string()
+        } else if first == b'_' {
+            "must not start with `_` (Cargo's crates.io keyword grammar requires the \
+             first character be an ASCII letter — `_` is a legitimate continuation \
+             character between alphanumeric segments but the canonical \
+             snake-leak / hidden-identifier footgun at the start; drop the leading \
+             `_`, e.g. `\"caixa-servico\"` not `\"_caixa_servico\"`)"
+                .to_string()
+        } else if first.is_ascii_digit() {
+            format!(
+                "must not start with digit {ch:?} (Cargo's crates.io keyword grammar \
+                 requires the first character be an ASCII letter — a digit at the \
+                 start is the canonical paste-from-numbered-list footgun, e.g. the \
+                 author copied `1. mesh` from a numbered doc and the `1` leaked \
+                 into the tag; drop the leading digit, e.g. `\"v2\"` not `\"2v\"`)",
+                ch = first as char
+            )
+        } else if first < 0x20 || first == 0x7F {
+            format!(
+                "must not start with control character 0x{first:02x} (Cargo's \
+                 crates.io keyword grammar rejects ASCII control characters; the \
+                 CR/LF arm is the canonical paste-from-multiline-doc footgun)"
+            )
+        } else if first >= 0x80 {
+            format!(
+                "must not start with non-ASCII byte 0x{first:02x} (Cargo's \
+                 crates.io keyword grammar is strict ASCII; the non-ASCII arm \
+                 catches the canonical paste-from-Unicode-doc footgun — every \
+                 legitimate search tag is a kebab-case ASCII identifier like \
+                 `\"mesh\"`, `\"wasm\"`, `\"tatara-lisp\"`. Raw non-ASCII silently \
+                 round-trips inconsistently across NFC/NFD normalization on APFS / \
+                 case-folding filesystems and breaks the Artifact Hub keyword \
+                 search index lookup)"
+            )
+        } else {
+            format!(
+                "must start with an ASCII letter, got {ch:?} (Cargo's crates.io \
+                 keyword grammar rejects every non-letter first character — the \
+                 canonical search tags are kebab-case ASCII identifiers starting \
+                 with a letter, like `\"mesh\"`, `\"wasm\"`, `\"hello-world\"`)",
+                ch = first as char
+            )
+        };
+        return Err(msg);
+    }
+    for &b in &bytes[1..] {
+        let valid = b.is_ascii_alphanumeric() || b == b'_' || b == b'-';
+        if !valid {
+            let msg = if b == b' ' || b == b'\t' {
+                format!(
+                    "must not contain whitespace character {ch:?} (Cargo's \
+                     crates.io keyword grammar rejects whitespace; search tags are \
+                     single-token identifiers — use `-` or `_` to separate \
+                     kebab-case / snake-case segments instead, or split into \
+                     separate `:etiquetas` entries: `(\"web\" \"service\")` not \
+                     `(\"web service\")`)",
+                    ch = b as char
+                )
+            } else if b == b',' {
+                "must not contain `,` (the comma separator belongs to the \
+                 `:etiquetas` list grammar between entries, not to the keyword \
+                 grammar within an entry — split the value into separate list \
+                 entries: `(\"mesh\" \"http\" \"grpc\")` not `(\"mesh,http,grpc\")`. \
+                 The author confused the CSV-style list-separator convention with \
+                 the list grammar)"
+                    .to_string()
+            } else if b == b'/' {
+                "must not contain `/` (Cargo's crates.io keyword grammar rejects \
+                 path-style separators within a tag; the segment separator within \
+                 a search tag is `-` or `_`, and multi-segment paths belong as \
+                 separate `:etiquetas` entries: `(\"caixa\" \"servico\")` not \
+                 `(\"caixa/servico\")`)"
+                    .to_string()
+            } else if b == b';' {
+                "must not contain `;` (the semicolon separator is not part of the \
+                 `:etiquetas` list grammar — split the value into separate list \
+                 entries: `(\"mesh\" \"http\")` not `(\"mesh;http\")`. The author \
+                 confused another lisp-list-style separator with the list \
+                 grammar)"
+                    .to_string()
+            } else if b == b'.' {
+                "must not contain `.` (Cargo's crates.io keyword grammar excludes \
+                 `.` from the continuation set — the canonical \
+                 namespace-confusion / version-suffix footgun, e.g. `\"http.1\"` \
+                 / `\"v1.0\"`; use `-` instead, e.g. `\"http-1\"` / `\"v1-0\"`)"
+                    .to_string()
+            } else if b == b'\n' {
+                "must not contain newline (chart keywords are single-line \
+                 single-token identifiers; an embedded newline is the canonical \
+                 paste-from-multiline-doc footgun — the author pasted a multi-tag \
+                 block into one `:etiquetas` entry instead of splitting into one \
+                 entry per tag)"
+                    .to_string()
+            } else if b == b'\r' {
+                "must not contain carriage return (chart keywords are single-line \
+                 single-token identifiers; a `\\r` byte is the canonical \
+                 paste-from-Windows-CRLF-doc footgun and lands as a literal CR in \
+                 the rendered Chart.yaml `keywords:` array)"
+                    .to_string()
+            } else if b < 0x20 || b == 0x7F {
+                format!(
+                    "must not contain control character 0x{b:02x} (Cargo's \
+                     crates.io keyword grammar rejects ASCII control characters; \
+                     the control-byte arm catches paste-from-binary-blob footguns \
+                     like `0x00` NUL, `0x07` BEL, `0x1b` ESC, `0x7f` DEL that \
+                     would silently land in the rendered Chart.yaml \
+                     `keywords:` array as a YAML-illegal byte sequence)"
+                )
+            } else if b >= 0x80 {
+                format!(
+                    "must not contain non-ASCII byte 0x{b:02x} (Cargo's crates.io \
+                     keyword grammar is strict ASCII; the non-ASCII arm catches \
+                     the canonical paste-from-Unicode-doc footgun — raw non-ASCII \
+                     silently round-trips inconsistently across NFC/NFD \
+                     normalization on APFS / case-folding filesystems and breaks \
+                     the Artifact Hub keyword search index lookup)"
+                )
+            } else {
+                format!(
+                    "contains invalid character {ch:?} (Cargo's crates.io keyword \
+                     grammar allows only `[A-Za-z0-9_-]` after the first \
+                     character)",
+                    ch = b as char
+                )
+            };
+            return Err(msg);
+        }
+    }
+    Ok(())
+}
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
@@ -3532,9 +3774,10 @@ mod tests {
                 .and_then(|v| v.as_str()),
             Some("CiliumNetworkPolicy")
         );
-        assert!(skel
-            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
-            .is_some());
+        assert!(
+            skel.get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+                .is_some()
+        );
     }
 
     #[test]
@@ -5745,5 +5988,138 @@ mod tests {
         let err = is_chart_maintainer_name_shape(&too_long).unwrap_err();
         assert!(err.contains("128"), "got: {err:?}");
         assert!(err.contains("129"), "got: {err:?}");
+    }
+
+    // ── is_chart_keyword_shape — shared `:etiquetas` chart-keyword predicate ──
+
+    #[test]
+    fn chart_keyword_shape_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // chart-keyword shape the `:etiquetas` axis carries. Drift
+        // between this list and the per-axis
+        // `manifest::tests::validate_etiquetas_accepts_canonical_shaped_forms`
+        // positive-set sweep surfaces here — one source of truth for
+        // the rule. Covers the example fixtures'
+        // `:etiquetas` lists (`"example"`, `"aplicacao"`, `"mesh"`,
+        // `"ecommerce"`, `"demo"`, `"infrastructure"`, `"aws"`,
+        // `"akeyless"`, `"pangea-native"`) and the substrate-fixed
+        // tags caixa-helm unions in at chart render (`"lareira"`,
+        // `"wasm"`, `"tatara-lisp"`, `"caixa-servico"`).
+        for s in [
+            "example",
+            "aplicacao",
+            "mesh",
+            "ecommerce",
+            "demo",
+            "infrastructure",
+            "aws",
+            "akeyless",
+            "pangea-native",
+            "hello-world",
+            "wasm",
+            "rust",
+            "tatara-lisp",
+            "caixa-servico",
+            "lareira",
+            "Foo",
+            "Bar123",
+            "x",
+            "snake_case_tag",
+        ] {
+            is_chart_keyword_shape(s)
+                .unwrap_or_else(|e| panic!("canonical chart keyword {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn chart_keyword_shape_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each arm surfaces its
+        // own distinct reason substring. Pinned here so a future
+        // reason-wording rephrase that drops any of these substrings
+        // surfaces at this one place, not piecemeal across every
+        // per-axis test sweep. Mirrors
+        // `chart_maintainer_name_shape_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicate.
+        for (s, needle) in [
+            // Leading whitespace — paste-from-aligned-doc.
+            (" mesh", "whitespace"),
+            // Leading hyphen — kebab-leak footgun.
+            ("-foo", "`-`"),
+            // Leading underscore — snake-leak footgun.
+            ("_foo", "`_`"),
+            // Leading digit — paste-from-numbered-list footgun.
+            ("1foo", "digit"),
+            // Embedded whitespace — multi-tag-blob footgun.
+            ("web service", "whitespace"),
+            // Tab inside — tab-from-aligned-doc.
+            ("mesh\thttp", "whitespace"),
+            // Newline — paste-from-multiline-doc.
+            ("mesh\nhttp", "newline"),
+            // Carriage return — paste-from-Windows-CRLF-doc.
+            ("mesh\rhttp", "carriage return"),
+            // Comma — CSV-list-separator confusion.
+            ("mesh,http", "`,`"),
+            // Slash — path-separator confusion.
+            ("caixa/servico", "`/`"),
+            // Semicolon — alt-list-separator confusion.
+            ("mesh;http", "`;`"),
+            // Period — namespace / version-suffix confusion.
+            ("http.1", "`.`"),
+            // NUL byte — paste-from-binary-blob.
+            ("mesh\x00http", "control character"),
+            // DEL byte (0x7F).
+            ("mesh\x7fhttp", "control character"),
+            // Non-ASCII inside.
+            ("café", "non-ASCII"),
+            // Non-ASCII leading.
+            ("éclair", "non-ASCII"),
+        ] {
+            let err = is_chart_keyword_shape(s)
+                .err()
+                .unwrap_or_else(|| panic!("chart keyword {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "chart keyword {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_keyword_shape_rejects_empty_defensively() {
+        // The predicate is called from `crate::Caixa::validate_etiquetas`
+        // only after the per-axis `EtiquetaEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`,
+        // `is_git_ref_name`, `is_git_oid`, `is_git_repo_url`,
+        // `is_cargo_feature_name`, `is_spdx_expression_shape`,
+        // `is_chart_description_shape`, and
+        // `is_chart_maintainer_name_shape` carry at their call sites.
+        let err = is_chart_keyword_shape("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn chart_keyword_shape_rejects_at_21_byte_boundary() {
+        // The 20-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring the peer
+        // cap-boundary pins
+        // (`chart_maintainer_name_shape_rejects_at_129_byte_boundary`
+        // on the 128-byte sibling,
+        // `chart_description_shape_rejects_at_513_byte_boundary` on
+        // the 512-byte sibling). Constructed as a single all-`a`
+        // token so only the cap arm fires (20 `a` bytes is alphabet-
+        // valid).
+        let max_ok = "a".repeat(CHART_KEYWORD_MAX_LEN);
+        assert_eq!(max_ok.len(), 20);
+        is_chart_keyword_shape(&max_ok).unwrap();
+        let too_long = "a".repeat(CHART_KEYWORD_MAX_LEN + 1);
+        assert_eq!(too_long.len(), 21);
+        let err = is_chart_keyword_shape(&too_long).unwrap_err();
+        assert!(err.contains("20"), "got: {err:?}");
+        assert!(err.contains("21"), "got: {err:?}");
     }
 }

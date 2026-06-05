@@ -6,13 +6,13 @@ use tatara_lisp::DeriveTataraDomain;
 use thiserror::Error;
 
 use crate::{
+    CaixaKind, Dep,
     behavior::BehaviorSpec,
     dep::DepError,
     limits::LimitsSpec,
-    render::{is_dns_1123_label, is_git_repo_url, is_sandboxed_relative_path, PathShapeViolation},
+    render::{PathShapeViolation, is_dns_1123_label, is_git_repo_url, is_sandboxed_relative_path},
     supervisor::SupervisorSpec,
     upgrade::UpgradeFromEntry,
-    CaixaKind, Dep,
 };
 
 /// Top-level manifest for a caixa (a tatara-lisp package).
@@ -839,15 +839,38 @@ impl Caixa {
     ///     discipline is uniform: every Vec-shaped author-supplied list
     ///     past validate is set-not-multiset, by construction.
     ///
+    /// Past the empty arm the gate enforces the chart-keyword shape
+    /// predicate via [`crate::render::is_chart_keyword_shape`]: Cargo's
+    /// crates.io `[package] keywords` grammar — 1..=20 bytes, starts
+    /// with an ASCII letter, ASCII alphanumeric / `_` / `-`
+    /// continuation. Closes the canonical paste-from-doc footguns the
+    /// bare empty + duplicate arms left open: paste-from-aligned-doc
+    /// whitespace (`" mesh"`, `"mesh "`), paste-from-multiline-doc
+    /// newline (`"mesh\nhttp"` — the author pasted a multi-tag block
+    /// into one entry instead of splitting), paste-from-Windows-CRLF-doc
+    /// carriage return, CSV-list-separator confusion (`"mesh,http,grpc"`
+    /// — the author meant three separate list entries), path-separator
+    /// confusion (`"caixa/servico"`), namespace-suffix (`"http.1"`),
+    /// leading-digit (`"1foo"`), kebab-leak (`"-foo"`), snake-leak
+    /// (`"_foo"`), non-ASCII (`"café"`), and paste-from-binary-blob
+    /// control bytes that would silently land as malformed search tags
+    /// in the rendered Chart.yaml `keywords:` array and break the
+    /// Artifact Hub keyword index lookup far from the source caixa.lisp.
+    /// Mirrors the [`Self::validate_autores`] shape-predicate cascade
+    /// established on the sibling universal-axis `Vec<String>` surface
+    /// — the second universal-axis Vec<String> surface to land the
+    /// empty-first-then-shape-then-duplicate per-entry cascade.
+    ///
     /// Same empty-first cascade discipline every peer per-axis gate
-    /// uses: the per-entry empty arm fires before the cross-entry
-    /// duplicate arm, so an `("" "" "demo")` authoring shape surfaces
-    /// the narrower [`ManifestError::EtiquetaEmpty`] (the structural
-    /// "this entry has no value" defect) rather than collapsing two
-    /// unrelated authoring errors into the duplicate diagnostic.
-    /// Walks the list in declaration order so the first-collision
-    /// diagnostic surfaces the lexicographically-earliest offending
-    /// position, peer with every other duplicate gate on this surface.
+    /// uses: the per-entry empty arm fires before the per-entry shape
+    /// arm fires before the cross-entry duplicate arm, so an
+    /// `("" "mesh" "mesh")` authoring shape surfaces the narrower
+    /// [`ManifestError::EtiquetaEmpty`] (the structural "this entry
+    /// has no value" defect) before either the shape or the duplicate
+    /// diagnostic. Walks the list in declaration order so the
+    /// first-collision diagnostic surfaces the lexicographically-
+    /// earliest offending position, peer with every other duplicate
+    /// gate on this surface.
     ///
     /// Universal-axis (every kind carries `:etiquetas`), so wired at the
     /// caixa-build gate alongside the peer universal gates
@@ -859,13 +882,19 @@ impl Caixa {
     /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-specific
     /// slot sets. The future caixa-registry search axis can reach for
     /// `caixa.etiquetas` knowing every entry is a non-empty distinct
-    /// string without re-deriving the precondition.
+    /// chart-keyword-shaped string without re-deriving the precondition.
     pub fn validate_etiquetas(&self) -> Result<(), ManifestError> {
         let mut seen = std::collections::HashSet::new();
         for etiqueta in &self.etiquetas {
             if etiqueta.is_empty() {
                 return Err(ManifestError::EtiquetaEmpty);
             }
+            crate::render::is_chart_keyword_shape(etiqueta).map_err(|reason| {
+                ManifestError::EtiquetaInvalid {
+                    etiqueta: etiqueta.clone(),
+                    reason,
+                }
+            })?;
             if !seen.insert(etiqueta.as_str()) {
                 return Err(ManifestError::EtiquetaDuplicate {
                     etiqueta: etiqueta.clone(),
@@ -1568,6 +1597,35 @@ pub enum ManifestError {
          duplicate or rename it to the actual tag intended)"
     )]
     EtiquetaDuplicate { etiqueta: String },
+    #[error(
+        ":etiquetas entry {etiqueta:?} is not a valid chart-keyword shape: \
+         {reason} (the substrate consumes this string through the shared \
+         `crate::render::is_chart_keyword_shape` predicate — the same \
+         Cargo crates.io `[package] keywords` grammar entry shape: 1..=20 \
+         bytes, starts with an ASCII letter, ASCII alphanumeric / `_` / `-` \
+         continuation. The canonical authoring shapes are short kebab-case \
+         identifiers like `\"mesh\"`, `\"wasm\"`, `\"tatara-lisp\"`, \
+         `\"hello-world\"`, `\"caixa-servico\"`, `\"infrastructure\"`. \
+         Without this gate a malformed `:etiquetas` entry (paste-from-doc \
+         leading / trailing whitespace `\" mesh\"` / `\"mesh \"`; \
+         paste-from-multiline-doc newline `\"mesh\\nhttp\"`; \
+         paste-from-Windows-CRLF-doc CR; CSV-list-separator confusion \
+         `\"mesh,http,grpc\"` — the author meant to author three separate \
+         list entries; path-separator confusion `\"caixa/servico\"`; \
+         namespace-suffix `\"http.1\"`; leading-digit `\"1foo\"`; \
+         kebab-leak `\"-foo\"`; snake-leak `\"_foo\"`; non-ASCII \
+         `\"café\"` — every legitimate search tag is strict ASCII; \
+         paste-from-binary-blob NUL / BEL / ESC / DEL byte) silently \
+         passed `from_lisp` + `validate_etiquetas` + \
+         `StandardLayout::verify` and landed in the rendered \
+         `lareira-<nome>` Helm chart's `Chart.yaml keywords:` array as a \
+         malformed search tag — Artifact Hub's keyword index + the future \
+         caixa-registry's keyword index would either silently drop the \
+         tag or fail to index it far from the source caixa.lisp; the gate \
+         moves the diagnostic to the manifest layer with the offending \
+         value named verbatim)"
+    )]
+    EtiquetaInvalid { etiqueta: String, reason: String },
     #[error(
         ":autores entry is empty (every maintainer must carry a non-empty \
          identifier; the empty entry has no operational meaning — it \
@@ -3551,11 +3609,15 @@ mod tests {
     fn validate_etiquetas_case_sensitive() {
         // Case-sensitivity pin: `("Foo" "foo")` is two distinct entries,
         // mirroring the peer `:membros :caixa` / `:children :caixa`
-        // exact-string-match discipline. The downstream
-        // `is_dns_1123_label` predicate would catch `"Foo"` as
-        // uppercase if `:etiquetas` ever gained a per-entry shape gate,
-        // but case-sensitivity at the duplicate-set layer is structural
-        // — two distinct strings are two distinct entries.
+        // exact-string-match discipline. The shape gate this routine
+        // landed (`is_chart_keyword_shape`, Cargo crates.io keyword
+        // grammar) accepts mixed case — crates.io's keyword rule is
+        // "case-insensitive" at the index layer but admits mixed case
+        // at the entry layer (the canonical Helm chart `keywords:`
+        // shape is lowercase by convention, but the grammar admits
+        // uppercase). Case-sensitivity at the duplicate-set layer
+        // remains structural — two distinct strings are two distinct
+        // entries.
         let c = caixa_with_etiquetas(vec!["Foo", "foo"]);
         c.validate_etiquetas().unwrap();
     }
@@ -3578,6 +3640,235 @@ mod tests {
             rendered.contains("demo"),
             "diagnostic must quote the offending tag: {rendered}",
         );
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_leading_whitespace_entry() {
+        // Canonical paste-from-aligned-doc footgun. Without the shape
+        // gate `" mesh"` silently passed validate and landed as a
+        // YAML plain-style scalar with leading whitespace in the
+        // rendered Chart.yaml `keywords:` array — every YAML 1.2
+        // dumper trims leading whitespace from plain-style scalars,
+        // so the authored space round-tripped inconsistently back
+        // through `caixa.lisp`. Mirrors the peer
+        // `validate_autores_rejects_leading_whitespace_entry`.
+        let c = caixa_with_etiquetas(vec![" mesh"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, " mesh");
+        assert!(reason.contains("whitespace"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_embedded_newline_entry() {
+        // Canonical paste-from-multiline-doc footgun — the author
+        // pasted a multi-tag block into one `:etiquetas` entry
+        // instead of splitting into one entry per tag. Without the
+        // shape gate `"mesh\nhttp"` silently passed validate and
+        // landed as a YAML-illegal multi-line scalar in the rendered
+        // Chart.yaml `keywords:` array.
+        let c = caixa_with_etiquetas(vec!["mesh\nhttp"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "mesh\nhttp");
+        assert!(reason.contains("newline"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_embedded_comma_entry() {
+        // Canonical CSV-list-separator-confusion footgun: the author
+        // confused the CSV-style separator convention with the
+        // `:etiquetas` list grammar. Without the shape gate
+        // `"mesh,http,grpc"` silently passed validate and landed as a
+        // single malformed search tag in the rendered Chart.yaml
+        // `keywords:` array — Artifact Hub's keyword index would
+        // either silently drop the tag or index it as
+        // `mesh,http,grpc` instead of three separate tags.
+        let c = caixa_with_etiquetas(vec!["mesh,http,grpc"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "mesh,http,grpc");
+        assert!(reason.contains('`'), "got: {reason}");
+        assert!(reason.contains(','), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_embedded_slash_entry() {
+        // Canonical path-separator-confusion footgun: the author
+        // confused namespace-path notation with the keyword grammar.
+        let c = caixa_with_etiquetas(vec!["caixa/servico"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "caixa/servico");
+        assert!(reason.contains('/'), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_leading_digit_entry() {
+        // Canonical paste-from-numbered-list footgun: the author
+        // copied `1. mesh` from a numbered doc and the `1` leaked
+        // into the tag.
+        let c = caixa_with_etiquetas(vec!["1mesh"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "1mesh");
+        assert!(reason.contains("digit"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_leading_hyphen_entry() {
+        // Canonical kebab-leak footgun.
+        let c = caixa_with_etiquetas(vec!["-foo"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "-foo");
+        assert!(reason.contains('-'), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_non_ascii_entry() {
+        // Canonical paste-from-Unicode-doc footgun. Every legitimate
+        // search tag is strict ASCII; raw non-ASCII silently
+        // round-trips inconsistently across NFC/NFD normalization on
+        // APFS / case-folding filesystems and breaks the Artifact Hub
+        // keyword search index lookup.
+        let c = caixa_with_etiquetas(vec!["café"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "café");
+        assert!(reason.contains("non-ASCII"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_period_entry() {
+        // Canonical namespace-confusion / version-suffix footgun
+        // (`"http.1"` / `"v1.0"`): Cargo's crates.io keyword grammar
+        // excludes `.` from the continuation set even though the
+        // sibling `:caracteristicas` axis (Cargo's feature-name
+        // grammar) admits it. Tighter than the sibling axis, peer
+        // with Cargo's own crates.io keyword shape.
+        let c = caixa_with_etiquetas(vec!["http.1"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { etiqueta, reason } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert_eq!(etiqueta, "http.1");
+        assert!(reason.contains('.'), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_empty_takes_precedence_over_shape() {
+        // Per-entry empty-first cascade pin: an entry that is both
+        // empty *and* shape-invalid surfaces `EtiquetaEmpty` (the
+        // narrower "this entry has no value" structural defect
+        // dominates the broader shape-predicate diagnostic). The
+        // empty arm fires before the shape predicate is consulted,
+        // mirroring the peer `validate_autores_empty_takes_precedence_over_shape`
+        // cascade established on the sibling universal-axis Vec<String>
+        // surface.
+        let c = caixa_with_etiquetas(vec![""]);
+        let err = c.validate_etiquetas().unwrap_err();
+        assert!(matches!(err, ManifestError::EtiquetaEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_etiquetas_shape_takes_precedence_over_duplicate() {
+        // Per-entry shape-before-cross-entry-duplicate cascade pin: an
+        // entry that is malformed surfaces `EtiquetaInvalid` even when
+        // a later entry would have collided on duplicate. The
+        // per-entry shape arm fires inside the same loop iteration as
+        // the empty arm, before the seen-set insert at end-of-iteration
+        // — structural per-entry defects dominate the cross-entry
+        // uniqueness diagnostic. Mirrors the peer
+        // `validate_autores_shape_takes_precedence_over_duplicate`.
+        let c = caixa_with_etiquetas(vec!["mesh\nhttp", "mesh\nhttp"]);
+        let err = c.validate_etiquetas().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::EtiquetaInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_etiquetas_invalid_diagnostic_names_offending_slot_and_value() {
+        // Diagnostic-shape pin on the new shape arm (peer with
+        // `validate_autores_invalid_diagnostic_names_offending_slot_and_value`):
+        // the rendered Display surfaces both the offending slot name
+        // and the offending value verbatim, so a `feira lint` run
+        // points the author at the exact `:etiquetas` entry to fix.
+        let c = caixa_with_etiquetas(vec!["mesh\nhttp"]);
+        let rendered = c.validate_etiquetas().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":etiquetas"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("mesh\\nhttp"),
+            "diagnostic must quote the offending value (debug-escaped): {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_etiquetas_rejects_at_21_byte_boundary() {
+        // The 20-byte cap pin — boundary-exceeding case rejected,
+        // boundary-accepting case passes. Mirrors the peer
+        // `chart_keyword_shape_rejects_at_21_byte_boundary` substrate-
+        // side pin, surfaced at the per-axis caller so the cap
+        // propagates through validate end-to-end. Constructed as a
+        // single all-`a` token so only the cap arm fires.
+        let max_ok = "a".repeat(20);
+        let c = caixa_with_etiquetas(vec![max_ok.as_str()]);
+        c.validate_etiquetas().unwrap();
+        let too_long = "a".repeat(21);
+        let c = caixa_with_etiquetas(vec![too_long.as_str()]);
+        let err = c.validate_etiquetas().unwrap_err();
+        let ManifestError::EtiquetaInvalid { reason, .. } = err else {
+            panic!("expected EtiquetaInvalid, got {err:?}");
+        };
+        assert!(reason.contains("20"), "got: {reason}");
+        assert!(reason.contains("21"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_etiquetas_accepts_canonical_shaped_forms() {
+        // Positive control sweep: every canonical-shaped tag from the
+        // hello-rio / checkout-aplicacao / pangea-tatara-akeyless
+        // example fixtures plus the substrate-fixed tags caixa-helm
+        // unions in at chart render. Drift between this list and the
+        // substrate-side `chart_keyword_shape_accepts_canonical_forms`
+        // sweep surfaces here — one source of truth for the rule.
+        let c = caixa_with_etiquetas(vec![
+            "example",
+            "aplicacao",
+            "mesh",
+            "ecommerce",
+            "demo",
+            "infrastructure",
+            "aws",
+            "akeyless",
+            "pangea-native",
+            "hello-world",
+            "wasm",
+            "rust",
+            "tatara-lisp",
+            "caixa-servico",
+            "lareira",
+        ]);
+        c.validate_etiquetas().unwrap();
     }
 
     // ── validate_autores — universal-axis maintainer shape ────────────

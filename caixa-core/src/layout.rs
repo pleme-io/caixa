@@ -1520,6 +1520,42 @@ mod tests {
         layout.verify(&c, &root).expect("template must pass");
     }
 
+    #[test]
+    fn etiquetas_violation_on_non_chart_keyword_shape() {
+        // Canonical CSV-list-separator-confusion footgun: the author
+        // confused the CSV-style separator with the `:etiquetas` list
+        // grammar. The shape gate fires past the empty + duplicate
+        // arms via [`Caixa::validate_etiquetas`]'s new
+        // `is_chart_keyword_shape` cascade, and the layout envelope
+        // wraps [`ManifestError::EtiquetaInvalid`]'s Display through
+        // verbatim — the issue string names both the offending slot
+        // and the offending value (debug-escaped). Peer with the
+        // `autores_violation_on_non_chart_maintainer_shape` pin on
+        // the sibling universal-axis `Vec<String>` surface — the
+        // second layout pin on the Vec<String> per-entry shape
+        // cascade.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.etiquetas = vec!["mesh,http,grpc".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::EtiquetasViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::EtiquetasViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":etiquetas"),
+            "issue must name the offending slot: {issue}",
+        );
+        assert!(
+            issue.contains("mesh,http,grpc"),
+            "issue must quote the offending value: {issue}",
+        );
+    }
+
     // ── autores universal-axis gate wired into verify ───────────────────
     //
     // Pins the layout-pipeline wire-up of [`Caixa::validate_autores`]:
