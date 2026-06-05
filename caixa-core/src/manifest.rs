@@ -6,13 +6,13 @@ use tatara_lisp::DeriveTataraDomain;
 use thiserror::Error;
 
 use crate::{
-    CaixaKind, Dep,
     behavior::BehaviorSpec,
     dep::DepError,
     limits::LimitsSpec,
-    render::{PathShapeViolation, is_dns_1123_label, is_git_repo_url, is_sandboxed_relative_path},
+    render::{is_dns_1123_label, is_git_repo_url, is_sandboxed_relative_path, PathShapeViolation},
     supervisor::SupervisorSpec,
     upgrade::UpgradeFromEntry,
+    CaixaKind, Dep,
 };
 
 /// Top-level manifest for a caixa (a tatara-lisp package).
@@ -907,12 +907,34 @@ impl Caixa {
     ///     on `:upgrade-from`, [`ManifestError::EtiquetaDuplicate`] on
     ///     `:etiquetas`).
     ///
+    /// Past the empty arm the gate enforces the chart-maintainer-name
+    /// shape predicate via [`crate::render::is_chart_maintainer_name_shape`]:
+    /// the structural single-line printable-UTF-8 floor every realistic
+    /// Helm chart maintainer name carries — 1..=128 bytes, no leading
+    /// or trailing whitespace, no ASCII control characters anywhere,
+    /// Unicode bytes accepted. Closes the canonical paste-from-doc
+    /// footguns the bare empty + duplicate arms left open:
+    /// paste-from-aligned-doc whitespace (`" pleme-io"`, `"pleme-io "`),
+    /// paste-from-multiline-doc newline (`"alice\nbob"` — the author
+    /// pasted a multi-line block of author records into one `:autores`
+    /// entry instead of splitting into one entry per author),
+    /// paste-from-Windows-CRLF-doc carriage return, tab-from-aligned-doc,
+    /// and the paste-from-binary-blob control bytes that would silently
+    /// land as YAML-illegal byte sequences in the rendered Chart.yaml
+    /// `maintainers:` array. Mirrors the shape-predicate cascade
+    /// [`Self::validate_descricao`] / [`Self::validate_licenca`] /
+    /// [`Self::validate_edicao`] / [`Self::validate_repositorio`]
+    /// establish past their own empty arms on the sibling universal-axis
+    /// `Option<String>` surfaces — the first universal-axis Vec<String>
+    /// surface to land the empty-first-then-shape-then-duplicate per-entry
+    /// cascade.
+    ///
     /// Same empty-first cascade discipline every peer per-axis gate
-    /// uses: the per-entry empty arm fires before the cross-entry
-    /// duplicate arm. Walks the list in declaration order so the
-    /// first-collision diagnostic surfaces the lexicographically-
-    /// earliest offending position, peer with every other duplicate
-    /// gate on this surface.
+    /// uses: the per-entry empty arm fires before the per-entry shape
+    /// arm before the cross-entry duplicate arm. Walks the list in
+    /// declaration order so the first-collision diagnostic surfaces the
+    /// lexicographically-earliest offending position, peer with every
+    /// other duplicate gate on this surface.
     ///
     /// Universal-axis (every kind carries `:autores`), so wired at the
     /// caixa-build gate alongside the peer universal gates
@@ -930,6 +952,12 @@ impl Caixa {
             if autor.is_empty() {
                 return Err(ManifestError::AutorEmpty);
             }
+            crate::render::is_chart_maintainer_name_shape(autor).map_err(|reason| {
+                ManifestError::AutorInvalid {
+                    autor: autor.clone(),
+                    reason,
+                }
+            })?;
             if !seen.insert(autor.as_str()) {
                 return Err(ManifestError::AutorDuplicate {
                     autor: autor.clone(),
@@ -1561,6 +1589,33 @@ pub enum ManifestError {
          rename it to the actual author intended)"
     )]
     AutorDuplicate { autor: String },
+    #[error(
+        ":autores entry {autor:?} is not a valid chart-maintainer-name shape: \
+         {reason} (the substrate consumes this string through the shared \
+         `crate::render::is_chart_maintainer_name_shape` predicate — the same \
+         single-line-UTF-8 floor every realistic chart maintainer name carries: \
+         1..=128 bytes, no leading or trailing whitespace, no ASCII control \
+         characters anywhere, Unicode bytes accepted. The canonical authoring \
+         shapes are short single-line identifiers like `\"pleme-io\"`, \
+         `\"Pleme Contributors\"`, `\"alice <alice@example.com>\"`, \
+         `\"François Dupont\"`. Without this gate a malformed `:autores` entry \
+         (paste-from-aligned-doc leading whitespace `\" pleme-io\"` / trailing \
+         whitespace `\"pleme-io \"`; paste-from-multiline-doc newline \
+         `\"alice\\nbob\"` — the author pasted a multi-line block of author \
+         records into one entry instead of splitting into one entry per author; \
+         paste-from-Windows-CRLF-doc carriage return `\"alice\\rbob\"`; \
+         tab-from-aligned-doc `\"Pleme\\tContributors\"`; paste-from-binary-blob \
+         NUL / BEL / ESC / DEL byte) silently passed `from_lisp` + \
+         `validate_autores` + `StandardLayout::verify` and landed in the \
+         rendered `lareira-<nome>` Helm chart's `Chart.yaml maintainers:` array \
+         as a YAML-illegal multi-line scalar or a silently-trimmed whitespace \
+         round-trip — every chart-aware UI (`helm list`, `helm search`, \
+         Artifact Hub maintainer index) would render the maintainer name in a \
+         single-line column far from the source caixa.lisp; the gate moves the \
+         diagnostic to the manifest layer with the offending value named \
+         verbatim)"
+    )]
+    AutorInvalid { autor: String, reason: String },
     #[error(
         ":repositorio is the empty string (every published caixa names its \
          git source via a non-empty `:repositorio` locator — the value \
@@ -3638,6 +3693,188 @@ mod tests {
             rendered.contains("pleme-io"),
             "diagnostic must quote the offending author: {rendered}",
         );
+    }
+
+    #[test]
+    fn validate_autores_rejects_leading_whitespace_entry() {
+        // Canonical paste-from-aligned-doc footgun. Without the shape
+        // gate `" pleme-io"` silently passed validate and landed as a
+        // YAML plain-style scalar with leading whitespace in the
+        // rendered Chart.yaml `maintainers:` array — every YAML 1.2
+        // dumper trims leading whitespace from plain-style scalars, so
+        // the authored space round-tripped inconsistently back through
+        // `caixa.lisp`. Mirrors the peer
+        // `validate_descricao_rejects_leading_whitespace`.
+        let c = caixa_with_autores(vec![" pleme-io"]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorInvalid { autor, reason } = err else {
+            panic!("expected AutorInvalid, got {err:?}");
+        };
+        assert_eq!(autor, " pleme-io");
+        assert!(reason.contains("whitespace"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_autores_rejects_trailing_whitespace_entry() {
+        // Canonical paste-from-doc footgun.
+        let c = caixa_with_autores(vec!["pleme-io "]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorInvalid { autor, reason } = err else {
+            panic!("expected AutorInvalid, got {err:?}");
+        };
+        assert_eq!(autor, "pleme-io ");
+        assert!(reason.contains("whitespace"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_autores_rejects_embedded_newline_entry() {
+        // Canonical paste-from-multiline-doc footgun — the author
+        // pasted a multi-line block of author records into one
+        // `:autores` entry instead of splitting into one entry per
+        // author. Without the shape gate `"alice\nbob"` silently
+        // passed validate and landed as a YAML-illegal multi-line
+        // scalar in the rendered Chart.yaml `maintainers:` array.
+        let c = caixa_with_autores(vec!["alice\nbob"]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorInvalid { autor, reason } = err else {
+            panic!("expected AutorInvalid, got {err:?}");
+        };
+        assert_eq!(autor, "alice\nbob");
+        assert!(reason.contains("newline"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_autores_rejects_embedded_carriage_return_entry() {
+        // Canonical paste-from-Windows-CRLF-doc footgun.
+        let c = caixa_with_autores(vec!["alice\rbob"]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorInvalid { autor, reason } = err else {
+            panic!("expected AutorInvalid, got {err:?}");
+        };
+        assert_eq!(autor, "alice\rbob");
+        assert!(reason.contains("carriage return"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_autores_rejects_embedded_tab_entry() {
+        // Canonical tab-from-aligned-doc footgun.
+        let c = caixa_with_autores(vec!["Pleme\tContributors"]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorInvalid { autor, reason } = err else {
+            panic!("expected AutorInvalid, got {err:?}");
+        };
+        assert_eq!(autor, "Pleme\tContributors");
+        assert!(reason.contains("tab"), "got: {reason}");
+    }
+
+    #[test]
+    fn validate_autores_rejects_embedded_control_bytes_entry() {
+        // Paste-from-binary-blob footguns: NUL, BEL, ESC, DEL all
+        // surface the same control-byte arm.
+        for entry in [
+            "alice\x00bob",
+            "alice\x07bob",
+            "alice\x1bbob",
+            "alice\x7fbob",
+        ] {
+            let c = caixa_with_autores(vec![entry]);
+            let err = c.validate_autores().unwrap_err();
+            let ManifestError::AutorInvalid { autor, reason } = err else {
+                panic!("expected AutorInvalid for {entry:?}, got {err:?}");
+            };
+            assert_eq!(autor, entry);
+            assert!(
+                reason.contains("control character"),
+                "{entry:?} reason: {reason}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_autores_accepts_unicode_entry() {
+        // Unicode positive control: realistic maintainer names carry
+        // Unicode (`François`, `日本語`, `naïve`). The predicate must
+        // round-trip Unicode losslessly, peer with the
+        // `chart_maintainer_name_shape_accepts_unicode` substrate-side
+        // sweep.
+        let c = caixa_with_autores(vec![
+            "François Dupont",
+            "日本語の名前",
+            "naïve <naive@example.com>",
+        ]);
+        c.validate_autores().unwrap();
+    }
+
+    #[test]
+    fn validate_autores_empty_takes_precedence_over_shape() {
+        // Per-entry empty-first cascade pin: an entry that is both
+        // empty *and* shape-invalid surfaces `AutorEmpty` (the narrower
+        // "this entry has no value" structural defect dominates the
+        // broader shape-predicate diagnostic). The empty arm fires
+        // before the shape predicate is consulted, mirroring the peer
+        // `validate_repositorio_empty_takes_precedence_over_shape`
+        // cascade on the universal `Option<String>` siblings — and now
+        // established on the Vec<String> per-entry surface.
+        let c = caixa_with_autores(vec![""]);
+        let err = c.validate_autores().unwrap_err();
+        assert!(matches!(err, ManifestError::AutorEmpty), "got {err:?}",);
+    }
+
+    #[test]
+    fn validate_autores_shape_takes_precedence_over_duplicate() {
+        // Per-entry shape-before-cross-entry-duplicate cascade pin: an
+        // entry that is malformed surfaces `AutorInvalid` even when a
+        // later entry would have collided on duplicate. The per-entry
+        // shape arm fires inside the same loop iteration as the empty
+        // arm, before the seen-set insert at end-of-iteration —
+        // structural per-entry defects dominate the cross-entry
+        // uniqueness diagnostic.
+        let c = caixa_with_autores(vec!["alice\nbob", "alice\nbob"]);
+        let err = c.validate_autores().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::AutorInvalid { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_autores_invalid_diagnostic_names_offending_slot_and_value() {
+        // Diagnostic-shape pin on the new shape arm (peer with
+        // `validate_descricao_invalid_diagnostic_carries_offending_value`):
+        // the rendered Display surfaces both the offending slot name
+        // and the offending value verbatim, so a `feira lint` run
+        // points the author at the exact `:autores` entry to fix.
+        let c = caixa_with_autores(vec!["alice\nbob"]);
+        let rendered = c.validate_autores().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":autores"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("alice\\nbob"),
+            "diagnostic must quote the offending value (debug-escaped): {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_autores_rejects_at_129_byte_boundary() {
+        // The 128-byte cap pin — boundary-exceeding case rejected,
+        // boundary-accepting case passes. Mirrors the peer
+        // `chart_maintainer_name_shape_rejects_at_129_byte_boundary`
+        // substrate-side pin, surfaced at the per-axis caller so the
+        // cap propagates through validate end-to-end. Constructed as
+        // a single all-`a` token so only the cap arm fires.
+        let max_ok = "a".repeat(128);
+        let c = caixa_with_autores(vec![max_ok.as_str()]);
+        c.validate_autores().unwrap();
+        let too_long = "a".repeat(129);
+        let c = caixa_with_autores(vec![too_long.as_str()]);
+        let err = c.validate_autores().unwrap_err();
+        let ManifestError::AutorInvalid { reason, .. } = err else {
+            panic!("expected AutorInvalid, got {err:?}");
+        };
+        assert!(reason.contains("128"), "got: {reason}");
+        assert!(reason.contains("129"), "got: {reason}");
     }
 
     // ── validate_repositorio — universal-axis git-repo-URL shape ──────

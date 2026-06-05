@@ -1667,6 +1667,44 @@ mod tests {
         layout.verify(&c, &root).expect("template must pass");
     }
 
+    #[test]
+    fn autores_violation_on_non_chart_maintainer_shape() {
+        // Canonical paste-from-multiline-doc footgun: the author
+        // pasted a multi-line block of author records into one
+        // `:autores` entry instead of splitting into one entry per
+        // author. The shape gate fires past the empty + duplicate arms
+        // via [`Caixa::validate_autores`]'s new
+        // `is_chart_maintainer_name_shape` cascade, and the layout
+        // envelope wraps [`ManifestError::AutorInvalid`]'s Display
+        // through verbatim — the issue string names both the offending
+        // slot and the offending value (debug-escaped). Peer with the
+        // `descricao_violation_on_non_chart_shape` pin on the sibling
+        // universal-axis `Option<String>` surface and the
+        // `licenca_violation_on_non_spdx_shape` /
+        // `edicao_violation_on_non_year_shape` peers — and the first
+        // layout pin on the Vec<String> per-entry shape cascade.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.autores = vec!["alice\nbob".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::AutoresViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::AutoresViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":autores"),
+            "issue must name the offending slot: {issue}",
+        );
+        assert!(
+            issue.contains("alice\\nbob"),
+            "issue must quote the offending value (debug-escaped): {issue}",
+        );
+    }
+
     // ── repositorio universal-axis gate wired into verify ────────────────
     //
     // Pins the layout-pipeline wire-up of [`Caixa::validate_repositorio`]:
