@@ -2317,6 +2317,174 @@ pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Maximum byte length of a chart-maintainer-name-shaped string. The
+/// 128-byte cap is the axis-appropriate ceiling for the per-entry
+/// identifier the `:autores` Vec axis carries: every realistic Helm
+/// chart maintainer name in the wild (`"pleme-io"`, `"Pleme
+/// Contributors"`, `"alice <alice@example.com>"`, `"François
+/// Dupont"`) sits well under 64 bytes, and the 128-byte cap surfaces
+/// the "paste-from-doc multi-paragraph blob landed in a single
+/// `:autores` entry" footgun at validate time. Tighter than
+/// [`CHART_DESCRIPTION_MAX_LEN`] (512) on the sibling free-form-prose
+/// axis where multi-sentence summaries are the canonical shape;
+/// peer with [`WIT_IDENT_MAX_LEN`] (128) on the sibling
+/// short-identifier-class axis.
+pub const CHART_MAINTAINER_NAME_MAX_LEN: usize = 128;
+
+/// Predicate: assert that `s` is a valid chart-maintainer-name shape.
+/// The `:autores` axis is a per-entry maintainer identifier that lands
+/// in the rendered `lareira-<nome>` Helm chart's `Chart.yaml`
+/// `maintainers: [{name: …, email: null}]` array via
+/// [`caixa-helm`]'s `build_chart_yaml` (`caixa-helm/src/lib.rs:251`);
+/// each entry becomes the `name:` value of a single `Maintainer`
+/// record (a YAML scalar consumed by `helm list`, `helm search`,
+/// Artifact Hub's maintainer index, and every chart-aware UI). The
+/// contract — modeled on the same YAML 1.2 plain-style scalar
+/// grammar [`is_chart_description_shape`] enforces on the sibling
+/// `:descricao` axis, with a tighter length cap for the per-entry
+/// identifier class:
+///
+///   - 1..=[`CHART_MAINTAINER_NAME_MAX_LEN`] (128) bytes;
+///   - no leading whitespace (paste-from-aligned-doc footgun —
+///     YAML plain-style scalars round-trip trim-and-restore on
+///     leading whitespace, so an authored `" pleme-io"` lands as
+///     `"pleme-io"` in the rendered Chart.yaml and the round-trip
+///     back through `caixa.lisp` silently drops the space);
+///   - no trailing whitespace (paste-from-doc footgun — every YAML
+///     dumper trims trailing whitespace from plain-style scalars,
+///     so an authored `"pleme-io "` round-trips inconsistently);
+///   - no ASCII control characters anywhere (`0x00..=0x1F` plus
+///     `0x7F` DEL) — tabs, newlines, carriage returns, and every
+///     other control byte break the single-line YAML scalar shape
+///     and the `helm list` / `helm search` / Artifact Hub
+///     maintainer-column rendering. The newline / CR arms are the
+///     canonical paste-from-multiline-doc footgun (the author
+///     pasted a multi-line block of author records into one
+///     `:autores` entry instead of splitting them into one entry
+///     per author); the tab arm is the canonical
+///     paste-from-aligned-doc footgun; the other-control-byte
+///     arm catches every more-exotic paste-from-binary-blob shape;
+///   - non-ASCII bytes (UTF-8 continuation sequences) are accepted
+///     — realistic maintainer names carry Unicode (`"François"`,
+///     `"日本語"`, `"naïve"`) and every downstream consumer
+///     (YAML 1.2, Helm v3, every chart-aware UI) round-trips
+///     Unicode losslessly.
+///
+/// Same structural single-line printable-UTF-8 floor as
+/// [`is_chart_description_shape`] — both `:descricao` and `:autores`
+/// land as YAML plain-style scalars in the same `Chart.yaml` and
+/// share every paste-from-doc footgun the YAML 1.2 grammar refuses
+/// at parse time. The two predicates differ only on the byte
+/// length cap: 512 bytes for `:descricao` (multi-sentence prose
+/// shape) vs 128 bytes for `:autores` entries (short-identifier
+/// shape). Returns the parser-shaped reason on rejection (without
+/// wrapping in any error variant) so each per-axis caller —
+/// [`crate::Caixa::validate_autores`] for the universal `:autores`
+/// axis at validate time, every future per-maintainer-name axis (a
+/// future caixa-registry maintainer-index entry, a future
+/// chart-author CLA-signer lookup) — wraps the same reason in its
+/// own typed `*Invalid { <axis>, reason }` variant.
+///
+/// Empty input is rejected here (defensively) and at each call
+/// site via the narrower [`crate::ManifestError::AutorEmpty`]
+/// variant — the same empty-first cascade [`is_dns_1123_label`],
+/// [`is_gateway_api_http_path`], [`is_wit_world_ref`],
+/// [`is_nats_subject`], [`is_wasi_keyvalue_slot`],
+/// [`is_git_ref_name`], [`is_git_oid`], [`is_git_repo_url`],
+/// [`is_cargo_feature_name`], [`is_spdx_expression_shape`], and
+/// [`is_chart_description_shape`] all carry.
+///
+/// # Errors
+///
+/// Returns the parser-shaped reason naming the specific violation
+/// (length / leading-whitespace / trailing-whitespace / tab /
+/// newline / carriage-return / other-control-byte), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { <axis>, reason }` enum
+/// variant.
+pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
+    if s.len() > CHART_MAINTAINER_NAME_MAX_LEN {
+        return Err(format!(
+            "exceeds chart maintainer name max length of \
+             {CHART_MAINTAINER_NAME_MAX_LEN} bytes (got {} bytes; realistic chart \
+             maintainer names like `\"pleme-io\"`, `\"Pleme Contributors\"`, \
+             `\"alice <alice@example.com>\"` rarely exceed ~64 bytes — this \
+             length suggests a paste-from-doc multi-paragraph blob landed in a \
+             single `:autores` entry instead of being split into one entry per \
+             author)",
+            s.len()
+        ));
+    }
+    let bytes = s.as_bytes();
+    if bytes[0] == b' ' {
+        return Err(
+            "must not start with whitespace (chart maintainer names are \
+             single-line YAML plain-style scalars; a leading space is the \
+             canonical paste-from-aligned-doc footgun and round-trips \
+             inconsistently — every YAML dumper trims leading whitespace from \
+             plain-style scalars, so the authored space silently drops in the \
+             rendered Chart.yaml)"
+                .to_string(),
+        );
+    }
+    if *bytes.last().expect("non-empty checked above") == b' ' {
+        return Err(
+            "must not end with whitespace (chart maintainer names don't \
+             terminate with trailing whitespace; every YAML dumper trims \
+             trailing whitespace from plain-style scalars, so the authored \
+             space round-trips inconsistently back through `caixa.lisp`)"
+                .to_string(),
+        );
+    }
+    for &b in bytes {
+        if b == b'\t' {
+            return Err(
+                "must not contain tab character (chart maintainer names are \
+                 single-line YAML plain-style scalars; tabs are the canonical \
+                 paste-from-aligned-doc footgun and break the single-line \
+                 scalar shape — every downstream YAML 1.2 parser is forbidden \
+                 from emitting indentation tabs and tabs in plain-style scalars \
+                 are implementation-defined)"
+                    .to_string(),
+            );
+        }
+        if b == b'\n' {
+            return Err("must not contain newline (chart maintainer names are \
+                 single-line YAML plain-style scalars; an embedded newline is \
+                 the canonical paste-from-multiline-doc footgun — the author \
+                 pasted a multi-line block of author records into one \
+                 `:autores` entry instead of splitting them into one entry per \
+                 author, and the result lands as a multi-line YAML block scalar \
+                 in the rendered Chart.yaml `maintainers:` array)"
+                .to_string());
+        }
+        if b == b'\r' {
+            return Err("must not contain carriage return (chart maintainer \
+                 names are single-line YAML plain-style scalars; a `\\r` byte \
+                 is the canonical paste-from-Windows-CRLF-doc footgun and \
+                 lands as a literal CR in the rendered Chart.yaml — every YAML \
+                 1.2 parser treats CR as a line terminator equivalent to LF, \
+                 so the embedded CR is silently normalized to a newline at \
+                 every downstream consumer)"
+                .to_string());
+        }
+        if b < 0x20 || b == 0x7F {
+            return Err(format!(
+                "must not contain control character 0x{b:02x} (chart \
+                 maintainer names are printable UTF-8 single-line scalars; the \
+                 control-byte arm catches paste-from-binary-blob footguns like \
+                 `0x00` NUL, `0x07` BEL, `0x1b` ESC that would silently land \
+                 in the rendered Chart.yaml as a YAML-illegal byte sequence \
+                 and fail at `helm lint` time far from the source caixa.lisp)"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Tagged reason a caixa-author-supplied path can fail the
 /// sandboxed-relative shape gate every callback / script path must
 /// pass for the layout checker's `root.join(p)` to stay inside the
@@ -3364,10 +3532,9 @@ mod tests {
                 .and_then(|v| v.as_str()),
             Some("CiliumNetworkPolicy")
         );
-        assert!(
-            skel.get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
-                .is_some()
-        );
+        assert!(skel
+            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .is_some());
     }
 
     #[test]
@@ -5453,5 +5620,130 @@ mod tests {
         let err = is_chart_description_shape(&too_long).unwrap_err();
         assert!(err.contains("512"), "got: {err:?}");
         assert!(err.contains("513"), "got: {err:?}");
+    }
+
+    // ── is_chart_maintainer_name_shape — shared `:autores` chart-maintainer predicate ──
+
+    #[test]
+    fn chart_maintainer_name_shape_accepts_canonical_forms() {
+        // Substrate-side pin: the predicate accepts every canonical
+        // chart-maintainer-name shape the `:autores` axis carries.
+        // Drift between this list and the per-axis
+        // `manifest::tests::validate_autores_accepts_canonical_forms`
+        // positive-set sweep surfaces here — one source of truth for
+        // the rule. Covers the hello-rio / checkout-aplicacao
+        // `:autores ("pleme-io")` fixture, the multi-author
+        // `"Pleme Contributors"` shape, and the canonical Helm
+        // `"name <email>"` shape downstream packaging surfaces emit.
+        for s in [
+            "pleme-io",
+            "Pleme Contributors",
+            "alice <alice@example.com>",
+            "bob <bob@example.com>",
+            "Acme Corporation",
+            "x",
+        ] {
+            is_chart_maintainer_name_shape(s).unwrap_or_else(|e| {
+                panic!("canonical chart maintainer name {s:?} must pass: {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_rejects_each_arm_with_substring_pinned_reason() {
+        // Substrate-side diagnostic-shape pin: each arm surfaces its
+        // own distinct reason substring. Pinned here so a future
+        // reason-wording rephrase that drops any of these substrings
+        // surfaces at this one place, not piecemeal across every
+        // per-axis test sweep. Mirrors
+        // `chart_description_shape_rejects_each_arm_with_substring_pinned_reason`
+        // on the peer predicate.
+        for (s, needle) in [
+            // Leading whitespace — paste-from-aligned-doc.
+            (" pleme-io", "whitespace"),
+            // Trailing whitespace — paste-from-doc.
+            ("pleme-io ", "whitespace"),
+            // Tab inside — tab-from-aligned-doc.
+            ("Pleme\tContributors", "tab"),
+            // Newline — paste-from-multiline-doc (author pasted
+            // multi-line author block into one entry).
+            ("alice\nbob", "newline"),
+            // Carriage return — paste-from-Windows-CRLF-doc.
+            ("alice\rbob", "carriage return"),
+            // NUL byte — paste-from-binary-blob.
+            ("alice\x00bob", "control character"),
+            // BEL byte — paste-from-binary-blob.
+            ("alice\x07bob", "control character"),
+            // ESC byte — paste-from-binary-blob.
+            ("alice\x1bbob", "control character"),
+            // DEL byte (0x7F).
+            ("alice\x7fbob", "control character"),
+        ] {
+            let err = is_chart_maintainer_name_shape(s)
+                .err()
+                .unwrap_or_else(|| panic!("chart maintainer name {s:?} must be rejected"));
+            assert!(
+                err.contains(needle),
+                "chart maintainer name {s:?} reason must contain {needle:?}; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_accepts_unicode() {
+        // Positive control on the non-ASCII arm: the predicate must
+        // accept Unicode beyond the ASCII alphabet — realistic
+        // maintainer names carry Unicode (`François`, `日本語`,
+        // `naïve`), and every downstream consumer (YAML 1.2, Helm v3,
+        // every chart-aware UI) round-trips Unicode losslessly. A
+        // future tightening that bans non-ASCII bytes would regress
+        // every Unicode-named maintainer and surface here as a
+        // regression. Mirrors the peer
+        // `chart_description_shape_accepts_unicode`.
+        for s in [
+            "François Dupont",
+            "日本語の名前",
+            "naïve <naive@example.com>",
+            "André",
+        ] {
+            is_chart_maintainer_name_shape(s)
+                .unwrap_or_else(|e| panic!("Unicode chart maintainer name {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_rejects_empty_defensively() {
+        // The predicate is called from `crate::Caixa::validate_autores`
+        // only after the per-axis `AutorEmpty` arm has fired at
+        // validate time; re-checking here keeps the predicate usable
+        // from any future call site without an empty-precondition
+        // footgun. Same defensive empty-check `is_dns_1123_label`,
+        // `is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`,
+        // `is_git_ref_name`, `is_git_oid`, `is_git_repo_url`,
+        // `is_cargo_feature_name`, `is_spdx_expression_shape`, and
+        // `is_chart_description_shape` carry at their call sites.
+        let err = is_chart_maintainer_name_shape("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_rejects_at_129_byte_boundary() {
+        // The 128-byte cap pin — both the boundary-exceeding case and
+        // the boundary-accepting case in one place, so a future cap
+        // shift surfaces both arms simultaneously, mirroring the peer
+        // cap-boundary pins (`chart_description_shape_rejects_at_513_byte_boundary`
+        // on the 512-byte sibling, `spdx_expression_shape_rejects_at_257_byte_boundary`
+        // on the 256-byte sibling). Constructed as a single all-`a`
+        // token so only the cap arm fires (128 `a` bytes is
+        // alphabet-valid).
+        let max_ok = "a".repeat(CHART_MAINTAINER_NAME_MAX_LEN);
+        assert_eq!(max_ok.len(), 128);
+        is_chart_maintainer_name_shape(&max_ok).unwrap();
+        let too_long = "a".repeat(CHART_MAINTAINER_NAME_MAX_LEN + 1);
+        assert_eq!(too_long.len(), 129);
+        let err = is_chart_maintainer_name_shape(&too_long).unwrap_err();
+        assert!(err.contains("128"), "got: {err:?}");
+        assert!(err.contains("129"), "got: {err:?}");
     }
 }
