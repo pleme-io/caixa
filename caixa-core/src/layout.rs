@@ -185,6 +185,55 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
+        // `:deps` / `:deps-dev` self-dep cross-slot coherence gate. A
+        // caixa whose `:deps` or `:deps-dev` lists its own `:nome` is a
+        // degenerate self-edge in the lacre closure's dep-graph — the
+        // closure is a DAG rooted at the caixa's `:nome`, and the
+        // caixa-resolver's traversal would otherwise be handed a node
+        // that is its own parent: a one-node cycle it either rejects
+        // far from the source `caixa.lisp` (the resolver detecting
+        // infinite recursion on the closure walk) or, worse, recurses
+        // on until it exhausts its stack. Until this gate landed the
+        // within-list duplicate-`:nome` arm of [`Caixa::validate_deps`]
+        // (359fba5) closed the multiset axis on each dep list, but the
+        // self-edge axis (one entry whose `:nome` happens to equal the
+        // parent caixa's `:nome`) silently passed validate. Both lists
+        // are walked (in declaration order: `:deps` → `:deps-dev`) so a
+        // caixa that self-references on both axes surfaces the `:deps`
+        // diagnostic first, peer with the canonical
+        // [`Caixa::validate_deps`] cascade and the
+        // [`crate::supervisor::validate_no_self_supervision`] /
+        // [`crate::aplicacao::validate_no_self_membership`] self-edge
+        // gates on the supervision-tree and Aplicacao-membership axes.
+        //
+        // Runs *after* `validate_deps` so the per-entry / cross-entry
+        // dep-shape diagnostics fire first — a self-referential `:deps`
+        // entry whose `:nome` is malformed (`:nome ""`, non-DNS-1123,
+        // duplicate within its list) surfaces the narrower per-entry
+        // diagnostic before the self-edge gate sees the entry. Same
+        // ordering posture every peer cross-slot gate uses
+        // ([`validate_no_self_supervision`] runs after
+        // `SupervisorSpec::validate`, [`validate_no_self_membership`]
+        // runs after `AplicacaoSpec::validate`,
+        // [`validate_upgrade_from_against_versao`] runs after
+        // `validate_upgrade_from`).
+        //
+        // Threads [`DepError`] Display through verbatim — the per-arm
+        // reason already names the offending dep's `:nome` and the
+        // list tag (`":deps"` / `":deps-dev"`), so the wrap envelope's
+        // `issue` carries a self-locating "which list, which entry,
+        // why" without re-shaping the parser-side reason. Closes the
+        // self-edge axis on the third typed-name-graph kind on the
+        // typed Caixa surface (`:children :caixa` ad4abf1,
+        // `:membros :caixa` and this dep-graph gate together cover
+        // every typed-name-graph axis the substrate carries).
+        crate::dep::validate_no_self_dep(&caixa.deps, &caixa.deps_dev, &caixa.nome).map_err(
+            |err| LayoutError::DepsViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            },
+        )?;
+
         // `:etiquetas` per-entry empty + cross-entry duplicate gate. The
         // fourth universal-axis Caixa-level value-shape gate (peer of
         // [`Caixa::validate_nome`] / [`Caixa::validate_versao`] /
@@ -2916,6 +2965,97 @@ mod tests {
         assert!(
             matches!(err, LayoutError::MissingManifest(_)),
             "got {err:?} — MissingManifest must dominate the deps gate",
+        );
+    }
+
+    #[test]
+    fn deps_violation_on_self_dep_in_deps() {
+        // Cross-slot self-edge: a caixa whose `:deps` lists its own
+        // `:nome` is rejected at the layout wire-up, the diagnostic
+        // surfaces through the `DepsViolation` envelope with both the
+        // offending list tag (`":deps"`) and the parent's `:nome`
+        // verbatim. Until this wire-up landed the self-dep silently
+        // passed `feira build` and the resolver's lacre-pipeline
+        // closure walk either rejected mid-traversal (infinite
+        // recursion detected far from the source caixa.lisp) or, on
+        // the unbounded path, recursed until it exhausted its stack.
+        // Mirrors the supervision-tree
+        // [`supervisor_violation_on_self_supervision`] and the
+        // Aplicacao-membership self-edge wire-up tests on the peer
+        // typed-name-graph axes.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps = vec![Dep::simple("demo", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":deps") && issue.contains("demo"),
+            "issue must name the offending list + parent :nome: {issue}",
+        );
+    }
+
+    #[test]
+    fn deps_violation_on_self_dep_in_deps_dev() {
+        // Same cross-slot self-edge gate on the `:deps-dev` axis —
+        // neither dep list is a second-class citizen of the typed
+        // surface. The diagnostic names `:deps-dev` so the author can
+        // grep their caixa.lisp for the offending block directly.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let default_lib = root.join("lib").join("demo.lisp");
+        let layout =
+            StandardLayout::new().with_path_exists(move |p| p == manifest || p == default_lib);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.deps_dev = vec![Dep::simple("demo", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert_eq!(caixa, "demo");
+        assert!(
+            issue.contains(":deps-dev"),
+            "issue must name the offending list: {issue}",
+        );
+    }
+
+    #[test]
+    fn self_dep_fires_after_per_entry_dep_shape() {
+        // Precedence pin: the per-entry shape gates of
+        // [`Caixa::validate_deps`] (DNS-1123 / SemVer / fonte / etc.)
+        // fire first on a self-dep entry whose `:nome` is malformed.
+        // Same ordering posture every peer cross-slot gate uses
+        // (`validate_no_self_supervision` after `SupervisorSpec::validate`,
+        // `validate_no_self_membership` after `AplicacaoSpec::validate`).
+        // A malformed self-dep `:nome` surfaces the narrower
+        // per-entry diagnostic (which already names the parser-side
+        // reason) before the self-edge gate sees the entry.
+        use crate::Dep;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        // The parent is "demo" (DNS-1123 valid); the dep is "DEMO"
+        // (DNS-1123 invalid). The per-entry shape gate fires on the
+        // upper-case nome, masking the self-edge gate (and that's the
+        // canonical precedence — fix the dep shape first, then the
+        // structural self-edge becomes the next live diagnostic).
+        c.deps = vec![Dep::simple("DEMO", "^0.1")];
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa: _, issue } = err else {
+            panic!("expected LayoutError::DepsViolation, got {err:?}");
+        };
+        assert!(
+            issue.contains("DNS-1123"),
+            "issue must be the per-entry shape diagnostic, not the self-edge gate: {issue}",
         );
     }
 
