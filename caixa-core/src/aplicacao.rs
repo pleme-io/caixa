@@ -665,6 +665,58 @@ fn validate_contrato_caixa(slot: &'static str, caixa: &str) -> Result<(), Aplica
     })
 }
 
+/// Reject `:entrada :para` values whose shape can never legitimately
+/// match a validated `:membros :caixa`. Thin wrapper around
+/// [`crate::render::is_dns_1123_label`] that maps the shared parser-
+/// shaped reason into the [`AplicacaoError::EntradaParaInvalid`]
+/// variant, so the diagnostic is self-locating (the offending
+/// `:entrada :para` value is named verbatim) and the author can grep
+/// their caixa.lisp for `:para "<name>"` and fix it in one edit.
+///
+/// Until this gate landed an empty or DNS-1123-malformed `:entrada
+/// :para` (`:para ""`, `:para "Cart"` the canonical TitleCase-from-an-
+/// ADR typo, `:para "my_cart"` the Python-module-name leak,
+/// `:para "team.cart"` the namespace-dot-on-a-label confusion,
+/// `:para "-cart"` / `:para "cart-"` the boundary-hyphen violation,
+/// the 64-byte over-cap slug, `:para "café"` un-Punycode-encoded IDN)
+/// silently passed the per-axis check and surfaced as
+/// [`AplicacaoError::EntradaMemberMissing`] at the membership lookup
+/// — diagnostic-framed as "this caixa is not in `:membros`" when the
+/// root cause is "this `:entrada :para` value is not a well-shaped
+/// Servico-name identifier and could never legitimately match any
+/// validated member". Because every `:membros :caixa` is shape-
+/// validated through [`validate_membro_caixa`] (3f9d7a0), the `names`
+/// `HashSet` structurally never contains an empty / malformed string,
+/// so the membership lookup arm misframes every empty / malformed
+/// input. Lifting the shape arm ahead of the lookup preserves the
+/// legitimate `EntradaMemberMissing` arm (a well-shaped `:para` that
+/// simply isn't in `:membros` — a phantom reference) while routing
+/// every structurally-impossible-to-match input through the narrower
+/// self-locating shape diagnostic.
+///
+/// Same diagnostic shape as [`AplicacaoError::MembroCaixaInvalid`]
+/// (3f9d7a0), [`AplicacaoError::PlacementClusterInvalid`] (6c8c00b),
+/// and [`AplicacaoError::ContratoCaixaInvalid`] (8d5af6b) — the
+/// fourth and last Aplicacao-level Servico-name reference axis to
+/// land on the canonical [`crate::render::is_dns_1123_label`] floor.
+/// No `slot: &'static str` field because there is only one axis
+/// (`:entrada :para`), unlike the dual-axis `:contratos :de`/`:para`;
+/// the simpler shape mirrors [`validate_membro_caixa`] and
+/// [`validate_placement_cluster`].
+fn validate_entrada_para(para: &str) -> Result<(), AplicacaoError> {
+    // Empty is gated separately at the call site for a self-locating
+    // diagnostic; re-checking here keeps the predicate usable from any
+    // future call site (the M4 CR materializer's per-`:entrada`
+    // validator) without an empty-check footgun.
+    if para.is_empty() {
+        return Err(AplicacaoError::EntradaParaEmpty);
+    }
+    crate::render::is_dns_1123_label(para).map_err(|reason| AplicacaoError::EntradaParaInvalid {
+        para: para.to_string(),
+        reason,
+    })
+}
+
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
 /// would refuse at admission time. The contract — exactly the regex
 /// the Gateway API CRD's OpenAPI schema enforces on `Listener.hostname`
@@ -1277,6 +1329,22 @@ impl AplicacaoSpec {
         self.detect_sync_cycles()?;
 
         if let Some(e) = &self.entrada {
+            // Shape gate on `:entrada :para` runs ahead of the
+            // membership lookup. Every `:membros :caixa` past
+            // `validate_membro_caixa` is a valid DNS-1123 label
+            // (3f9d7a0), so the `names` set structurally cannot
+            // contain an empty / malformed string and the membership-
+            // lookup diagnostic always misframed the root cause as
+            // "this caixa is not in `:membros`". The shape gate
+            // routes structurally-impossible-to-match inputs through
+            // the narrower self-locating diagnostic, preserving the
+            // legitimate "well-shaped phantom reference" arm — the
+            // same trajectory the peer `:membros :caixa` (3f9d7a0),
+            // `:placement :clusters` (6c8c00b), and `:contratos :de`
+            // / `:para` (8d5af6b) axes already follow. This closes
+            // the fourth and last Aplicacao-level Servico-name
+            // reference axis on the canonical DNS-1123 floor.
+            validate_entrada_para(&e.para)?;
             if !names.contains(e.para.as_str()) {
                 return Err(AplicacaoError::EntradaMemberMissing {
                     para: e.para.clone(),
@@ -1882,6 +1950,20 @@ pub enum AplicacaoError {
         wit: String,
         reason: String,
     },
+    #[error(
+        ":entrada :para is empty (every :entrada must route to a caixa declared in \
+         :membros; fill the :para field with a member name)"
+    )]
+    EntradaParaEmpty,
+    #[error(
+        ":entrada :para {para:?} is not a valid DNS-1123 label: {reason} (every \
+         :entrada :para value names a member of :membros, which is itself a DNS-1123 \
+         label per the K8s apiserver's `metadata.name` rule on every object the \
+         member name lands in — Service backendRefs, HTTPRoute spec, identity-based \
+         Cilium selector; use a lowercase alphanumeric + hyphen identifier like \
+         `\"checkout\"` or `\"cart-v2\"`)"
+    )]
+    EntradaParaInvalid { para: String, reason: String },
     #[error(":entrada routes to caixa {para:?} not declared in :membros")]
     EntradaMemberMissing { para: String },
     #[error(":entrada must declare a non-empty :host")]
@@ -3053,6 +3135,269 @@ mod tests {
             s.validate().unwrap_err(),
             AplicacaoError::EntradaMemberMissing { .. }
         ));
+    }
+
+    // ── :entrada :para DNS-1123 label value-shape gate ───────────────────
+
+    #[test]
+    fn rejects_entrada_para_empty() {
+        // `:para ""` previously fell through to
+        // `EntradaMemberMissing { para: "" }` because the validated
+        // `:membros :caixa` set never contains the empty string. The
+        // narrower `EntradaParaEmpty` diagnostic now names the
+        // offending slot directly — same empty-first cascade
+        // `MembroCaixaEmpty` / `PlacementClusterEmpty` /
+        // `ContratoCaixaEmpty` establish on the peer name axes.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = String::new();
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, AplicacaoError::EntradaParaEmpty, "got {err:?}");
+    }
+
+    #[test]
+    fn rejects_entrada_para_with_uppercase() {
+        // The canonical "I copied the Servico's TitleCase display
+        // name from an ADR" typo. Until this gate landed `:para "Cart"`
+        // surfaced `EntradaMemberMissing { para: "Cart" }` — framed
+        // as "this caixa isn't in `:membros`" when the root cause is
+        // "this `:para` value's shape can never legitimately match a
+        // validated member (DNS-1123 labels are lowercase)". The
+        // narrower diagnostic names the value verbatim plus the
+        // parser-shaped reason.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "Cart".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaParaInvalid { para, reason } = err else {
+            panic!("expected EntradaParaInvalid, got other variant");
+        };
+        assert_eq!(para, "Cart");
+        assert!(
+            reason.contains("uppercase"),
+            "diagnostic must name the violation as `uppercase` (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_para_with_underscore() {
+        // The canonical "I'm thinking of a Python module" leak —
+        // `_` is forbidden by every DNS-1123 / DNS-1035 label schema.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "my_cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, ref reason }
+                    if para == "my_cart" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_para_with_dot() {
+        // An `:entrada :para` value is a single DNS-1123 *label*, not
+        // a subdomain — mirroring the `:membros :caixa` floor. The
+        // strictest floor among the use sites wins.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "team.cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, ref reason }
+                    if para == "team.cart" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_para_with_unicode() {
+        // DNS-1123 is ASCII-only; IDN must be pre-encoded as Punycode
+        // (`xn--…`) before it reaches K8s.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "café".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, .. } if para == "café"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_para_with_leading_hyphen() {
+        // DNS-1123 boundary rule: labels must start and end with an
+        // alphanumeric. K8s rejects `-cart` outright.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "-cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, ref reason }
+                    if para == "-cart" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_para_with_trailing_hyphen() {
+        // Symmetric boundary arm.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "cart-".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, ref reason }
+                    if para == "cart-" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_para_too_long() {
+        // 64-byte over-cap slug — the DNS-1123 label rule caps at 63
+        // bytes per label. K8s rejects longer names at admission on
+        // every `metadata.name` axis.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "a".repeat(64);
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, ref reason }
+                    if para.len() == 64 && reason.contains("max length")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_para_empty_takes_precedence_over_invalid() {
+        // Order pin: the `EntradaParaEmpty` arm fires before the
+        // `EntradaParaInvalid` parse-side arm — same empty-first
+        // cascade `validate_membro_caixa` / `validate_placement_cluster`
+        // / `validate_contrato_caixa` already establish.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = String::new();
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaParaEmpty);
+    }
+
+    #[test]
+    fn entrada_para_shape_fires_before_membership_lookup() {
+        // The load-bearing pin: an invalid-shape `:para` surfaces its
+        // *own* diagnostic, not the misframed `EntradaMemberMissing`.
+        // Because every `:membros :caixa` is shape-validated (3f9d7a0),
+        // an invalid-shape `:para` could never legitimately match any
+        // member — the prior `EntradaMemberMissing` diagnostic framed
+        // a structural impossibility as a graph-membership failure.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "Cart".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, .. } if para == "Cart"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_para_shape_fires_before_host_gate() {
+        // Per-`:entrada` order pin: the `:para` shape gate fires
+        // before the `:host` gate, mirroring the existing
+        // `entrada_host_member_missing_takes_precedence_over_host_invalid`
+        // ordering where the member-lookup arm preceded the host gate.
+        // The shape gate slots ahead of that, so a malformed `:para`
+        // surfaces its own diagnostic even when `:host` is also wrong.
+        let mut s = three_member_spec();
+        let e = s.entrada.as_mut().unwrap();
+        e.para = "Cart".into();
+        e.host = "BAD HOST".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaParaInvalid { ref para, .. } if para == "Cart"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_para_well_shaped_phantom_still_raises_member_missing() {
+        // Strict-improvement pin: a well-shaped `:para` that simply
+        // isn't in `:membros` (a phantom reference — author meant to
+        // add the member but didn't, or renamed and missed an
+        // update) still surfaces `EntradaMemberMissing`, unchanged.
+        // The shape gate only intercepts inputs that could never
+        // legitimately match a validated member.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "phantom-shim".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::EntradaMemberMissing { ref para }
+                    if para == "phantom-shim"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn entrada_para_invalid_diagnostic_carries_offending_para() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:para` value verbatim plus a non-empty parser-shaped
+        // reason, so the author can grep their caixa.lisp for
+        // `:para "<name>"` and fix it in one edit. Same diagnostic
+        // shape as `MembroCaixaInvalid` (3f9d7a0),
+        // `PlacementClusterInvalid` (6c8c00b), and
+        // `ContratoCaixaInvalid` (8d5af6b).
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().para = "BAD_NAME".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaParaInvalid { para, reason } = err else {
+            panic!("expected EntradaParaInvalid, got {err:?}");
+        };
+        assert_eq!(para, "BAD_NAME");
+        assert!(
+            !reason.is_empty(),
+            "EntradaParaInvalid `reason` must carry a parser-shaped wording"
+        );
+    }
+
+    #[test]
+    fn accepts_canonical_entrada_para_forms() {
+        // Positive-control sweep covering the DNS-1123 label shapes a
+        // caixa author is realistically going to write on `:entrada
+        // :para`. Pin every leg so a future tightening that bans
+        // (e.g.) digit-start identifiers surfaces here, mirroring
+        // `accepts_canonical_membro_caixa_forms` and
+        // `accepts_canonical_contrato_caixa_forms` on the peer name
+        // axes.
+        for form in ["cart", "cart-v2", "a", "c0", "3rd-party-shim", "x-1-2-3-4"] {
+            let mut s = three_member_spec();
+            s.membros = vec![membro(form, "^0.1"), membro("catalog", "^0.1")];
+            s.contratos = vec![contract_http(form, "catalog", "/x")];
+            s.entrada = Some(Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: form.into(),
+                paths: vec!["/api".into()],
+                port: 8080,
+            });
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical form {form:?} must validate on `:entrada :para`, got {e:?}")
+            });
+        }
     }
 
     #[test]
