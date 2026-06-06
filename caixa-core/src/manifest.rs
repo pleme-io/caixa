@@ -779,6 +779,66 @@ impl Caixa {
             (":exe", &self.exe),
             (":servicos", &self.servicos),
         ] {
+            // Per-slot set-not-multiset gate on the typed code-path axis.
+            // Every peer Vec-shaped author-supplied list past validate is
+            // a set, not a multiset: `:membros :caixa`
+            // ([`crate::AplicacaoError::MembroDuplicate`]), `:placement
+            // :clusters` ([`crate::AplicacaoError::PlacementClusterDuplicate`]),
+            // `:entrada :paths` ([`crate::AplicacaoError::EntradaPathDuplicate`]),
+            // `:contratos` ([`crate::AplicacaoError::ContratoDuplicate`]),
+            // `:children :caixa` ([`crate::SupervisorError::DuplicateChild`]),
+            // `:deps` / `:deps-dev` `:nome` ([`crate::DepError::DuplicateNome`]
+            // per 359fba5), `:upgrade-from :from` ([`crate::UpgradeError::DuplicateFrom`]),
+            // `:etiquetas` ([`ManifestError::EtiquetaDuplicate`] per 360a499),
+            // `:autores` ([`ManifestError::AutorDuplicate`] per 86c769b) —
+            // the three code-path lists are the last Vec-shaped author-
+            // supplied slots on the typed Caixa surface still admitting a
+            // duplicate entry silently. Scope is per-list (`:bibliotecas`
+            // duplicates are flagged within `:bibliotecas`, not across
+            // `:bibliotecas` ↔ `:exe`) — the same per-list scope `:deps`
+            // ↔ `:deps-dev` use (a `:nome` present in both lists is a
+            // legitimate dev-vs-runtime shape on the dep axis, fenced
+            // separately by [`crate::dep::validate_no_self_dep`]). On the
+            // code-path axis a cross-slot collision is structurally
+            // impossible by the layout's `starts_with(<exe|servicos>_dir)`
+            // fence — `:exe` and `:servicos` entries are confined to their
+            // own directory trees, so the only way a string could appear
+            // on two code-path lists is the (rare, structurally invalid)
+            // case where `:bibliotecas` carries an `"exe/<x>"` or
+            // `"servicos/<x>.yaml"`-shaped path.
+            //
+            // Without the gate three authoring footguns silently passed:
+            //
+            //   - `:bibliotecas ("lib/foo.lisp" "lib/foo.lisp")` — the
+            //     canonical copy-paste-the-wrong-file footgun. `feira
+            //     build` (`caixa-feira/src/cmd/build.rs:33`) walks the
+            //     list and re-parses the same file twice, wasting work
+            //     and silently masking the author's intent to declare a
+            //     *second* biblioteca.
+            //   - `:exe ("exe/cli" "exe/cli")` — the same footgun on the
+            //     Binario surface. The future `caixa-flake` `nix flake`
+            //     emitter that materializes each `:exe` entry as a flake
+            //     `packages.<exe-name>` derivation would collide on the
+            //     duplicate package name and surface a flake-eval error
+            //     far from the source `caixa.lisp`.
+            //   - `:servicos ("servicos/x.computeunit.yaml"
+            //     "servicos/x.computeunit.yaml")` — the same footgun on
+            //     the Servico surface. The peer `caixa-helm` / `caixa-flux`
+            //     renderers already refuse `:servicos.len() != 1` with
+            //     the narrower [`UnsupportedServicoCount`] diagnostic, but
+            //     that diagnostic surfaces "too many servicos" without
+            //     naming "duplicate entry" — the typed self-locating
+            //     "which entry is the duplicate" framing only lands at
+            //     this gate.
+            //
+            // Same `seen.insert(entry.as_str())` shape every peer per-list
+            // duplicate gate uses (`:etiquetas` 360a499, `:autores`
+            // 86c769b, `:deps` 359fba5) and the same "structural shape
+            // checks fire before the duplicate check on the same entry"
+            // ordering (a `(:bibliotecas ("" "lib/x.lisp" "lib/x.lisp"))`
+            // shape surfaces the narrower [`Self::CodePathEmpty`] for the
+            // empty entry first, not the duplicate on the later pair).
+            let mut seen = std::collections::HashSet::new();
             for entry in list {
                 let path = Path::new(entry);
                 match is_sandboxed_relative_path(path) {
@@ -798,6 +858,12 @@ impl Caixa {
                             path: path.to_path_buf(),
                         });
                     }
+                }
+                if !seen.insert(entry.as_str()) {
+                    return Err(ManifestError::CodePathDuplicate {
+                        slot,
+                        path: path.to_path_buf(),
+                    });
                 }
             }
         }
@@ -1577,6 +1643,26 @@ pub enum ManifestError {
         path.display()
     )]
     CodePathParentEscape { slot: &'static str, path: PathBuf },
+    #[error(
+        "{slot} entry {} appears more than once (the code-path list is \
+         a set, not a multiset; every peer Vec-shaped author-supplied \
+         list past validate is set-not-multiset — `:membros :caixa`, \
+         `:placement :clusters`, `:entrada :paths`, `:contratos`, \
+         `:children :caixa`, `:deps` / `:deps-dev` `:nome`, \
+         `:upgrade-from :from`, `:etiquetas`, `:autores` — and the three \
+         code-path lists are the last Vec-shaped author-supplied slots on \
+         the typed Caixa surface still admitting a duplicate entry. \
+         `:bibliotecas` duplicates re-parse the same file at \
+         `feira build` time and silently mask the author's intent to \
+         declare a *second* biblioteca; `:exe` duplicates collide on the \
+         flake `packages.<name>` derivation key at the future \
+         `caixa-flake` materializer; `:servicos` duplicates surface as the \
+         narrower [`caixa-helm`] / [`caixa-flux`] `UnsupportedServicoCount` \
+         rejection far from the source `caixa.lisp`. Drop the duplicate \
+         or rename it to the actual second file intended)",
+        path.display()
+    )]
+    CodePathDuplicate { slot: &'static str, path: PathBuf },
     #[error(
         ":etiquetas entry is empty (every tag must carry a non-empty \
          registry-search identifier; the empty entry has no operational \
@@ -3517,6 +3603,147 @@ mod tests {
         );
         assert!(
             rendered.contains("/etc/passwd"),
+            "diagnostic must quote the offending path: {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_duplicate_bibliotecas_entry() {
+        // Canonical copy-paste-the-wrong-file footgun on the biblioteca
+        // axis. Without the gate `feira build` re-parses the same lib
+        // twice, wasting work and silently masking the author's intent
+        // to declare a *second* biblioteca.
+        let c = caixa_with_code_paths(vec!["lib/demo.lisp", "lib/demo.lisp"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathDuplicate { slot, path } = err else {
+            panic!("expected CodePathDuplicate, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        assert_eq!(path, PathBuf::from("lib/demo.lisp"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_duplicate_exe_entry() {
+        // Same footgun on the Binario surface. The future `caixa-flake`
+        // emitter that materializes each `:exe` entry as a flake
+        // `packages.<name>` derivation would collide on the duplicate
+        // package key — surfaced here at the typed-validate layer with a
+        // self-locating diagnostic instead.
+        let c = caixa_with_code_paths(vec![], vec!["exe/cli", "exe/cli"], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathDuplicate { slot, path } = err else {
+            panic!("expected CodePathDuplicate, got {err:?}");
+        };
+        assert_eq!(slot, ":exe");
+        assert_eq!(path, PathBuf::from("exe/cli"));
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_duplicate_servicos_entry() {
+        // Same footgun on the Servico surface. The peer caixa-helm /
+        // caixa-flux renderers refuse `:servicos.len() != 1` with the
+        // narrower `UnsupportedServicoCount` diagnostic, but that
+        // diagnostic surfaces "too many servicos" without naming
+        // "duplicate entry" — the typed self-locating framing only lands
+        // at this gate.
+        let c = caixa_with_code_paths(
+            vec![],
+            vec![],
+            vec![
+                "servicos/demo.computeunit.yaml",
+                "servicos/demo.computeunit.yaml",
+            ],
+        );
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathDuplicate { slot, path } = err else {
+            panic!("expected CodePathDuplicate, got {err:?}");
+        };
+        assert_eq!(slot, ":servicos");
+        assert_eq!(path, PathBuf::from("servicos/demo.computeunit.yaml"));
+    }
+
+    #[test]
+    fn validate_code_paths_accepts_same_path_across_slots() {
+        // Per-list scope pin: a `:bibliotecas` entry that happens to
+        // collide with an `:exe` or `:servicos` entry as a *string* is
+        // not a duplicate by this gate (each list gets its own HashSet),
+        // mirroring the peer `:deps` ↔ `:deps-dev` per-list scope
+        // (a `:nome` present in both lists is a legitimate dev-vs-runtime
+        // shape on the dep axis). The structural `starts_with(<exe |
+        // servicos>_dir)` fence at layout time prevents the realistic
+        // cross-slot collision case from existing on disk, but the gate's
+        // per-list scope is correct independent of that downstream fence.
+        let c = caixa_with_code_paths(
+            vec!["lib/x.lisp"],
+            vec!["exe/x"],
+            vec!["servicos/x.computeunit.yaml"],
+        );
+        c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn validate_code_paths_duplicate_fires_after_structural_checks_on_same_slot() {
+        // Within-slot ordering pin: structural defects (empty / absolute
+        // / parent-escape) fire before the duplicate gate on the same
+        // slot. A `:bibliotecas ("" "lib/x.lisp" "lib/x.lisp")` shape
+        // surfaces the narrower `CodePathEmpty` for the empty entry
+        // first, not the duplicate on the later pair — same arm-ordering
+        // every peer per-list duplicate gate uses (`:etiquetas` 360a499,
+        // `:autores` 86c769b, `:deps` 359fba5).
+        let c = caixa_with_code_paths(vec!["", "lib/x.lisp", "lib/x.lisp"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::CodePathEmpty {
+                    slot: ":bibliotecas"
+                }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_code_paths_duplicate_in_bibliotecas_fires_before_duplicate_in_exe() {
+        // Cross-slot ordering pin on the duplicate arm: `:bibliotecas`
+        // duplicates surface before `:exe` duplicates, matching the
+        // canonical `:bibliotecas` → `:exe` → `:servicos` declaration
+        // order every peer per-slot diagnostic on this surface follows.
+        let c = caixa_with_code_paths(
+            vec!["lib/x.lisp", "lib/x.lisp"],
+            vec!["exe/y", "exe/y"],
+            vec![],
+        );
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathDuplicate { slot, path } = err else {
+            panic!("expected CodePathDuplicate, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        assert_eq!(path, PathBuf::from("lib/x.lisp"));
+    }
+
+    #[test]
+    fn validate_code_paths_duplicate_diagnostic_carries_offending_slot_and_path() {
+        // Diagnostic-shape pin (peer with
+        // `validate_code_paths_diagnostic_carries_offending_slot_and_path`
+        // on the structural arm): the duplicate-arm Display surfaces both
+        // the offending `:slot` tag and the offending path verbatim, so a
+        // `feira lint` run can render the diagnostic without re-parsing.
+        let c = caixa_with_code_paths(
+            vec![],
+            vec![],
+            vec![
+                "servicos/demo.computeunit.yaml",
+                "servicos/demo.computeunit.yaml",
+            ],
+        );
+        let rendered = c.validate_code_paths().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":servicos"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("servicos/demo.computeunit.yaml"),
             "diagnostic must quote the offending path: {rendered}",
         );
     }
