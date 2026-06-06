@@ -615,6 +615,56 @@ fn validate_placement_cluster(cluster: &str) -> Result<(), AplicacaoError> {
     })
 }
 
+/// Reject `:contratos :de` / `:contratos :para` values whose shape
+/// can never legitimately match a validated `:membros :caixa`. Thin
+/// wrapper around [`crate::render::is_dns_1123_label`] that maps the
+/// shared parser-shaped reason into the
+/// [`AplicacaoError::ContratoCaixaInvalid`] variant, so the per-edge
+/// diagnostic is self-locating (which slot — `:de` or `:para` — and
+/// the offending value verbatim) and the author can grep their
+/// caixa.lisp for `:de "<name>"` / `:para "<name>"` and fix it in
+/// one edit.
+///
+/// Until this gate landed an empty or DNS-1123-malformed `:de` /
+/// `:para` (`:de ""`, `:de "Cart"` the canonical TitleCase-from-an-ADR
+/// typo, `:de "my_cart"` the Python-module-name leak, `:de "team.cart"`
+/// the namespace-dot-on-a-label confusion, `:de "-cart"` / `:de "cart-"`
+/// the boundary-hyphen violation, the 64-byte over-cap slug, `:de "café"`
+/// un-Punycode-encoded IDN) silently passed the per-axis check and
+/// surfaced as [`AplicacaoError::ContratoMemberMissing`] at the
+/// membership lookup — diagnostic-framed as "this caixa is not in
+/// `:membros`" when the root cause is "this `:de` value is not a
+/// well-shaped Servico-name identifier and could never legitimately
+/// match any validated member". Because every `:membros :caixa` is
+/// shape-validated through [`validate_membro_caixa`] (3f9d7a0), the
+/// `names` HashSet structurally never contains an empty / malformed
+/// string, so the membership lookup arm misframes every empty /
+/// malformed input. Lifting the shape arm ahead of the lookup
+/// preserves the legitimate `ContratoMemberMissing` arm (a
+/// well-shaped `:de` that simply isn't in `:membros` — a phantom
+/// reference) while routing every structurally-impossible-to-match
+/// input through the narrower self-locating shape diagnostic.
+///
+/// Same diagnostic shape as [`AplicacaoError::MembroCaixaInvalid`]
+/// (3f9d7a0) and [`AplicacaoError::PlacementClusterInvalid`]
+/// (6c8c00b) — the third Aplicacao-level Servico-name reference axis
+/// to land on the canonical [`crate::render::is_dns_1123_label`]
+/// floor. The `slot: &'static str` field carries the kebab-case
+/// `:de` / `:para` tag verbatim, mirroring [`BehaviorSpec::validate`]'s
+/// per-callback-slot diagnostic shape and the
+/// [`ManifestError::CodePathDuplicate`] (e113ace) / [`DepError::DepIsSelf`]
+/// (85f102c) cross-list-tag pattern.
+fn validate_contrato_caixa(slot: &'static str, caixa: &str) -> Result<(), AplicacaoError> {
+    if caixa.is_empty() {
+        return Err(AplicacaoError::ContratoCaixaEmpty { slot });
+    }
+    crate::render::is_dns_1123_label(caixa).map_err(|reason| AplicacaoError::ContratoCaixaInvalid {
+        slot,
+        caixa: caixa.to_string(),
+        reason,
+    })
+}
+
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
 /// would refuse at admission time. The contract — exactly the regex
 /// the Gateway API CRD's OpenAPI schema enforces on `Listener.hostname`
@@ -1122,6 +1172,24 @@ impl AplicacaoSpec {
         let mut seen_contracts: std::collections::HashSet<ContratoIdentity<'_>> =
             std::collections::HashSet::new();
         for c in &self.contratos {
+            // Per-axis value-shape gate on every `:contratos` name
+            // reference, before any graph-membership lookup. Empty +
+            // DNS-1123-malformed `:de`/`:para` values silently fell
+            // through to `ContratoMemberMissing` at the lookup arm
+            // because every `:membros :caixa` is shape-validated
+            // (3f9d7a0), so the `names` set structurally cannot contain
+            // an empty / malformed string and the membership-lookup
+            // diagnostic always misframed the root cause as
+            // "this caixa is not in `:membros`". The shape gate runs
+            // ahead of the lookup so structurally-impossible-to-match
+            // inputs route through the narrower self-locating
+            // diagnostic, preserving the legitimate "well-shaped
+            // phantom reference" arm. `:de` runs before `:para` per
+            // the canonical edge-direction order the existing
+            // membership lookup, self-edge check, target dispatch,
+            // and diagnostic strings already use.
+            validate_contrato_caixa(":de", &c.de)?;
+            validate_contrato_caixa(":para", &c.para)?;
             if !names.contains(c.de.as_str()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
                     caixa: c.de.clone(),
@@ -1770,6 +1838,25 @@ pub enum AplicacaoError {
          constituent caixa."
     )]
     MembroIsSelfAplicacao { caixa: String },
+    #[error(
+        "contrato {slot} is empty (every :contratos entry's :de and :para must name a \
+         caixa declared in :membros; omit the contract or fill the {slot} field with a \
+         member name)"
+    )]
+    ContratoCaixaEmpty { slot: &'static str },
+    #[error(
+        "contrato {slot} {caixa:?} is not a valid DNS-1123 label: {reason} (every \
+         :contratos {slot} value names a member of :membros, which is itself a \
+         DNS-1123 label per the K8s apiserver's `metadata.name` rule on every \
+         object the member name lands in — Service, Pod, identity-based Cilium \
+         selector; use a lowercase alphanumeric + hyphen identifier like \
+         `\"checkout\"` or `\"cart-v2\"`)"
+    )]
+    ContratoCaixaInvalid {
+        slot: &'static str,
+        caixa: String,
+        reason: String,
+    },
     #[error("contrato references caixa {caixa:?} not declared in :membros")]
     ContratoMemberMissing { caixa: String },
     #[error(
@@ -2632,6 +2719,315 @@ mod tests {
         assert!(
             matches!(err, AplicacaoError::ContratoMemberMissing { caixa } if caixa == "phantom")
         );
+    }
+
+    // ── :contratos :de / :para DNS-1123 label value-shape gate ──────────
+
+    #[test]
+    fn rejects_contrato_de_empty() {
+        // `:de ""` previously fell through to `ContratoMemberMissing`
+        // (with `caixa: ""`) because the validated `:membros :caixa`
+        // set never contains the empty string. The narrower
+        // `ContratoCaixaEmpty { slot: ":de" }` diagnostic now names
+        // the offending slot.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert_eq!(
+            err,
+            AplicacaoError::ContratoCaixaEmpty { slot: ":de" },
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_para_empty() {
+        // Symmetric arm to `:de ""` — `:para ""` previously fell
+        // through to `ContratoMemberMissing { caixa: "" }`.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "", "/x"));
+        let err = s.validate().unwrap_err();
+        assert_eq!(
+            err,
+            AplicacaoError::ContratoCaixaEmpty { slot: ":para" },
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_de_with_uppercase() {
+        // The canonical "I copied the Servico's TitleCase display
+        // name from an ADR" typo. Until this gate landed `:de "Cart"`
+        // surfaced `ContratoMemberMissing { caixa: "Cart" }` — framed
+        // as "this caixa isn't in `:membros`" when the root cause is
+        // "this `:de` value's shape can never legitimately match a
+        // validated member (DNS-1123 labels are lowercase)". The
+        // narrower diagnostic names the offending slot, the value
+        // verbatim, and the parser-shaped reason.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("Cart", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ContratoCaixaInvalid {
+            slot,
+            caixa,
+            reason,
+        } = err
+        else {
+            panic!("expected ContratoCaixaInvalid, got other variant");
+        };
+        assert_eq!(slot, ":de");
+        assert_eq!(caixa, "Cart");
+        assert!(
+            reason.contains("uppercase"),
+            "diagnostic must name the violation as `uppercase` (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_para_with_underscore() {
+        // The canonical "I'm thinking of a Python module" leak —
+        // `_` is forbidden by every DNS-1123 / DNS-1035 label schema.
+        // Pin the `:para` axis surfaces the same diagnostic shape as
+        // the `:de` axis on the underscore violation.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "my_catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, ref reason }
+                    if slot == ":para" && caixa == "my_catalog" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_de_with_dot() {
+        // A `:contratos :de` value is a single DNS-1123 *label*, not
+        // a subdomain — mirroring the `:membros :caixa` floor. The
+        // strictest floor among the use sites wins.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("team.cart", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, ref reason }
+                    if slot == ":de" && caixa == "team.cart" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_para_with_unicode() {
+        // DNS-1123 is ASCII-only; IDN must be pre-encoded as Punycode
+        // (`xn--…`) before it reaches K8s. The byte-by-byte ASCII
+        // validity check rejects multi-byte UTF-8 by the first
+        // non-`[a-z0-9-]` byte.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "café", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, .. }
+                    if slot == ":para" && caixa == "café"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_contrato_de_with_leading_hyphen() {
+        // DNS-1123 boundary rule: labels must start and end with an
+        // alphanumeric. K8s rejects `-cart` outright; the narrower
+        // shape diagnostic now names the violation at caixa-build
+        // time rather than the misframed membership-lookup arm.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("-cart", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, ref reason }
+                    if slot == ":de" && caixa == "-cart" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_de_empty_takes_precedence_over_invalid() {
+        // Order pin: the `ContratoCaixaEmpty` arm fires before the
+        // `ContratoCaixaInvalid` parse-side arm — same empty-first
+        // cascade `validate_membro_caixa` / `validate_placement_cluster`
+        // / `validate_entrada_host` already establish on their peer
+        // name axes. The empty string is a structurally distinct
+        // authoring footgun (the author left the field blank, vs.
+        // typed a malformed value), so it gets its own diagnostic.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, AplicacaoError::ContratoCaixaEmpty { slot: ":de" });
+    }
+
+    #[test]
+    fn contrato_de_shape_fires_before_para_shape() {
+        // Per-axis order pin: within one `:contratos` entry, the `:de`
+        // shape gate fires before the `:para` shape gate — same
+        // edge-direction order the existing `ContratoMemberMissing` /
+        // `ContratoSelfLoop` / target-dispatch checks use, so the
+        // diagnostic for a contract with both `:de` and `:para`
+        // malformed is stable. Authors fixing the surfaced `:de`
+        // first will see `:para`'s diagnostic on re-run.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("Cart", "Catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, .. }
+                    if slot == ":de" && caixa == "Cart"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_shape_fires_before_membership_lookup() {
+        // The load-bearing pin: an invalid-shape `:de` surfaces its
+        // *own* diagnostic, not the misframed `ContratoMemberMissing`.
+        // Because every `:membros :caixa` is shape-validated (3f9d7a0),
+        // an invalid-shape `:de` could never legitimately match any
+        // member — the prior `ContratoMemberMissing` diagnostic was
+        // a structural impossibility framed as a graph-membership
+        // failure. The shape gate now routes every such input through
+        // the narrower self-locating diagnostic.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("Cart", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, .. } if slot == ":de"
+            ),
+            "got {err:?}"
+        );
+        // And the symmetric case: an invalid-shape `:para` surfaces
+        // its own diagnostic too, even when `:de` is well-shaped.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "Catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, .. } if slot == ":para"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_shape_fires_before_self_edge_check() {
+        // A `:de "Cart" :para "Cart"` entry is two distinct authoring
+        // bugs: the shape violation (uppercase) and the self-edge
+        // violation. The narrower per-axis shape diagnostic surfaces
+        // first because fixing the shape may reveal that the author
+        // also meant to point `:para` at a different member — the
+        // self-edge framing is only useful once both endpoints have
+        // valid shape.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("Cart", "Cart", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, .. }
+                    if slot == ":de" && caixa == "Cart"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_well_shaped_phantom_still_raises_member_missing() {
+        // Strict-improvement pin: a well-shaped `:de` that simply
+        // isn't in `:membros` (a phantom reference — author meant
+        // to add the member but didn't, or renamed and missed an
+        // update) still surfaces `ContratoMemberMissing`, unchanged.
+        // The shape gate only intercepts inputs that could never
+        // legitimately match a validated member; legitimately-shaped
+        // phantom references remain on the graph-membership axis.
+        let mut s = three_member_spec();
+        s.contratos
+            .push(contract_http("phantom-shim", "catalog", "/x"));
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoMemberMissing { ref caixa }
+                    if caixa == "phantom-shim"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn contrato_caixa_invalid_diagnostic_carries_offending_slot_and_value() {
+        // The diagnostic-shape pin: the error names the offending
+        // slot (`:de` or `:para`) verbatim and the offending value
+        // verbatim plus a non-empty parser-shaped reason, so the
+        // author can grep their caixa.lisp for `:de "<name>"` /
+        // `:para "<name>"` and fix it in one edit. Same diagnostic
+        // shape as `MembroCaixaInvalid` (3f9d7a0) and
+        // `PlacementClusterInvalid` (6c8c00b).
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "BAD_NAME", "/x"));
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ContratoCaixaInvalid {
+            slot,
+            caixa,
+            reason,
+        } = err
+        else {
+            panic!("expected ContratoCaixaInvalid, got {err:?}");
+        };
+        assert_eq!(slot, ":para");
+        assert_eq!(caixa, "BAD_NAME");
+        assert!(
+            !reason.is_empty(),
+            "ContratoCaixaInvalid `reason` must carry a parser-shaped wording"
+        );
+    }
+
+    #[test]
+    fn accepts_canonical_contrato_caixa_forms() {
+        // The DNS-1123 label shapes a caixa author is realistically
+        // going to write on a `:contratos :de` / `:para`. Pin every
+        // leg so a future tightening that bans (e.g.) digit-start
+        // identifiers surfaces here, mirroring
+        // `accepts_canonical_membro_caixa_forms` on the peer name
+        // axis.
+        for form in ["cart", "cart-v2", "a", "c0", "3rd-party-shim", "x-1-2-3-4"] {
+            let mut s = three_member_spec();
+            s.membros = vec![membro("checkout", "^0.1"), membro(form, "^0.1")];
+            s.contratos = vec![contract_http("checkout", form, "/x")];
+            s.entrada = None;
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical form {form:?} must validate on `:para`, got {e:?}")
+            });
+
+            let mut s = three_member_spec();
+            s.membros = vec![membro(form, "^0.1"), membro("catalog", "^0.1")];
+            s.contratos = vec![contract_http(form, "catalog", "/x")];
+            s.entrada = None;
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical form {form:?} must validate on `:de`, got {e:?}")
+            });
+        }
     }
 
     #[test]
