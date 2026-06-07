@@ -73,8 +73,17 @@ pub enum Error {
 }
 
 /// Default cluster-wide namespace for caixa Servicos when the
-/// computeunit doesn't pin its own.
-pub const DEFAULT_NAMESPACE: &str = "tatara-system";
+/// computeunit doesn't pin its own. Re-export of the canonical
+/// [`caixa_core::DEFAULT_NAMESPACE`] so the namespace string lives in
+/// exactly one place across every renderer — caixa-flux's
+/// programs.yaml / GitRepository / HelmRelease / Kustomization
+/// emitters and caixa-mesh's programs fan-out / CiliumNetworkPolicy /
+/// Gateway / HTTPRoute emitters now consult the same `&'static str`,
+/// so a future per-cluster-namespace rebrand is a one-line edit on
+/// the canonical [`caixa_core::DEFAULT_NAMESPACE`] declaration, not a
+/// coordinated rewrite across this crate, caixa-mesh, and every
+/// future per-target renderer the substrate adds.
+pub use caixa_core::DEFAULT_NAMESPACE;
 
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
@@ -489,6 +498,35 @@ spec:
 "#,
         )
         .unwrap()
+    }
+
+    #[test]
+    fn default_namespace_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub const DEFAULT_NAMESPACE` was lifted to a
+        // re-export of [`caixa_core::DEFAULT_NAMESPACE`] so the
+        // namespace string lives in exactly one place across every
+        // caixa renderer (caixa-flux + caixa-mesh today, every future
+        // per-target renderer the substrate adds). Pin the equality
+        // here so any local re-introduction of a sibling `pub const
+        // DEFAULT_NAMESPACE: &str = "…"` (the canonical drift footgun
+        // that motivated this lift, with the prior caixa-mesh doc-
+        // comment explicitly acknowledging the duplication) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time CiliumNetworkPolicy / Gateway / HTTPRoute
+        // `endpointSelector` namespace mismatch dropping every L7
+        // contrato flow far from the source rebrand commit. Peer to
+        // `caixa_mesh::tests::default_namespace_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(DEFAULT_NAMESPACE, caixa_core::DEFAULT_NAMESPACE);
+        assert!(
+            std::ptr::eq(
+                DEFAULT_NAMESPACE.as_ptr(),
+                caixa_core::DEFAULT_NAMESPACE.as_ptr(),
+            ),
+            "DEFAULT_NAMESPACE must be a re-export of caixa_core::DEFAULT_NAMESPACE, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
     }
 
     #[test]
