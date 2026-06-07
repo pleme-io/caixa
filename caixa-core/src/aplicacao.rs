@@ -549,6 +549,18 @@ const ENTRADA_HOST_MAX_LEN: usize = 253;
 /// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
 const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
 
+/// Max byte length for an Akka-cluster-sharding `:placement :shard-key`
+/// extractor expression — the upper bound `validate_placement_shard_key`
+/// enforces on every well-shaped shard-key past validate. The realistic
+/// shard-key forms in the wild (`tenantId`, `customerId`, `$tenantId`,
+/// `metadata.tenantId`, `${tenant}`, `$.user.id`) all sit well under 64
+/// bytes; the 63-byte cap mirrors the DNS-1123 label cap on the peer
+/// `:placement :affinity` / `:placement :clusters` identifier-shaped
+/// axes and surfaces the canonical "paste-from-doc multi-line blob landed
+/// in `:shard-key`" footgun at validate time rather than at the future
+/// M4 Akka-style cluster-sharding reconciler's hash-extractor pass.
+const PLACEMENT_SHARD_KEY_MAX_LEN: usize = 63;
+
 /// Reject `:membros :caixa` values the K8s apiserver would refuse at
 /// admission time. Thin wrapper around [`crate::render::is_dns_1123_label`]
 /// that maps the shared parser-shaped reason into the
@@ -678,6 +690,167 @@ fn validate_placement_affinity(affinity: &str) -> Result<(), AplicacaoError> {
             reason,
         }
     })
+}
+
+/// Reject `:placement :shard-key` extractor expressions whose shape can
+/// never legitimately drive the future M4 Akka-style cluster-sharding
+/// reconciler's hash-extractor pass. Maps the per-byte / length checks
+/// into the [`AplicacaoError::ShardKeyInvalid`] variant, so the
+/// diagnostic is self-locating (the offending `:shard-key` value is
+/// named verbatim alongside the parser-shaped reason) and the author can
+/// grep their caixa.lisp for `:shard-key "<expr>"` and fix it in one
+/// edit.
+///
+/// The `:shard-key` slot is the Akka-cluster-sharding `ExtractEntityId`
+/// axis (MESH-COMPOSITION §II.4) — a single-token entity-id extractor
+/// expression naming the message property to hash on. The realistic
+/// shapes in the wild (`tenantId` / `customerId` / `userId` — bare
+/// property name; `$tenantId` — Akka entity-id placeholder;
+/// `metadata.tenantId` / `$.user.id` — JSONPath-style nested reference;
+/// `${tenant}` — interpolation-style template) all sit in the printable
+/// ASCII subset; the realistic *non-shapes* (a paste-from-doc
+/// multi-line blob landing in `:shard-key`, an embedded space from a
+/// paste-from-aligned-doc, a trailing newline from a paste-from-shell
+/// heredoc, a non-ASCII byte from a paste-from-Unicode-doc, the
+/// `:shard-key "tenant Id"` typo) silently passed the prior empty-only
+/// check and the failure surfaces at the future M4 reconciler's hash
+/// pass as a runtime extractor-evaluation error far from the source
+/// `caixa.lisp`, with no field naming which member's `:shard-key`
+/// carried the offending value.
+///
+/// The contract — the printable ASCII single-token intersection-floor
+/// every Akka-style entity-id extractor implementation admits:
+///
+///   - 1..=[`PLACEMENT_SHARD_KEY_MAX_LEN`] (63) bytes — same cap as the
+///     peer DNS-1123-label-shaped `:placement :affinity` /
+///     `:placement :clusters` identifier axes; realistic shard-keys sit
+///     well under 32 bytes, the cap surfaces paste-from-doc multi-line
+///     blob footguns at validate time;
+///   - every byte in the printable ASCII range `0x21..=0x7E` —
+///     rejects whitespace (space, tab, CR, LF — `"$tenant Id"` /
+///     `"$tenantId\n"` from paste-from-aligned-doc /
+///     paste-from-shell-heredoc), control characters (`\x00..\x1F`,
+///     `\x7F` — the canonical "embedded null from a copy-paste-binary
+///     footgun"), and non-ASCII bytes (`"$tenàntId"` —
+///     un-Punycode-encoded IDN that round-trips inconsistently across
+///     NFC/NFD normalization).
+///
+/// The accepted set is broader than the DNS-1123 label floor the peer
+/// `:placement :clusters` / `:placement :affinity` axes use because the
+/// `:shard-key` value is not a K8s `metadata.name` / label-selector
+/// landing site; it's an extractor expression the future Akka-style
+/// reconciler reads as a property reference. The realistic forms
+/// (`$tenantId`, `metadata.tenantId`, `${tenant}`, `$.user.id`) carry
+/// `$` / `.` / `{` / `}` characters that the DNS-1123 grammar forbids
+/// but every Akka-style entity-id extractor parses. The
+/// printable-ASCII-token floor accepts every shape any such extractor
+/// would accept while rejecting the cross-implementation footguns
+/// (whitespace breaks token boundaries; non-ASCII round-trips
+/// inconsistently across YAML emitters and NFC/NFD normalization;
+/// control characters silently corrupt the next read).
+///
+/// Until this gate landed `validate_placement` only refused the
+/// `Some("")` empty arm via [`AplicacaoError::ShardedKeyEmpty`]; a
+/// structurally invalid `:shard-key` (`":shard-key \" $tenantId\""` —
+/// leading space from paste-from-aligned-doc, `":shard-key \"$tenant
+/// Id\""` — embedded space, `":shard-key \"$tenantId\\n\""` — trailing
+/// newline from paste-from-shell-heredoc, `":shard-key \"$tenàntId\""`
+/// — un-Punycode-encoded IDN, `":shard-key \"$tenantId\\x01\""` —
+/// control character from paste-from-binary, the 64-byte over-cap
+/// paste-from-doc multi-line slug) silently passed validate. The future
+/// M4 Akka-style cluster-sharding reconciler's hash-extractor pass
+/// would then surface the malformed value either as a runtime
+/// extractor-evaluation error (whitespace breaks the extractor's token
+/// boundary, no match) or as a silently-different shard assignment
+/// across YAML emitters (non-ASCII normalizes differently between the
+/// caixa-mesh-side YAML emitter and the in-cluster reconciler's YAML
+/// parser, the same entity ID maps to two distinct shards on a
+/// re-render). Lifting the shape gate to caixa-build time makes the
+/// extractor-floor invariant a structural property of every validated
+/// `Placement`: every `Sharded` placement past `validate_placement` has
+/// a `:shard-key` the future M4 reconciler can hash without
+/// re-validating at the runtime layer.
+///
+/// Mirrors the [`AplicacaoError::ContratoSlotInvalid`] /
+/// [`AplicacaoError::ContratoSubjectInvalid`] /
+/// [`AplicacaoError::ContratoEndpointInvalid`] payload-axis shape gates
+/// on the peer `:contratos` payload axes — each lifts the
+/// runtime-side parser's intersection-floor to a caixa-build-time gate,
+/// closing the canonical "this passed validate but the runtime parser
+/// rejected it" surprise.
+fn validate_placement_shard_key(key: &str) -> Result<(), AplicacaoError> {
+    // Empty is gated separately at the call site via the more
+    // self-locating [`AplicacaoError::ShardedKeyEmpty`] diagnostic;
+    // re-checking here keeps the predicate usable from any future call
+    // site (the M4 CR materializer's per-shard-key validator) without
+    // an empty-check footgun.
+    if key.is_empty() {
+        return Err(AplicacaoError::ShardedKeyEmpty);
+    }
+    if key.len() > PLACEMENT_SHARD_KEY_MAX_LEN {
+        return Err(AplicacaoError::ShardKeyInvalid {
+            shard_key: key.to_string(),
+            reason: format!(
+                "exceeds :shard-key max length of {PLACEMENT_SHARD_KEY_MAX_LEN} bytes \
+                 (got {} bytes; realistic Akka-style entity-id extractor expressions \
+                 — `tenantId`, `$tenantId`, `metadata.tenantId`, `${{tenant}}` — sit \
+                 well under 32 bytes, this length suggests a paste-from-doc \
+                 multi-line blob landed in `:shard-key` instead of a single-token \
+                 extractor expression)",
+                key.len()
+            ),
+        });
+    }
+    for &b in key.as_bytes() {
+        if (0x21..=0x7E).contains(&b) {
+            continue;
+        }
+        let reason = if b == b' ' {
+            "contains a space (Akka-style entity-id extractor expressions are \
+             single-token references like `tenantId` / `$tenantId` / `metadata.tenantId`; \
+             whitespace breaks the extractor's token boundary at the runtime layer, \
+             and the paste-from-aligned-doc / paste-from-CSV footgun silently lands \
+             a multi-token blob in one `:shard-key` slot)"
+                .to_string()
+        } else if b == b'\t' {
+            "contains a tab character (paste-from-aligned-doc footgun; the \
+             Akka-style entity-id extractor reads `:shard-key` as a single-token \
+             reference, embedded whitespace breaks the token boundary at the \
+             runtime hash-extractor pass)"
+                .to_string()
+        } else if b == b'\n' || b == b'\r' {
+            format!(
+                "contains line terminator 0x{b:02x} (paste-from-shell-heredoc / \
+                 paste-from-multiline-doc footgun; the Akka-style entity-id \
+                 extractor reads `:shard-key` as a single-token reference, embedded \
+                 newlines either truncate the value at the YAML emitter layer or \
+                 break the token boundary at the runtime hash-extractor pass)"
+            )
+        } else if b < 0x20 || b == 0x7F {
+            format!(
+                "contains control character 0x{b:02x} (the canonical \
+                 paste-from-binary / paste-from-screen-cleared-terminal footgun; \
+                 control characters silently corrupt round-trip serialization \
+                 across YAML emitters and break the runtime hash-extractor's \
+                 single-token parser)"
+            )
+        } else {
+            format!(
+                "contains non-ASCII byte 0x{b:02x} (the canonical \
+                 paste-from-Unicode-doc footgun; non-ASCII bytes round-trip \
+                 inconsistently across NFC/NFD normalization on APFS / ext4 / \
+                 across YAML emitter implementations — the same entity ID can \
+                 silently map to two distinct shards on a re-render. Use a \
+                 printable-ASCII extractor expression like `tenantId`, \
+                 `$tenantId`, or `metadata.tenantId`)"
+            )
+        };
+        return Err(AplicacaoError::ShardKeyInvalid {
+            shard_key: key.to_string(),
+            reason,
+        });
+    }
+    Ok(())
 }
 
 /// Reject `:contratos :de` / `:contratos :para` values whose shape
@@ -1659,7 +1832,20 @@ impl AplicacaoSpec {
             PlacementStrategy::Sharded => match &self.placement.shard_key {
                 None => return Err(AplicacaoError::ShardedWithoutKey),
                 Some(k) if k.is_empty() => return Err(AplicacaoError::ShardedKeyEmpty),
-                Some(_) => {}
+                // Per-axis value-shape gate on the Akka-cluster-sharding
+                // `:shard-key` extractor expression. The shape gate runs
+                // after the more self-locating `ShardedKeyEmpty` arm so
+                // a `:shard-key ""` surfaces the narrower empty
+                // diagnostic first; every non-empty `:shard-key` past
+                // this call is guaranteed to be a printable-ASCII
+                // single-token reference the future M4 Akka-style
+                // cluster-sharding reconciler can hash without
+                // re-validating at the runtime layer. Mirrors the
+                // payload-axis shape gates on the peer `:contratos`
+                // `:endpoint`/`:subject`/`:slot` axes (4f0390b /
+                // 63e18a0 / c4213a4) — each lifts the runtime parser's
+                // intersection-floor to a caixa-build-time gate.
+                Some(k) => validate_placement_shard_key(k)?,
             },
             // `:shard-key` is the Akka-cluster-sharding axis
             // (MESH-COMPOSITION §II.4) — hash-keyed entity distribution
@@ -2109,6 +2295,16 @@ pub enum AplicacaoError {
          hashes every entity onto the same shard, defeating sharding entirely)"
     )]
     ShardedKeyEmpty,
+    #[error(
+        ":placement Sharded :shard-key {shard_key:?} is not a valid Akka-style \
+         entity-id extractor expression: {reason} (the future M4 Akka-style \
+         cluster-sharding reconciler — MESH-COMPOSITION §II.4 — reads `:shard-key` \
+         as a single-token property reference and hashes the extracted entity ID \
+         to compute shard placement; use a printable-ASCII extractor expression \
+         like `\"tenantId\"`, `\"$tenantId\"`, `\"metadata.tenantId\"`, or \
+         `\"${{tenant}}\"`)"
+    )]
+    ShardKeyInvalid { shard_key: String, reason: String },
     #[error(
         ":placement {estrategia:?} carries :shard-key {shard_key:?} — only :estrategia \
          Sharded consumes :shard-key (hash-keyed entity distribution, Akka cluster-sharding \
@@ -6944,6 +7140,266 @@ mod tests {
         s.placement.estrategia = PlacementStrategy::SingleNode;
         s.placement.shard_key = None;
         s.validate().unwrap();
+    }
+
+    fn sharded_spec_with_key(key: &str) -> AplicacaoSpec {
+        // Fixture builder for the `:placement :shard-key` shape gate
+        // tests: a three-member Aplicacao on the `Sharded` strategy
+        // with the supplied `:shard-key` slot. Co-locates the
+        // arm-construction so every test below carries one line of
+        // setup (the offending `:shard-key` value) and the assertion.
+        let mut s = three_member_spec();
+        s.placement.estrategia = PlacementStrategy::Sharded;
+        s.placement.shard_key = Some(key.into());
+        s
+    }
+
+    #[test]
+    fn rejects_shard_key_with_embedded_space() {
+        // The canonical paste-from-aligned-doc footgun:
+        // `:shard-key "$tenant Id"` — the Akka-style entity-id
+        // extractor reads the slot as a single-token reference, and an
+        // embedded space breaks the token boundary at the runtime
+        // hash-extractor pass with no diagnostic naming the offending
+        // entry.
+        let s = sharded_spec_with_key("$tenant Id");
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyInvalid { ref shard_key, ref reason }
+                    if shard_key == "$tenant Id" && reason.contains("space")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_shard_key_with_leading_space() {
+        // Leading-space arm of the embedded-whitespace footgun — the
+        // paste-from-aligned-doc / paste-from-CSV-cell variant where
+        // the leading column-padding leaked into the slot.
+        let s = sharded_spec_with_key(" $tenantId");
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyInvalid { ref shard_key, .. }
+                    if shard_key == " $tenantId"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_shard_key_with_trailing_newline() {
+        // The canonical paste-from-shell-heredoc footgun — every
+        // `<<EOF` heredoc terminator paste leaves a trailing newline
+        // the YAML emitter then folds away inconsistently across
+        // emitter implementations.
+        let s = sharded_spec_with_key("$tenantId\n");
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyInvalid { ref shard_key, ref reason }
+                    if shard_key == "$tenantId\n" && reason.contains("0x0a")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_shard_key_with_embedded_tab() {
+        // The paste-from-aligned-doc tab-stop variant — tabs land
+        // alongside spaces in copy-paste from formatted columns.
+        let s = sharded_spec_with_key("$tenant\tId");
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyInvalid { ref shard_key, ref reason }
+                    if shard_key == "$tenant\tId" && reason.contains("tab")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_shard_key_with_control_character() {
+        // The paste-from-binary / paste-from-screen-cleared-terminal
+        // footgun — an embedded `\x01` (SOH) byte that some YAML
+        // emitters silently strip and others escape as ``,
+        // breaking round-trip across emitter implementations.
+        let s = sharded_spec_with_key("$tenant\u{0001}Id");
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyInvalid { ref shard_key, ref reason }
+                    if shard_key == "$tenant\u{0001}Id" && reason.contains("control")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_shard_key_with_non_ascii() {
+        // The canonical un-Punycode-encoded IDN / paste-from-Unicode-doc
+        // footgun — non-ASCII bytes normalize differently between the
+        // caixa-mesh-side YAML emitter and the in-cluster reconciler's
+        // YAML parser, the same entity ID can silently map to two
+        // distinct shards on a re-render.
+        let s = sharded_spec_with_key("$tenàntId");
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyInvalid { ref shard_key, ref reason }
+                    if shard_key == "$tenàntId" && reason.contains("non-ASCII")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_shard_key_too_long() {
+        // Length cap pin: 64 bytes — one byte over the
+        // PLACEMENT_SHARD_KEY_MAX_LEN (63) cap. The realistic shape
+        // here is a paste-from-doc multi-line blob landing in
+        // `:shard-key` instead of a single-token extractor expression.
+        let too_long = "a".repeat(64);
+        let s = sharded_spec_with_key(&too_long);
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ShardKeyInvalid {
+            ref shard_key,
+            ref reason,
+        } = err
+        else {
+            panic!("expected ShardKeyInvalid, got {err:?}");
+        };
+        assert_eq!(shard_key, &too_long);
+        assert!(
+            reason.contains("63") && reason.contains("64"),
+            "diagnostic must name the cap (63) and the actual length (64): {reason:?}"
+        );
+    }
+
+    #[test]
+    fn shard_key_max_length_validates() {
+        // Boundary pin: 63 bytes exactly — the
+        // `PLACEMENT_SHARD_KEY_MAX_LEN` cap. A future tightening (e.g.
+        // dropping to 62) surfaces here as a regression, mirroring
+        // `placement_cluster_max_length_validates` /
+        // `placement_affinity_max_length_validates` on the peer
+        // identifier-shaped slots.
+        let s = sharded_spec_with_key(&"a".repeat(63));
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_canonical_shard_key_forms() {
+        // The Akka-style entity-id extractor shapes a caixa author is
+        // realistically going to write — pin every leg so a future
+        // tightening that bans (e.g.) the `${...}` interpolation
+        // variant or the `metadata.<field>` JSONPath form surfaces
+        // here as a regression. The canonical forms span:
+        //
+        //   - bare property name (`tenantId`, `customerId`)
+        //   - Akka `ExtractEntityId` placeholder (`$tenantId`)
+        //   - JSONPath-style nested reference (`metadata.tenantId`,
+        //     `$.user.id`)
+        //   - interpolation-style template (`${tenant}`)
+        //   - snake_case property name (`customer_id`)
+        //   - kebab-case property name (`customer-id` — accepted
+        //     because the slot is a printable-ASCII single-token
+        //     reference, not a DNS-1123 label like
+        //     `:placement :affinity` / `:clusters`)
+        //   - single character (`a`, `$` — boundary)
+        for form in [
+            "tenantId",
+            "customerId",
+            "$tenantId",
+            "metadata.tenantId",
+            "$.user.id",
+            "${tenant}",
+            "customer_id",
+            "customer-id",
+            "a",
+            "$",
+        ] {
+            let s = sharded_spec_with_key(form);
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical shard-key form {form:?} must validate, got {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn shard_key_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `ShardedKeyEmpty` diagnostic
+        // (reserved for the `Sharded` `Some("")` arm) fires before the
+        // new `ShardKeyInvalid` parse-side diagnostic, so an empty
+        // `:shard-key` keeps its narrower error message — the new gate
+        // would also reject `""` defensively, but the empty-string arm
+        // is the more self-locating diagnostic. Mirrors the
+        // `placement_cluster_empty_takes_precedence_over_invalid` pin
+        // on the peer identifier-shaped slot.
+        let s = sharded_spec_with_key("");
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, AplicacaoError::ShardedKeyEmpty);
+    }
+
+    #[test]
+    fn shard_key_invalid_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the error names the offending
+        // `:shard-key` value verbatim so the author can grep their
+        // caixa.lisp without re-running the build, and carries a
+        // parser-shaped `reason:` naming the specific violation —
+        // mirrors `placement_cluster_invalid_diagnostic_carries_offending_cluster`
+        // on the peer identifier-shaped slot.
+        let s = sharded_spec_with_key("$tenant Id");
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ShardKeyInvalid {
+            ref shard_key,
+            ref reason,
+        } = err
+        else {
+            panic!("expected ShardKeyInvalid, got {err:?}");
+        };
+        assert_eq!(shard_key, "$tenant Id");
+        assert!(
+            !reason.is_empty(),
+            "reason must name the specific violation, got empty string"
+        );
+    }
+
+    #[test]
+    fn shard_key_shape_fires_after_non_sharded_strategy_gate() {
+        // Order pin: the `ShardKeyOnNonSharded` arm (which rejects
+        // `:shard-key` carried on non-Sharded strategies) fires before
+        // the shape gate, so a malformed `:shard-key` carried on (e.g.)
+        // a `Replicated` strategy surfaces the more self-locating
+        // strategy-mismatch diagnostic (naming the actual fix — drop
+        // the slot, or switch to Sharded) rather than the shape
+        // diagnostic. The strategy-mismatch arm is the more actionable
+        // diagnostic: a malformed shard-key on Replicated is "you
+        // shouldn't have a :shard-key here at all", not "your
+        // :shard-key value is malformed".
+        let mut s = three_member_spec();
+        // Replicated is the default fixture strategy.
+        s.placement.shard_key = Some("$tenant Id".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ShardKeyOnNonSharded {
+                    estrategia: PlacementStrategy::Replicated,
+                    ..
+                }
+            ),
+            "got {err:?}"
+        );
     }
 
     #[test]
