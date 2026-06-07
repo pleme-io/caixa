@@ -536,6 +536,46 @@ fn is_canonical_rate_limit_window(window: Duration) -> bool {
     window.subsec_nanos() == 0 && (secs == 1 || secs == 60 || secs == 3600)
 }
 
+/// True when `d` is representable as an integer number of milliseconds —
+/// the round-trippable accepted set of the shared
+/// [`supervisor::duration_codec`] every typed-`Duration` `:politicas`
+/// slot ([`MeshPolicy::timeout`], [`CircuitBreaker::window`]) routes
+/// through. The codec parses `<integer><unit>` for unit ∈
+/// {`"ms"`,`"s"`,`"m"`,`"h"`} and renders by picking the largest unit
+/// the value is a clean multiple of (`h`/`m`/`s`/`ms`); a `Duration`
+/// whose sub-millisecond residue is non-zero either renders as a
+/// truncated-to-`ms` string the parser then deserializes as a
+/// *different* value (`Duration::from_micros(1500)` →
+/// `as_millis() == 1` → renders `"1ms"` → parses back to
+/// `Duration::from_millis(1)` = `1_000_000` ns ≠ original `1_500_000` ns)
+/// or — for sub-millisecond magnitudes — renders as the literal
+/// `"0s"` (`as_millis() == 0` arm of [`supervisor::duration_codec::render`])
+/// which the [`MeshPolicy::timeout`] zero-floor gate then rejects on
+/// re-validate. Either branch breaks the THEORY.md §V.2.7
+/// render-determinism contract every typed slot carries: the *same*
+/// validated value must produce the *same* string on every emit, and
+/// the parsed value of that string must equal the original.
+///
+/// Lifted to a typed predicate (rather than an inline
+/// `d.subsec_nanos() % 1_000_000 == 0` at each
+/// [`AplicacaoSpec::validate_politicas`] axis) so the codec's
+/// round-trippable set lives in exactly one place — drift between
+/// the codec's accepted granularity and either typed-`Duration` slot's
+/// accepted set is a build error visible at this predicate, not a
+/// silent round-trip break at the codec layer. Peer of
+/// [`is_canonical_rate_limit_window`] on the third typed-`Duration`
+/// `:politicas` axis (`:rate-limit :window`, which lands on a
+/// stricter floor — the three canonical 1s/60s/3600s windows — because
+/// the [`rate_limit_codec`] is unit-magnitude-1 only) and the same
+/// "typed-slot's valid set matches its codec's accepted set,
+/// structurally" discipline every predicate-on-the-typed-slot helper
+/// carries ([`MeshPolicy::is_empty`], [`crate::LimitsSpec::is_empty`],
+/// [`crate::BehaviorSpec::is_empty`]).
+#[must_use]
+fn is_integer_millisecond_duration(d: Duration) -> bool {
+    d.subsec_nanos() % 1_000_000 == 0
+}
+
 /// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
 /// max length, in bytes — same value the apiserver-side OpenAPI
 /// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
@@ -1909,6 +1949,33 @@ impl AplicacaoSpec {
             if t.is_zero() {
                 return Err(AplicacaoError::PolicyTimeoutZero);
             }
+            // Codec round-trip floor on the typed `:timeout`
+            // axis. The shared `supervisor::duration_codec` accepts
+            // `<integer><unit>` for `unit ∈ {ms,s,m,h}` and renders
+            // by picking the largest unit a value is a clean
+            // multiple of; a `Duration` carrying a sub-millisecond
+            // residue (`Duration::from_micros(1500)` =
+            // 1_500_000 ns) either truncates to `as_millis()`
+            // (renders `"1ms"` → parses back to `Duration::from_millis(1)`
+            // = 1_000_000 ns, *not* the original) or — for purely
+            // sub-millisecond magnitudes — renders as the literal
+            // `"0s"` the `PolicyTimeoutZero` arm above rejects on
+            // re-validate. Either branch breaks the THEORY.md
+            // §V.2.7 render-determinism contract every typed slot
+            // carries. Lifting the gate to validate matches the
+            // discipline `is_canonical_rate_limit_window` (808017c)
+            // applies on the sibling `:rate-limit :window` axis:
+            // every validated `Duration` past `validate_politicas`
+            // round-trips losslessly through the codec, by
+            // construction. The zero-floor gate strictly precedes
+            // this canonical gate so `Duration::ZERO` (which has
+            // `subsec_nanos() == 0` and would pass the canonical
+            // arm) surfaces the more self-locating
+            // `PolicyTimeoutZero` diagnostic naming the omit-axis
+            // remediation, not the round-trip-shape diagnostic.
+            if !is_integer_millisecond_duration(t) {
+                return Err(AplicacaoError::PolicyTimeoutNotCanonical { timeout: t });
+            }
         }
         if let Some(r) = p.retries {
             if r == 0 {
@@ -1921,6 +1988,21 @@ impl AplicacaoSpec {
             }
             if cb.window.is_zero() {
                 return Err(AplicacaoError::PolicyBreakerZeroWindow);
+            }
+            // Same codec round-trip floor as the `:timeout` arm
+            // above, on the second typed-`Duration` `:politicas`
+            // axis: every validated `CircuitBreaker.window` past
+            // `validate_politicas` is an integer multiple of 1ms,
+            // and therefore round-trips losslessly through the
+            // shared `supervisor::duration_codec` the
+            // `duration_codec_required` adapter wires onto the
+            // (required, not optional) `:window` field. The
+            // zero-floor gate strictly precedes this canonical
+            // gate, peer to the `:timeout` ordering, so
+            // `Duration::ZERO` surfaces the more self-locating
+            // `PolicyBreakerZeroWindow` diagnostic.
+            if !is_integer_millisecond_duration(cb.window) {
+                return Err(AplicacaoError::PolicyBreakerWindowNotCanonical { window: cb.window });
             }
         }
         if let Some(rl) = &p.rate_limit {
@@ -2460,6 +2542,26 @@ pub enum AplicacaoError {
          three canonical windows)"
     )]
     PolicyRateLimitWindowNotCanonical { window: Duration },
+    #[error(
+        ":politicas :timeout must be an integer number of milliseconds — the canonical \
+         authoring form `\"<integer><unit>\"` for unit ∈ {{`ms`,`s`,`m`,`h`}} the shared \
+         duration codec round-trips losslessly; got {timeout:?} which carries a \
+         sub-millisecond residue that either truncates to a different `Duration` on \
+         re-parse (e.g. `Duration::from_micros(1500)` → renders `\"1ms\"` → parses back \
+         to 1ms, not 1.5ms) or renders as `\"0s\"` (sub-millisecond magnitude) the \
+         zero-floor gate rejects on re-validate. Pick an integer-millisecond magnitude \
+         (e.g. `\"30s\"`, `\"1500ms\"`, `\"2m\"`, `\"1h\"`)"
+    )]
+    PolicyTimeoutNotCanonical { timeout: Duration },
+    #[error(
+        ":politicas :circuit-breaker :window must be an integer number of milliseconds — \
+         the canonical authoring form `\"<integer><unit>\"` for unit ∈ {{`ms`,`s`,`m`,`h`}} \
+         the shared duration codec round-trips losslessly; got {window:?} which carries a \
+         sub-millisecond residue that either truncates to a different `Duration` on \
+         re-parse or renders as `\"0s\"` the zero-floor gate rejects on re-validate. \
+         Pick an integer-millisecond magnitude (e.g. `\"60s\"`, `\"500ms\"`, `\"2m\"`)"
+    )]
+    PolicyBreakerWindowNotCanonical { window: Duration },
 }
 
 #[cfg(test)]
@@ -6709,6 +6811,322 @@ mod tests {
         assert!(!super::is_canonical_rate_limit_window(
             Duration::from_millis(1500)
         ));
+    }
+
+    #[test]
+    fn rejects_policy_timeout_sub_millisecond() {
+        // A purely sub-millisecond `Duration` (`from_micros(500)` =
+        // 500_000 ns) is not the zero `Duration` — the `is_zero()`
+        // arm passes — but `as_millis() == 0`, so the shared codec's
+        // `render` arm returns the literal `"0s"`, which the
+        // codec's `parse` arm then deserializes as `Duration::ZERO`
+        // and the `PolicyTimeoutZero` zero-floor gate would reject
+        // on re-validate. Pin the rejection at the typed slot's
+        // canonical-floor gate so the round-trip break surfaces at
+        // validate time, naming the offending `Duration`, rather
+        // than at the next serialize → deserialize round-trip far
+        // from the source `caixa.lisp`.
+        let mut s = three_member_spec();
+        let timeout = Duration::from_micros(500);
+        s.politicas.timeout = Some(timeout);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutNotCanonical { timeout }
+        );
+    }
+
+    #[test]
+    fn rejects_policy_timeout_non_integer_millisecond() {
+        // A `Duration` with non-integer-millisecond residue
+        // (`from_micros(1500)` = 1.5 ms = 1_500_000 ns) renders
+        // through the shared codec's `render` arm as `"1ms"` (the
+        // `as_millis()` floor truncates), which the codec's `parse`
+        // arm then deserializes as `Duration::from_millis(1)` =
+        // 1_000_000 ns — silently *different* from the original.
+        // Pin the rejection so this round-trip break surfaces at
+        // validate time, where the offending `Duration` is named,
+        // rather than as a silent value-laundered round-trip on the
+        // next codec round-trip.
+        let mut s = three_member_spec();
+        let timeout = Duration::from_micros(1500);
+        s.politicas.timeout = Some(timeout);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutNotCanonical { timeout }
+        );
+    }
+
+    #[test]
+    fn accepts_policy_timeout_integer_millisecond_forms() {
+        // The codec's accepted set — integer multiples of 1ms — is
+        // the typed slot's accepted set: `1ms`, `500ms`, `30s`, `2m`,
+        // `1h` all pass the canonical gate. Pin the canonical-forms
+        // sweep so a future tightening of the codec's grammar (e.g.
+        // dropping `:ms`) surfaces here as a test failure rather
+        // than a silent contract narrowing on the typed slot.
+        for timeout in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(120),
+            Duration::from_secs(3600),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = Some(timeout);
+            s.validate()
+                .expect("integer-millisecond :timeout must validate");
+        }
+    }
+
+    #[test]
+    fn policy_timeout_zero_takes_precedence_over_canonical() {
+        // `Duration::ZERO` carries `subsec_nanos() == 0` and would
+        // pass the canonical-millisecond gate; the more self-locating
+        // `PolicyTimeoutZero` arm (which names the omit-axis
+        // remediation directly) must fire first. Pin the ordering so
+        // a future refactor that reorders the arms surfaces here as a
+        // test failure rather than a silent diagnostic regression.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::ZERO);
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::PolicyTimeoutZero);
+    }
+
+    #[test]
+    fn policy_timeout_canonical_diagnostic_carries_offending_duration() {
+        // The diagnostic envelope carries the offending `Duration`
+        // verbatim so the author can grep their `caixa.lisp` for
+        // `:timeout "<value>"` and fix it in one edit. Same
+        // diagnostic shape every other typed-slot canonical-form
+        // gate (`PolicyRateLimitWindowNotCanonical`) uses on the
+        // peer `:rate-limit :window` axis.
+        let mut s = three_member_spec();
+        let timeout = Duration::from_nanos(1_000_001);
+        s.politicas.timeout = Some(timeout);
+        match s.validate().unwrap_err() {
+            AplicacaoError::PolicyTimeoutNotCanonical { timeout: t } => {
+                assert_eq!(t, timeout, "diagnostic must carry the offending Duration");
+            }
+            other => panic!("expected PolicyTimeoutNotCanonical, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_window_sub_millisecond() {
+        // Peer of the `:timeout` sub-millisecond arm on the second
+        // typed-`Duration` `:politicas` axis: a purely sub-ms
+        // `Duration` (`from_micros(500)`) renders through the shared
+        // codec as `"0s"`, which the codec parses back to
+        // `Duration::ZERO`, which the `PolicyBreakerZeroWindow`
+        // zero-floor gate then rejects on re-validate.
+        let mut s = three_member_spec();
+        let window = Duration::from_micros(500);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowNotCanonical { window }
+        );
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_window_non_integer_millisecond() {
+        // Peer of the `:timeout` non-integer-ms arm: a `Duration`
+        // with non-integer-millisecond residue renders through the
+        // shared codec as the truncated `"<n>ms"` form, parsing back
+        // to a *different* `Duration` on the next round-trip.
+        let mut s = three_member_spec();
+        let window = Duration::from_micros(1500);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowNotCanonical { window }
+        );
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_window_integer_millisecond_forms() {
+        // The canonical-forms sweep on the breaker axis: every
+        // integer-ms multiple the codec round-trips losslessly
+        // passes the canonical gate.
+        for window in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(3600),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures: 5,
+                window,
+            });
+            s.validate()
+                .expect("integer-millisecond :circuit-breaker :window must validate");
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_zero_window_takes_precedence_over_canonical() {
+        // `Duration::ZERO` would pass the canonical-ms gate (the
+        // sub-ns residue is zero) but must surface the narrower
+        // `PolicyBreakerZeroWindow` diagnostic with its omit-axis
+        // remediation.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::ZERO,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroWindow
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_zero_failures_takes_precedence_over_window_canonical() {
+        // Both axes invalid: max_failures == 0 *and* window is
+        // sub-ms. The validate gate must fire on max_failures first
+        // (matching the existing ordering pin
+        // `rejects_circuit_breaker_zero_max_failures` enshrines), so
+        // the existing diagnostic continues to lead with the simpler
+        // "zero threshold" framing.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 0,
+            window: Duration::from_micros(500),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroFailures
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_canonical_diagnostic_carries_offending_duration() {
+        let mut s = three_member_spec();
+        let window = Duration::from_nanos(60_000_000_001);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        match s.validate().unwrap_err() {
+            AplicacaoError::PolicyBreakerWindowNotCanonical { window: w } => {
+                assert_eq!(w, window, "diagnostic must carry the offending Duration");
+            }
+            other => panic!("expected PolicyBreakerWindowNotCanonical, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn is_integer_millisecond_duration_predicate_tracks_codec() {
+        // Pin the predicate's accepted set against the codec's
+        // accepted set explicitly. The codec parses
+        // `<integer><unit>` for unit ∈ {`ms`,`s`,`m`,`h`} — every
+        // accepted value is an integer-millisecond multiple — so the
+        // predicate must accept exactly that set. Same shape every
+        // other predicate-on-the-typed-slot helper carries
+        // (`is_canonical_rate_limit_window_predicate_tracks_codec`).
+        assert!(super::is_integer_millisecond_duration(Duration::ZERO));
+        assert!(super::is_integer_millisecond_duration(
+            Duration::from_millis(1)
+        ));
+        assert!(super::is_integer_millisecond_duration(
+            Duration::from_millis(500)
+        ));
+        assert!(super::is_integer_millisecond_duration(
+            Duration::from_millis(1500)
+        ));
+        assert!(super::is_integer_millisecond_duration(Duration::from_secs(
+            30
+        )));
+        assert!(super::is_integer_millisecond_duration(Duration::from_secs(
+            3600
+        )));
+        // Non-integer-millisecond residue: rejected.
+        assert!(!super::is_integer_millisecond_duration(
+            Duration::from_micros(1)
+        ));
+        assert!(!super::is_integer_millisecond_duration(
+            Duration::from_micros(500)
+        ));
+        assert!(!super::is_integer_millisecond_duration(
+            Duration::from_micros(1500)
+        ));
+        assert!(!super::is_integer_millisecond_duration(
+            Duration::from_nanos(1)
+        ));
+        assert!(!super::is_integer_millisecond_duration(
+            Duration::from_nanos(999_999)
+        ));
+        // The 1-ns-past-1ms boundary: rejected (no longer a clean
+        // integer-millisecond multiple).
+        assert!(!super::is_integer_millisecond_duration(
+            Duration::from_nanos(1_000_001)
+        ));
+    }
+
+    #[test]
+    fn policy_timeout_validated_value_round_trips_through_codec() {
+        // The structural property the canonical-ms gate enforces:
+        // every `MeshPolicy::timeout` past `AplicacaoSpec::validate`
+        // round-trips losslessly through the shared `duration_codec`
+        // (serialize → string → deserialize → equal value). Pin this
+        // end-to-end so a future change to either side (the validate
+        // gate's accepted granularity, the codec's parse/render unit
+        // set) that breaks the alignment surfaces here. The
+        // previous-state shape (typed slot accepts arbitrary
+        // `Duration`, codec only round-trips integer-ms) would fail
+        // this test for any `Duration::from_micros(1500)` timeout —
+        // the validate gate now forecloses that.
+        for timeout in [
+            Duration::from_millis(1),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(3600),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = Some(timeout);
+            s.validate().unwrap();
+            let json = serde_json::to_string(&s.politicas).unwrap();
+            let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                back.timeout, s.politicas.timeout,
+                "every validated :timeout must round-trip losslessly through the codec"
+            );
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_window_validated_value_round_trips_through_codec() {
+        // Peer of the `:timeout` round-trip property on the breaker
+        // axis.
+        for window in [
+            Duration::from_millis(1),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(3600),
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures: 5,
+                window,
+            });
+            s.validate().unwrap();
+            let json = serde_json::to_string(&s.politicas).unwrap();
+            let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                back.circuit_breaker.unwrap().window,
+                window,
+                "every validated :circuit-breaker :window must round-trip losslessly"
+            );
+        }
     }
 
     #[test]
