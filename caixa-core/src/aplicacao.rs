@@ -576,6 +576,46 @@ fn is_integer_millisecond_duration(d: Duration) -> bool {
     d.subsec_nanos() % 1_000_000 == 0
 }
 
+/// Upper-bound ceiling on the `:politicas :retries` axis — every
+/// validated [`MeshPolicy::retries`] past
+/// [`AplicacaoSpec::validate_politicas`] lies in `1..=POLICY_RETRIES_MAX`.
+///
+/// The typed slot is `Option<u32>` (`None` = no retries on transient
+/// failure; `Some(0)` already rejected by the
+/// [`AplicacaoError::PolicyRetriesZero`] zero-floor arm), so a
+/// programmatic struct literal (`MeshPolicy { retries: Some(100_000),
+/// .. }`) and the equivalent author-surface form
+/// (`(:politicas (:retries 100000))`) both round-trip cleanly through
+/// serde / the codec — a structurally unbounded `u32` ceiling. The
+/// runtime substrate that consumes the value (Envoy's
+/// `retry_policy.num_retries`, the `CiliumClusterwideEnvoyConfig`
+/// per-`:politicas` overlay MESH-COMPOSITION §III.2 #3 names, AWS
+/// App Mesh's `gRPCRouteRetryPolicy.maxRetries` whose schema-side
+/// admission cap is 10) translates a four-billion-retry policy into a
+/// thundering-herd amplification vector on transient failure — the
+/// caller's one request fans out to `retries` server-side calls per
+/// edge per traversal, multiplying load by `(retries+1)^depth` across
+/// the synchronous-`:contratos` subgraph. The MESH-COMPOSITION §V CSE
+/// invariant "no infinite blocking" pairs with a no-runaway-amplification
+/// invariant on the retry axis; both belong at the typed-slot layer.
+///
+/// The `10` ceiling matches AWS App Mesh's explicit hard cap (the only
+/// upstream mesh-policy schema that documents one) and sits above the
+/// Envoy / Istio practical-recommendation band (`num_retries ≤ 5` in
+/// every documented production playbook): a value the author can
+/// plausibly want, but a hard wall above which the policy is
+/// structurally a footgun. Lifted as a typed `pub const` so the bound
+/// has exactly one source of truth — a future axis reaching for the
+/// same value (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's admission webhook, the caixa-mesh-side
+/// `CiliumClusterwideEnvoyConfig` overlay's per-edge cap) reads from
+/// one place. Same shape every other typed upper bound in this crate
+/// carries ([`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::GATEWAY_API_HTTP_PATH_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const POLICY_RETRIES_MAX: u32 = 10;
+
 /// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
 /// max length, in bytes — same value the apiserver-side OpenAPI
 /// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
@@ -1981,6 +2021,42 @@ impl AplicacaoSpec {
             if r == 0 {
                 return Err(AplicacaoError::PolicyRetriesZero);
             }
+            // Upper-bound floor on the typed `:retries` axis. The
+            // typed slot is `Option<u32>` and the zero-floor arm
+            // immediately above already brackets the bottom edge;
+            // until this gate landed the top edge ran all the way to
+            // `u32::MAX` and a struct-literal `MeshPolicy { retries:
+            // Some(100_000), .. }` (or the equivalent author-surface
+            // `(:retries 100000)` / `(:retries 4294967295)` typo
+            // landing in the slot) silently passed validate. The
+            // runtime substrate consuming the value (Envoy's
+            // `retry_policy.num_retries`, the future
+            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
+            // policy into a thundering-herd amplification vector —
+            // the caller's one request fans out to `retries`
+            // server-side calls per edge per traversal, multiplying
+            // load by `(retries+1)^depth` across the
+            // synchronous-`:contratos` subgraph at the precise moment
+            // the substrate is already failing (transient failure is
+            // the trigger), exactly the failure mode AWS App Mesh's
+            // explicit `maxRetries ≤ 10` schema cap exists to
+            // prevent. Lifting the rejection to a build-time gate at
+            // `validate_politicas` brackets the typed `:retries` set
+            // structurally — every validated value lies in
+            // `1..=POLICY_RETRIES_MAX` — and matches the same
+            // top-and-bottom-edge discipline the
+            // [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`] cap applies
+            // on the sibling [`crate::LimitsSpec::memory`] axis
+            // (zero-floor `MemoryZero` + upper-floor
+            // `MemoryExceedsWasm32Cap`). The zero-floor gate
+            // strictly precedes this cap arm so `Some(0)` surfaces
+            // the more self-locating `PolicyRetriesZero` diagnostic
+            // (with its omit-axis remediation directly named) rather
+            // than the cap-shape diagnostic.
+            if r > POLICY_RETRIES_MAX {
+                return Err(AplicacaoError::PolicyRetriesExceedsCap { retries: r });
+            }
         }
         if let Some(cb) = &p.circuit_breaker {
             if cb.max_failures == 0 {
@@ -2519,6 +2595,17 @@ pub enum AplicacaoError {
          `no retries on transient failure`"
     )]
     PolicyRetriesZero,
+    #[error(
+        ":politicas :retries ({retries}) exceeds the mesh-policy ceiling \
+         (POLICY_RETRIES_MAX = 10) — a value above this cap turns the typed \
+         retry policy into a thundering-herd amplification vector on transient \
+         failure (one caller request fans out to `(retries+1)^depth` server-side \
+         calls across the synchronous-:contratos subgraph), exactly the failure \
+         mode AWS App Mesh's `maxRetries ≤ 10` schema cap exists to prevent. \
+         Pin a value in 1..=10 (Envoy / Istio production playbooks recommend ≤ 5) \
+         or omit :retries to disable retries entirely"
+    )]
+    PolicyRetriesExceedsCap { retries: u32 },
     #[error(
         ":politicas :circuit-breaker :max-failures must be > 0 (a zero-threshold \
          breaker trips on the first call); omit :circuit-breaker to disable it"
@@ -6553,6 +6640,133 @@ mod tests {
         let mut s = three_member_spec();
         s.politicas.retries = Some(0);
         assert_eq!(s.validate().unwrap_err(), AplicacaoError::PolicyRetriesZero);
+    }
+
+    #[test]
+    fn rejects_policy_retries_above_cap() {
+        // The fail-before-pass-after pin: `Some(11)` is structurally
+        // one past the [`POLICY_RETRIES_MAX`] ceiling and silently
+        // passed validate on every pre-gate codebase because the
+        // typed slot's only check was the zero-floor arm. The
+        // thundering-herd amplification vector only surfaced at the
+        // runtime substrate (Envoy / Cilium L7 retry overlay)
+        // far from the source caixa.lisp with no field naming the
+        // offending policy.
+        let mut s = three_member_spec();
+        s.politicas.retries = Some(POLICY_RETRIES_MAX + 1);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesExceedsCap {
+                retries: POLICY_RETRIES_MAX + 1
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_policy_retries_far_above_cap() {
+        // The `u32::MAX` worst case — the four-billion-retry policy
+        // a typo (`(:retries 4294967295)`) or struct-literal
+        // copy-paste lands in the slot. Pin the cap arm's coverage
+        // explicitly across the full `u32` overflow so a future
+        // relaxation that drops the upper bound surfaces here.
+        let mut s = three_member_spec();
+        s.politicas.retries = Some(u32::MAX);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesExceedsCap { retries: u32::MAX }
+        );
+    }
+
+    #[test]
+    fn accepts_policy_retries_at_cap() {
+        // The boundary value — exactly [`POLICY_RETRIES_MAX`] —
+        // must validate. The cap is inclusive on the top edge,
+        // matching the [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`]
+        // discipline on the sibling [`crate::LimitsSpec::memory`]
+        // axis. Pin the boundary explicitly so a future off-by-one
+        // tightening (`>= POLICY_RETRIES_MAX` instead of `>`)
+        // surfaces here as a test failure rather than a silent
+        // contract narrowing.
+        let mut s = three_member_spec();
+        s.politicas.retries = Some(POLICY_RETRIES_MAX);
+        s.validate()
+            .expect("retries == POLICY_RETRIES_MAX must validate");
+    }
+
+    #[test]
+    fn accepts_policy_retries_typical_values() {
+        // The full inclusive `1..=POLICY_RETRIES_MAX` sweep —
+        // every value in the validated set must pass. The
+        // Envoy / Istio production-playbook recommendation band
+        // (`num_retries ≤ 5`) and the AWS App Mesh schema cap
+        // (`maxRetries ≤ 10`) both lie within this set.
+        for r in 1..=POLICY_RETRIES_MAX {
+            let mut s = three_member_spec();
+            s.politicas.retries = Some(r);
+            s.validate()
+                .unwrap_or_else(|e| panic!("retries={r} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn policy_retries_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Some(0)` is structurally
+        // outside both `1..` (zero-floor) and `..=POLICY_RETRIES_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the omit-axis
+        // remediation), so the validate gate must fire on zero
+        // first. Pin the order so a future refactor that reorders
+        // the arms surfaces here as a test failure rather than a
+        // silent diagnostic regression. Same shape every other
+        // zero-then-shape ordering on this surface uses
+        // ([`AplicacaoError::PolicyTimeoutZero`] then
+        // [`AplicacaoError::PolicyTimeoutNotCanonical`];
+        // [`AplicacaoError::PolicyBreakerZeroWindow`] then
+        // [`AplicacaoError::PolicyBreakerWindowNotCanonical`]).
+        let mut s = three_member_spec();
+        s.politicas.retries = Some(0);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesZero,
+            "Some(0) must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn policy_retries_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `u32` is carried
+        // verbatim into the [`AplicacaoError::PolicyRetriesExceedsCap`]
+        // variant so the surfaced error message names the value the
+        // author wrote (`":politicas :retries (47) exceeds the
+        // mesh-policy ceiling …"`), not just the cap. Same
+        // self-locating diagnostic shape every other typed-cap arm
+        // on this surface carries
+        // ([`crate::LimitsError::MemoryExceedsWasm32Cap`] carries the
+        // offending byte count verbatim).
+        let mut s = three_member_spec();
+        s.politicas.retries = Some(47);
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::PolicyRetriesExceedsCap { retries: 47 }),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("47"),
+            ":politicas :retries cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn policy_retries_cap_is_aws_app_mesh_aligned() {
+        // The [`POLICY_RETRIES_MAX`] constant pins the value at 10,
+        // matching AWS App Mesh's `gRPCRouteRetryPolicy.maxRetries`
+        // schema cap — the only upstream mesh-policy schema that
+        // documents an explicit hard cap. Pinning the literal value
+        // here surfaces a future drift (a relaxation to 20, a
+        // tightening to 5) as a deliberate test edit, not a silent
+        // contract narrowing.
+        assert_eq!(POLICY_RETRIES_MAX, 10);
     }
 
     #[test]
