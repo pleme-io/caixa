@@ -615,6 +615,71 @@ fn validate_placement_cluster(cluster: &str) -> Result<(), AplicacaoError> {
     })
 }
 
+/// Reject `:placement :affinity` hints whose shape can never legitimately
+/// land in any downstream selector or label-keyed routing axis. Thin
+/// wrapper around [`crate::render::is_dns_1123_label`] that maps the
+/// shared parser-shaped reason into the
+/// [`AplicacaoError::PlacementAffinityInvalid`] variant, so the
+/// diagnostic is self-locating (the offending `:affinity` is named
+/// verbatim) and the author can grep their caixa.lisp for
+/// `:affinity "<hint>"` and fix it in one edit.
+///
+/// The `:affinity` slot carries a placement-engine hint — canonical
+/// examples in the M3 surface are `"data-locality"`, `"low-latency"`,
+/// `"anti-affinity"` — that flows verbatim into the M3 Adaptive
+/// compression overlay and the future M4 placement-engine's per-hint
+/// routing axis. Each downstream consumer (caixa-mesh's
+/// `placement.affinity` overlay at caixa-mesh/src/lib.rs:126, the
+/// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// `spec.placement.affinity` admission rule, the future M4 per-hint
+/// node-affinity / pod-affinity rule generator keying off the same
+/// value as a K8s `app.pleme.io/affinity-hint=<value>` label
+/// selector) requires the value to be a DNS-1123 label — K8s label
+/// values are bounded by `[a-z0-9A-Z_.-]{,63}` with a stricter
+/// `[a-z0-9]([-a-z0-9]*[a-z0-9])?` floor in every identity-keyed
+/// admission rule the apiserver enforces.
+///
+/// Until this gate landed an `:affinity "DataLocality"` (the canonical
+/// TitleCase-from-an-ADR typo), `:affinity "data_locality"` (the
+/// Python-module-name leak), `:affinity "data.locality"` (the
+/// namespace-dot-on-a-label confusion), `:affinity "-data-locality"` /
+/// `:affinity "data-locality-"` (boundary-hyphen violation),
+/// `:affinity "data locality"` (paste-from-doc whitespace),
+/// `:affinity "data-localité"` (un-Punycode-encoded IDN), or the
+/// 64-byte over-cap slug silently passed the empty-only check and the
+/// failure surfaced as a no-match at the M3 Adaptive compression
+/// overlay's filter time (`placement.affinity` carried a malformed
+/// value, no node matched, the workload landed on the default
+/// heuristic) — the canonical "declared-but-inert" footgun mirroring
+/// the empty-:affinity / empty-shard-key / zero-:politicas /
+/// empty-:contratos-target gates already close on every other
+/// declare-but-no-opinion axis. Lifting the rejection to a build-time
+/// gate closes the fifth typed slot on the Aplicacao surface to land
+/// on the canonical DNS-1123 label floor (after the four Servico-name
+/// reference axes: `:membros :caixa` 3f9d7a0, `:placement :clusters`
+/// 6c8c00b, `:contratos :de`/`:para` 8d5af6b, `:entrada :para`
+/// b0e8748).
+///
+/// Same diagnostic shape as [`AplicacaoError::PlacementClusterInvalid`]
+/// (6c8c00b) on the sibling `:placement :clusters` axis — both axes'
+/// validated values are guaranteed-accepted by the apiserver without
+/// re-validation at any downstream renderer or admission layer.
+fn validate_placement_affinity(affinity: &str) -> Result<(), AplicacaoError> {
+    // Empty is gated separately at the call site for a self-locating
+    // diagnostic; re-checking here keeps the predicate usable from any
+    // future call site (the M4 CR materializer's per-affinity
+    // validator) without an empty-check footgun.
+    if affinity.is_empty() {
+        return Err(AplicacaoError::PlacementAffinityEmpty);
+    }
+    crate::render::is_dns_1123_label(affinity).map_err(|reason| {
+        AplicacaoError::PlacementAffinityInvalid {
+            affinity: affinity.to_string(),
+            reason,
+        }
+    })
+}
+
 /// Reject `:contratos :de` / `:contratos :para` values whose shape
 /// can never legitimately match a validated `:membros :caixa`. Thin
 /// wrapper around [`crate::render::is_dns_1123_label`] that maps the
@@ -1575,9 +1640,20 @@ impl AplicacaoSpec {
             }
         }
         if let Some(a) = &self.placement.affinity {
-            if a.is_empty() {
-                return Err(AplicacaoError::PlacementAffinityEmpty);
-            }
+            // Per-hint value-shape gate: the `:affinity` value lands
+            // verbatim in the M3 Adaptive compression overlay
+            // (caixa-mesh's `placement.affinity` emission) and every
+            // future M4 placement-engine routing axis keying off the
+            // hint as a K8s `app.pleme.io/affinity-hint=<value>` label
+            // selector — each enforces the DNS-1123 label rule on
+            // admission. Same typed-shape trajectory as `:placement
+            // :clusters` (6c8c00b) on the sibling slot and the four
+            // Servico-name reference axes (`:membros :caixa` 3f9d7a0,
+            // `:placement :clusters` 6c8c00b, `:contratos :de`/`:para`
+            // 8d5af6b, `:entrada :para` b0e8748) — the fifth typed slot
+            // on the Aplicacao surface to land on the canonical
+            // [`crate::render::is_dns_1123_label`] floor.
+            validate_placement_affinity(a)?;
         }
         match self.placement.estrategia {
             PlacementStrategy::Sharded => match &self.placement.shard_key {
@@ -2016,6 +2092,16 @@ pub enum AplicacaoError {
          `no placement hint`)"
     )]
     PlacementAffinityEmpty,
+    #[error(
+        ":placement :affinity {affinity:?} is not a valid DNS-1123 label: {reason} \
+         (placement hints land verbatim in the M3 Adaptive compression overlay's \
+         `placement.affinity` field and in every future M4 placement-engine routing \
+         axis keying off the hint as a K8s `app.pleme.io/affinity-hint=<value>` label \
+         selector — both enforce the DNS-1123 label rule on admission; use a \
+         lowercase alphanumeric + hyphen hint like `\"data-locality\"`, \
+         `\"low-latency\"`, or `\"anti-affinity\"`)"
+    )]
+    PlacementAffinityInvalid { affinity: String, reason: String },
     #[error(":placement Sharded requires :shard-key")]
     ShardedWithoutKey,
     #[error(
@@ -6878,6 +6964,236 @@ mod tests {
         let mut s = three_member_spec();
         s.placement.affinity = None;
         s.validate().unwrap();
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_uppercase() {
+        // The canonical "I copied the ADR's display name verbatim" typo
+        // — placement hints land verbatim in K8s label-selector
+        // territory, where the apiserver enforces the DNS-1123 label
+        // rule (lowercase-only) on every identity-keyed admission axis.
+        // Mirrors `rejects_placement_cluster_with_uppercase` on the
+        // sibling slot.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("DataLocality".into());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::PlacementAffinityInvalid { affinity, reason } = err else {
+            panic!("expected PlacementAffinityInvalid, got other variant");
+        };
+        assert_eq!(affinity, "DataLocality");
+        assert!(
+            reason.contains("uppercase"),
+            "diagnostic must name the violation as `uppercase` (got: {reason:?})"
+        );
+        assert!(
+            reason.contains("\"datalocality\""),
+            "diagnostic must suggest the lower-cased fix verbatim (got: {reason:?})"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_underscore() {
+        // The canonical "I'm thinking of an env var / Python identifier"
+        // leak — `_` is forbidden by every DNS-1123 label schema. Same
+        // shape as `rejects_placement_cluster_with_underscore` on the
+        // sibling slot.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("data_locality".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementAffinityInvalid { ref affinity, ref reason }
+                    if affinity == "data_locality" && reason.contains('_')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_dot() {
+        // A `:placement :affinity` value is a single DNS-1123 *label*
+        // (it lands as a K8s label value selector key), not a subdomain.
+        // The "I want to namespace my hint with `.`" intent is expressed
+        // via `-` (`data-locality-east`).
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("data.locality".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementAffinityInvalid { ref affinity, ref reason }
+                    if affinity == "data.locality" && reason.contains('.')
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_unicode() {
+        // DNS-1123 is ASCII-only; IDN must be pre-encoded as Punycode
+        // before it reaches K8s. The byte-by-byte ASCII validity check
+        // rejects multi-byte UTF-8 sequences by the first byte that
+        // fails `[a-z0-9-]`.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("data-localité".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementAffinityInvalid { ref affinity, .. }
+                    if affinity == "data-localité"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_leading_hyphen() {
+        // DNS-1123 boundary rule: labels must start with an
+        // alphanumeric. Pin separately from the trailing-hyphen arm so
+        // a future relaxation that only checks one boundary surfaces
+        // here as a regression (parallel to
+        // `rejects_placement_cluster_with_leading_hyphen`).
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("-data-locality".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementAffinityInvalid { ref affinity, ref reason }
+                    if affinity == "-data-locality" && reason.contains("start and end")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_trailing_hyphen() {
+        // Symmetric arm of the DNS-1123 boundary rule. Pinned so both
+        // ends are covered against a future relaxation.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("data-locality-".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementAffinityInvalid { ref affinity, .. }
+                    if affinity == "data-locality-"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_with_whitespace() {
+        // Whitespace is the canonical "I pasted from a sketch / doc"
+        // footgun. The apiserver rejects every label-selector value
+        // carrying whitespace.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("data locality".into());
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PlacementAffinityInvalid { ref affinity, .. }
+                    if affinity == "data locality"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_placement_affinity_too_long() {
+        // 64 bytes exceeds the DNS-1123 label cap by one — the boundary
+        // pin. The diagnostic names both the cap (63) and the actual
+        // length so the author can shorten in one edit. Mirrors
+        // `rejects_placement_cluster_too_long`.
+        let mut s = three_member_spec();
+        let too_long = "a".repeat(64);
+        s.placement.affinity = Some(too_long.clone());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::PlacementAffinityInvalid { affinity, reason } = err else {
+            panic!("expected PlacementAffinityInvalid");
+        };
+        assert_eq!(affinity, too_long);
+        assert!(
+            reason.contains("63") && reason.contains("64"),
+            "diagnostic must name the cap (63) and the actual length (64): {reason:?}"
+        );
+    }
+
+    #[test]
+    fn placement_affinity_max_length_validates() {
+        // 63 bytes exactly — the DNS-1123 label cap. Boundary pin so a
+        // future tightening (e.g. dropping to 62) surfaces here as a
+        // regression, mirroring `placement_cluster_max_length_validates`.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("a".repeat(63));
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn accepts_canonical_placement_affinity_forms() {
+        // The DNS-1123 label shapes a caixa author is realistically
+        // going to write for placement hints: the M3 canonical examples
+        // (`data-locality`, `low-latency`, `anti-affinity`), the
+        // single-token form (`affinity`), the single-character boundary
+        // (`a`), the digit-start (DNS-1123 allows this, unlike
+        // DNS-1035), and a regional-suffixed form. Pin every leg so a
+        // future tightening that bans (e.g.) digit-start identifiers
+        // surfaces here.
+        for form in [
+            "data-locality",
+            "low-latency",
+            "anti-affinity",
+            "affinity",
+            "a",
+            "3-tier",
+            "locality-east",
+        ] {
+            let mut s = three_member_spec();
+            s.placement.affinity = Some(form.into());
+            s.validate().unwrap_or_else(|e| {
+                panic!("canonical affinity form {form:?} must validate, got {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn placement_affinity_empty_takes_precedence_over_invalid() {
+        // Order pin: the existing `PlacementAffinityEmpty` diagnostic
+        // (which doesn't try to parse) fires before the new
+        // `PlacementAffinityInvalid` parse-side diagnostic, so an empty
+        // `:affinity` keeps its narrower error message — the new gate
+        // would also reject `""`, but the empty-string arm is the more
+        // self-locating diagnostic. Mirrors the
+        // `placement_cluster_empty_takes_precedence_over_invalid` pin.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some(String::new());
+        let err = s.validate().unwrap_err();
+        assert_eq!(err, AplicacaoError::PlacementAffinityEmpty);
+    }
+
+    #[test]
+    fn placement_affinity_invalid_diagnostic_carries_offending_value() {
+        // The diagnostic shape pin: every rejection carries the offending
+        // `affinity:` verbatim plus a parser-shaped `reason:` so the
+        // author can grep their caixa.lisp for `:affinity "<hint>"` and
+        // fix it in one edit. Mirrors the
+        // `placement_cluster_invalid_diagnostic_carries_offending_cluster`
+        // pin on the sibling slot.
+        let mut s = three_member_spec();
+        s.placement.affinity = Some("Data_Locality".into());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::PlacementAffinityInvalid { affinity, reason } = err else {
+            panic!("expected PlacementAffinityInvalid");
+        };
+        assert_eq!(affinity, "Data_Locality");
+        assert!(
+            !reason.is_empty(),
+            "diagnostic reason must not be empty (got: {reason:?})"
+        );
     }
 
     #[test]
