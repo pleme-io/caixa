@@ -2940,6 +2940,51 @@ pub const KUBE_KEY_LABELS: &str = "labels";
 /// [k8s-ls]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta
 pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 
+/// Default cluster-wide K8s namespace every caixa renderer emits
+/// objects into when the source caixa doesn't pin its own. The single
+/// source of truth both [`caixa-flux`][cf]'s programs.yaml /
+/// GitRepository / HelmRelease / Kustomization emitters and
+/// [`caixa-mesh`][cm]'s programs fan-out / CiliumNetworkPolicy /
+/// Gateway / HTTPRoute emitters consult — re-exported by each
+/// renderer's lib as `pub use caixa_core::DEFAULT_NAMESPACE`, so a
+/// future per-cluster-namespace rebrand (e.g. moving to `pleme-system`
+/// once `tatara-system` outlives its scoping intent) is a one-line
+/// edit here, not a coordinated rewrite across every renderer
+/// crate's `metadata.namespace` slot.
+///
+/// Until this lift landed both renderers carried their own `pub const
+/// DEFAULT_NAMESPACE: &str = "tatara-system"` declarations
+/// (caixa-flux/src/lib.rs:77, caixa-mesh/src/lib.rs:172), with the
+/// `caixa-mesh` site's doc-comment explicitly acknowledging the
+/// duplication ("Mirrors `caixa_flux::DEFAULT_NAMESPACE`"); a future
+/// rebrand on either side without a coordinated edit on the other
+/// would have silently emitted into two distinct namespaces on the
+/// same cluster's apply — Servicos at programs.yaml's namespace,
+/// their Aplicacao's NetworkPolicies / Gateways / HTTPRoutes at a
+/// drifted one — and the CiliumNetworkPolicy's `endpointSelector`
+/// would match no pods (different namespace), silently dropping every
+/// L7 contrato flow at apply time with no diagnostic naming the
+/// namespace-drift root cause.
+///
+/// Lifting it to caixa-core's render-constants block alongside the
+/// peer [`LABEL_APLICACAO`] / [`LABEL_PROGRAM`] / [`LABEL_CONTRATO`]
+/// label-namespace constants and the canonical [`KUBE_KEY_NAMESPACE`]
+/// API-key constant makes the namespace-axis discipline structural:
+/// every renderer that reaches for the default namespace consults the
+/// same `&'static str`, and every future renderer (the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer, the future
+/// per-edge `CiliumClusterwideEnvoyConfig` emitter, the future
+/// caixa-otel collector-pipeline emitter) inherits the same value by
+/// construction, with no opportunity for per-renderer drift. Same
+/// "the typed constant lives in one place" discipline the
+/// [`PLEME_LABEL_PREFIX`] (a8d4d57) and [`KUBE_KEY_API_VERSION`] /
+/// [`KUBE_KEY_KIND`] / [`KUBE_KEY_METADATA`] lifts apply on the peer
+/// shared-string axes.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [cm]: ../../caixa_mesh/index.html
+pub const DEFAULT_NAMESPACE: &str = "tatara-system";
+
 /// Build the canonical Cilium `matchLabels` selector for a single
 /// pleme-io program **scoped to its Aplicacao** — the safe default
 /// every per-Aplicacao mesh renderer (caixa-mesh's
@@ -3465,6 +3510,52 @@ mod tests {
         assert_eq!(LABEL_APLICACAO, "pleme.pleme.io/aplicacao");
         assert_eq!(LABEL_PROGRAM, "pleme.pleme.io/program");
         assert_eq!(LABEL_CONTRATO, "pleme.pleme.io/contrato");
+    }
+
+    #[test]
+    fn default_namespace_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the cluster-side namespace every renderer emits
+        // into. The string is part of the cluster-side contract with
+        // the lareira-fleet-programs aggregator chart, the per-cluster
+        // CiliumNetworkPolicy `endpointSelector` namespace scope, the
+        // Gateway / HTTPRoute apply namespace, and the future M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's apply
+        // namespace; changing it is a coordinated multi-repo migration
+        // (the per-cluster k8s repo's namespaces, every
+        // lareira-fleet-programs HelmRelease's targetNamespace, every
+        // ComputeUnit's `metadata.namespace`), not an incidental edit.
+        // Peer to `pleme_label_consts_have_expected_canonical_values`
+        // on the canonical-string-value-pin axis for the
+        // `PLEME_LABEL_PREFIX` / `LABEL_*` constants.
+        assert_eq!(DEFAULT_NAMESPACE, "tatara-system");
+    }
+
+    #[test]
+    fn default_namespace_is_a_valid_dns_1123_label() {
+        // Cross-axis invariant: the default namespace lands as
+        // `metadata.namespace` on every emitted K8s object across every
+        // renderer, and the K8s apiserver enforces the DNS-1123 label
+        // rule on every `metadata.namespace`. Pinning this here means
+        // a future rebrand on the canonical `DEFAULT_NAMESPACE`
+        // declaration can't silently land a value the apiserver
+        // refuses at the *first* renderer to apply against a cluster,
+        // far from the rebrand commit's source — the typed
+        // [`is_dns_1123_label`] floor rejects it at caixa-core build
+        // time on the canonical lift, before any renderer consumes
+        // the value. Same trajectory as `:membros :caixa` /
+        // `:placement :clusters` / `:contratos :de`/`:para` /
+        // `:entrada :para` / `:placement :affinity` (dfd4902 — the
+        // five typed-identifier axes on the Aplicacao surface that
+        // already land on this same `is_dns_1123_label` floor at
+        // their respective validate gates), now extended onto the
+        // canonical-namespace-default axis the renderers share.
+        assert!(
+            is_dns_1123_label(DEFAULT_NAMESPACE).is_ok(),
+            "DEFAULT_NAMESPACE {DEFAULT_NAMESPACE:?} must be a valid \
+             DNS-1123 label — every K8s apiserver-side schema enforces \
+             this rule on `metadata.namespace`"
+        );
     }
 
     #[test]

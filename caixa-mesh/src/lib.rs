@@ -168,8 +168,26 @@ pub fn typed_view(caixa: &Caixa) -> Result<AplicacaoSpec, Error> {
 }
 
 /// Default namespace for emitted cluster objects when the Aplicacao
-/// doesn't pin one. Mirrors `caixa_flux::DEFAULT_NAMESPACE`.
-pub const DEFAULT_NAMESPACE: &str = "tatara-system";
+/// doesn't pin one. Re-export of the canonical
+/// [`caixa_core::DEFAULT_NAMESPACE`] so the namespace string lives in
+/// exactly one place across every renderer — caixa-mesh's programs
+/// fan-out / CiliumNetworkPolicy / Gateway / HTTPRoute emitters and
+/// caixa-flux's programs.yaml / GitRepository / HelmRelease /
+/// Kustomization emitters now consult the same `&'static str`, so a
+/// future per-cluster-namespace rebrand is a one-line edit on the
+/// canonical [`caixa_core::DEFAULT_NAMESPACE`] declaration, not a
+/// coordinated rewrite across this crate, caixa-flux, and every
+/// future per-target renderer the substrate adds. The prior local
+/// `pub const` declaration explicitly acknowledged the duplication
+/// ("Mirrors `caixa_flux::DEFAULT_NAMESPACE`"); this re-export
+/// closes the drift footgun structurally — a future rebrand on one
+/// side without a coordinated edit on the other would otherwise have
+/// silently emitted Servicos into one namespace and their Aplicacao's
+/// NetworkPolicies / Gateways / HTTPRoutes into a drifted one, with
+/// the apply-time symptom (CiliumNetworkPolicy `endpointSelector`
+/// matches no pods, every L7 contrato flow silently drops) far from
+/// the rebrand commit's source.
+pub use caixa_core::DEFAULT_NAMESPACE;
 
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
@@ -695,6 +713,38 @@ mod tests {
                 port: 8080,
             }),
         }
+    }
+
+    #[test]
+    fn default_namespace_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub const DEFAULT_NAMESPACE` (with its prior
+        // doc-comment explicitly acknowledging the duplication —
+        // "Mirrors `caixa_flux::DEFAULT_NAMESPACE`") was lifted to a
+        // re-export of [`caixa_core::DEFAULT_NAMESPACE`] so the
+        // namespace string lives in exactly one place across every
+        // caixa renderer. Pin the equality here so any local re-
+        // introduction of a sibling `pub const DEFAULT_NAMESPACE: &str
+        // = "…"` is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a rebrand on the caixa-flux side without a
+        // coordinated caixa-mesh edit silently land Servicos at one
+        // namespace and their Aplicacao's CiliumNetworkPolicy /
+        // Gateway / HTTPRoute objects at the drifted other, with
+        // every L7 contrato flow dropping at apply time because the
+        // policy's `endpointSelector` matched no pods in its emit
+        // namespace. Peer to
+        // `caixa_flux::tests::default_namespace_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(DEFAULT_NAMESPACE, caixa_core::DEFAULT_NAMESPACE);
+        assert!(
+            std::ptr::eq(
+                DEFAULT_NAMESPACE.as_ptr(),
+                caixa_core::DEFAULT_NAMESPACE.as_ptr(),
+            ),
+            "DEFAULT_NAMESPACE must be a re-export of caixa_core::DEFAULT_NAMESPACE, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
     }
 
     #[test]
