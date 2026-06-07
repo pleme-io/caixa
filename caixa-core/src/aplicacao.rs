@@ -616,6 +616,51 @@ fn is_integer_millisecond_duration(d: Duration) -> bool {
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const POLICY_RETRIES_MAX: u32 = 10;
 
+/// Upper-bound ceiling on the `:politicas :circuit-breaker :max-failures`
+/// axis — every validated [`CircuitBreaker::max_failures`] past
+/// [`AplicacaoSpec::validate_politicas`] lies in
+/// `1..=POLICY_BREAKER_MAX_FAILURES_MAX`.
+///
+/// The typed field is `u32` (the zero-floor arm
+/// [`AplicacaoError::PolicyBreakerZeroFailures`] already rejects
+/// `0` — a breaker that trips on the first call), so a programmatic
+/// struct literal (`CircuitBreaker { max_failures: u32::MAX, .. }`)
+/// and the equivalent author-surface form
+/// (`(:circuit-breaker (:max-failures 4294967295))`) both round-trip
+/// cleanly through serde — a structurally unbounded `u32` ceiling. A
+/// `max_failures` value far above the documented production-playbook
+/// band (Hystrix `circuitBreaker.requestVolumeThreshold` default 20,
+/// Istio `outlierDetection.consecutive5xxErrors` default 5, Envoy
+/// `outlier_detection.consecutive_5xx` default 5, Polly / Resilience4j
+/// typical 5–50) silently disables the breaker's protection role:
+/// the threshold is structurally so high that no realistic
+/// failures-per-`:window` traffic shape can reach it, so the breaker
+/// never trips and the typed slot becomes a no-op carried on every
+/// emitted Envoy / Cilium L7 overlay. Pairs with the
+/// [`POLICY_RETRIES_MAX`] cap on the sibling `:politicas :retries`
+/// axis — both close the "structurally unbounded `u32` ceiling on a
+/// typed policy axis" footgun the prior zero-floor-only checks left
+/// open.
+///
+/// The `1000` ceiling sits an order of magnitude above every
+/// documented upstream production-playbook recommendation band (the
+/// highest is Hystrix's 20-default `requestVolumeThreshold`, the
+/// Istio / Envoy / Polly / Resilience4j ones all sit ≤ 50) and below
+/// the clearly-pathological "effectively no protection"
+/// floor (`10_000`, `100_000`, `u32::MAX`): a value the author can
+/// plausibly want at hyperscale, but a hard wall above which the
+/// policy is structurally a no-op. Lifted as a typed `pub const` so
+/// the bound has exactly one source of truth — the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+/// webhook and the caixa-mesh-side `CiliumClusterwideEnvoyConfig`
+/// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) read from
+/// one place. Same shape every other typed upper bound in this crate
+/// carries ([`POLICY_RETRIES_MAX`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const POLICY_BREAKER_MAX_FAILURES_MAX: u32 = 1000;
+
 /// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
 /// max length, in bytes — same value the apiserver-side OpenAPI
 /// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
@@ -2062,6 +2107,44 @@ impl AplicacaoSpec {
             if cb.max_failures == 0 {
                 return Err(AplicacaoError::PolicyBreakerZeroFailures);
             }
+            // Upper-bound floor on the typed `:max-failures` axis.
+            // The typed slot is `u32` and the zero-floor arm
+            // immediately above already brackets the bottom edge;
+            // until this gate landed the top edge ran all the way
+            // to `u32::MAX` and a struct-literal
+            // `CircuitBreaker { max_failures: 100_000, .. }` (or the
+            // equivalent author-surface `(:max-failures 100000)` /
+            // `(:max-failures 4294967295)` typo landing in the slot)
+            // silently passed validate. The runtime substrate
+            // consuming the value (Envoy's
+            // `outlier_detection.consecutive_5xx`, the future
+            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
+            // breaker policy into a no-op — the trip threshold is
+            // structurally so high that no realistic
+            // failures-per-`:window` traffic shape can reach it, the
+            // breaker never trips, and every typed-slot consumer
+            // emits an Envoy / Cilium L7 overlay carrying a
+            // protection that is structurally never enforced.
+            // Lifting the rejection to a build-time gate at
+            // `validate_politicas` brackets the typed `:max-failures`
+            // set structurally — every validated value lies in
+            // `1..=POLICY_BREAKER_MAX_FAILURES_MAX` — and matches the
+            // same top-and-bottom-edge discipline the
+            // [`POLICY_RETRIES_MAX`] cap applies on the sibling
+            // `:politicas :retries` axis (zero-floor
+            // `PolicyRetriesZero` + upper-floor
+            // `PolicyRetriesExceedsCap`). The zero-floor gate
+            // strictly precedes this cap arm so `max_failures == 0`
+            // surfaces the more self-locating
+            // `PolicyBreakerZeroFailures` diagnostic (with its
+            // omit-axis remediation directly named) rather than the
+            // cap-shape diagnostic.
+            if cb.max_failures > POLICY_BREAKER_MAX_FAILURES_MAX {
+                return Err(AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                    max_failures: cb.max_failures,
+                });
+            }
             if cb.window.is_zero() {
                 return Err(AplicacaoError::PolicyBreakerZeroWindow);
             }
@@ -2611,6 +2694,19 @@ pub enum AplicacaoError {
          breaker trips on the first call); omit :circuit-breaker to disable it"
     )]
     PolicyBreakerZeroFailures,
+    #[error(
+        ":politicas :circuit-breaker :max-failures ({max_failures}) exceeds the \
+         mesh-policy ceiling (POLICY_BREAKER_MAX_FAILURES_MAX = 1000) — a value \
+         above this cap turns the typed breaker policy into a no-op: the trip \
+         threshold is structurally so high that no realistic failures-per-:window \
+         traffic shape can reach it, so the breaker never trips and every typed-slot \
+         consumer (the future CiliumClusterwideEnvoyConfig per-:politicas overlay, \
+         Envoy's outlier_detection.consecutive_5xx) emits a protection that is \
+         structurally never enforced. Pin a value in 1..=1000 (Hystrix / Istio / \
+         Envoy / Polly / Resilience4j production playbooks recommend 5..=50) or \
+         omit :circuit-breaker to disable the breaker entirely"
+    )]
+    PolicyBreakerMaxFailuresExceedsCap { max_failures: u32 },
     #[error(
         ":politicas :circuit-breaker :window must be > 0 (a zero-window breaker \
          tracks no failures); omit :circuit-breaker to disable it"
@@ -6780,6 +6876,195 @@ mod tests {
             s.validate().unwrap_err(),
             AplicacaoError::PolicyBreakerZeroFailures
         );
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_max_failures_above_cap() {
+        // The fail-before-pass-after pin: `1001` is structurally one
+        // past the [`POLICY_BREAKER_MAX_FAILURES_MAX`] ceiling and
+        // silently passed validate on every pre-gate codebase
+        // because the typed slot's only check was the zero-floor
+        // arm. The breaker-no-op vector only surfaced at the runtime
+        // substrate (Envoy / Cilium L7 outlier-detection overlay)
+        // far from the source caixa.lisp with no field naming the
+        // offending policy.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: POLICY_BREAKER_MAX_FAILURES_MAX + 1,
+            window: Duration::from_secs(60),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                max_failures: POLICY_BREAKER_MAX_FAILURES_MAX + 1,
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_max_failures_far_above_cap() {
+        // The `u32::MAX` worst case — the four-billion-failure
+        // threshold a typo (`(:max-failures 4294967295)`) or a
+        // struct-literal copy-paste lands in the slot. Pin the cap
+        // arm's coverage explicitly across the full `u32` overflow
+        // so a future relaxation that drops the upper bound surfaces
+        // here.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: u32::MAX,
+            window: Duration::from_secs(60),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                max_failures: u32::MAX,
+            }
+        );
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_max_failures_at_cap() {
+        // The boundary value — exactly
+        // [`POLICY_BREAKER_MAX_FAILURES_MAX`] — must validate. The
+        // cap is inclusive on the top edge, matching the
+        // [`POLICY_RETRIES_MAX`] / [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`]
+        // discipline on the sibling capped axes. Pin the boundary
+        // explicitly so a future off-by-one tightening
+        // (`>= POLICY_BREAKER_MAX_FAILURES_MAX` instead of `>`)
+        // surfaces here as a test failure rather than a silent
+        // contract narrowing.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: POLICY_BREAKER_MAX_FAILURES_MAX,
+            window: Duration::from_secs(60),
+        });
+        s.validate()
+            .expect("max_failures == POLICY_BREAKER_MAX_FAILURES_MAX must validate");
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_max_failures_typical_values() {
+        // The documented production-playbook band positive-control
+        // sweep — every value Hystrix / Istio / Envoy / Polly /
+        // Resilience4j recommend (5..=50) must pass, plus a sweep
+        // through the hyperscale band (100, 500, 1000) the cap
+        // accepts. Pin the inclusive validated set explicitly so a
+        // future tightening of the ceiling surfaces here.
+        for n in [1u32, 5, 10, 20, 50, 100, 500, 1000] {
+            let mut s = three_member_spec();
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures: n,
+                window: Duration::from_secs(60),
+            });
+            s.validate()
+                .unwrap_or_else(|e| panic!("max_failures={n} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_zero_max_failures_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `0` is structurally outside
+        // both `1..` (zero-floor) and `..=POLICY_BREAKER_MAX_FAILURES_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the omit-axis
+        // remediation), so the validate gate must fire on zero
+        // first. Same shape every other zero-then-shape ordering on
+        // this surface uses
+        // ([`AplicacaoError::PolicyRetriesZero`] then
+        // [`AplicacaoError::PolicyRetriesExceedsCap`];
+        // [`AplicacaoError::PolicyTimeoutZero`] then
+        // [`AplicacaoError::PolicyTimeoutNotCanonical`]).
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 0,
+            window: Duration::from_secs(60),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroFailures,
+            "max_failures == 0 must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_max_failures_cap_takes_precedence_over_window_gates() {
+        // The cross-arm ordering pin between the cap and the
+        // sibling `:window` gates (zero-window, canonical-window).
+        // A breaker carrying both an over-cap `max_failures` AND a
+        // structurally invalid window (zero, sub-ms) must surface
+        // the cap diagnostic first — the cap arm is wired
+        // immediately after the zero-failure arm and strictly
+        // before the window arms, so the offending value the
+        // diagnostic names matches the order the author would
+        // discover the gates by reading top-to-bottom through
+        // [`AplicacaoSpec::validate_politicas`]. Pin the order so a
+        // future refactor that reorders the arms surfaces here as a
+        // test failure rather than a silent diagnostic regression.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: POLICY_BREAKER_MAX_FAILURES_MAX + 1,
+            window: Duration::ZERO,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                max_failures: POLICY_BREAKER_MAX_FAILURES_MAX + 1,
+            },
+            "over-cap max_failures must surface the cap diagnostic before any window-axis diagnostic"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_max_failures_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `u32` is carried
+        // verbatim into the
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`]
+        // variant so the surfaced error message names the value the
+        // author wrote (`":politicas :circuit-breaker :max-failures
+        // (50000) exceeds the mesh-policy ceiling …"`), not just
+        // the cap. Same self-locating diagnostic shape every other
+        // typed-cap arm on this surface carries
+        // ([`AplicacaoError::PolicyRetriesExceedsCap`] carries the
+        // offending retry count verbatim,
+        // [`crate::LimitsError::MemoryExceedsWasm32Cap`] carries the
+        // offending byte count verbatim).
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 50_000,
+            window: Duration::from_secs(60),
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                    max_failures: 50_000
+                }
+            ),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("50000"),
+            ":politicas :circuit-breaker :max-failures cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn policy_breaker_max_failures_cap_pins_canonical_value() {
+        // The [`POLICY_BREAKER_MAX_FAILURES_MAX`] constant pins the
+        // value at 1000 — an order of magnitude above every
+        // documented production-playbook recommendation band
+        // (Hystrix `requestVolumeThreshold` default 20, Istio
+        // `outlierDetection.consecutive5xxErrors` default 5, Envoy
+        // `outlier_detection.consecutive_5xx` default 5, Polly /
+        // Resilience4j typical 5..=50) and below the
+        // clearly-pathological "effectively no protection" floor
+        // (10_000, 100_000, u32::MAX). Pinning the literal value
+        // here surfaces a future drift (a relaxation to 10_000, a
+        // tightening to 100) as a deliberate test edit, not a
+        // silent contract narrowing.
+        assert_eq!(POLICY_BREAKER_MAX_FAILURES_MAX, 1000);
     }
 
     #[test]
