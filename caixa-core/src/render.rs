@@ -4115,7 +4115,7 @@ mod tests {
         c.kind = CaixaKind::Biblioteca;
         c.servicos = vec![];
         c.limits = Some(LimitsSpec {
-            memory: Some(1024),
+            memory: Some(crate::LIMITS_MEMORY_WASM32_PAGE_BYTES),
             ..Default::default()
         });
         let overlay = servico_m2_overlay(&c).unwrap();
