@@ -535,6 +535,45 @@ pub mod duration_codec {
         }
         format!("{total_ms}ms")
     }
+
+    /// True iff `d` round-trips losslessly through [`render`] + [`parse`].
+    ///
+    /// [`render`] truncates a `Duration` to `as_millis()` before picking the
+    /// largest divisor unit, so any sub-millisecond residue
+    /// (`d.subsec_nanos() % 1_000_000 != 0`) silently breaks the THEORY.md
+    /// §V.2.7 render-determinism contract:
+    ///
+    ///   - `Duration::from_micros(1500)` (= `1_500_000` ns) → `as_millis() == 1`
+    ///     → renders `"1ms"` → parses back to `Duration::from_millis(1)` =
+    ///     `1_000_000` ns ≠ original `1_500_000` ns;
+    ///   - `Duration::from_nanos(1)` (= 1 ns) → `as_millis() == 0` →
+    ///     renders the literal `"0s"`, which the per-axis zero-floor gate
+    ///     on every typed-`Duration` slot then rejects on re-validate.
+    ///
+    /// Lifted to a `pub` predicate next to the [`render`] / [`parse`] pair so
+    /// the codec's round-trippable accepted set lives in exactly one place —
+    /// every typed-`Duration` slot that routes through this shared codec
+    /// (`SupervisorSpec::restart_window` via [`super::duration_codec`],
+    /// [`crate::MeshPolicy::timeout`] / [`crate::CircuitBreaker::window`] via
+    /// `supervisor::duration_codec` + [`super::duration_codec_required`]) and
+    /// every typed-`Duration` slot whose own codec shares the same
+    /// `as_millis()`-truncation shape ([`crate::LimitsSpec::wall_clock`] via
+    /// [`crate::limits`]'s in-module `parse_duration` / `render_duration`
+    /// pair) calls this predicate from its `validate()` to bracket the
+    /// accepted set against the codec's accepted set, structurally. Drift
+    /// between the codec's granularity and any typed slot's accepted set is
+    /// then a single-source-of-truth edit at this predicate rather than a
+    /// silent round-trip break the next consumer discovers at apply time.
+    ///
+    /// Peer of [`crate::aplicacao::POLICY_RETRIES_MAX`] /
+    /// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`] and the
+    /// `is_dns_1123_label` / `is_canonical_rate_limit_window` predicate
+    /// family — same "typed-slot's valid set matches its codec's accepted
+    /// set, structurally" discipline carried at the codec layer.
+    #[must_use]
+    pub fn is_integer_millisecond_duration(d: Duration) -> bool {
+        d.subsec_nanos().is_multiple_of(1_000_000)
+    }
 }
 
 /// Required-Duration variant for fields that aren't Option<Duration>.
