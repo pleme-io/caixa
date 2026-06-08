@@ -33,7 +33,9 @@ pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepError, DepSource};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
-pub use limits::{LIMITS_MEMORY_WASM32_MAX_BYTES, LimitsError, LimitsSpec};
+pub use limits::{
+    LIMITS_MEMORY_WASM32_MAX_BYTES, LIMITS_MEMORY_WASM32_PAGE_BYTES, LimitsError, LimitsSpec,
+};
 pub use manifest::{Caixa, ManifestError};
 pub use render::{
     CARGO_FEATURE_NAME_MAX_LEN, DEFAULT_NAMESPACE, DNS_1123_LABEL_MAX_LEN,
