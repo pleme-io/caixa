@@ -552,6 +552,65 @@ fn is_integer_millisecond_duration(d: Duration) -> bool {
     supervisor::duration_codec::is_integer_millisecond_duration(d)
 }
 
+/// Upper-bound ceiling on the `:politicas :timeout` axis — every
+/// validated [`MeshPolicy::timeout`] past
+/// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
+/// (inclusive on both ends, integer-millisecond magnitudes by the
+/// canonical-form gate immediately preceding).
+///
+/// The typed field is `Option<Duration>` (the zero-floor arm
+/// [`AplicacaoError::PolicyTimeoutZero`] already rejects
+/// `Duration::ZERO`, and the canonical-form arm
+/// [`AplicacaoError::PolicyTimeoutNotCanonical`] already rejects
+/// sub-millisecond residue), so a programmatic struct literal
+/// (`MeshPolicy { timeout: Some(Duration::from_secs(86_400)), .. }` —
+/// 24h) and the equivalent author-surface form
+/// (`(:politicas (:timeout "24h"))` — the codec emits `"h"` for any
+/// integer-hour magnitude) both round-trip cleanly through serde — a
+/// structurally unbounded `Duration` ceiling. A `:timeout` value far
+/// above the documented production-playbook band (Envoy default `15s`,
+/// Istio per-route typical `≤ 30s`, AWS App Mesh `httpRouteTimeout`
+/// schema typical `≤ 60s`, Linkerd `request_timeout` typical `10s`,
+/// Kubernetes ingress-nginx `proxy_read_timeout` default `60s` capped
+/// at `~3600s`) silently degenerates the mesh-policy contract: the
+/// per-call deadline is structurally so long that no realistic
+/// synchronous-`:contratos` traversal can reach it, so the typed slot
+/// becomes a no-op carried on every emitted Envoy / Cilium L7 timeout
+/// overlay — the MESH-COMPOSITION §V CSE invariant "no infinite
+/// blocking" degenerates to a nominal-only contract on the
+/// synchronous-call path. Pairs with the [`POLICY_RETRIES_MAX`] cap on
+/// the sibling `:politicas :retries` axis and the
+/// [`POLICY_BREAKER_MAX_FAILURES_MAX`] cap on the sibling
+/// `:politicas :circuit-breaker :max-failures` axis — all three close
+/// the "structurally unbounded ceiling on a typed `:politicas` axis"
+/// footgun the prior zero-floor-and-canonical-form-only checks left
+/// open.
+///
+/// The 1h (3600s = `3_600_000` ms) ceiling matches the largest unit the
+/// shared duration codec emits (`"<n>h"` for any integer-hour
+/// magnitude) — every value in the canonical authoring form's
+/// `<integer><unit>` grammar at or below this cap renders to a clean
+/// canonical string. The cap sits an order of magnitude above every
+/// documented production-playbook recommendation band (Envoy default
+/// `15s`, Istio production `≤ 30s`, Linkerd production `≤ 10s`, AWS
+/// App Mesh production `≤ 60s`) and at the Kubernetes ingress-nginx
+/// configured maximum (`proxy_read_timeout` typical max `3600s`),
+/// below the clearly-pathological "effectively no timeout" floor
+/// (`24h`, `7d`, `Duration::MAX`): a value the author can plausibly
+/// want for a long-running synchronous workflow, but a hard wall above
+/// which the mesh-level deadline is structurally a non-deadline.
+/// Lifted as a typed `pub const` so the bound has exactly one source
+/// of truth — the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's admission webhook and the caixa-mesh-side
+/// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+/// (MESH-COMPOSITION §III.2 #3) read from one place. Same shape every
+/// other typed upper bound in this crate carries
+/// ([`POLICY_RETRIES_MAX`], [`POLICY_BREAKER_MAX_FAILURES_MAX`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const POLICY_TIMEOUT_MAX: Duration = Duration::from_secs(3600);
+
 /// Upper-bound ceiling on the `:politicas :retries` axis — every
 /// validated [`MeshPolicy::retries`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1..=POLICY_RETRIES_MAX`.
@@ -2037,6 +2096,42 @@ impl AplicacaoSpec {
             if !is_integer_millisecond_duration(t) {
                 return Err(AplicacaoError::PolicyTimeoutNotCanonical { timeout: t });
             }
+            // Upper-bound ceiling on the typed `:timeout` axis. The
+            // typed slot is `Option<Duration>` and the zero-floor +
+            // canonical-millisecond arms immediately above already
+            // bracket the bottom edge and the round-trip-stability
+            // shape; until this gate landed the top edge ran all the
+            // way to `Duration::MAX` and a struct-literal
+            // `MeshPolicy { timeout: Some(Duration::from_secs(86_400)), .. }`
+            // (or the equivalent author-surface `(:timeout "24h")` /
+            // `(:timeout "86400s")` typo landing in the slot) silently
+            // passed validate. The runtime substrate consuming the
+            // value (Envoy's per-route `timeout`, the future
+            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
+            // policy into a nominal-only deadline: the per-call
+            // timeout is structurally so long that no realistic
+            // synchronous-`:contratos` traversal can reach it, the
+            // mesh's "no infinite blocking" CSE invariant
+            // (MESH-COMPOSITION §V) degenerates to a contract
+            // enforced only at the wasm-engine `:limits :wall-clock`
+            // layer (per-Servico, far above the per-edge granularity
+            // the policy is meant to express), and every typed-slot
+            // consumer emits an Envoy timeout carrying a deadline
+            // that exists only nominally. Lifting the rejection to a
+            // build-time gate at `validate_politicas` brackets the
+            // typed `:timeout` set structurally — every validated
+            // value lies in `1ms..=POLICY_TIMEOUT_MAX` (1ms..=1h) —
+            // and matches the same top-and-bottom-edge discipline
+            // [`POLICY_RETRIES_MAX`] and
+            // [`POLICY_BREAKER_MAX_FAILURES_MAX`] apply on the sibling
+            // capped `:politicas` axes (zero-floor + canonical-form +
+            // upper-cap; the cap arm strictly after the canonical-form
+            // arm so a sub-millisecond above-cap `Duration` surfaces
+            // the more fundamental round-trip-shape diagnostic first).
+            if t > POLICY_TIMEOUT_MAX {
+                return Err(AplicacaoError::PolicyTimeoutExceedsCap { timeout: t });
+            }
         }
         if let Some(r) = p.retries {
             if r == 0 {
@@ -2712,6 +2807,22 @@ pub enum AplicacaoError {
          (e.g. `\"30s\"`, `\"1500ms\"`, `\"2m\"`, `\"1h\"`)"
     )]
     PolicyTimeoutNotCanonical { timeout: Duration },
+    #[error(
+        ":politicas :timeout ({timeout:?}) exceeds the mesh-policy ceiling \
+         (POLICY_TIMEOUT_MAX = 1h = 3600s) — a value above this cap turns the typed \
+         per-call deadline into a nominal-only contract (Envoy / Cilium L7 timeout \
+         overlays carry a deadline so long no realistic synchronous-:contratos \
+         traversal can reach it), and the MESH-COMPOSITION §V \"no infinite blocking\" \
+         CSE invariant degenerates to enforcement only at the per-Servico \
+         `:limits :wall-clock` layer — far above the per-edge granularity the typed \
+         `:politicas :timeout` slot is meant to express. Pin a value in 1ms..=1h \
+         (Envoy / Istio / Linkerd / AWS App Mesh production playbooks all recommend \
+         ≤ 60s; the Kubernetes ingress-nginx documented `proxy_read_timeout` band \
+         maxes out at the same `3600s` ceiling) or omit :timeout to express \
+         `no per-call deadline on this axis` (the synchronous-call deadline then \
+         relies entirely on the per-Servico `:limits :wall-clock` axis)"
+    )]
+    PolicyTimeoutExceedsCap { timeout: Duration },
     #[error(
         ":politicas :circuit-breaker :window must be an integer number of milliseconds — \
          the canonical authoring form `\"<integer><unit>\"` for unit ∈ {{`ms`,`s`,`m`,`h`}} \
@@ -7384,6 +7495,229 @@ mod tests {
             }
             other => panic!("expected PolicyTimeoutNotCanonical, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn rejects_policy_timeout_above_cap() {
+        // The fail-before-pass-after pin: 3601s = 1h + 1s is
+        // structurally one canonical-tick past the
+        // [`POLICY_TIMEOUT_MAX`] ceiling (1h = 3600s) — an
+        // integer-millisecond magnitude the canonical-form arm above
+        // accepts cleanly, that the codec round-trips losslessly as
+        // `"3601s"`, and that silently passed validate on every
+        // pre-gate codebase because the typed slot's only checks were
+        // the zero-floor and canonical-form arms. The mesh-level
+        // deadline degenerates only at the runtime substrate (Envoy
+        // / Cilium L7 timeout overlay) far from the source
+        // `caixa.lisp` with no field naming the offending policy.
+        let mut s = three_member_spec();
+        let timeout = POLICY_TIMEOUT_MAX + Duration::from_secs(1);
+        s.politicas.timeout = Some(timeout);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutExceedsCap { timeout }
+        );
+    }
+
+    #[test]
+    fn rejects_policy_timeout_one_millisecond_above_cap() {
+        // Boundary case: exactly 1ms past the cap (the granularity
+        // the canonical-form gate enforces). Catches a future
+        // "strictly less than" half-measure and pins the diagnostic
+        // to name the offending `Duration` verbatim. Peer of
+        // [`crate::limits`]'s `validate_rejects_memory_one_byte_above_wasm32_cap`
+        // boundary pin on the sibling `:limits :memory` top edge.
+        let mut s = three_member_spec();
+        let timeout = POLICY_TIMEOUT_MAX + Duration::from_millis(1);
+        s.politicas.timeout = Some(timeout);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutExceedsCap { timeout }
+        );
+    }
+
+    #[test]
+    fn rejects_policy_timeout_far_above_cap() {
+        // The "obvious authoring footgun" case: a `(:timeout "24h")`
+        // or `(:timeout "86400s")` — values the canonical-form arm
+        // accepts as integer-millisecond magnitudes, the codec
+        // round-trips losslessly through serde, but the mesh-level
+        // policy cannot honor (a 24-hour synchronous-`:contratos`
+        // deadline is operationally indistinguishable from
+        // omit-the-axis). Until this gate landed validate accepted
+        // it. Pin both common above-cap values (24h, 7d) so a future
+        // relaxation that drops the upper bound surfaces here.
+        for timeout in [
+            Duration::from_secs(86_400),    // 24h
+            Duration::from_secs(604_800),   // 7d
+            Duration::from_secs(1_000_000), // ~11.5 days
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = Some(timeout);
+            assert_eq!(
+                s.validate().unwrap_err(),
+                AplicacaoError::PolicyTimeoutExceedsCap { timeout }
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_policy_timeout_at_cap() {
+        // The boundary value — exactly [`POLICY_TIMEOUT_MAX`] (1h) —
+        // must validate. The cap is inclusive on the top edge,
+        // matching the [`POLICY_RETRIES_MAX`] /
+        // [`POLICY_BREAKER_MAX_FAILURES_MAX`] /
+        // [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`] discipline on the
+        // sibling capped axes. Pin the boundary explicitly so a
+        // future off-by-one tightening (`>= POLICY_TIMEOUT_MAX`
+        // instead of `>`) surfaces here as a test failure rather
+        // than a silent contract narrowing.
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(POLICY_TIMEOUT_MAX);
+        s.validate()
+            .expect("timeout == POLICY_TIMEOUT_MAX must validate");
+    }
+
+    #[test]
+    fn accepts_policy_timeout_typical_values() {
+        // The documented production-playbook band positive-control
+        // sweep — every value Envoy / Istio / Linkerd / AWS App Mesh
+        // / Kubernetes ingress-nginx recommend (1s..=60s) must pass,
+        // plus a sweep through the long-running-workflow band
+        // (5m, 15m, 30m, 1h) the cap accepts. Pin the inclusive
+        // validated set explicitly so a future tightening of the
+        // ceiling surfaces here as a deliberate test edit, not a
+        // silent contract narrowing.
+        for timeout in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_secs(1),
+            Duration::from_secs(10),
+            Duration::from_secs(15), // Envoy default
+            Duration::from_secs(30),
+            Duration::from_secs(60), // AWS App Mesh typical
+            Duration::from_secs(300),
+            Duration::from_secs(900),
+            Duration::from_secs(1800),
+            Duration::from_secs(3600), // exactly 1h, the cap
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.timeout = Some(timeout);
+            s.validate()
+                .unwrap_or_else(|e| panic!("timeout={timeout:?} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn policy_timeout_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Duration::ZERO` is
+        // structurally outside both `>= 1ms` (zero-floor) and
+        // `<= POLICY_TIMEOUT_MAX` (cap), but the zero-floor
+        // diagnostic is the more self-locating one (it directly
+        // names the omit-axis remediation), so the validate gate
+        // must fire on zero first. Same shape every other
+        // zero-then-shape ordering on this surface uses
+        // ([`AplicacaoError::PolicyRetriesZero`] then
+        // [`AplicacaoError::PolicyRetriesExceedsCap`];
+        // [`AplicacaoError::PolicyBreakerZeroFailures`] then
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`]).
+        let mut s = three_member_spec();
+        s.politicas.timeout = Some(Duration::ZERO);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutZero,
+            "Duration::ZERO must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn policy_timeout_canonical_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: a `Duration` that is *both*
+        // sub-millisecond (non-canonical-form) and structurally
+        // above the cap surfaces the canonical-form diagnostic
+        // first, because the round-trip-shape break is the more
+        // fundamental issue (the value can't even round-trip
+        // through the codec, so the cap diagnostic naming
+        // `1ms..=1h` would be misleading — there's no integer-ms
+        // form of the offending value). Pin the order so a future
+        // refactor that reorders the arms surfaces here as a test
+        // failure rather than a silent diagnostic regression.
+        let mut s = three_member_spec();
+        // A `Duration` with `subsec_nanos() == 1` (sub-ms residue)
+        // *and* total magnitude above the 1h cap.
+        let timeout = POLICY_TIMEOUT_MAX + Duration::from_nanos(1);
+        s.politicas.timeout = Some(timeout);
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutNotCanonical { timeout },
+            "sub-ms above-cap value must surface the canonical-form diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn policy_timeout_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `Duration` is
+        // carried verbatim into the
+        // [`AplicacaoError::PolicyTimeoutExceedsCap`] variant so the
+        // surfaced error message names the value the author wrote
+        // (`":politicas :timeout (Duration { secs: 7200, nanos: 0 })
+        // exceeds the mesh-policy ceiling …"`), not just the cap.
+        // Same self-locating diagnostic shape every other typed-cap
+        // arm on this surface carries
+        // ([`AplicacaoError::PolicyRetriesExceedsCap`] carries the
+        // offending retry count verbatim).
+        let mut s = three_member_spec();
+        let timeout = Duration::from_secs(7200); // 2h
+        s.politicas.timeout = Some(timeout);
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::PolicyTimeoutExceedsCap { timeout: t } if t == timeout),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("7200"),
+            ":politicas :timeout cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn policy_timeout_cap_pins_canonical_value() {
+        // The [`POLICY_TIMEOUT_MAX`] constant pins the value at
+        // exactly 1 hour (3600s = 3_600_000ms) — the largest unit
+        // the shared duration codec emits as a clean canonical
+        // string (`"<n>h"`). Pinning the literal value here surfaces
+        // a future drift (a relaxation to 24h, a tightening to 5m)
+        // as a deliberate test edit, not a silent contract
+        // narrowing. Same shape every other typed-cap value pin on
+        // this surface uses (`policy_retries_cap_is_aws_app_mesh_aligned`).
+        assert_eq!(POLICY_TIMEOUT_MAX, Duration::from_secs(3600));
+        assert_eq!(POLICY_TIMEOUT_MAX.as_millis(), 3_600_000);
+    }
+
+    #[test]
+    fn policy_timeout_cap_value_round_trips_through_codec() {
+        // The codec round-trip property the cap arm preserves: the
+        // [`POLICY_TIMEOUT_MAX`] constant itself round-trips through
+        // the shared duration codec — every value at the cap renders
+        // to a clean canonical string (`"1h"`) and parses back to
+        // the same `Duration`. Pin this so a future drift between
+        // the cap constant and the codec's largest emitted unit
+        // surfaces here. Same shape every other typed boundary pin
+        // on this surface uses
+        // (`wasm32_memory_cap_matches_parsed_4_gib`).
+        let policy = MeshPolicy {
+            timeout: Some(POLICY_TIMEOUT_MAX),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&policy).unwrap();
+        // The codec emits `"1h"` for the canonical 1-hour magnitude.
+        assert!(
+            json.contains("\"1h\""),
+            "the POLICY_TIMEOUT_MAX value must render to the canonical \"1h\" form (got: {json})"
+        );
+        let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.timeout, Some(POLICY_TIMEOUT_MAX));
     }
 
     #[test]
