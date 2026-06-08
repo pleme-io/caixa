@@ -159,6 +159,48 @@ impl LimitsSpec {
         if matches!(self.wall_clock, Some(d) if d.is_zero()) {
             return Err(LimitsError::WallClockZero);
         }
+        // Sub-millisecond residue gate on the typed `:wall-clock` axis.
+        // The peer typed-`Duration` axes already routed through the
+        // shared `supervisor::duration_codec` (`:politicas :timeout`
+        // a4ae535, `:circuit-breaker :window` a4ae535) gate on
+        // `is_integer_millisecond_duration` because the codec's `render`
+        // truncates to `as_millis()` and parses with integer-ms
+        // granularity; the in-module `render_duration` / `parse_duration`
+        // pair in this crate carries the same `as_millis()`-truncation
+        // shape, so the same sub-millisecond-residue footgun lived on
+        // this axis until this gate landed. A programmatic struct
+        // literal (`LimitsSpec { wall_clock: Some(Duration::from_micros(1500)), .. }`,
+        // or any wasm-engine / M2.5 caller propagating a `Duration`
+        // from a non-`<integer><unit>`-string source) would either
+        // truncate-to-`ms` on first serialize (`from_micros(1500)` =
+        // 1_500_000 ns → renders `"1ms"` → parses back to
+        // `Duration::from_millis(1)` = 1_000_000 ns ≠ original) or —
+        // for sub-millisecond magnitudes — render as the literal `"0s"`
+        // (`from_micros(500)` → `as_millis() == 0` → renders `"0s"`)
+        // the zero-floor arm immediately above rejects on re-validate,
+        // either way breaking the THEORY.md §V.2.7 render-determinism
+        // contract every typed slot carries. The shared predicate
+        // [`crate::supervisor::duration_codec::is_integer_millisecond_duration`]
+        // lives next to the codec — single source of truth, drift
+        // between the codec's accepted granularity and any typed
+        // `Duration` slot's accepted set is a single-edit fix at the
+        // predicate rather than a silent round-trip break the next
+        // consumer (the wasm-engine `wall_clock` deadline cancellation
+        // MESH-COMPOSITION §V names, the future caixa-helm
+        // `pleme-computeunit` chart's `:limits` value mapping) discovers
+        // at apply time. The zero-floor arm strictly precedes this
+        // canonical gate so `Duration::ZERO` (`subsec_nanos() == 0` — a
+        // value the canonical arm would otherwise accept) surfaces the
+        // more self-locating `WallClockZero` diagnostic with its
+        // omit-axis remediation directly named, peer to the
+        // `PolicyTimeoutZero` → `PolicyTimeoutNotCanonical` and
+        // `PolicyBreakerZeroWindow` → `PolicyBreakerWindowNotCanonical`
+        // cross-arm ordering on `:politicas`.
+        if let Some(w) = self.wall_clock
+            && !crate::supervisor::duration_codec::is_integer_millisecond_duration(w)
+        {
+            return Err(LimitsError::WallClockNotCanonical { wall_clock: w });
+        }
         if self.cpu == Some(0) {
             return Err(LimitsError::CpuZero);
         }
@@ -236,6 +278,14 @@ pub enum LimitsError {
         ":limits :wall-clock must be > 0 — a zero deadline expires before the call starts; omit the field for unbounded"
     )]
     WallClockZero,
+    #[error(
+        ":limits :wall-clock ({wall_clock:?}) carries a sub-millisecond residue the typed `:wall-clock` duration codec cannot round-trip — \
+         the codec truncates to `as_millis()` before picking the canonical unit, so a value with `subsec_nanos() % 1_000_000 != 0` either \
+         truncates on first serialize (e.g. `Duration::from_micros(1500)` → \"1ms\" → `Duration::from_millis(1)` ≠ original) or renders \
+         as \"0s\" the `WallClockZero` arm then rejects on re-validate. Pin an integer-millisecond magnitude in the canonical authoring form \
+         (`<integer><unit>` for unit ∈ {{ms, s, m, h}}, e.g. `\"500ms\"`, `\"30s\"`, `\"2m\"`, `\"1h\"`) or omit the field for unbounded"
+    )]
+    WallClockNotCanonical { wall_clock: Duration },
     #[error(
         ":limits :cpu must be > 0m — a zero cgroup share starves the process; omit the field for unbounded"
     )]
@@ -1548,5 +1598,187 @@ mod tests {
         let json = r#"{"cpu":"500m"}"#;
         let l: LimitsSpec = serde_json::from_str(json).unwrap();
         assert_eq!(l.cpu, Some(500));
+    }
+
+    // ── canonical-form: integer-millisecond :wall-clock gate ──────────────
+    //
+    // The peer typed-`Duration` axes routed through
+    // `supervisor::duration_codec` (`:politicas :timeout` a4ae535,
+    // `:circuit-breaker :window` a4ae535) already gate on
+    // `is_integer_millisecond_duration` because the codec's `render`
+    // truncates to `as_millis()` and parses with integer-ms granularity;
+    // this crate's in-module `render_duration` / `parse_duration` pair
+    // carries the same `as_millis()`-truncation shape, so the same sub-
+    // millisecond-residue footgun lived on this axis until this gate
+    // landed. The tests below pin the fail-before-pass-after boundary,
+    // the diagnostic shape, the cross-arm zero-then-canonical ordering
+    // matching the `:politicas` peer, the integer-ms happy-path sweep,
+    // and the codec round-trip property (every validated `wall_clock`
+    // survives serialize → deserialize equality).
+
+    #[test]
+    fn validate_rejects_sub_millisecond_wall_clock() {
+        // The fail-before-pass-after pin: a programmatic
+        // `Duration::from_micros(1500)` (= 1_500_000 ns) silently passed
+        // validate on every pre-gate codebase, then truncated to
+        // `as_millis() == 1` on first serialize — `render_duration`
+        // emits `"1ms"`, the codec parses it back to
+        // `Duration::from_millis(1)` = 1_000_000 ns, the typed
+        // `wall_clock` no longer matches its rendered form.
+        let l = LimitsSpec {
+            wall_clock: Some(Duration::from_micros(1500)),
+            ..Default::default()
+        };
+        match l.validate().unwrap_err() {
+            LimitsError::WallClockNotCanonical { wall_clock } => {
+                assert_eq!(wall_clock, Duration::from_micros(1500));
+            }
+            other => panic!("expected WallClockNotCanonical, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_one_nanosecond_wall_clock() {
+        // The far-sub-ms case: `Duration::from_nanos(1)` is non-zero
+        // (so `WallClockZero` doesn't fire) but `as_millis() == 0`, so
+        // `render_duration` emits the literal `"0s"` — the next serde
+        // round-trip would parse back to `Duration::ZERO`, which the
+        // `WallClockZero` arm then rejects on re-validate. The
+        // canonical-form gate at this layer surfaces a self-locating
+        // diagnostic naming the offending Duration verbatim rather
+        // than a downstream `WallClockZero` whose remediation points
+        // at omitting the slot.
+        let l = LimitsSpec {
+            wall_clock: Some(Duration::from_nanos(1)),
+            ..Default::default()
+        };
+        match l.validate().unwrap_err() {
+            LimitsError::WallClockNotCanonical { wall_clock } => {
+                assert_eq!(wall_clock, Duration::from_nanos(1));
+            }
+            other => panic!("expected WallClockNotCanonical, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_nanosecond_past_canonical_boundary() {
+        // The 1-ns-past-1ms boundary case: a `Duration` carrying
+        // 1_000_001 ns is structurally past the integer-ms granularity
+        // floor — `subsec_nanos() % 1_000_000 == 1`. The codec
+        // round-trip would truncate to `1ms` and the consumer would
+        // observe a 1-ns drift on every emit. Same boundary the peer
+        // `is_integer_millisecond_duration_predicate_tracks_codec` test
+        // in aplicacao.rs pins for the `:politicas` axes.
+        let w = Duration::from_nanos(1_000_001);
+        let l = LimitsSpec {
+            wall_clock: Some(w),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::WallClockNotCanonical { wall_clock: w }
+        );
+    }
+
+    #[test]
+    fn validate_accepts_integer_millisecond_wall_clock_values() {
+        // The positive-control sweep: every `Duration` the codec can
+        // round-trip losslessly — the canonical `<integer>{ms,s,m,h}`
+        // set the `render_duration` / `parse_duration` pair emits and
+        // accepts — passes `validate` without surfacing the new
+        // canonical-form arm. Mirrors
+        // `accepts_policy_retries_typical_values` /
+        // `accepts_circuit_breaker_max_failures_typical_values` on
+        // sibling axes.
+        for w in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_millis(1500),
+            Duration::from_secs(1),
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(120),
+            Duration::from_secs(3600),
+        ] {
+            let l = LimitsSpec {
+                wall_clock: Some(w),
+                ..Default::default()
+            };
+            l.validate()
+                .unwrap_or_else(|e| panic!("integer-ms {w:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_wall_clock_zero_takes_precedence_over_canonical_gate() {
+        // Cross-arm ordering pin: `Duration::ZERO` has
+        // `subsec_nanos() == 0` and would otherwise pass the
+        // canonical-form arm — the zero-floor arm must fire first so
+        // the more self-locating `WallClockZero` diagnostic (with its
+        // omit-axis remediation directly named) leads. Same posture
+        // every peer zero-then-shape gate uses
+        // (`PolicyTimeoutZero` → `PolicyTimeoutNotCanonical`,
+        // `PolicyBreakerZeroWindow` → `PolicyBreakerWindowNotCanonical`).
+        let l = LimitsSpec {
+            wall_clock: Some(Duration::ZERO),
+            ..Default::default()
+        };
+        assert_eq!(l.validate().unwrap_err(), LimitsError::WallClockZero);
+    }
+
+    #[test]
+    fn wall_clock_canonical_diagnostic_carries_offending_duration() {
+        // Diagnostic-shape pin: the canonical-form arm names the
+        // offending `Duration` verbatim so the author's grep lands on
+        // the field's value, not a generic "duration not canonical"
+        // message. Same shape every other typed-cap arm on this
+        // surface carries (`MemoryExceedsWasm32Cap` carries the
+        // offending byte count verbatim, `PolicyRetriesExceedsCap`
+        // carries the offending retry count verbatim,
+        // `PolicyBreakerMaxFailuresExceedsCap` carries the offending
+        // u32 verbatim).
+        let w = Duration::from_micros(500);
+        let l = LimitsSpec {
+            wall_clock: Some(w),
+            ..Default::default()
+        };
+        let err = l.validate().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("500"),
+            "diagnostic must carry the offending magnitude verbatim (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn wall_clock_validated_value_round_trips_through_codec() {
+        // The structural property the canonical-ms gate enforces:
+        // every `LimitsSpec::wall_clock` past `LimitsSpec::validate`
+        // round-trips losslessly through the in-module duration codec
+        // (serialize → string → deserialize → equal value). Pin this
+        // end-to-end so a future change to either side (the validate
+        // gate's accepted granularity, the codec's parse/render unit
+        // set) that breaks the alignment surfaces here. Peer of
+        // `policy_timeout_validated_value_round_trips_through_codec` /
+        // `circuit_breaker_window_validated_value_round_trips_through_codec`
+        // on the sibling `:politicas` axes.
+        for w in [
+            Duration::from_millis(1),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(3600),
+        ] {
+            let l = LimitsSpec {
+                wall_clock: Some(w),
+                ..Default::default()
+            };
+            l.validate().unwrap();
+            let json = serde_json::to_string(&l).unwrap();
+            let back: LimitsSpec = serde_json::from_str(&json).unwrap();
+            assert_eq!(
+                back.wall_clock, l.wall_clock,
+                "every validated :wall-clock must round-trip losslessly through the codec"
+            );
+        }
     }
 }

@@ -540,40 +540,16 @@ fn is_canonical_rate_limit_window(window: Duration) -> bool {
 /// the round-trippable accepted set of the shared
 /// [`supervisor::duration_codec`] every typed-`Duration` `:politicas`
 /// slot ([`MeshPolicy::timeout`], [`CircuitBreaker::window`]) routes
-/// through. The codec parses `<integer><unit>` for unit ∈
-/// {`"ms"`,`"s"`,`"m"`,`"h"`} and renders by picking the largest unit
-/// the value is a clean multiple of (`h`/`m`/`s`/`ms`); a `Duration`
-/// whose sub-millisecond residue is non-zero either renders as a
-/// truncated-to-`ms` string the parser then deserializes as a
-/// *different* value (`Duration::from_micros(1500)` →
-/// `as_millis() == 1` → renders `"1ms"` → parses back to
-/// `Duration::from_millis(1)` = `1_000_000` ns ≠ original `1_500_000` ns)
-/// or — for sub-millisecond magnitudes — renders as the literal
-/// `"0s"` (`as_millis() == 0` arm of [`supervisor::duration_codec::render`])
-/// which the [`MeshPolicy::timeout`] zero-floor gate then rejects on
-/// re-validate. Either branch breaks the THEORY.md §V.2.7
-/// render-determinism contract every typed slot carries: the *same*
-/// validated value must produce the *same* string on every emit, and
-/// the parsed value of that string must equal the original.
-///
-/// Lifted to a typed predicate (rather than an inline
-/// `d.subsec_nanos() % 1_000_000 == 0` at each
-/// [`AplicacaoSpec::validate_politicas`] axis) so the codec's
-/// round-trippable set lives in exactly one place — drift between
-/// the codec's accepted granularity and either typed-`Duration` slot's
-/// accepted set is a build error visible at this predicate, not a
-/// silent round-trip break at the codec layer. Peer of
-/// [`is_canonical_rate_limit_window`] on the third typed-`Duration`
-/// `:politicas` axis (`:rate-limit :window`, which lands on a
-/// stricter floor — the three canonical 1s/60s/3600s windows — because
-/// the [`rate_limit_codec`] is unit-magnitude-1 only) and the same
-/// "typed-slot's valid set matches its codec's accepted set,
-/// structurally" discipline every predicate-on-the-typed-slot helper
-/// carries ([`MeshPolicy::is_empty`], [`crate::LimitsSpec::is_empty`],
-/// [`crate::BehaviorSpec::is_empty`]).
+/// through. Thin re-export of
+/// [`supervisor::duration_codec::is_integer_millisecond_duration`] so the
+/// two `:politicas` `Duration` axes at [`AplicacaoSpec::validate_politicas`]
+/// gate on the same predicate the codec itself documents — single source
+/// of truth for the codec's round-trippable accepted set, with the
+/// `:limits :wall-clock` axis (whose own `as_millis()`-truncation codec
+/// lives in [`crate::limits`]) routing through the same predicate.
 #[must_use]
 fn is_integer_millisecond_duration(d: Duration) -> bool {
-    d.subsec_nanos() % 1_000_000 == 0
+    supervisor::duration_codec::is_integer_millisecond_duration(d)
 }
 
 /// Upper-bound ceiling on the `:politicas :retries` axis — every
