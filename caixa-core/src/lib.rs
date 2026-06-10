@@ -35,8 +35,8 @@ pub use dep::{Dep, DepError, DepSource};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{
-    LIMITS_CPU_MILLICORES_MAX, LIMITS_MEMORY_WASM32_MAX_BYTES, LIMITS_MEMORY_WASM32_PAGE_BYTES,
-    LIMITS_WALL_CLOCK_MAX, LimitsError, LimitsSpec,
+    LIMITS_CPU_MILLICORES_MAX, LIMITS_FUEL_MAX, LIMITS_MEMORY_WASM32_MAX_BYTES,
+    LIMITS_MEMORY_WASM32_PAGE_BYTES, LIMITS_WALL_CLOCK_MAX, LimitsError, LimitsSpec,
 };
 pub use manifest::{Caixa, ManifestError};
 pub use render::{

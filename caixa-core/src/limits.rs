@@ -243,6 +243,93 @@ pub const LIMITS_WALL_CLOCK_MAX: Duration = Duration::from_secs(3600);
 /// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
 pub const LIMITS_CPU_MILLICORES_MAX: u32 = 128_000;
 
+/// Upper-bound ceiling on the `:limits :fuel` axis, in wasm
+/// instructions per outermost call — every validated
+/// [`LimitsSpec::fuel`] past [`LimitsSpec::validate`] lies in
+/// `1..=LIMITS_FUEL_MAX` (inclusive on both ends).
+///
+/// The typed field is `Option<u64>` (the zero-floor arm
+/// [`LimitsError::FuelZero`] already rejects `Some(0)` — wasmtime
+/// traps the first instruction at `fuel=0`), so a programmatic
+/// struct literal (`LimitsSpec { fuel: Some(u64::MAX), .. }` —
+/// ≈ 1.8 × 10¹⁹ instructions) and the equivalent author-surface
+/// form (`(:limits (:fuel 18446744073709551615))`) both
+/// round-trip cleanly through serde — a structurally unbounded
+/// `u64` ceiling. The runtime substrate consuming the value
+/// ([`crate::render::servico_m2_overlay`]'s
+/// `pleme-computeunit.limits.fuel` projection, the M2.5
+/// `wasm-engine` `Store::set_fuel` call the
+/// `ABSORPTION-ROADMAP` names as the downstream wiring, the
+/// future M4 `mesh.pleme.io/v1alpha1/Caixa` CR materializer's
+/// admission webhook) lands the value verbatim as the
+/// wasmtime store's per-call fuel budget. A value far above any
+/// reachable wasm execution count turns the typed slot into a
+/// no-op budget: the sibling [`LIMITS_WALL_CLOCK_MAX`] (1h)
+/// cap fires before the fuel counter ever drains, the per-call
+/// fuel-tracking contract degenerates to "rely on `:wall-clock`
+/// instead" enforcement, and the per-process CSE invariant
+/// (every typed `:fuel` is a meaningful budget the wasm-engine
+/// can actually consume) is a runtime, not build-time, contract
+/// on every above-cap input — the canonical declared-but-no-op
+/// footgun the sibling `:wall-clock` / `:cpu` / `:memory` cap
+/// arms close on the peer "cannot be honored" /
+/// "unschedulable hint" / "no-op budget" shapes, and the peer
+/// `:politicas :rate-limit` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window` /
+/// `:supervisor :max-restarts` cap arms close on every other
+/// `Option<numeric>` axis on the typed Caixa surface.
+///
+/// The `1_000_000_000_000` (10¹² = 1 trillion wasm instructions)
+/// ceiling matches the operational envelope the sibling
+/// [`LIMITS_WALL_CLOCK_MAX`] cap pins: at wasmtime's documented
+/// fuel-tracked execution rate (~10⁸–10⁹ fuel-units per second
+/// on modern x86_64 / aarch64 hosts running wasmtime through
+/// Cranelift — the substrate's wasm32-wasip2 default backend per
+/// the `caixa-feira` runner), the largest realistic per-call
+/// fuel budget reachable within `LIMITS_WALL_CLOCK_MAX` (1h)
+/// sits at ~3.6 × 10¹¹–3.6 × 10¹² fuel-units. The 10¹² cap is
+/// the round-number ceiling above this operational envelope,
+/// sits six orders of magnitude above the canonical fixture
+/// (the in-tree `Caixa::template` documentation and
+/// `caixa-feira` examples carry `:fuel 1_000_000` = 10⁶,
+/// peer to wasmtime's official `Store::set_fuel(1_000_000)`
+/// example in the `wasmtime` book), and surfaces every
+/// paste-from-binary / overflow / u64-magnitude-typo footgun
+/// (`u64::MAX`, `0xFFFF_FFFF_FFFF_FFFF`, large hex literals
+/// confused for instruction-count budgets) at validate time.
+/// A value above this cap is operationally a no-op fuel
+/// counter: the wall-clock deadline ([`LIMITS_WALL_CLOCK_MAX`]
+/// = 3600s × ~10⁹ fuel/sec ≈ 3.6 × 10¹² instructions reachable)
+/// fires before the fuel counter could ever be drained,
+/// so the typed `:fuel` slot becomes a no-op budget far from
+/// the source caixa.lisp. The wasm32-wasip2 single-threaded
+/// execution model the canonical caixa Servico targets
+/// ([`theory/CAIXA-SDLC.md` §V][sdlc-v]) reinforces the
+/// structural argument: a single wasm component cannot
+/// out-execute its host's CPU clock, so even the Lunatic-style
+/// supervised-multi-process host (`theory/INSPIRATIONS.md`
+/// §III.1) bounds its useful fuel-per-call budget to a
+/// per-clock-tick magnitude, never higher.
+///
+/// Lifted as a typed `pub const` (rather than an inline literal
+/// at the [`LimitsSpec::validate`] call site) so the bound has
+/// exactly one source of truth — the future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-`:limits
+/// :fuel` admission webhook, the caixa-helm `pleme-computeunit`
+/// chart's fuel-budget mapping, the M2.5 `wasm-engine` host-
+/// runtime `Store::set_fuel` propagation all read from one
+/// place. Same shape every other typed upper bound in this
+/// crate carries ([`LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`LIMITS_WALL_CLOCK_MAX`], [`LIMITS_CPU_MILLICORES_MAX`],
+/// [`crate::POLICY_TIMEOUT_MAX`],
+/// [`crate::POLICY_BREAKER_WINDOW_MAX`],
+/// [`crate::POLICY_RATE_LIMIT_MAX`],
+/// [`crate::SUPERVISOR_MAX_RESTARTS_MAX`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`]).
+///
+/// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
+pub const LIMITS_FUEL_MAX: u64 = 1_000_000_000_000;
+
 /// Per-process limits. All fields optional — `None` = unbounded for that axis.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -366,6 +453,52 @@ impl LimitsSpec {
         }
         if self.fuel == Some(0) {
             return Err(LimitsError::FuelZero);
+        }
+        // Upper-bound gate on `:fuel`: every validated value must also
+        // fit within the typed `:fuel` ceiling ([`LIMITS_FUEL_MAX`] =
+        // 10¹² = 1 trillion wasm instructions). The zero-floor and this
+        // cap arm together bracket the typed `:fuel` axis structurally
+        // — every validated value lies in `1..=LIMITS_FUEL_MAX`. Until
+        // this gate landed the `Option<u64>` slot accepted any value
+        // past zero (the parser's only upper bound was `u64::MAX`), so
+        // `(:fuel 18446744073709551615)` round-tripped cleanly through
+        // serde and the per-process CSE invariant (no value the
+        // wasm-engine's fuel counter can't honor as a meaningful budget
+        // before the sibling `:wall-clock` deadline fires) was a
+        // runtime, not build-time, contract on every above-cap input
+        // — the canonical declared-but-no-op footgun the sibling
+        // [`LimitsError::MemoryExceedsWasm32Cap`] /
+        // [`LimitsError::WallClockExceedsCap`] /
+        // [`LimitsError::CpuExceedsCap`] arms close on the peer
+        // "cannot be honored" / "unschedulable hint" /
+        // "nominal-only deadline" shapes, the peer
+        // [`crate::AplicacaoError::PolicyTimeoutExceedsCap`] /
+        // [`crate::AplicacaoError::PolicyBreakerWindowExceedsCap`] /
+        // [`crate::AplicacaoError::PolicyRateLimitExceedsCap`] arms
+        // close on the no-op-deadline / lifetime-counter / no-op-limiter
+        // shapes, and the
+        // [`crate::SupervisorError::MaxRestartsExceedsCap`] arm closes
+        // on the no-op-supervisor shape. The four `:limits` axes are
+        // now uniformly bracketed top and bottom (`:memory` in
+        // `LIMITS_MEMORY_WASM32_PAGE_BYTES..=LIMITS_MEMORY_WASM32_MAX_BYTES`,
+        // `:fuel` in `1..=LIMITS_FUEL_MAX`, `:wall-clock` in
+        // `1ms..=LIMITS_WALL_CLOCK_MAX`, `:cpu` in
+        // `1..=LIMITS_CPU_MILLICORES_MAX`) — closing the open edge the
+        // 857dfcc cap commit body explicitly named as the next
+        // compounding step ("three of the four axes carry a top-and-
+        // bottom edge gate; only `:fuel` remains with a zero-floor-only
+        // shape"). The zero-floor arm strictly precedes this cap so
+        // `Some(0)` (a value the canonical arm would otherwise accept
+        // as `<= LIMITS_FUEL_MAX`) surfaces the more self-locating
+        // `FuelZero` diagnostic with its omit-axis remediation directly
+        // named, peer to every other zero-then-cap chain on this
+        // surface (`MemoryZero` → `MemoryExceedsWasm32Cap`,
+        // `WallClockZero` → `WallClockExceedsCap`, `CpuZero` →
+        // `CpuExceedsCap`).
+        if let Some(f) = self.fuel
+            && f > LIMITS_FUEL_MAX
+        {
+            return Err(LimitsError::FuelExceedsCap { fuel: f });
         }
         if matches!(self.wall_clock, Some(d) if d.is_zero()) {
             return Err(LimitsError::WallClockZero);
@@ -559,6 +692,28 @@ pub enum LimitsError {
         ":limits :fuel must be > 0 — wasmtime traps the first instruction at fuel=0; omit the field for unbounded"
     )]
     FuelZero,
+    #[error(
+        ":limits :fuel ({fuel} instructions) exceeds the per-process ceiling \
+         (LIMITS_FUEL_MAX = 1_000_000_000_000 = 10^12 wasm instructions) — a value \
+         above this cap turns the typed per-call fuel counter into a no-op budget: \
+         the sibling `:wall-clock` cap (LIMITS_WALL_CLOCK_MAX = 1h = 3600s) fires \
+         before the fuel counter could ever be drained (wasmtime's documented \
+         fuel-tracked execution rate sits at ~10^8–10^9 fuel-units per second on \
+         modern x86_64 / aarch64 hosts running wasmtime through Cranelift, so the \
+         largest realistic per-call fuel budget reachable within 1h sits at ~3.6 × \
+         10^11–3.6 × 10^12 fuel-units, and a value above 10^12 is structurally \
+         unreachable as a per-call counter), so the typed `:fuel` slot becomes a \
+         declared-but-no-op contract far from the source caixa.lisp. Pin a value \
+         in 1..=1_000_000_000_000 (the canonical caixa Servico runs in the \
+         10^6..=10^9 fuel band — the in-tree `Caixa::template` documentation and \
+         `caixa-feira` examples carry `:fuel 1_000_000` = 10^6, peer to \
+         wasmtime's official `Store::set_fuel(1_000_000)` example in the wasmtime \
+         book; production-shape per-request fuel budgets sit in the 10^7..=10^9 \
+         band for compute-bound workloads) or omit :fuel to express `no per-call \
+         fuel budget on this axis` (the wasm-engine then relies entirely on the \
+         sibling `:wall-clock` cgroup / Kubernetes activeDeadlineSeconds deadline)"
+    )]
+    FuelExceedsCap { fuel: u64 },
     #[error(
         ":limits :wall-clock must be > 0 — a zero deadline expires before the call starts; omit the field for unbounded"
     )]
@@ -2825,5 +2980,272 @@ mod tests {
         assert_eq!(back.cpu, Some(LIMITS_CPU_MILLICORES_MAX));
         l.validate()
             .expect("LIMITS_CPU_MILLICORES_MAX itself must pass validate");
+    }
+
+    // ── value-shape: :fuel upper bound — 10^12 no-op-budget ceiling ────────
+    //
+    // The fourth and final `LimitsSpec` axis brought to a top-edge
+    // cap, closing the open edge the 857dfcc CPU-cap commit body
+    // explicitly named: "three of the four axes carry a top-and-bottom
+    // edge gate; only `:fuel` remains with a zero-floor-only shape."
+    // Mirrors the test discipline every sibling capped axis carries:
+    // the fail-before-pass-after pin, the one-instruction-boundary
+    // pin, the far-above-cap sweep, the inclusive-at-cap positive
+    // control, the production-band positive-control sweep, the
+    // cross-arm zero-then-cap ordering pin, the cross-axis
+    // earlier-then-later precedence pin, the diagnostic-shape pin
+    // carrying the offending value verbatim, and the cap-value
+    // literal-identity + codec round-trip pins anchoring the
+    // constant.
+
+    #[test]
+    fn validate_rejects_fuel_above_cap() {
+        // The fail-before-pass-after pin: `LIMITS_FUEL_MAX + 1` =
+        // one wasm-instruction past the structural ceiling — a `u64`
+        // magnitude the typed slot round-trips losslessly through
+        // serde, and that silently passed validate on every pre-gate
+        // codebase because the typed slot's only check was the
+        // zero-floor arm. The wasm-engine consuming the value (via
+        // `Store::set_fuel` projection in the M2.5 host runtime)
+        // accepts the magnitude but the sibling `:wall-clock` 1h cap
+        // fires before the fuel counter could ever drain — the typed
+        // `:fuel` slot becomes a no-op budget far from the source
+        // caixa.lisp.
+        let f = LIMITS_FUEL_MAX + 1;
+        let l = LimitsSpec {
+            fuel: Some(f),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::FuelExceedsCap { fuel: f }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_fuel_far_above_cap() {
+        // The "obvious authoring footgun" case: a `(:fuel
+        // 1000000000000000)` (10^15 instructions), a paste-from-binary
+        // `u64::MAX`, or a hex-literal-confused-for-decimal magnitude
+        // — values the `u64` slot accepts cleanly, the codec
+        // round-trips losslessly through serde, but the wasm-engine
+        // can never honor as a meaningful counter. Until this gate
+        // landed validate accepted them. Pin the common above-cap
+        // values (10x cap, 1000x cap, `u64::MAX`) so a future
+        // relaxation that drops the upper bound surfaces here. Peer
+        // of `validate_rejects_cpu_far_above_cap` /
+        // `validate_rejects_memory_8_gib` /
+        // `validate_rejects_wall_clock_far_above_cap`.
+        for f in [
+            LIMITS_FUEL_MAX * 10,
+            LIMITS_FUEL_MAX * 1_000,
+            u64::MAX,
+        ] {
+            let l = LimitsSpec {
+                fuel: Some(f),
+                ..Default::default()
+            };
+            assert_eq!(
+                l.validate().unwrap_err(),
+                LimitsError::FuelExceedsCap { fuel: f }
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_fuel_at_cap() {
+        // The boundary value — exactly [`LIMITS_FUEL_MAX`] (10^12
+        // wasm instructions) — must validate. The cap is inclusive
+        // on the top edge, matching the discipline on every sibling
+        // capped axis ([`LIMITS_MEMORY_WASM32_MAX_BYTES`],
+        // [`LIMITS_WALL_CLOCK_MAX`], [`LIMITS_CPU_MILLICORES_MAX`],
+        // [`crate::POLICY_TIMEOUT_MAX`],
+        // [`crate::POLICY_BREAKER_WINDOW_MAX`],
+        // [`crate::POLICY_RATE_LIMIT_MAX`]). Pin the boundary
+        // explicitly so a future off-by-one tightening
+        // (`>= LIMITS_FUEL_MAX` instead of `>`) surfaces here as a
+        // test failure rather than a silent contract narrowing.
+        let l = LimitsSpec {
+            fuel: Some(LIMITS_FUEL_MAX),
+            ..Default::default()
+        };
+        l.validate().expect("fuel == LIMITS_FUEL_MAX must validate");
+    }
+
+    #[test]
+    fn validate_accepts_fuel_typical_values() {
+        // The documented production-playbook band positive-control
+        // sweep — every value the canonical caixa Servico runs in
+        // (10^6..=10^9 fuel-units) must pass, plus a sweep through
+        // the larger compute-bound-Servico band (10^10, 10^11) the
+        // cap accepts. The canonical fixture is `1_000_000` =
+        // wasmtime's documented `Store::set_fuel(1_000_000)` example.
+        // Mirrors `validate_accepts_cpu_typical_values` on the
+        // sibling `:cpu` axis.
+        for f in [
+            1_u64,                // smallest non-zero
+            1_000,                // tiny per-call budget
+            1_000_000,            // canonical fixture (10^6) — wasmtime book example
+            10_000_000,           // typical small-Servico (10^7)
+            100_000_000,          // typical heavier-Servico (10^8)
+            1_000_000_000,        // 1 billion — upper realistic per-call (10^9)
+            100_000_000_000,      // 10^11 — heavy compute-bound (10x below cap)
+            500_000_000_000,      // half the cap
+            1_000_000_000_000,    // exactly at cap (10^12)
+        ] {
+            let l = LimitsSpec {
+                fuel: Some(f),
+                ..Default::default()
+            };
+            l.validate()
+                .unwrap_or_else(|e| panic!("fuel={f} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn fuel_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Some(0)` is structurally
+        // outside both `>= 1` (zero-floor) and `<= LIMITS_FUEL_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the omit-axis
+        // remediation and the wasmtime-traps-at-zero semantics), so
+        // the validate gate must fire on zero first. Same shape every
+        // other zero-then-cap ordering on this surface uses
+        // (`MemoryZero` then `MemoryExceedsWasm32Cap`,
+        // `WallClockZero` then `WallClockExceedsCap`, `CpuZero` then
+        // `CpuExceedsCap`).
+        let l = LimitsSpec {
+            fuel: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::FuelZero,
+            "Some(0) must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_fuel_cap_after_earlier_axes() {
+        // Cross-axis ordering: when both an above-cap `:fuel` and an
+        // earlier-axis violation are present, the earlier axis must
+        // fire first. The validate sequence is :memory → :fuel →
+        // :wall-clock → :cpu, so a paired memory-zero + fuel-above-
+        // cap input surfaces `MemoryZero`, never the fuel-cap
+        // diagnostic. Pins the canonical axis order so a future
+        // refactor that reorders the arms surfaces here as a test
+        // failure rather than a silent diagnostic regression. Peer
+        // of `validate_rejects_cpu_cap_after_earlier_axes`.
+        let l = LimitsSpec {
+            memory: Some(0),
+            fuel: Some(LIMITS_FUEL_MAX + 1),
+            wall_clock: None,
+            cpu: None,
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryZero,
+            "earlier-axis violation must take precedence over later-axis cap violation"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_fuel_cap_before_later_axes() {
+        // Cross-axis ordering on the other side: when both an
+        // above-cap `:fuel` and a later-axis violation are present,
+        // the `:fuel` cap must fire before the `:wall-clock` /
+        // `:cpu` zero-floor diagnostics. The validate sequence is
+        // :memory → :fuel → :wall-clock → :cpu, so a paired
+        // fuel-above-cap + wall-clock-zero input surfaces
+        // `FuelExceedsCap`, not `WallClockZero`. Pins the canonical
+        // axis order on the new arm's downstream side, peer to the
+        // upstream pin `validate_rejects_fuel_cap_after_earlier_axes`.
+        let l = LimitsSpec {
+            memory: None,
+            fuel: Some(LIMITS_FUEL_MAX + 1),
+            wall_clock: Some(Duration::ZERO),
+            cpu: Some(0),
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::FuelExceedsCap {
+                fuel: LIMITS_FUEL_MAX + 1
+            },
+            ":fuel cap diagnostic must take precedence over later-axis zero-floor diagnostics"
+        );
+    }
+
+    #[test]
+    fn fuel_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending fuel count is
+        // carried verbatim into the [`LimitsError::FuelExceedsCap`]
+        // variant so the surfaced error message names the value the
+        // author wrote, not just the cap. Same self-locating
+        // diagnostic shape every other typed-cap arm on this surface
+        // carries (`MemoryExceedsWasm32Cap` carries the offending
+        // byte count verbatim, `WallClockExceedsCap` carries the
+        // offending `Duration` verbatim, `CpuExceedsCap` carries the
+        // offending millicore count verbatim).
+        let f = 5_000_000_000_000_u64; // 5 trillion — 5x the cap
+        let l = LimitsSpec {
+            fuel: Some(f),
+            ..Default::default()
+        };
+        let err = l.validate().unwrap_err();
+        assert!(
+            matches!(err, LimitsError::FuelExceedsCap { fuel } if fuel == f),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("5000000000000"),
+            ":limits :fuel cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn fuel_cap_pins_canonical_value() {
+        // The [`LIMITS_FUEL_MAX`] constant pins the value at exactly
+        // 10^12 (1 trillion wasm instructions) — the round-number
+        // ceiling above the operational envelope the sibling
+        // [`LIMITS_WALL_CLOCK_MAX`] (1h) × wasmtime's fuel-tracked
+        // execution rate (~10^9 fuel/sec) yields. Pinning the
+        // literal value here surfaces a future drift (a relaxation
+        // to 10^15, a tightening to 10^9) as a deliberate test edit,
+        // not a silent contract narrowing. Same shape every other
+        // typed-cap value pin uses (`cpu_cap_pins_canonical_value`,
+        // `wall_clock_cap_pins_canonical_value`,
+        // `wasm32_memory_cap_matches_parsed_4_gib`).
+        assert_eq!(LIMITS_FUEL_MAX, 1_000_000_000_000);
+        assert_eq!(LIMITS_FUEL_MAX, 10_u64.pow(12));
+    }
+
+    #[test]
+    fn fuel_cap_value_round_trips_through_serde() {
+        // The serde round-trip property the cap arm preserves: the
+        // [`LIMITS_FUEL_MAX`] constant itself round-trips through
+        // the in-module `u64` serde codec — the cap value renders as
+        // the bare integer literal and parses back to the same
+        // `u64`. Pin this so a future drift between the cap constant
+        // and the codec's accepted magnitude (a future custom u64
+        // serializer that introduces lossy formatting) surfaces
+        // here. Same shape every other typed boundary pin on this
+        // surface uses (`wasm32_memory_cap_matches_parsed_4_gib`,
+        // `wall_clock_cap_value_round_trips_through_codec`,
+        // `cpu_cap_value_round_trips_through_codec`).
+        let l = LimitsSpec {
+            fuel: Some(LIMITS_FUEL_MAX),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(
+            json.contains("1000000000000"),
+            "the LIMITS_FUEL_MAX value must render verbatim as the bare integer 10^12 \
+             (got: {json})"
+        );
+        let back: LimitsSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.fuel, Some(LIMITS_FUEL_MAX));
+        l.validate()
+            .expect("LIMITS_FUEL_MAX itself must pass validate");
     }
 }
