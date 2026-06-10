@@ -219,6 +219,54 @@ impl SupervisorSpec {
         if matches!(self.restart_window, Some(d) if d.is_zero()) {
             return Err(SupervisorError::RestartWindowZero);
         }
+        // Sub-millisecond residue gate on the typed `:restart-window`
+        // axis. The shared `duration_codec` (which serializes /
+        // deserializes this slot via `with = "duration_codec"`)
+        // truncates to `as_millis()` before picking the canonical unit,
+        // so any `Duration` whose `subsec_nanos() % 1_000_000 != 0`
+        // either truncates on first serialize (e.g.
+        // `Duration::from_micros(1500)` = 1_500_000 ns → renders
+        // `"1ms"` → parses back to `Duration::from_millis(1)` =
+        // 1_000_000 ns ≠ original) or — for sub-millisecond magnitudes
+        // — renders as the literal `"0s"` (`from_micros(500)` →
+        // `as_millis() == 0` → renders `"0s"`) the zero-floor arm
+        // immediately above rejects on re-validate. The serde path is
+        // already gated at the codec layer (a4ae535 — every
+        // `{"restartWindow":"1.5s"}`-shaped JSON payload surfaces a
+        // structured diagnostic at deserialize); this arm closes the
+        // programmatic-struct-literal path the codec gate can't see
+        // (`SupervisorSpec { restart_window: Some(Duration::from_micros(1500)), .. }`,
+        // or any wasm-operator / supervisor-tree caller propagating a
+        // `Duration` from a non-`<integer><unit>`-string source). The
+        // shared predicate
+        // [`duration_codec::is_integer_millisecond_duration`] lives
+        // next to the codec — single source of truth, drift between
+        // the codec's accepted granularity and any typed `Duration`
+        // slot's accepted set is a single-edit fix at the predicate
+        // rather than a silent round-trip break the next consumer (the
+        // future wasm-operator's per-supervisor MaxIntensity/Period
+        // accounting, the M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+        // materializer's `:restart-window` admission webhook)
+        // discovers at apply time. Closes the fourth (and last) typed-
+        // `Duration` axis on this discipline — peer with
+        // [`crate::LimitsError::WallClockNotCanonical`] (82fc3ef on
+        // `:limits :wall-clock`) and
+        // [`crate::AplicacaoError::PolicyTimeoutNotCanonical`] /
+        // [`crate::AplicacaoError::PolicyBreakerWindowNotCanonical`]
+        // (a4ae535 on the two `:politicas` axes). The zero-floor arm
+        // strictly precedes this canonical gate so `Duration::ZERO`
+        // (`subsec_nanos() == 0` — a value the canonical arm would
+        // otherwise accept) surfaces the more self-locating
+        // `RestartWindowZero` diagnostic with its omit-axis
+        // remediation directly named, peer to the
+        // `WallClockZero` → `WallClockNotCanonical` and
+        // `PolicyTimeoutZero` → `PolicyTimeoutNotCanonical` cross-arm
+        // ordering on the sibling axes.
+        if let Some(w) = self.restart_window
+            && !duration_codec::is_integer_millisecond_duration(w)
+        {
+            return Err(SupervisorError::RestartWindowNotCanonical { window: w });
+        }
         let mut seen = std::collections::HashSet::new();
         for child in &self.children {
             if child.caixa.is_empty() {
@@ -349,6 +397,14 @@ pub enum SupervisorError {
          express `never reset`; carry a positive duration to express the window."
     )]
     RestartWindowZero,
+    #[error(
+        ":supervisor :restart-window ({window:?}) carries a sub-millisecond residue the shared `duration_codec` cannot round-trip — \
+         the codec truncates to `as_millis()` before picking the canonical unit, so a value with `subsec_nanos() % 1_000_000 != 0` either \
+         truncates on first serialize (e.g. `Duration::from_micros(1500)` → \"1ms\" → `Duration::from_millis(1)` ≠ original) or renders \
+         as \"0s\" the `RestartWindowZero` arm then rejects on re-validate. Pin an integer-millisecond magnitude in the canonical authoring form \
+         (`<integer><unit>` for unit ∈ {{ms, s, m, h}}, e.g. `\"500ms\"`, `\"30s\"`, `\"2m\"`, `\"1h\"`) or omit the field for `never reset`"
+    )]
+    RestartWindowNotCanonical { window: Duration },
     #[error("child entry has empty :caixa name")]
     EmptyChildName,
     #[error(
@@ -1192,6 +1248,193 @@ mod tests {
             s.validate().unwrap_err(),
             SupervisorError::RestartWindowZero
         );
+    }
+
+    // ── value-shape: integer-ms canonical-form on :restart-window ─────────
+    //
+    // The fourth (and last) typed-`Duration` axis in caixa-core to get
+    // the integer-millisecond canonical-form gate — peer with
+    // `:limits :wall-clock` (82fc3ef), `:politicas :timeout` (a4ae535),
+    // and `:politicas :circuit-breaker :window` (a4ae535). The serde
+    // path is already gated at the shared codec layer (see
+    // `restart_window_serde_rejects_fractional_seconds`); this arm
+    // closes the programmatic-struct-literal path the codec gate can't
+    // see.
+
+    #[test]
+    fn validate_rejects_sub_millisecond_restart_window() {
+        // The fail-before-pass-after pin: a programmatic
+        // `Duration::from_micros(1500)` (= 1_500_000 ns) silently passed
+        // `validate` on every pre-gate codebase, then truncated to
+        // `as_millis() == 1` on first serialize — the shared codec
+        // emits `"1ms"`, parses it back to `Duration::from_millis(1)` =
+        // 1_000_000 ns, the typed `restart_window` no longer matches
+        // its rendered form.
+        let s = SupervisorSpec {
+            restart_window: Some(Duration::from_micros(1500)),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        match s.validate().unwrap_err() {
+            SupervisorError::RestartWindowNotCanonical { window } => {
+                assert_eq!(window, Duration::from_micros(1500));
+            }
+            other => panic!("expected RestartWindowNotCanonical, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_one_nanosecond_restart_window() {
+        // The far-sub-ms case: `Duration::from_nanos(1)` is non-zero
+        // (so `RestartWindowZero` doesn't fire) but `as_millis() == 0`,
+        // so the shared codec emits the literal `"0s"` — the next
+        // serde round-trip would parse back to `Duration::ZERO`, which
+        // the `RestartWindowZero` arm then rejects on re-validate. The
+        // canonical-form gate at this layer surfaces a self-locating
+        // diagnostic naming the offending Duration verbatim rather
+        // than a downstream `RestartWindowZero` whose remediation
+        // points at omitting the slot.
+        let s = SupervisorSpec {
+            restart_window: Some(Duration::from_nanos(1)),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        match s.validate().unwrap_err() {
+            SupervisorError::RestartWindowNotCanonical { window } => {
+                assert_eq!(window, Duration::from_nanos(1));
+            }
+            other => panic!("expected RestartWindowNotCanonical, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_nanosecond_past_canonical_boundary_restart_window() {
+        // The 1-ns-past-1ms boundary case: a `Duration` carrying
+        // 1_000_001 ns is structurally past the integer-ms granularity
+        // floor — `subsec_nanos() % 1_000_000 == 1`. The codec round-
+        // trip would truncate to `1ms` and the consumer would observe
+        // a 1-ns drift on every emit. Same boundary the peer
+        // `validate_rejects_nanosecond_past_canonical_boundary` test
+        // in limits.rs pins for the `:limits :wall-clock` axis.
+        let w = Duration::from_nanos(1_000_001);
+        let s = SupervisorSpec {
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowNotCanonical { window: w }
+        );
+    }
+
+    #[test]
+    fn validate_accepts_integer_millisecond_restart_window_values() {
+        // The positive-control sweep: every `Duration` the shared
+        // codec can round-trip losslessly — the canonical
+        // `<integer>{ms,s,m,h}` set the codec's `render` / `parse`
+        // pair emits and accepts — passes `validate` without
+        // surfacing the new canonical-form arm. Mirrors
+        // `validate_accepts_integer_millisecond_wall_clock_values` on
+        // the sibling `:limits :wall-clock` axis.
+        for w in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_millis(1500),
+            Duration::from_secs(1),
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            Duration::from_secs(120),
+            Duration::from_secs(3600),
+        ] {
+            let s = SupervisorSpec {
+                restart_window: Some(w),
+                children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            s.validate()
+                .unwrap_or_else(|e| panic!("integer-ms {w:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_restart_window_zero_takes_precedence_over_canonical_gate() {
+        // Cross-arm ordering pin: `Duration::ZERO` has
+        // `subsec_nanos() == 0` and would otherwise pass the
+        // canonical-form arm — the zero-floor arm must fire first so
+        // the more self-locating `RestartWindowZero` diagnostic (with
+        // its omit-axis remediation directly named) leads. Same
+        // posture every peer zero-then-shape gate uses
+        // (`WallClockZero` → `WallClockNotCanonical`,
+        // `PolicyTimeoutZero` → `PolicyTimeoutNotCanonical`,
+        // `PolicyBreakerZeroWindow` → `PolicyBreakerWindowNotCanonical`).
+        let s = SupervisorSpec {
+            restart_window: Some(Duration::ZERO),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowZero
+        );
+    }
+
+    #[test]
+    fn restart_window_canonical_diagnostic_carries_offending_duration() {
+        // Diagnostic-shape pin: the canonical-form arm names the
+        // offending `Duration` verbatim so the author's grep lands on
+        // the field's value, not a generic "duration not canonical"
+        // message. Same shape every other typed-canonical-form arm
+        // on this surface carries (`WallClockNotCanonical` carries
+        // the offending `Duration` verbatim,
+        // `PolicyTimeoutNotCanonical` carries the offending
+        // `Duration` verbatim).
+        let w = Duration::from_micros(500);
+        let s = SupervisorSpec {
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("500"),
+            "diagnostic must carry the offending magnitude verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("sub-millisecond"),
+            "diagnostic must name the sub-millisecond residue class (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn restart_window_validated_value_round_trips_through_codec() {
+        // The structural property the canonical-ms gate enforces:
+        // every `SupervisorSpec::restart_window` past
+        // `SupervisorSpec::validate` round-trips losslessly through
+        // the shared duration codec (serialize → string →
+        // deserialize → equal value). Pin this end-to-end so a future
+        // change to either side (the validate gate's accepted
+        // granularity, the codec's parse/render unit set) that breaks
+        // the alignment surfaces here. Peer of
+        // `wall_clock_validated_value_round_trips_through_codec` on
+        // the sibling `:limits :wall-clock` axis.
+        for w in [
+            Duration::from_millis(1),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(3600),
+        ] {
+            let s = SupervisorSpec {
+                restart_window: Some(w),
+                children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            s.validate().unwrap();
+            let json = serde_json::to_string(&s).unwrap();
+            let back: SupervisorSpec = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.restart_window, Some(w));
+        }
     }
 
     #[test]
