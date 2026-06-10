@@ -759,6 +759,61 @@ pub const POLICY_BREAKER_MAX_FAILURES_MAX: u32 = 1000;
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const POLICY_BREAKER_WINDOW_MAX: Duration = Duration::from_secs(3600);
 
+/// Upper-bound ceiling on the `:politicas :rate-limit` rate axis —
+/// every validated [`RateLimit::rate`] past
+/// [`AplicacaoSpec::validate_politicas`] lies in
+/// `1..=POLICY_RATE_LIMIT_MAX`.
+///
+/// The typed field is `u32` (the zero-floor arm
+/// [`AplicacaoError::PolicyRateLimitZero`] already rejects `0` — a
+/// zero-rate limit denies every request, the canonical "I forgot
+/// that 0 means deny-everything" footgun), so a programmatic struct
+/// literal (`RateLimit { rate: u32::MAX, window: Duration::from_secs(1) }`)
+/// and the equivalent author-surface form (`(:rate-limit "4294967295/s")`
+/// — the `rate_limit_codec` parses any `u32`-shaped magnitude) both
+/// round-trip cleanly through serde — a structurally unbounded `u32`
+/// ceiling. The runtime substrate consuming the value (Envoy's
+/// `local_rate_limit.token_bucket.max_tokens`, the future
+/// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+/// MESH-COMPOSITION §III.2 #3 names) translates a four-billion-token
+/// rate-limit into a no-op rate-limiter: the bucket capacity is
+/// structurally so high no realistic per-edge traffic shape can
+/// drain it, the limiter never trips, and the typed slot becomes a
+/// "rate-limit declared, no enforcement" footgun — the canonical
+/// declared-but-inert shape every other `:politicas` cap arm
+/// closes ([`POLICY_RETRIES_MAX`] thundering-herd amplification,
+/// [`POLICY_BREAKER_MAX_FAILURES_MAX`] no-op-breaker, etc.).
+///
+/// The `1_000_000` (1M) ceiling sits two-to-three orders of magnitude
+/// above every documented upstream production-playbook recommendation
+/// band (Envoy `local_rate_limit` typical `10..=10_000` RPS, Istio
+/// `RateLimitFilter` typical `10..=10_000` RPS, Cloudflare WAF
+/// rate-rule Free / Pro `10_000` req/min, AWS API Gateway account
+/// default `10_000` RPS, Kong typical `100..=10_000`, NGINX
+/// `limit_req_zone` typical `1..=1_000` RPS) and below the
+/// clearly-pathological "paste-from-binary blob" floor (`100_000_000`,
+/// `u32::MAX`): a value the author can plausibly want at hyperscale
+/// (Cloudflare Enterprise rate-plans run to ~6M/min ≈ 1M/h on the
+/// /h-window arm), but a hard wall above which the policy is
+/// structurally a no-op carried verbatim on every emitted Envoy /
+/// Cilium L7 overlay. The cap brackets all three canonical windows
+/// the [`rate_limit_codec`] accepts: at `1M/s` (absurd hyperscale
+/// ceiling, ~1M RPS per edge), at `1M/m` (~16.7k RPS, the
+/// hyperscale-tier WAF band), at `1M/h` (~277 RPS, the common
+/// per-endpoint API band). Lifted as a typed `pub const` so the bound
+/// has exactly one source of truth — the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+/// webhook and the caixa-mesh-side `CiliumClusterwideEnvoyConfig`
+/// per-`:politicas` overlay (MESH-COMPOSITION §III.2 #3) read from
+/// one place. Same shape every other typed upper bound in this crate
+/// carries ([`POLICY_TIMEOUT_MAX`], [`POLICY_RETRIES_MAX`],
+/// [`POLICY_BREAKER_MAX_FAILURES_MAX`], [`POLICY_BREAKER_WINDOW_MAX`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::LIMITS_WALL_CLOCK_MAX`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const POLICY_RATE_LIMIT_MAX: u32 = 1_000_000;
+
 /// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
 /// max length, in bytes — same value the apiserver-side OpenAPI
 /// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
@@ -2336,6 +2391,47 @@ impl AplicacaoSpec {
             if rl.rate == 0 {
                 return Err(AplicacaoError::PolicyRateLimitZero);
             }
+            // Upper-bound floor on the typed `:rate-limit` rate axis.
+            // The typed field is `u32` and the zero-floor arm
+            // immediately above already brackets the bottom edge;
+            // until this gate landed the top edge ran all the way to
+            // `u32::MAX` and a struct-literal `RateLimit { rate: u32::MAX,
+            // .. }` (or the equivalent author-surface
+            // `(:rate-limit "4294967295/s")` / `(:rate-limit "100000000/m")`
+            // typo landing in the slot) silently passed validate. The
+            // runtime substrate consuming the value (Envoy's
+            // `local_rate_limit.token_bucket.max_tokens`, the future
+            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
+            // rate-limit policy into a no-op limiter: the bucket
+            // capacity is structurally so high that no realistic
+            // per-edge traffic shape can drain it, the limiter never
+            // trips, and every typed-slot consumer emits a "rate
+            // declared" L7 overlay carrying enforcement that is
+            // structurally never reached — the canonical
+            // declared-but-inert footgun the sibling
+            // [`POLICY_BREAKER_MAX_FAILURES_MAX`] cap arm closes on the
+            // peer no-op-breaker shape. Lifting the rejection to a
+            // build-time gate at `validate_politicas` brackets the
+            // typed `:rate-limit` rate set structurally — every
+            // validated value lies in `1..=POLICY_RATE_LIMIT_MAX` — and
+            // matches the same top-and-bottom-edge discipline the
+            // [`POLICY_RETRIES_MAX`] / [`POLICY_BREAKER_MAX_FAILURES_MAX`]
+            // caps apply on the sibling capped `:politicas` axes
+            // (zero-floor + upper-cap; the cap arm strictly after the
+            // zero-floor arm so `Some(0)` surfaces the more
+            // self-locating `PolicyRateLimitZero` diagnostic with its
+            // omit-axis remediation directly named, peer to the
+            // `PolicyRetriesZero` → `PolicyRetriesExceedsCap` and
+            // `PolicyBreakerZeroFailures` → `PolicyBreakerMaxFailuresExceedsCap`
+            // cross-arm ordering on the sibling axes). The rate cap
+            // strictly precedes the window-canonical gate so a
+            // structurally absurd rate magnitude surfaces the more
+            // fundamental amplification-shape diagnostic before the
+            // narrower codec-round-trip-shape diagnostic on `:window`.
+            if rl.rate > POLICY_RATE_LIMIT_MAX {
+                return Err(AplicacaoError::PolicyRateLimitExceedsCap { rate: rl.rate });
+            }
             // The `:rate-limit` author surface is the canonical
             // `"<n>/<s|m|h>"` form, and the [`rate_limit_codec`] parser
             // accepts exactly the three-unit set (1s/60s/3600s) the
@@ -2885,6 +2981,21 @@ pub enum AplicacaoError {
          request); omit :rate-limit to disable rate limiting"
     )]
     PolicyRateLimitZero,
+    #[error(
+        ":politicas :rate-limit rate ({rate}) exceeds the mesh-policy ceiling \
+         (POLICY_RATE_LIMIT_MAX = 1000000) — a value above this cap turns the typed \
+         rate-limit policy into a no-op limiter: the token-bucket capacity is \
+         structurally so high that no realistic per-edge traffic shape can drain it, \
+         so the limiter never trips and every typed-slot consumer (the future \
+         CiliumClusterwideEnvoyConfig per-:politicas overlay, Envoy's \
+         local_rate_limit.token_bucket.max_tokens) emits a rate-limit declaration \
+         that is structurally never enforced. Pin a value in 1..=1000000 (Envoy / \
+         Istio / Kong / NGINX production playbooks recommend 10..=10000 RPS; \
+         Cloudflare / AWS API Gateway typical 10000..=100000 per-minute; \
+         Cloudflare Enterprise rate-plans run to ~1M per-hour) or omit :rate-limit \
+         to disable rate limiting entirely"
+    )]
+    PolicyRateLimitExceedsCap { rate: u32 },
     #[error(
         ":politicas :rate-limit :window must be exactly 1s, 1m (60s), or 1h (3600s) — \
          the canonical authoring forms `\"<n>/s\"`, `\"<n>/m\"`, `\"<n>/h\"` the \
@@ -7366,6 +7477,192 @@ mod tests {
             s.validate().unwrap_err(),
             AplicacaoError::PolicyRateLimitWindowNotCanonical { window }
         );
+    }
+
+    #[test]
+    fn rejects_policy_rate_limit_above_cap() {
+        // The fail-before-pass-after pin: `rate = POLICY_RATE_LIMIT_MAX + 1`
+        // is structurally one past the cap and silently passed
+        // validate on every pre-gate codebase because the typed slot's
+        // only `rate` check was the zero-floor arm. The no-op-limiter
+        // shape only surfaced at the runtime substrate (Envoy's
+        // `local_rate_limit.token_bucket.max_tokens`, the future
+        // Cilium L7 rate-limit overlay) far from the source caixa.lisp
+        // with no field naming the offending policy.
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: POLICY_RATE_LIMIT_MAX + 1,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitExceedsCap {
+                rate: POLICY_RATE_LIMIT_MAX + 1
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_policy_rate_limit_far_above_cap() {
+        // The `u32::MAX` worst case — the four-billion-token rate-limit
+        // a typo (`(:rate-limit "4294967295/s")`) or struct-literal
+        // copy-paste lands in the slot. Pin the cap arm's coverage
+        // explicitly across the full `u32` overflow so a future
+        // relaxation that drops the upper bound surfaces here. Peer to
+        // `rejects_policy_retries_far_above_cap` on the sibling
+        // `:retries` axis and `rejects_policy_breaker_max_failures_far_above_cap`
+        // on the sibling `:max-failures` axis.
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: u32::MAX,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitExceedsCap { rate: u32::MAX }
+        );
+    }
+
+    #[test]
+    fn accepts_policy_rate_limit_at_cap() {
+        // The boundary value — exactly [`POLICY_RATE_LIMIT_MAX`] —
+        // must validate. The cap is inclusive on the top edge, matching
+        // every other typed upper bound in this crate
+        // ([`POLICY_RETRIES_MAX`], [`POLICY_BREAKER_MAX_FAILURES_MAX`],
+        // [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`]). Pin the boundary
+        // across all three canonical windows so a future off-by-one
+        // tightening (`>= POLICY_RATE_LIMIT_MAX` instead of `>`) or a
+        // window-conditional cap surfaces here as a test failure rather
+        // than a silent contract narrowing.
+        for secs in [1u64, 60, 3600] {
+            let mut s = three_member_spec();
+            s.politicas.rate_limit = Some(RateLimit {
+                rate: POLICY_RATE_LIMIT_MAX,
+                window: Duration::from_secs(secs),
+            });
+            s.validate().unwrap_or_else(|e| {
+                panic!("rate == POLICY_RATE_LIMIT_MAX must validate (window={secs}s); got {e:?}",)
+            });
+        }
+    }
+
+    #[test]
+    fn accepts_policy_rate_limit_typical_values() {
+        // The documented production-playbook recommendation band —
+        // Envoy / Istio / Kong / NGINX 10..=10_000 RPS, Cloudflare /
+        // AWS API Gateway 10_000..=100_000 per-minute, Cloudflare
+        // Enterprise ~1M per-hour. Every value in the validated set
+        // must pass; pin the band explicitly so a future tightening
+        // surfaces here.
+        for rate in [1u32, 10, 100, 1_000, 10_000, 100_000, 1_000_000] {
+            for secs in [1u64, 60, 3600] {
+                let mut s = three_member_spec();
+                s.politicas.rate_limit = Some(RateLimit {
+                    rate,
+                    window: Duration::from_secs(secs),
+                });
+                s.validate().unwrap_or_else(|e| {
+                    panic!("rate={rate} window={secs}s must validate; got {e:?}")
+                });
+            }
+        }
+    }
+
+    #[test]
+    fn policy_rate_limit_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `rate == 0` is structurally
+        // outside both `1..` (zero-floor) and `..=POLICY_RATE_LIMIT_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the omit-axis
+        // remediation). Pin the order so a future refactor that
+        // reorders the arms surfaces here as a test failure rather
+        // than a silent diagnostic regression. Same shape every other
+        // zero-then-cap ordering on this surface uses
+        // ([`AplicacaoError::PolicyRetriesZero`] then
+        // [`AplicacaoError::PolicyRetriesExceedsCap`];
+        // [`AplicacaoError::PolicyBreakerZeroFailures`] then
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`]).
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 0,
+            window: Duration::from_secs(1),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitZero,
+            "rate == 0 must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_cap_takes_precedence_over_non_canonical_window() {
+        // Two-axis-bad pin: rate above cap *and* window non-canonical.
+        // The validate gate must fire on the rate cap first — the
+        // amplification-shape (no-op limiter) diagnostic is the more
+        // fundamental one; the window-canonical diagnostic is the
+        // narrower codec-round-trip shape. Pin the ordering so a future
+        // refactor that reorders the rate-then-window check arms
+        // surfaces here as a test failure rather than a silent
+        // diagnostic regression.
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: POLICY_RATE_LIMIT_MAX + 1,
+            window: Duration::from_secs(45),
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyRateLimitExceedsCap {
+                rate: POLICY_RATE_LIMIT_MAX + 1
+            },
+            "above-cap rate must surface the cap diagnostic, not the window diagnostic"
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `u32` is carried
+        // verbatim into the [`AplicacaoError::PolicyRateLimitExceedsCap`]
+        // variant so the surfaced error message names the value the
+        // author wrote (`":politicas :rate-limit rate (5000000) exceeds
+        // the mesh-policy ceiling …"`), not just the cap. Same
+        // self-locating diagnostic shape every other typed-cap arm on
+        // this surface carries ([`AplicacaoError::PolicyRetriesExceedsCap`]
+        // carries the offending retries count verbatim,
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`] carries
+        // the offending failure count verbatim).
+        let mut s = three_member_spec();
+        s.politicas.rate_limit = Some(RateLimit {
+            rate: 5_000_000,
+            window: Duration::from_secs(1),
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::PolicyRateLimitExceedsCap { rate: 5_000_000 }
+            ),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("5000000"),
+            ":politicas :rate-limit cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn policy_rate_limit_cap_pins_canonical_value() {
+        // The [`POLICY_RATE_LIMIT_MAX`] constant pins the value at
+        // 1_000_000 — two-to-three orders of magnitude above every
+        // documented production-playbook recommendation band (Envoy /
+        // Istio / Kong / NGINX 10..=10_000 RPS, Cloudflare / AWS API
+        // Gateway 10_000..=100_000 per-minute) and below the
+        // clearly-pathological "paste-from-binary blob" floor
+        // (100_000_000, u32::MAX). Pinning the literal value here
+        // surfaces a future drift (a relaxation to 10_000_000, a
+        // tightening to 100_000) as a deliberate test edit, not a
+        // silent contract narrowing.
+        assert_eq!(POLICY_RATE_LIMIT_MAX, 1_000_000);
     }
 
     #[test]
