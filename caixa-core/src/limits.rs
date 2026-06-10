@@ -105,6 +105,75 @@ pub const LIMITS_MEMORY_WASM32_MAX_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 /// [`crate::render::DNS_1123_LABEL_MAX_LEN`]).
 pub const LIMITS_MEMORY_WASM32_PAGE_BYTES: u64 = 64 * 1024;
 
+/// Upper-bound ceiling on the `:limits :wall-clock` axis — every
+/// validated [`LimitsSpec::wall_clock`] past [`LimitsSpec::validate`]
+/// lies in `1ms..=LIMITS_WALL_CLOCK_MAX` (inclusive on both ends,
+/// integer-millisecond magnitudes by the canonical-form gate
+/// immediately preceding).
+///
+/// The typed field is `Option<Duration>` (the zero-floor arm
+/// [`LimitsError::WallClockZero`] already rejects `Duration::ZERO`, and
+/// the canonical-form arm [`LimitsError::WallClockNotCanonical`]
+/// already rejects sub-millisecond residue), so a programmatic struct
+/// literal (`LimitsSpec { wall_clock: Some(Duration::from_secs(86_400)),
+/// .. }` — 24h) and the equivalent author-surface form
+/// (`(:limits (:wall-clock "24h"))` — the codec emits `"<n>h"` for any
+/// integer-hour magnitude) both round-trip cleanly through serde — a
+/// structurally unbounded `Duration` ceiling. A `:wall-clock` value far
+/// above the per-process production band (Lunatic / Wasmtime documented
+/// per-call deadlines sit in the seconds-to-minutes range; Kubernetes
+/// activeDeadlineSeconds typical `≤ 3600s`; the longest per-request
+/// timeout any upstream HTTP runtime documents — Kubernetes
+/// ingress-nginx `proxy_read_timeout` — caps at the same 3600s) turns
+/// the typed per-process deadline into a nominal-only contract: the
+/// wasm-engine's epoch-deadline cancellation reaches for a `Duration`
+/// so long no realistic synchronous wasm call can hit it, the runaway-
+/// process invariant the MESH-COMPOSITION §V "no infinite blocking" CSE
+/// invariant pins at the per-Servico layer degenerates to a runtime,
+/// not build-time, contract. Pairs with the
+/// [`crate::POLICY_TIMEOUT_MAX`] cap on the sibling `:politicas :timeout`
+/// mesh-edge axis and the [`crate::POLICY_BREAKER_WINDOW_MAX`] cap on
+/// the sibling `:politicas :circuit-breaker :window` rolling-window
+/// axis — all three close the "structurally unbounded `Duration`
+/// ceiling on a typed slot" footgun the prior zero-floor-and-canonical-
+/// form-only checks left open.
+///
+/// The 1h (3600s = `3_600_000` ms) ceiling matches the largest unit
+/// the shared duration codec emits (`"<n>h"` for any integer-hour
+/// magnitude) — every value in the canonical authoring form's
+/// `<integer><unit>` grammar at or below this cap renders to a clean
+/// canonical string — and matches the two sibling typed-`Duration`
+/// caps already lifted to this surface
+/// ([`crate::POLICY_TIMEOUT_MAX`], [`crate::POLICY_BREAKER_WINDOW_MAX`]).
+/// The three typed-`Duration` axes — per-process `:limits :wall-clock`,
+/// per-edge `:politicas :timeout`, per-breaker `:politicas
+/// :circuit-breaker :window` — now share a single uniform top edge so
+/// the next typed-slot wiring (the wasm-engine M2.5 epoch-deadline
+/// cancellation hook, the future caixa-helm `pleme-computeunit` chart's
+/// `:limits` value mapping, the M4 `mesh.pleme.io/v1alpha1/Caixa` CR
+/// materializer's per-`:limits :wall-clock` admission webhook) reaches
+/// for any of the three knowing the value is in `1ms..=1h` without
+/// re-validating at the renderer layer. The cap sits above the
+/// documented per-request playbook band (Envoy / Istio / Linkerd
+/// production `≤ 60s`, AWS App Mesh / ingress-nginx typical `≤ 300s`,
+/// Kubernetes activeDeadlineSeconds typical `≤ 3600s`) and below the
+/// clearly-pathological "effectively no deadline" floor (`24h`, `7d`,
+/// `Duration::MAX`): a value the author can plausibly want for a
+/// long-running synchronous workflow, but a hard wall above which the
+/// per-process deadline is structurally a non-deadline.
+///
+/// Lifted as a typed `pub const` so the bound has exactly one source
+/// of truth — the wasm-engine M2.5 epoch-deadline wiring, a wasm-engine
+/// smoke test asserting the engine's epoch interrupt fires within the
+/// typed bound, the M4 `mesh.pleme.io/v1alpha1/Caixa` CR materializer's
+/// per-`:limits :wall-clock` admission webhook all read from one place.
+/// Same shape every other typed upper bound in this crate carries
+/// ([`LIMITS_MEMORY_WASM32_MAX_BYTES`], [`crate::POLICY_TIMEOUT_MAX`],
+/// [`crate::POLICY_BREAKER_WINDOW_MAX`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const LIMITS_WALL_CLOCK_MAX: Duration = Duration::from_secs(3600);
+
 /// Per-process limits. All fields optional — `None` = unbounded for that axis.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -274,6 +343,37 @@ impl LimitsSpec {
         {
             return Err(LimitsError::WallClockNotCanonical { wall_clock: w });
         }
+        // Upper-bound gate on `:wall-clock`: every validated value must
+        // also fit within the typed-`Duration` ceiling
+        // ([`LIMITS_WALL_CLOCK_MAX`] = 1h = 3600s). The zero-floor,
+        // canonical-form, and this cap arm together bracket the typed
+        // `:wall-clock` axis structurally — every validated value lies
+        // in `1ms..=LIMITS_WALL_CLOCK_MAX`, integer-millisecond
+        // granularity. Until this gate landed the duration codec
+        // accepted any `Duration` past zero with integer-ms residue
+        // (the parser's only upper bound was `Duration::MAX`), so
+        // `(:wall-clock "24h")` round-tripped cleanly through serde and
+        // the per-process CSE invariant (no value the wasm-engine's
+        // epoch-deadline cancellation can't honor as a meaningful
+        // bound) was a runtime, not build-time, contract. Same
+        // trajectory as the sibling typed-`Duration` cap lifts on
+        // [`crate::POLICY_TIMEOUT_MAX`] (per-edge mesh-policy deadline)
+        // and [`crate::POLICY_BREAKER_WINDOW_MAX`] (per-breaker
+        // rolling-window) — the three typed-`Duration` axes now share
+        // a single uniform top edge at the codec's largest emitted
+        // unit. The canonical-form arm strictly precedes this cap so a
+        // `Duration` that is *both* sub-millisecond and above-cap
+        // surfaces the more fundamental round-trip-shape diagnostic
+        // first (the cap's `1ms..=1h` remediation would be misleading
+        // when no integer-ms form of the offending value exists). Same
+        // posture every peer zero-then-shape-then-cap chain uses on
+        // this surface (`MemoryZero` → `MemoryBelowWasm32Page` →
+        // `MemoryExceedsWasm32Cap`).
+        if let Some(w) = self.wall_clock
+            && w > LIMITS_WALL_CLOCK_MAX
+        {
+            return Err(LimitsError::WallClockExceedsCap { wall_clock: w });
+        }
         if self.cpu == Some(0) {
             return Err(LimitsError::CpuZero);
         }
@@ -363,6 +463,23 @@ pub enum LimitsError {
          (`<integer><unit>` for unit ∈ {{ms, s, m, h}}, e.g. `\"500ms\"`, `\"30s\"`, `\"2m\"`, `\"1h\"`) or omit the field for unbounded"
     )]
     WallClockNotCanonical { wall_clock: Duration },
+    #[error(
+        ":limits :wall-clock ({wall_clock:?}) exceeds the per-process ceiling \
+         (LIMITS_WALL_CLOCK_MAX = 1h = 3600s) — a value above this cap turns the typed \
+         per-call deadline into a nominal-only contract (the wasm-engine's epoch-deadline \
+         cancellation reaches for a `Duration` so long no realistic synchronous wasm call \
+         can hit it), and the MESH-COMPOSITION §V \"no infinite blocking\" CSE invariant \
+         degenerates to enforcement only at the per-Servico cgroup / Kubernetes \
+         activeDeadlineSeconds layer — far above the per-call granularity the typed \
+         `:limits :wall-clock` slot is meant to express. Pin a value in 1ms..=1h \
+         (Envoy / Istio / Linkerd production per-request playbooks all recommend ≤ 60s; \
+         AWS App Mesh / ingress-nginx typical ≤ 300s; the longest per-request \
+         `proxy_read_timeout` ingress-nginx documents maxes out at the same 3600s ceiling) \
+         or omit :wall-clock to express `no per-process deadline on this axis` (the \
+         deadline then relies entirely on the cluster-level cgroup / pod \
+         activeDeadlineSeconds bound)"
+    )]
+    WallClockExceedsCap { wall_clock: Duration },
     #[error(
         ":limits :cpu must be > 0m — a zero cgroup share starves the process; omit the field for unbounded"
     )]
@@ -2086,5 +2203,271 @@ mod tests {
                 "every validated :wall-clock must round-trip losslessly through the codec"
             );
         }
+    }
+
+    // ── value-shape: :wall-clock upper bound — 1h ceiling ──────────────────
+    //
+    // The third typed-`Duration` axis brought to the uniform top edge
+    // `LIMITS_WALL_CLOCK_MAX` = 1h established by the prior cap lifts
+    // on `:politicas :timeout` (POLICY_TIMEOUT_MAX) and
+    // `:politicas :circuit-breaker :window` (POLICY_BREAKER_WINDOW_MAX).
+    // Mirrors the test discipline those peers carry: the
+    // fail-before-pass-after pin, the 1ms-boundary pin, the
+    // far-above-cap sweep (24h / 7d / ~11.5d — the values a
+    // `(:wall-clock "24h")` typo or copy-paste typically lands), the
+    // inclusive-at-cap positive control, the production-band positive-
+    // control sweep, the cross-arm zero-then-cap and
+    // canonical-then-cap ordering pins, the diagnostic-shape pin
+    // carrying the offending `Duration` verbatim, and the cap-value
+    // literal-identity + codec-round-trip pins anchoring the constant
+    // to the codec's largest emitted unit and to its peer constants.
+
+    #[test]
+    fn validate_rejects_wall_clock_above_cap() {
+        // The fail-before-pass-after pin: 3601s = 1h + 1s is
+        // structurally one canonical-tick past the
+        // [`LIMITS_WALL_CLOCK_MAX`] ceiling (1h = 3600s) — an
+        // integer-millisecond magnitude the canonical-form arm above
+        // accepts cleanly, that the in-module duration codec
+        // round-trips losslessly as `"3601s"`, and that silently
+        // passed validate on every pre-gate codebase because the typed
+        // slot's only checks were the zero-floor and canonical-form
+        // arms. The wasm-engine consuming the value (the M2.5
+        // `wasm-engine`'s epoch-deadline cancellation hook, the future
+        // caixa-helm `pleme-computeunit` chart's `:limits` value
+        // mapping) reaches for a `Duration` so long no realistic
+        // synchronous wasm call hits it, far from the source
+        // caixa.lisp.
+        let w = LIMITS_WALL_CLOCK_MAX + Duration::from_secs(1);
+        let l = LimitsSpec {
+            wall_clock: Some(w),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::WallClockExceedsCap { wall_clock: w }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_wall_clock_one_millisecond_above_cap() {
+        // Boundary case: exactly 1ms past the cap (the granularity the
+        // canonical-form gate enforces). Catches a future "strictly
+        // less than" half-measure and pins the diagnostic to name the
+        // offending `Duration` verbatim. Peer of
+        // `rejects_policy_timeout_one_millisecond_above_cap` /
+        // `rejects_circuit_breaker_window_one_millisecond_above_cap`
+        // on the sibling typed-`Duration` axes' top edges.
+        let w = LIMITS_WALL_CLOCK_MAX + Duration::from_millis(1);
+        let l = LimitsSpec {
+            wall_clock: Some(w),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::WallClockExceedsCap { wall_clock: w }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_wall_clock_far_above_cap() {
+        // The "obvious authoring footgun" case: a `(:wall-clock "24h")`
+        // or `(:wall-clock "7d")` — values the canonical-form arm
+        // accepts as integer-millisecond magnitudes, the codec
+        // round-trips losslessly through serde, but the wasm-engine
+        // cannot honor as a meaningful per-call deadline. Until this
+        // gate landed validate accepted them. Pin the common
+        // above-cap values (24h, 7d, ~11.5d) so a future relaxation
+        // that drops the upper bound surfaces here.
+        for w in [
+            Duration::from_secs(86_400),    // 24h
+            Duration::from_secs(604_800),   // 7d
+            Duration::from_secs(1_000_000), // ~11.5 days
+        ] {
+            let l = LimitsSpec {
+                wall_clock: Some(w),
+                ..Default::default()
+            };
+            assert_eq!(
+                l.validate().unwrap_err(),
+                LimitsError::WallClockExceedsCap { wall_clock: w }
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_wall_clock_at_cap() {
+        // The boundary value — exactly [`LIMITS_WALL_CLOCK_MAX`] (1h)
+        // — must validate. The cap is inclusive on the top edge,
+        // matching the [`crate::POLICY_TIMEOUT_MAX`] /
+        // [`crate::POLICY_BREAKER_WINDOW_MAX`] /
+        // [`LIMITS_MEMORY_WASM32_MAX_BYTES`] discipline on the sibling
+        // capped axes. Pin the boundary explicitly so a future
+        // off-by-one tightening (`>= LIMITS_WALL_CLOCK_MAX` instead of
+        // `>`) surfaces here as a test failure rather than a silent
+        // contract narrowing.
+        let l = LimitsSpec {
+            wall_clock: Some(LIMITS_WALL_CLOCK_MAX),
+            ..Default::default()
+        };
+        l.validate()
+            .expect("wall_clock == LIMITS_WALL_CLOCK_MAX must validate");
+    }
+
+    #[test]
+    fn validate_accepts_wall_clock_typical_values() {
+        // The documented per-request production-playbook band positive-
+        // control sweep — every value Envoy / Istio / Linkerd / AWS
+        // App Mesh / Kubernetes ingress-nginx recommend
+        // (1ms..=3600s) must pass, plus a sweep through the
+        // long-running-workflow band (5m, 15m, 30m, 1h) the cap
+        // accepts. Mirrors `accepts_policy_timeout_typical_values` on
+        // the sibling `:politicas :timeout` axis.
+        for w in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_secs(1),
+            Duration::from_secs(10),
+            Duration::from_secs(15), // Envoy default
+            Duration::from_secs(30),
+            Duration::from_secs(60),  // AWS App Mesh typical
+            Duration::from_secs(300), // 5m
+            Duration::from_secs(900), // 15m
+            Duration::from_secs(1800),
+            Duration::from_secs(3600), // exactly 1h, the cap
+        ] {
+            let l = LimitsSpec {
+                wall_clock: Some(w),
+                ..Default::default()
+            };
+            l.validate()
+                .unwrap_or_else(|e| panic!("wall_clock={w:?} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn wall_clock_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Duration::ZERO` is structurally
+        // outside both `>= 1ms` (zero-floor) and `<= LIMITS_WALL_CLOCK_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the omit-axis
+        // remediation), so the validate gate must fire on zero first.
+        // Same shape every other zero-then-shape ordering on this
+        // surface uses (`MemoryZero` then `MemoryExceedsWasm32Cap`,
+        // `PolicyTimeoutZero` then `PolicyTimeoutExceedsCap`).
+        let l = LimitsSpec {
+            wall_clock: Some(Duration::ZERO),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::WallClockZero,
+            "Duration::ZERO must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn wall_clock_canonical_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: a `Duration` that is *both*
+        // sub-millisecond (non-canonical-form) and structurally above
+        // the cap surfaces the canonical-form diagnostic first,
+        // because the round-trip-shape break is the more fundamental
+        // issue (the value can't even round-trip through the codec, so
+        // the cap diagnostic naming `1ms..=1h` would be misleading —
+        // there's no integer-ms form of the offending value). Pin the
+        // order so a future refactor that reorders the arms surfaces
+        // here as a test failure rather than a silent diagnostic
+        // regression. Peer of
+        // `policy_timeout_canonical_takes_precedence_over_cap`.
+        let w = LIMITS_WALL_CLOCK_MAX + Duration::from_nanos(1);
+        let l = LimitsSpec {
+            wall_clock: Some(w),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::WallClockNotCanonical { wall_clock: w },
+            "sub-ms above-cap value must surface the canonical-form diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn wall_clock_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `Duration` is
+        // carried verbatim into the
+        // [`LimitsError::WallClockExceedsCap`] variant so the surfaced
+        // error message names the value the author wrote, not just
+        // the cap. Same self-locating diagnostic shape every other
+        // typed-cap arm on this surface carries
+        // (`MemoryExceedsWasm32Cap` carries the offending byte count
+        // verbatim, `PolicyTimeoutExceedsCap` carries the offending
+        // `Duration` verbatim).
+        let w = Duration::from_secs(7200); // 2h
+        let l = LimitsSpec {
+            wall_clock: Some(w),
+            ..Default::default()
+        };
+        let err = l.validate().unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WallClockExceedsCap { wall_clock } if wall_clock == w),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("7200"),
+            ":limits :wall-clock cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn wall_clock_cap_pins_canonical_value() {
+        // The [`LIMITS_WALL_CLOCK_MAX`] constant pins the value at
+        // exactly 1 hour (3600s = 3_600_000ms) — the largest unit the
+        // shared duration codec emits as a clean canonical string
+        // (`"<n>h"`). Pinning the literal value here surfaces a future
+        // drift (a relaxation to 24h, a tightening to 5m) as a
+        // deliberate test edit, not a silent contract narrowing.
+        //
+        // The three typed-`Duration` caps on the validation surface
+        // (`LIMITS_WALL_CLOCK_MAX` per-process, `POLICY_TIMEOUT_MAX`
+        // per-edge, `POLICY_BREAKER_WINDOW_MAX` per-breaker) share a
+        // single uniform top edge at the codec's largest emitted unit
+        // — a structural-property invariant the equality assertions
+        // here enshrine, so a future drift on any of the three
+        // surfaces as a deliberate test edit. Same shape every other
+        // typed-cap value pin uses
+        // (`policy_timeout_cap_pins_canonical_value`,
+        // `circuit_breaker_window_cap_pins_canonical_value`).
+        assert_eq!(LIMITS_WALL_CLOCK_MAX, Duration::from_secs(3600));
+        assert_eq!(LIMITS_WALL_CLOCK_MAX.as_millis(), 3_600_000);
+        assert_eq!(LIMITS_WALL_CLOCK_MAX, crate::POLICY_TIMEOUT_MAX);
+        assert_eq!(LIMITS_WALL_CLOCK_MAX, crate::POLICY_BREAKER_WINDOW_MAX);
+    }
+
+    #[test]
+    fn wall_clock_cap_value_round_trips_through_codec() {
+        // The codec round-trip property the cap arm preserves: the
+        // [`LIMITS_WALL_CLOCK_MAX`] constant itself round-trips through
+        // the in-module duration codec — every value at the cap
+        // renders to a clean canonical string (`"1h"`) and parses back
+        // to the same `Duration`. Pin this so a future drift between
+        // the cap constant and the codec's largest emitted unit
+        // surfaces here. Same shape every other typed boundary pin on
+        // this surface uses
+        // (`wasm32_memory_cap_matches_parsed_4_gib`,
+        // `policy_timeout_cap_value_round_trips_through_codec`).
+        let l = LimitsSpec {
+            wall_clock: Some(LIMITS_WALL_CLOCK_MAX),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(
+            json.contains("\"1h\""),
+            "the LIMITS_WALL_CLOCK_MAX value must render to the canonical \"1h\" form (got: {json})"
+        );
+        let back: LimitsSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.wall_clock, Some(LIMITS_WALL_CLOCK_MAX));
+        l.validate()
+            .expect("LIMITS_WALL_CLOCK_MAX itself must pass validate");
     }
 }
