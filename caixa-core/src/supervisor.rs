@@ -30,11 +30,20 @@ use thiserror::Error;
 ///
 /// The strategy decides what happens to *sibling* children when one
 /// child dies. Per-child behaviour is governed by [`RestartPolicy`].
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
-         gen_platform::TypedDispatcher,
-         gen_platform::Discriminant,
-         gen_platform::IsVariant,
-         gen_platform::FromStrKind)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    gen_platform::TypedDispatcher,
+    gen_platform::Discriminant,
+    gen_platform::IsVariant,
+    gen_platform::FromStrKind,
+)]
 #[discriminant(also_display)]
 pub enum RestartStrategy {
     /// On child failure, restart only that child. Default; matches
@@ -62,11 +71,20 @@ impl Default for RestartStrategy {
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash,
-         gen_platform::TypedDispatcher,
-         gen_platform::Discriminant,
-         gen_platform::IsVariant,
-         gen_platform::FromStrKind)]
+#[derive(
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    gen_platform::TypedDispatcher,
+    gen_platform::Discriminant,
+    gen_platform::IsVariant,
+    gen_platform::FromStrKind,
+)]
 #[discriminant(also_display)]
 pub enum RestartPolicy {
     /// Always restart the child, regardless of how it died. Used for
@@ -92,7 +110,7 @@ impl Default for RestartPolicy {
 // theory/UNIFIED-COMPUTING-MODEL.md §VI for the roadmap +
 // theory/TYPED-ABSORPTION.md for the absorption arc).
 gen_platform::register_dispatcher!("caixa.restart-strategy", RestartStrategy);
-gen_platform::register_dispatcher!("caixa.restart-policy",   RestartPolicy);
+gen_platform::register_dispatcher!("caixa.restart-policy", RestartPolicy);
 
 /// One child entry in the supervisor's `:children` list.
 ///
@@ -156,6 +174,69 @@ const fn default_max_restarts() -> u32 {
     5
 }
 
+/// Upper-bound ceiling on the `:supervisor :max-restarts` axis — every
+/// validated [`SupervisorSpec::max_restarts`] past
+/// [`SupervisorSpec::validate`] lies in `1..=SUPERVISOR_MAX_RESTARTS_MAX`.
+///
+/// The typed field is `u32` (the zero-floor arm
+/// [`SupervisorError::ZeroMaxRestarts`] already brackets the bottom edge),
+/// so a programmatic struct literal
+/// (`SupervisorSpec { max_restarts: u32::MAX, .. }`) and the equivalent
+/// author-surface form (`:max-restarts 4294967295` or any
+/// `:max-restarts 100000`-shape typo landing in the slot) both round-trip
+/// cleanly through serde — a structurally unbounded `u32` ceiling. The
+/// runtime substrate consuming the value (Erlang/OTP's
+/// `MaxIntensity / Period` ratio, the future wasm-operator's
+/// per-supervisor restart-intensity counter, the M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission webhook)
+/// then turned a typed `:max-restarts` policy into a no-op supervisor: the
+/// escalation threshold is structurally so high that no realistic
+/// restarts-per-`:restart-window` traffic shape can reach it, the
+/// supervisor never escalates to its parent, and a bad child can loop
+/// inside the window indefinitely with the parent supervisor structurally
+/// never receiving the "this subtree has exceeded its restart budget"
+/// signal the typed slot is meant to express — the canonical
+/// "supervisor intensity declared, no escalation" footgun, exactly the
+/// peer of the [`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`] cap
+/// on the `:politicas :circuit-breaker :max-failures` axis (both are
+/// "trip the next-higher protection layer after N events in a rolling
+/// window" counters with identical degenerate-at-the-high-end shape).
+///
+/// The `1000` ceiling matches the sibling
+/// [`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`] (the closest
+/// peer — same "events-per-window trip threshold" semantics, same `u32`
+/// type, same no-op-at-the-high-end failure mode) so the M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` / `.../Aplicacao` CR materializers
+/// and the future wasm-operator's per-supervisor restart-intensity
+/// counter reach for either field knowing the value is in `1..=1000`
+/// without re-validating at the reconciler layer. The cap sits two
+/// orders of magnitude above every documented Erlang/OTP production
+/// playbook recommendation (Learn You Some Erlang's
+/// `{intensity, 5, 60}` worker-supervisor default, Elixir's `Supervisor`
+/// `max_restarts: 3` default, OTP's `supervisor` callback module
+/// `MaxR = 1` / `MaxT = 5` "minimal-restart" default, Riak Core's
+/// typical `MaxR ∈ 5..=100`, RabbitMQ's broker-supervisor `MaxR = 5`
+/// default) and below the clearly-pathological "effectively no
+/// escalation" floor (`10_000`, `100_000`, `u32::MAX`): a value the
+/// author can plausibly want at hyperscale (a long-running supervisor
+/// over a very-flaky pool tolerating thousands of transient restarts
+/// before escalating), but a hard wall above which the typed policy is
+/// structurally a no-op carried verbatim on every emitted child-restart
+/// reconciliation contract.
+///
+/// Lifted as a typed `pub const` so the bound has exactly one source of
+/// truth — the future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+/// materializer's admission webhook and the wasm-operator-side
+/// per-supervisor restart-intensity reconciler read from one place. Same
+/// shape every other typed upper bound in this crate carries
+/// ([`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`],
+/// [`crate::aplicacao::POLICY_RETRIES_MAX`],
+/// [`crate::aplicacao::POLICY_RATE_LIMIT_MAX`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const SUPERVISOR_MAX_RESTARTS_MAX: u32 = 1000;
+
 impl Default for SupervisorSpec {
     fn default() -> Self {
         Self {
@@ -215,6 +296,52 @@ impl SupervisorSpec {
         }
         if self.max_restarts == 0 {
             return Err(SupervisorError::ZeroMaxRestarts);
+        }
+        // Upper-bound ceiling on the typed `:max-restarts` axis. The
+        // typed slot is `u32` and the zero-floor arm immediately above
+        // already brackets the bottom edge; until this gate landed the
+        // top edge ran all the way to `u32::MAX` and a struct-literal
+        // `SupervisorSpec { max_restarts: 100_000, .. }` (or the
+        // equivalent author-surface `:max-restarts 100000` /
+        // `:max-restarts 4294967295` typo landing in the slot) silently
+        // passed validate. The runtime substrate consuming the value
+        // (Erlang/OTP's `MaxIntensity / Period` ratio, the future
+        // wasm-operator's per-supervisor restart-intensity counter, the
+        // M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+        // admission webhook) then turned a typed `:max-restarts`
+        // policy into a no-op supervisor: the escalation threshold is
+        // structurally so high that no realistic
+        // restarts-per-`:restart-window` traffic shape can reach it,
+        // the supervisor never escalates to its parent, and a bad
+        // child can loop inside the window indefinitely with the
+        // parent supervisor structurally never receiving the "this
+        // subtree has exceeded its restart budget" signal the typed
+        // slot is meant to express. Lifting the rejection to a
+        // build-time gate at `SupervisorSpec::validate` brackets the
+        // typed `:max-restarts` set structurally — every validated
+        // value lies in `1..=SUPERVISOR_MAX_RESTARTS_MAX` — and
+        // matches the same top-and-bottom-edge discipline the
+        // [`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`] cap
+        // applies on the peer `:politicas :circuit-breaker
+        // :max-failures` axis (zero-floor `PolicyBreakerZeroFailures`
+        // + upper-floor `PolicyBreakerMaxFailuresExceedsCap`): both
+        // axes are "trip the next-higher protection layer after N
+        // events in a rolling window" counters with identical
+        // degenerate-at-the-high-end shape. The zero-floor gate
+        // strictly precedes this cap arm so `0` surfaces the more
+        // self-locating `ZeroMaxRestarts` diagnostic (with its
+        // counter-axis remediation directly named) rather than the
+        // cap-shape diagnostic; the cap arm strictly precedes the
+        // sibling `:restart-window` zero-floor / canonical-millisecond
+        // arms so an over-cap `max_restarts` paired with a
+        // structurally invalid window surfaces the cap diagnostic
+        // first, mirroring the
+        // `PolicyBreakerMaxFailuresExceedsCap` / window-axis cross-arm
+        // ordering on the peer `:politicas :circuit-breaker` slot.
+        if self.max_restarts > SUPERVISOR_MAX_RESTARTS_MAX {
+            return Err(SupervisorError::MaxRestartsExceedsCap {
+                max_restarts: self.max_restarts,
+            });
         }
         if matches!(self.restart_window, Some(d) if d.is_zero()) {
             return Err(SupervisorError::RestartWindowZero);
@@ -390,6 +517,23 @@ pub enum SupervisorError {
     SimpleOneForOneWithStaticChildren,
     #[error(":max-restarts must be > 0")]
     ZeroMaxRestarts,
+    #[error(
+        ":supervisor :max-restarts ({max_restarts}) exceeds the supervisor-policy ceiling \
+         (SUPERVISOR_MAX_RESTARTS_MAX = 1000) — a value above this cap turns the typed \
+         restart-intensity policy into a no-op supervisor: the escalation threshold is \
+         structurally so high that no realistic restarts-per-:restart-window traffic shape \
+         can reach it, so the supervisor never escalates to its parent and a bad child can \
+         loop inside the window indefinitely. Every typed-slot consumer (Erlang/OTP's \
+         MaxIntensity/Period ratio, the future wasm-operator's per-supervisor \
+         restart-intensity counter, the M4 mesh.pleme.io/v1alpha1/Supervisor CR \
+         materializer's admission webhook) emits a `:max-restarts` declaration that is \
+         structurally never reached. Pin a value in 1..=1000 (Erlang/OTP / Elixir / Riak \
+         Core / RabbitMQ production playbooks recommend 3..=100; the OTP `supervisor` \
+         callback module's `MaxR = 1` minimal-restart default sits at the bottom of the \
+         band) or restructure the supervision tree (split the flaky child into its own \
+         sub-supervisor with a tighter budget) if you need a higher restart tolerance."
+    )]
+    MaxRestartsExceedsCap { max_restarts: u32 },
     #[error(
         ":restart-window must be > 0 when set — Erlang/OTP's MaxIntensity/Period \
          requires Period > 0; a zero window either trips on the first failure or \
@@ -704,6 +848,211 @@ mod tests {
             ..SupervisorSpec::default()
         };
         assert_eq!(s.validate().unwrap_err(), SupervisorError::ZeroMaxRestarts);
+    }
+
+    // ── upper-cap: SUPERVISOR_MAX_RESTARTS_MAX brackets the typed slot ─────
+    //
+    // The cap arm lifts the `:politicas :circuit-breaker :max-failures` /
+    // `POLICY_BREAKER_MAX_FAILURES_MAX` (2b51ace) discipline onto the peer
+    // `:supervisor :max-restarts` axis — both fields are "trip the
+    // next-higher protection layer after N events in a rolling window"
+    // counters with identical degenerate-at-the-high-end shape, so the
+    // typed-slot's accepted set lies in `1..=1000` on the supervisor side
+    // exactly as it lies in `1..=1000` on the breaker side.
+
+    #[test]
+    fn validate_rejects_max_restarts_above_cap() {
+        // The fail-before-pass-after pin: `SUPERVISOR_MAX_RESTARTS_MAX +
+        // 1` is structurally one past the cap and silently passed
+        // validate on every pre-gate codebase because the typed slot's
+        // only check was the zero-floor arm. The no-op-supervisor vector
+        // only surfaced at the runtime substrate (Erlang/OTP
+        // MaxIntensity/Period ratio, the future wasm-operator's
+        // per-supervisor restart-intensity counter) far from the source
+        // caixa.lisp with no field naming the offending supervisor.
+        let s = SupervisorSpec {
+            max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::MaxRestartsExceedsCap {
+                max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+            }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_max_restarts_far_above_cap() {
+        // The `u32::MAX` worst case — the four-billion-restart
+        // threshold a typo (`:max-restarts 4294967295`) or a
+        // struct-literal copy-paste lands in the slot. Pin the cap
+        // arm's coverage explicitly across the full `u32` overflow so
+        // a future relaxation that drops the upper bound surfaces
+        // here. Same shape every other typed-cap arm on this surface
+        // carries (POLICY_BREAKER_MAX_FAILURES_MAX,
+        // POLICY_RETRIES_MAX, POLICY_RATE_LIMIT_MAX).
+        let s = SupervisorSpec {
+            max_restarts: u32::MAX,
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::MaxRestartsExceedsCap {
+                max_restarts: u32::MAX,
+            }
+        );
+    }
+
+    #[test]
+    fn validate_accepts_max_restarts_at_cap() {
+        // The boundary value — exactly SUPERVISOR_MAX_RESTARTS_MAX —
+        // must validate. The cap is inclusive on the top edge,
+        // matching the POLICY_BREAKER_MAX_FAILURES_MAX /
+        // POLICY_RETRIES_MAX / LIMITS_MEMORY_WASM32_MAX_BYTES
+        // discipline on the sibling capped axes. Pin the boundary
+        // explicitly so a future off-by-one tightening
+        // (`>= SUPERVISOR_MAX_RESTARTS_MAX` instead of `>`) surfaces
+        // here as a test failure rather than a silent contract
+        // narrowing.
+        let s = SupervisorSpec {
+            max_restarts: SUPERVISOR_MAX_RESTARTS_MAX,
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        s.validate()
+            .expect("max_restarts == SUPERVISOR_MAX_RESTARTS_MAX must validate");
+    }
+
+    #[test]
+    fn validate_accepts_max_restarts_typical_values() {
+        // The documented production-playbook band positive-control
+        // sweep — every value Erlang/OTP / Elixir / Riak Core /
+        // RabbitMQ recommend (1..=100) must pass, plus a sweep
+        // through the hyperscale band (200, 500, 1000) the cap
+        // accepts. Pin the inclusive validated set explicitly so a
+        // future tightening of the ceiling surfaces here.
+        for n in [1u32, 3, 5, 10, 20, 50, 100, 200, 500, 1000] {
+            let s = SupervisorSpec {
+                max_restarts: n,
+                children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            s.validate()
+                .unwrap_or_else(|e| panic!("max_restarts={n} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn zero_max_restarts_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `0` is structurally outside
+        // both `1..` (zero-floor) and `..=SUPERVISOR_MAX_RESTARTS_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the counter-axis
+        // remediation), so the validate gate must fire on zero first.
+        // Same shape every other zero-then-shape ordering on this
+        // surface uses (PolicyRetriesZero then
+        // PolicyRetriesExceedsCap; PolicyBreakerZeroFailures then
+        // PolicyBreakerMaxFailuresExceedsCap).
+        let s = SupervisorSpec {
+            max_restarts: 0,
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::ZeroMaxRestarts,
+            "max_restarts == 0 must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn max_restarts_cap_takes_precedence_over_restart_window_gates() {
+        // The cross-arm ordering pin between the cap and the sibling
+        // `:restart-window` gates (zero-window, canonical-window). A
+        // supervisor carrying both an over-cap `max_restarts` AND a
+        // structurally invalid window (zero, sub-ms) must surface the
+        // cap diagnostic first — the cap arm is wired immediately
+        // after the zero-restart arm and strictly before the window
+        // arms, so the offending value the diagnostic names matches
+        // the order the author would discover the gates by reading
+        // top-to-bottom through `SupervisorSpec::validate`. Pin the
+        // order so a future refactor that reorders the arms surfaces
+        // here as a test failure rather than a silent diagnostic
+        // regression. Peer of
+        // `circuit_breaker_max_failures_cap_takes_precedence_over_window_gates`
+        // on the sibling `:politicas :circuit-breaker` slot.
+        let s = SupervisorSpec {
+            max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+            restart_window: Some(Duration::ZERO),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::MaxRestartsExceedsCap {
+                max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+            },
+            "over-cap max_restarts must surface the cap diagnostic before any window-axis diagnostic"
+        );
+    }
+
+    #[test]
+    fn max_restarts_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `u32` is carried
+        // verbatim into the `SupervisorError::MaxRestartsExceedsCap`
+        // variant so the surfaced error message names the value the
+        // author wrote (`":supervisor :max-restarts (50000) exceeds the
+        // supervisor-policy ceiling …"`), not just the cap. Same
+        // self-locating diagnostic shape every other typed-cap arm on
+        // this surface carries
+        // (`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap` carries
+        // the offending failure count verbatim,
+        // `AplicacaoError::PolicyRetriesExceedsCap` carries the offending
+        // retries count verbatim).
+        let s = SupervisorSpec {
+            max_restarts: 50_000,
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                SupervisorError::MaxRestartsExceedsCap {
+                    max_restarts: 50_000
+                }
+            ),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("50000"),
+            ":supervisor :max-restarts cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn supervisor_max_restarts_cap_pins_canonical_value() {
+        // The SUPERVISOR_MAX_RESTARTS_MAX constant pins the value at
+        // 1000 — the same ceiling the peer
+        // POLICY_BREAKER_MAX_FAILURES_MAX cap carries on the
+        // `:politicas :circuit-breaker :max-failures` axis (both are
+        // "trip the next-higher protection layer after N events in a
+        // rolling window" counters with identical
+        // degenerate-at-the-high-end shape; uniform top edge so the
+        // M4 CR materializers and the wasm-operator reconciler reach
+        // for either field knowing the value is in `1..=1000`). Two
+        // orders of magnitude above every documented Erlang/OTP /
+        // Elixir / Riak Core / RabbitMQ production-playbook
+        // recommendation band and below the clearly-pathological
+        // "effectively no escalation" floor (10_000, 100_000,
+        // u32::MAX). Pinning the literal value here surfaces a future
+        // drift (a relaxation to 10_000, a tightening to 100) as a
+        // deliberate test edit, not a silent contract narrowing.
+        assert_eq!(SUPERVISOR_MAX_RESTARTS_MAX, 1000);
     }
 
     #[test]

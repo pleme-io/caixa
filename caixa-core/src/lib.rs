@@ -53,7 +53,10 @@ pub use render::{
     pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind, servico_m2_overlay,
     single_field_overlay, yaml_string_mapping,
 };
-pub use supervisor::{ChildSpec, RestartPolicy, RestartStrategy, SupervisorError, SupervisorSpec};
+pub use supervisor::{
+    ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX, SupervisorError,
+    SupervisorSpec,
+};
 pub use upgrade::{
     UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from,
     validate_upgrade_from_against_behavior, validate_upgrade_from_against_versao,
