@@ -174,6 +174,75 @@ pub const LIMITS_MEMORY_WASM32_PAGE_BYTES: u64 = 64 * 1024;
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const LIMITS_WALL_CLOCK_MAX: Duration = Duration::from_secs(3600);
 
+/// Upper-bound ceiling on the `:limits :cpu` axis, in Kubernetes
+/// millicores — every validated [`LimitsSpec::cpu`] past
+/// [`LimitsSpec::validate`] lies in `1..=LIMITS_CPU_MILLICORES_MAX`
+/// (inclusive on both ends).
+///
+/// The typed field is `Option<u32>` (the zero-floor arm
+/// [`LimitsError::CpuZero`] already rejects `Some(0)` — a zero cgroup
+/// share starves the process), so a programmatic struct literal
+/// (`LimitsSpec { cpu: Some(u32::MAX), .. }` — ≈ 4.3 million cores)
+/// and the equivalent author-surface form (`(:limits (:cpu
+/// "1000000m"))` — the millicore codec parses any `u32`-shaped
+/// magnitude) both round-trip cleanly through serde — a structurally
+/// unbounded `u32` ceiling. The runtime substrate consuming the value
+/// ([`crate::render::servico_m2_overlay`]'s `pleme-computeunit.limits.cpu`
+/// projection, the M2.5 `wasm-engine` instantiator the
+/// `ABSORPTION-ROADMAP` names as the downstream wiring, the future
+/// M4 `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission
+/// webhook) lands the value verbatim as the K8s pod's
+/// `resources.requests.cpu`. A value far above the largest commodity
+/// node's vCPU count turns the typed slot into an unschedulable hint:
+/// the Kubernetes scheduler refuses to bind the pod to any node
+/// (insufficient `cpu` available), the Servico sits `Pending`
+/// indefinitely, and the per-process CSE invariant (every typed
+/// `:cpu` reaches a node) is a runtime, not build-time, contract —
+/// the canonical declared-but-unschedulable footgun the sibling
+/// `:limits :memory` wasm32-cap arm closes on its peer "cannot be
+/// honored" shape.
+///
+/// The `128_000` (128 cores) ceiling matches the largest commercially
+/// common non-metal cloud Kubernetes node vCPU count (AWS m7i.32xlarge
+/// / c7i.32xlarge = 128 vCPU; Azure HBv3-128rs = 128 vCPU; GCP
+/// c3-standard-128 = 128 vCPU — every major managed-Kubernetes provider
+/// tops out at 128 vCPU on its general-purpose non-metal SKUs) and sits
+/// two orders of magnitude above every realistic per-Servico
+/// production-playbook band (the canonical caixa Servico runs in the
+/// 100m–2000m band; the in-tree
+/// `limits_slot_propagates_into_values_block` smoke test pins
+/// `cpu: Some(500)` = 500m as the load-bearing example, peer to the
+/// `caixa-flux` projector's identical 500m default). A value above this
+/// cap is structurally unschedulable on any commercial managed
+/// Kubernetes node pool: GKE Standard / EKS managed / AKS default
+/// node-group SKU ladders cap at 128 vCPU per node for general-purpose
+/// instance families, so a `:cpu` request above `128_000m` cannot bind to
+/// any node the operator can provision through the standard
+/// cloud-provider control plane. The wasm32-wasip2 single-threaded
+/// execution model the canonical caixa Servico targets
+/// ([`theory/CAIXA-SDLC.md` §V][sdlc-v]) reinforces the structural
+/// argument: a single wasm component cannot saturate more than one
+/// core, so even the Lunatic-style supervised-multi-process host
+/// (`theory/INSPIRATIONS.md` §III.1) — which fans wasm processes across
+/// the host runtime's Tokio thread pool — bounds its useful CPU request
+/// to the host node's vCPU count, never higher.
+///
+/// Lifted as a typed `pub const` (rather than an inline literal at the
+/// [`LimitsSpec::validate`] call site) so the bound has exactly one
+/// source of truth — the future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-`:limits :cpu`
+/// admission webhook, the caixa-helm `pleme-computeunit` chart's
+/// resource-request mapping, the M2.5 `wasm-engine` host-runtime
+/// thread-pool sizing hint all read from one place. Same shape every
+/// other typed upper bound in this crate carries
+/// ([`LIMITS_MEMORY_WASM32_MAX_BYTES`], [`LIMITS_WALL_CLOCK_MAX`],
+/// [`crate::POLICY_TIMEOUT_MAX`], [`crate::POLICY_BREAKER_WINDOW_MAX`],
+/// [`crate::POLICY_RATE_LIMIT_MAX`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`]).
+///
+/// [sdlc-v]: https://github.com/pleme-io/theory/blob/main/CAIXA-SDLC.md
+pub const LIMITS_CPU_MILLICORES_MAX: u32 = 128_000;
+
 /// Per-process limits. All fields optional — `None` = unbounded for that axis.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -377,6 +446,45 @@ impl LimitsSpec {
         if self.cpu == Some(0) {
             return Err(LimitsError::CpuZero);
         }
+        // Upper-bound gate on `:cpu`: every validated value must also
+        // fit within the largest commercially-common non-metal cloud
+        // Kubernetes node vCPU count ([`LIMITS_CPU_MILLICORES_MAX`] =
+        // 128 cores = 128_000 millicores). The zero-floor arm
+        // immediately above closes the literal `Some(0)` shape; this
+        // cap arm closes the structurally-unschedulable class
+        // (`Some(128_001)`..`Some(u32::MAX)` — values that pass the
+        // numeric zero check but that the Kubernetes scheduler cannot
+        // bind to any node because no general-purpose managed-K8s
+        // SKU provides >128 vCPU per node). Until this gate landed
+        // the millicore codec accepted any `Option<u32>` past zero
+        // (the prior numeric-zero arm's only floor), so
+        // `(:cpu "1000000m")` (1000 cores) round-tripped cleanly
+        // through serde and the per-axis CSE invariant (no value the
+        // Kubernetes scheduler can't honor) was a runtime, not
+        // build-time, contract on every above-cap input: the
+        // `pleme-computeunit` chart's `resources.requests.cpu`
+        // landed verbatim, the pod sat `Pending` indefinitely with a
+        // `0/N nodes are available: N Insufficient cpu` event, and
+        // the typed `:cpu` slot became an unschedulable hint far from
+        // the source caixa.lisp. Closes the same gap the
+        // wasm32-wasip2 upper ceiling closes on the `:memory` axis —
+        // the typed `:cpu` axis is now operationally bracketed
+        // (`1..=LIMITS_CPU_MILLICORES_MAX`), not just numerically
+        // (`1..=u32::MAX`). Same top-and-bottom-edge discipline the
+        // prior trajectory applied to every sibling cap arm on this
+        // surface ([`LimitsError::MemoryExceedsWasm32Cap`],
+        // [`LimitsError::WallClockExceedsCap`],
+        // [`crate::AplicacaoError::PolicyTimeoutExceedsCap`],
+        // [`crate::AplicacaoError::PolicyRetriesExceedsCap`],
+        // [`crate::AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`],
+        // [`crate::AplicacaoError::PolicyBreakerWindowExceedsCap`],
+        // [`crate::AplicacaoError::PolicyRateLimitExceedsCap`],
+        // [`crate::SupervisorError::MaxRestartsExceedsCap`]).
+        if let Some(m) = self.cpu
+            && m > LIMITS_CPU_MILLICORES_MAX
+        {
+            return Err(LimitsError::CpuExceedsCap { millicores: m });
+        }
         Ok(())
     }
 }
@@ -484,6 +592,30 @@ pub enum LimitsError {
         ":limits :cpu must be > 0m — a zero cgroup share starves the process; omit the field for unbounded"
     )]
     CpuZero,
+    #[error(
+        ":limits :cpu ({millicores}m) exceeds the per-process ceiling \
+         (LIMITS_CPU_MILLICORES_MAX = 128_000m = 128 cores) — a value above this cap is \
+         structurally unschedulable on every commercially-common managed-Kubernetes node \
+         pool (GKE Standard / EKS managed / AKS default general-purpose SKU ladders top out \
+         at 128 vCPU per node; AWS m7i.32xlarge / c7i.32xlarge, Azure HBv3-128rs, GCP \
+         c3-standard-128 all sit at the same 128-vCPU ceiling), so the resulting \
+         `pleme-computeunit` chart's `resources.requests.cpu` lands as a hint the \
+         Kubernetes scheduler cannot bind to any node — the pod sits `Pending` indefinitely \
+         with a `0/N nodes are available: N Insufficient cpu` event, and the typed `:cpu` \
+         slot becomes an unschedulable contract far from the source caixa.lisp. The \
+         wasm32-wasip2 single-threaded execution model the canonical caixa Servico targets \
+         reinforces the structural argument: a single wasm component cannot saturate more \
+         than one core, so even the Lunatic-style supervised-multi-process host bounds its \
+         useful CPU request to the host node's vCPU count. Pin a value in 1m..=128000m \
+         (the canonical caixa Servico runs in the 100m..=2000m band — every in-tree \
+         example uses 500m; AWS App Mesh / Envoy / Istio per-pod CPU production playbooks \
+         all sit ≤ 8000m / 8 cores; the longest documented per-Servico CPU request any \
+         pleme-io substrate playbook recommends maxes at ~16 cores) or omit :cpu to \
+         express `no per-process CPU hint on this axis` (the cgroup share then defaults to \
+         the cluster-level `LimitRange` / `ResourceQuota` policy the operator pins on the \
+         host namespace)"
+    )]
+    CpuExceedsCap { millicores: u32 },
 }
 
 // ── byte-size codec ────────────────────────────────────────────────────
@@ -2469,5 +2601,229 @@ mod tests {
         assert_eq!(back.wall_clock, Some(LIMITS_WALL_CLOCK_MAX));
         l.validate()
             .expect("LIMITS_WALL_CLOCK_MAX itself must pass validate");
+    }
+
+    // ── value-shape: :cpu upper bound — 128-core schedulability ceiling ─────
+    //
+    // The third `LimitsSpec` axis brought to a top-edge cap, peer to
+    // the `:memory` wasm32 ceiling and the `:wall-clock` 1h ceiling.
+    // Mirrors the test discipline those peers carry: the
+    // fail-before-pass-after pin, the one-millicore-boundary pin, the
+    // far-above-cap sweep, the inclusive-at-cap positive control, the
+    // production-band positive-control sweep, the cross-arm zero-then-
+    // cap ordering pin, the diagnostic-shape pin carrying the offending
+    // value verbatim, and the cap-value literal-identity + codec
+    // round-trip pins anchoring the constant.
+
+    #[test]
+    fn validate_rejects_cpu_above_cap() {
+        // The fail-before-pass-after pin: 128_001m = 128 cores + 1
+        // millicore is structurally one canonical-tick past the
+        // [`LIMITS_CPU_MILLICORES_MAX`] ceiling — a `u32` magnitude the
+        // millicore codec round-trips losslessly as `"128001m"`, and
+        // that silently passed validate on every pre-gate codebase
+        // because the typed slot's only check was the zero-floor arm.
+        // The Kubernetes scheduler consuming the value (via the
+        // `pleme-computeunit` chart's `resources.requests.cpu`
+        // projection) cannot bind the pod to any node, far from the
+        // source caixa.lisp.
+        let m = LIMITS_CPU_MILLICORES_MAX + 1;
+        let l = LimitsSpec {
+            cpu: Some(m),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::CpuExceedsCap { millicores: m }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_cpu_far_above_cap() {
+        // The "obvious authoring footgun" case: a `(:cpu "1000000m")`
+        // (1000 cores) or `(:cpu "4294967295m")` (≈ u32::MAX) — values
+        // the millicore codec accepts cleanly, the codec round-trips
+        // losslessly through serde, but the Kubernetes scheduler
+        // cannot bind to any node. Until this gate landed validate
+        // accepted them. Pin the common above-cap values (1000 cores,
+        // 10_000 cores, u32::MAX) so a future relaxation that drops
+        // the upper bound surfaces here. Peer of
+        // `validate_rejects_memory_8_gib` /
+        // `validate_rejects_wall_clock_far_above_cap`.
+        for m in [1_000_000_u32, 10_000_000, u32::MAX] {
+            let l = LimitsSpec {
+                cpu: Some(m),
+                ..Default::default()
+            };
+            assert_eq!(
+                l.validate().unwrap_err(),
+                LimitsError::CpuExceedsCap { millicores: m }
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_cpu_at_cap() {
+        // The boundary value — exactly [`LIMITS_CPU_MILLICORES_MAX`]
+        // (128 cores = 128_000m) — must validate. The cap is inclusive
+        // on the top edge, matching the discipline on every sibling
+        // capped axis ([`LIMITS_MEMORY_WASM32_MAX_BYTES`],
+        // [`LIMITS_WALL_CLOCK_MAX`], [`crate::POLICY_TIMEOUT_MAX`],
+        // [`crate::POLICY_BREAKER_WINDOW_MAX`],
+        // [`crate::POLICY_RATE_LIMIT_MAX`]). Pin the boundary
+        // explicitly so a future off-by-one tightening
+        // (`>= LIMITS_CPU_MILLICORES_MAX` instead of `>`) surfaces here
+        // as a test failure rather than a silent contract narrowing.
+        let l = LimitsSpec {
+            cpu: Some(LIMITS_CPU_MILLICORES_MAX),
+            ..Default::default()
+        };
+        l.validate()
+            .expect("cpu == LIMITS_CPU_MILLICORES_MAX must validate");
+    }
+
+    #[test]
+    fn validate_accepts_cpu_typical_values() {
+        // The documented production-playbook band positive-control
+        // sweep — every value the canonical caixa Servico runs in
+        // (100m..=2000m) must pass, plus a sweep through the larger
+        // burstable / multi-component-host band (4000m, 8000m, 16000m,
+        // 32000m, 64000m, 128000m) the cap accepts. Mirrors
+        // `accepts_wall_clock_typical_values` on the sibling
+        // `:wall-clock` axis.
+        for m in [
+            1_u32,   // smallest non-zero
+            100,     // typical small worker
+            500,     // canonical test default (peer to limits/flux/helm)
+            1_000,   // 1 core, single-threaded wasm32 saturation
+            2_000,   // 2 cores
+            4_000,   // typical burstable
+            8_000,   // upper realistic per-Servico band
+            16_000,  // documented heavy-Servico ceiling
+            32_000,  // wide-node multi-component-host
+            64_000,  // half the cap
+            128_000, // exactly at cap
+        ] {
+            let l = LimitsSpec {
+                cpu: Some(m),
+                ..Default::default()
+            };
+            l.validate()
+                .unwrap_or_else(|e| panic!("cpu={m}m must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn cpu_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Some(0)` is structurally outside
+        // both `>= 1` (zero-floor) and `<= LIMITS_CPU_MILLICORES_MAX`
+        // (cap), but the zero-floor diagnostic is the more
+        // self-locating one (it directly names the omit-axis
+        // remediation), so the validate gate must fire on zero first.
+        // Same shape every other zero-then-cap ordering on this surface
+        // uses (`MemoryZero` then `MemoryExceedsWasm32Cap`,
+        // `WallClockZero` then `WallClockExceedsCap`).
+        let l = LimitsSpec {
+            cpu: Some(0),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::CpuZero,
+            "Some(0) must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_cpu_cap_after_earlier_axes() {
+        // Cross-axis ordering: when both an above-cap `:cpu` and an
+        // earlier-axis violation are present, the earlier axis must
+        // fire first. The validate sequence is :memory → :fuel →
+        // :wall-clock → :cpu, so a paired memory-zero + cpu-above-cap
+        // input surfaces `MemoryZero`, never the cpu-cap diagnostic.
+        // Pins the canonical axis order so a future refactor that
+        // reorders the arms surfaces here as a test failure rather
+        // than a silent diagnostic regression. Peer of
+        // `validate_rejects_first_zero_axis_deterministically` and
+        // `validate_rejects_memory_cap_before_other_axes`.
+        let l = LimitsSpec {
+            memory: Some(0),
+            fuel: None,
+            wall_clock: None,
+            cpu: Some(LIMITS_CPU_MILLICORES_MAX + 1),
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryZero,
+            "earlier-axis violation must take precedence over later-axis cap violation"
+        );
+    }
+
+    #[test]
+    fn cpu_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending millicore count is
+        // carried verbatim into the [`LimitsError::CpuExceedsCap`]
+        // variant so the surfaced error message names the value the
+        // author wrote, not just the cap. Same self-locating
+        // diagnostic shape every other typed-cap arm on this surface
+        // carries (`MemoryExceedsWasm32Cap` carries the offending byte
+        // count verbatim, `WallClockExceedsCap` carries the offending
+        // `Duration` verbatim).
+        let m = 256_000_u32; // 256 cores — double the cap
+        let l = LimitsSpec {
+            cpu: Some(m),
+            ..Default::default()
+        };
+        let err = l.validate().unwrap_err();
+        assert!(
+            matches!(err, LimitsError::CpuExceedsCap { millicores } if millicores == m),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("256000"),
+            ":limits :cpu cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn cpu_cap_pins_canonical_value() {
+        // The [`LIMITS_CPU_MILLICORES_MAX`] constant pins the value at
+        // exactly 128 cores (128_000 millicores) — the largest
+        // commercially-common non-metal cloud Kubernetes node vCPU
+        // count. Pinning the literal value here surfaces a future
+        // drift (a relaxation to 256 cores, a tightening to 64 cores)
+        // as a deliberate test edit, not a silent contract narrowing.
+        // Same shape every other typed-cap value pin uses
+        // (`wall_clock_cap_pins_canonical_value`,
+        // `wasm32_memory_cap_matches_parsed_4_gib`).
+        assert_eq!(LIMITS_CPU_MILLICORES_MAX, 128_000);
+        assert_eq!(LIMITS_CPU_MILLICORES_MAX, 128 * 1000);
+    }
+
+    #[test]
+    fn cpu_cap_value_round_trips_through_codec() {
+        // The codec round-trip property the cap arm preserves: the
+        // [`LIMITS_CPU_MILLICORES_MAX`] constant itself round-trips
+        // through the in-module millicore codec — the cap value
+        // renders to a clean canonical string (`"128000m"`) and parses
+        // back to the same `u32`. Pin this so a future drift between
+        // the cap constant and the codec's accepted magnitude surfaces
+        // here. Same shape every other typed boundary pin on this
+        // surface uses (`wasm32_memory_cap_matches_parsed_4_gib`,
+        // `wall_clock_cap_value_round_trips_through_codec`).
+        let l = LimitsSpec {
+            cpu: Some(LIMITS_CPU_MILLICORES_MAX),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(
+            json.contains("\"128000m\""),
+            "the LIMITS_CPU_MILLICORES_MAX value must render to the canonical \"128000m\" form (got: {json})"
+        );
+        let back: LimitsSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.cpu, Some(LIMITS_CPU_MILLICORES_MAX));
+        l.validate()
+            .expect("LIMITS_CPU_MILLICORES_MAX itself must pass validate");
     }
 }
