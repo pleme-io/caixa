@@ -26,8 +26,8 @@ pub mod version;
 
 pub use aplicacao::{
     AplicacaoError, AplicacaoSpec, CircuitBreaker, Entrada, Membro, MeshPolicy,
-    POLICY_BREAKER_MAX_FAILURES_MAX, POLICY_RETRIES_MAX, POLICY_TIMEOUT_MAX, Placement,
-    PlacementStrategy, RateLimit, WitContract, WitTarget,
+    POLICY_BREAKER_MAX_FAILURES_MAX, POLICY_BREAKER_WINDOW_MAX, POLICY_RETRIES_MAX,
+    POLICY_TIMEOUT_MAX, Placement, PlacementStrategy, RateLimit, WitContract, WitTarget,
 };
 pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepError, DepSource};
