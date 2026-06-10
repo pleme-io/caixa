@@ -696,6 +696,69 @@ pub const POLICY_RETRIES_MAX: u32 = 10;
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const POLICY_BREAKER_MAX_FAILURES_MAX: u32 = 1000;
 
+/// Upper-bound ceiling on the `:politicas :circuit-breaker :window` axis —
+/// every validated [`CircuitBreaker::window`] past
+/// [`AplicacaoSpec::validate_politicas`] lies in
+/// `1ms..=POLICY_BREAKER_WINDOW_MAX` (inclusive on both ends,
+/// integer-millisecond magnitudes by the canonical-form gate
+/// immediately preceding).
+///
+/// The typed field is `Duration` (the zero-floor arm
+/// [`AplicacaoError::PolicyBreakerZeroWindow`] already rejects
+/// `Duration::ZERO`, and the canonical-form arm
+/// [`AplicacaoError::PolicyBreakerWindowNotCanonical`] already rejects
+/// sub-millisecond residue), so a programmatic struct literal
+/// (`CircuitBreaker { window: Duration::from_secs(86_400), .. }` — 24h)
+/// and the equivalent author-surface form
+/// (`(:circuit-breaker (:window "24h"))` — the codec emits `"h"` for any
+/// integer-hour magnitude) both round-trip cleanly through serde — a
+/// structurally unbounded `Duration` ceiling. A `:window` value far
+/// above the documented production-playbook band (Hystrix
+/// `metrics.rollingStats.timeInMilliseconds` default `10s`,
+/// resilience4j `slidingWindowSize` time-based typical `10s..=60s`,
+/// Istio `outlierDetection.interval` default `10s`, Envoy
+/// `outlier_detection.interval` default `10s`, AWS App Mesh
+/// circuit-breaker time-window typical `30s..=300s`) degenerates the
+/// breaker's role: a rolling-window failure counter whose window is
+/// hours long is operationally a lifetime counter, the breaker's
+/// "recent failures" memory is structurally so long that transient
+/// failures are never forgotten, and the typed slot becomes a no-op
+/// trigger that trips once and stays tripped for the lifetime of the
+/// component carried on every emitted Envoy / Cilium L7 overlay.
+///
+/// The 1h (3600s = `3_600_000` ms) ceiling matches the largest unit the
+/// shared duration codec emits (`"<n>h"` for any integer-hour
+/// magnitude) — every value in the canonical authoring form's
+/// `<integer><unit>` grammar at or below this cap renders to a clean
+/// canonical string — and matches the sibling [`POLICY_TIMEOUT_MAX`]
+/// cap on the first typed-`Duration` `:politicas` axis: the two
+/// duration-typed `:politicas` axes now share a single uniform top
+/// edge so the next typed-slot wiring (the future caixa-mesh
+/// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay, the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-policy
+/// admission webhook) reaches for either field knowing the value is
+/// in `1ms..=1h` without re-validating at the renderer layer. The cap
+/// sits two orders of magnitude above every documented upstream
+/// production-playbook recommendation band (Hystrix / resilience4j /
+/// Istio / Envoy all default to 10s; AWS App Mesh maxes out at ~5m)
+/// and below the clearly-pathological "rolling window degenerates to
+/// lifetime counter" floor (`24h`, `7d`, `Duration::MAX`): a value the
+/// author can plausibly want for a very-low-traffic long-tail
+/// failure-detection window, but a hard wall above which the breaker's
+/// rolling-window contract is structurally a lifetime-counter contract.
+/// Lifted as a typed `pub const` so the bound has exactly one source
+/// of truth — the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's admission webhook and the caixa-mesh-side
+/// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+/// (MESH-COMPOSITION §III.2 #3) read from one place. Same shape every
+/// other typed upper bound in this crate carries
+/// ([`POLICY_TIMEOUT_MAX`], [`POLICY_RETRIES_MAX`],
+/// [`POLICY_BREAKER_MAX_FAILURES_MAX`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const POLICY_BREAKER_WINDOW_MAX: Duration = Duration::from_secs(3600);
+
 /// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
 /// max length, in bytes — same value the apiserver-side OpenAPI
 /// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
@@ -2234,6 +2297,40 @@ impl AplicacaoSpec {
             if !is_integer_millisecond_duration(cb.window) {
                 return Err(AplicacaoError::PolicyBreakerWindowNotCanonical { window: cb.window });
             }
+            // Upper-bound ceiling on the typed `:window` axis. The typed
+            // slot is `Duration` and the zero-floor +
+            // canonical-millisecond arms immediately above already
+            // bracket the bottom edge and the round-trip-stability
+            // shape; until this gate landed the top edge ran all the
+            // way to `Duration::MAX` and a struct-literal
+            // `CircuitBreaker { window: Duration::from_secs(86_400), .. }`
+            // (or the equivalent author-surface
+            // `(:circuit-breaker (:window "24h"))` / `(:window "7d")`
+            // typo landing in the slot) silently passed validate. The
+            // runtime substrate consuming the value (Envoy's
+            // `outlier_detection.interval`, the future
+            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
+            // rolling-window breaker into a lifetime-counter breaker:
+            // the failure-counting window is structurally so long that
+            // transient failures are never forgotten, the breaker
+            // trips once and stays tripped for the lifetime of the
+            // component, and every typed-slot consumer emits an Envoy
+            // / Cilium L7 overlay carrying a "rolling" window that
+            // exists only nominally. Lifting the rejection to a
+            // build-time gate at `validate_politicas` brackets the
+            // typed `:window` set structurally — every validated value
+            // lies in `1ms..=POLICY_BREAKER_WINDOW_MAX` (1ms..=1h) —
+            // and matches the same top-and-bottom-edge discipline
+            // [`POLICY_TIMEOUT_MAX`] applies on the sibling
+            // duration-typed `:politicas :timeout` axis (zero-floor +
+            // canonical-form + upper-cap; the cap arm strictly after
+            // the canonical-form arm so a sub-millisecond above-cap
+            // `Duration` surfaces the more fundamental
+            // round-trip-shape diagnostic first).
+            if cb.window > POLICY_BREAKER_WINDOW_MAX {
+                return Err(AplicacaoError::PolicyBreakerWindowExceedsCap { window: cb.window });
+            }
         }
         if let Some(rl) = &p.rate_limit {
             if rl.rate == 0 {
@@ -2832,6 +2929,19 @@ pub enum AplicacaoError {
          Pick an integer-millisecond magnitude (e.g. `\"60s\"`, `\"500ms\"`, `\"2m\"`)"
     )]
     PolicyBreakerWindowNotCanonical { window: Duration },
+    #[error(
+        ":politicas :circuit-breaker :window ({window:?}) exceeds the mesh-policy ceiling \
+         (POLICY_BREAKER_WINDOW_MAX = 1h = 3600s) — a value above this cap turns the typed \
+         rolling-window breaker into a lifetime-counter breaker: the failure-counting window \
+         is structurally so long that transient failures are never forgotten, the breaker \
+         trips once and stays tripped for the lifetime of the component, and every typed-slot \
+         consumer (the future CiliumClusterwideEnvoyConfig per-:politicas overlay, Envoy's \
+         outlier_detection.interval) emits a \"rolling\" window that exists only nominally. \
+         Pin a value in 1ms..=1h (Hystrix / resilience4j / Istio / Envoy production playbooks \
+         default to 10s; AWS App Mesh maxes out at ~5m) or omit :circuit-breaker to disable \
+         the breaker entirely"
+    )]
+    PolicyBreakerWindowExceedsCap { window: Duration },
 }
 
 #[cfg(test)]
@@ -7831,6 +7941,290 @@ mod tests {
             }
             other => panic!("expected PolicyBreakerWindowNotCanonical, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_window_above_cap() {
+        // The fail-before-pass-after pin: 3601s = 1h + 1s is
+        // structurally one canonical-tick past the
+        // [`POLICY_BREAKER_WINDOW_MAX`] ceiling (1h = 3600s) — an
+        // integer-millisecond magnitude the canonical-form arm above
+        // accepts cleanly, that the codec round-trips losslessly as
+        // `"3601s"`, and that silently passed validate on every
+        // pre-gate codebase because the typed slot's only checks were
+        // the zero-floor and canonical-form arms. The
+        // rolling-window-to-lifetime-counter degeneration surfaces
+        // only at the runtime substrate (Envoy's outlier_detection
+        // interval, the future CiliumClusterwideEnvoyConfig overlay)
+        // far from the source `caixa.lisp` with no field naming the
+        // offending policy.
+        let mut s = three_member_spec();
+        let window = POLICY_BREAKER_WINDOW_MAX + Duration::from_secs(1);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowExceedsCap { window }
+        );
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_window_one_millisecond_above_cap() {
+        // Boundary case: exactly 1ms past the cap (the granularity the
+        // canonical-form gate enforces). Catches a future "strictly
+        // less than" half-measure and pins the diagnostic to name the
+        // offending `Duration` verbatim. Peer of
+        // `rejects_policy_timeout_one_millisecond_above_cap` on the
+        // sibling duration-typed `:politicas :timeout` top edge.
+        let mut s = three_member_spec();
+        let window = POLICY_BREAKER_WINDOW_MAX + Duration::from_millis(1);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowExceedsCap { window }
+        );
+    }
+
+    #[test]
+    fn rejects_circuit_breaker_window_far_above_cap() {
+        // The "obvious authoring footgun" case: a `(:window "24h")` or
+        // `(:window "86400s")` — values the canonical-form arm
+        // accepts as integer-millisecond magnitudes, the codec
+        // round-trips losslessly through serde, but the
+        // rolling-window breaker contract cannot honor (a 24-hour
+        // rolling failure window is operationally a lifetime counter).
+        // Until this gate landed validate accepted it. Pin both common
+        // above-cap values (24h, 7d) so a future relaxation that
+        // drops the upper bound surfaces here.
+        for window in [
+            Duration::from_secs(86_400),    // 24h
+            Duration::from_secs(604_800),   // 7d
+            Duration::from_secs(1_000_000), // ~11.5 days
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures: 5,
+                window,
+            });
+            assert_eq!(
+                s.validate().unwrap_err(),
+                AplicacaoError::PolicyBreakerWindowExceedsCap { window }
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_window_at_cap() {
+        // The boundary value — exactly [`POLICY_BREAKER_WINDOW_MAX`]
+        // (1h) — must validate. The cap is inclusive on the top edge,
+        // matching the [`POLICY_TIMEOUT_MAX`] /
+        // [`POLICY_RETRIES_MAX`] / [`POLICY_BREAKER_MAX_FAILURES_MAX`]
+        // / [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`] discipline on the
+        // sibling capped axes. Pin the boundary explicitly so a
+        // future off-by-one tightening (`>= POLICY_BREAKER_WINDOW_MAX`
+        // instead of `>`) surfaces here as a test failure rather than
+        // a silent contract narrowing.
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: POLICY_BREAKER_WINDOW_MAX,
+        });
+        s.validate()
+            .expect("window == POLICY_BREAKER_WINDOW_MAX must validate");
+    }
+
+    #[test]
+    fn accepts_circuit_breaker_window_typical_values() {
+        // The documented production-playbook band positive-control
+        // sweep — every value Hystrix / resilience4j / Istio / Envoy
+        // / AWS App Mesh recommend (1s..=300s) must pass, plus a sweep
+        // through the long-tail failure-detection band (15m, 30m, 1h)
+        // the cap accepts. Pin the inclusive validated set explicitly
+        // so a future tightening of the ceiling surfaces here as a
+        // deliberate test edit, not a silent contract narrowing.
+        for window in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_secs(1),
+            Duration::from_secs(10), // Hystrix / Istio / Envoy default
+            Duration::from_secs(30),
+            Duration::from_secs(60),  // resilience4j typical
+            Duration::from_secs(300), // AWS App Mesh typical
+            Duration::from_secs(900),
+            Duration::from_secs(1800),
+            Duration::from_secs(3600), // exactly 1h, the cap
+        ] {
+            let mut s = three_member_spec();
+            s.politicas.circuit_breaker = Some(CircuitBreaker {
+                max_failures: 5,
+                window,
+            });
+            s.validate()
+                .unwrap_or_else(|e| panic!("window={window:?} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_zero_window_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Duration::ZERO` is structurally
+        // outside both `>= 1ms` (zero-floor) and
+        // `<= POLICY_BREAKER_WINDOW_MAX` (cap), but the zero-floor
+        // diagnostic is the more self-locating one (it directly names
+        // the omit-axis remediation), so the validate gate must fire
+        // on zero first. Same shape every other zero-then-cap
+        // ordering on this surface uses
+        // ([`AplicacaoError::PolicyTimeoutZero`] then
+        // [`AplicacaoError::PolicyTimeoutExceedsCap`];
+        // [`AplicacaoError::PolicyBreakerZeroFailures`] then
+        // [`AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`]).
+        let mut s = three_member_spec();
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window: Duration::ZERO,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerZeroWindow,
+            "Duration::ZERO must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_canonical_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: a `Duration` that is *both*
+        // sub-millisecond (non-canonical-form) and structurally above
+        // the cap surfaces the canonical-form diagnostic first,
+        // because the round-trip-shape break is the more fundamental
+        // issue (the value can't even round-trip through the codec, so
+        // the cap diagnostic naming `1ms..=1h` would be misleading —
+        // there's no integer-ms form of the offending value). Pin the
+        // order so a future refactor that reorders the arms surfaces
+        // here as a test failure rather than a silent diagnostic
+        // regression. Peer of
+        // `policy_timeout_canonical_takes_precedence_over_cap` on the
+        // sibling duration-typed `:politicas :timeout` axis.
+        let mut s = three_member_spec();
+        let window = POLICY_BREAKER_WINDOW_MAX + Duration::from_nanos(1);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerWindowNotCanonical { window },
+            "sub-ms above-cap value must surface the canonical-form diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_max_failures_cap_takes_precedence_over_window_cap() {
+        // The cross-arm ordering pin between the two breaker axes: a
+        // `CircuitBreaker` whose *both* `max_failures` is above its
+        // cap *and* `window` is above its cap surfaces the
+        // max-failures cap diagnostic first, because the validate
+        // gate visits the failures arm before the window arm. Pin the
+        // order so a future refactor that reorders the breaker arms
+        // surfaces here.
+        let mut s = three_member_spec();
+        let window = POLICY_BREAKER_WINDOW_MAX + Duration::from_secs(1);
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: POLICY_BREAKER_MAX_FAILURES_MAX + 1,
+            window,
+        });
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
+                max_failures: POLICY_BREAKER_MAX_FAILURES_MAX + 1
+            },
+            "both-axes-above-cap must surface the max-failures cap diagnostic first (arm order)"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `Duration` is
+        // carried verbatim into the
+        // [`AplicacaoError::PolicyBreakerWindowExceedsCap`] variant so
+        // the surfaced error message names the value the author wrote
+        // (`":politicas :circuit-breaker :window (Duration { secs:
+        // 7200, nanos: 0 }) exceeds the mesh-policy ceiling …"`), not
+        // just the cap. Same self-locating diagnostic shape every
+        // other typed-cap arm on this surface carries
+        // ([`AplicacaoError::PolicyTimeoutExceedsCap`] carries the
+        // offending `Duration` verbatim).
+        let mut s = three_member_spec();
+        let window = Duration::from_secs(7200); // 2h
+        s.politicas.circuit_breaker = Some(CircuitBreaker {
+            max_failures: 5,
+            window,
+        });
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::PolicyBreakerWindowExceedsCap { window: w } if w == window),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("7200"),
+            ":politicas :circuit-breaker :window cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_cap_pins_canonical_value() {
+        // The [`POLICY_BREAKER_WINDOW_MAX`] constant pins the value at
+        // exactly 1 hour (3600s = 3_600_000ms) — the largest unit the
+        // shared duration codec emits as a clean canonical string
+        // (`"<n>h"`) and the same value [`POLICY_TIMEOUT_MAX`] pins on
+        // the sibling duration-typed `:politicas :timeout` axis (the
+        // two duration-typed `:politicas` axes share a uniform top
+        // edge). Pinning the literal value here surfaces a future
+        // drift (a relaxation to 24h, a tightening to 5m) as a
+        // deliberate test edit, not a silent contract narrowing. Same
+        // shape every other typed-cap value pin on this surface uses
+        // (`policy_timeout_cap_pins_canonical_value`).
+        assert_eq!(POLICY_BREAKER_WINDOW_MAX, Duration::from_secs(3600));
+        assert_eq!(POLICY_BREAKER_WINDOW_MAX.as_millis(), 3_600_000);
+        assert_eq!(
+            POLICY_BREAKER_WINDOW_MAX, POLICY_TIMEOUT_MAX,
+            "the two duration-typed `:politicas` caps share the same top edge"
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_cap_value_round_trips_through_codec() {
+        // The codec round-trip property the cap arm preserves: the
+        // [`POLICY_BREAKER_WINDOW_MAX`] constant itself round-trips
+        // through the shared duration codec — every value at the cap
+        // renders to a clean canonical string (`"1h"`) and parses back
+        // to the same `Duration`. Pin this so a future drift between
+        // the cap constant and the codec's largest emitted unit
+        // surfaces here. Same shape every other typed boundary pin on
+        // this surface uses
+        // (`policy_timeout_cap_value_round_trips_through_codec`).
+        let policy = MeshPolicy {
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 5,
+                window: POLICY_BREAKER_WINDOW_MAX,
+            }),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&policy).unwrap();
+        // The codec emits `"1h"` for the canonical 1-hour magnitude.
+        assert!(
+            json.contains("\"1h\""),
+            "the POLICY_BREAKER_WINDOW_MAX value must render to the canonical \"1h\" form (got: {json})"
+        );
+        let back: MeshPolicy = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            back.circuit_breaker.unwrap().window,
+            POLICY_BREAKER_WINDOW_MAX
+        );
     }
 
     #[test]
