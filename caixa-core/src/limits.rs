@@ -451,6 +451,71 @@ impl LimitsSpec {
                 return Err(LimitsError::MemoryExceedsWasm32Cap { bytes: m });
             }
         }
+        // Page-multiple gate on `:memory`: every validated value within
+        // the bracketed range
+        // (`LIMITS_MEMORY_WASM32_PAGE_BYTES..=LIMITS_MEMORY_WASM32_MAX_BYTES`)
+        // must also be an integer multiple of
+        // [`LIMITS_MEMORY_WASM32_PAGE_BYTES`] (64 KiB). The wasm spec
+        // defines linear memory in fixed 64 KiB pages and wasmtime's
+        // `StoreLimits::memory_size` is consumed as a page-quantized
+        // ceiling: every `memory.grow(n)` request checks whether the
+        // new total page count × 64 KiB exceeds the cap, so a
+        // sub-page residue (`m % PAGE_BYTES != 0`) is operationally
+        // unreachable — the engine can grow at most
+        // `floor(m / PAGE_BYTES)` pages, and the bytes in
+        // `[floor(m / PAGE_BYTES) * PAGE_BYTES, m]` are structural
+        // dead space the wasm runtime cannot honor. Until this gate
+        // landed the byte-size codec accepted any `Option<u64>` past
+        // the page floor (the prior page-floor arm's only structural
+        // gate at the bottom edge), so `(:memory "100000")` (≈ 97.65
+        // KiB — one page plus a 34464-byte unreachable residue),
+        // `(:memory "65537")` (one page plus a 1-byte unreachable
+        // residue), or any programmatic struct literal carrying a
+        // sub-page residue round-tripped cleanly through serde and
+        // the per-axis CSE invariant (no value the wasm-engine can't
+        // honor) was a runtime, not build-time, contract on every
+        // sub-page-residue input — the typed `:memory` cap landed
+        // verbatim in the `pleme-computeunit` chart's
+        // `resources.limits.memory` field and in the M2.5
+        // `wasm-engine` instantiator's `StoreLimits::memory_size`
+        // call, the engine silently floored the cap to the previous
+        // page boundary, and the bytes between the floor and the
+        // declared cap became operationally invisible. Closes the
+        // same gap the integer-millisecond-granularity gate
+        // ([`LimitsError::WallClockNotCanonical`]) closes on the
+        // peer typed-`Duration` `:wall-clock` axis — the engine's
+        // accepted granularity (pages on `:memory`, milliseconds on
+        // `:wall-clock`) is lifted to the typed validator so every
+        // value past `LimitsSpec::validate` is structurally
+        // honored-as-written by the downstream consumer, with no
+        // silent flooring at the engine layer. The four `:limits`
+        // axes now share a uniform granularity-lift posture: the two
+        // numerically-bracketed `Option<u64>` axes (`:memory`,
+        // `:fuel`) and the two duration-bracketed axes
+        // (`:wall-clock` integer-ms, `:supervisor :restart-window`
+        // integer-ms via `72bac01`) all surface "the engine quantizes
+        // this axis at granularity G" at validate time rather than
+        // at apply time. Pairs with the
+        // [`crate::POLICY_TIMEOUT_MAX`] / [`crate::POLICY_BREAKER_WINDOW_MAX`]
+        // top-edge caps and [`LimitsError::WallClockNotCanonical`]
+        // granularity gate on the sibling typed-`Duration` axes —
+        // the same two-axis-disjoint discipline (bracket + quantize)
+        // now applies to `:memory` as well. The cap arm strictly
+        // precedes this granularity gate so a value that is *both*
+        // above-cap and sub-page-residue surfaces the more
+        // aggressive cap-shape diagnostic first (the page-multiple
+        // remediation would be misleading when the offending value
+        // exceeds the wasm32 address-space ceiling anyway — the
+        // canonical fix collapses both into "pin a page-aligned
+        // value ≤ 4 GiB"), peer to the
+        // `MemoryZero` → `MemoryBelowWasm32Page` →
+        // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple` cascade
+        // surfacing the smallest-scope-issue last.
+        if let Some(m) = self.memory
+            && m % LIMITS_MEMORY_WASM32_PAGE_BYTES != 0
+        {
+            return Err(LimitsError::MemoryNotPageMultiple { bytes: m });
+        }
         if self.fuel == Some(0) {
             return Err(LimitsError::FuelZero);
         }
@@ -688,6 +753,19 @@ pub enum LimitsError {
         ":limits :memory ({bytes} bytes) exceeds the wasm32-wasip2 linear-memory ceiling (4 GiB = 4294967296 bytes); pin a value ≤ 4 GiB or omit the field for unbounded"
     )]
     MemoryExceedsWasm32Cap { bytes: u64 },
+    #[error(
+        ":limits :memory ({bytes} bytes) carries a sub-page residue the wasm32-wasip2 \
+         linear-memory model cannot honor — the wasm spec defines linear memory in \
+         fixed 64 KiB pages (LIMITS_MEMORY_WASM32_PAGE_BYTES = 65536 bytes) and \
+         wasmtime's StoreLimits::memory_size is consumed as a page-quantized ceiling: \
+         the engine can grow at most floor({bytes} / 65536) pages, and the bytes in \
+         [floor({bytes} / 65536) * 65536, {bytes}] are structural dead space the \
+         runtime cannot honor. Pin a page-aligned value in 64KiB..=4GiB \
+         (the canonical authoring magnitudes — `\"64KiB\"`, `\"128KiB\"`, `\"1MiB\"`, \
+         `\"64MiB\"`, `\"1GiB\"`, `\"4GiB\"` — every power-of-1024 unit the byte-size \
+         codec emits divides cleanly by the page size) or omit the field for unbounded"
+    )]
+    MemoryNotPageMultiple { bytes: u64 },
     #[error(
         ":limits :fuel must be > 0 — wasmtime traps the first instruction at fuel=0; omit the field for unbounded"
     )]
@@ -1616,6 +1694,229 @@ mod tests {
         // fail first.
         let l = LimitsSpec {
             memory: Some(LIMITS_MEMORY_WASM32_PAGE_BYTES - 1),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&l).unwrap();
+        let back: LimitsSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(l, back);
+        assert!(back.validate().is_err());
+    }
+
+    // ── value-shape: :memory page-multiple granularity gate ───────────────
+
+    #[test]
+    fn validate_rejects_memory_one_byte_above_page() {
+        // The fail-before-pass-after pin: until this gate landed a
+        // `LimitsSpec { memory: Some(LIMITS_MEMORY_WASM32_PAGE_BYTES +
+        // 1), .. }` (65537 bytes — one wasm32 page plus a 1-byte
+        // unreachable residue) silently passed validate, the byte-size
+        // codec round-tripped cleanly through serde (`render_byte_size`
+        // falls through to `"65537"` on any non-power-of-1024 magnitude),
+        // and wasmtime's `StoreLimits::memory_size` consumed the value
+        // verbatim as a page-quantized ceiling — the engine grew at
+        // most floor(65537 / 65536) = 1 page, and the byte at offset
+        // 65536 became structural dead space the runtime cannot honor.
+        let bytes = LIMITS_MEMORY_WASM32_PAGE_BYTES + 1;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryNotPageMultiple { bytes }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_memory_just_below_two_pages() {
+        // Boundary case: exactly 1 byte below two pages (`2 *
+        // LIMITS_MEMORY_WASM32_PAGE_BYTES - 1` = 131071 bytes). Pins
+        // the inclusive-page-boundary / strict-sub-page-residue
+        // relationship on the page-multiple arm: 131071 is *out*
+        // (sub-page residue), 131072 is *in* (exactly two pages).
+        // Matches the peer `validate_rejects_memory_one_byte_below_page`
+        // / `validate_rejects_memory_one_byte_above_wasm32_cap` shape
+        // on the surrounding edges.
+        let bytes = 2 * LIMITS_MEMORY_WASM32_PAGE_BYTES - 1;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryNotPageMultiple { bytes }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_memory_100000_bytes() {
+        // The "obvious authoring footgun" case: a magnitude the
+        // byte-size codec accepts cleanly (`"100000"` → 100000 bytes
+        // ≈ 97.65 KiB) and serde round-trips silently, but no wasm32
+        // engine can honor as a meaningful ceiling — the engine grows
+        // at most floor(100000 / 65536) = 1 page, and the 34464 bytes
+        // between offsets 65536 and 100000 are structural dead space.
+        // Until this gate landed `validate` accepted it. Peer of
+        // `validate_rejects_memory_8_gib` on the cap arm.
+        let bytes = parse_byte_size("100000").unwrap();
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryNotPageMultiple { bytes }
+        );
+    }
+
+    #[test]
+    fn validate_accepts_every_page_aligned_value_through_serde() {
+        // Positive-control sweep through the byte-size codec: every
+        // canonical magnitude `render_byte_size` emits at or above
+        // the page floor divides cleanly by the page size, so the
+        // page-multiple gate accepts the entire canonical-output
+        // domain at and above the page floor. The sweep walks
+        // single-page (`"64KiB"`), two-page (`"128KiB"`), every
+        // power-of-1024 unit (`"1MiB"`, `"64MiB"`, `"1GiB"`, `"4GiB"`),
+        // and the cap (`"4GiB"`) — pinning that the codec's
+        // emitted-canonical-form set is a structural subset of the
+        // validate gate's accepted set. Drift between the codec's
+        // emit alphabet and the validate gate would surface here
+        // rather than at a future serializer round trip.
+        for s in ["64KiB", "128KiB", "1MiB", "64MiB", "1GiB", "4GiB"] {
+            let bytes = parse_byte_size(s).unwrap();
+            assert_eq!(
+                bytes % LIMITS_MEMORY_WASM32_PAGE_BYTES,
+                0,
+                "canonical byte-size codec output {s:?} ({bytes}) must be page-aligned",
+            );
+            let l = LimitsSpec {
+                memory: Some(bytes),
+                ..Default::default()
+            };
+            l.validate()
+                .unwrap_or_else(|e| panic!("canonical {s:?} = {bytes} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_memory_below_page_takes_precedence_over_page_multiple() {
+        // Cross-arm ordering pin: `Some(1)` would otherwise pass the
+        // page-multiple arm's `m % PAGE_BYTES != 0` check (1 % 65536
+        // == 1 ≠ 0), but the page-floor arm strictly precedes the
+        // page-multiple arm so the more self-locating
+        // `MemoryBelowWasm32Page` diagnostic (with its "single page
+        // cannot fit" remediation, applicable to every sub-page
+        // value uniformly) leads. Peer of `MemoryZero` →
+        // `MemoryBelowWasm32Page` precedence on the zero edge:
+        // every value `m` in the range `1..=PAGE_BYTES-1` satisfies
+        // both `m < PAGE_BYTES` and `m % PAGE_BYTES != 0`, but the
+        // structurally-narrower diagnostic (page-floor) leads.
+        let l = LimitsSpec {
+            memory: Some(1),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryBelowWasm32Page { bytes: 1 }
+        );
+    }
+
+    #[test]
+    fn validate_memory_cap_takes_precedence_over_page_multiple() {
+        // Cross-arm ordering pin: `LIMITS_MEMORY_WASM32_MAX_BYTES + 1`
+        // (4 GiB + 1 byte) is *both* above-cap and not page-aligned.
+        // The cap arm strictly precedes the page-multiple arm so the
+        // more aggressive cap-shape diagnostic leads (the page-multiple
+        // remediation would be misleading when the offending value
+        // exceeds the wasm32 address-space ceiling anyway — the
+        // canonical fix collapses both into "pin a page-aligned value
+        // ≤ 4 GiB"). Peer of `WallClockNotCanonical` →
+        // `WallClockExceedsCap` ordering on the sibling `:wall-clock`
+        // axis (with the inverse polarity — there the granularity
+        // gate leads because sub-millisecond residue breaks serde
+        // round-trip; here the cap leads because both gates' offending
+        // values round-trip cleanly through serde and the broader
+        // magnitude constraint is the more aggressive one).
+        let bytes = LIMITS_MEMORY_WASM32_MAX_BYTES + 1;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryExceedsWasm32Cap { bytes }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_memory_page_multiple_before_other_axes() {
+        // With a sub-page-residue `:memory` and zero values on every
+        // other axis, the diagnostic names `:memory` rather than
+        // `:fuel` / `:wall-clock` / `:cpu` — peer of the existing
+        // `validate_memory_page_floor_takes_precedence_over_other_axes`
+        // and `validate_rejects_memory_cap_before_other_axes` ordering
+        // pins. Memory is the first axis the validate cascade checks,
+        // so a sub-page-residue value surfaces before any other-axis
+        // diagnostic regardless of how many other axes are
+        // simultaneously invalid.
+        let bytes = LIMITS_MEMORY_WASM32_PAGE_BYTES + 1;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            fuel: Some(0),
+            wall_clock: Some(Duration::ZERO),
+            cpu: Some(0),
+        };
+        assert_eq!(
+            l.validate().unwrap_err(),
+            LimitsError::MemoryNotPageMultiple { bytes }
+        );
+    }
+
+    #[test]
+    fn memory_page_multiple_diagnostic_carries_offending_bytes() {
+        // Diagnostic-shape pin: the page-multiple arm names the
+        // offending byte count verbatim so the author's grep lands on
+        // the field's value, not a generic "memory not aligned"
+        // message. Same shape every other typed-cap arm on this
+        // surface carries (`MemoryExceedsWasm32Cap` carries the
+        // offending byte count verbatim, `WallClockNotCanonical`
+        // carries the offending `Duration` verbatim).
+        let bytes = LIMITS_MEMORY_WASM32_PAGE_BYTES + 12345;
+        let l = LimitsSpec {
+            memory: Some(bytes),
+            ..Default::default()
+        };
+        let err = l.validate().unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains(&bytes.to_string()),
+            "diagnostic must carry the offending byte count verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("64 KiB") || msg.contains("65536") || msg.contains("page"),
+            "diagnostic must name the page-size granularity (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn sub_page_residue_value_still_round_trips_through_serde() {
+        // The byte-size codec accepts the sub-page-residue value (the
+        // page-multiple gate lives in validate, not in the codec) —
+        // peer of `above_cap_value_still_round_trips_through_serde`
+        // and `below_page_value_still_round_trips_through_serde`.
+        // Pins that the structural property is "sub-page-residue is
+        // rejected by validate" — not "sub-page-residue is
+        // unparseable by the codec"; the latter would prevent the
+        // diagnostic from naming the offending byte count at all,
+        // since deserialize would fail first. The render-then-parse
+        // round trip also pins the codec's flow-through-to-bytes
+        // shape on non-power-of-1024 magnitudes: `render_byte_size`
+        // falls through every `(mult, label)` arm whose `n % mult !=
+        // 0` and emits the bare byte count.
+        let bytes = LIMITS_MEMORY_WASM32_PAGE_BYTES + 1;
+        let l = LimitsSpec {
+            memory: Some(bytes),
             ..Default::default()
         };
         let json = serde_json::to_string(&l).unwrap();
@@ -3036,11 +3337,7 @@ mod tests {
         // of `validate_rejects_cpu_far_above_cap` /
         // `validate_rejects_memory_8_gib` /
         // `validate_rejects_wall_clock_far_above_cap`.
-        for f in [
-            LIMITS_FUEL_MAX * 10,
-            LIMITS_FUEL_MAX * 1_000,
-            u64::MAX,
-        ] {
+        for f in [LIMITS_FUEL_MAX * 10, LIMITS_FUEL_MAX * 1_000, u64::MAX] {
             let l = LimitsSpec {
                 fuel: Some(f),
                 ..Default::default()
@@ -3083,15 +3380,15 @@ mod tests {
         // Mirrors `validate_accepts_cpu_typical_values` on the
         // sibling `:cpu` axis.
         for f in [
-            1_u64,                // smallest non-zero
-            1_000,                // tiny per-call budget
-            1_000_000,            // canonical fixture (10^6) — wasmtime book example
-            10_000_000,           // typical small-Servico (10^7)
-            100_000_000,          // typical heavier-Servico (10^8)
-            1_000_000_000,        // 1 billion — upper realistic per-call (10^9)
-            100_000_000_000,      // 10^11 — heavy compute-bound (10x below cap)
-            500_000_000_000,      // half the cap
-            1_000_000_000_000,    // exactly at cap (10^12)
+            1_u64,             // smallest non-zero
+            1_000,             // tiny per-call budget
+            1_000_000,         // canonical fixture (10^6) — wasmtime book example
+            10_000_000,        // typical small-Servico (10^7)
+            100_000_000,       // typical heavier-Servico (10^8)
+            1_000_000_000,     // 1 billion — upper realistic per-call (10^9)
+            100_000_000_000,   // 10^11 — heavy compute-bound (10x below cap)
+            500_000_000_000,   // half the cap
+            1_000_000_000_000, // exactly at cap (10^12)
         ] {
             let l = LimitsSpec {
                 fuel: Some(f),
