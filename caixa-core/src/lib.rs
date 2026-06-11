@@ -54,8 +54,8 @@ pub use render::{
     single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{
-    ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX, SupervisorError,
-    SupervisorSpec,
+    ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX,
+    SUPERVISOR_RESTART_WINDOW_MAX, SupervisorError, SupervisorSpec,
 };
 pub use upgrade::{
     UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from,

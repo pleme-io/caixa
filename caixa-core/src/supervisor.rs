@@ -237,6 +237,90 @@ const fn default_max_restarts() -> u32 {
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const SUPERVISOR_MAX_RESTARTS_MAX: u32 = 1000;
 
+/// Upper-bound ceiling on the `:supervisor :restart-window` axis —
+/// every validated `Some(`[`SupervisorSpec::restart_window`]`)` past
+/// [`SupervisorSpec::validate`] lies in `1ms..=SUPERVISOR_RESTART_WINDOW_MAX`
+/// (inclusive on both ends, integer-millisecond magnitudes by the
+/// canonical-form gate immediately preceding).
+///
+/// The typed field is `Option<Duration>` (the zero-floor arm
+/// [`SupervisorError::RestartWindowZero`] already rejects
+/// `Some(Duration::ZERO)`, and the canonical-form arm
+/// [`SupervisorError::RestartWindowNotCanonical`] already rejects
+/// sub-millisecond residue), so a programmatic struct literal
+/// (`SupervisorSpec { restart_window: Some(Duration::from_secs(86_400)),
+/// .. }` — 24h) and the equivalent author-surface form
+/// (`(:supervisor (:restart-window "24h"))` — the shared duration codec
+/// emits `"<n>h"` for any integer-hour magnitude) both round-trip
+/// cleanly through serde — a structurally unbounded `Duration` ceiling.
+/// A `:restart-window` value far above the documented Erlang/OTP
+/// `MaxIntensity / Period` production-playbook band (Learn You Some
+/// Erlang's `{intensity, 5, 60}` worker-supervisor `Period = 60s`
+/// default, Elixir's `Supervisor` `max_seconds: 5` default, OTP's
+/// `supervisor` callback module `MaxT = 5..=60` typical, Riak Core's
+/// `MaxT ∈ 10s..=300s`, RabbitMQ broker-supervisor `MaxT = 5s` default)
+/// degenerates the supervisor's restart-intensity counter into a
+/// lifetime counter: the rolling failure-counting window is structurally
+/// so long that transient restarts are never forgotten, so the
+/// `MaxIntensity / Period` ratio degenerates from "trip the parent
+/// supervisor when the child has exceeded its restart budget *within
+/// the recent window*" to "trip the parent when the child has exceeded
+/// its restart budget *over its lifetime*" — every transient restart
+/// counts against the budget forever, the supervisor's reset semantic
+/// never reaches the child, and the typed `:restart-window` slot
+/// becomes a no-op rolling window carried on every emitted hierarchical
+/// reconciliation contract. The canonical
+/// rolling-window-degenerates-to-lifetime-counter footgun the sibling
+/// [`crate::POLICY_BREAKER_WINDOW_MAX`] cap closes on the peer
+/// `:politicas :circuit-breaker :window` axis with identical shape (both
+/// are "rolling failure-counting window with a per-`Period` reset" Duration
+/// axes whose lifetime-counter degenerate at the high end is the same
+/// "the reset semantic never fires" CSE invariant violation).
+///
+/// The `1h` (3600s = `3_600_000` ms) ceiling matches the largest unit
+/// the shared duration codec emits (`"<n>h"` for any integer-hour
+/// magnitude) — every value in the canonical authoring form's
+/// `<integer><unit>` grammar at or below this cap renders to a clean
+/// canonical string — and matches the three sibling typed-`Duration`
+/// caps already lifted to this surface
+/// ([`crate::LIMITS_WALL_CLOCK_MAX`], [`crate::POLICY_TIMEOUT_MAX`],
+/// [`crate::POLICY_BREAKER_WINDOW_MAX`]). All four typed-`Duration`
+/// axes — per-process `:limits :wall-clock`, per-edge `:politicas
+/// :timeout`, per-breaker `:politicas :circuit-breaker :window`, and
+/// per-supervisor `:supervisor :restart-window` — now share a single
+/// uniform top edge at the codec's largest emitted unit so the next
+/// typed-slot wiring (the future wasm-operator's per-supervisor
+/// `MaxIntensity / Period` reconciler, the M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+/// webhook, the `caixa-operator`'s hierarchical reconciliation
+/// scheduler) reaches for any of the four knowing the value is in
+/// `1ms..=1h` without re-validating at the renderer layer. The cap sits
+/// two orders of magnitude above every documented Erlang/OTP / Elixir /
+/// Riak Core / RabbitMQ production-playbook recommendation band
+/// (`5s..=300s`) and below the clearly-pathological "rolling window
+/// degenerates to lifetime counter" floor (`24h`, `7d`, `Duration::MAX`):
+/// a value the author can plausibly want for a very-low-traffic
+/// long-tail failure-restart window over a hyperscale-flaky child pool,
+/// but a hard wall above which the rolling-window contract is
+/// structurally a lifetime-counter contract.
+///
+/// Lifted as a typed `pub const` so the bound has exactly one source
+/// of truth — the future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+/// materializer's admission webhook, the wasm-operator-side
+/// per-supervisor `MaxIntensity / Period` reconciler, and the
+/// `caixa-operator`'s hierarchical reconciliation scheduler all read
+/// from one place. Same shape every other typed upper bound in this
+/// crate carries ([`SUPERVISOR_MAX_RESTARTS_MAX`],
+/// [`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`],
+/// [`crate::aplicacao::POLICY_RETRIES_MAX`],
+/// [`crate::aplicacao::POLICY_RATE_LIMIT_MAX`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::LIMITS_WALL_CLOCK_MAX`], [`crate::POLICY_TIMEOUT_MAX`],
+/// [`crate::POLICY_BREAKER_WINDOW_MAX`],
+/// [`crate::render::DNS_1123_LABEL_MAX_LEN`],
+/// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
+pub const SUPERVISOR_RESTART_WINDOW_MAX: Duration = Duration::from_secs(3600);
+
 impl Default for SupervisorSpec {
     fn default() -> Self {
         Self {
@@ -394,6 +478,50 @@ impl SupervisorSpec {
         {
             return Err(SupervisorError::RestartWindowNotCanonical { window: w });
         }
+        // Upper-bound gate on `:restart-window`: every validated value
+        // must also fit within the typed-`Duration` ceiling
+        // ([`SUPERVISOR_RESTART_WINDOW_MAX`] = 1h = 3600s). The zero-floor,
+        // canonical-form, and this cap arm together bracket the typed
+        // `:restart-window` axis structurally — every validated value
+        // lies in `1ms..=SUPERVISOR_RESTART_WINDOW_MAX`, integer-millisecond
+        // granularity. Until this gate landed the shared duration codec
+        // accepted any `Duration` past zero with integer-ms residue
+        // (the parser's only upper bound was `u64::MAX` seconds, the
+        // largest value the `<integer>h` form can encode), so
+        // `(:supervisor (:restart-window "24h"))` round-tripped cleanly
+        // through serde and the per-supervisor CSE invariant (no
+        // `:restart-window` the operator's `MaxIntensity / Period`
+        // reconciler can't honor as a meaningful rolling-window reset)
+        // was a runtime, not build-time, contract. Same trajectory as
+        // the three sibling typed-`Duration` cap lifts on
+        // [`crate::LIMITS_WALL_CLOCK_MAX`] (per-process wasm-engine
+        // deadline), [`crate::POLICY_TIMEOUT_MAX`] (per-edge mesh-policy
+        // deadline), and [`crate::POLICY_BREAKER_WINDOW_MAX`]
+        // (per-breaker rolling-window) — the four typed-`Duration` axes
+        // now share a single uniform top edge at the codec's largest
+        // emitted unit so the next typed-slot wiring (the future
+        // wasm-operator's per-supervisor `MaxIntensity / Period`
+        // reconciler, the M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+        // materializer's admission webhook, the `caixa-operator`'s
+        // hierarchical reconciliation scheduler) reaches for any of the
+        // four knowing the value is in `1ms..=1h` without re-validating
+        // at the renderer layer. The canonical-form arm strictly
+        // precedes this cap so a `Duration` that is *both*
+        // sub-millisecond and above-cap surfaces the more fundamental
+        // round-trip-shape diagnostic first (the cap's `1ms..=1h`
+        // remediation would be misleading when no integer-ms form of
+        // the offending value exists). Same posture every peer
+        // zero-then-shape-then-cap chain uses on this surface
+        // (`WallClockZero` → `WallClockNotCanonical` →
+        // `WallClockExceedsCap`, `PolicyTimeoutZero` →
+        // `PolicyTimeoutNotCanonical` → `PolicyTimeoutExceedsCap`,
+        // `PolicyBreakerZeroWindow` → `PolicyBreakerWindowNotCanonical`
+        // → `PolicyBreakerWindowExceedsCap`).
+        if let Some(w) = self.restart_window
+            && w > SUPERVISOR_RESTART_WINDOW_MAX
+        {
+            return Err(SupervisorError::RestartWindowExceedsCap { window: w });
+        }
         let mut seen = std::collections::HashSet::new();
         for child in &self.children {
             if child.caixa.is_empty() {
@@ -549,6 +677,31 @@ pub enum SupervisorError {
          (`<integer><unit>` for unit ∈ {{ms, s, m, h}}, e.g. `\"500ms\"`, `\"30s\"`, `\"2m\"`, `\"1h\"`) or omit the field for `never reset`"
     )]
     RestartWindowNotCanonical { window: Duration },
+    #[error(
+        ":supervisor :restart-window ({window:?}) exceeds the supervisor-policy ceiling \
+         (SUPERVISOR_RESTART_WINDOW_MAX = 1h = 3600s) — a value above this cap turns the typed \
+         per-supervisor rolling-window restart-intensity counter into a lifetime counter: the \
+         failure-counting window is structurally so long that transient restarts are never \
+         forgotten, the MaxIntensity/Period ratio degenerates from `trip the parent supervisor \
+         when the child has exceeded its restart budget within the recent window` to `trip the \
+         parent when the child has exceeded its restart budget over its lifetime`, and the \
+         supervisor's reset semantic never reaches the child — every typed-slot consumer \
+         (Erlang/OTP's MaxIntensity/Period reconciler, the future wasm-operator's \
+         per-supervisor restart-intensity counter, the M4 mesh.pleme.io/v1alpha1/Supervisor CR \
+         materializer's admission webhook, the caixa-operator's hierarchical reconciliation \
+         scheduler) emits a `:restart-window` declaration that is structurally a no-op rolling \
+         window. Pin a value in 1ms..=1h (Learn You Some Erlang's `{{intensity, 5, 60}}` \
+         worker-supervisor `Period = 60s` default, Elixir's `Supervisor` `max_seconds: 5` \
+         default, OTP's `supervisor` callback module `MaxT = 5..=60` typical, Riak Core's \
+         `MaxT ∈ 10s..=300s`, RabbitMQ broker-supervisor `MaxT = 5s` default — every Erlang/OTP \
+         / Elixir production playbook sits in the 5s..=300s band; the longest documented \
+         per-supervisor restart-window any pleme-io substrate playbook recommends maxes at \
+         ~30m) or omit :restart-window to express `never reset` (the supervisor's restart \
+         budget then becomes a strict lifetime counter by design, not a degenerate one — the \
+         author surfaces the lifetime-counter semantic explicitly at the slot, rather than \
+         hiding it behind a rolling-window declaration the cap arm rejects)"
+    )]
+    RestartWindowExceedsCap { window: Duration },
     #[error("child entry has empty :caixa name")]
     EmptyChildName,
     #[error(
@@ -1784,6 +1937,323 @@ mod tests {
             let back: SupervisorSpec = serde_json::from_str(&json).unwrap();
             assert_eq!(back.restart_window, Some(w));
         }
+    }
+
+    // ── value-shape: upper cap on :restart-window ─────────────────────────
+    //
+    // The fourth (and last) typed-`Duration` axis in caixa-core to get
+    // the 1h upper cap — peer with `:limits :wall-clock` (51e0dbd),
+    // `:politicas :timeout` (2e8ee7e), and `:politicas
+    // :circuit-breaker :window` (379a814). Brackets the typed
+    // `:restart-window` axis structurally: every validated value lies
+    // in `1ms..=SUPERVISOR_RESTART_WINDOW_MAX`, integer-millisecond
+    // granularity, closing the
+    // rolling-window-degenerates-to-lifetime-counter footgun the prior
+    // zero-floor-and-canonical-form-only checks left open.
+
+    #[test]
+    fn validate_rejects_restart_window_above_cap() {
+        // The fail-before-pass-after pin: 3601s = 1h + 1s is
+        // structurally one canonical-tick past the
+        // [`SUPERVISOR_RESTART_WINDOW_MAX`] ceiling (1h = 3600s) — an
+        // integer-millisecond magnitude the canonical-form arm above
+        // accepts cleanly, that the shared duration codec round-trips
+        // losslessly as `"3601s"`, and that silently passed validate on
+        // every pre-gate codebase because the typed slot's only checks
+        // were the zero-floor and canonical-form arms. The runtime
+        // substrate consuming the value (Erlang/OTP's MaxIntensity/
+        // Period reconciler, the future wasm-operator's per-supervisor
+        // restart-intensity counter) reaches for a `Duration` so long
+        // no realistic restart-recovery pattern resets the counter,
+        // far from the source caixa.lisp.
+        let w = SUPERVISOR_RESTART_WINDOW_MAX + Duration::from_secs(1);
+        let s = SupervisorSpec {
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowExceedsCap { window: w }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_restart_window_one_millisecond_above_cap() {
+        // Boundary case: exactly 1ms past the cap (the granularity the
+        // canonical-form gate enforces). Catches a future "strictly
+        // less than" half-measure and pins the diagnostic to name the
+        // offending `Duration` verbatim. Peer of
+        // `validate_rejects_wall_clock_one_millisecond_above_cap` /
+        // `rejects_policy_timeout_one_millisecond_above_cap` /
+        // `rejects_circuit_breaker_window_one_millisecond_above_cap`
+        // on the sibling typed-`Duration` axes' top edges.
+        let w = SUPERVISOR_RESTART_WINDOW_MAX + Duration::from_millis(1);
+        let s = SupervisorSpec {
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowExceedsCap { window: w }
+        );
+    }
+
+    #[test]
+    fn validate_rejects_restart_window_far_above_cap() {
+        // The "obvious authoring footgun" case: a `(:restart-window "24h")`,
+        // `(:restart-window "7d")`, or any "I want a lifetime counter
+        // but wrote a `<integer>h` magnitude anyway" typo — values the
+        // canonical-form arm accepts as integer-millisecond magnitudes,
+        // the codec round-trips losslessly through serde, but the
+        // operator's `MaxIntensity / Period` reconciler cannot honor
+        // as a meaningful rolling window. Until this gate landed
+        // validate accepted them. Pin the common above-cap values (24h,
+        // 7d, ~11.5d) so a future relaxation that drops the upper bound
+        // surfaces here.
+        for w in [
+            Duration::from_secs(86_400),    // 24h
+            Duration::from_secs(604_800),   // 7d
+            Duration::from_secs(1_000_000), // ~11.5 days
+        ] {
+            let s = SupervisorSpec {
+                restart_window: Some(w),
+                children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            assert_eq!(
+                s.validate().unwrap_err(),
+                SupervisorError::RestartWindowExceedsCap { window: w }
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_restart_window_at_cap() {
+        // The boundary value — exactly [`SUPERVISOR_RESTART_WINDOW_MAX`]
+        // (1h) — must validate. The cap is inclusive on the top edge,
+        // matching the [`crate::LIMITS_WALL_CLOCK_MAX`] /
+        // [`crate::POLICY_TIMEOUT_MAX`] /
+        // [`crate::POLICY_BREAKER_WINDOW_MAX`] discipline on the sibling
+        // capped axes. Pin the boundary explicitly so a future
+        // off-by-one tightening (`>= SUPERVISOR_RESTART_WINDOW_MAX`
+        // instead of `>`) surfaces here as a test failure rather than a
+        // silent contract narrowing.
+        let s = SupervisorSpec {
+            restart_window: Some(SUPERVISOR_RESTART_WINDOW_MAX),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        s.validate()
+            .expect("restart_window == SUPERVISOR_RESTART_WINDOW_MAX must validate");
+    }
+
+    #[test]
+    fn validate_accepts_restart_window_typical_values() {
+        // The documented Erlang/OTP / Elixir / Riak Core / RabbitMQ
+        // per-supervisor production-playbook band positive-control
+        // sweep — every value Learn You Some Erlang's `{intensity, 5,
+        // 60}` worker-supervisor `Period = 60s` default, Elixir's
+        // `Supervisor` `max_seconds: 5` default, OTP's `supervisor`
+        // callback module `MaxT = 5..=60` typical, Riak Core's `MaxT ∈
+        // 10s..=300s`, and RabbitMQ broker-supervisor `MaxT = 5s`
+        // default recommend (5s..=300s) must pass, plus a sweep
+        // through the long-tail-flaky-pool band (5m, 15m, 30m, 1h) the
+        // cap accepts. Mirrors `validate_accepts_wall_clock_typical_values`
+        // on the sibling `:limits :wall-clock` axis.
+        for w in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_secs(1),
+            Duration::from_secs(5),  // RabbitMQ broker-supervisor default
+            Duration::from_secs(10), // Riak Core lower
+            Duration::from_secs(30),
+            Duration::from_secs(60),  // Learn You Some Erlang default
+            Duration::from_secs(120), // OTP supervisor MaxT typical
+            Duration::from_secs(300), // Riak Core upper
+            Duration::from_secs(900), // 15m
+            Duration::from_secs(1800),
+            Duration::from_secs(3600), // exactly 1h, the cap
+        ] {
+            let s = SupervisorSpec {
+                restart_window: Some(w),
+                children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+                ..SupervisorSpec::default()
+            };
+            s.validate()
+                .unwrap_or_else(|e| panic!("restart_window={w:?} must validate; got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn restart_window_zero_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: `Duration::ZERO` is structurally
+        // outside both `>= 1ms` (zero-floor) and `<=
+        // SUPERVISOR_RESTART_WINDOW_MAX` (cap), but the zero-floor
+        // diagnostic is the more self-locating one (it directly names
+        // the omit-axis remediation), so the validate gate must fire
+        // on zero first. Same shape every other zero-then-cap ordering
+        // on this surface uses (`WallClockZero` then
+        // `WallClockExceedsCap`, `PolicyTimeoutZero` then
+        // `PolicyTimeoutExceedsCap`, `PolicyBreakerZeroWindow` then
+        // `PolicyBreakerWindowExceedsCap`).
+        let s = SupervisorSpec {
+            restart_window: Some(Duration::ZERO),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowZero,
+            "Duration::ZERO must surface the zero-floor diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn restart_window_canonical_takes_precedence_over_cap() {
+        // The cross-arm ordering pin: a `Duration` that is *both*
+        // sub-millisecond (non-canonical-form) and structurally above
+        // the cap surfaces the canonical-form diagnostic first,
+        // because the round-trip-shape break is the more fundamental
+        // issue (the value can't even round-trip through the codec,
+        // so the cap diagnostic naming `1ms..=1h` would be misleading
+        // — there's no integer-ms form of the offending value). Pin
+        // the order so a future refactor that reorders the arms
+        // surfaces here as a test failure rather than a silent
+        // diagnostic regression. Peer of
+        // `wall_clock_canonical_takes_precedence_over_cap` /
+        // `policy_timeout_canonical_takes_precedence_over_cap`.
+        let w = SUPERVISOR_RESTART_WINDOW_MAX + Duration::from_nanos(1);
+        let s = SupervisorSpec {
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::RestartWindowNotCanonical { window: w },
+            "sub-ms above-cap value must surface the canonical-form diagnostic, not the cap diagnostic"
+        );
+    }
+
+    #[test]
+    fn max_restarts_cap_takes_precedence_over_restart_window_cap() {
+        // The cross-arm ordering pin between the `:max-restarts` cap
+        // and the sibling `:restart-window` cap. A supervisor carrying
+        // both an over-cap `max_restarts` AND an over-cap window must
+        // surface the `MaxRestartsExceedsCap` diagnostic first — the
+        // cap arm is wired immediately after the zero-restart arm and
+        // strictly before every window-axis arm (zero / canonical /
+        // cap), so the offending value the diagnostic names matches
+        // the order the author would discover the gates by reading
+        // top-to-bottom through `SupervisorSpec::validate`. Pin the
+        // order so a future refactor that reorders the arms surfaces
+        // here as a test failure rather than a silent diagnostic
+        // regression. Peer of
+        // `max_restarts_cap_takes_precedence_over_restart_window_gates`
+        // on the sibling zero / canonical window arms.
+        let w = SUPERVISOR_RESTART_WINDOW_MAX + Duration::from_secs(1);
+        let s = SupervisorSpec {
+            max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::MaxRestartsExceedsCap {
+                max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+            },
+            "over-cap max_restarts must surface the cap diagnostic before any window-axis diagnostic"
+        );
+    }
+
+    #[test]
+    fn restart_window_cap_diagnostic_carries_offending_value() {
+        // The diagnostic-shape pin: the offending `Duration` is
+        // carried verbatim into the
+        // [`SupervisorError::RestartWindowExceedsCap`] variant so the
+        // surfaced error message names the value the author wrote,
+        // not just the cap. Same self-locating diagnostic shape every
+        // other typed-cap arm on this surface carries
+        // (`WallClockExceedsCap` carries the offending `Duration`
+        // verbatim, `PolicyTimeoutExceedsCap` carries the offending
+        // `Duration` verbatim, `PolicyBreakerWindowExceedsCap` carries
+        // the offending `Duration` verbatim).
+        let w = Duration::from_secs(7200); // 2h
+        let s = SupervisorSpec {
+            restart_window: Some(w),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, SupervisorError::RestartWindowExceedsCap { window } if window == w),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("7200"),
+            ":supervisor :restart-window cap diagnostic must carry the offending value verbatim (got: {msg})"
+        );
+    }
+
+    #[test]
+    fn supervisor_restart_window_cap_pins_canonical_value() {
+        // The SUPERVISOR_RESTART_WINDOW_MAX constant pins the value at
+        // exactly 1 hour (3600s = 3_600_000ms) — the largest unit the
+        // shared duration codec emits as a clean canonical string
+        // (`"<n>h"`). Pinning the literal value here surfaces a future
+        // drift (a relaxation to 24h, a tightening to 5m) as a
+        // deliberate test edit, not a silent contract narrowing.
+        //
+        // The four typed-`Duration` caps on the validation surface
+        // (`LIMITS_WALL_CLOCK_MAX` per-process, `POLICY_TIMEOUT_MAX`
+        // per-edge, `POLICY_BREAKER_WINDOW_MAX` per-breaker,
+        // `SUPERVISOR_RESTART_WINDOW_MAX` per-supervisor) share a
+        // single uniform top edge at the codec's largest emitted unit
+        // — a structural-property invariant the equality assertions
+        // here enshrine, so a future drift on any of the four
+        // surfaces as a deliberate test edit. Same shape every other
+        // typed-cap value pin uses
+        // (`wall_clock_cap_pins_canonical_value`,
+        // `policy_timeout_cap_pins_canonical_value`,
+        // `circuit_breaker_window_cap_pins_canonical_value`).
+        assert_eq!(SUPERVISOR_RESTART_WINDOW_MAX, Duration::from_secs(3600));
+        assert_eq!(SUPERVISOR_RESTART_WINDOW_MAX.as_millis(), 3_600_000);
+        assert_eq!(SUPERVISOR_RESTART_WINDOW_MAX, crate::LIMITS_WALL_CLOCK_MAX);
+        assert_eq!(SUPERVISOR_RESTART_WINDOW_MAX, crate::POLICY_TIMEOUT_MAX);
+        assert_eq!(
+            SUPERVISOR_RESTART_WINDOW_MAX,
+            crate::POLICY_BREAKER_WINDOW_MAX
+        );
+    }
+
+    #[test]
+    fn restart_window_cap_value_round_trips_through_codec() {
+        // The codec round-trip property the cap arm preserves: the
+        // [`SUPERVISOR_RESTART_WINDOW_MAX`] constant itself round-trips
+        // through the shared duration codec — every value at the cap
+        // serializes to the canonical `"1h"` form and parses back
+        // identically. Pin the round-trip so a future change to the
+        // codec's unit set or to the cap's magnitude that breaks the
+        // round-trip property surfaces here. Peer of
+        // `wall_clock_cap_value_round_trips_through_codec` on the
+        // sibling `:limits :wall-clock` axis.
+        let s = SupervisorSpec {
+            restart_window: Some(SUPERVISOR_RESTART_WINDOW_MAX),
+            children: vec![child("w", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        s.validate().unwrap();
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(
+            json.contains("\"1h\""),
+            "SUPERVISOR_RESTART_WINDOW_MAX must serialize to the canonical `\"1h\"` form (got {json})"
+        );
+        let back: SupervisorSpec = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.restart_window, Some(SUPERVISOR_RESTART_WINDOW_MAX));
     }
 
     #[test]
