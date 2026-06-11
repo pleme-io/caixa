@@ -232,7 +232,7 @@ fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), Behavio
     // (`MemoryZero` → `MemoryBelowWasm32Page` →
     // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`, the
     // smallest-scope arm fires last).
-    if path.extension().and_then(|ext| ext.to_str()) != Some("lisp") {
+    if !crate::render::is_lisp_extension(path) {
         return Err(BehaviorError::NonLispExtension {
             slot,
             path: path.to_path_buf(),

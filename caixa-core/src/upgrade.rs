@@ -1149,19 +1149,87 @@ impl UpgradeInstruction {
                 // on (the `:state-change :script` self-locating error)
                 // is preserved by construction.
                 match crate::render::is_sandboxed_relative_path(script) {
-                    Ok(()) => Ok(()),
-                    Err(crate::render::PathShapeViolation::Empty) => Err(UpgradeError::EmptyScript),
+                    Ok(()) => {}
+                    Err(crate::render::PathShapeViolation::Empty) => {
+                        return Err(UpgradeError::EmptyScript);
+                    }
                     Err(crate::render::PathShapeViolation::Absolute) => {
-                        Err(UpgradeError::AbsoluteScript {
+                        return Err(UpgradeError::AbsoluteScript {
                             script: script.clone(),
-                        })
+                        });
                     }
                     Err(crate::render::PathShapeViolation::ParentEscape) => {
-                        Err(UpgradeError::ParentEscapeScript {
+                        return Err(UpgradeError::ParentEscapeScript {
                             script: script.clone(),
-                        })
+                        });
                     }
                 }
+                // File-type contract on the `:upgrade-from :state-change
+                // :script` axis: every typed migration script is
+                // consumed by the M2.5 wasm-engine instantiator (the
+                // `ABSORPTION-ROADMAP` names the runtime substrate that
+                // executes appup hot-upgrades) as a tatara-lisp source
+                // file the engine reads through `tatara_lisp::read` at
+                // hot-upgrade migration time — the same downstream
+                // consumer the peer `:behavior :on-*` axis routes
+                // through at instance-start time (c97815a). The author
+                // surface already documents the `.lisp` extension as
+                // the canonical shape (the in-module example
+                // `(:state-change "lib/migrations/v01-to-v02.lisp")`
+                // and every in-tree test fixture use `lib/<name>.lisp`)
+                // and the per-`UpgradeFromEntry` `:from`-keyed migration
+                // directory invariant assumes the same `.lisp`
+                // extension verbatim; until this gate landed the typed
+                // slot accepted any path that passed the structural-shape
+                // checks (empty / absolute / parent-escape), so a
+                // programmatic struct literal
+                // (`UpgradeInstruction::StateChange { script:
+                // PathBuf::from("lib/migrations.txt") }` /
+                // `PathBuf::from("lib/migrations.rs")` / the equivalent
+                // author-surface `(:state-change "lib/migrations.lisp.bak")`
+                // / `(:state-change "lib/migrations")` / any "I dragged
+                // the wrong file from the workspace tree" typo landing
+                // in the slot) round-tripped cleanly through serde and
+                // the per-script CSE invariant (no value the wasm-engine
+                // can't honor as tatara-lisp source) was a runtime, not
+                // build-time, contract. The wasm-engine's
+                // `tatara_lisp::read` failed at hot-upgrade migration
+                // time with a parser-shaped diagnostic far from the
+                // source caixa.lisp, with no field naming the offending
+                // `(:state-change …)` instruction — the canonical
+                // "declared-but-unloadable migration" footgun the
+                // sibling `:upgrade-from` path-shape arms close on the
+                // peer "sandbox-escaping" / "empty" / "parent-escape"
+                // shapes, and the peer `BehaviorError::NonLispExtension`
+                // (c97815a) closes on the `:behavior :on-*` axis's
+                // identical "tatara-lisp source file the engine reads
+                // through `tatara_lisp::read`" file-type contract: both
+                // are "the consumer substrate's accepted set is
+                // narrower than the structural-shape gate alone" lifts,
+                // surfacing the engine's load-bearing type-contract at
+                // validate time rather than at apply time.
+                //
+                // The path-shape arms strictly precede this extension
+                // arm so a path that is *both* sandbox-escaping and
+                // non-`.lisp` surfaces the more fundamental sandbox-shape
+                // diagnostic first (the `.lisp` remediation would be
+                // misleading when the offending path can never resolve
+                // under the caixa root anyway — the canonical fix
+                // collapses both into "pin a relative `.lisp` path
+                // under the caixa root"). Same posture every peer
+                // zero-then-shape-then-cap chain uses on this surface
+                // (`MemoryZero` → `MemoryBelowWasm32Page` →
+                // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`,
+                // the smallest-scope arm fires last) and the same
+                // posture the sibling `BehaviorError` chain follows
+                // (`EmptyPath` → `AbsolutePath` → `ParentEscape` →
+                // `NonLispExtension`).
+                if !crate::render::is_lisp_extension(script) {
+                    return Err(UpgradeError::NonLispExtensionScript {
+                        script: script.clone(),
+                    });
+                }
+                Ok(())
             }
             Self::Restart => Ok(()),
         }
@@ -1253,6 +1321,19 @@ pub enum UpgradeError {
         script.display()
     )]
     ParentEscapeScript { script: PathBuf },
+    #[error(
+        ":upgrade-from (:state-change {}) does not terminate in the `.lisp` extension — the M2.5 \
+         wasm-engine instantiator reads every migration script as tatara-lisp source through \
+         `tatara_lisp::read` at hot-upgrade migration time (the same downstream consumer the \
+         peer `:behavior :on-*` axis routes through at instance-start time, c97815a), so any \
+         other extension (`.txt`, `.rs`, `.lisp.bak`) or no-extension shape is structurally a \
+         parser error far from the source caixa.lisp, with no field naming the offending \
+         `(:state-change …)` instruction. Pin a relative path under the caixa root whose \
+         terminating extension is lowercase-`.lisp` (e.g. `\"lib/migrations.lisp\"`, \
+         `\"lib/migrations/v01-to-v02.lisp\"`).",
+        script.display()
+    )]
+    NonLispExtensionScript { script: PathBuf },
     #[error(
         ":upgrade-from carries more than one `(:from {from:?})` entry — OTP appup picks at most \
          one matching block per running version (`release_handler:install_release/1` dispatches \
@@ -1453,6 +1534,8 @@ pub enum UpgradeError {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     fn entry(from: &str, instrs: Vec<UpgradeInstruction>) -> UpgradeFromEntry {
@@ -1720,6 +1803,226 @@ mod tests {
             i2.validate().unwrap_err(),
             UpgradeError::ParentEscapeScript { .. }
         ));
+    }
+
+    // ── :upgrade-from :state-change :script `.lisp` extension gate ─
+    // Mirrors the c97815a `BehaviorError::NonLispExtension` arm on
+    // the peer `:behavior :on-*` tatara-lisp-source-path axis. Both
+    // axes route through the same M2.5 wasm-engine `tatara_lisp::read`
+    // consumer; the file-type contract is identical, so the per-axis
+    // test grid is mirrored leg-for-leg.
+
+    #[test]
+    fn validate_rejects_no_extension_script() {
+        // Fail-before-pass-after: the canonical "I declared the
+        // migration script but forgot the `.lisp` extension"
+        // authoring footgun (e.g. `(:state-change "lib/migrations")`).
+        // The wasm-engine's `tatara_lisp::read` consumer needs a
+        // file-type contract beyond the structural-shape gate; a
+        // no-extension path past `is_sandboxed_relative_path` would
+        // surface a parser-shaped diagnostic at hot-upgrade migration
+        // time far from the source caixa.lisp.
+        for relpath in ["lib/migrations", "migrations", "lib/handlers/migrate"] {
+            let i = UpgradeInstruction::StateChange {
+                script: PathBuf::from(relpath),
+            };
+            let err = i.validate().unwrap_err();
+            assert!(
+                matches!(&err, UpgradeError::NonLispExtensionScript { script: s }
+                         if s == Path::new(relpath)),
+                "no-extension script {relpath:?} must surface as NonLispExtensionScript \
+                 carrying the offending path verbatim, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_non_lisp_extension_script() {
+        // Wrong-extension sweep across common authoring footguns: the
+        // `.txt` / `.md` / `.json` / `.yaml` shapes an author might
+        // drag in from the workspace tree, the `.rs` shape that an
+        // IDE auto-complete might propose, the `.lisp.bak` shape an
+        // editor might leave behind, and the `.lispx` near-miss that
+        // a typo would produce. Each must surface as
+        // `NonLispExtensionScript` carrying the offending path
+        // verbatim — the wasm-engine's `tatara_lisp::read` consumer
+        // rejects all of these at hot-upgrade migration time, and
+        // the gate lifts that contract to validate time. Mirrors the
+        // peer `BehaviorError::NonLispExtension` sweep (c97815a) on
+        // the `:behavior :on-*` axis leg-for-leg — same downstream
+        // consumer, same accepted set, same per-axis test grid.
+        let footguns: &[&str] = &[
+            "lib/migrations.rs",
+            "lib/migrations.txt",
+            "lib/migrations.md",
+            "lib/migrations.json",
+            "lib/migrations.yaml",
+            "lib/migrations.toml",
+            "lib/migrations.lisp.bak",
+            "lib/migrations.lispx",
+            "lib/migrations.lis",
+        ];
+        for relpath in footguns {
+            let i = UpgradeInstruction::StateChange {
+                script: PathBuf::from(relpath),
+            };
+            let err = i.validate().unwrap_err();
+            assert!(
+                matches!(&err, UpgradeError::NonLispExtensionScript { script: s }
+                         if s == Path::new(relpath)),
+                "wrong-extension script {relpath:?} must surface as NonLispExtensionScript \
+                 carrying the offending path verbatim, got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_uppercase_lisp_extension_script() {
+        // Strict lowercase: `.LISP` / `.Lisp` / `.LiSp` are
+        // case-folded shapes a case-insensitive volume's existence
+        // check would match the on-disk file — but the
+        // canonical-form codec emits lowercase `.lisp` verbatim, so
+        // a case-folded shape mismatches the round-trip-stable
+        // canonical form (THEORY.md §V.2.7 render-determinism).
+        // Same case-sensitive discipline the byte-size / duration
+        // codecs use on unit suffixes (`MiB`, `ms`, `s`, `m`, `h`)
+        // and every other shape-gate predicate in `render.rs` (label
+        // / scheme / unit boundaries). Mirrors the peer
+        // `BehaviorError::NonLispExtension` case-fold sweep (c97815a).
+        for relpath in [
+            "lib/migrations.LISP",
+            "lib/migrations.Lisp",
+            "lib/migrations.LiSp",
+            "lib/migrations.lISP",
+        ] {
+            let i = UpgradeInstruction::StateChange {
+                script: PathBuf::from(relpath),
+            };
+            let err = i.validate().unwrap_err();
+            assert!(
+                matches!(&err, UpgradeError::NonLispExtensionScript { script: s }
+                         if s == Path::new(relpath)),
+                "case-folded `.lisp` extension {relpath:?} must surface as \
+                 NonLispExtensionScript (strict lowercase, canonical-form \
+                 round-trip pin), got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_canonical_lisp_extension_scripts() {
+        // Positive-control sweep across every canonical in-tree
+        // authoring shape: bare filename, standard `lib/`
+        // subdirectory, deeply-nested migrations subdirectory,
+        // explicit current-dir-relative prefix, mid-path `./`
+        // segment, multi-dot stem (the version-suffix shape
+        // `lib/migrations/v.0.1.lisp` an author might use to encode
+        // the migration's `:from` version into the filename). Drift
+        // here = a future tightening that rejects any of these
+        // surfaces as a test-failure at the per-axis validator
+        // boundary, not piecemeal across renderer / layout-checker
+        // call sites. Mirrors the peer `BehaviorSpec` positive-set
+        // sweep (c97815a).
+        let canonical: &[&str] = &[
+            "lib/migrations.lisp",
+            "lib/migrations/v01-to-v02.lisp",
+            "migrations.lisp",
+            "a.lisp",
+            "./lib/migrations.lisp",
+            "lib/./migrations.lisp",
+            "lib/migrations/v.0.1.lisp",
+        ];
+        for relpath in canonical {
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from(relpath),
+            }
+            .validate()
+            .unwrap_or_else(|e| {
+                panic!("canonical `.lisp` script {relpath:?} must pass, got {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn validate_sandbox_shape_takes_precedence_over_lisp_extension() {
+        // Cross-arm precedence pin: a script that is *both*
+        // sandbox-escaping (Empty / Absolute / ParentEscape) and
+        // non-`.lisp` must surface the more-fundamental
+        // sandbox-shape diagnostic first — the canonical fix
+        // collapses both into "pin a relative `.lisp` path under the
+        // caixa root", and the `.lisp` remediation would be
+        // misleading when the offending path can never resolve under
+        // the caixa root anyway. Mirrors the peer
+        // `BehaviorError` cross-arm precedence (c97815a) and the
+        // sibling `LimitsError`
+        // (`MemoryZero` → `MemoryBelowWasm32Page` →
+        // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`)
+        // smallest-scope-arm-fires-last posture.
+        let i_empty = UpgradeInstruction::StateChange {
+            script: PathBuf::new(),
+        };
+        assert_eq!(i_empty.validate().unwrap_err(), UpgradeError::EmptyScript);
+        let i_abs = UpgradeInstruction::StateChange {
+            script: PathBuf::from("/etc/migrations.txt"),
+        };
+        assert!(
+            matches!(
+                i_abs.validate().unwrap_err(),
+                UpgradeError::AbsoluteScript { .. }
+            ),
+            "absolute + non-`.lisp` must surface AbsoluteScript first"
+        );
+        let i_esc = UpgradeInstruction::StateChange {
+            script: PathBuf::from("../sibling/migrations.rs"),
+        };
+        assert!(
+            matches!(
+                i_esc.validate().unwrap_err(),
+                UpgradeError::ParentEscapeScript { .. }
+            ),
+            "parent-escape + non-`.lisp` must surface ParentEscapeScript first"
+        );
+    }
+
+    #[test]
+    fn non_lisp_extension_script_diagnostic_carries_offending_path() {
+        // Diagnostic-shape pin: the surfaced error message names the
+        // offending path verbatim (so the author can grep their
+        // caixa.lisp for the literal value), the `.lisp` extension
+        // is named in the remediation, and the downstream consumer
+        // (`tatara_lisp::read` at hot-upgrade migration time) is
+        // named so the author can trace the contract back to its
+        // source. Same self-locating shape every per-axis variant
+        // carries (`BehaviorError::NonLispExtension`, c97815a;
+        // `LimitsError::MemoryNotPageMultiple`, ec266d8).
+        let bad = PathBuf::from("lib/migrations.txt");
+        let err = UpgradeInstruction::StateChange {
+            script: bad.clone(),
+        }
+        .validate()
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("lib/migrations.txt"),
+            "diagnostic must name the offending path verbatim, got {msg:?}"
+        );
+        assert!(
+            msg.contains(".lisp"),
+            "diagnostic must name the expected `.lisp` extension, got {msg:?}"
+        );
+        assert!(
+            msg.contains(":state-change"),
+            "diagnostic must name the offending `:state-change` instruction, got {msg:?}"
+        );
+        match err {
+            UpgradeError::NonLispExtensionScript { script } => {
+                assert_eq!(
+                    script, bad,
+                    "variant must carry the offending path verbatim"
+                );
+            }
+            other => panic!("expected NonLispExtensionScript, got {other:?}"),
+        }
     }
 
     #[test]
