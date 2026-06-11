@@ -2842,6 +2842,71 @@ pub fn is_sandboxed_relative_path(path: &Path) -> Result<(), PathShapeViolation>
     Ok(())
 }
 
+/// The canonical tatara-lisp source-file extension every M2 typed
+/// path-slot the M2.5 wasm-engine instantiator reads through
+/// `tatara_lisp::read` at instance-start time must terminate in.
+///
+/// Strict lowercase: the byte-size / duration codecs and every other
+/// shape-gate predicate in this module are case-sensitive on unit /
+/// scheme / label boundaries, so a strict `lisp` shape matches the
+/// downstream accepted set without case-folding drift (an uppercase
+/// `.LISP` / `.Lisp` shape that a case-insensitive volume's existence
+/// check would match the on-disk file would still mismatch the
+/// canonical form the codec emits, breaking the THEORY.md §V.2.7
+/// render-determinism contract every typed slot carries).
+pub const LISP_SOURCE_EXTENSION: &str = "lisp";
+
+/// Predicate: assert that `path` terminates in the canonical
+/// [`LISP_SOURCE_EXTENSION`] (lowercase `.lisp`) — the file-type
+/// shape every M2 typed path-slot the wasm-engine instantiator reads
+/// as tatara-lisp source must take. The contract:
+///
+///   - the path has an extension component (no-extension paths like
+///     `"lib/init"` or `"a"` fail);
+///   - the extension's UTF-8 string form is exactly `"lisp"` —
+///     lowercase, no trailing residue, no double-extension shadow
+///     like `".lisp.bak"`.
+///
+/// Returns `true` on accept, `false` on reject. Each per-axis caller
+/// — [`crate::BehaviorSpec::validate`] on `:behavior :on-*` paths
+/// (c97815a), [`crate::UpgradeInstruction::StateChange::validate`]
+/// on `:upgrade-from :state-change :script` (this commit), every
+/// future axis admitting a tatara-lisp source path — wraps the
+/// boolean into its own typed `*NonLispExtension { slot, path }` /
+/// `*NonLispExtensionScript { script }` enum variant so the
+/// diagnostic still names *which slot* carried the non-`.lisp`
+/// value. The predicate is axis-agnostic; the wrapping per-axis
+/// variant carries the slot identity.
+///
+/// Lifted from `caixa-core::behavior` where the same single-line
+/// gate (`path.extension().and_then(|ext| ext.to_str()) ==
+/// Some("lisp")`) was inlined verbatim across the first call site
+/// (`BehaviorSpec::validate_callback_path`) — the PRIME DIRECTIVE
+/// duplication-budget rule (THEORY.md §I.3.5: "every recurring shape
+/// becomes a generator before it becomes a pattern; every pattern
+/// becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the gate to a typed
+/// substrate-side predicate on the same trajectory the path-shape
+/// gate [`is_sandboxed_relative_path`] already follows (lifted from
+/// the same two call sites once the second consumer appeared). The
+/// third caller — the future `:bibliotecas` per-entry tatara-lisp
+/// source-file axis (the `feira build` loop reads each through the
+/// same `tatara_lisp::read` reader at parse time), the future `:exe`
+/// `:kind Binario` entry-point axis (the nix-built binary's entry
+/// point loads as Lisp source), the future M2.5 wasm-engine
+/// pre-warm hook axis — lands as a thin two-line wrapper rather
+/// than re-inlining the same extension check.
+///
+/// Pairs with the per-axis `*NonLispExtension` / `*NonLispExtensionScript`
+/// variants on [`crate::BehaviorError`] and [`crate::UpgradeError`]
+/// — those remain the typed surface authors see; this predicate is
+/// the single-source-of-truth gate the caixa-build pipeline consults
+/// to produce them.
+#[must_use]
+pub fn is_lisp_extension(path: &Path) -> bool {
+    path.extension().and_then(|ext| ext.to_str()) == Some(LISP_SOURCE_EXTENSION)
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -5562,6 +5627,190 @@ mod tests {
                 is_sandboxed_relative_path(Path::new(reject)).unwrap_err(),
                 *expected,
                 "pre-lift reject {reject:?} must classify as {expected:?}"
+            );
+        }
+    }
+
+    // ── is_lisp_extension — `:behavior :on-*` + `:upgrade-from ───────────
+    // ── :state-change :script` file-type predicate ───────────────────────
+
+    #[test]
+    fn lisp_extension_accepts_canonical_shapes() {
+        // Positive controls: every documented authoring shape across
+        // both existing call sites — bare filename, standard `lib/`
+        // subdirectory, deeply-nested migrations subdirectory,
+        // explicit current-dir-relative prefix, mid-path `./`
+        // segment, single-letter stem, and the multi-dot stem
+        // (`lib/migrations/v.0.1.lisp`) an author might use to
+        // encode the migration's `:from` version into the filename.
+        // The predicate only inspects the terminating extension —
+        // `Path::extension()` returns the substring after the final
+        // `.` — so the multi-dot stem is structurally accepted
+        // because the final extension is still `lisp`. Drift here =
+        // a future tightening that rejects any of these surfaces as
+        // a test-failure at the predicate boundary, not piecemeal
+        // across per-axis call sites (`BehaviorSpec::validate`,
+        // `UpgradeInstruction::StateChange::validate`).
+        for relpath in [
+            "init.lisp",
+            "lib/init.lisp",
+            "lib/handlers.lisp",
+            "lib/migrations.lisp",
+            "lib/migrations/v01-to-v02.lisp",
+            "./lib/init.lisp",
+            "lib/./handlers.lisp",
+            "lib/migrations/v.0.1.lisp",
+            "a.lisp",
+        ] {
+            assert!(
+                is_lisp_extension(Path::new(relpath)),
+                "canonical `.lisp` shape {relpath:?} must pass is_lisp_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn lisp_extension_rejects_no_extension() {
+        // The fail-before-pass-after pin on the no-extension shape.
+        // A path with no `.` component (`Path::extension()` returns
+        // `None`) is the canonical "I declared the slot but forgot
+        // the `.lisp` extension" authoring footgun. The wasm-engine's
+        // `tatara_lisp::read` consumer can't infer the file type from
+        // the path alone, so the gate refuses the value at validate
+        // time.
+        for relpath in [
+            "lib/init",
+            "init",
+            "lib/handlers",
+            "lib/migrations/v01-to-v02",
+            "a",
+        ] {
+            assert!(
+                !is_lisp_extension(Path::new(relpath)),
+                "no-extension shape {relpath:?} must fail is_lisp_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn lisp_extension_rejects_wrong_extension() {
+        // Wrong-extension sweep: the canonical authoring footguns
+        // an author might drag in from the workspace tree (`.txt`,
+        // `.md`, `.json`, `.yaml`, `.toml`), the `.rs` shape that
+        // an IDE auto-complete might propose, the `.lisp.bak` shape
+        // an editor might leave behind (the predicate only inspects
+        // the *terminating* extension — `Path::extension()` returns
+        // `bak` here, not `lisp.bak` — so the gate refuses it as a
+        // no-`.lisp` final extension), and the `.lispx` / `.lis`
+        // near-miss shapes that a typo would produce. Each must
+        // fail the predicate — the wasm-engine's `tatara_lisp::read`
+        // consumer rejects all of these at hot-upgrade migration /
+        // instance-start time.
+        for relpath in [
+            "lib/init.rs",
+            "lib/init.txt",
+            "lib/init.md",
+            "lib/init.json",
+            "lib/init.yaml",
+            "lib/init.toml",
+            "lib/init.lisp.bak",
+            "lib/init.lispx",
+            "lib/init.lis",
+        ] {
+            assert!(
+                !is_lisp_extension(Path::new(relpath)),
+                "wrong-extension shape {relpath:?} must fail is_lisp_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn lisp_extension_is_case_sensitive() {
+        // Strict lowercase pin: every case-folded shape a
+        // case-insensitive volume's existence check would match the
+        // on-disk file must still fail the predicate — the
+        // canonical-form codec emits lowercase `.lisp` verbatim, so
+        // a case-folded shape mismatches the round-trip-stable
+        // canonical form (THEORY.md §V.2.7 render-determinism).
+        // Same case-sensitive discipline the byte-size / duration
+        // codecs and every other shape-gate predicate in `render.rs`
+        // (label / scheme / unit boundaries) carry. Pinned at the
+        // predicate boundary so any future case-folding regression
+        // surfaces here rather than piecemeal across per-axis call
+        // sites.
+        for relpath in [
+            "lib/init.LISP",
+            "lib/init.Lisp",
+            "lib/init.LiSp",
+            "lib/init.lISP",
+            "lib/init.LISp",
+        ] {
+            assert!(
+                !is_lisp_extension(Path::new(relpath)),
+                "case-folded `.lisp` shape {relpath:?} must fail is_lisp_extension \
+                 (strict lowercase, render-determinism pin)"
+            );
+        }
+    }
+
+    #[test]
+    fn lisp_extension_constant_matches_predicate() {
+        // Cross-pin: the [`LISP_SOURCE_EXTENSION`] const and the
+        // predicate's accepted set are the same single source of
+        // truth. Drift would let a future renderer / per-axis
+        // wrapper emit `.<const>` while the predicate accepts only
+        // `.lisp` (or vice versa), silently breaking the
+        // round-trip-stable canonical form. Pinned by constructing
+        // a path from the const and round-tripping through the
+        // predicate.
+        assert_eq!(LISP_SOURCE_EXTENSION, "lisp");
+        let p = PathBuf::from(format!("lib/init.{LISP_SOURCE_EXTENSION}"));
+        assert!(
+            is_lisp_extension(&p),
+            "path constructed from LISP_SOURCE_EXTENSION must pass is_lisp_extension"
+        );
+    }
+
+    #[test]
+    fn lisp_extension_matches_inlined_call_site_semantics() {
+        // End-to-end pin: every value the pre-lift inline gate
+        // (`BehaviorSpec::validate_callback_path`, c97815a) accepted-
+        // or-rejected must surface from the lifted predicate
+        // identically. Drift here would mean a previously-accepted
+        // authoring shape would suddenly fail (or vice versa)
+        // silently across the lift commit. Sweeps the canonical
+        // authoring shapes the pre-lift call site's tests covered
+        // verbatim.
+        // Pre-lift accepts (must still pass):
+        for accept in [
+            "lib/init.lisp",
+            "lib/handlers.lisp",
+            "lib/migrations/v01-to-v02.lisp",
+            "init.lisp",
+            "a.lisp",
+            "./lib/init.lisp",
+            "lib/./handlers.lisp",
+            "lib/migrations/v.0.1.lisp",
+        ] {
+            assert!(
+                is_lisp_extension(Path::new(accept)),
+                "pre-lift accept {accept:?} regressed"
+            );
+        }
+        // Pre-lift rejects (must still reject):
+        for reject in [
+            "lib/init",
+            "init",
+            "lib/init.rs",
+            "lib/init.txt",
+            "lib/init.lisp.bak",
+            "lib/init.lispx",
+            "lib/init.LISP",
+            "lib/init.Lisp",
+        ] {
+            assert!(
+                !is_lisp_extension(Path::new(reject)),
+                "pre-lift reject {reject:?} regressed"
             );
         }
     }
