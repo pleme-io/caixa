@@ -113,7 +113,7 @@ impl BehaviorSpec {
     /// (absolute path replaces `root` per `Path::join` semantics), or
     /// traverse out of the root via `..` components.
     ///
-    /// Three invariants per slot, evaluated in declaration order
+    /// Four invariants per slot, evaluated in declaration order
     /// (`:on-init` → `:on-call` → `:on-cast` → `:on-info` →
     /// `:on-state-change` → `:on-terminate`) so the diagnostic for
     /// multi-malformed manifests is deterministic:
@@ -122,7 +122,12 @@ impl BehaviorSpec {
     ///   - relative path (Lunatic-style sandbox: callbacks live under
     ///     the caixa root, never in `/etc/...`),
     ///   - no `..` components (relative paths must not escape the
-    ///     caixa root via parent-directory traversal).
+    ///     caixa root via parent-directory traversal),
+    ///   - terminating `.lisp` extension (the wasm-engine reads every
+    ///     callback path as tatara-lisp source — a `.txt` / `.rs` /
+    ///     `.lisp.bak` / no-extension shape is structurally a parser
+    ///     error at instance-start time, far from the source
+    ///     caixa.lisp).
     ///
     /// Mirrors the discipline applied to `:limits` axes
     /// (`LimitsSpec::validate`) and to the M3 mesh `:entrada :paths`
@@ -149,17 +154,91 @@ fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), Behavio
     // (the per-slot diagnostic naming `:behavior :on-init`, etc.) is
     // preserved by construction.
     match crate::render::is_sandboxed_relative_path(path) {
-        Ok(()) => Ok(()),
-        Err(crate::render::PathShapeViolation::Empty) => Err(BehaviorError::EmptyPath { slot }),
-        Err(crate::render::PathShapeViolation::Absolute) => Err(BehaviorError::AbsolutePath {
-            slot,
-            path: path.to_path_buf(),
-        }),
-        Err(crate::render::PathShapeViolation::ParentEscape) => Err(BehaviorError::ParentEscape {
-            slot,
-            path: path.to_path_buf(),
-        }),
+        Ok(()) => {}
+        Err(crate::render::PathShapeViolation::Empty) => {
+            return Err(BehaviorError::EmptyPath { slot });
+        }
+        Err(crate::render::PathShapeViolation::Absolute) => {
+            return Err(BehaviorError::AbsolutePath {
+                slot,
+                path: path.to_path_buf(),
+            });
+        }
+        Err(crate::render::PathShapeViolation::ParentEscape) => {
+            return Err(BehaviorError::ParentEscape {
+                slot,
+                path: path.to_path_buf(),
+            });
+        }
     }
+    // File-type contract on the `:behavior :on-*` axis: every typed
+    // callback path is consumed by the M2.5 wasm-engine instantiator
+    // (the `ABSORPTION-ROADMAP` names the runtime substrate) as a
+    // tatara-lisp source file the engine reads through
+    // `tatara_lisp::read` at instance-start time. The author surface
+    // already documents the `.lisp` extension as the canonical shape
+    // (the in-module example and every in-tree test fixture use
+    // `lib/<name>.lisp`), and the layout's `:kind Biblioteca` default
+    // (`lib/<nome>.lisp` at `layout.rs:793`) plus the `:bibliotecas` /
+    // `:exe` directory invariants all assume the same `.lisp` extension
+    // verbatim; until this gate landed the typed slot accepted any
+    // path that passed the structural-shape checks (empty / absolute /
+    // parent-escape), so a programmatic struct literal
+    // (`BehaviorSpec { on_init: Some(PathBuf::from("lib/init.txt")), .. }`
+    // or `Some(PathBuf::from("lib/init.rs"))` or the equivalent
+    // author-surface `(:behavior (:on-init "lib/init.lisp.bak"))` /
+    // `(:on-init "lib/init")` / any "I dragged the wrong file from the
+    // workspace tree" typo landing in the slot) round-tripped cleanly
+    // through serde and the per-callback CSE invariant (no value the
+    // wasm-engine can't honor as tatara-lisp source) was a runtime,
+    // not build-time, contract. The wasm-engine's `tatara_lisp::read`
+    // failed at instance-start time with a parser-shaped diagnostic
+    // far from the source caixa.lisp, with no field naming the
+    // offending `:on-*` slot — the canonical "declared-but-unloadable
+    // callback" footgun the sibling `:behavior` path-shape arms close
+    // on the peer "sandbox-escaping" / "empty" / "parent-escape"
+    // shapes, and the peer `LimitsError::MemoryNotPageMultiple`
+    // (ec266d8) closes on the `:limits :memory` axis's "engine-
+    // quantization-granularity-mismatch" shape: both are "the consumer
+    // substrate's accepted set is narrower than the structural-shape
+    // gate alone" lifts, surfacing the engine's load-bearing
+    // type-contract at validate time rather than at apply time.
+    //
+    // Strict `.lisp` (lowercase, case-sensitive): the byte-size and
+    // duration codecs are case-sensitive on unit suffixes (`MiB`,
+    // `ms`, `s`, `m`, `h`) and every layout invariant compares
+    // extensions via `PathBuf` equality (case-sensitive on every
+    // filesystem the substrate targets — Linux/macOS volume defaults,
+    // every container image filesystem), so a strict `.lisp` shape
+    // matches the downstream accepted set without case-folding drift.
+    // An uppercase `.LISP` shape that the layout's existence check
+    // would (case-insensitively, on case-insensitive volumes) match
+    // the on-disk file would still mismatch the canonical-form codec
+    // emits, breaking the THEORY.md §V.2.7 render-determinism
+    // contract every typed slot carries. Same canonical-form
+    // discipline `is_canonical_rate_limit_window` (808017c) applies
+    // to the rate-limit window axis and every shape-gate predicate
+    // in `render.rs` (case-sensitive on unit / scheme / label
+    // boundaries).
+    //
+    // The path-shape arms strictly precede this extension arm so a
+    // path that is *both* sandbox-escaping and non-`.lisp` surfaces
+    // the more fundamental sandbox-shape diagnostic first (the
+    // `.lisp` remediation would be misleading when the offending
+    // path can never be loaded under the caixa root anyway — the
+    // canonical fix collapses both into "pin a relative `.lisp` path
+    // under the caixa root"). Same posture every peer
+    // zero-then-shape-then-cap chain uses on this surface
+    // (`MemoryZero` → `MemoryBelowWasm32Page` →
+    // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`, the
+    // smallest-scope arm fires last).
+    if path.extension().and_then(|ext| ext.to_str()) != Some("lisp") {
+        return Err(BehaviorError::NonLispExtension {
+            slot,
+            path: path.to_path_buf(),
+        });
+    }
+    Ok(())
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -182,6 +261,19 @@ pub enum BehaviorError {
         path.display()
     )]
     ParentEscape { slot: &'static str, path: PathBuf },
+    #[error(
+        ":behavior {slot} path {} does not terminate in the `.lisp` extension — the M2.5 \
+         wasm-engine instantiator reads every callback path as tatara-lisp source through \
+         `tatara_lisp::read` at instance-start time, so any other extension (`.txt`, `.rs`, \
+         `.lisp.bak`) or no-extension shape is structurally a parser error far from the \
+         source caixa.lisp, with no field naming the offending `:on-*` slot. Pin a \
+         relative path under the caixa root whose terminating extension is \
+         lowercase-`.lisp` (e.g. `\"lib/init.lisp\"`, `\"lib/handlers.lisp\"`, \
+         `\"lib/migrations/v01-to-v02.lisp\"`) or omit the slot to fall back to the \
+         runtime default callback",
+        path.display()
+    )]
+    NonLispExtension { slot: &'static str, path: PathBuf },
 }
 
 #[cfg(test)]
@@ -391,5 +483,261 @@ mod tests {
         };
         let err = b.validate().unwrap_err();
         assert!(matches!(err, BehaviorError::EmptyPath { slot: ":on-init" }));
+    }
+
+    // ── `.lisp`-extension gate on every `:behavior :on-*` axis ─────
+
+    #[test]
+    fn validate_rejects_non_lisp_extension_per_slot() {
+        // Loop the same offending non-`.lisp` path through every M2
+        // typed `:behavior` slot — the diagnostic must name the
+        // offending slot, not collapse to a generic "bad extension"
+        // shape. Same per-slot diagnostic posture every peer
+        // `BehaviorError` arm carries (`EmptyPath`, `AbsolutePath`,
+        // `ParentEscape`).
+        let cases: [(&'static str, fn(PathBuf) -> BehaviorSpec); 6] = [
+            (":on-init", |p| BehaviorSpec {
+                on_init: Some(p),
+                ..Default::default()
+            }),
+            (":on-call", |p| BehaviorSpec {
+                on_call: Some(p),
+                ..Default::default()
+            }),
+            (":on-cast", |p| BehaviorSpec {
+                on_cast: Some(p),
+                ..Default::default()
+            }),
+            (":on-info", |p| BehaviorSpec {
+                on_info: Some(p),
+                ..Default::default()
+            }),
+            (":on-state-change", |p| BehaviorSpec {
+                on_state_change: Some(p),
+                ..Default::default()
+            }),
+            (":on-terminate", |p| BehaviorSpec {
+                on_terminate: Some(p),
+                ..Default::default()
+            }),
+        ];
+        let path = PathBuf::from("lib/init.txt");
+        for (expected_slot, build) in cases {
+            let err = build(path.clone()).validate().unwrap_err();
+            assert!(
+                matches!(&err, BehaviorError::NonLispExtension { slot, path: p }
+                    if *slot == expected_slot && p == &path),
+                "slot {expected_slot}: got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_no_extension() {
+        // The no-extension shape — author dropped the suffix entirely
+        // (`lib/init` instead of `lib/init.lisp`). `Path::extension`
+        // returns None, so the typed check distinguishes this from
+        // the wrong-extension shape and from a leading-dot file like
+        // `.lisp` (which also has no `Path::extension`).
+        let cases = [
+            PathBuf::from("lib/init"),
+            PathBuf::from("lib/handlers"),
+            PathBuf::from("init"),
+        ];
+        for path in cases {
+            let b = BehaviorSpec {
+                on_init: Some(path.clone()),
+                ..Default::default()
+            };
+            let err = b.validate().unwrap_err();
+            assert!(
+                matches!(&err, BehaviorError::NonLispExtension { slot: ":on-init", path: p }
+                    if p == &path),
+                "no-extension path {path:?}: got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_wrong_extension() {
+        // Common authoring footguns — files that pass every prior
+        // path-shape gate but that the wasm-engine's tatara-lisp
+        // reader cannot consume as source.
+        let cases = [
+            PathBuf::from("lib/init.rs"),
+            PathBuf::from("lib/init.txt"),
+            PathBuf::from("lib/init.md"),
+            PathBuf::from("lib/init.json"),
+            PathBuf::from("lib/init.yaml"),
+            PathBuf::from("lib/init.lisp.bak"),
+            PathBuf::from("lib/init.lispx"),
+        ];
+        for path in cases {
+            let b = BehaviorSpec {
+                on_call: Some(path.clone()),
+                ..Default::default()
+            };
+            let err = b.validate().unwrap_err();
+            assert!(
+                matches!(&err, BehaviorError::NonLispExtension { slot: ":on-call", path: p }
+                    if p == &path),
+                "wrong-extension path {path:?}: got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_uppercase_lisp_extension() {
+        // The strict-lowercase posture matches every other shape
+        // predicate in `render.rs` — the byte-size codec is
+        // case-sensitive on `MiB`, the duration codec on `ms` / `s` /
+        // `m` / `h`, every DNS-1123 label is lowercase-only — so the
+        // accepted set for `.lisp` does not silently fold to `.LISP` /
+        // `.Lisp` / `.LiSp` even on case-insensitive volumes. A path
+        // whose existence check would match the on-disk file via
+        // case-insensitive lookup would still mismatch the canonical
+        // form the codec emits, breaking the round-trip-stability
+        // contract.
+        let cases = [
+            PathBuf::from("lib/init.LISP"),
+            PathBuf::from("lib/init.Lisp"),
+            PathBuf::from("lib/init.LiSp"),
+        ];
+        for path in cases {
+            let b = BehaviorSpec {
+                on_init: Some(path.clone()),
+                ..Default::default()
+            };
+            let err = b.validate().unwrap_err();
+            assert!(
+                matches!(&err, BehaviorError::NonLispExtension { slot: ":on-init", path: p }
+                    if p == &path),
+                "uppercase `.lisp` {path:?}: got {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_canonical_lisp_paths() {
+        // Positive control: every shape the in-tree fixtures and
+        // module-doc examples use must pass the gate. Pins the
+        // accepted set so a future tightening doesn't accidentally
+        // reject the canonical authoring shape.
+        let cases = [
+            PathBuf::from("lib/init.lisp"),
+            PathBuf::from("lib/handlers.lisp"),
+            PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+            PathBuf::from("init.lisp"),
+            PathBuf::from("a.lisp"),
+            PathBuf::from("./lib/init.lisp"),
+            PathBuf::from("lib/./handlers.lisp"),
+            PathBuf::from("lib/migrations/v.0.1.lisp"),
+        ];
+        for path in cases {
+            let b = BehaviorSpec {
+                on_init: Some(path.clone()),
+                ..Default::default()
+            };
+            b.validate()
+                .unwrap_or_else(|e| panic!("canonical `.lisp` path {path:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_path_shape_precedes_extension_arm() {
+        // Cross-arm ordering: a path that is *both* path-shape invalid
+        // (empty / absolute / parent-escape) and non-`.lisp` surfaces
+        // the more fundamental sandbox-shape diagnostic first — the
+        // `.lisp` remediation is misleading when the offending path
+        // can never resolve under the caixa root anyway. Mirrors the
+        // `MemoryZero` → `MemoryBelowWasm32Page` → `MemoryExceedsWasm32Cap`
+        // → `MemoryNotPageMultiple` smallest-scope-last cascade on the
+        // peer `:limits :memory` axis.
+
+        // Empty + non-`.lisp` → empty wins (the empty case has no
+        // extension to begin with).
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::new()),
+            ..Default::default()
+        };
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BehaviorError::EmptyPath { slot: ":on-init" }
+        ));
+
+        // Absolute + non-`.lisp` → absolute wins.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("/etc/init.txt")),
+            ..Default::default()
+        };
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BehaviorError::AbsolutePath {
+                slot: ":on-init",
+                ..
+            }
+        ));
+
+        // Parent-escape + non-`.lisp` → parent-escape wins.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("../sibling/init.txt")),
+            ..Default::default()
+        };
+        assert!(matches!(
+            b.validate().unwrap_err(),
+            BehaviorError::ParentEscape {
+                slot: ":on-init",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn validate_extension_diagnostic_names_offending_slot_and_path() {
+        // Self-locating diagnostic pin: the surfaced error names the
+        // exact `:on-*` slot the author wrote and the exact offending
+        // path verbatim, so the author can grep their caixa.lisp for
+        // the named slot / path and fix it in one edit. Same shape
+        // every peer per-slot `:behavior` arm exposes.
+        let path = PathBuf::from("lib/handlers.rs");
+        let b = BehaviorSpec {
+            on_cast: Some(path.clone()),
+            ..Default::default()
+        };
+        let err = b.validate().unwrap_err();
+        let rendered = err.to_string();
+        assert!(
+            rendered.contains(":on-cast"),
+            "diagnostic must name the `:on-cast` slot: {rendered}"
+        );
+        assert!(
+            rendered.contains("lib/handlers.rs"),
+            "diagnostic must carry the offending path verbatim: {rendered}"
+        );
+        assert!(
+            rendered.contains(".lisp"),
+            "diagnostic must name the expected `.lisp` extension: {rendered}"
+        );
+    }
+
+    #[test]
+    fn validate_extension_arm_fires_across_multi_malformed_manifest_in_slot_order() {
+        // Multi-malformed manifest, all four slots carrying a
+        // non-`.lisp` extension — the first declared slot
+        // (`:on-init`) wins, mirroring the prior
+        // `validate_diagnostic_order_is_deterministic` pin on the
+        // path-shape arms.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.rs")),
+            on_call: Some(PathBuf::from("lib/handlers.txt")),
+            on_state_change: Some(PathBuf::from("lib/migrations.md")),
+            ..Default::default()
+        };
+        let err = b.validate().unwrap_err();
+        assert!(matches!(
+            &err,
+            BehaviorError::NonLispExtension { slot: ":on-init", path }
+                if path == &PathBuf::from("lib/init.rs")
+        ));
     }
 }
