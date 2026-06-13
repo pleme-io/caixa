@@ -47,13 +47,13 @@ pub use render::{
     LABEL_APLICACAO, LABEL_CONTRATO, LABEL_PROGRAM, LAREIRA_CHART_NAME_NOME_MAX_LEN,
     LAREIRA_CHART_NAME_PREFIX, LISP_SOURCE_EXTENSION, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
     M2_KEY_UPGRADE_FROM, M3_KEY_PLACEMENT, NATS_SUBJECT_MAX_LEN, PLEME_LABEL_PREFIX,
-    PathShapeViolation, RenderError, WASI_KV_SLOT_MAX_LEN, WIT_IDENT_MAX_LEN,
+    PathShapeViolation, RenderError, ServicoCountMismatch, WASI_KV_SLOT_MAX_LEN, WIT_IDENT_MAX_LEN,
     is_cargo_feature_name, is_computeunit_yaml_extension, is_dns_1123_label,
     is_gateway_api_http_path, is_git_oid, is_git_ref_name, is_git_repo_url,
     is_lareira_chart_name_shape, is_lisp_extension, is_nats_subject, is_sandboxed_relative_path,
     is_wasi_keyvalue_slot, is_wit_world_ref, kube_resource_skeleton, label_selector,
     lareira_chart_name, pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind,
-    servico_m2_overlay, single_field_overlay, yaml_string_mapping,
+    require_single_servico, servico_m2_overlay, single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{
     ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX,
