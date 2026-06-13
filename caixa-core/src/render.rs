@@ -3124,6 +3124,88 @@ pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 /// [cm]: ../../caixa_mesh/index.html
 pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 
+/// Canonical Helm chart-name prefix for every per-Servico chart the
+/// substrate emits — the `"lareira-"` segment of the well-known
+/// `lareira-<nome>` shape every caixa Servico renderer prepends to a
+/// caixa's `:nome` to derive its [`Chart.yaml` `name:`][chart-yaml] field,
+/// its OCI artifact reference (`oci://<registry>/lareira-<nome>`), and
+/// the resulting cluster-side `HelmRelease` `release_name`. The single
+/// source of truth all three downstream Servico renderers consult —
+/// [`caixa-helm`][cf]'s `render_chart_for_servico` chart-dir name
+/// (caixa-helm/src/lib.rs:207), [`caixa-flux`][cm]'s `cluster_bundle`
+/// `HelmRelease` `chart:` field (caixa-flux/src/lib.rs:329), and
+/// [`caixa-tatara`][ct]'s `process_for_aplicacao` `release_name` +
+/// `derive_chart_ref` OCI ref (caixa-tatara/src/lib.rs:124,182) — so a
+/// future per-chart-name-prefix rebrand (e.g. moving to `forno-` once
+/// `lareira-` outlives its scoping intent, or any segment-namespace
+/// migration the chart-publishing pipeline requires) is a one-line edit
+/// here, not a coordinated rewrite across every renderer crate's chart-
+/// name-derivation site.
+///
+/// Until this lift landed all three renderers carried inline
+/// `format!("lareira-{}", caixa.nome)` / `format!("lareira-{name}")` /
+/// `format!("oci://{}/lareira-{}", registry, caixa.nome.as_str())`
+/// expressions — three verbatim copies of the same substrate-wide
+/// naming convention. The PRIME DIRECTIVE duplication budget of zero
+/// (THEORY.md §I.3.5) lands the lift here at the third occurrence: a
+/// future rebrand on any one site without a coordinated edit on the
+/// others would have silently published a chart at one name, registered
+/// its OCI ref at a second, and resolved the `HelmRelease` at a third —
+/// the cluster's apply would surface as a `chart pull failed: image not
+/// found` error far from the source rebrand commit, with no field
+/// naming the prefix-drift root cause.
+///
+/// Lifting it to caixa-core's render-constants block alongside the peer
+/// [`DEFAULT_NAMESPACE`] (a085b26) makes the chart-name-prefix axis
+/// discipline structural: every renderer that derives a per-Servico
+/// chart name consults [`lareira_chart_name`], and every future renderer
+/// (the future per-cluster snapshot bundle emitter, the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's chart-ref slot,
+/// the future caixa-otel collector chart name) inherits the same prefix
+/// by construction, with no opportunity for per-renderer drift. Same
+/// "the typed constant lives in one place" discipline the
+/// [`PLEME_LABEL_PREFIX`] / [`DEFAULT_NAMESPACE`] / [`KUBE_KEY_API_VERSION`]
+/// lifts apply on the peer shared-string axes.
+///
+/// [chart-yaml]: https://helm.sh/docs/topics/charts/#the-chartyaml-file
+/// [cf]: ../../caixa_helm/index.html
+/// [cm]: ../../caixa_flux/index.html
+/// [ct]: ../../caixa_tatara/index.html
+pub const LAREIRA_CHART_NAME_PREFIX: &str = "lareira-";
+
+/// Derive the canonical per-Servico Helm chart name from a caixa's
+/// `:nome` — the substrate-wide `lareira-<nome>` shape every
+/// per-Servico renderer ([`caixa-helm`][cf]'s `render_chart_for_servico`
+/// chart-dir name, [`caixa-flux`][cm]'s `cluster_bundle` `HelmRelease`
+/// `chart:` field, [`caixa-tatara`][ct]'s `process_for_aplicacao`
+/// `release_name`, and the `oci://<registry>/lareira-<nome>` OCI ref)
+/// composes by prepending [`LAREIRA_CHART_NAME_PREFIX`].
+///
+/// Single source of truth for the prefix-application: every consumer
+/// reaches for this helper rather than re-deriving the `format!(…)`
+/// shape inline, so a future change to the prefix axis (the lift's
+/// raison d'être) is one edit here, not a coordinated sweep across
+/// every renderer.
+///
+/// The input `nome` is the caixa's typed `:nome` field, already
+/// DNS-1123-label-validated at [`Caixa::validate_nome`] (6c992f8) —
+/// every value reaching this helper is structurally a valid Helm
+/// chart-name segment. The prepended prefix is a fixed lowercase ASCII
+/// alphanumeric + hyphen string, so the concatenation is structurally a
+/// valid Helm chart name by construction (Helm's chart-name accepted
+/// set is the DNS-1123 label rule, and DNS-1123 labels concatenate with
+/// the prefix-and-hyphen separator into valid DNS-1123 labels as long
+/// as the joint length stays ≤ 63 bytes; the M4 admission webhook will
+/// pin the joint-length invariant when it lands).
+///
+/// [cf]: ../../caixa_helm/index.html
+/// [cm]: ../../caixa_flux/index.html
+/// [ct]: ../../caixa_tatara/index.html
+#[must_use]
+pub fn lareira_chart_name(nome: &str) -> String {
+    format!("{LAREIRA_CHART_NAME_PREFIX}{nome}")
+}
+
 /// Build the canonical Cilium `matchLabels` selector for a single
 /// pleme-io program **scoped to its Aplicacao** — the safe default
 /// every per-Aplicacao mesh renderer (caixa-mesh's
@@ -3694,6 +3776,124 @@ mod tests {
             "DEFAULT_NAMESPACE {DEFAULT_NAMESPACE:?} must be a valid \
              DNS-1123 label — every K8s apiserver-side schema enforces \
              this rule on `metadata.namespace`"
+        );
+    }
+
+    // ── lareira-<nome> chart-name prefix lift ──────────────────────
+    //
+    // The lift pins the substrate-wide `lareira-` chart-name prefix
+    // as the single source of truth every per-Servico renderer
+    // (caixa-helm, caixa-flux, caixa-tatara) reaches for, peer to the
+    // [`DEFAULT_NAMESPACE`] (a085b26) lift on the canonical-namespace
+    // axis. Pinning the prefix value, the helper's
+    // construction-shape, and the DNS-1123-label round-trip for the
+    // canonical-fixture input forms the structural floor every future
+    // renderer consumer inherits by construction.
+
+    #[test]
+    fn lareira_chart_name_prefix_pins_canonical_value() {
+        // Pin the actual string value so a typo on the canonical lift
+        // can't silently rebrand the substrate's per-Servico Helm chart
+        // namespace. The string is part of the contract with the OCI
+        // chart-publishing pipeline (`oci://<registry>/lareira-<nome>`),
+        // the per-cluster HelmRelease `chart:` field (which Flux
+        // resolves through the OCI ref), and the historical
+        // `pleme-io/helmworks/charts/lareira-<name>/` source tree
+        // layout (caixa-helm/src/lib.rs:7); changing it is a
+        // coordinated multi-repo migration, not an incidental edit.
+        // Peer to `default_namespace_pins_canonical_value` on the
+        // canonical-string-value-pin axis for the
+        // `DEFAULT_NAMESPACE` constant.
+        assert_eq!(LAREIRA_CHART_NAME_PREFIX, "lareira-");
+    }
+
+    #[test]
+    fn lareira_chart_name_composes_prefix_and_nome() {
+        // Pin the helper's construction shape — the chart name is the
+        // prefix concatenated with the caixa's `:nome` verbatim, with
+        // no intermediate hyphen, no path separator, no trimming. Pin
+        // the canonical hello-rio fixture (the in-tree
+        // `caixa-helm` test fixture at caixa-helm/src/lib.rs:431
+        // already asserts `dir.name == "lareira-hello-rio"`, which
+        // this helper now derives) and a peer fixture
+        // (`checkout-aplicacao` member) to sweep the typical author
+        // surface.
+        assert_eq!(lareira_chart_name("hello-rio"), "lareira-hello-rio");
+        assert_eq!(lareira_chart_name("cart"), "lareira-cart");
+        assert_eq!(lareira_chart_name("worker"), "lareira-worker");
+    }
+
+    #[test]
+    fn lareira_chart_name_starts_with_prefix() {
+        // Cross-axis invariant: every output of the helper begins with
+        // the lifted prefix verbatim — a future refactor that
+        // accidentally introduced a different prefix-application
+        // shape (e.g. `format!("{nome}-lareira")` transposition, or a
+        // `to_uppercase()` case fold) would surface here. The
+        // structural pin holds for the empty `:nome` shape too
+        // (a value `validate_nome` rejects upstream, but the helper
+        // itself imposes no shape on the input).
+        for nome in ["hello-rio", "cart", "worker", "a", ""] {
+            let chart = lareira_chart_name(nome);
+            assert!(
+                chart.starts_with(LAREIRA_CHART_NAME_PREFIX),
+                "lareira_chart_name({nome:?}) = {chart:?} must start with the lifted prefix \
+                 {LAREIRA_CHART_NAME_PREFIX:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn lareira_chart_name_round_trips_through_dns_1123_for_validated_nome() {
+        // Cross-axis invariant: every `:nome` past
+        // [`Caixa::validate_nome`] (6c992f8) is a valid DNS-1123 label,
+        // and the prepended `lareira-` segment is itself a valid
+        // DNS-1123 label prefix (lowercase ASCII + hyphen with a
+        // terminating-hyphen continuation). The composition therefore
+        // round-trips through [`is_dns_1123_label`] for every
+        // `:nome` whose joint length with the prefix stays ≤ 63 bytes
+        // (the DNS-1123 label cap). The canonical author surface sits
+        // far below that cap (the in-tree fixtures range from
+        // `"a"` = 9-byte chart name to `"checkout"` = 16 bytes, with
+        // the cap admitting up to 55-byte `:nome` values). Pin the
+        // round-trip for the canonical-fixture set so a future renderer
+        // that lands the helper's output verbatim as a K8s
+        // `metadata.name` (caixa-helm's `ChartDir.name`,
+        // caixa-flux's HelmRelease `chart:` field, caixa-tatara's
+        // `release_name`) inherits the apiserver-valid floor by
+        // construction.
+        for nome in ["hello-rio", "cart", "worker", "checkout", "a"] {
+            let chart = lareira_chart_name(nome);
+            assert!(
+                is_dns_1123_label(&chart).is_ok(),
+                "lareira_chart_name({nome:?}) = {chart:?} must be a valid DNS-1123 label"
+            );
+        }
+    }
+
+    #[test]
+    fn lareira_chart_name_prefix_is_a_valid_dns_1123_segment_continuation() {
+        // The lifted prefix is one substring of the rendered chart
+        // name; pin its grammar so a future rebrand can't land a
+        // value that would invalidate the joint DNS-1123 label
+        // structurally. The prefix must:
+        //   - be lowercase ASCII alphanumeric + hyphen (the DNS-1123
+        //     accepted set), so its bytes don't widen the joint
+        //     accepted set;
+        //   - end with a hyphen (so the concatenation slot doesn't
+        //     accidentally merge with the leading character of the
+        //     `:nome` it precedes).
+        assert!(
+            LAREIRA_CHART_NAME_PREFIX
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'),
+            "LAREIRA_CHART_NAME_PREFIX {LAREIRA_CHART_NAME_PREFIX:?} must use only DNS-1123-label \
+             bytes (lowercase ASCII alphanumeric + hyphen)"
+        );
+        assert!(
+            LAREIRA_CHART_NAME_PREFIX.ends_with('-'),
+            "LAREIRA_CHART_NAME_PREFIX {LAREIRA_CHART_NAME_PREFIX:?} must end with `-` so \
+             concatenation with the caixa's `:nome` produces a hyphenated joint label"
         );
     }
 
