@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use caixa_core::{Dep, DepSource};
 use clap::Args;
 
-use super::load::{caixa_manifest_path, load_caixa};
+use super::load::{caixa_manifest_path, caixa_root, load_caixa};
 
 /// Add a dep to the caixa.lisp in CWD (or `--path`).
 ///
@@ -51,7 +51,7 @@ pub struct Add {
 
 impl Add {
     pub fn run(self) -> Result<()> {
-        let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
+        let root = caixa_root(self.path.as_deref());
         let manifest_path = caixa_manifest_path(&root);
         let mut caixa = load_caixa(&root)?;
 

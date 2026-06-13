@@ -26,6 +26,8 @@ use caixa_teia::{TeiaManifest, parse_teia_source};
 use caixa_theme::{Semantic, Theme};
 use clap::{Args, Subcommand};
 
+use super::load::caixa_root;
+
 /// End-to-end Lisp → teia → arch proof → HCL → tofu.
 #[derive(Args)]
 pub struct Tofu {
@@ -88,7 +90,7 @@ impl Tofu {
 }
 
 fn render(opts: &RenderOpts) -> Result<(PathBuf, TeiaManifest)> {
-    let root = opts.path.clone().unwrap_or_else(|| PathBuf::from("."));
+    let root = caixa_root(opts.path.as_deref());
     let out_dir = opts
         .out
         .clone()

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use caixa_core::{LayoutInvariants, StandardLayout};
 use clap::Args;
 
-use super::load::load_caixa;
+use super::load::{caixa_root, load_caixa};
 
 /// Validate caixa.lisp + layout + every `:bibliotecas` entry parses.
 ///
@@ -21,7 +21,7 @@ pub struct Build {
 
 impl Build {
     pub fn run(self) -> Result<()> {
-        let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
+        let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;
 
         StandardLayout::new()

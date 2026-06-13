@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use caixa_core::{Caixa, CaixaKind};
 use clap::Args;
 
-use super::load::load_caixa;
+use super::load::{caixa_root, load_caixa};
 
 /// Emit a `flake.nix` that builds the caixa via substrate.
 #[derive(Args)]
@@ -20,7 +20,7 @@ pub struct Nix {
 
 impl Nix {
     pub fn run(self) -> Result<()> {
-        let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
+        let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;
 
         let flake = render_flake(&caixa);

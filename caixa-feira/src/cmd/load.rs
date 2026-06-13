@@ -42,9 +42,58 @@ use caixa_core::Caixa;
 /// [`load_caixa`]; no verb should hard-code the literal string.
 pub(crate) const CAIXA_MANIFEST_FILENAME: &str = "caixa.lisp";
 
+/// The canonical "where does `--path` default to?" answer — the
+/// current working directory as a relative `PathBuf`. Every `feira`
+/// verb's `Option<PathBuf>` `--path` flag resolves through
+/// [`caixa_root`] with this literal as the absent-flag fallback; no
+/// verb should hard-code the `"."` string.
+pub(crate) const CAIXA_ROOT_DEFAULT_DIRNAME: &str = ".";
+
 /// Resolve the per-caixa-root manifest path.
 pub(crate) fn caixa_manifest_path(root: &Path) -> PathBuf {
     root.join(CAIXA_MANIFEST_FILENAME)
+}
+
+/// Resolve a `feira` verb's `--path` flag into the canonical caixa
+/// root, defaulting to the current working directory when the flag
+/// is absent.
+///
+/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.5 — "the
+/// duplication budget is zero") on the per-verb `--path` fallback
+/// axis. Before this lift the same one-line shape —
+/// `self.path.clone().unwrap_or_else(|| PathBuf::from("."))` —
+/// appeared verbatim at every `feira` verb's `Run::run` entry-point:
+/// `feira add` (cmd/add.rs), `feira build` (cmd/build.rs),
+/// `feira chart` (cmd/chart.rs), `feira deploy` (cmd/deploy.rs),
+/// `feira lock` (cmd/lock.rs), `feira nix` (cmd/nix.rs),
+/// `feira publish` (cmd/publish.rs), `feira resolve`
+/// (cmd/resolve.rs), and the `feira tofu render` helper plus the
+/// `feira app` verbs' shared `load_aplicacao` helper (cmd/app.rs).
+/// Ten inline copies of the same load-bearing fallback decision,
+/// each one another place a future change to the "where does
+/// `--path` default land?" discipline has to remember to touch —
+/// the future M4 `feira reconcile` per-cluster diff verb the
+/// absorption-roadmap acknowledges, a future `CAIXA_ROOT` env-var
+/// override, a future "walk-up-until-`caixa.lisp`" discovery —
+/// every one inherits the drift-budget if the choice lives at every
+/// verb.
+///
+/// After the lift every per-verb entry-point routes through this
+/// resolver: the fallback decision lives at exactly one call-site,
+/// the literal `"."` string lands at exactly one definition (the
+/// canonical [`CAIXA_ROOT_DEFAULT_DIRNAME`] constant, peer with the
+/// [`CAIXA_MANIFEST_FILENAME`] constant on the manifest-filename
+/// axis), and a future `feira` verb inherits the canonical shape
+/// through this helper rather than re-derives a skewed copy. Mirrors
+/// [`caixa_manifest_path`] on the per-caixa-root path-resolution
+/// surface — together the two resolvers + the [`load_caixa`] /
+/// [`load_yaml`] readers form the canonical per-verb IO entry-point
+/// shape (`--path` → root → manifest path → typed Caixa).
+pub(crate) fn caixa_root(path: Option<&Path>) -> PathBuf {
+    path.map_or_else(
+        || PathBuf::from(CAIXA_ROOT_DEFAULT_DIRNAME),
+        Path::to_path_buf,
+    )
 }
 
 /// Read + parse the per-caixa-root `caixa.lisp` into a typed
@@ -296,6 +345,85 @@ mod tests {
         assert!(
             typed_reachable,
             "underlying serde_yaml::Error must remain reachable on the anyhow chain"
+        );
+    }
+
+    #[test]
+    fn caixa_root_with_none_resolves_to_canonical_cwd_dirname() {
+        // The canonical fallback arm — an absent `--path` flag
+        // resolves to the canonical CWD-default dirname literal
+        // ([`CAIXA_ROOT_DEFAULT_DIRNAME`]). Pins the load-bearing
+        // fallback shape every per-verb call-site relied on before
+        // this lift (`self.path.clone().unwrap_or_else(||
+        // PathBuf::from("."))`); a future refactor of the helper
+        // can't silently regress to a different fallback (an
+        // absolute-path default, a CWD-via-env-var default, a
+        // panic-on-absent) without this pin firing.
+        let p = caixa_root(None);
+        assert_eq!(
+            p,
+            PathBuf::from(CAIXA_ROOT_DEFAULT_DIRNAME),
+            "absent --path must fall back to the canonical CWD-default dirname literal"
+        );
+        assert_eq!(
+            p.as_os_str(),
+            std::ffi::OsStr::new("."),
+            "the canonical CWD-default dirname literal must remain `.` verbatim"
+        );
+    }
+
+    #[test]
+    fn caixa_root_with_some_returns_caller_path_clone() {
+        // The peer arm — when `--path` is present the resolver
+        // returns a clone of the borrowed [`Path`], not the
+        // canonical fallback. Pins that a caller-provided
+        // `--path /some/absolute/caixa` (the common CI shape) round-
+        // trips through the helper unchanged — peer with the
+        // `:nome` round-trip pin on `load_caixa_accepts_well_formed_
+        // manifest`.
+        let caller = PathBuf::from("/tmp/some/explicit/caixa-root");
+        let resolved = caixa_root(Some(&caller));
+        assert_eq!(
+            resolved, caller,
+            "explicit --path must pass through the resolver unchanged"
+        );
+    }
+
+    #[test]
+    fn caixa_root_with_some_relative_path_preserves_shape() {
+        // Defensive coverage: relative `--path` shapes (the common
+        // shell-invocation form, e.g. `feira chart --path
+        // ./subcaixa`) round-trip the resolver verbatim — a future
+        // refactor can't silently canonicalize or absolutize the
+        // path without this pin firing. The canonical layout
+        // discipline (`StandardLayout::verify`) joins this root with
+        // `:bibliotecas` / `:exe` / `:servicos` entries downstream,
+        // so any silent canonicalization would break the
+        // per-caixa-root layout invariant pins peer-with
+        // `caixa_manifest_path_resolves_root_join_canonical_filename`
+        // on the manifest axis.
+        let rel = PathBuf::from("./subcaixa");
+        let resolved = caixa_root(Some(&rel));
+        assert_eq!(
+            resolved, rel,
+            "relative --path must pass through the resolver verbatim, no canonicalize"
+        );
+    }
+
+    #[test]
+    fn caixa_root_canonical_dirname_constant_pins_dot_literal() {
+        // The canonical-constant arm — pins
+        // [`CAIXA_ROOT_DEFAULT_DIRNAME`] at the verbatim `"."`
+        // literal. Peer with the
+        // [`CAIXA_MANIFEST_FILENAME`]-pins-`"caixa.lisp"` discipline
+        // on the manifest-filename axis: a future refactor of the
+        // helper can't silently regress the canonical fallback
+        // dirname to a different literal (`""`, `"./"`,
+        // `std::env::current_dir().unwrap()`) independent of the
+        // per-verb call-sites that already route through it.
+        assert_eq!(
+            CAIXA_ROOT_DEFAULT_DIRNAME, ".",
+            "canonical CWD-default dirname literal must remain `.` verbatim"
         );
     }
 

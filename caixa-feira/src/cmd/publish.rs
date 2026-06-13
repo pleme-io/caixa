@@ -4,7 +4,7 @@ use std::process::Command;
 use anyhow::{Result, bail};
 use clap::Args;
 
-use super::load::load_caixa;
+use super::load::{caixa_root, load_caixa};
 
 /// Publish the current caixa by tagging its Git HEAD and pushing the tag
 /// to `origin`.
@@ -37,7 +37,7 @@ pub struct Publish {
 
 impl Publish {
     pub fn run(self) -> Result<()> {
-        let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
+        let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;
 
         let versao = self.versao.clone().unwrap_or(caixa.versao.clone());
