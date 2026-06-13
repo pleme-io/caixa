@@ -1300,6 +1300,48 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                 .to_string(),
         });
     }
+    // After the `://` scheme-prefix and `/` path arms have ruled out the
+    // two `:`-bearing shapes the Gateway API actively rejects with
+    // location-shaped diagnostics, any remaining `:` in the host body is
+    // either the canonical "I put the port in the `:host` slot"
+    // authoring footgun (`"checkout.quero.cloud:8080"` — the `:port`
+    // slot lives one axis away on the same `:entrada` block) or an
+    // unbracketed IPv6 literal (`"2001:db8::1"`) which Gateway API v1
+    // Hostname forbids identically to the IPv4-literal arm below. Both
+    // shapes silently fell through the `://` and `/` arms before this
+    // lift and surfaced as a deep `label "<rest>:<port>" contains
+    // invalid character ':'` diagnostic from the per-byte loop near the
+    // bottom of this predicate, which named the offending byte but not
+    // the canonical authoring fix — for the port case the author has to
+    // know the `:entrada` block carries a separate `:port u16` slot
+    // (`caixa-core/src/aplicacao.rs:1667`, `default_port = 8080`) and
+    // move the value over; for the IPv6 case the author has to know
+    // Gateway API v1 forbids IP literals across the board. The contract
+    // doc-comment above already promises "no port (`:8080`)" verbatim
+    // in the rejected-shape enumeration but the predicate's
+    // implementation refused the `:` only as a side-effect of the
+    // per-label `[a-z0-9-]` character-class loop; this arm brings the
+    // implementation in line with the documented contract by surfacing
+    // the canonical fix at the top-level shape gate, peer with how the
+    // `://` arm names the scheme prefix and the `/` arm names the
+    // `:entrada :paths` axis. Same compounding trajectory the recent
+    // `is_gateway_api_http_path` (6a17961) per-byte tightening followed
+    // — the typed slot's rejected set matches the apiserver's rejected
+    // set, structurally, with a self-locating diagnostic at the
+    // offending axis instead of a deep parser-shape leak.
+    if host.contains(':') {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: "must not contain `:` (the port belongs in the `:entrada :port` \
+                     slot — a separate `u16` axis on the same `:entrada` block, \
+                     defaulting to 8080 — not in the host body; drop the `:<port>` \
+                     suffix and author the bare hostname. If you intended an IPv6 \
+                     literal (`2001:db8::1` / `::1` / `fe80::1`), Gateway API v1 \
+                     Hostname forbids IP literals identically to the IPv4-literal \
+                     arm — use a DNS name)"
+                .to_string(),
+        });
+    }
     if host.bytes().any(|b| b.is_ascii_whitespace()) {
         return Err(AplicacaoError::EntradaHostInvalid {
             host: host.to_string(),
@@ -6739,13 +6781,77 @@ mod tests {
     #[test]
     fn rejects_entrada_host_with_port() {
         // The `:8080` port suffix is the canonical "I forgot the port
-        // belongs in `:entrada :port`" footgun.
+        // belongs in `:entrada :port`" footgun. The top-level `:` arm
+        // (introduced after the per-label loop-only impl silently
+        // surfaced a deep "label \"cloud:8080\" contains invalid
+        // character ':'" leak) names the canonical fix verbatim — the
+        // `:entrada :port` slot.
         let mut s = three_member_spec();
         s.entrada.as_mut().unwrap().host = "checkout.quero.cloud:8080".into();
         let err = s.validate().unwrap_err();
         assert!(
-            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, .. }
-                if host == "checkout.quero.cloud:8080"),
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, ref reason }
+                if host == "checkout.quero.cloud:8080"
+                && reason.contains(":entrada :port")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_with_trailing_colon() {
+        // Trailing `:` (e.g. an in-progress `:host "example.com:"`
+        // edit) — the per-label loop would land it as a deep
+        // "label \"com:\" must start and end with an alphanumeric"
+        // / "contains invalid character ':'" leak. The top-level
+        // `:` arm pre-empts with the canonical `:port` slot
+        // diagnostic.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.quero.cloud:".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, ref reason }
+                if host == "checkout.quero.cloud:"
+                && reason.contains(":entrada :port")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_unbracketed_ipv6_literal() {
+        // Unbracketed IPv6 literal — Gateway API v1 Hostname forbids IP
+        // literals across the board (peer with `rejects_entrada_host_
+        // ipv4_literal` above for the four-label-all-digit IPv4 arm).
+        // Before this top-level `:` arm landed the per-label loop
+        // surfaced a single-label byte-class diagnostic that named the
+        // `:` byte but not the IP-literal prohibition. The top-level
+        // `:` arm names both the `:port` slot and the IP-literal
+        // prohibition verbatim, so an author whose `:host "2001:..."`
+        // value lands here gets a self-locating fix either way.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "2001:db8::1".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, ref reason }
+                if host == "2001:db8::1"
+                && reason.contains("IPv6")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_wildcard_with_port() {
+        // Wildcard host with port suffix — the `*.` strip and the
+        // per-label loop on `["foo", "quero", "cloud:8080"]` would
+        // surface the deep byte-class leak. The top-level `:` arm sits
+        // upstream of the `*.` strip, so it names the canonical `:port`
+        // fix verbatim regardless of whether the host is wildcard-led.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "*.quero.cloud:8080".into();
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaHostInvalid { ref host, ref reason }
+                if host == "*.quero.cloud:8080"
+                && reason.contains(":entrada :port")),
             "got {err:?}"
         );
     }
