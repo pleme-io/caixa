@@ -92,9 +92,7 @@ pub(crate) fn load_first_servico_yaml(
     root: &std::path::Path,
 ) -> Result<serde_yaml::Value> {
     let cu_path = first_servico_path(caixa, root)?;
-    let cu_src = std::fs::read_to_string(&cu_path)
-        .with_context(|| format!("reading {}", cu_path.display()))?;
-    serde_yaml::from_str(&cu_src).with_context(|| format!("parsing {}", cu_path.display()))
+    super::load::load_yaml(&cu_path)
 }
 
 /// Resolve the single `:servicos` entry's on-disk path for a per-Servico

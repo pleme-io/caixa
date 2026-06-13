@@ -98,10 +98,7 @@ impl Deploy {
             );
         }
 
-        let existing_src = std::fs::read_to_string(&programs_abs)
-            .with_context(|| format!("reading {}", programs_abs.display()))?;
-        let existing: serde_yaml::Value = serde_yaml::from_str(&existing_src)
-            .with_context(|| format!("parsing {}", programs_abs.display()))?;
+        let existing = super::load::load_yaml(&programs_abs)?;
 
         // 4. Upsert the entry into spec.values.programs[] of the HelmRelease.
         let (new_doc, inserted) = caixa_flux::upsert_into_helmrelease_programs(existing, entry)?;
