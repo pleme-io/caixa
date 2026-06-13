@@ -68,11 +68,7 @@ impl Deploy {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
         let caixa = load_caixa(&root)?;
 
-        let cu_path = super::chart::first_servico_path(&caixa, &root)?;
-        let cu_src = std::fs::read_to_string(&cu_path)
-            .with_context(|| format!("reading {}", cu_path.display()))?;
-        let cu_yaml: serde_yaml::Value = serde_yaml::from_str(&cu_src)
-            .with_context(|| format!("parsing {}", cu_path.display()))?;
+        let cu_yaml = super::chart::load_first_servico_yaml(&caixa, &root)?;
 
         // 2. Render the entry.
         let entry = caixa_flux::programs_yaml_entry(&caixa, &cu_yaml)?;

@@ -37,11 +37,7 @@ impl Chart {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
         let caixa = load_caixa(&root)?;
 
-        let cu_path = first_servico_path(&caixa, &root)?;
-        let cu_src = std::fs::read_to_string(&cu_path)
-            .with_context(|| format!("reading {}", cu_path.display()))?;
-        let cu_yaml: serde_yaml::Value = serde_yaml::from_str(&cu_src)
-            .with_context(|| format!("parsing {}", cu_path.display()))?;
+        let cu_yaml = load_first_servico_yaml(&caixa, &root)?;
 
         let dir = caixa_helm::render_chart_for_servico(&caixa, &cu_yaml)?;
         dir.write_to(&self.out)
@@ -54,6 +50,51 @@ impl Chart {
         );
         Ok(())
     }
+}
+
+/// Read + parse the single `:servicos` computeunit YAML for a
+/// per-Servico `feira` verb (`feira chart` + `feira deploy`).
+///
+/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5) on the
+/// per-Servico computeunit IO axis. Before this lift both verbs
+/// open-coded the same four-line shape — [`first_servico_path`] →
+/// [`std::fs::read_to_string`] → [`serde_yaml::from_str`], all with
+/// verbatim `"reading {…}"` / `"parsing {…}"` `.with_context(...)`
+/// strings — at every entry-point that consumes the per-Servico
+/// `servicos/<name>.computeunit.yaml`. Two inline copies of the same
+/// load-bearing diagnostic shape, each one another place a future
+/// change to the `"reading {…}"` / `"parsing {…}"` discipline has to
+/// remember to touch.
+///
+/// After the lift every per-Servico-verb entry-point routes through
+/// this helper; the `"reading {…}"` / `"parsing {…}"` context strings
+/// live at exactly one call-site, the underlying `serde_yaml::Error`
+/// remains reachable on the anyhow cause chain for typed-view
+/// downstream callers (peer with the per-renderer
+/// [`caixa_core::KindMismatch`] / [`caixa_core::ServicoCountMismatch`]
+/// downcast discipline), and a future per-Servico-verb consumer (the
+/// future `feira oci publish` per-Servico OCI packager, the future
+/// `feira validate --strict` per-caixa admission verb) inherits the
+/// canonical entry-point shape rather than re-derives a skewed copy.
+///
+/// Mirrors [`super::load::load_caixa`] on the peer
+/// `<root>/caixa.lisp` axis — the canonical per-verb IO entry-point
+/// the db76969 lift established. The two helpers compose the
+/// per-Servico verb's IO entry-point in two canonical calls (the
+/// manifest loader + this per-computeunit loader); every diagnostic
+/// names the offending path with the same `"reading …"` /
+/// `"parsing …"` discipline, and the [`first_servico_path`] gate's
+/// typed-view chain (kind + count + file-existence) remains
+/// reachable through the anyhow chain for downstream structured-output
+/// consumers.
+pub(crate) fn load_first_servico_yaml(
+    caixa: &Caixa,
+    root: &std::path::Path,
+) -> Result<serde_yaml::Value> {
+    let cu_path = first_servico_path(caixa, root)?;
+    let cu_src = std::fs::read_to_string(&cu_path)
+        .with_context(|| format!("reading {}", cu_path.display()))?;
+    serde_yaml::from_str(&cu_src).with_context(|| format!("parsing {}", cu_path.display()))
 }
 
 /// Resolve the single `:servicos` entry's on-disk path for a per-Servico
@@ -311,5 +352,144 @@ mod tests {
             rendered.contains("not found"),
             "diagnostic must name the file-existence axis (got: {rendered:?})"
         );
+    }
+
+    #[test]
+    fn load_first_servico_yaml_accepts_well_formed_computeunit() {
+        // The canonical happy-path — a `:kind Servico` caixa with one
+        // `:servicos` entry whose file is on disk and parses as YAML
+        // returns the typed `serde_yaml::Value`, peer with every
+        // per-Servico verb's `Run::run` entry-point: each one used to
+        // open-code the same four-line `first_servico_path` → read →
+        // parse shape before this lift, and now routes through the
+        // canonical helper.
+        let dir = tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("servicos")).expect("mkdir servicos");
+        std::fs::write(
+            dir.path().join("servicos/hello.computeunit.yaml"),
+            "name: hello\nimage: ghcr.io/pleme-io/hello:0.1.0\n",
+        )
+        .expect("write cu");
+        let caixa = parse(
+            r#"(defcaixa
+                 :nome "hello"
+                 :kind Servico
+                 :versao "0.1.0"
+                 :servicos ("servicos/hello.computeunit.yaml"))"#,
+        );
+        let cu_yaml = load_first_servico_yaml(&caixa, dir.path()).expect("well-formed must load");
+        assert_eq!(
+            cu_yaml.get("name").and_then(serde_yaml::Value::as_str),
+            Some("hello"),
+            "parsed YAML must round-trip the canonical top-level scalar"
+        );
+    }
+
+    #[test]
+    fn load_first_servico_yaml_parse_error_diagnostic_names_path_with_parsing_context() {
+        // The diagnostic-shape pin on the parse-failure arm: a
+        // malformed computeunit YAML surfaces the verbatim
+        // `"parsing <path>"` `.with_context(...)` string with the
+        // resolved `servicos/<name>.computeunit.yaml` path, so a
+        // future refactor of the helper can't silently regress to a
+        // different context-string shape every per-Servico-verb
+        // consumer relied on before the lift. Peer with the
+        // `super::load::load_caixa_parse_error_diagnostic_names_path_
+        // with_parsing_context` pin on the sibling manifest-IO axis.
+        let dir = tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("servicos")).expect("mkdir servicos");
+        std::fs::write(
+            dir.path().join("servicos/broken.computeunit.yaml"),
+            "name: broken\n  bad-indent: [unclosed\n",
+        )
+        .expect("write malformed cu");
+        let caixa = parse(
+            r#"(defcaixa
+                 :nome "broken"
+                 :kind Servico
+                 :versao "0.1.0"
+                 :servicos ("servicos/broken.computeunit.yaml"))"#,
+        );
+        let err =
+            load_first_servico_yaml(&caixa, dir.path()).expect_err("malformed YAML must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("parsing"),
+            "diagnostic must name the parsing axis (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("broken.computeunit.yaml"),
+            "diagnostic must name the offending computeunit path (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn load_first_servico_yaml_parse_error_preserves_underlying_serde_yaml_error_on_chain() {
+        // Peer to the parse-context pin above: the anyhow
+        // `.with_context(...)` wrap preserves the underlying
+        // `serde_yaml::Error` on the cause chain — a future
+        // structured-output mode (`feira chart --json`, a future
+        // `feira validate --strict` per-Servico admission verb) can
+        // downcast through the chain and read the typed payload
+        // directly, peer with the per-renderer
+        // [`caixa_core::KindMismatch`] /
+        // [`caixa_core::ServicoCountMismatch`] typed-view downcast
+        // discipline the per-renderer + per-verb entry-points already
+        // follow, and peer with the `super::load::load_caixa_parse_
+        // error_preserves_underlying_lisp_error_on_chain` pin on the
+        // sibling manifest-IO axis.
+        let dir = tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("servicos")).expect("mkdir servicos");
+        std::fs::write(
+            dir.path().join("servicos/torn.computeunit.yaml"),
+            "name: torn\n  bad-indent: [unclosed\n",
+        )
+        .expect("write malformed cu");
+        let caixa = parse(
+            r#"(defcaixa
+                 :nome "torn"
+                 :kind Servico
+                 :versao "0.1.0"
+                 :servicos ("servicos/torn.computeunit.yaml"))"#,
+        );
+        let err =
+            load_first_servico_yaml(&caixa, dir.path()).expect_err("malformed YAML must reject");
+        let typed_reachable = err
+            .chain()
+            .any(|e| e.downcast_ref::<serde_yaml::Error>().is_some());
+        assert!(
+            typed_reachable,
+            "underlying serde_yaml::Error must remain reachable on the anyhow chain"
+        );
+    }
+
+    #[test]
+    fn load_first_servico_yaml_routes_kind_mismatch_through_first_servico_path() {
+        // The lifted helper composes `first_servico_path` on its
+        // entry-point path — every typed-view diagnostic the gate
+        // surfaces (kind mismatch, V0 `:servicos` count mismatch,
+        // file-existence) remains reachable through this helper's
+        // anyhow chain, so the canonical per-Servico verb-gate
+        // discipline (864f761 / 06b2981 / 1548fd2) is preserved by
+        // construction. This pin closes the regression vector where
+        // a future refactor of the helper might bypass the lifted
+        // gate and read the file directly, silently demoting a
+        // typed `KindMismatch` to a generic parse failure.
+        let dir = tempdir().expect("tempdir");
+        let caixa = parse(
+            r#"(defcaixa
+                 :nome "lib-shape"
+                 :kind Biblioteca
+                 :versao "0.1.0"
+                 :bibliotecas ())"#,
+        );
+        let err = load_first_servico_yaml(&caixa, dir.path()).expect_err("Biblioteca must reject");
+        let km = err
+            .chain()
+            .find_map(|e| e.downcast_ref::<caixa_core::KindMismatch>())
+            .expect("KindMismatch must remain reachable through the helper's anyhow chain");
+        assert_eq!(km.nome, "lib-shape");
+        assert_eq!(km.expected, CaixaKind::Servico);
+        assert_eq!(km.actual, CaixaKind::Biblioteca);
     }
 }
