@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use caixa_core::Caixa;
 use clap::Args;
 
-use super::load::{caixa_root, load_caixa};
+use super::load::{caixa_root, load_caixa, validate_cluster_arg};
 
 /// Deploy a caixa Servico to a target cluster by upserting its entry
 /// into the cluster's lareira-fleet-programs HelmRelease values.
@@ -64,6 +64,16 @@ pub struct Deploy {
 
 impl Deploy {
     pub fn run(self) -> Result<()> {
+        // Validate the `--cluster` arg at the verb entry-point, before
+        // any IO. The value lands as a path segment in
+        // `<k8s-repo>/clusters/<cluster>/programs/release.yaml` and as
+        // a K8s `metadata.name` on the downstream lareira-fleet-programs
+        // HelmRelease's per-cluster `name:`-keyed lookup; the DNS-1123
+        // label gate refuses every footgun the typed `:placement
+        // :clusters` slot already refuses (empty, path-traversal,
+        // uppercase, underscore, leading-`-`), peer with the lifted
+        // `validate_placement_cluster` discipline on the typed-slot axis.
+        validate_cluster_arg(&self.cluster)?;
         // 1. Load the caixa + computeunit.
         let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;

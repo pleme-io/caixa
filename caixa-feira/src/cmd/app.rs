@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use caixa_core::{Caixa, CaixaKind, WitTarget};
 use clap::{Args, Subcommand};
 
-use super::load::{caixa_root, load_caixa};
+use super::load::{caixa_root, load_caixa, validate_cluster_arg};
 
 /// `feira app …` — composition verbs for `:kind Aplicacao` caixas.
 ///
@@ -137,6 +137,18 @@ pub struct DeployArgs {
 
 impl DeployArgs {
     pub fn run(self) -> Result<()> {
+        // Validate the `--cluster` arg at the verb entry-point, before
+        // any IO. The value lands as a path segment in
+        // `<k8s-repo>/clusters/<cluster>/aplicacaos/<nome>/manifests.yaml`
+        // and as a K8s `metadata.name` on the downstream per-Aplicacao
+        // Gateway / HTTPRoute / CiliumNetworkPolicy resources; the
+        // DNS-1123 label gate refuses every footgun the typed
+        // `:placement :clusters` slot already refuses (empty,
+        // path-traversal, uppercase, underscore, leading-`-`), peer with
+        // the lifted `validate_placement_cluster` discipline on the
+        // typed-slot axis and with the `feira deploy` per-Servico
+        // verb's matching gate.
+        validate_cluster_arg(&self.cluster)?;
         let caixa = load_aplicacao(self.path.as_deref())?;
         let docs = caixa_mesh::render_all(&caixa)?;
 
