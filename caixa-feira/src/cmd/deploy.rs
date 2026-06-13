@@ -4,6 +4,8 @@ use anyhow::{Context, Result, bail};
 use caixa_core::Caixa;
 use clap::Args;
 
+use super::load::load_caixa;
+
 /// Deploy a caixa Servico to a target cluster by upserting its entry
 /// into the cluster's lareira-fleet-programs HelmRelease values.
 ///
@@ -64,11 +66,7 @@ impl Deploy {
     pub fn run(self) -> Result<()> {
         // 1. Load the caixa + computeunit.
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
-        let manifest_path = root.join("caixa.lisp");
-        let src = std::fs::read_to_string(&manifest_path)
-            .with_context(|| format!("reading {}", manifest_path.display()))?;
-        let caixa = Caixa::from_lisp(&src)
-            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let caixa = load_caixa(&root)?;
 
         let cu_path = super::chart::first_servico_path(&caixa, &root)?;
         let cu_src = std::fs::read_to_string(&cu_path)
@@ -83,20 +81,15 @@ impl Deploy {
         let k8s_repo = self
             .k8s_repo
             .clone()
-            .or_else(|| {
-                dirs::home_dir().map(|h| h.join("code/github/pleme-io/k8s"))
-            })
+            .or_else(|| dirs::home_dir().map(|h| h.join("code/github/pleme-io/k8s")))
             .ok_or_else(|| anyhow::anyhow!("could not resolve k8s repo path"))?;
 
-        let programs_rel = self
-            .programs_yaml
-            .clone()
-            .unwrap_or_else(|| {
-                PathBuf::from("clusters")
-                    .join(&self.cluster)
-                    .join("programs")
-                    .join("release.yaml")
-            });
+        let programs_rel = self.programs_yaml.clone().unwrap_or_else(|| {
+            PathBuf::from("clusters")
+                .join(&self.cluster)
+                .join("programs")
+                .join("release.yaml")
+        });
         let programs_abs = k8s_repo.join(&programs_rel);
 
         if !programs_abs.exists() {

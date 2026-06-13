@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use caixa_core::{Caixa, Dep, DepSource};
+use caixa_core::{Dep, DepSource};
 use clap::Args;
+
+use super::load::{caixa_manifest_path, load_caixa};
 
 /// Add a dep to the caixa.lisp in CWD (or `--path`).
 ///
@@ -50,11 +52,8 @@ pub struct Add {
 impl Add {
     pub fn run(self) -> Result<()> {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
-        let manifest_path = root.join("caixa.lisp");
-        let src = std::fs::read_to_string(&manifest_path)
-            .with_context(|| format!("reading {}", manifest_path.display()))?;
-        let mut caixa = Caixa::from_lisp(&src)
-            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let manifest_path = caixa_manifest_path(&root);
+        let mut caixa = load_caixa(&root)?;
 
         let fonte = self.git.as_ref().map(|repo| DepSource::Git {
             repo: repo.clone(),

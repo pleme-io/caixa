@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
-use caixa_core::Caixa;
+use anyhow::{Result, bail};
 use clap::Args;
+
+use super::load::load_caixa;
 
 /// Publish the current caixa by tagging its Git HEAD and pushing the tag
 /// to `origin`.
@@ -37,11 +38,7 @@ pub struct Publish {
 impl Publish {
     pub fn run(self) -> Result<()> {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
-        let manifest = root.join("caixa.lisp");
-        let src = std::fs::read_to_string(&manifest)
-            .with_context(|| format!("reading {}", manifest.display()))?;
-        let caixa =
-            Caixa::from_lisp(&src).with_context(|| format!("parsing {}", manifest.display()))?;
+        let caixa = load_caixa(&root)?;
 
         let versao = self.versao.clone().unwrap_or(caixa.versao.clone());
         let tag = format!("{}{versao}", self.prefix);

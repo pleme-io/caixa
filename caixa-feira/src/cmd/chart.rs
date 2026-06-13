@@ -4,6 +4,8 @@ use anyhow::{Context, Result, bail};
 use caixa_core::{Caixa, CaixaKind};
 use clap::Args;
 
+use super::load::load_caixa;
+
 /// Render the per-program lareira-<name> Helm chart for the caixa Servico
 /// in CWD.
 ///
@@ -33,11 +35,7 @@ pub struct Chart {
 impl Chart {
     pub fn run(self) -> Result<()> {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
-        let manifest_path = root.join("caixa.lisp");
-        let src = std::fs::read_to_string(&manifest_path)
-            .with_context(|| format!("reading {}", manifest_path.display()))?;
-        let caixa = Caixa::from_lisp(&src)
-            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let caixa = load_caixa(&root)?;
 
         let cu_path = first_servico_path(&caixa, &root)?;
         let cu_src = std::fs::read_to_string(&cu_path)
