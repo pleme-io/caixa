@@ -398,7 +398,18 @@ pub const GATEWAY_API_HTTP_PATH_MAX_LEN: usize = 1024;
 ///   - no ASCII control characters (`0x00..0x1F`, `0x7F`);
 ///   - no non-ASCII bytes (`>= 0x80`) — RFC 3986 requires `%XX`
 ///     percent-encoding for anything outside the ASCII unreserved +
-///     reserved set.
+///     reserved set;
+///   - no printable-ASCII byte outside the K8s Gateway API
+///     `HTTPPathMatch.value` apiserver-side `OpenAPI` regex
+///     `^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$`
+///     accepted set — namely `"` `<` `>` `[` `\` `]` `^` `` ` `` `{`
+///     `|` `}`. These eleven bytes are printable ASCII but RFC 3986's
+///     `pchar = unreserved / pct-encoded / sub-delims / ":" / "@"`
+///     grammar excludes them, so the apiserver rejects them at
+///     admission time on every `HTTPRoute.spec.rules[].matches[].
+///     path.value` landing site and the Cilium L7 path matcher
+///     refuses them too. Percent-encode (`%XX`) if the literal byte
+///     is intended.
 ///
 /// Returns the parser-shaped reason on rejection (without wrapping in
 /// any error variant) so each per-axis caller — `validate_entrada_path`
@@ -489,6 +500,46 @@ pub fn is_gateway_api_http_path(path: &str) -> Result<(), String> {
                 "must not contain non-ASCII byte 0x{b:02x} (RFC 3986 requires \
                  percent-encoding `%XX` for characters outside the ASCII unreserved \
                  + reserved set)"
+            ))
+        } else if matches!(
+            b,
+            b'"' | b'<' | b'>' | b'[' | b'\\' | b']' | b'^' | b'`' | b'{' | b'|' | b'}'
+        ) {
+            // The eleven printable-ASCII bytes outside the K8s Gateway
+            // API HTTPPathMatch.value apiserver-side OpenAPI regex
+            // accepted set. RFC 3986 §3.3 `pchar = unreserved /
+            // pct-encoded / sub-delims / ":" / "@"` excludes them from
+            // every path-segment, so the apiserver rejects them at
+            // admission time on every
+            // `HTTPRoute.spec.rules[].matches[].path.value` landing site
+            // (and the Cilium L7 path matcher follows the same grammar).
+            // Until this gate landed `validate` only refused `?`, `#`,
+            // whitespace, control characters, and non-ASCII bytes; the
+            // canonical author-side "I wrote a path-template variable"
+            // / "I copied an OpenAPI route" footguns silently passed
+            // (`/api/cart/{id}` — Gateway API uses `:foo` for path
+            // parameters, not `{foo}`; `/api/cart[0]` — index-bracket
+            // shape; `/api/<placeholder>` — angle-bracket placeholder;
+            // `/api\path` — Windows path-separator typo; `/api/^foo` —
+            // accidental shell-regex character) and the failure surfaced
+            // at apply time as a Gateway API webhook rejection naming
+            // the offending byte but not the offending caixa.lisp slot.
+            // Lifting the rejection to caixa-build time makes the
+            // canonical Gateway API HTTPPathMatch.value accepted set a
+            // structural property of every validated `:entrada :paths`
+            // entry and every typed-HTTP `:contratos :endpoint` payload,
+            // mirroring the c7d05ec / 55410e4 / 4f0390b trajectory each
+            // brought the per-axis accepted set to match the apiserver
+            // accepted set verbatim.
+            Some(format!(
+                "must not contain reserved character {ch:?} (RFC 3986 \
+                 path-segment grammar — and the K8s Gateway API \
+                 HTTPPathMatch.value apiserver-side OpenAPI regex \
+                 `^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{{2}})+$` — \
+                 exclude this byte from the `pchar = unreserved / pct-encoded \
+                 / sub-delims / \":\" / \"@\"` set; percent-encode as \
+                 `%{b:02X}` if the literal character is intended)",
+                ch = b as char
             ))
         } else {
             None
@@ -5091,6 +5142,110 @@ mod tests {
         // without a shape-mismatch footgun.
         let err = is_gateway_api_http_path("api/cart").unwrap_err();
         assert!(err.contains('/'), "got: {err:?}");
+    }
+
+    #[test]
+    fn gateway_api_http_path_rejects_every_reserved_printable_ascii_byte() {
+        // Substrate-side sweep: every one of the eleven printable-ASCII
+        // bytes outside the K8s Gateway API HTTPPathMatch.value
+        // apiserver-side OpenAPI regex
+        // `^(?:[-A-Za-z0-9/._~!$&'()*+,;=:@]|[%][0-9a-fA-F]{2})+$`
+        // accepted set surfaces a self-locating reason naming the
+        // offending byte verbatim plus the canonical `%XX` percent-
+        // encoding remediation. RFC 3986 §3.3's `pchar = unreserved /
+        // pct-encoded / sub-delims / ":" / "@"` grammar excludes these
+        // bytes from every path segment, so the apiserver rejects them
+        // at admission time on every
+        // `HTTPRoute.spec.rules[].matches[].path.value` landing site —
+        // peer with the `?` / `#` / whitespace / control / non-ASCII
+        // arms `gateway_api_http_path_rejects_each_arm_with_substring_
+        // pinned_reason` covers.
+        //
+        // Each char surfaces in a path-shape that pins the canonical
+        // authoring footgun the K8s apiserver would otherwise catch
+        // far from the caixa.lisp: `{id}` / `[0]` / `<placeholder>`
+        // template forms, the Windows path-separator typo, the
+        // shell-regex character footgun, the SQL-string-literal /
+        // YAML-flow-mapping accidents.
+        for (path, ch) in [
+            ("/api/cart\"path", '"'),
+            ("/api/cart<id>", '<'),
+            ("/api/cart/<id>", '<'),
+            ("/api/cart[0]", '['),
+            ("/api/cart\\path", '\\'),
+            ("/api/cart]", ']'),
+            ("/api/cart/^foo", '^'),
+            ("/api/cart/`foo", '`'),
+            ("/api/cart/{id}", '{'),
+            ("/api/cart|alt", '|'),
+            ("/api/cart}", '}'),
+        ] {
+            let err = is_gateway_api_http_path(path)
+                .err()
+                .unwrap_or_else(|| panic!("path {path:?} must be rejected"));
+            assert!(
+                err.contains("reserved character"),
+                "path {path:?} reason must name the reserved-character axis; got {err:?}"
+            );
+            assert!(
+                err.contains(&format!("{ch:?}")),
+                "path {path:?} reason must name the offending byte {ch:?} verbatim; got {err:?}"
+            );
+            let hex = format!("%{:02X}", ch as u8);
+            assert!(
+                err.contains(&hex),
+                "path {path:?} reason must surface the canonical {hex:?} percent-encoding \
+                 remediation; got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_api_http_path_reserved_char_arm_fires_before_consecutive_slash() {
+        // Precedence pin: the per-byte loop runs before the post-loop
+        // structural arms (`//`, `/./`, `/../`), so a path that is
+        // *both* reserved-char-bearing and consecutive-`/`-bearing
+        // surfaces the more self-locating reserved-character diagnostic
+        // first, naming the offending byte verbatim. Mirrors the
+        // existing `?` / `#` / whitespace / control / non-ASCII arms'
+        // implicit precedence the
+        // `gateway_api_http_path_rejects_each_arm_with_substring_
+        // pinned_reason` pin already establishes for the peer per-byte
+        // shapes.
+        let err = is_gateway_api_http_path("/api/{id}//x").unwrap_err();
+        assert!(
+            err.contains("reserved character") && err.contains("'{'"),
+            "got: {err:?}"
+        );
+        assert!(
+            !err.contains("consecutive"),
+            "the reserved-char arm must fire before the consecutive-`/` arm; got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn gateway_api_http_path_accepts_percent_encoded_reserved_chars() {
+        // Positive-control complement to the reserved-byte rejection
+        // sweep: every one of the eleven reserved printable-ASCII bytes
+        // is admissible *when* properly percent-encoded, matching the
+        // canonical Gateway API HTTPPathMatch.value apiserver-side
+        // OpenAPI regex's `[%][0-9a-fA-F]{2}` alternative. Pins the
+        // canonical remediation pathway the reserved-byte arm's reason
+        // wording names — author who carries a literal `{` percent-
+        // encodes as `%7B` and the typed slot accepts.
+        for path in [
+            "/api/cart%22path",
+            "/api/cart%3Cid%3E",
+            "/api/cart%5B0%5D",
+            "/api/cart%5Cpath",
+            "/api/cart/%5Efoo",
+            "/api/cart/%60foo",
+            "/api/cart/%7Bid%7D",
+            "/api/cart%7Calt",
+        ] {
+            is_gateway_api_http_path(path)
+                .unwrap_or_else(|e| panic!("percent-encoded path {path:?} must pass: {e:?}"));
+        }
     }
 
     // ── is_wit_world_ref — shared WIT world-reference predicate ──────────

@@ -6664,6 +6664,54 @@ mod tests {
         }
     }
 
+    #[test]
+    fn rejects_entrada_path_with_curly_brace_template_form() {
+        // Per-axis pin on the shared `is_gateway_api_http_path`
+        // reserved-byte arm: the canonical "I wrote an OpenAPI
+        // path-template `{id}` instead of the Gateway API `:id` form"
+        // footgun the K8s apiserver would otherwise catch at admission
+        // time on every `HTTPRoute.spec.rules[].matches[].path.value`
+        // landing site, far from the caixa.lisp. Surfaces as
+        // `EntradaPathInvalid` carrying the offending path verbatim
+        // plus the canonical `%7B`/`%7D` percent-encoding remediation
+        // — the substrate-side `gateway_api_http_path_rejects_every_
+        // reserved_printable_ascii_byte` predicate-level sweep pins the
+        // full eleven-byte set; this per-axis pin confirms the
+        // diagnostic flows through to the `EntradaPathInvalid` variant.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().paths = vec!["/api/cart/{id}".into()];
+        let err = s.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::EntradaPathInvalid { ref path, ref reason }
+                if path == "/api/cart/{id}"
+                    && reason.contains("reserved character")
+                    && reason.contains("'{'")
+                    && reason.contains("%7B")),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_http_contrato_endpoint_with_curly_brace_template_form() {
+        // Per-axis peer of `rejects_entrada_path_with_curly_brace_
+        // template_form` on the sibling `:contratos :endpoint` axis.
+        // Same shared `is_gateway_api_http_path` reserved-byte arm
+        // fires through `ContratoEndpointInvalid`, with the offending
+        // endpoint + `:de` + `:para` + reason flowing through verbatim.
+        // Pins that the lifted predicate's tightening lands on both
+        // caller axes simultaneously — one source of truth for the
+        // Gateway API HTTPPathMatch.value accepted set.
+        let err = contrato_endpoint_err("/api/cart/{id}");
+        assert!(
+            matches!(err, AplicacaoError::ContratoEndpointInvalid { ref endpoint, ref reason, .. }
+                if endpoint == "/api/cart/{id}"
+                    && reason.contains("reserved character")
+                    && reason.contains("'{'")
+                    && reason.contains("%7B")),
+            "got {err:?}"
+        );
+    }
+
     // ── :entrada :host value-shape gate ──────────────────────────────
     //
     // Mirrors the `:entrada :paths` value-shape suite (eb3456d) on
