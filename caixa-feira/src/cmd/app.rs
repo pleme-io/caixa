@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use caixa_core::{Caixa, CaixaKind, WitTarget};
 use clap::{Args, Subcommand};
 
@@ -194,12 +194,21 @@ fn load_aplicacao(path: Option<&std::path::Path>) -> Result<Caixa> {
         .with_context(|| format!("reading {}", manifest.display()))?;
     let caixa =
         Caixa::from_lisp(&src).with_context(|| format!("parsing {}", manifest.display()))?;
-    if caixa.kind != CaixaKind::Aplicacao {
-        bail!(
-            "feira app: caixa :kind must be Aplicacao for app verbs, got {:?}",
-            caixa.kind
-        );
-    }
+    // Route the `:kind` gate through the lifted typed-view predicate so
+    // the diagnostic names the offending `caixa.lisp` verbatim through
+    // the cause chain — peer with the canonical entry-point shape every
+    // per-kind renderer (`caixa-helm`, `caixa-flux`, `caixa-mesh`)
+    // already uses (c4213a4). Before the lift this feira verb raised
+    // `feira app: caixa :kind must be Aplicacao for app verbs, got
+    // Biblioteca` — the operator had to grep their source tree for
+    // which caixa.lisp triggered it; after the lift the wrapped
+    // [`caixa_core::KindMismatch`] view carries the `:nome` so the
+    // anyhow Debug renderer (the `Result<()>` main contract uses) prints
+    // it in the cause chain. Exactly the "feira verb whose error path
+    // doesn't name the offending caixa" punch-list item the compounding
+    // mandate calls out.
+    caixa_core::require_kind(&caixa, CaixaKind::Aplicacao)
+        .with_context(|| "feira app verbs require :kind Aplicacao")?;
     Ok(caixa)
 }
 
@@ -244,4 +253,112 @@ fn git<'a, I: IntoIterator<Item = &'a str>>(cwd: &std::path::Path, args: I) -> R
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn write_caixa(dir: &std::path::Path, src: &str) {
+        std::fs::write(dir.join("caixa.lisp"), src).expect("write caixa.lisp");
+    }
+
+    #[test]
+    fn load_aplicacao_accepts_aplicacao_kind() {
+        // The canonical accept case — an Aplicacao-kind caixa parses
+        // and the typed-view kind gate routes through with no
+        // diagnostic. Peer with the canonical entry-point
+        // `require_kind` happy-path the per-kind renderers
+        // (`caixa-helm` / `caixa-flux` / `caixa-mesh`) already pin.
+        let dir = tempdir().expect("tempdir");
+        write_caixa(
+            dir.path(),
+            r#"(defcaixa
+                 :nome "checkout"
+                 :kind Aplicacao
+                 :versao "0.1.0"
+                 :membros ())"#,
+        );
+        let caixa = load_aplicacao(Some(dir.path())).expect("Aplicacao must load");
+        assert_eq!(caixa.nome, "checkout");
+        assert_eq!(caixa.kind, CaixaKind::Aplicacao);
+    }
+
+    #[test]
+    fn load_aplicacao_rejects_non_aplicacao_kind_with_named_caixa() {
+        // The load-bearing property the lift closes: a wrong-kind
+        // caixa surfaces a diagnostic whose anyhow cause chain *names
+        // the offending caixa* (`mis-kinded`), not just the rejected
+        // kind. Before the lift this verb raised `feira app: caixa
+        // :kind must be Aplicacao for app verbs, got Biblioteca` —
+        // the operator had to grep their source tree for which
+        // caixa.lisp triggered it. After the lift the wrapped
+        // [`caixa_core::KindMismatch`] view carries the `:nome` and
+        // the anyhow Debug renderer (the `Result<()>` main contract
+        // uses) prints it in the cause chain. Pins the rendered
+        // diagnostic shape so a future refactor can't silently
+        // regress the `:nome`-naming property.
+        let dir = tempdir().expect("tempdir");
+        write_caixa(
+            dir.path(),
+            r#"(defcaixa
+                 :nome "mis-kinded"
+                 :kind Biblioteca
+                 :versao "0.1.0"
+                 :bibliotecas ())"#,
+        );
+        let err = load_aplicacao(Some(dir.path())).expect_err("Biblioteca must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("mis-kinded"),
+            "diagnostic must name the offending caixa nome (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("Aplicacao"),
+            "diagnostic must name the expected kind (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("Biblioteca"),
+            "diagnostic must name the actual kind (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("feira app"),
+            "diagnostic must keep the feira-app context the prior bail \
+             prefix carried (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn load_aplicacao_rejection_carries_typed_kind_mismatch_view() {
+        // Peer to the [`KindMismatch`]-named-caixa pin above: the
+        // anyhow error chain's underlying source downcasts to
+        // [`caixa_core::KindMismatch`], so a future caller that
+        // inspects the chain (e.g. a structured-output mode for
+        // `feira app graph --json`) reads the typed view's
+        // `nome` / `expected` / `actual` slots verbatim, peer with
+        // the `caixa-helm` / `caixa-flux` / `caixa-mesh`
+        // `#[from] KindMismatch` test families. Pins that the
+        // `.with_context(...)` wrap preserves the typed source —
+        // anyhow keeps the original `KindMismatch` reachable via
+        // `Error::chain`, so the typed payload isn't lost behind
+        // the string-only context message.
+        let dir = tempdir().expect("tempdir");
+        write_caixa(
+            dir.path(),
+            r#"(defcaixa
+                 :nome "wrong-shape"
+                 :kind Servico
+                 :versao "0.1.0"
+                 :servicos ("servicos/wrong-shape.computeunit.yaml"))"#,
+        );
+        let err = load_aplicacao(Some(dir.path())).expect_err("Servico must reject");
+        let km = err
+            .chain()
+            .find_map(|e| e.downcast_ref::<caixa_core::KindMismatch>())
+            .expect("KindMismatch must be reachable through the anyhow chain");
+        assert_eq!(km.nome, "wrong-shape");
+        assert_eq!(km.expected, CaixaKind::Aplicacao);
+        assert_eq!(km.actual, CaixaKind::Servico);
+    }
 }
