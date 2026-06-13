@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use caixa_core::Caixa;
 use caixa_resolver::{CacheDir, ResolverConfig, resolve_lacre};
 use clap::Args;
+
+use super::load::load_caixa;
 
 /// Resolve deps via git + write `lacre.lisp`.
 ///
@@ -32,11 +33,7 @@ pub struct Resolve {
 impl Resolve {
     pub fn run(self) -> Result<()> {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
-        let manifest_path = root.join("caixa.lisp");
-        let src = std::fs::read_to_string(&manifest_path)
-            .with_context(|| format!("reading {}", manifest_path.display()))?;
-        let caixa = Caixa::from_lisp(&src)
-            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let caixa = load_caixa(&root)?;
 
         let mut cfg = ResolverConfig::load_or_default();
         cfg.include_dev = self.dev;

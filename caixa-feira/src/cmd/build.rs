@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use caixa_core::{Caixa, LayoutInvariants, StandardLayout};
+use caixa_core::{LayoutInvariants, StandardLayout};
 use clap::Args;
+
+use super::load::load_caixa;
 
 /// Validate caixa.lisp + layout + every `:bibliotecas` entry parses.
 ///
@@ -20,11 +22,7 @@ pub struct Build {
 impl Build {
     pub fn run(self) -> Result<()> {
         let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
-        let manifest_path = root.join("caixa.lisp");
-        let src = std::fs::read_to_string(&manifest_path)
-            .with_context(|| format!("reading {}", manifest_path.display()))?;
-        let caixa = Caixa::from_lisp(&src)
-            .with_context(|| format!("parsing {}", manifest_path.display()))?;
+        let caixa = load_caixa(&root)?;
 
         StandardLayout::new()
             .verify(&caixa, &root)

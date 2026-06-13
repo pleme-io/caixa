@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use caixa_core::{Caixa, CaixaKind, WitTarget};
 use clap::{Args, Subcommand};
+
+use super::load::load_caixa;
 
 /// `feira app …` — composition verbs for `:kind Aplicacao` caixas.
 ///
@@ -189,11 +191,7 @@ fn load_aplicacao(path: Option<&std::path::Path>) -> Result<Caixa> {
     let root = path
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| PathBuf::from("."));
-    let manifest = root.join("caixa.lisp");
-    let src = std::fs::read_to_string(&manifest)
-        .with_context(|| format!("reading {}", manifest.display()))?;
-    let caixa =
-        Caixa::from_lisp(&src).with_context(|| format!("parsing {}", manifest.display()))?;
+    let caixa = load_caixa(&root)?;
     // Route the `:kind` gate through the lifted typed-view predicate so
     // the diagnostic names the offending `caixa.lisp` verbatim through
     // the cause chain — peer with the canonical entry-point shape every
