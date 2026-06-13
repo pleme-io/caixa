@@ -33,7 +33,7 @@
 
 use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use caixa_core::Caixa;
 
 /// The canonical caixa manifest filename. Every `feira` verb's
@@ -149,6 +149,99 @@ pub(crate) fn load_yaml(path: &Path) -> Result<serde_yaml::Value> {
     let src =
         std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     serde_yaml::from_str(&src).with_context(|| format!("parsing {}", path.display()))
+}
+
+/// Validate a `feira` verb's `--cluster <name>` flag value at the
+/// per-verb entry-point against the canonical DNS-1123 label shape every
+/// downstream consumer (the K8s apiserver's per-Service / per-Pod /
+/// per-CR `metadata.name` axis, the `:placement :clusters` typed slot,
+/// the `<k8s-repo>/clusters/<cluster>/…` GitOps path join) demands.
+///
+/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5 — "the
+/// duplication budget is zero") on the per-verb `--cluster` axis. Before
+/// this lift the same `--cluster` value passed through both
+/// [`super::deploy::Deploy::run`] (the per-Servico `feira deploy`
+/// per-cluster `<k8s-repo>/clusters/<cluster>/programs/release.yaml`
+/// path-join at `cmd/deploy.rs:83`) and
+/// [`super::app::DeployArgs::run`] (the whole-Aplicacao `feira app
+/// deploy` per-cluster `<k8s-repo>/clusters/<cluster>/aplicacaos/<nome>/
+/// manifests.yaml` path-join at `cmd/app.rs:156`) with no shape gate
+/// at all — every footgun the author surface's `:placement :clusters`
+/// slot already refuses through
+/// [`caixa_core::AplicacaoError::PlacementClusterInvalid`] (the 6c8c00b
+/// lift on the sibling typed-slot axis) silently passed at the verb
+/// arg-entry. Two unprotected call-sites of the same load-bearing
+/// shape, each one another place a future change to the canonical
+/// cluster-name discipline has to remember to touch — the future M4
+/// `feira reconcile --cluster <name>` cluster-diff verb the
+/// absorption-roadmap acknowledges, the future per-cluster
+/// `feira oci publish --cluster <name>` registry-push verb, the future
+/// `feira app status --cluster <name>` introspection verb — each one
+/// landing on a per-verb open-coded gate is a coordinated rewrite of
+/// every verb-entry-point that either gets it right at every site or
+/// quietly drifts at one.
+///
+/// Without the gate three authoring footguns silently passed:
+///
+///   - `--cluster ""` — the canonical "I forgot the flag value"
+///     footgun. The path join landed at
+///     `<k8s-repo>/clusters//programs/release.yaml`, which file-system-
+///     normalizes to `<k8s-repo>/clusters/programs/release.yaml` and
+///     either silently overwrote a sibling-dir file or surfaced a
+///     non-existent-path error far from the source flag.
+///   - `--cluster "rio/.."` — the path-traversal footgun. The path
+///     join landed at `<k8s-repo>/clusters/rio/../programs/release.yaml`,
+///     which file-system-normalizes to
+///     `<k8s-repo>/clusters/programs/release.yaml` and overwrote the
+///     sibling location with no diagnostic naming the escape.
+///   - `--cluster "Rio"` / `--cluster "rio_cluster"` /
+///     `--cluster "rio.cluster"` — the wrong-case / wrong-separator /
+///     wrong-shape footguns the K8s apiserver refuses at admission
+///     time on every `metadata.name` consumer downstream (the
+///     `lareira-fleet-programs` HelmRelease's per-cluster
+///     `name:`-keyed lookup, the per-Aplicacao Gateway/HTTPRoute's
+///     `name:` field). Silent passage through the verb arg-entry
+///     surfaced the failure at `kubectl apply` time as a "field is
+///     invalid" rejection, far from the source `--cluster` flag.
+///
+/// After the lift every per-verb `--cluster` consumer routes through
+/// this helper: the DNS-1123 label gate fires at the verb's entry-
+/// point, the diagnostic carries the offending `--cluster <value>`
+/// verbatim plus a parser-shaped reason naming the specific violation,
+/// and the canonical "what shape must `--cluster` carry?" decision
+/// lives at exactly one call-site. Mirrors the per-slot
+/// [`caixa_core::AplicacaoError::PlacementClusterInvalid`] discipline
+/// on the typed-Caixa author surface — the same DNS-1123 label shape
+/// both the typed `:placement :clusters` slot and the per-verb
+/// `--cluster` arg refuse drift against, sharing the lifted
+/// [`caixa_core::is_dns_1123_label`] predicate so the substrate-wide
+/// "valid cluster name" set is single-sourced.
+pub(crate) fn validate_cluster_arg(cluster: &str) -> Result<()> {
+    // Empty is gated first with a self-locating diagnostic — the
+    // canonical "I forgot the flag value" footgun a bare
+    // `--cluster ""` shape produces. Peer with the
+    // [`caixa_core::AplicacaoError::PlacementClusterEmpty`] gate on
+    // the typed-slot axis (the empty-first cascade every author-
+    // surface DNS-1123 label slot follows on `:membros :caixa`,
+    // `:placement :clusters`, `:children :caixa`, `:contratos :de` /
+    // `:para`, `:entrada :para`).
+    if cluster.is_empty() {
+        bail!(
+            "--cluster value is empty (every `feira` verb that joins \
+             `<k8s-repo>/clusters/<cluster>/…` requires a non-empty \
+             cluster name — e.g. `--cluster rio`, `--cluster mar`, \
+             `--cluster plo`)"
+        );
+    }
+    caixa_core::is_dns_1123_label(cluster).map_err(|reason| {
+        anyhow::anyhow!(
+            "--cluster {cluster:?} is not a valid DNS-1123 label: {reason} \
+             (every cluster name lands as a path segment in \
+             `<k8s-repo>/clusters/<cluster>/…` and as a K8s `metadata.name` \
+             on downstream HelmRelease / Gateway / HTTPRoute consumers; the \
+             apiserver rejects any non-DNS-1123-label name at admission time)"
+        )
+    })
 }
 
 #[cfg(test)]
@@ -425,6 +518,156 @@ mod tests {
             CAIXA_ROOT_DEFAULT_DIRNAME, ".",
             "canonical CWD-default dirname literal must remain `.` verbatim"
         );
+    }
+
+    #[test]
+    fn validate_cluster_arg_accepts_canonical_dns_1123_label_names() {
+        // The canonical happy-path arm — the three canonical pleme-io
+        // cluster names (`rio`, `mar`, `plo`) the `feira deploy` /
+        // `feira app deploy` help text already documents pass the lifted
+        // DNS-1123 label gate cleanly. Peer with every per-slot
+        // DNS-1123-label call-site's happy-path pin
+        // (`validate_placement_cluster` on the typed `:placement
+        // :clusters` slot, `validate_membro_caixa` on `:membros :caixa`,
+        // `validate_child_caixa` on `:children :caixa`).
+        for cluster in ["rio", "mar", "plo", "us-east-1", "eu-west-2", "a", "a0"] {
+            validate_cluster_arg(cluster)
+                .unwrap_or_else(|_| panic!("canonical cluster name {cluster:?} must accept"));
+        }
+    }
+
+    #[test]
+    fn validate_cluster_arg_rejects_empty_with_self_locating_diagnostic() {
+        // The canonical "I forgot the flag value" footgun a bare
+        // `--cluster ""` shape produces — silently passing the empty
+        // string would join to `<k8s-repo>/clusters//programs/release.yaml`,
+        // which file-system-normalizes to a sibling-dir path. The gate
+        // refuses with a self-locating diagnostic naming the `--cluster`
+        // flag and the canonical cluster-name shape, peer with the
+        // [`caixa_core::AplicacaoError::PlacementClusterEmpty`] arm on
+        // the typed-slot axis.
+        let err = validate_cluster_arg("").expect_err("empty --cluster must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("--cluster"),
+            "diagnostic must name the offending flag (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("empty"),
+            "diagnostic must name the empty-value axis (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_cluster_arg_rejects_path_traversal_with_named_value() {
+        // The path-traversal footgun: `--cluster "rio/.."` joined at
+        // `<k8s-repo>/clusters/rio/../programs/release.yaml` normalizes
+        // to a sibling-dir overwrite with no diagnostic naming the
+        // escape. The DNS-1123 label gate refuses `/` and `.` outright,
+        // so the parent-escape attempt surfaces as a
+        // "contains `/` (DNS-1123 labels allow only `[a-z0-9-]`)" or
+        // "contains `.` (a single DNS-1123 label is not a subdomain)"
+        // shape — peer with the `validate_placement_cluster` rejection
+        // on the typed-slot axis. The diagnostic names the offending
+        // `--cluster` value verbatim so the operator can grep their
+        // shell history for the bad flag.
+        for bad in ["rio/..", "../rio", "rio/sub", "."] {
+            let err = match validate_cluster_arg(bad) {
+                Err(e) => e,
+                Ok(()) => panic!("path-traversal {bad:?} must reject"),
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("--cluster"),
+                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_cluster_arg_rejects_uppercase_with_named_value_and_canonical_lowercase_hint() {
+        // The wrong-case footgun: `--cluster "Rio"` lands as a K8s
+        // `metadata.name` on the downstream `lareira-fleet-programs`
+        // HelmRelease's per-cluster `name:`-keyed lookup, which the
+        // apiserver rejects at admission time with a "field is invalid"
+        // diagnostic far from the source flag. The lifted
+        // `is_dns_1123_label` predicate carries a canonical-lowercase
+        // hint in its reason wording ("use {lower:?}") so the
+        // diagnostic names the canonical fix verbatim — peer with the
+        // `validate_placement_cluster` rejection on the typed-slot
+        // axis. Pins both the offending value and the canonical
+        // lowercase remediation in the rendered diagnostic.
+        let err = validate_cluster_arg("Rio").expect_err("uppercase --cluster must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("--cluster"),
+            "diagnostic must name the offending flag (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("Rio"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("rio"),
+            "diagnostic must surface the canonical lowercase remediation (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_cluster_arg_rejects_underscore_with_named_value_and_hyphen_hint() {
+        // The wrong-separator footgun: `--cluster "rio_cluster"` is a
+        // common author error (the K8s `metadata.name` axis allows
+        // hyphen-separated tokens, not snake_case). The lifted
+        // `is_dns_1123_label` predicate's reason wording names `-` as
+        // the canonical separator ("use `-` instead") so the
+        // diagnostic surfaces the fix verbatim — peer with the
+        // `validate_placement_cluster` rejection on the typed-slot
+        // axis.
+        let err =
+            validate_cluster_arg("rio_cluster").expect_err("underscore --cluster must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("--cluster"),
+            "diagnostic must name the offending flag (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("rio_cluster"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains('`'),
+            "diagnostic must surface the hyphen-separator remediation (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_cluster_arg_rejects_leading_hyphen_with_named_value() {
+        // The boundary-char footgun: `--cluster "-rio"` violates the
+        // DNS-1123 label rule that names must start and end with an
+        // alphanumeric (the K8s apiserver rejects leading / trailing
+        // `-` outright at admission time). The lifted predicate's
+        // reason wording names the boundary rule verbatim — peer with
+        // the `validate_placement_cluster` rejection on the typed-slot
+        // axis.
+        for bad in ["-rio", "rio-"] {
+            let err = match validate_cluster_arg(bad) {
+                Err(e) => e,
+                Ok(()) => panic!("boundary-`-` {bad:?} must reject"),
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("--cluster"),
+                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
     }
 
     #[test]
