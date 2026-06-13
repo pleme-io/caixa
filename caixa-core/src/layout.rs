@@ -116,6 +116,29 @@ impl LayoutInvariants for StandardLayout {
                 caixa: caixa.nome.clone(),
                 issue: err.to_string(),
             })?;
+        // `:nome`-side joint-length budget on the canonical
+        // `lareira-<nome>` chart-name shape — the second arm on the
+        // shared `:nome` axis after the bare-DNS-1123 gate above. Runs
+        // through the same [`LayoutError::NomeViolation`] envelope so
+        // every per-axis diagnostic on `:nome` carries one wrap shape,
+        // peer with the [`Caixa::validate_nome`] → `NomeInvalid`
+        // routing already at this site. The chart-name budget is the
+        // second-axis ceiling [`Caixa::validate_nome`] cannot see — a
+        // 56-byte DNS-1123-valid `:nome` passes the bare-`:nome` shape
+        // but produces a 64-byte `lareira-<nome>` chart name the
+        // apiserver / `helm lint` rejects at admission, far from the
+        // source `caixa.lisp` and naming none of the joint-length
+        // overflow's three carriers (DNS-1123 cap, prefix, `:nome`
+        // length). Closing it at this wire-up turns the
+        // [`lareira_chart_name`] doc-comment's explicit M4-admission
+        // deferral (caixa-core/src/render.rs:3198) into a build-time
+        // structural property of every emitted artifact.
+        caixa
+            .validate_nome_chart_name_budget()
+            .map_err(|err| LayoutError::NomeViolation {
+                caixa: caixa.nome.clone(),
+                issue: err.to_string(),
+            })?;
         caixa
             .validate_versao()
             .map_err(|err| LayoutError::VersaoViolation {

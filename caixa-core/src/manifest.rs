@@ -567,6 +567,75 @@ impl Caixa {
         })
     }
 
+    /// Reject `:nome` values whose joint length with the canonical
+    /// [`crate::LAREIRA_CHART_NAME_PREFIX`] (`"lareira-"`) overflows
+    /// the K8s DNS-1123 label cap [`crate::DNS_1123_LABEL_MAX_LEN`]
+    /// (63 bytes). Every per-Servico / per-Aplicacao renderer the
+    /// substrate carries materializes the caixa's `:nome` through the
+    /// canonical [`crate::lareira_chart_name`] helper (f7320d7) into a
+    /// `lareira-<nome>` artifact that lands as a K8s `metadata.name` /
+    /// Helm chart name / `HelmRelease` `release_name`: `caixa-helm`'s
+    /// `ChartDir.name` + `Chart.yaml::name`
+    /// (caixa-helm/src/lib.rs:207), `caixa-flux`'s `cluster_bundle`
+    /// `HelmRelease` `chart:` slot (caixa-flux/src/lib.rs:329),
+    /// `caixa-tatara`'s `process_for_aplicacao` `release_name` +
+    /// `oci://<registry>/lareira-<nome>` chart ref
+    /// (caixa-tatara/src/lib.rs:124,178). Helm's own `Chart.yaml::name`
+    /// admission rule strict-parses against DNS-1123-label, the Helm
+    /// operator's tracking-secret name is derived from `release_name`
+    /// and is itself DNS-1123-label-bounded, and the rendered chart's
+    /// K8s object `metadata.name` axes embed the chart name as a
+    /// prefix — every one fails admission on a > 63-byte chart name.
+    ///
+    /// The per-axis [`Self::validate_nome`] gate (6c992f8) already
+    /// caps `:nome` itself at 63 bytes via [`is_dns_1123_label`], so a
+    /// `:nome` of 56–63 bytes silently passed validate (the inner
+    /// DNS-1123 check accepts the bare `:nome`) but produced a
+    /// `lareira-<nome>` of 64–71 bytes that the apiserver / `helm lint`
+    /// rejected at admission — far from the source `caixa.lisp`, with
+    /// no field naming the overflow root cause. The
+    /// [`lareira_chart_name`] helper's own doc comment
+    /// (caixa-core/src/render.rs:3198) explicitly deferred the fix:
+    /// "the M4 admission webhook will pin the joint-length invariant
+    /// when it lands". This gate lands the invariant at the
+    /// manifest-validate layer rather than waiting for the apiserver
+    /// — the same fail-at-the-source posture every peer per-axis
+    /// value-shape gate (DNS-1123 on `:nome`, SemVer-2 on `:versao`,
+    /// SPDX-expression-shape on `:licenca`, 4-digit decimal year on
+    /// `:edicao`, etc.) takes.
+    ///
+    /// Thin wrapper around
+    /// [`crate::render::is_lareira_chart_name_shape`] (the
+    /// substrate-side predicate that composes [`lareira_chart_name`] +
+    /// [`is_dns_1123_label`] via the lifted
+    /// [`crate::LAREIRA_CHART_NAME_NOME_MAX_LEN`] budget); maps the
+    /// shared parser-shaped reason into the
+    /// [`ManifestError::NomeChartNameBudgetExceeded`] variant so the
+    /// diagnostic is self-locating (the offending `:nome` is named
+    /// verbatim alongside the rendered chart name and the budget) and
+    /// the author can shorten in one edit. The gate runs across every
+    /// `:kind` — `:nome` is the substrate-wide identity axis any
+    /// future renderer the substrate adds can derive a
+    /// `lareira-<nome>` artifact from, and uniform enforcement closes
+    /// the drift footgun where a future kind grows a chart-emitting
+    /// render path while the validate cascade doesn't catch it.
+    ///
+    /// Runs *after* [`Self::validate_nome`] so the narrower
+    /// `NomeEmpty` / `NomeInvalid` shape diagnostics fire first — a
+    /// structurally-malformed `:nome` (empty, uppercase, underscore,
+    /// dot, leading/trailing hyphen, Unicode, > 63 bytes) surfaces its
+    /// specific shape error rather than the chart-name-budget error,
+    /// preserving the legitimate "well-shaped `:nome` that happens to
+    /// overflow the joint cap" arm for this gate.
+    pub fn validate_nome_chart_name_budget(&self) -> Result<(), ManifestError> {
+        crate::render::is_lareira_chart_name_shape(&self.nome).map_err(|reason| {
+            ManifestError::NomeChartNameBudgetExceeded {
+                nome: self.nome.clone(),
+                reason,
+            }
+        })
+    }
+
     /// Reject `:versao` values that don't parse as [`semver::Version`].
     /// The top-level Caixa version flows directly into every
     /// substrate-side artifact that carries a "this is which version of
@@ -1705,6 +1774,21 @@ pub enum ManifestError {
          `\"checkout\"` or `\"cart-v2\"`)"
     )]
     NomeInvalid { nome: String, reason: String },
+    #[error(
+        ":nome {nome:?} overflows the joint-length budget on the canonical \
+         `lareira-<nome>` chart-name shape: {reason} (every per-Servico / \
+         per-Aplicacao renderer the substrate carries — `caixa-helm`'s \
+         `Chart.yaml::name`, `caixa-flux`'s `cluster_bundle` HelmRelease \
+         `chart:` slot, `caixa-tatara`'s `release_name` + \
+         `oci://<registry>/lareira-<nome>` chart ref — derives the same \
+         joint name through the canonical `lareira_chart_name` helper, and \
+         Helm's `Chart.yaml::name` admission rule + the K8s apiserver's \
+         DNS-1123 label cap on every chart-name-derived `metadata.name` \
+         reject any joint name exceeding 63 bytes; the narrower \
+         `:nome` shape (`NomeInvalid`) gates the bare-`:nome` budget, this \
+         arm gates the chart-name budget downstream renderers inherit)"
+    )]
+    NomeChartNameBudgetExceeded { nome: String, reason: String },
     #[error(
         ":versao is empty (every caixa must pin its own version; the value flows \
          into the `lareira-<nome>` Helm chart's `Chart.yaml` version + appVersion, \
@@ -3057,6 +3141,214 @@ mod tests {
         assert!(
             !reason.is_empty(),
             "NomeInvalid `reason` must carry the predicate's wording verbatim"
+        );
+    }
+
+    // ── Caixa::validate_nome_chart_name_budget — joint-length on `:nome` ──
+    //
+    // The bare-`:nome` axis [`Caixa::validate_nome`] caps at 63 bytes
+    // via DNS-1123; this second-axis gate caps the joint
+    // `lareira-<nome>` chart name at the same 63-byte ceiling. The
+    // canonical [`crate::lareira_chart_name`] helper's doc comment
+    // (f7320d7, caixa-core/src/render.rs:3198) explicitly deferred:
+    // "the M4 admission webhook will pin the joint-length invariant
+    // when it lands". These tests pin it at the manifest-validate
+    // layer instead, fail-before-pass-after on the 56-byte boundary.
+
+    #[test]
+    fn validate_nome_chart_name_budget_accepts_canonical_template() {
+        // Positive control: the bare `feira init`-style template's
+        // `:nome` ("demo") sits far below the cap; the gate must not
+        // regress this baseline. Same shape every peer
+        // value-shape-gate baseline pin uses.
+        let c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.validate_nome_chart_name_budget().unwrap();
+    }
+
+    #[test]
+    fn validate_nome_chart_name_budget_accepts_canonical_fixtures() {
+        // Positive-set sweep across the canonical author surface every
+        // in-tree fixture uses (`hello-rio`, `cart`, `checkout`,
+        // `worker`, the `checkout-aplicacao` example members, the
+        // `akeyless-attest` caixa-tatara fixture). Every value sits
+        // far below the 55-byte per-`:nome` budget. Same shape every
+        // peer per-axis baseline pin uses.
+        for nome in [
+            "hello-rio",
+            "cart",
+            "checkout",
+            "worker",
+            "akeyless-attest",
+            "demo",
+            "a",
+        ] {
+            caixa_with_nome(nome)
+                .validate_nome_chart_name_budget()
+                .unwrap_or_else(|e| {
+                    panic!("canonical :nome {nome:?} must pass chart-name budget, got {e:?}")
+                });
+        }
+    }
+
+    #[test]
+    fn validate_nome_chart_name_budget_accepts_nome_at_cap() {
+        // Boundary-accepting case at the 55-byte per-`:nome` budget —
+        // the joint chart name is exactly 63 bytes, the DNS-1123 label
+        // cap. Pinned alongside the rejecting-arm test so a future cap
+        // shift surfaces both arms simultaneously. Mirrors
+        // `nome_max_length_validates` on the peer bare-`:nome` axis.
+        let at_cap = "a".repeat(crate::LAREIRA_CHART_NAME_NOME_MAX_LEN);
+        caixa_with_nome(&at_cap)
+            .validate_nome_chart_name_budget()
+            .unwrap();
+    }
+
+    #[test]
+    fn validate_nome_chart_name_budget_rejects_nome_one_over_cap() {
+        // Fail-before-pass-after pin on the 56-byte boundary: the
+        // smallest `:nome` length that overflows the joint chart-name
+        // cap. The inner [`is_dns_1123_label`] gate
+        // (`Caixa::validate_nome`) accepts it (56 ≤ 63), so prior to
+        // this gate it silently passed the manifest-validate cascade
+        // and surfaced as a `helm lint` / apiserver rejection on the
+        // rendered chart name far from the source `caixa.lisp`, with
+        // no field naming the overflow. With this gate the diagnostic
+        // names the offending `:nome` verbatim alongside the rendered
+        // chart name and the budget, so the author can shorten in one
+        // edit. Mirrors `validate_nome_rejects_too_long` on the peer
+        // bare-`:nome` axis.
+        let over = "a".repeat(crate::LAREIRA_CHART_NAME_NOME_MAX_LEN + 1);
+        let c = caixa_with_nome(&over);
+        let err = c.validate_nome_chart_name_budget().unwrap_err();
+        let ManifestError::NomeChartNameBudgetExceeded { nome, reason } = err else {
+            panic!("expected NomeChartNameBudgetExceeded for over-budget :nome");
+        };
+        assert_eq!(nome.len(), crate::LAREIRA_CHART_NAME_NOME_MAX_LEN + 1);
+        assert_eq!(nome, over);
+        assert!(
+            reason.contains("63") && reason.contains("64") && reason.contains("55"),
+            "diagnostic must name the DNS-1123 cap (63), the actual chart-name length (64), \
+             and the per-`:nome` budget (55), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_chart_name_budget_rejects_nome_at_bare_dns_cap() {
+        // The 63-byte `:nome` boundary — passes the bare-`:nome`
+        // [`is_dns_1123_label`] cap exactly, but produces a 71-byte
+        // joint chart name that overflows the DNS-1123 label cap
+        // structurally. The most stringent fail-before-pass-after
+        // surface: every `:nome` in the 56..=63-byte range passed the
+        // prior cascade and broke at admission.
+        let bare_max = "a".repeat(crate::DNS_1123_LABEL_MAX_LEN);
+        let c = caixa_with_nome(&bare_max);
+        // The bare-`:nome` gate accepts the 63-byte length.
+        c.validate_nome().unwrap();
+        // The new joint-length gate rejects it.
+        let err = c.validate_nome_chart_name_budget().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                ManifestError::NomeChartNameBudgetExceeded { ref nome, .. }
+                    if nome.len() == crate::DNS_1123_LABEL_MAX_LEN
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_chart_name_budget_diagnostic_carries_offending_chart_name() {
+        // Diagnostic-shape pin: the rendered `lareira-<nome>` chart
+        // name appears verbatim in the diagnostic so the author sees
+        // exactly the string the apiserver / `helm lint` would have
+        // rejected — no re-derivation required to grep the source.
+        // Peer with `nome_invalid_diagnostic_carries_offending_nome`
+        // on the bare-`:nome` axis.
+        let over = "x".repeat(crate::LAREIRA_CHART_NAME_NOME_MAX_LEN + 5);
+        let c = caixa_with_nome(&over);
+        let err = c.validate_nome_chart_name_budget().unwrap_err();
+        let ManifestError::NomeChartNameBudgetExceeded { nome, reason } = err else {
+            panic!("expected NomeChartNameBudgetExceeded variant");
+        };
+        assert_eq!(nome, over);
+        let expected_chart = crate::lareira_chart_name(&over);
+        assert!(
+            reason.contains(&expected_chart),
+            "diagnostic must carry the rendered chart name {expected_chart:?} verbatim, \
+             got {reason:?}"
+        );
+        assert!(
+            reason.contains("lareira-"),
+            "diagnostic must name the canonical chart-name prefix verbatim, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_nome_chart_name_budget_runs_after_nome_shape_via_layout_verify() {
+        // Order pin on the layout cascade: the narrower
+        // `NomeInvalid` (bare-DNS-1123 shape) fires before the
+        // joint-length budget. A structurally-malformed `:nome` (here:
+        // uppercase) surfaces its specific shape error rather than
+        // the chart-name-budget error, even when the joint length
+        // would also overflow — the narrower diagnostic is more
+        // self-locating. Mirrors the cascade-precedence pins peer
+        // gates already use (e.g. `EntradaParaEmpty` before
+        // `EntradaParaInvalid`).
+        let over = "A".repeat(crate::LAREIRA_CHART_NAME_NOME_MAX_LEN + 1);
+        let c = caixa_with_nome(&over);
+        // The bare-shape gate fires first.
+        let err = c.validate_nome().unwrap_err();
+        assert!(
+            matches!(err, ManifestError::NomeInvalid { .. }),
+            "bare-shape gate must fire before chart-name-budget gate; got {err:?}"
+        );
+        // And the layout verify cascade surfaces that diagnostic, not
+        // the budget arm. Inject a path-exists oracle so the cascade
+        // gets past the manifest-presence check and into the
+        // value-shape gates.
+        let layout = crate::StandardLayout::new().with_path_exists(|_| true);
+        let err = crate::LayoutInvariants::verify(
+            &layout,
+            &c,
+            std::path::Path::new("/tmp/caixa-test-fake-root"),
+        )
+        .unwrap_err();
+        let issue = err.to_string();
+        assert!(
+            issue.contains("DNS-1123") || issue.contains("uppercase"),
+            "layout cascade must surface the bare-DNS-1123 diagnostic on a \
+             structurally-malformed :nome, not the chart-name-budget diagnostic; got {issue:?}"
+        );
+    }
+
+    #[test]
+    fn layout_verify_routes_chart_name_budget_through_nome_violation() {
+        // Cross-axis envelope pin: the layout cascade wraps both
+        // bare-`:nome` and joint-length-`:nome` failures through the
+        // same [`LayoutError::NomeViolation`] envelope, since both
+        // arms are on the `:nome` axis. The user's diagnostic stays
+        // self-locating ("which axis"), and a future consumer that
+        // dispatches on the layout-error variant (e.g. a `feira lint`
+        // exit-code mapping) sees a single per-axis envelope. The
+        // wrapped `issue:` carries the full inner diagnostic.
+        let over = "a".repeat(crate::LAREIRA_CHART_NAME_NOME_MAX_LEN + 1);
+        let c = caixa_with_nome(&over);
+        // The bare-shape gate accepts.
+        c.validate_nome().unwrap();
+        let layout = crate::StandardLayout::new().with_path_exists(|_| true);
+        let err = crate::LayoutInvariants::verify(
+            &layout,
+            &c,
+            std::path::Path::new("/tmp/caixa-test-fake-root"),
+        )
+        .unwrap_err();
+        let crate::LayoutError::NomeViolation { caixa, issue } = err else {
+            panic!("expected LayoutError::NomeViolation, got {err:?}");
+        };
+        assert_eq!(caixa, over);
+        assert!(
+            issue.contains("lareira-") && issue.contains("63") && issue.contains("55"),
+            "wrapped issue must carry the joint-length diagnostic verbatim, got {issue:?}"
         );
     }
 

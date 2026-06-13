@@ -3206,6 +3206,82 @@ pub fn lareira_chart_name(nome: &str) -> String {
     format!("{LAREIRA_CHART_NAME_PREFIX}{nome}")
 }
 
+/// The `:nome`-side budget the [`lareira_chart_name`] composition
+/// imposes on every caixa `:nome` reaching a renderer that derives a
+/// `lareira-<nome>` artifact (`caixa-helm`'s `ChartDir.name` +
+/// `Chart.yaml` `name:`, `caixa-flux`'s `cluster_bundle` `HelmRelease`
+/// `chart:` slot, `caixa-tatara`'s `process_for_aplicacao`
+/// `release_name` + `oci://<registry>/lareira-<nome>` chart ref).
+///
+/// The joint length of `lareira-` + `<nome>` must satisfy the K8s
+/// DNS-1123 label cap ([`DNS_1123_LABEL_MAX_LEN`] = 63) every downstream
+/// consumer enforces — Helm's `Chart.yaml::name` field (`helm lint`
+/// rejects at chart-package time per the DNS-1123 rule), the
+/// `HelmRelease`'s `release_name` field (the Helm operator's tracking
+/// secret name is derived from `release_name` and is itself a DNS-1123
+/// label), the rendered chart's K8s object `metadata.name` axes that
+/// embed the chart name as a prefix. The arithmetic is therefore
+/// `DNS_1123_LABEL_MAX_LEN - LAREIRA_CHART_NAME_PREFIX.len()` = 63 - 8
+/// = 55 bytes the caixa's `:nome` may itself occupy.
+///
+/// Lifted to a `pub const` so a future change to either axis
+/// ([`LAREIRA_CHART_NAME_PREFIX`] rebrand, [`DNS_1123_LABEL_MAX_LEN`]
+/// shift if Helm/K8s ever relax the chart-name rule) re-derives the
+/// budget mechanically — every per-axis call site
+/// ([`is_lareira_chart_name_shape`] consults it, the
+/// `Caixa::validate_nome_chart_name_budget` diagnostic names it
+/// verbatim) inherits the new value with no coordinated edit.
+pub const LAREIRA_CHART_NAME_NOME_MAX_LEN: usize =
+    DNS_1123_LABEL_MAX_LEN - LAREIRA_CHART_NAME_PREFIX.len();
+
+/// Predicate: assert that `nome` produces a [`lareira_chart_name`]
+/// output satisfying the K8s DNS-1123 label rule — the joint-length
+/// invariant the canonical `lareira_chart_name` helper's doc comment
+/// (f7320d7) defers to "the M4 admission webhook will pin … when it
+/// lands". This predicate lands it at the manifest-validate layer
+/// rather than waiting for the apiserver.
+///
+/// Returns the parser-shaped reason on rejection (without wrapping in
+/// any error variant) — same call-site discipline as the peer
+/// [`is_dns_1123_label`] predicate. Each per-axis caller wraps the
+/// returned reason in its own typed `*Error::*Exceeded { … }` variant
+/// (today: `Caixa::validate_nome_chart_name_budget` → the new
+/// [`crate::ManifestError::NomeChartNameBudgetExceeded`] arm).
+///
+/// The predicate composes via [`lareira_chart_name`] + [`is_dns_1123_label`]
+/// — the same two primitives every renderer consults — so a future
+/// rebrand of either axis (`LAREIRA_CHART_NAME_PREFIX`,
+/// `DNS_1123_LABEL_MAX_LEN`) re-derives the budget mechanically. A
+/// `:nome` that already passes [`is_dns_1123_label`] (≤63 bytes,
+/// boundary-anchored, `[a-z0-9-]` only) but whose prefixed chart name
+/// exceeds the joint cap is what this gate catches — every byte the
+/// inner DNS-1123 check accepts the prefixed form may still reject.
+///
+/// # Errors
+///
+/// Returns a parser-shaped reason naming the budget
+/// ([`LAREIRA_CHART_NAME_NOME_MAX_LEN`]), the offending `:nome`
+/// length, and the rendered chart name's length — so the diagnostic is
+/// self-locating and the author can shorten in one edit.
+pub fn is_lareira_chart_name_shape(nome: &str) -> Result<(), String> {
+    let chart_name = lareira_chart_name(nome);
+    if chart_name.len() > DNS_1123_LABEL_MAX_LEN {
+        return Err(format!(
+            "produces `{chart_name}` ({chart_len} bytes), which exceeds the \
+             DNS-1123 label max length of {DNS_1123_LABEL_MAX_LEN} bytes that \
+             Helm's `Chart.yaml::name` field and every downstream K8s artifact \
+             derived from the chart name enforce; the per-`:nome` budget is \
+             {budget} bytes (DNS-1123 cap minus the `{prefix}` prefix), shorten \
+             `:nome` to ≤ {budget} bytes",
+            chart_name = chart_name,
+            chart_len = chart_name.len(),
+            budget = LAREIRA_CHART_NAME_NOME_MAX_LEN,
+            prefix = LAREIRA_CHART_NAME_PREFIX,
+        ));
+    }
+    Ok(())
+}
+
 /// Build the canonical Cilium `matchLabels` selector for a single
 /// pleme-io program **scoped to its Aplicacao** — the safe default
 /// every per-Aplicacao mesh renderer (caixa-mesh's
@@ -3895,6 +3971,123 @@ mod tests {
             "LAREIRA_CHART_NAME_PREFIX {LAREIRA_CHART_NAME_PREFIX:?} must end with `-` so \
              concatenation with the caixa's `:nome` produces a hyphenated joint label"
         );
+    }
+
+    // ── is_lareira_chart_name_shape — joint-length budget on `:nome` ─────
+    //
+    // The canonical [`lareira_chart_name`] helper's own doc comment
+    // (f7320d7) explicitly defers: "the M4 admission webhook will pin
+    // the joint-length invariant when it lands". These tests land it
+    // at the manifest-validate layer instead — the predicate consults
+    // [`lareira_chart_name`] + [`is_dns_1123_label`] (no third primitive)
+    // so a future rebrand of either axis re-derives the budget
+    // mechanically and the test suite re-pins through the same lifts.
+
+    #[test]
+    fn lareira_chart_name_nome_max_len_pins_arithmetic() {
+        // Pin the arithmetic so a future shift in either input axis
+        // surfaces here. The const is mechanically derived from
+        // [`DNS_1123_LABEL_MAX_LEN`] (63 — the K8s apiserver cap every
+        // chart-name-derived `metadata.name` inherits) minus
+        // [`LAREIRA_CHART_NAME_PREFIX`].len() (8 — the canonical
+        // chart-name prefix the lift f7320d7 made structural). The
+        // landing value: 55 bytes the caixa's `:nome` may itself
+        // occupy under the joint chart-name cap.
+        assert_eq!(LAREIRA_CHART_NAME_NOME_MAX_LEN, 55);
+        assert_eq!(
+            LAREIRA_CHART_NAME_NOME_MAX_LEN,
+            DNS_1123_LABEL_MAX_LEN - LAREIRA_CHART_NAME_PREFIX.len()
+        );
+    }
+
+    #[test]
+    fn is_lareira_chart_name_shape_accepts_canonical_fixtures() {
+        // Positive control: every in-tree fixture `:nome` (caixa-helm,
+        // caixa-flux, caixa-mesh, caixa-tatara tests, the
+        // checkout-aplicacao example) sits far below the cap. The
+        // predicate must not regress this baseline shape.
+        for nome in [
+            "hello-rio",
+            "cart",
+            "worker",
+            "checkout",
+            "a",
+            "akeyless-attest",
+        ] {
+            is_lareira_chart_name_shape(nome).unwrap_or_else(|e| {
+                panic!("canonical :nome {nome:?} must pass chart-name budget, got {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn is_lareira_chart_name_shape_accepts_nome_at_budget() {
+        // Boundary-accepting case at the 55-byte cap — the joint
+        // chart name is exactly 63 bytes, the DNS-1123 label cap.
+        let at_cap = "a".repeat(LAREIRA_CHART_NAME_NOME_MAX_LEN);
+        assert_eq!(at_cap.len(), LAREIRA_CHART_NAME_NOME_MAX_LEN);
+        is_lareira_chart_name_shape(&at_cap).unwrap();
+        assert_eq!(lareira_chart_name(&at_cap).len(), DNS_1123_LABEL_MAX_LEN);
+    }
+
+    #[test]
+    fn is_lareira_chart_name_shape_rejects_nome_one_over_budget() {
+        // Fail-before-pass-after pin: 56 bytes is the smallest `:nome`
+        // length that overflows the joint chart-name cap. The inner
+        // [`is_dns_1123_label`] check accepts it (56 ≤ 63), so prior
+        // to this gate it silently passed `Caixa::validate_nome` and
+        // surfaced as a `helm lint` / apiserver rejection on the
+        // rendered chart name far from the source caixa.lisp.
+        let over = "a".repeat(LAREIRA_CHART_NAME_NOME_MAX_LEN + 1);
+        let err = is_lareira_chart_name_shape(&over).unwrap_err();
+        assert!(
+            err.contains("63") && err.contains("64") && err.contains("55"),
+            "diagnostic must name the DNS-1123 cap (63), the actual chart-name length (64), \
+             and the per-`:nome` budget (55), got {err:?}"
+        );
+        assert!(
+            err.contains("lareira-"),
+            "diagnostic must name the canonical prefix verbatim, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn is_lareira_chart_name_shape_diagnostic_carries_offending_chart_name() {
+        // The rendered chart name appears verbatim in the diagnostic
+        // so the author sees exactly the string the apiserver would
+        // have rejected — no re-derivation required to grep the source.
+        let over = "x".repeat(LAREIRA_CHART_NAME_NOME_MAX_LEN + 5);
+        let err = is_lareira_chart_name_shape(&over).unwrap_err();
+        let expected_chart = lareira_chart_name(&over);
+        assert!(
+            err.contains(&expected_chart),
+            "diagnostic must carry the rendered chart name {expected_chart:?} verbatim, \
+             got {err:?}"
+        );
+    }
+
+    #[test]
+    fn is_lareira_chart_name_shape_composes_through_canonical_helper() {
+        // Cross-axis invariant: the predicate is defined exactly as
+        // `is_dns_1123_label(lareira_chart_name(nome))` for the length
+        // arm — no inline `format!("lareira-{nome}")` shape duplicating
+        // the canonical lift. Pinning this composition closes the
+        // drift footgun where a future predicate refactor re-inlines
+        // the prefix-and-`:nome` concatenation and diverges from the
+        // canonical helper. Sweep across the boundary so both sides
+        // (accept + reject) consult the same helper.
+        for delta in 0..=2usize {
+            let nome = "z".repeat(LAREIRA_CHART_NAME_NOME_MAX_LEN.saturating_sub(delta));
+            let predicate_ok = is_lareira_chart_name_shape(&nome).is_ok();
+            let canonical_ok = is_dns_1123_label(&lareira_chart_name(&nome)).is_ok();
+            assert_eq!(
+                predicate_ok,
+                canonical_ok,
+                "predicate / canonical-composition divergence for :nome of len {} \
+                 (predicate_ok = {predicate_ok}, canonical_ok = {canonical_ok})",
+                nome.len()
+            );
+        }
     }
 
     #[test]
