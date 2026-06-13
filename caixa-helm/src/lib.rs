@@ -65,8 +65,17 @@ pub enum Error {
     /// shared verbatim with `caixa-flux` and `caixa-mesh`.
     #[error("{0}")]
     NotAServico(#[from] caixa_core::KindMismatch),
-    #[error("caixa :servicos must declare exactly one entry for V0 (got {0})")]
-    UnsupportedServicoCount(usize),
+    /// The caixa's `:servicos` list doesn't carry exactly one entry —
+    /// the V0 contract every Servico-kind caixa satisfies (one
+    /// ComputeUnit YAML pointer per Servico, matching the one Helm
+    /// chart this renderer emits). Lifted from a prior
+    /// `UnsupportedServicoCount(usize)` arm to wrap
+    /// [`caixa_core::ServicoCountMismatch`] so the diagnostic names
+    /// the offending caixa's `:nome` (not just the count), shared
+    /// verbatim with `caixa-flux` (the peer per-Servico renderer
+    /// running the same V0 invariant on the programs.yaml-entry axis).
+    #[error("{0}")]
+    UnsupportedServicoCount(#[from] caixa_core::ServicoCountMismatch),
     #[error("computeunit yaml missing required field: {0}")]
     MissingField(&'static str),
     #[error("yaml: {0}")]
@@ -200,9 +209,7 @@ pub fn render_chart_for_servico_with(
     opts: &RenderOpts,
 ) -> Result<ChartDir, Error> {
     caixa_core::require_kind(caixa, CaixaKind::Servico)?;
-    if caixa.servicos.len() != 1 {
-        return Err(Error::UnsupportedServicoCount(caixa.servicos.len()));
-    }
+    caixa_core::require_single_servico(caixa)?;
 
     let chart_name = lareira_chart_name(&caixa.nome);
     let chart_yaml = build_chart_yaml(caixa, &chart_name, opts);
@@ -300,7 +307,10 @@ fn build_values_yaml(
     );
 
     let mut block = BTreeMap::new();
-    block.insert("enabled".to_string(), serde_yaml::Value::Bool(opts.enabled_default));
+    block.insert(
+        "enabled".to_string(),
+        serde_yaml::Value::Bool(opts.enabled_default),
+    );
     if let serde_yaml::Value::Mapping(map) = spec {
         for (k, v) in map {
             if let Some(s) = k.as_str() {
@@ -356,7 +366,10 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
          {license}.\n",
         chart_name = chart_name,
         descricao = descricao,
-        repo = caixa.repositorio.clone().unwrap_or_else(|| caixa.nome.clone()),
+        repo = caixa
+            .repositorio
+            .clone()
+            .unwrap_or_else(|| caixa.nome.clone()),
         versao = caixa.versao,
         license = caixa.licenca.clone().unwrap_or_else(|| "MIT".into()),
     )
@@ -429,7 +442,11 @@ spec:
     fn renders_three_files() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
         assert_eq!(dir.name, "lareira-hello-rio");
-        let names: Vec<_> = dir.files.iter().map(|f| f.path.to_string_lossy().to_string()).collect();
+        let names: Vec<_> = dir
+            .files
+            .iter()
+            .map(|f| f.path.to_string_lossy().to_string())
+            .collect();
         assert!(names.contains(&"Chart.yaml".to_string()));
         assert!(names.contains(&"values.yaml".to_string()));
         assert!(names.contains(&"README.md".to_string()));
@@ -438,7 +455,11 @@ spec:
     #[test]
     fn chart_yaml_metadata_propagates() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let chart_file = dir.files.iter().find(|f| f.path == PathBuf::from("Chart.yaml")).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("Chart.yaml"))
+            .unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(chart.api_version, "v2");
         assert_eq!(chart.name, "lareira-hello-rio");
@@ -454,10 +475,19 @@ spec:
     #[test]
     fn values_yaml_wraps_under_pleme_computeunit_key() {
         let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        let values = dir.files.iter().find(|f| f.path == PathBuf::from("values.yaml")).unwrap();
+        let values = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
-        let cu_block = parsed.get("pleme-computeunit").expect("must wrap under pleme-computeunit");
-        assert_eq!(cu_block.get("enabled"), Some(&serde_yaml::Value::Bool(false)));
+        let cu_block = parsed
+            .get("pleme-computeunit")
+            .expect("must wrap under pleme-computeunit");
+        assert_eq!(
+            cu_block.get("enabled"),
+            Some(&serde_yaml::Value::Bool(false))
+        );
         assert!(cu_block.get("module").is_some());
         assert!(cu_block.get("trigger").is_some());
         assert!(cu_block.get("capabilities").is_some());
@@ -529,6 +559,73 @@ spec:
     }
 
     #[test]
+    fn servico_count_mismatch_carries_typed_view_with_nome() {
+        // Peer to the [`KindMismatch`]-lift pin above on the V0
+        // `:servicos`-singularity axis: a Servico-kind caixa whose
+        // `:servicos` list is non-singleton fails
+        // [`render_chart_for_servico`] with the renderer's
+        // `Error::UnsupportedServicoCount` variant wrapping the typed
+        // [`caixa_core::ServicoCountMismatch`] view (carrying the
+        // offending caixa's `:nome` + the actual count). Before the
+        // lift the variant carried only `usize` — the user had to grep
+        // their source tree for which `caixa.lisp` triggered it; after
+        // the lift the wrapped typed view names the offending caixa
+        // verbatim. Pins both the variant routing (via `#[from]`) and
+        // the typed payload so a future refactor can't silently switch
+        // back to the raw-`usize` payload (which would regress the
+        // shared-shape contract with caixa-flux on the peer
+        // programs.yaml-entry path).
+        let mut c = sample_caixa();
+        c.servicos = vec![
+            "servicos/hello-rio.computeunit.yaml".into(),
+            "servicos/extra.computeunit.yaml".into(),
+        ];
+        let err = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap_err();
+        match err {
+            Error::UnsupportedServicoCount(scm) => {
+                assert_eq!(scm.nome, "hello-rio");
+                assert_eq!(scm.count, 2);
+            }
+            other => panic!("expected Error::UnsupportedServicoCount, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_count_mismatch_diagnostic_names_offending_caixa_nome() {
+        // The renderer's `#[error("{0}")] UnsupportedServicoCount(
+        // #[from] ServicoCountMismatch)` arm prints the typed view's
+        // Display through verbatim, so the offending caixa's `:nome`
+        // appears in the rendered diagnostic. Pinning the
+        // self-locating property end-to-end (renderer entry-point →
+        // typed view's Display → final diagnostic string) so a future
+        // refactor that re-wraps the variant in a Display impl that
+        // drops the `:nome` surfaces here as a test failure rather
+        // than as silent fragmentation of the diagnostic. Peer to the
+        // `kind_mismatch_error_names_offending_caixa_nome` test above
+        // on the sibling V0 Servico-shape axis.
+        let mut c = sample_caixa();
+        c.servicos = vec![
+            "servicos/hello-rio.computeunit.yaml".into(),
+            "servicos/extra.computeunit.yaml".into(),
+        ];
+        let err = render_chart_for_servico(&c, &sample_cu_yaml()).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-rio"),
+            ":servicos-count-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("2"),
+            "diagnostic must name the actual count (got: {msg:?})"
+        );
+        assert!(
+            msg.contains(":servicos"),
+            "diagnostic must name the offending field axis (got: {msg:?})"
+        );
+    }
+
+    #[test]
     fn limits_slot_propagates_into_values_block() {
         use caixa_core::LimitsSpec;
         use std::time::Duration;
@@ -550,7 +647,10 @@ spec:
         let limits = cu_block.get("limits").expect("limits must propagate");
         assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
         assert_eq!(limits.get("fuel").and_then(|m| m.as_u64()), Some(1_000_000));
-        assert_eq!(limits.get("wallClock").and_then(|m| m.as_str()), Some("30s"));
+        assert_eq!(
+            limits.get("wallClock").and_then(|m| m.as_str()),
+            Some("30s")
+        );
         assert_eq!(limits.get("cpu").and_then(|m| m.as_str()), Some("500m"));
     }
 

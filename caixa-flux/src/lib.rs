@@ -62,8 +62,18 @@ pub enum Error {
     /// shared verbatim with `caixa-helm` and `caixa-mesh`.
     #[error("{0}")]
     NotAServico(#[from] caixa_core::KindMismatch),
-    #[error("caixa :servicos must declare exactly one entry for V0 (got {0})")]
-    UnsupportedServicoCount(usize),
+    /// The caixa's `:servicos` list doesn't carry exactly one entry —
+    /// the V0 contract every Servico-kind caixa satisfies (one
+    /// ComputeUnit YAML pointer per Servico, matching the one
+    /// programs.yaml entry / cluster bundle this renderer emits).
+    /// Lifted from a prior `UnsupportedServicoCount(usize)` arm to
+    /// wrap [`caixa_core::ServicoCountMismatch`] so the diagnostic
+    /// names the offending caixa's `:nome` (not just the count),
+    /// shared verbatim with `caixa-helm` (the peer per-Servico
+    /// renderer running the same V0 invariant on the
+    /// `lareira-<nome>` chart-dir axis).
+    #[error("{0}")]
+    UnsupportedServicoCount(#[from] caixa_core::ServicoCountMismatch),
     #[error("computeunit yaml missing required field: {0}")]
     MissingField(&'static str),
     #[error("yaml: {0}")]
@@ -103,9 +113,7 @@ pub fn programs_yaml_entry(
     computeunit_yaml: &serde_yaml::Value,
 ) -> Result<serde_yaml::Value, Error> {
     caixa_core::require_kind(caixa, CaixaKind::Servico)?;
-    if caixa.servicos.len() != 1 {
-        return Err(Error::UnsupportedServicoCount(caixa.servicos.len()));
-    }
+    caixa_core::require_single_servico(caixa)?;
 
     let spec = computeunit_yaml
         .get("spec")
@@ -175,7 +183,9 @@ pub fn upsert_into_helmrelease_programs(
         .to_string();
 
     let serde_yaml::Value::Mapping(mut root) = helmrelease else {
-        return Err(Error::MissingField("expected mapping at root of HelmRelease"));
+        return Err(Error::MissingField(
+            "expected mapping at root of HelmRelease",
+        ));
     };
 
     let spec = root
@@ -195,7 +205,11 @@ pub fn upsert_into_helmrelease_programs(
         .or_insert(serde_yaml::Value::Sequence(Vec::new()));
     let arr = match programs_val {
         serde_yaml::Value::Sequence(seq) => seq,
-        _ => return Err(Error::MissingField("spec.values.programs must be a sequence")),
+        _ => {
+            return Err(Error::MissingField(
+                "spec.values.programs must be a sequence",
+            ));
+        }
     };
 
     let mut inserted = true;
@@ -234,7 +248,9 @@ pub fn upsert_into_programs_yaml(
         .to_string();
 
     let serde_yaml::Value::Mapping(mut root) = programs_yaml else {
-        return Err(Error::MissingField("expected mapping at root of values.yaml"));
+        return Err(Error::MissingField(
+            "expected mapping at root of values.yaml",
+        ));
     };
 
     let programs_key = serde_yaml::Value::String("programs".into());
@@ -532,7 +548,10 @@ spec:
     #[test]
     fn programs_yaml_entry_round_trips() {
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        assert_eq!(entry.get("name").and_then(|n| n.as_str()), Some("hello-rio"));
+        assert_eq!(
+            entry.get("name").and_then(|n| n.as_str()),
+            Some("hello-rio")
+        );
         assert_eq!(
             entry.get("namespace").and_then(|n| n.as_str()),
             Some("tatara-system")
@@ -562,7 +581,10 @@ spec:
         )
         .unwrap();
         let entry = programs_yaml_entry(&sample_caixa(), &cu).unwrap();
-        assert_eq!(entry.get("namespace").and_then(|n| n.as_str()), Some(DEFAULT_NAMESPACE));
+        assert_eq!(
+            entry.get("namespace").and_then(|n| n.as_str()),
+            Some(DEFAULT_NAMESPACE)
+        );
     }
 
     #[test]
@@ -638,6 +660,70 @@ spec:
     }
 
     #[test]
+    fn servico_count_mismatch_carries_typed_view_with_nome() {
+        // Peer to the [`KindMismatch`]-lift pin above on the V0
+        // `:servicos`-singularity axis: a Servico-kind caixa whose
+        // `:servicos` list is non-singleton fails
+        // [`programs_yaml_entry`] with the renderer's
+        // `Error::UnsupportedServicoCount` variant wrapping the typed
+        // [`caixa_core::ServicoCountMismatch`] view (carrying the
+        // offending caixa's `:nome` + the actual count). Before the
+        // lift the variant carried only `usize` — the user had to grep
+        // their source tree for which `caixa.lisp` triggered it; after
+        // the lift the wrapped typed view names the offending caixa
+        // verbatim. Pins both the variant routing (via `#[from]`) and
+        // the typed payload so a future refactor can't silently switch
+        // back to the raw-`usize` payload (which would regress the
+        // shared-shape contract with caixa-helm on the peer
+        // `lareira-<nome>` chart-dir path).
+        let mut c = sample_caixa();
+        c.servicos = vec![
+            "servicos/hello-rio.computeunit.yaml".into(),
+            "servicos/extra.computeunit.yaml".into(),
+        ];
+        let err = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap_err();
+        match err {
+            Error::UnsupportedServicoCount(scm) => {
+                assert_eq!(scm.nome, "hello-rio");
+                assert_eq!(scm.count, 2);
+            }
+            other => panic!("expected Error::UnsupportedServicoCount, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn servico_count_mismatch_diagnostic_names_offending_caixa_nome() {
+        // The renderer's `#[error("{0}")] UnsupportedServicoCount(
+        // #[from] ServicoCountMismatch)` arm prints the typed view's
+        // Display through verbatim, so the offending caixa's `:nome`
+        // appears in the rendered diagnostic on both the
+        // `programs_yaml_entry` and `cluster_bundle` paths. Pinning the
+        // self-locating property end-to-end so a future refactor that
+        // re-wraps the variant in a Display impl that drops the
+        // `:nome` surfaces here as a test failure rather than as
+        // silent fragmentation across the two flux deploy paths. Peer
+        // to `cluster_bundle_kind_mismatch_names_offending_caixa_nome`
+        // on the sibling V0 Servico-shape axis.
+        let mut c = sample_caixa();
+        c.servicos = vec![];
+        let err = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-rio"),
+            ":servicos-count-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("0"),
+            "diagnostic must name the actual count (got: {msg:?})"
+        );
+        assert!(
+            msg.contains(":servicos"),
+            "diagnostic must name the offending field axis (got: {msg:?})"
+        );
+    }
+
+    #[test]
     fn upsert_inserts_new_entry() {
         let initial: serde_yaml::Value = serde_yaml::from_str(
             r#"
@@ -652,7 +738,10 @@ programs: []
         assert!(inserted, "first time should be insert");
         let arr = modified.get("programs").unwrap().as_sequence().unwrap();
         assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0].get("name").and_then(|n| n.as_str()), Some("hello-rio"));
+        assert_eq!(
+            arr[0].get("name").and_then(|n| n.as_str()),
+            Some("hello-rio")
+        );
     }
 
     #[test]
@@ -677,8 +766,15 @@ programs:
         assert!(!inserted, "second time should be replace");
         let arr = modified.get("programs").unwrap().as_sequence().unwrap();
         assert_eq!(arr.len(), 2, "no new entry added");
-        let updated_module = arr[0].get("module").unwrap().get("source").and_then(|s| s.as_str());
-        assert_eq!(updated_module, Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0"));
+        let updated_module = arr[0]
+            .get("module")
+            .unwrap()
+            .get("source")
+            .and_then(|s| s.as_str());
+        assert_eq!(
+            updated_module,
+            Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0")
+        );
     }
 
     #[test]
@@ -708,12 +804,19 @@ spec:
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(inserted);
         let arr = modified
-            .get("spec").unwrap()
-            .get("values").unwrap()
-            .get("programs").unwrap()
-            .as_sequence().unwrap();
+            .get("spec")
+            .unwrap()
+            .get("values")
+            .unwrap()
+            .get("programs")
+            .unwrap()
+            .as_sequence()
+            .unwrap();
         assert_eq!(arr.len(), 2);
-        assert_eq!(arr[1].get("name").and_then(|n| n.as_str()), Some("hello-rio"));
+        assert_eq!(
+            arr[1].get("name").and_then(|n| n.as_str()),
+            Some("hello-rio")
+        );
     }
 
     #[test]
@@ -737,12 +840,20 @@ spec:
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(!inserted);
         let arr = modified
-            .get("spec").unwrap()
-            .get("values").unwrap()
-            .get("programs").unwrap()
-            .as_sequence().unwrap();
+            .get("spec")
+            .unwrap()
+            .get("values")
+            .unwrap()
+            .get("programs")
+            .unwrap()
+            .as_sequence()
+            .unwrap();
         assert_eq!(arr.len(), 2);
-        let updated = arr[0].get("module").unwrap().get("source").and_then(|s| s.as_str());
+        let updated = arr[0]
+            .get("module")
+            .unwrap()
+            .get("source")
+            .and_then(|s| s.as_str());
         assert_eq!(updated, Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0"));
     }
 
@@ -819,15 +930,24 @@ spec:
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         assert_eq!(files.len(), 3);
-        let names: Vec<_> = files.iter().map(|f| f.path.to_string_lossy().to_string()).collect();
+        let names: Vec<_> = files
+            .iter()
+            .map(|f| f.path.to_string_lossy().to_string())
+            .collect();
         assert!(names.contains(&"gitrepository.yaml".to_string()));
         assert!(names.contains(&"helmrelease.yaml".to_string()));
         assert!(names.contains(&"kustomization.yaml".to_string()));
 
-        let kust = files.iter().find(|f| f.path == std::path::PathBuf::from("kustomization.yaml")).unwrap();
+        let kust = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .unwrap();
         assert!(kust.contents.contains("./clusters/rio/services/hello-rio"));
 
-        let gitrepo = files.iter().find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml")).unwrap();
+        let gitrepo = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .unwrap();
         assert!(gitrepo.contents.contains("v0.1.0"));
     }
 }

@@ -127,6 +127,101 @@ pub fn require_kind(caixa: &Caixa, expected: CaixaKind) -> Result<(), KindMismat
     }
 }
 
+/// Typed `:servicos`-count-mismatch view: the canonical surface every
+/// per-Servico `caixa-<target>` renderer raises when it's handed a
+/// [`Caixa`] whose `:servicos` list doesn't carry exactly one entry —
+/// the V0 contract every Servico-kind caixa satisfies (`caixa-helm`'s
+/// `render_chart_for_servico`, `caixa-flux`'s `programs_yaml_entry`, the
+/// future per-Servico OCI/wasm packager). Carries the offending caixa's
+/// `:nome` alongside the actual count, so the diagnostic reads `caixa
+/// "<nome>": :servicos must declare exactly one entry for V0 (got
+/// <count>)` — naming which `caixa.lisp` needs author attention, not
+/// just the count the renderer rejected.
+///
+/// Lifted from two identical-shape per-renderer arms in
+/// [`caixa-helm`][helm-err] and [`caixa-flux`][flux-err]
+/// (`Error::UnsupportedServicoCount(usize)`). The prior arms each
+/// carried only the actual count, leaving the user to grep for which
+/// `caixa.lisp` triggered the mismatch — exactly the "feira verb whose
+/// error path doesn't name the offending caixa" punch-list item the
+/// compounding-mandate protocol calls out. Same trajectory as
+/// [`KindMismatch`] (which lifted the prior `NotAServico(CaixaKind)` /
+/// `NotAnAplicacao(CaixaKind)` per-renderer arms into a typed view
+/// naming the offending caixa).
+///
+/// Renderers wrap this view in their own [`thiserror`] `Error` enum
+/// via `#[from]`; the `?` operator at every count-checking call site
+/// turns the [`require_single_servico`] result into the renderer's
+/// local error type with no manual conversion. Peer to [`require_kind`]
+/// on the V0 Servico-shape gate axis (the kind gate refuses the wrong
+/// `:kind`; this gate refuses the wrong `:servicos` count) — every
+/// per-Servico renderer chains both at its entry point.
+///
+/// [helm-err]: https://docs.rs/caixa-helm
+/// [flux-err]: https://docs.rs/caixa-flux
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("caixa {nome:?}: :servicos must declare exactly one entry for V0 (got {count})")]
+pub struct ServicoCountMismatch {
+    /// The offending caixa's `:nome` — names which `caixa.lisp` the
+    /// renderer was handed, so the diagnostic doesn't require the
+    /// user to grep for it.
+    pub nome: String,
+    /// The `:servicos` list length the offending caixa actually carries.
+    /// The expected count is fixed at 1 by the V0 contract — every
+    /// `:kind Servico` caixa declares exactly one `ComputeUnit` YAML
+    /// pointer, matching the one Helm chart / one programs.yaml entry
+    /// each renderer emits.
+    pub count: usize,
+}
+
+/// Predicate: assert that `caixa.servicos.len() == 1`, returning a typed
+/// [`ServicoCountMismatch`] view (carrying [`Caixa::nome`] + the actual
+/// count) on rejection. The canonical entry-point every per-Servico
+/// renderer wraps in its own [`thiserror`] `Error` variant via
+/// `#[from]` — the call site becomes a single
+/// `caixa_core::require_single_servico(caixa)?;` in place of the prior
+/// inline `if caixa.servicos.len() != 1 { return
+/// Err(Error::UnsupportedServicoCount(caixa.servicos.len())); }`
+/// block.
+///
+/// Lifted to a single helper so the V0 `:servicos`-singularity invariant
+/// — the same shape the [`crate::Caixa::validate_code_paths`] doc
+/// comment already names as load-bearing on caixa-helm + caixa-flux
+/// (caixa-core/src/manifest.rs:4108) — lives in exactly one place across
+/// every per-Servico renderer. A future per-Servico renderer
+/// (`caixa-otel`, the future per-Servico OCI packager, the future M4
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CR materializer) gets the same
+/// naming-the-offending-caixa diagnostic for free, and a future change
+/// to the V0 invariant (e.g. allowing multi-servico Servicos when the
+/// component-model multi-world boundary lands in M5) is one edit here,
+/// not a coordinated rewrite of every renderer's per-arm
+/// `UnsupportedServicoCount` check.
+///
+/// Same trajectory as [`require_kind`] / [`KindMismatch`] on the peer
+/// V0 Servico-shape axis: every per-Servico renderer reaches for one
+/// `caixa_core::require_*` helper per V0 invariant, so the diagnostic
+/// shape (named caixa, named field) is uniform across the substrate.
+///
+/// # Errors
+///
+/// Returns [`ServicoCountMismatch`] when `caixa.servicos.len() != 1`
+/// (both empty and ≥ 2 land on this arm — the V0 contract requires
+/// *exactly* one entry, not *at-least* one). The error carries the
+/// caixa's `:nome` + the offending count so the diagnostic names the
+/// offending `caixa.lisp` — same shape every renderer's
+/// `Error::From<ServicoCountMismatch>` converts into the renderer's
+/// local error type.
+pub fn require_single_servico(caixa: &Caixa) -> Result<(), ServicoCountMismatch> {
+    if caixa.servicos.len() == 1 {
+        Ok(())
+    } else {
+        Err(ServicoCountMismatch {
+            nome: caixa.nome.clone(),
+            count: caixa.servicos.len(),
+        })
+    }
+}
+
 /// K8s DNS-1123 label rule's max length, in bytes — the floor each
 /// apiserver-side schema enforces independently on every `metadata.name`
 /// / Service name / label value axis a validated identifier lands in.
@@ -4632,6 +4727,95 @@ mod tests {
         assert_eq!(err.expected, CaixaKind::Supervisor);
         assert_eq!(err.actual, CaixaKind::Aplicacao);
         require_kind(&c, CaixaKind::Aplicacao).unwrap();
+    }
+
+    // ── require_single_servico / ServicoCountMismatch — V0 Servico-shape ─
+
+    #[test]
+    fn require_single_servico_accepts_singleton_list() {
+        // The happy path: the canonical V0 Servico carries exactly one
+        // `:servicos` entry (the ComputeUnit YAML pointer), the same
+        // shape every in-tree fixture + canonical example uses. Surfaced
+        // as `Ok(())` so the renderer's call site reads as a one-liner
+        // gate beside the peer [`require_kind`] check rather than a
+        // typed pattern match.
+        let c = bare_servico();
+        assert_eq!(
+            c.servicos.len(),
+            1,
+            "fixture pin: bare_servico() is singleton"
+        );
+        require_single_servico(&c).unwrap();
+    }
+
+    #[test]
+    fn require_single_servico_rejects_empty_list_with_typed_mismatch() {
+        // A Servico-kind caixa with zero `:servicos` entries fails
+        // `require_single_servico` with a typed [`ServicoCountMismatch`]
+        // view that names the offending caixa's `:nome` + the actual
+        // count (0). Pinning the typed shape so a future Display-format
+        // tweak can't silently drop either of the two load-bearing
+        // fields (which would regress the "feira verb whose error path
+        // doesn't name the offending caixa" punch-list item the protocol
+        // calls out — same shape every peer per-axis lift carries).
+        let mut c = bare_servico();
+        c.servicos = vec![];
+        let err = require_single_servico(&c).unwrap_err();
+        assert_eq!(err.nome, "hello-rio");
+        assert_eq!(err.count, 0);
+    }
+
+    #[test]
+    fn require_single_servico_rejects_multi_entry_list_with_typed_mismatch() {
+        // The peer arm on the upper-bound axis: a Servico-kind caixa
+        // with ≥ 2 `:servicos` entries fails the same gate, with the
+        // typed view carrying the actual count (2). Both empty and
+        // multi-entry lists land on the same [`ServicoCountMismatch`]
+        // arm — the V0 contract requires *exactly* one entry, not
+        // *at-least* one — so the single helper closes both directions
+        // of the V0 invariant in one call site.
+        let mut c = bare_servico();
+        c.servicos = vec![
+            "servicos/hello-rio.computeunit.yaml".into(),
+            "servicos/extra.computeunit.yaml".into(),
+        ];
+        let err = require_single_servico(&c).unwrap_err();
+        assert_eq!(err.nome, "hello-rio");
+        assert_eq!(err.count, 2);
+    }
+
+    #[test]
+    fn servico_count_mismatch_display_names_offending_caixa_nome() {
+        // The Display impl is the load-bearing surface every renderer's
+        // `#[error("{0}")] UnsupportedServicoCount(#[from]
+        // ServicoCountMismatch)` arm prints through. Pinning the exact
+        // rendered form so a future format change is a one-line edit +
+        // a one-line test update, not a silent regression of the
+        // diagnostic clarity that motivated the lift (the prior
+        // per-renderer `UnsupportedServicoCount(usize)` arm named only
+        // the count). Same shape every peer [`KindMismatch`] / typed-
+        // view Display tests pin.
+        let err = ServicoCountMismatch {
+            nome: "checkout".into(),
+            count: 3,
+        };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("checkout"),
+            "Display must name the offending caixa nome (got: {msg:?})"
+        );
+        assert!(
+            msg.contains('3'),
+            "Display must name the actual count (got: {msg:?})"
+        );
+        assert!(
+            msg.contains(":servicos"),
+            "Display must name the offending field axis (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("exactly one"),
+            "Display must name the V0 invariant (got: {msg:?})"
+        );
     }
 
     #[test]
