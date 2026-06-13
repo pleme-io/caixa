@@ -2907,6 +2907,80 @@ pub fn is_lisp_extension(path: &Path) -> bool {
     path.extension().and_then(|ext| ext.to_str()) == Some(LISP_SOURCE_EXTENSION)
 }
 
+/// The canonical compound suffix every `:servicos` entry — the
+/// ComputeUnit-CR axis the M2 typed-substrate caixa-helm /
+/// caixa-flux renderers consume via `serde_yaml::from_str` — must
+/// terminate in. Two-segment shape (`.computeunit.yaml`) rather than
+/// a single `.yaml` extension: the `.computeunit` segment routes
+/// authoring-time to the typed `ComputeUnit` CR shape the
+/// `pleme-computeunit` library chart resolves, distinguishing the
+/// slot's accepted set from the open `.yaml` universe (Helm
+/// `values.yaml`, FluxCD `Kustomization.yaml`, the generic K8s
+/// manifest YAML every operator emits) — same axis-discipline the
+/// peer [`LISP_SOURCE_EXTENSION`] sibling carries on the tatara-lisp-
+/// source axis but with a compound suffix because
+/// [`Path::extension`] only returns the post-last-`.` segment
+/// (`"yaml"` for `foo.computeunit.yaml`), so the predicate routes
+/// through [`Path::file_name`] and a string `ends_with` check on the
+/// full suffix instead.
+///
+/// Strict lowercase: every other shape-gate predicate in this module
+/// is case-sensitive on unit / scheme / label boundaries, so a strict
+/// `.computeunit.yaml` shape matches the downstream accepted set
+/// without case-folding drift (an uppercase `.COMPUTEUNIT.YAML` shape
+/// that a case-insensitive volume's existence check would match the
+/// on-disk file would still mismatch the canonical form every in-tree
+/// `:servicos` fixture and the `Caixa::template` scaffold emit,
+/// breaking the THEORY.md §V.2.7 render-determinism contract every
+/// typed slot carries).
+pub const COMPUTEUNIT_YAML_SUFFIX: &str = ".computeunit.yaml";
+
+/// Predicate: assert that `path` terminates in the canonical
+/// [`COMPUTEUNIT_YAML_SUFFIX`] (lowercase `.computeunit.yaml`) — the
+/// file-type shape every `:servicos` entry, the ComputeUnit-CR axis
+/// the M2 typed-substrate caixa-helm / caixa-flux renderers consume
+/// via `serde_yaml::from_str`, must take. The contract:
+///
+///   - the path has a final file-name component (paths ending in `/`
+///     fail);
+///   - the file name's UTF-8 string form ends in
+///     `.computeunit.yaml` — lowercase, no case-folding;
+///   - at least one byte precedes the suffix (the degenerate hidden-
+///     file `.computeunit.yaml` shape — file name exactly equal to
+///     the suffix — fails: the substrate identifies each ComputeUnit
+///     by the file-stem segment that precedes `.computeunit.yaml`,
+///     so an empty stem is structurally an unidentified Servico).
+///
+/// Returns `true` on accept, `false` on reject. The per-axis caller
+/// — [`crate::Caixa::validate_code_paths`] on the `:servicos` axis —
+/// wraps the boolean into its own typed
+/// `ManifestError::CodePathNonComputeUnitYamlExtension { slot, path }`
+/// variant so the diagnostic still names the offending slot and the
+/// offending path verbatim. Peer of [`is_lisp_extension`] on the
+/// tatara-lisp-source axis (`:bibliotecas` 64772a9); same axis-
+/// agnostic predicate discipline, here on the compound-suffix axis
+/// [`Path::extension`] can't express on its own. The third caller —
+/// the future M2.5 caixa-operator `:servicos` admission webhook
+/// keying off the same accepted set, the M4
+/// `mesh.pleme.io/v1alpha1/ComputeUnit` CR materializer's per-
+/// `:servicos` shape gate, the future `feira fmt`'s `:servicos`
+/// canonical-form normalizer — lands as a thin wrapper rather than
+/// re-inlining the same compound-suffix check.
+///
+/// Pairs with the per-axis
+/// [`crate::ManifestError::CodePathNonComputeUnitYamlExtension`]
+/// variant — that remains the typed surface authors see; this
+/// predicate is the single-source-of-truth gate the caixa-build
+/// pipeline consults to produce it.
+#[must_use]
+pub fn is_computeunit_yaml_extension(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| {
+            name.len() > COMPUTEUNIT_YAML_SUFFIX.len() && name.ends_with(COMPUTEUNIT_YAML_SUFFIX)
+        })
+}
+
 /// Canonical camelCase YAML key for the `:limits` slot's overlay.
 pub const M2_KEY_LIMITS: &str = "limits";
 /// Canonical camelCase YAML key for the `:behavior` slot's overlay.
@@ -5813,6 +5887,149 @@ mod tests {
                 "pre-lift reject {reject:?} regressed"
             );
         }
+    }
+
+    // ── is_computeunit_yaml_extension — `:servicos` compound-suffix predicate ───
+
+    #[test]
+    fn computeunit_yaml_extension_accepts_canonical_shapes() {
+        // Positive controls: every canonical authoring shape every
+        // in-tree fixture and the `Caixa::template` scaffold use. The
+        // predicate inspects the final file-name component and checks
+        // for the compound `.computeunit.yaml` suffix with at least
+        // one byte of stem preceding it.
+        for relpath in [
+            "servicos/demo.computeunit.yaml",
+            "servicos/hello-rio.computeunit.yaml",
+            "servicos/my-service.computeunit.yaml",
+            "servicos/a.computeunit.yaml",
+            "./servicos/demo.computeunit.yaml",
+            "servicos/./demo.computeunit.yaml",
+            "servicos/sub/nested.computeunit.yaml",
+            "servicos/v0.1.computeunit.yaml",
+        ] {
+            assert!(
+                is_computeunit_yaml_extension(Path::new(relpath)),
+                "canonical `.computeunit.yaml` shape {relpath:?} must pass \
+                 is_computeunit_yaml_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn computeunit_yaml_extension_rejects_no_extension() {
+        // No-extension shape — the canonical "I declared the slot
+        // but forgot the `.computeunit.yaml` suffix" footgun. The
+        // peer caixa-helm / caixa-flux `serde_yaml::from_str`
+        // consumer can't infer the file type from the path alone, so
+        // the gate refuses the value at validate time.
+        for relpath in ["servicos/demo", "demo", "servicos/sub/nested"] {
+            assert!(
+                !is_computeunit_yaml_extension(Path::new(relpath)),
+                "no-extension shape {relpath:?} must fail \
+                 is_computeunit_yaml_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn computeunit_yaml_extension_rejects_wrong_extension() {
+        // Wrong-extension sweep across the canonical authoring footguns
+        // an author might drag in from the workspace tree — bare
+        // `.yaml` (the canonical "I forgot the `.computeunit` segment"
+        // typo), `.yml` (Helm-shorthand leak), `.json` (FluxCD
+        // bundle leak), `.toml` (Cargo workspace leak), `.txt`
+        // / `.md` (paste-from-doc footguns), `.yaml.bak` (editor
+        // backup), the near-miss `.computeunit.yam` / `.computeunit.yamls`
+        // typo, and the off-by-one-segment `computeunit-yaml`
+        // / `computeunit_yaml` shapes. Each must fail the predicate.
+        for relpath in [
+            "servicos/demo.yaml",
+            "servicos/demo.yml",
+            "servicos/demo.json",
+            "servicos/demo.toml",
+            "servicos/demo.txt",
+            "servicos/demo.md",
+            "servicos/demo.computeunit.yaml.bak",
+            "servicos/demo.computeunit.yam",
+            "servicos/demo.computeunit.yamls",
+            "servicos/demo.computeunit",
+            "servicos/demo-computeunit.yaml",
+            "servicos/demo_computeunit.yaml",
+        ] {
+            assert!(
+                !is_computeunit_yaml_extension(Path::new(relpath)),
+                "wrong-extension shape {relpath:?} must fail \
+                 is_computeunit_yaml_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn computeunit_yaml_extension_is_case_sensitive() {
+        // Strict lowercase pin: every case-folded shape a
+        // case-insensitive volume's existence check would match the
+        // on-disk file must still fail the predicate — the canonical-
+        // form codec emits lowercase `.computeunit.yaml` verbatim, so
+        // a case-folded shape mismatches the round-trip-stable
+        // canonical form (THEORY.md §V.2.7 render-determinism). Same
+        // case-sensitive discipline the byte-size / duration codecs
+        // and the peer `is_lisp_extension` predicate carry.
+        for relpath in [
+            "servicos/demo.ComputeUnit.yaml",
+            "servicos/demo.COMPUTEUNIT.yaml",
+            "servicos/demo.computeunit.YAML",
+            "servicos/demo.computeunit.Yaml",
+            "servicos/demo.COMPUTEUNIT.YAML",
+        ] {
+            assert!(
+                !is_computeunit_yaml_extension(Path::new(relpath)),
+                "case-folded `.computeunit.yaml` shape {relpath:?} must fail \
+                 is_computeunit_yaml_extension (strict lowercase, \
+                 render-determinism pin)"
+            );
+        }
+    }
+
+    #[test]
+    fn computeunit_yaml_extension_rejects_empty_stem() {
+        // Degenerate hidden-file shape: a file name exactly equal to
+        // the suffix (`.computeunit.yaml` — no stem preceding the
+        // suffix) is the structural "Servico declared with no
+        // identity" footgun. The substrate identifies each ComputeUnit
+        // by the file-stem segment that precedes `.computeunit.yaml`
+        // (the rendered `lareira-<stem>` Helm chart, the per-Servico
+        // `metadata.name`, the M3 `:contratos` membership lookup), so
+        // an empty stem leaves the Servico unidentifiable. Predicate
+        // pin: the `name.len() > SUFFIX.len()` bound rejects the
+        // hidden-file shape at the predicate boundary.
+        for relpath in [".computeunit.yaml", "servicos/.computeunit.yaml"] {
+            assert!(
+                !is_computeunit_yaml_extension(Path::new(relpath)),
+                "empty-stem shape {relpath:?} must fail \
+                 is_computeunit_yaml_extension"
+            );
+        }
+    }
+
+    #[test]
+    fn computeunit_yaml_extension_constant_matches_predicate() {
+        // Cross-pin: the [`COMPUTEUNIT_YAML_SUFFIX`] const and the
+        // predicate's accepted set are the same single source of
+        // truth. Drift would let a future renderer / per-axis wrapper
+        // emit `<stem><const>` while the predicate accepts only
+        // `.computeunit.yaml` (or vice versa), silently breaking the
+        // round-trip-stable canonical form. Pinned by constructing a
+        // path from the const and round-tripping through the
+        // predicate. Mirrors the peer
+        // `lisp_extension_constant_matches_predicate` pin.
+        assert_eq!(COMPUTEUNIT_YAML_SUFFIX, ".computeunit.yaml");
+        let p = PathBuf::from(format!("servicos/demo{COMPUTEUNIT_YAML_SUFFIX}"));
+        assert!(
+            is_computeunit_yaml_extension(&p),
+            "path constructed from COMPUTEUNIT_YAML_SUFFIX must pass \
+             is_computeunit_yaml_extension"
+        );
     }
 
     // ── is_cargo_feature_name — shared `:caracteristicas` feature-name predicate ──

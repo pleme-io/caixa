@@ -11,8 +11,8 @@ use crate::{
     dep::DepError,
     limits::LimitsSpec,
     render::{
-        PathShapeViolation, is_dns_1123_label, is_git_repo_url, is_lisp_extension,
-        is_sandboxed_relative_path,
+        PathShapeViolation, is_computeunit_yaml_extension, is_dns_1123_label, is_git_repo_url,
+        is_lisp_extension, is_sandboxed_relative_path,
     },
     supervisor::SupervisorSpec,
     upgrade::UpgradeFromEntry,
@@ -777,29 +777,89 @@ impl Caixa {
     /// past validate, peer with `:behavior :on-*` and
     /// `:upgrade-from :state-change :script`.
     pub fn validate_code_paths(&self) -> Result<(), ManifestError> {
-        // The per-slot `is_lisp_source` flag selects which axes carry the
-        // lifted [`is_lisp_extension`] gate. Only `:bibliotecas` is a
-        // tatara-lisp source axis (the `feira build` loop at
+        /// Per-slot file-type contract for the three Caixa-level
+        /// code-path surfaces (`:bibliotecas`, `:exe`, `:servicos`).
+        /// Each variant names the predicate the per-entry file-type
+        /// gate consults; [`Self::None`] opts the slot out of any
+        /// file-type contract. Lifted as a typed local enum so the
+        /// per-slot dispatch is exhaustive at the `match` — adding a
+        /// future axis to the typed-substrate `:` slot set (the
+        /// future `:assets` resource axis the M5 roadmap names, the
+        /// future `:nix-flake` derivation axis the caixa-flake
+        /// emitter consults) lands as one variant + one `match` arm,
+        /// not a coordinated rewrite of every per-slot bool flag.
+        ///
+        /// Peer of the typed-substrate per-slot variant disciplines
+        /// already established on this surface
+        /// ([`crate::supervisor::RestartStrategy`] +
+        /// [`crate::supervisor::RestartPolicy`] on the OTP-shape
+        /// supervision-tree axis,
+        /// [`crate::aplicacao::PlacementStrategy`] on the §III.1
+        /// placement axis, [`crate::aplicacao::WitTarget`] on the
+        /// `:contratos` payload-target axis): the typed `enum` is
+        /// the substrate's single source of truth for the per-axis
+        /// dispatch, and every consumer (the per-arm body here, the
+        /// future feira-lint per-slot diagnostic renderer, the M4
+        /// per-axis admission webhook) reaches for the same typed
+        /// surface rather than re-deriving the partition from inline
+        /// flag combinations.
+        enum CodePathFileType {
+            /// `:exe` — nix-build derivation output, no terminating-
+            /// extension contract (the canonical `"exe/<name>"`
+            /// fixtures the layout's `ExeOutsideDir` error message
+            /// documents carry no extension by convention).
+            None,
+            /// `:bibliotecas` — tatara-lisp source files the
+            /// `feira build` loop reads through `tatara_lisp::read`
+            /// at parse time. Routes to [`is_lisp_extension`].
+            LispSource,
+            /// `:servicos` — ComputeUnit-CR YAML files the
+            /// caixa-helm / caixa-flux renderers consume through
+            /// `serde_yaml::from_str`. Routes to
+            /// [`is_computeunit_yaml_extension`].
+            ComputeUnitYaml,
+        }
+
+        // The per-slot [`CodePathFileType`] selects which axes carry the
+        // lifted file-type predicate. `:bibliotecas` is the tatara-lisp
+        // source axis (the `feira build` loop at
         // `caixa-feira/src/cmd/build.rs:33` reads each entry through
-        // `tatara_lisp::read` at parse time, the same downstream consumer
-        // the peer `:behavior :on-*` and `:upgrade-from :state-change
-        // :script` axes route through). `:exe` is the nix-built executable
-        // surface (per the canonical `"exe/<name>"`-shaped fixtures the
-        // layout's `ExeOutsideDir` error message documents and every
-        // in-tree `caixa_with_code_paths` positive control uses) — its
-        // file-type contract is "nix-build derivation output", not
-        // tatara-lisp source, so the `.lisp`-extension gate would mismatch
-        // the downstream accepted set. `:servicos` is the
-        // `.computeunit.yaml` ComputeUnit-CR axis (the peer caixa-helm /
-        // caixa-flux renderers consume it through `serde_yaml::from_str`),
-        // structurally a YAML axis. Both axes are surfaced through the
-        // same iteration so the sandbox-shape + duplicate gates apply
-        // uniformly, but the file-type gate fires only where the
-        // tatara-lisp-source contract holds.
-        for (slot, list, is_lisp_source) in [
-            (":bibliotecas", &self.bibliotecas, true),
-            (":exe", &self.exe, false),
-            (":servicos", &self.servicos, false),
+        // `tatara_lisp::read` at parse time) — the lifted
+        // [`is_lisp_extension`] predicate gates the `.lisp` extension.
+        // `:exe` is the nix-built executable surface (per the canonical
+        // `"exe/<name>"`-shaped fixtures the layout's `ExeOutsideDir`
+        // error message documents and every in-tree
+        // `caixa_with_code_paths` positive control uses) — its file-type
+        // contract is "nix-build derivation output", not a typed source
+        // file, so [`CodePathFileType::None`] opts the slot out of any
+        // file-type gate. `:servicos` is the `.computeunit.yaml`
+        // ComputeUnit-CR axis (the peer caixa-helm / caixa-flux
+        // renderers consume each entry through `serde_yaml::from_str` as
+        // a typed `ComputeUnit` CR) — the lifted
+        // [`is_computeunit_yaml_extension`] predicate gates the compound
+        // `.computeunit.yaml` suffix. All three axes are surfaced through
+        // the same iteration so the sandbox-shape + duplicate gates
+        // apply uniformly; the typed file-type dispatch fires per-slot
+        // exactly where the downstream consumer's accepted set demands
+        // it. The third file-type variant ([`ComputeUnitYaml`]) is the
+        // compounding lift on the peer 64772a9 `:bibliotecas`
+        // `.lisp`-gate trajectory — the second of the three code-path
+        // axes to land on a typed compound-suffix gate, with the same
+        // self-locating per-slot diagnostic shape every peer per-axis
+        // file-type lift uses (`*NonLispExtension { slot, path }` /
+        // `*NonComputeUnitYamlExtension { slot, path }`).
+        for (slot, list, file_type) in [
+            (
+                ":bibliotecas",
+                &self.bibliotecas,
+                CodePathFileType::LispSource,
+            ),
+            (":exe", &self.exe, CodePathFileType::None),
+            (
+                ":servicos",
+                &self.servicos,
+                CodePathFileType::ComputeUnitYaml,
+            ),
         ] {
             // Per-slot set-not-multiset gate on the typed code-path axis.
             // Every peer Vec-shaped author-supplied list past validate is
@@ -881,25 +941,57 @@ impl Caixa {
                         });
                     }
                 }
-                // The lifted [`is_lisp_extension`] file-type gate. Fires
-                // after the sandbox-shape arms so a path that is *both*
-                // sandbox-escaping and non-`.lisp` surfaces the more
-                // fundamental sandbox-shape diagnostic first (mirrors the
-                // peer `EmptyPath` → `AbsolutePath` → `ParentEscape` →
-                // `NonLispExtension` arm-ordering on `:behavior :on-*`
-                // c97815a, and `EmptyScript` → `AbsoluteScript` →
-                // `ParentEscapeScript` → `NonLispExtensionScript` on
+                // The per-slot file-type gate dispatched through the
+                // typed [`CodePathFileType`] selector above. Each variant
+                // routes to the lifted predicate the downstream consumer
+                // demands:
+                //
+                //   - [`LispSource`] → [`is_lisp_extension`] for
+                //     `:bibliotecas` (the `feira build` loop's
+                //     `tatara_lisp::read` consumer);
+                //   - [`ComputeUnitYaml`] → [`is_computeunit_yaml_extension`]
+                //     for `:servicos` (the caixa-helm / caixa-flux
+                //     `serde_yaml::from_str` consumer's `ComputeUnit` CR
+                //     accepted set);
+                //   - [`None`] for `:exe` — the nix-build derivation-
+                //     output axis has no terminating-extension contract.
+                //
+                // Fires after the sandbox-shape arms so a path that is
+                // *both* sandbox-escaping and wrong-extension surfaces
+                // the more fundamental sandbox-shape diagnostic first
+                // (mirrors the peer `EmptyPath` → `AbsolutePath` →
+                // `ParentEscape` → `NonLispExtension` arm-ordering on
+                // `:behavior :on-*` c97815a, and `EmptyScript` →
+                // `AbsoluteScript` → `ParentEscapeScript` →
+                // `NonLispExtensionScript` on
                 // `:upgrade-from :state-change :script` 33cc830), and
                 // before the duplicate gate so the narrower per-entry
                 // file-type shape dominates the cross-entry uniqueness
-                // diagnostic (a `("lib/x.txt" "lib/x.txt")` shape surfaces
-                // `CodePathNonLispExtension` on the first entry rather
-                // than `CodePathDuplicate` on the pair).
-                if is_lisp_source && !is_lisp_extension(path) {
-                    return Err(ManifestError::CodePathNonLispExtension {
-                        slot,
-                        path: path.to_path_buf(),
-                    });
+                // diagnostic (a
+                // `("servicos/x.yaml" "servicos/x.yaml")` shape on
+                // `:servicos` surfaces
+                // `CodePathNonComputeUnitYamlExtension` on the first
+                // entry rather than `CodePathDuplicate` on the pair —
+                // peer with the 64772a9 `:bibliotecas`
+                // `("lib/x.txt" "lib/x.txt")` ordering).
+                match file_type {
+                    CodePathFileType::None => {}
+                    CodePathFileType::LispSource => {
+                        if !is_lisp_extension(path) {
+                            return Err(ManifestError::CodePathNonLispExtension {
+                                slot,
+                                path: path.to_path_buf(),
+                            });
+                        }
+                    }
+                    CodePathFileType::ComputeUnitYaml => {
+                        if !is_computeunit_yaml_extension(path) {
+                            return Err(ManifestError::CodePathNonComputeUnitYamlExtension {
+                                slot,
+                                path: path.to_path_buf(),
+                            });
+                        }
+                    }
                 }
                 if !seen.insert(entry.as_str()) {
                     return Err(ManifestError::CodePathDuplicate {
@@ -1701,6 +1793,28 @@ pub enum ManifestError {
         path.display()
     )]
     CodePathNonLispExtension { slot: &'static str, path: PathBuf },
+    #[error(
+        "{slot} entry {} does not terminate in the `.computeunit.yaml` \
+         compound suffix — every `:servicos` entry is a typed `ComputeUnit` \
+         CR YAML file the peer caixa-helm / caixa-flux renderers consume \
+         through `serde_yaml::from_str` at chart / FluxCD bundle render \
+         time, so any other extension (`.yaml`, `.yml`, `.json`, the \
+         off-by-one-segment `.computeunit-yaml`, the editor-backup \
+         `.computeunit.yaml.bak`) or no-extension shape is structurally a \
+         YAML-parser error / `ComputeUnit` schema-mismatch far from the \
+         source caixa.lisp, with no field naming the offending `:servicos` \
+         entry. Pin a relative path under the caixa root whose terminating \
+         compound suffix is lowercase-`.computeunit.yaml` (e.g. \
+         `\"servicos/<name>.computeunit.yaml\"`, \
+         `\"servicos/hello-rio.computeunit.yaml\"`) — the same file-type \
+         contract the sibling `:bibliotecas` axis (64772a9) already carries \
+         on the tatara-lisp-source axis through the peer lifted \
+         `is_lisp_extension` predicate, here on the compound-suffix axis \
+         `Path::extension` can't express on its own through the lifted \
+         `is_computeunit_yaml_extension` predicate",
+        path.display()
+    )]
+    CodePathNonComputeUnitYamlExtension { slot: &'static str, path: PathBuf },
     #[error(
         "{slot} entry {} appears more than once (the code-path list is \
          a set, not a multiset; every peer Vec-shaped author-supplied \
@@ -4019,6 +4133,261 @@ mod tests {
         assert!(
             rendered.contains(".lisp"),
             "diagnostic must name the expected extension: {rendered}",
+        );
+    }
+
+    // ── validate_code_paths — `.computeunit.yaml` compound-suffix gate on :servicos ──
+    //
+    // The lifted [`crate::render::is_computeunit_yaml_extension`] predicate
+    // now gates `:servicos` entries on the ComputeUnit-CR YAML file-type
+    // contract. The peer caixa-helm / caixa-flux renderers consume each
+    // `:servicos` entry through `serde_yaml::from_str` as a typed
+    // `ComputeUnit` CR — same downstream-consumer-shape lift as the peer
+    // `:bibliotecas` `.lisp` gate (64772a9), here on the compound-suffix
+    // axis `Path::extension` can't express on its own.
+
+    #[test]
+    fn validate_code_paths_rejects_no_extension_servicos_entry() {
+        // Canonical "I dragged the wrong file from the workspace tree"
+        // footgun on the Servico axis. Without the gate the peer
+        // caixa-helm / caixa-flux renderers hand the extensionless path
+        // to `serde_yaml::from_str` and fail with a parser-shaped
+        // diagnostic far from the source caixa.lisp, with no field
+        // naming the offending `:servicos` entry.
+        for relpath in ["servicos/demo", "demo", "servicos/sub/nested"] {
+            let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
+                panic!(
+                    "expected CodePathNonComputeUnitYamlExtension for {relpath:?}, \
+                     got {err:?}"
+                );
+            };
+            assert_eq!(slot, ":servicos");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_wrong_extension_servicos_entry() {
+        // Wrong-extension sweep across common authoring footguns on the
+        // Servico axis. Bare `.yaml` is the canonical "I forgot the
+        // `.computeunit` segment" typo; the off-by-one-segment shapes
+        // (`.computeunit-yaml` / `.computeunit_yaml`) silently pass the
+        // bare `Path::extension` view but mismatch the typed compound
+        // suffix the renderers' `serde_yaml::from_str` consumer demands.
+        // Same sweep-posture as the peer
+        // `validate_code_paths_rejects_wrong_extension_bibliotecas_entry`
+        // (64772a9) on the sibling tatara-lisp-source axis.
+        for relpath in [
+            "servicos/demo.yaml",
+            "servicos/demo.yml",
+            "servicos/demo.json",
+            "servicos/demo.toml",
+            "servicos/demo.txt",
+            "servicos/demo.computeunit.yaml.bak",
+            "servicos/demo.computeunit.yam",
+            "servicos/demo.computeunit",
+            "servicos/demo-computeunit.yaml",
+            "servicos/demo_computeunit.yaml",
+        ] {
+            let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
+                panic!(
+                    "expected CodePathNonComputeUnitYamlExtension for {relpath:?}, \
+                     got {err:?}"
+                );
+            };
+            assert_eq!(slot, ":servicos");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_case_folded_extension_servicos_entry() {
+        // Case-sensitivity sweep — pins the strict lowercase
+        // `.computeunit.yaml` contract. A case-folded shape that the
+        // layout's existence check would (case-insensitively, on
+        // case-insensitive volumes) match the on-disk file still
+        // mismatches the canonical form the codec emits, breaking the
+        // THEORY.md §V.2.7 render-determinism contract. Mirrors the peer
+        // `validate_code_paths_rejects_case_folded_extension_bibliotecas_entry`
+        // (64772a9) sweep on the sibling tatara-lisp-source axis.
+        for relpath in [
+            "servicos/demo.ComputeUnit.yaml",
+            "servicos/demo.COMPUTEUNIT.yaml",
+            "servicos/demo.computeunit.YAML",
+            "servicos/demo.computeunit.Yaml",
+            "servicos/demo.COMPUTEUNIT.YAML",
+        ] {
+            let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
+                panic!(
+                    "expected CodePathNonComputeUnitYamlExtension for {relpath:?}, \
+                     got {err:?}"
+                );
+            };
+            assert_eq!(slot, ":servicos");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_empty_stem_servicos_entry() {
+        // Degenerate hidden-file shape: a file name exactly equal to the
+        // suffix (`.computeunit.yaml` — no stem preceding the suffix) is
+        // the structural "Servico declared with no identity" footgun.
+        // The substrate identifies each ComputeUnit by the file-stem
+        // segment that precedes `.computeunit.yaml` (the rendered
+        // `lareira-<stem>` Helm chart, the per-Servico `metadata.name`,
+        // the M3 `:contratos` membership lookup), so an empty stem
+        // leaves the Servico unidentifiable. Pinned at the typed-axis
+        // level so a future regression that drops the `name.len() >
+        // SUFFIX.len()` bound at the predicate surfaces here, not
+        // piecemeal as a `lareira-` chart-name collision at render time.
+        for relpath in ["servicos/.computeunit.yaml"] {
+            let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
+                panic!(
+                    "expected CodePathNonComputeUnitYamlExtension for {relpath:?}, \
+                     got {err:?}"
+                );
+            };
+            assert_eq!(slot, ":servicos");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_accepts_canonical_computeunit_yaml_shapes() {
+        // Positive-control sweep through every canonical authoring shape
+        // every in-tree fixture and the `Caixa::template` scaffold use.
+        // Mirrors the peer
+        // `validate_code_paths_accepts_canonical_lisp_shapes` (64772a9)
+        // and the lifted predicate's own
+        // `computeunit_yaml_extension_accepts_canonical_shapes` sweep in
+        // render.rs.
+        for relpath in [
+            "servicos/demo.computeunit.yaml",
+            "servicos/hello-rio.computeunit.yaml",
+            "servicos/my-service.computeunit.yaml",
+            "servicos/a.computeunit.yaml",
+            "./servicos/demo.computeunit.yaml",
+            "servicos/./demo.computeunit.yaml",
+            "servicos/sub/nested.computeunit.yaml",
+            "servicos/v0.1.computeunit.yaml",
+        ] {
+            let c = caixa_with_code_paths(vec![], vec![], vec![relpath]);
+            c.validate_code_paths()
+                .unwrap_or_else(|e| panic!("canonical shape {relpath:?} must pass, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_non_computeunit_yaml_extension_does_not_fire_on_bibliotecas_or_exe() {
+        // The file-type gate is per-slot — only `:servicos` carries the
+        // ComputeUnit-CR YAML contract. A canonical `.lisp` `:bibliotecas`
+        // entry and an extensionless `:exe` entry are the canonical
+        // shapes every in-tree fixture uses, and must continue to pass
+        // validate. Peer of
+        // `validate_code_paths_non_lisp_extension_does_not_fire_on_exe_or_servicos`
+        // (64772a9) — together pin that the typed
+        // [`CodePathFileType`] dispatch is exhaustively per-slot, with no
+        // cross-axis leakage in either direction.
+        let c = caixa_with_code_paths(
+            vec!["lib/demo.lisp"],
+            vec!["exe/demo", "exe/tool"],
+            vec!["servicos/demo.computeunit.yaml"],
+        );
+        c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn validate_code_paths_sandbox_shape_arms_precede_non_computeunit_yaml_extension() {
+        // Cross-arm precedence pin: a `:servicos` entry that is *both*
+        // sandbox-escaping and wrong-extension surfaces the more
+        // fundamental sandbox-shape diagnostic first (the
+        // `.computeunit.yaml` remediation would be misleading when the
+        // offending path can never resolve under the caixa root
+        // anyway). Mirrors the peer
+        // `validate_code_paths_sandbox_shape_arms_precede_non_lisp_extension`
+        // (64772a9) ordering on the sibling `:bibliotecas` axis and the
+        // peer `EmptyPath` → `AbsolutePath` → `ParentEscape` →
+        // `NonComputeUnitYamlExtension` arm-ordering the dispatch
+        // table establishes.
+        //
+        // Empty wins (the strictly-smaller-scope structural arm).
+        let c = caixa_with_code_paths(vec![], vec![], vec![""]);
+        assert!(
+            matches!(
+                c.validate_code_paths().unwrap_err(),
+                ManifestError::CodePathEmpty { slot: ":servicos" }
+            ),
+            "empty must win over non-computeunit-yaml-extension",
+        );
+        // Absolute wins (the path can't resolve under the caixa root).
+        let c = caixa_with_code_paths(vec![], vec![], vec!["/etc/foo.yaml"]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathAbsolute { slot, .. } = err else {
+            panic!("absolute must win over non-computeunit-yaml-extension, got {err:?}");
+        };
+        assert_eq!(slot, ":servicos");
+        // ParentEscape wins (the path escapes the caixa root).
+        let c = caixa_with_code_paths(vec![], vec![], vec!["../sibling/x.yaml"]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathParentEscape { slot, .. } = err else {
+            panic!("parent-escape must win over non-computeunit-yaml-extension, got {err:?}");
+        };
+        assert_eq!(slot, ":servicos");
+    }
+
+    #[test]
+    fn validate_code_paths_non_computeunit_yaml_extension_precedes_duplicate() {
+        // Within-slot precedence pin: the per-entry file-type shape gate
+        // fires before the cross-entry duplicate gate, so the narrower
+        // structural defect dominates the uniqueness diagnostic. A
+        // `("servicos/x.yaml" "servicos/x.yaml")` shape surfaces
+        // `CodePathNonComputeUnitYamlExtension` on the first entry
+        // rather than `CodePathDuplicate` on the pair — same posture
+        // every per-entry shape-gate-precedes-duplicate cascade follows
+        // on this surface, peer of the 64772a9 `:bibliotecas`
+        // `("lib/x.txt" "lib/x.txt")` ordering.
+        let c = caixa_with_code_paths(vec![], vec![], vec!["servicos/x.yaml", "servicos/x.yaml"]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathNonComputeUnitYamlExtension { slot, path } = err else {
+            panic!("expected CodePathNonComputeUnitYamlExtension, got {err:?}");
+        };
+        assert_eq!(slot, ":servicos");
+        assert_eq!(path, PathBuf::from("servicos/x.yaml"));
+    }
+
+    #[test]
+    fn validate_code_paths_non_computeunit_yaml_extension_diagnostic_carries_offending_slot_and_path()
+     {
+        // Diagnostic-shape pin (peer with
+        // `validate_code_paths_non_lisp_extension_diagnostic_carries_offending_slot_and_path`
+        // on the sibling tatara-lisp-source axis): the file-type-arm
+        // Display surfaces both the offending `:slot` tag, the
+        // offending path verbatim, and the expected
+        // `.computeunit.yaml` compound suffix named in the remediation
+        // text, so a `feira lint` run can render the diagnostic without
+        // re-parsing.
+        let c = caixa_with_code_paths(vec![], vec![], vec!["servicos/demo.yaml"]);
+        let rendered = c.validate_code_paths().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":servicos"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("servicos/demo.yaml"),
+            "diagnostic must quote the offending path: {rendered}",
+        );
+        assert!(
+            rendered.contains(".computeunit.yaml"),
+            "diagnostic must name the expected compound suffix: {rendered}",
         );
     }
 
