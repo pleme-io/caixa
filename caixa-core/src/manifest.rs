@@ -10,7 +10,10 @@ use crate::{
     behavior::BehaviorSpec,
     dep::DepError,
     limits::LimitsSpec,
-    render::{PathShapeViolation, is_dns_1123_label, is_git_repo_url, is_sandboxed_relative_path},
+    render::{
+        PathShapeViolation, is_dns_1123_label, is_git_repo_url, is_lisp_extension,
+        is_sandboxed_relative_path,
+    },
     supervisor::SupervisorSpec,
     upgrade::UpgradeFromEntry,
 };
@@ -774,10 +777,29 @@ impl Caixa {
     /// past validate, peer with `:behavior :on-*` and
     /// `:upgrade-from :state-change :script`.
     pub fn validate_code_paths(&self) -> Result<(), ManifestError> {
-        for (slot, list) in [
-            (":bibliotecas", &self.bibliotecas),
-            (":exe", &self.exe),
-            (":servicos", &self.servicos),
+        // The per-slot `is_lisp_source` flag selects which axes carry the
+        // lifted [`is_lisp_extension`] gate. Only `:bibliotecas` is a
+        // tatara-lisp source axis (the `feira build` loop at
+        // `caixa-feira/src/cmd/build.rs:33` reads each entry through
+        // `tatara_lisp::read` at parse time, the same downstream consumer
+        // the peer `:behavior :on-*` and `:upgrade-from :state-change
+        // :script` axes route through). `:exe` is the nix-built executable
+        // surface (per the canonical `"exe/<name>"`-shaped fixtures the
+        // layout's `ExeOutsideDir` error message documents and every
+        // in-tree `caixa_with_code_paths` positive control uses) — its
+        // file-type contract is "nix-build derivation output", not
+        // tatara-lisp source, so the `.lisp`-extension gate would mismatch
+        // the downstream accepted set. `:servicos` is the
+        // `.computeunit.yaml` ComputeUnit-CR axis (the peer caixa-helm /
+        // caixa-flux renderers consume it through `serde_yaml::from_str`),
+        // structurally a YAML axis. Both axes are surfaced through the
+        // same iteration so the sandbox-shape + duplicate gates apply
+        // uniformly, but the file-type gate fires only where the
+        // tatara-lisp-source contract holds.
+        for (slot, list, is_lisp_source) in [
+            (":bibliotecas", &self.bibliotecas, true),
+            (":exe", &self.exe, false),
+            (":servicos", &self.servicos, false),
         ] {
             // Per-slot set-not-multiset gate on the typed code-path axis.
             // Every peer Vec-shaped author-supplied list past validate is
@@ -858,6 +880,26 @@ impl Caixa {
                             path: path.to_path_buf(),
                         });
                     }
+                }
+                // The lifted [`is_lisp_extension`] file-type gate. Fires
+                // after the sandbox-shape arms so a path that is *both*
+                // sandbox-escaping and non-`.lisp` surfaces the more
+                // fundamental sandbox-shape diagnostic first (mirrors the
+                // peer `EmptyPath` → `AbsolutePath` → `ParentEscape` →
+                // `NonLispExtension` arm-ordering on `:behavior :on-*`
+                // c97815a, and `EmptyScript` → `AbsoluteScript` →
+                // `ParentEscapeScript` → `NonLispExtensionScript` on
+                // `:upgrade-from :state-change :script` 33cc830), and
+                // before the duplicate gate so the narrower per-entry
+                // file-type shape dominates the cross-entry uniqueness
+                // diagnostic (a `("lib/x.txt" "lib/x.txt")` shape surfaces
+                // `CodePathNonLispExtension` on the first entry rather
+                // than `CodePathDuplicate` on the pair).
+                if is_lisp_source && !is_lisp_extension(path) {
+                    return Err(ManifestError::CodePathNonLispExtension {
+                        slot,
+                        path: path.to_path_buf(),
+                    });
                 }
                 if !seen.insert(entry.as_str()) {
                     return Err(ManifestError::CodePathDuplicate {
@@ -1643,6 +1685,22 @@ pub enum ManifestError {
         path.display()
     )]
     CodePathParentEscape { slot: &'static str, path: PathBuf },
+    #[error(
+        "{slot} entry {} does not terminate in the `.lisp` extension — every \
+         `:bibliotecas` entry is a tatara-lisp source file the `feira build` \
+         loop reads through `tatara_lisp::read` at parse time, so any other \
+         extension (`.rs`, `.txt`, `.lisp.bak`) or no-extension shape is \
+         structurally a parser error far from the source caixa.lisp, with \
+         no field naming the offending `:bibliotecas` entry. Pin a relative \
+         path under the caixa root whose terminating extension is \
+         lowercase-`.lisp` (e.g. `\"lib/<name>.lisp\"`, \
+         `\"lib/handlers.lisp\"`) — the same file-type contract the peer \
+         `:behavior :on-*` (c97815a) and `:upgrade-from :state-change :script` \
+         (33cc830) axes already carry through the same lifted \
+         `is_lisp_extension` predicate",
+        path.display()
+    )]
+    CodePathNonLispExtension { slot: &'static str, path: PathBuf },
     #[error(
         "{slot} entry {} appears more than once (the code-path list is \
          a set, not a multiset; every peer Vec-shaped author-supplied \
@@ -3745,6 +3803,222 @@ mod tests {
         assert!(
             rendered.contains("servicos/demo.computeunit.yaml"),
             "diagnostic must quote the offending path: {rendered}",
+        );
+    }
+
+    // ── validate_code_paths — `.lisp` extension gate on :bibliotecas ──
+    //
+    // The lifted [`crate::render::is_lisp_extension`] predicate (33cc830)
+    // now gates `:bibliotecas` entries on the tatara-lisp-source file-type
+    // contract. The `feira build` loop (`caixa-feira/src/cmd/build.rs:33`)
+    // reads every declared `:bibliotecas` entry through `tatara_lisp::read`
+    // at parse time — the same downstream consumer the peer `:behavior
+    // :on-*` (c97815a, [`crate::BehaviorError::NonLispExtension`]) and
+    // `:upgrade-from :state-change :script` (33cc830,
+    // [`crate::UpgradeError::NonLispExtensionScript`]) axes route through.
+    // `:exe` and `:servicos` are deliberately excluded — `:exe` is the
+    // nix-built executable surface (`"exe/<name>"` shape per the canonical
+    // [`crate::LayoutError::ExeOutsideDir`] error message and every
+    // in-tree `caixa_with_code_paths` positive control), and `:servicos`
+    // is the `.computeunit.yaml` ComputeUnit-CR axis.
+
+    #[test]
+    fn validate_code_paths_rejects_no_extension_bibliotecas_entry() {
+        // Canonical "I dragged the wrong file from the workspace tree"
+        // footgun on the biblioteca axis. Without the gate `feira build`
+        // hands the extensionless path to `tatara_lisp::read` and fails
+        // with a parser-shaped diagnostic far from the source caixa.lisp,
+        // with no field naming the offending `:bibliotecas` entry.
+        for relpath in ["lib/demo", "demo", "lib/handlers/inner"] {
+            let c = caixa_with_code_paths(vec![relpath], vec![], vec![]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonLispExtension { slot, path } = err else {
+                panic!("expected CodePathNonLispExtension for {relpath:?}, got {err:?}");
+            };
+            assert_eq!(slot, ":bibliotecas");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_wrong_extension_bibliotecas_entry() {
+        // Wrong-extension sweep across common authoring footguns. Same
+        // sweep posture as the peer
+        // `behavior::validate_rejects_wrong_extension` (c97815a) and
+        // `upgrade::tests::state_change_rejects_wrong_extension_script`
+        // (33cc830) cases.
+        for relpath in [
+            "lib/demo.rs",
+            "lib/demo.txt",
+            "lib/demo.md",
+            "lib/demo.json",
+            "lib/demo.yaml",
+            "lib/demo.toml",
+            "lib/demo.lisp.bak",
+            "lib/demo.lispx",
+            "lib/demo.lis",
+        ] {
+            let c = caixa_with_code_paths(vec![relpath], vec![], vec![]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonLispExtension { slot, path } = err else {
+                panic!("expected CodePathNonLispExtension for {relpath:?}, got {err:?}");
+            };
+            assert_eq!(slot, ":bibliotecas");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_rejects_case_folded_extension_bibliotecas_entry() {
+        // Case-sensitivity sweep — pins the strict lowercase `.lisp`
+        // contract. An uppercase `.LISP` shape that the layout's existence
+        // check would (case-insensitively, on case-insensitive volumes)
+        // match the on-disk file still mismatches the canonical form the
+        // codec emits, breaking the THEORY.md §V.2.7 render-determinism
+        // contract. Mirrors the peer
+        // `behavior::validate_rejects_case_folded_extension` (c97815a) and
+        // `upgrade::tests::state_change_rejects_case_folded_extension_script`
+        // (33cc830) sweeps.
+        for relpath in [
+            "lib/demo.LISP",
+            "lib/demo.Lisp",
+            "lib/demo.LiSp",
+            "lib/demo.lISP",
+        ] {
+            let c = caixa_with_code_paths(vec![relpath], vec![], vec![]);
+            let err = c.validate_code_paths().unwrap_err();
+            let ManifestError::CodePathNonLispExtension { slot, path } = err else {
+                panic!("expected CodePathNonLispExtension for {relpath:?}, got {err:?}");
+            };
+            assert_eq!(slot, ":bibliotecas");
+            assert_eq!(path, PathBuf::from(relpath));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_accepts_canonical_lisp_shapes() {
+        // Positive-control sweep through every canonical authoring shape
+        // every in-tree fixture and the `Caixa::template` scaffold use.
+        // Mirrors the peer `behavior::validate_accepts_canonical_lisp_paths`
+        // (c97815a) and the lifted predicate's own
+        // `is_lisp_extension_accepts_canonical_shapes` sweep in render.rs
+        // (33cc830).
+        for relpath in [
+            "lib/demo.lisp",
+            "lib/handlers.lisp",
+            "lib/migrations/v01-to-v02.lisp",
+            "demo.lisp",
+            "a.lisp",
+            "./lib/demo.lisp",
+            "lib/./handlers.lisp",
+            "lib/migrations/v.0.1.lisp",
+        ] {
+            let c = caixa_with_code_paths(vec![relpath], vec![], vec![]);
+            c.validate_code_paths()
+                .unwrap_or_else(|e| panic!("canonical shape {relpath:?} must pass, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_non_lisp_extension_does_not_fire_on_exe_or_servicos() {
+        // The file-type gate is per-slot — only `:bibliotecas` carries the
+        // tatara-lisp-source contract. An extensionless `:exe` entry
+        // (`exe/demo`) and a `.computeunit.yaml` `:servicos` entry are the
+        // canonical shapes every in-tree fixture uses, and must continue
+        // to pass validate. Pins that a future tightening that broadens
+        // the `.lisp` gate to either axis surfaces as a test failure
+        // rather than as a silent breaking change to existing valid
+        // manifests.
+        let c = caixa_with_code_paths(
+            vec![],
+            vec!["exe/demo", "exe/tool"],
+            vec!["servicos/demo.computeunit.yaml"],
+        );
+        c.validate_code_paths().unwrap();
+    }
+
+    #[test]
+    fn validate_code_paths_sandbox_shape_arms_precede_non_lisp_extension() {
+        // Cross-arm precedence pin: a `:bibliotecas` entry that is *both*
+        // sandbox-escaping and non-`.lisp` surfaces the more fundamental
+        // sandbox-shape diagnostic first (the `.lisp` remediation would
+        // be misleading when the offending path can never resolve under
+        // the caixa root anyway). Mirrors the peer
+        // `EmptyPath` → `AbsolutePath` → `ParentEscape` → `NonLispExtension`
+        // ordering on `:behavior :on-*` (c97815a) and `EmptyScript` →
+        // `AbsoluteScript` → `ParentEscapeScript` → `NonLispExtensionScript`
+        // on `:upgrade-from :state-change :script` (33cc830).
+        //
+        // Empty wins (the strictly-smaller-scope structural arm).
+        let c = caixa_with_code_paths(vec![""], vec![], vec![]);
+        assert!(
+            matches!(
+                c.validate_code_paths().unwrap_err(),
+                ManifestError::CodePathEmpty {
+                    slot: ":bibliotecas"
+                }
+            ),
+            "empty must win over non-lisp-extension",
+        );
+        // Absolute wins (the path can't resolve under the caixa root).
+        let c = caixa_with_code_paths(vec!["/etc/passwd"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathAbsolute { slot, .. } = err else {
+            panic!("absolute must win over non-lisp-extension, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        // ParentEscape wins (the path escapes the caixa root).
+        let c = caixa_with_code_paths(vec!["../sibling/x.txt"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathParentEscape { slot, .. } = err else {
+            panic!("parent-escape must win over non-lisp-extension, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+    }
+
+    #[test]
+    fn validate_code_paths_non_lisp_extension_precedes_duplicate() {
+        // Within-slot precedence pin: the per-entry file-type shape gate
+        // fires before the cross-entry duplicate gate, so the narrower
+        // structural defect dominates the uniqueness diagnostic. A
+        // `("lib/x.txt" "lib/x.txt")` shape surfaces
+        // `CodePathNonLispExtension` on the first entry rather than
+        // `CodePathDuplicate` on the pair — same posture every per-entry
+        // shape-gate-precedes-duplicate cascade follows on this surface
+        // (the empty / absolute / parent-escape arms already precede the
+        // duplicate arm; the lifted file-type arm joins that set).
+        let c = caixa_with_code_paths(vec!["lib/x.txt", "lib/x.txt"], vec![], vec![]);
+        let err = c.validate_code_paths().unwrap_err();
+        let ManifestError::CodePathNonLispExtension { slot, path } = err else {
+            panic!("expected CodePathNonLispExtension, got {err:?}");
+        };
+        assert_eq!(slot, ":bibliotecas");
+        assert_eq!(path, PathBuf::from("lib/x.txt"));
+    }
+
+    #[test]
+    fn validate_code_paths_non_lisp_extension_diagnostic_carries_offending_slot_and_path() {
+        // Diagnostic-shape pin (peer with
+        // `validate_code_paths_diagnostic_carries_offending_slot_and_path`
+        // on the sandbox-shape arms and
+        // `validate_code_paths_duplicate_diagnostic_carries_offending_slot_and_path`
+        // on the duplicate arm): the file-type-arm Display surfaces both
+        // the offending `:slot` tag, the offending path verbatim, and the
+        // expected `.lisp` extension named in the remediation text, so a
+        // `feira lint` run can render the diagnostic without re-parsing.
+        let c = caixa_with_code_paths(vec!["lib/demo.rs"], vec![], vec![]);
+        let rendered = c.validate_code_paths().unwrap_err().to_string();
+        assert!(
+            rendered.contains(":bibliotecas"),
+            "diagnostic must name the offending slot: {rendered}",
+        );
+        assert!(
+            rendered.contains("lib/demo.rs"),
+            "diagnostic must quote the offending path: {rendered}",
+        );
+        assert!(
+            rendered.contains(".lisp"),
+            "diagnostic must name the expected extension: {rendered}",
         );
     }
 
