@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use caixa_core::{Caixa, CaixaKind, WitTarget};
 use clap::{Args, Subcommand};
 
-use super::load::load_caixa;
+use super::load::{caixa_root, load_caixa};
 
 /// `feira app …` — composition verbs for `:kind Aplicacao` caixas.
 ///
@@ -188,9 +188,7 @@ impl DeployArgs {
 // ── helpers ─────────────────────────────────────────────────────────
 
 fn load_aplicacao(path: Option<&std::path::Path>) -> Result<Caixa> {
-    let root = path
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| PathBuf::from("."));
+    let root = caixa_root(path);
     let caixa = load_caixa(&root)?;
     // Route the `:kind` gate through the lifted typed-view predicate so
     // the diagnostic names the offending `caixa.lisp` verbatim through

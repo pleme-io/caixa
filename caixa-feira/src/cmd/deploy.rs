@@ -4,7 +4,7 @@ use anyhow::{Context, Result, bail};
 use caixa_core::Caixa;
 use clap::Args;
 
-use super::load::load_caixa;
+use super::load::{caixa_root, load_caixa};
 
 /// Deploy a caixa Servico to a target cluster by upserting its entry
 /// into the cluster's lareira-fleet-programs HelmRelease values.
@@ -65,7 +65,7 @@ pub struct Deploy {
 impl Deploy {
     pub fn run(self) -> Result<()> {
         // 1. Load the caixa + computeunit.
-        let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
+        let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;
 
         let cu_yaml = super::chart::load_first_servico_yaml(&caixa, &root)?;

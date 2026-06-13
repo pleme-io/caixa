@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use caixa_lacre::{Lacre, LacreEntry, closure_hash, hash_bytes};
 use clap::Args;
 
-use super::load::load_caixa;
+use super::load::{caixa_root, load_caixa};
 
 /// Resolve deps and write `lacre.lisp`.
 ///
@@ -26,7 +26,7 @@ pub struct Lock {
 
 impl Lock {
     pub fn run(self) -> Result<()> {
-        let root = self.path.clone().unwrap_or_else(|| PathBuf::from("."));
+        let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;
 
         let entries: Vec<LacreEntry> = caixa.deps.iter().map(resolve_stub).collect();
