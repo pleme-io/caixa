@@ -33,7 +33,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind};
+use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -121,7 +121,7 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
     let versao = caixa.versao.clone();
 
     let chart_ref = derive_chart_ref(caixa, &inputs.registry);
-    let release_name = format!("lareira-{}", caixa.nome.as_str());
+    let release_name = lareira_chart_name(caixa.nome.as_str());
 
     let aplicacao = AplicacaoIntent {
         chart_ref,
@@ -177,9 +177,12 @@ pub fn process_yaml(caixa: &Caixa, inputs: &RenderInputs) -> Result<String> {
 
 fn derive_chart_ref(caixa: &Caixa, registry: &str) -> String {
     // caixa-helm publishes the rendered chart as `lareira-<name>` to
-    // the supplied registry. We compose the OCI ref using the same
-    // naming convention so the Process resolves the right chart.
-    format!("oci://{}/lareira-{}", registry, caixa.nome.as_str())
+    // the supplied registry; we compose the OCI ref through the same
+    // canonical `lareira_chart_name` helper every per-Servico
+    // renderer consults so the Process resolves the same chart name
+    // the publisher pushed under, with no inline prefix-format drift.
+    let chart = lareira_chart_name(caixa.nome.as_str());
+    format!("oci://{registry}/{chart}")
 }
 
 fn default_class() -> Classification {

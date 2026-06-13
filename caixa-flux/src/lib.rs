@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind};
+use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -326,7 +326,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     caixa_core::require_kind(caixa, CaixaKind::Servico)?;
 
     let name = caixa.nome.clone();
-    let chart_name = format!("lareira-{name}");
+    let chart_name = lareira_chart_name(&name);
 
     let gitref_field = match &opts.git_ref {
         GitRefSpec::Tag(t) => format!("    tag: {t:?}"),

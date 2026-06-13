@@ -50,7 +50,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use caixa_core::{Caixa, CaixaKind};
+use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -204,7 +204,7 @@ pub fn render_chart_for_servico_with(
         return Err(Error::UnsupportedServicoCount(caixa.servicos.len()));
     }
 
-    let chart_name = format!("lareira-{}", caixa.nome);
+    let chart_name = lareira_chart_name(&caixa.nome);
     let chart_yaml = build_chart_yaml(caixa, &chart_name, opts);
     let values_yaml = build_values_yaml(caixa, computeunit_yaml, opts)?;
     let readme = build_readme(caixa, &chart_name);
