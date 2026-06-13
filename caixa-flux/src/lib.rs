@@ -338,8 +338,31 @@ pub struct BundleFile {
 ///   kustomization.yaml — the Flux Kustomization that staples them
 ///
 /// Written under `<cluster>/services/<caixa-name>/` by `feira deploy`.
+///
+/// V0 contract: every `:kind Servico` caixa carries exactly one
+/// `:servicos` entry (one ComputeUnit YAML pointer per Servico,
+/// matching the one `lareira-<nome>` Helm chart `caixa-helm` renders
+/// and the one HelmRelease this bundle's `helmrelease.yaml` points at).
+/// The pair [`caixa_core::require_kind`] + [`caixa_core::require_single_servico`]
+/// is the canonical per-Servico-renderer entry-point gate axis the peer
+/// [`programs_yaml_entry`] (the aggregator path) and
+/// [`caixa_helm::render_chart_for_servico`] (the per-program chart path)
+/// both run; until this gate landed `cluster_bundle` ran only the kind
+/// half of the pair, so a Servico-kind caixa with a non-singleton
+/// `:servicos` list silently passed the bundle render and the failure
+/// surfaced at the chart-render layer (`caixa-helm` refused the input
+/// with `UnsupportedServicoCount`) far from the source `caixa.lisp` and
+/// far from the deploy-path entry point — the canonical "the V0
+/// invariant is enforced at every per-Servico renderer entry except
+/// this one" footgun the prior 06b2981 lift commit's body named when
+/// it called the pair "the canonical V0-shape gate pair for the Servico
+/// kind, in one place". Same shape every peer per-Servico-renderer
+/// entry-point uses ([`programs_yaml_entry`] at the aggregator path,
+/// [`caixa_helm::render_chart_for_servico`] at the per-program chart
+/// path).
 pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<BundleFile>, Error> {
     caixa_core::require_kind(caixa, CaixaKind::Servico)?;
+    caixa_core::require_single_servico(caixa)?;
 
     let name = caixa.nome.clone();
     let chart_name = lareira_chart_name(&name);
@@ -711,6 +734,75 @@ spec:
         assert!(
             msg.contains("hello-rio"),
             ":servicos-count-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("0"),
+            "diagnostic must name the actual count (got: {msg:?})"
+        );
+        assert!(
+            msg.contains(":servicos"),
+            "diagnostic must name the offending field axis (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_servico_count_mismatch_carries_typed_view_with_nome() {
+        // Peer to `cluster_bundle_kind_mismatch_names_offending_caixa_nome`
+        // on the sibling V0 `:servicos`-singularity axis. The second
+        // per-Servico renderer entry-point in caixa-flux —
+        // [`cluster_bundle`] — must surface the same lifted
+        // [`caixa_core::ServicoCountMismatch`] view the peer
+        // [`programs_yaml_entry`] path already pins on the sibling V0
+        // gate axis. Until this gate landed `cluster_bundle` ran only
+        // the [`require_kind`] half of the V0-shape gate pair, so a
+        // Servico-kind caixa whose `:servicos` list is non-singleton
+        // silently passed the bundle render and the failure surfaced at
+        // the chart-render layer (`caixa-helm` refused the same input
+        // with `UnsupportedServicoCount`) far from the deploy-path
+        // entry-point — the canonical "the V0 invariant is enforced at
+        // every per-Servico renderer entry except this one" footgun.
+        // Pins both the variant routing (via `#[from]`) and the typed
+        // payload so a future refactor that re-inlines a raw count
+        // check, or strips the `require_single_servico` call from this
+        // path, surfaces here as a test failure rather than as silent
+        // fragmentation across the two flux deploy paths.
+        let mut c = sample_caixa();
+        c.servicos = vec![
+            "servicos/hello-rio.computeunit.yaml".into(),
+            "servicos/extra.computeunit.yaml".into(),
+        ];
+        let opts = ClusterBundleOpts::for_caixa(&c, "rio");
+        let err = cluster_bundle(&c, &opts).unwrap_err();
+        match err {
+            Error::UnsupportedServicoCount(scm) => {
+                assert_eq!(scm.nome, "hello-rio");
+                assert_eq!(scm.count, 2);
+            }
+            other => panic!("expected Error::UnsupportedServicoCount, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_servico_count_mismatch_diagnostic_names_offending_caixa_nome() {
+        // End-to-end Display pin on the [`cluster_bundle`] path —
+        // peer of `servico_count_mismatch_diagnostic_names_offending_caixa_nome`
+        // on the sibling [`programs_yaml_entry`] path. The rendered
+        // diagnostic must name the offending caixa's `:nome`, the
+        // actual count, and the `:servicos` field axis verbatim on
+        // both per-Servico renderer entry-points in caixa-flux. Peer
+        // to `cluster_bundle_kind_mismatch_names_offending_caixa_nome`
+        // on the sibling V0 kind-shape axis — both V0 gate arms now
+        // pin their self-locating diagnostic shape end-to-end through
+        // the bundle path.
+        let mut c = sample_caixa();
+        c.servicos = vec![];
+        let opts = ClusterBundleOpts::for_caixa(&c, "rio");
+        let err = cluster_bundle(&c, &opts).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-rio"),
+            "cluster_bundle's :servicos-count-mismatch must name the offending caixa nome \
              (got: {msg:?})"
         );
         assert!(
