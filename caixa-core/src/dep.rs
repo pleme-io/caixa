@@ -535,6 +535,71 @@ impl DepSource {
                 caminho: caminho.to_string(),
             });
         }
+        // Reproducibility gate's leading-space arm. The b94fd83 / a5c248e /
+        // f4efe9c arms closed the leading-byte host-layout-leak shapes
+        // (`/` / `~` / `$`); the embedded-control-byte arm below closes
+        // every byte in `0x00..=0x1F` plus `0x7F` (which already includes
+        // tab `0x09`, LF `0x0A`, CR `0x0D` — every ASCII whitespace
+        // *except* the ASCII space byte `0x20`). The bare ASCII space at
+        // the leading position is the orthogonal paste-from-aligned-doc
+        // shape that silently passed every prior arm: `Path::is_absolute`
+        // returns false on `" ../caixa-teia"` (the leading byte is `0x20`
+        // not `0x2F`), `0x20` is not `~` / `$` / `\` / a control byte, and
+        // the value's last byte is not `/`, so the canonical
+        // paste-from-aligned-`caixa.lisp`-doc footgun (every `:fonte`
+        // form in a multi-entry `:deps` block sits at the same column —
+        // an author selecting `"<sp><sp><sp>../caixa-teia"` and pasting
+        // it from the rendered alignment into a fresh entry preserves the
+        // leading whitespace verbatim) silently rendered as a path with
+        // a leading-space directory component the resolver folds through
+        // `Path::join` looking for a literal `./ ../caixa-teia`
+        // subdirectory that fails at resolve time with a non-self-
+        // locating `No such file or directory` error.
+        //
+        // The lacre pipeline's reproducibility contract bites
+        // strictly at this byte: `path:" ../caixa-teia"` and
+        // `path:"../caixa-teia"` yield distinct BLAKE3 closures
+        // (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189) for the byte-divergent /
+        // semantic-identical caixa, and the substrate's "the lacre is
+        // the build's identity" contract (CAIXA-SDLC §III.2) silently
+        // breaks across two workstations whose authors differ only in
+        // paste-from-aligned-doc whitespace habits — the most insidious
+        // failure mode the typed slot can carry (no error surfaces; the
+        // divergence is invisible until two machines compare lacres).
+        //
+        // The arm fires AFTER the absolute / tilde / var leading-byte
+        // arms (each names the more self-locating shell-convention
+        // diagnostic on values that probe as that arm's leading-byte
+        // sentinel followed by a leading space — e.g.
+        // `:caminho "/  /foo"` surfaces `FonteCaminhoAbsolute` because
+        // the leading byte is `/`, not space) and BEFORE the
+        // embedded-control-byte arm (a leading-space value with an
+        // embedded control byte surfaces the broader leading-space
+        // diagnostic because the cascade walks leading-byte arms first
+        // — peer with how `FonteCaminhoAbsolute` precedes
+        // `FonteCaminhoControlChar` on `"/etc/passwd\n"`).
+        //
+        // The peer single-token-shaped axes already reject leading
+        // whitespace on the same paste-from-aligned-doc contract:
+        // [`crate::render::is_git_repo_url`] rejects leading whitespace
+        // on `:fonte :repo`, [`crate::render::is_git_ref_name`] rejects
+        // leading whitespace on `:fonte :tag`/`:branch`,
+        // [`crate::render::is_chart_description_shape`] rejects leading
+        // whitespace on `:descricao`,
+        // [`crate::render::is_spdx_expression_shape`] rejects leading
+        // whitespace on `:licenca`. Closing the same byte on
+        // `:fonte :caminho` makes the substrate-wide "no leading ASCII
+        // space anywhere in a typed string slot" invariant structurally
+        // consistent across every value-shape-gated typed surface (the
+        // `:caminho` axis was the last typed string surface still
+        // admitting a leading space byte).
+        if caminho.starts_with(' ') {
+            return Err(DepError::FonteCaminhoLeadingWhitespace {
+                nome: nome.to_string(),
+                caminho: caminho.to_string(),
+            });
+        }
         // Reproducibility gate's embedded-control-byte arm. The
         // b94fd83 + a5c248e + f4efe9c arms closed the three
         // leading-byte host-layout-leak shapes (`/` / `~` / `$`);
@@ -585,8 +650,9 @@ impl DepSource {
         // Mirrors the cascade discipline every prior `:caminho`
         // arm establishes: `FonteCaminhoEmpty` →
         // `FonteCaminhoAbsolute` → `FonteCaminhoTildeExpansion`
-        // → `FonteCaminhoVarExpansion` → `FonteCaminhoControlChar`.
-        // The four leading-byte arms structurally precede the
+        // → `FonteCaminhoVarExpansion` →
+        // `FonteCaminhoLeadingWhitespace` → `FonteCaminhoControlChar`.
+        // The five leading-byte arms structurally precede the
         // embedded-byte arm because the leading-byte shapes are
         // the more self-locating diagnostic on values that probe
         // as both (e.g. `:caminho "/etc/passwd\n"` surfaces the
@@ -1201,6 +1267,36 @@ pub enum DepError {
          explicitly if a workstation-rooted dep is genuinely intended)"
     )]
     FonteCaminhoVarExpansion { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} starts \
+         with a space (the leading ASCII space `0x20` is the orthogonal \
+         paste-from-aligned-doc footgun that silently passes \
+         `Path::is_absolute` and every prior leading-byte arm — \
+         `\" ../caixa-teia\"` resolves via `Path::join` to a literal \
+         `./ ../caixa-teia` subdirectory the resolver fails to find at \
+         resolve time with a non-self-locating `No such file or directory` \
+         error far from the source caixa.lisp; the lacre pipeline embeds \
+         the value verbatim in its per-dep content-address `path:{caminho}` \
+         at caixa-resolver/src/resolve.rs:189, so byte-divergent / \
+         semantic-identical caixa values (` ../caixa-teia` vs \
+         `../caixa-teia`) yield two distinct BLAKE3 closures across two \
+         workstations whose authors differ only in paste-from-aligned- \
+         caixa.lisp-doc whitespace habits — the most insidious failure \
+         mode the typed slot can carry (no error surfaces; the divergence \
+         is invisible until two machines compare lacres), defeating the \
+         THEORY.md §V.2 render-determinism contract. The canonical \
+         paste-from-aligned-`:deps`-block footgun (every `:fonte` form in \
+         a multi-entry `:deps` block sits at the same column — an author \
+         selecting `\"<sp><sp><sp>../caixa-teia\"` and pasting it from \
+         the rendered alignment into a fresh entry preserves the leading \
+         whitespace verbatim); peer `:fonte :repo` axis already rejects \
+         leading whitespace via `is_git_repo_url`, `:fonte :tag` / \
+         `:fonte :branch` via `is_git_ref_name`, `:descricao` via \
+         `is_chart_description_shape`, `:licenca` via \
+         `is_spdx_expression_shape`. Drop the leading space; express the \
+         path as a bare relative single-token like \"../caixa-teia\")"
+    )]
+    FonteCaminhoLeadingWhitespace { nome: String, caminho: String },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains \
          ASCII control byte 0x{byte:02x} (POSIX paths reject NUL `0x00` outright — \
@@ -2750,6 +2846,136 @@ mod tests {
         assert!(
             matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
             "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_leading_space_caminho() {
+        // The fail-before-pass-after pin for the leading ASCII space
+        // `:caminho` shape: `(:tipo path :caminho " ../caixa-teia")`.
+        // Until this gate landed the b94fd83 absolute arm + the a5c248e
+        // tilde arm + the f4efe9c var arm + the d624c8d control-byte arm
+        // all let `" ../caixa-teia"` through: `Path::is_absolute` returns
+        // false on a leading space (the leading byte is `0x20`, not `0x2F`),
+        // `starts_with('~')` / `starts_with('$')` return false, and `0x20`
+        // is not in the `0x00..=0x1F` plus `0x7F` control-byte set (the
+        // four ASCII whitespace bytes `0x09` tab, `0x0A` LF, `0x0D` CR
+        // are caught, but the most common whitespace `0x20` space is
+        // not). The lacre embedded the value verbatim and the resolver
+        // folded it through `Path::join` looking for a literal `./ ../
+        // caixa-teia` subdirectory and failing at resolve time with a
+        // non-self-locating `No such file or directory` error far from
+        // the source caixa.lisp. The new gate moves the check to
+        // validate time and names the offending dep + caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: " ../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoLeadingWhitespace { nome, caminho } = err else {
+            panic!("expected FonteCaminhoLeadingWhitespace, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, " ../caixa-teia");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_multiple_leading_spaces_caminho() {
+        // The aligned-doc paste footgun sweep: more than one leading
+        // space (`"   ../caixa-teia"` — the canonical "I selected the
+        // aligned column from a four-`:fonte`-entry `:deps` block"
+        // paste) routes through the same gate's `starts_with(' ')`
+        // byte check. Pinned so the gate doesn't narrow to a
+        // single-space prefix.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "   ../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoLeadingWhitespace { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_mid_path_space_caminho() {
+        // The leading-space is the canonical paste-from-aligned-doc
+        // footgun — a space mid-path (`"../my dir/caixa-teia"` — the
+        // canonical "I have a directory with a space in its name"
+        // idiom; ASCII `0x20` is a valid POSIX filename byte) is a
+        // legitimate path with no whitespace-leak semantic at the
+        // non-leading position. Pinned so the gate doesn't widen to a
+        // full no-space-anywhere sweep that would break every
+        // legitimate-shape space-in-filename path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../my dir/caixa-teia".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_var_fires_before_leading_whitespace() {
+        // Cascade pin: the var-expansion arm structurally precedes the
+        // leading-whitespace arm. A value like `"$ "` would probe positive
+        // on var (`starts_with('$')`) but the leading-byte arms walk
+        // left-to-right so the var arm fires on the leading `$` before
+        // the leading-whitespace arm probes. Mirrors the
+        // `fonte_caminho_tilde_fires_before_var_expansion` cascade
+        // discipline on the immediate-predecessor arms.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$VAR".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_leading_whitespace_fires_before_control_char() {
+        // Cascade pin: the leading-whitespace arm structurally precedes
+        // the control-char arm. A value like `" ../foo\n"` probes
+        // positive on both (starts with space AND contains LF), but
+        // the narrower leading-byte diagnostic
+        // (`FonteCaminhoLeadingWhitespace`) wins so the author sees the
+        // more self-locating paste-from-aligned-doc arm first. Mirrors
+        // the `fonte_caminho_var_fires_before_control_char` cascade
+        // discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: " ../foo\n".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoLeadingWhitespace { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_leading_whitespace_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_var_diagnostic_carries_offending_dep_and_caminho`'s
+        // payload assertion on the immediate-predecessor arm): the
+        // error's Display surfaces both the offending `:nome` and the
+        // offending `:caminho` verbatim, so a `feira lint` run can
+        // render the diagnostic without re-parsing and the author can
+        // grep their caixa.lisp for `:caminho "<value>"` and fix it in
+        // one edit.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: " ../caixa-teia".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains(" ../caixa-teia"),
+            "diagnostic must quote the offending caminho: {rendered}",
+        );
+        assert!(
+            rendered.contains("space"),
+            "diagnostic must name the space footgun: {rendered}",
         );
     }
 
