@@ -1849,6 +1849,28 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     browser address bar and forgot to trim the `?tab=…` /
 ///     `?ref=…` tail" footgun, peer with the `#` fragment arm on
 ///     the same paste-from-browser-address-bar trajectory;
+///   - no embedded `\` byte (RFC 3986 §3.3 reserves `/` as the path-
+///     segment separator; no URL grammar admits `\`) — every
+///     documented `:repo` shape (`github:org/repo` shorthand,
+///     `https://…` / `ssh://…` / `git://…` / `file://…` URL schemes,
+///     `git@host:path` scp-style SSH) uses `/` as the path separator.
+///     The canonical Windows-path-confusion footgun: an author
+///     pastes `file:///C:\Users\me\repo` from a Windows Explorer
+///     address bar / PowerShell `Get-Location` output, or
+///     `https://github.com\foo\bar` after a Win32 shell mangled
+///     the slashes, or the bare Windows-rooted path `C:\repo` into
+///     a slot expecting a `file://` URL. libcurl's URL parser
+///     (the layer `git clone <https-url>` invokes) silently
+///     translates `\` → `/` on some platforms and refuses it on
+///     others — the byte rides verbatim into the lacre's per-dep
+///     content-address but is silently rewritten or rejected at
+///     the wire, defeating the THEORY.md §V.2 render-determinism
+///     contract on the same axis the `#` fragment / `?` query arms
+///     close. The peer [`DepError::FonteCaminhoBackslash`] arm
+///     (commit 3a4e1d7) closes the same byte on the sibling
+///     `:fonte :caminho` path-fonte axis; this arm closes the
+///     URL-grammar axis so every byte past `is_git_repo_url`
+///     reaches `git clone`'s wire-format intact;
 ///   - must contain a `:` separator at a non-leading position — every
 ///     documented form carries one (`github:org/repo`, `https://…`,
 ///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
@@ -1892,9 +1914,10 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-`-` / whitespace / control-char / non-ASCII /
-/// fragment-`#` / query-`?` / missing-`:` separator / leading-`:`),
-/// without wrapping in any error variant — every caller maps the same
-/// `String` into its own typed `*Invalid { axis, reason }` enum variant.
+/// fragment-`#` / query-`?` / backslash-`\` / missing-`:` separator /
+/// leading-`:`), without wrapping in any error variant — every caller
+/// maps the same `String` into its own typed `*Invalid { axis, reason }`
+/// enum variant.
 #[allow(
     clippy::too_many_lines,
     reason = "the per-byte rejection cascade is structurally flat by design — \
@@ -2011,6 +2034,36 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  newsletter / Slack-unfurl appends). Drop the \
                  `?query` tail; pin the ref via the typed `:tag` / \
                  `:branch` / `:rev` slot instead)"
+                .to_string());
+        }
+        if b == b'\\' {
+            return Err("must not contain `\\` (RFC 3986 §3.3 reserves \
+                 `/` as the URL path-segment separator; no URL grammar \
+                 admits `\\`. Every documented `:fonte :repo` shape \
+                 (`github:org/repo` shorthand, `https://…` / \
+                 `ssh://…` / `git://…` / `file://…` URL schemes, \
+                 `git@host:path` scp-style SSH) uses `/` as the path \
+                 separator. The canonical Windows-path-confusion \
+                 footgun: an author pastes `file:///C:\\Users\\me\\repo` \
+                 from a Windows Explorer address bar / PowerShell \
+                 `Get-Location` output, `https://github.com\\foo\\bar` \
+                 after a Win32 shell mangled the slashes, or the bare \
+                 Windows-rooted path `C:\\repo` into a slot expecting a \
+                 `file://` URL. libcurl's URL parser (the layer \
+                 `git clone <https-url>` invokes) silently translates \
+                 `\\` to `/` on some platforms and refuses it on others, \
+                 so the byte rides verbatim into the lacre's per-dep \
+                 content-address but is silently rewritten or rejected \
+                 at the wire, defeating the THEORY.md §V.2 render-\
+                 determinism contract on the same axis the fragment-`#` \
+                 and query-`?` arms close. The peer \
+                 `DepError::FonteCaminhoBackslash` arm (commit 3a4e1d7) \
+                 closes the same byte on the sibling `:fonte :caminho` \
+                 path-fonte axis; this arm closes the URL-grammar axis. \
+                 Drop the `\\` — use `/` for URL path separators, or \
+                 author the `file:///C:/path` form with forward slashes \
+                 (the canonical RFC 8089 file-URI shape on Windows-\
+                 rooted paths))"
                 .to_string());
         }
     }
