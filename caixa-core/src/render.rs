@@ -1871,6 +1871,29 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     `:fonte :caminho` path-fonte axis; this arm closes the
 ///     URL-grammar axis so every byte past `is_git_repo_url`
 ///     reaches `git clone`'s wire-format intact;
+///   - no embedded `{` / `}` byte — RFC 3986 §2 excludes the pair
+///     from URL syntax (they sit in the 'delims' / 'unwise' byte
+///     set every URL parser is required to refuse or percent-
+///     encode), and RFC 6570 reserves the matched pair for URI
+///     Template placeholders (the canonical
+///     `https://{host}/{org}/{repo}` substitution shape every
+///     `OpenAPI` / Swagger / Postman / GitHub Octokit client library
+///     / Helm chart-URL fragment carries). The canonical 'I forgot
+///     to resolve the template placeholder' footgun: an author
+///     pastes `:repo "https://github.com/{org}/{repo}"` from a
+///     README quick-start snippet, an `OpenAPI` `servers:` URL, a
+///     Helm chart's `home:` template, or the Mustache / Handlebars
+///     `{{org}}/{{repo}}` doubled-brace substitution form every
+///     CI / `IaC` templating engine emits, expecting the substrate
+///     to resolve the placeholder downstream. libcurl percent-
+///     encodes `{` / `}` to `%7B` / `%7D` on the wire so the byte
+///     round-trips inconsistently between the lacre's per-dep
+///     content-address and the resolver's `git clone <repo>`
+///     invocation, defeating the THEORY.md §V.2 render-
+///     determinism contract on the same axis the `#` fragment /
+///     `?` query / `\` backslash arms close; every git porcelain
+///     entry-point additionally fetches a nonexistent
+///     `{placeholder}`-named path far from the source caixa.lisp;
 ///   - must contain a `:` separator at a non-leading position — every
 ///     documented form carries one (`github:org/repo`, `https://…`,
 ///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
@@ -1914,10 +1937,10 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-`-` / whitespace / control-char / non-ASCII /
-/// fragment-`#` / query-`?` / backslash-`\` / missing-`:` separator /
-/// leading-`:`), without wrapping in any error variant — every caller
-/// maps the same `String` into its own typed `*Invalid { axis, reason }`
-/// enum variant.
+/// fragment-`#` / query-`?` / backslash-`\` / template-`{`-or-`}` /
+/// missing-`:` separator / leading-`:`), without wrapping in any error
+/// variant — every caller maps the same `String` into its own typed
+/// `*Invalid { axis, reason }` enum variant.
 #[allow(
     clippy::too_many_lines,
     reason = "the per-byte rejection cascade is structurally flat by design — \
@@ -2065,6 +2088,41 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  (the canonical RFC 8089 file-URI shape on Windows-\
                  rooted paths))"
                 .to_string());
+        }
+        if b == b'{' || b == b'}' {
+            return Err(format!(
+                "must not contain `{ch}` (RFC 3986 §2 excludes `{{` / `}}` \
+                 from URL syntax — they sit in the 'delims' / 'unwise' \
+                 byte set every URL parser is required to refuse or \
+                 percent-encode; RFC 6570 reserves the matched pair for \
+                 URI Template placeholders (the canonical \
+                 `https://{{host}}/{{org}}/{{repo}}` substitution shape \
+                 every OpenAPI / Swagger / Postman / GitHub Octokit \
+                 client library / Helm chart-URL fragment carries). The \
+                 canonical 'I forgot to resolve the template \
+                 placeholder' footgun: an author pastes \
+                 `:repo \"https://github.com/{{org}}/{{repo}}\"` from a \
+                 README's quick-start snippet, an OpenAPI spec's \
+                 `servers:` URL, a Helm chart's `home:` template, or \
+                 the Mustache / Handlebars `{{{{org}}}}/{{{{repo}}}}` \
+                 doubled-brace substitution form every CI / IaC \
+                 templating engine emits, expecting the substrate to \
+                 resolve the placeholder downstream. libcurl percent-\
+                 encodes `{{` / `}}` to `%7B` / `%7D` on the wire (so \
+                 the byte round-trips inconsistently between the \
+                 lacre's per-dep content-address and the resolver's \
+                 `git clone <repo>` invocation, defeating the THEORY.md \
+                 §V.2 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, and backslash-`\\` arms close) \
+                 while every git porcelain entry-point fetches a \
+                 nonexistent literal-`{{placeholder}}`-named path far \
+                 from the source caixa.lisp. Resolve the placeholder at \
+                 author time — substitute the literal org / repo name \
+                 (`https://github.com/pleme-io/hello-rio`), or use \
+                 `:fonte (:tipo path :caminho \"<local-path>\")` for a \
+                 local workspace dep)",
+                ch = b as char
+            ));
         }
     }
     if s.starts_with(':') {

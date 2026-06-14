@@ -2987,6 +2987,129 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_uri_template_placeholder() {
+        // The fail-before-pass-after pin for the canonical URI Template
+        // (RFC 6570) placeholder footgun on `:repo`. An author copies a
+        // README quick-start snippet / OpenAPI `servers:` URL / Helm
+        // chart `home:` template that carries unresolved
+        // `{org}` / `{repo}` placeholders and pastes the raw template
+        // into the `:repo` slot, expecting the substrate to resolve the
+        // placeholder downstream. Until this arm landed the value
+        // silently passed every prior arm (no whitespace, no control
+        // chars, no non-ASCII, no `#`, no `?`, no `\`, doesn't start
+        // with `-` or `:`); libcurl percent-encodes `{` / `}` to `%7B`
+        // / `%7D` on the wire, so the byte rides verbatim into the
+        // lacre's per-dep content-address but round-trips inconsistently
+        // between the lacre's per-dep content-address and the
+        // resolver's `git clone <repo>` invocation, defeating the
+        // THEORY.md §V.2 render-determinism contract on the same axis
+        // the `#` fragment, `?` query, and `\` backslash arms close;
+        // every git porcelain entry-point additionally fetches a
+        // nonexistent literal-`{placeholder}`-named path far from the
+        // source caixa.lisp.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/{org}/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/{org}/caixa-teia");
+        assert!(
+            reason.contains("must not contain `{`"),
+            "reason must surface the open-brace `{{` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("URI Template") || reason.contains("RFC 6570"),
+            "reason must name the RFC 6570 URI Template grammar, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_handlebars_doubled_brace() {
+        // The symmetric Mustache / Handlebars doubled-brace
+        // substitution-form footgun every CI / IaC templating engine
+        // (Argo Workflows, Jinja2, Liquid, Vue / Angular interpolation,
+        // GitHub Actions `${{ … }}` even though Actions uses `${{`) /
+        // chart README quick-start snippet emits. Pinned separately
+        // from the single-`{` `{org}` arm so a future relaxation that
+        // narrows to one substitution-form surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/{{org}}/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `{`"),
+            "reason must surface the open-brace `{{` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_closing_brace_only() {
+        // Asymmetric `}`-only shape — covers the closing-brace-by-
+        // itself footgun (an author truncated `{org}/{repo}` mid-edit
+        // and left a trailing `}` from the prior template fragment,
+        // or pasted a value that included a closing brace from a
+        // surrounding shell context). Pinned to ensure the predicate
+        // refuses each brace independently rather than only when both
+        // appear — a future regression that ANDs the two byte tests
+        // surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia}".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `}`"),
+            "reason must surface the close-brace `}}` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_template_placeholder_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the template-`{` /
+        // `}` arm are both per-byte arms inside the same
+        // `for &b in s.as_bytes()` loop, so the byte that appears
+        // first in the value's byte order wins. A `:repo
+        // "https://github.com/p/x#readme{org}"` carries both `#` and
+        // `{`; the `#` byte appears first, so the fragment-`#` arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL. Mirrors the
+        // peer cascade discipline `fonte_repo_fragment_fires_before_backslash_when_fragment_first`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme{org}".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before template-`{{` when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
