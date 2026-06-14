@@ -1606,6 +1606,24 @@ pub const GIT_OID_SHA256_LEN: usize = 64;
 ///     intersects the `:tag` / `:branch` slot's valid set at exactly
 ///     the empty set, structurally — every refname is rejected here,
 ///     every OID is rejected by [`is_git_ref_name`].
+///   - not the all-zero null-OID sentinel (`"0000…0000"` — 40 zeros
+///     at SHA-1 width, 64 zeros at SHA-256 width). Git reserves this
+///     value as the "no commit" sentinel in `git update-ref` /
+///     pre-receive hook flows (`<old-value>` for create, `<new-value>`
+///     for delete) and no commit in any object database has this OID,
+///     so a `:rev "0000…0000"` is structurally impossible to resolve.
+///     The canonical "I copy-pasted the sentinel out of `git
+///     update-ref --stdin` docs / pre-receive hook example" footgun
+///     would otherwise pass every other shape arm (canonical length,
+///     lowercase hex) and surface at `git fetch <remote> 0000…0000`
+///     time with a quoting-confused "couldn't find remote ref" error
+///     far from the source caixa.lisp, with the lacre's content-
+///     address locked to a `git:0000…0000` closure that never equals
+///     any upstream's actual `HEAD`. Mirrors `is_git_ref_name`'s
+///     canonical-OID-shape pre-emption arm (line 1322) — both
+///     predicates carry one self-aware arm that catches values
+///     structurally valid for the alphabet but operationally
+///     meaningless on the typed axis.
 ///
 /// Returns the parser-shaped reason on rejection (without wrapping in
 /// any error variant) so each per-axis caller — [`crate::DepError::FontePinShape`]
@@ -1685,6 +1703,43 @@ pub fn is_git_oid(s: &str) -> Result<(), String> {
                 ));
             }
         }
+    }
+    // Null-OID sentinel pre-emption — the all-zero hex string is git's
+    // canonical "no commit" sentinel (used in `git update-ref` /
+    // pre-receive hook flows as the old-value side of ref-create and the
+    // new-value side of ref-delete) and never names a real commit in any
+    // repo's object database. A `:rev "0000000000000000000000000000000000000000"`
+    // (SHA-1 width) or `:rev "0000…0000"` (SHA-256 width) is the canonical
+    // "I copy-pasted the no-such-commit sentinel out of `git
+    // update-ref --stdin` docs / pre-receive hook example" footgun: it's
+    // shape-valid hex of canonical width but resolves to nothing at
+    // `git fetch <remote> 0000…0000` time and surfaces as a fetch failure
+    // far from the source caixa.lisp, with the lacre's
+    // content-addressing probe locked to a non-resolvable `git:0000…0000`
+    // closure that never equals any upstream's actual `HEAD`. Rejecting
+    // at the predicate keeps the `:rev` slot's accepted set aligned with
+    // its documented reproducibility contract — "exactly one immutable
+    // commit, forever" — by structurally refusing the only OID-shaped
+    // value the contract cannot uphold (no commit means no immutable
+    // resolution). Same pre-emption shape `is_git_ref_name`'s canonical-
+    // OID-shape pre-emption arm (caixa-core/src/render.rs:1322) carries
+    // — both predicates carry one self-aware arm that catches values
+    // structurally valid for the alphabet but operationally meaningless
+    // on the typed axis.
+    if s.bytes().all(|b| b == b'0') {
+        return Err(format!(
+            "must not be the all-zero null-OID sentinel ({len} `0` \
+             characters — git's canonical `no-such-commit` value used by \
+             `git update-ref` / pre-receive hook flows to indicate ref \
+             create/delete; no commit in any object database has this OID, \
+             so the resolver's `git fetch <remote> 0000…0000` would fail \
+             far from the source caixa.lisp and the lacre would lock to a \
+             `git:0000…0000` closure that never equals any upstream's \
+             actual `HEAD`. The `:rev` slot's reproducibility contract \
+             requires a *real* commit OID — the canonical authoring shape \
+             is the lowercase-hex value `git rev-parse HEAD` emits for an \
+             actual commit, like `\"c99fdb36abc7d3e1f4a5b6789012345678901234\"`)"
+        ));
     }
     Ok(())
 }
@@ -6137,11 +6192,15 @@ mod tests {
     fn git_oid_accepts_canonical_sha1() {
         // Positive control on the SHA-1 OID width: 40 lowercase hex
         // characters — the canonical `git rev-parse HEAD` emission
-        // shape every realistic pleme-io upstream uses today.
+        // shape every realistic pleme-io upstream uses today. The all-
+        // `f` boundary is the lexicographically-largest OID (a real
+        // commit's hash could land here, and the predicate accepts it
+        // because it's structurally a valid OID — the null-OID
+        // sentinel arm partitions the all-`0` boundary only, not the
+        // all-`f` one).
         is_git_oid("0123456789abcdef0123456789abcdef01234567").unwrap();
         is_git_oid("deadbeefcafebabe0123456789abcdef01234567").unwrap();
         is_git_oid("ffffffffffffffffffffffffffffffffffffffff").unwrap();
-        is_git_oid("0000000000000000000000000000000000000000").unwrap();
     }
 
     #[test]
@@ -6152,8 +6211,83 @@ mod tests {
         let sha256_one = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
         assert_eq!(sha256_one.len(), 64);
         is_git_oid(sha256_one).unwrap();
-        let sha256_zeros = "0".repeat(64);
-        is_git_oid(&sha256_zeros).unwrap();
+        let sha256_fs = "f".repeat(64);
+        is_git_oid(&sha256_fs).unwrap();
+    }
+
+    #[test]
+    fn git_oid_rejects_null_oid_sentinel_sha1() {
+        // Canonical "I copy-pasted the no-such-commit sentinel out of
+        // `git update-ref --stdin` docs / pre-receive hook example"
+        // footgun on the SHA-1 width — the all-zero 40-char hex
+        // string is git's `null OID` sentinel (used to indicate ref
+        // create / delete in update-ref flows) and never names a real
+        // commit in any repo's object database. Until the null-OID
+        // arm landed it passed every other shape arm (canonical
+        // length, lowercase hex) and surfaced at `git fetch <remote>
+        // 0000…0000` time with a quoting-confused "couldn't find
+        // remote ref" error far from the source caixa.lisp, with the
+        // lacre's content-address locked to a `git:0000…0000` closure
+        // that never equals any upstream's actual `HEAD`. The
+        // diagnostic carries the `40` width verbatim so a future
+        // SHA-256 fixture surfaces the same arm at the doubled width
+        // boundary.
+        let null_sha1 = "0".repeat(40);
+        let err = is_git_oid(&null_sha1).unwrap_err();
+        assert!(
+            err.contains("null-OID sentinel"),
+            "reason must name the sentinel: {err}",
+        );
+        assert!(err.contains("40"), "reason must name the width: {err}",);
+        assert!(
+            err.contains("no-such-commit") || err.contains("update-ref"),
+            "reason must reference git's null-OID semantics: {err}",
+        );
+    }
+
+    #[test]
+    fn git_oid_rejects_null_oid_sentinel_sha256() {
+        // Same sentinel on the SHA-256 width — `git`'s
+        // `extensions.objectFormat = sha256` mode (GA Git 2.42 / Oct
+        // 2023) carries the same null-OID semantics on the doubled
+        // 64-char width. Pinned separately so a future relaxation that
+        // only catches the SHA-1 width surfaces here, peer with the
+        // SHA-1 / SHA-256 pair-pinning posture
+        // `git_oid_accepts_canonical_sha1` /
+        // `git_oid_accepts_canonical_sha256` already establishes for
+        // the positive controls.
+        let null_sha256 = "0".repeat(64);
+        let err = is_git_oid(&null_sha256).unwrap_err();
+        assert!(
+            err.contains("null-OID sentinel"),
+            "reason must name the sentinel: {err}",
+        );
+        assert!(err.contains("64"), "reason must name the width: {err}",);
+    }
+
+    #[test]
+    fn git_oid_null_oid_fires_after_length_and_hex_arms() {
+        // Cascade-precedence pin: the null-OID arm runs *after* the
+        // length + character-class arms, so an off-by-one-length all-
+        // zeros value surfaces the narrower `abbreviated` diagnostic
+        // (the length arm's own reason wording) before the structural
+        // null-OID diagnostic, and an uppercase all-zeros value (which
+        // can't actually exist — `0` has no case — but pinned via the
+        // mixed-case-but-non-null fixture) routes the same way. The
+        // null-OID arm is the *fourth* arm, structurally the
+        // lexicographic-content-arm after length and per-byte
+        // character-class.
+        let off_by_one_zeros = "0".repeat(41);
+        let err = is_git_oid(&off_by_one_zeros).unwrap_err();
+        assert!(
+            err.contains("abbreviated"),
+            "off-by-one-length all-zeros surfaces length arm first: {err}",
+        );
+        // The all-`f` 40-char value — same boundary class as null-OID
+        // but at the opposite hex extreme — passes the predicate,
+        // confirming the null-OID arm doesn't over-fire on lexicographic
+        // boundaries.
+        is_git_oid("ffffffffffffffffffffffffffffffffffffffff").unwrap();
     }
 
     #[test]
@@ -6234,8 +6368,18 @@ mod tests {
         // (below SHA-1), 40 (SHA-1 exactly), 41 (just above), 63 (just
         // below SHA-256), 64 (SHA-256 exactly), 65 (just above). Pinned
         // so a future relaxation that admits "close enough" widths
-        // surfaces here. Constructed as all-zero hex so only the length
-        // arm fires.
+        // surfaces here. The failing-length fixtures use all-zero hex
+        // so only the length arm fires (the null-OID sentinel arm is
+        // structurally downstream of the length arm — a non-canonical
+        // length fires the abbreviated diagnostic before the null
+        // diagnostic). The passing-length fixtures use a non-null hex
+        // value so the null-OID arm doesn't fire (the all-zero
+        // canonical-width value is the sentinel and is rejected by its
+        // own arm, pinned in `git_oid_rejects_null_oid_sentinel_*`).
+        let nonzero_sha1 = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(nonzero_sha1.len(), 40);
+        let nonzero_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        assert_eq!(nonzero_sha256.len(), 64);
         for (len, ok) in [
             (1usize, false),
             (7, false),
@@ -6247,7 +6391,13 @@ mod tests {
             (65, false),
             (128, false),
         ] {
-            let s = "0".repeat(len);
+            let s = if ok && len == 40 {
+                nonzero_sha1.to_string()
+            } else if ok && len == 64 {
+                nonzero_sha256.to_string()
+            } else {
+                "0".repeat(len)
+            };
             let result = is_git_oid(&s);
             if ok {
                 result.unwrap_or_else(|e| panic!("len {len} must pass: {e:?}"));
