@@ -999,6 +999,88 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-command-substitution arm. The
+        // e12e4f3 shell-background / logical-AND arm closes the `&`
+        // byte; the backtick (`0x60`) is the orthogonal POSIX legacy
+        // command-substitution sentinel — every POSIX shell (sh /
+        // bash / zsh / dash / ksh / fish / nushell) lexes the byte as
+        // the canonical legacy wrapper that runs the enclosed command
+        // and substitutes its standard-output verbatim into the
+        // surrounding word (a `whoami` wrapped in backticks expands
+        // to the current user's name; a `cat /etc/passwd` wrapped in
+        // backticks expands to the file's contents — the canonical
+        // CWE-78 shell-command-injection vector every shell-side
+        // hardening guide enumerates first). POSIX
+        // `std::path::Path` treats backtick as a literal path-
+        // component byte (so `../caixa-teia/<backtick>whoami<backtick>`
+        // is one directory named literally that, sibling of `.` and
+        // `..`).
+        //
+        // A `:caminho "../caixa-teia/<backtick>whoami<backtick>"` (the
+        // canonical "I pasted a shell one-liner carrying a backticked
+        // `whoami` command-substitution expansion into the `:caminho`
+        // slot" footgun) or `:caminho "<backtick>pwd<backtick>/caixa-
+        // teia"` (the symmetric "I copied a `<backtick>pwd<backtick>/
+        // path` working-directory expansion") silently passes every
+        // prior arm because `Path::is_absolute` returns false on
+        // `..`, the backtick byte is neither a leading-byte sentinel
+        // (the f4efe9c `FonteCaminhoVarExpansion` arm catches the
+        // modern `$()` form at leading position only; backtick is
+        // the orthogonal legacy form) nor a control byte nor `\` nor
+        // `<` / `>` nor `|` nor `;` nor `&`, and the value's last
+        // byte isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // subdirectory whose name embeds the backticked token and
+        // fails at resolve time with a non-self-locating `No such
+        // file or directory` error far from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-
+        // dep content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a backtick byte
+        // lands in the BLAKE3 closure and rides downstream as part
+        // of the build's identity into every shell-spawned
+        // subprocess (the caixa-resolver's `git clone` invocation, a
+        // future `feira tofu` shell-out, a future operator-side
+        // `nix flake check` spawn) as the canonical shell-metachar
+        // injection surface every peer single-token-shaped typed
+        // slot already closes. The peer path-shaped axis
+        // [`crate::render::is_gateway_api_http_path`]
+        // (caixa-core/src/render.rs:506) rejects backtick as part of
+        // its eleven-byte RFC-3986-reserved set on `:entrada
+        // :paths`. The `:caminho` axis was the last typed path-
+        // string surface still admitting this byte; this arm closes
+        // the gap so the substrate-wide "no shell-composition
+        // metacharacter anywhere in a typed string slot that flows
+        // verbatim into a shell-spawned subprocess" invariant
+        // extends from shell-background / logical-AND (`&`) to
+        // shell-command-substitution (backtick) on the `:caminho`
+        // axis.
+        //
+        // The arm fires AFTER the shell-background arm because the
+        // prior arm's `cmd & sleep` shape is the more common shell-
+        // history paste idiom on values that probe as both (a
+        // `"../caixa-teia & <backtick>whoami<backtick>"` carries
+        // both `&` and a backtick — the background-launch tail is
+        // the load-bearing root-cause edit, so
+        // `FonteCaminhoShellBackground` wins; same cascade
+        // discipline every prior `:caminho` arm establishes). The
+        // arm fires BEFORE the trailing-`/` arm because the
+        // embedded command-substitution byte is the more semantic-
+        // locating axis on probe-as-both values (a
+        // `"../<backtick>whoami<backtick>/"` ends in `/` but the
+        // load-bearing diagnostic is the embedded backtick shell-
+        // command-substitution metachar — the trailing `/` is the
+        // secondary observation, and an author who removes the
+        // backtick is likely to also tab-strip the trailing
+        // separator).
+        for &b in caminho.as_bytes() {
+            if b == b'`' {
+                return Err(DepError::FonteCaminhoShellCommandSubstitution {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -1701,6 +1783,33 @@ pub enum DepError {
          shell-background / logical-AND semantic."
     )]
     FonteCaminhoShellBackground { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         command-substitution metacharacter `` ` `` (every POSIX shell — sh / bash / zsh / \
+         dash / ksh / fish / nushell — lexes the byte as the legacy command-substitution \
+         wrapper that runs the enclosed command and substitutes its standard-output \
+         verbatim into the surrounding word, so a backticked `whoami` expands to the \
+         current user's name and a backticked `cat /etc/passwd` expands to the file's \
+         contents — the canonical CWE-78 shell-command-injection vector; POSIX \
+         `std::path::Path` treats the byte as a literal path-component byte. The canonical \
+         paste-from-shell-prompt footgun is a `cd ../path/<backtick>whoami<backtick>` legacy substitution \
+         one-liner or a `cd <backtick>pwd<backtick>/path` working-directory expansion idiom selected whole \
+         into the `:caminho` slot — the prior `&` arm at e12e4f3 closed the shell-\
+         background / logical-AND vector, this arm closes the orthogonal command-\
+         substitution vector on the same paste-from-shell-prompt class (the modern `$()` \
+         form is gated at leading position by the f4efe9c `FonteCaminhoVarExpansion` arm; \
+         the legacy backtick form is the orthogonal axis). The lacre pipeline embeds the \
+         value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, so the byte lands in the BLAKE3 closure and \
+         rides into every shell-spawned subprocess (the resolver's `git clone`, a future \
+         `feira tofu` shell-out, a future operator-side `nix` spawn) as the canonical \
+         shell-metachar injection surface every peer single-token-shaped typed slot \
+         already closes. The peer `:entrada :paths` axis rejects the byte via \
+         `is_gateway_api_http_path`'s eleven-byte RFC-3986-reserved set. Express the path \
+         as a bare relative single-token like \"../caixa-teia\" — the sibling-workspace \
+         directory name carries no shell-command-substitution semantic."
+    )]
+    FonteCaminhoShellCommandSubstitution { nome: String, caminho: String },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} has a trailing \
          `/` (the resolver's `Path::join` resolves `\"../caixa-teia\"` and \
@@ -4643,6 +4752,309 @@ mod tests {
         assert!(
             rendered.contains("background") || rendered.contains("list-AND"),
             "diagnostic must name the shell-background / logical-AND footgun: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_backtick() {
+        // The fail-before-pass-after pin for the canonical shell-
+        // command-substitution paste footgun: an author copies a
+        // POSIX legacy backticked one-liner (`"../caixa-teia/`whoami`"`
+        // — the canonical "I pasted a path that included a `pwd`
+        // / `whoami` / `date` legacy command-substitution expansion
+        // out of a shell-history block") and silently passed every
+        // prior arm (`Path::is_absolute` false on `..`, no control
+        // bytes, no `\`, no `<` / `>`, no `|`, no `;`, no `&`, doesn't
+        // end in `/`). The lacre embedded the value verbatim, the
+        // resolver folded it through `Path::join` looking for a
+        // literal `./../caixa-teia/`whoami`` subdirectory, and the
+        // failure surfaced at resolve time with a non-self-locating
+        // `No such file or directory` error. The new arm moves the
+        // rejection to validate time and names the offending dep +
+        // caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/`whoami`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellCommandSubstitution { nome, caminho } = err else {
+            panic!("expected FonteCaminhoShellCommandSubstitution, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia/`whoami`");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_backtick() {
+        // Leading-position backtick shape (``"`pwd`/caixa-teia"`` —
+        // the canonical `<backtick>pwd<backtick>/path` working-
+        // directory expansion shape every shell-side path-composition
+        // idiom carries). Pinned separately from the embedded-byte
+        // shape so the gate covers every position, not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "`pwd`/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_trailing_backtick() {
+        // Trailing-position backtick shape (`"../caixa-teia`"` — the
+        // degenerate "I selected an unbalanced backtick out of a
+        // shell-history block" idiom that probes for the cascade's
+        // last-byte handling). The trailing-`/` arm fires only on
+        // last-byte `/`; an unbalanced trailing backtick must route
+        // through this arm regardless of position.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_balanced_backtick_pair() {
+        // The canonical balanced-pair shape (``"../<backtick>cat
+        // /etc/passwd<backtick>"`` — the canonical CWE-78 shell-
+        // command-injection paste idiom every shell-side hardening
+        // guide enumerates first). The arm fires on the first
+        // backtick encountered; pinned so a future arm that tries to
+        // distinguish the opening from the closing byte doesn't break
+        // the broader contract.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`cat /etc/passwd`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_backtick() {
+        // The positive-control pin: the gate targets only the
+        // backtick byte, never adjacent printable ASCII or POSIX-
+        // valid bytes. The canonical relative POSIX path
+        // (`"../caixa-teia"`) and a nested deeply-pathed variant with
+        // adjacent printable punctuation
+        // (`"../caixa-teia/sub-dir.v2"`) must continue to validate
+        // cleanly so the gate doesn't widen to a "no printable
+        // punctuation anywhere" sweep that would defeat the entire
+        // path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_command_substitution() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `&` and a backtick (``"../caixa-teia &
+        // <backtick>sleep 1<backtick>"`` — the canonical "I pasted a
+        // `cmd & <backtick>sleep N<backtick>` background-launch +
+        // command-substitution chain" footgun) routes through
+        // `FonteCaminhoShellBackground` not
+        // `FonteCaminhoShellCommandSubstitution`. The background-
+        // launch tail is the more common shell-history paste idiom
+        // on every probe-as-both value — same cascade discipline
+        // every prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & `sleep 1`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_command_substitution() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and a backtick (``"../caixa-teia;
+        // <backtick>whoami<backtick>"`` — the canonical "I pasted a
+        // `cmd; <backtick>follow-up<backtick>` sequential-chain
+        // footgun) routes through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellCommandSubstitution`. The sequential-
+        // command-separator paste is the load-bearing root-cause
+        // edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; `whoami`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_command_substitution() {
+        // Cascade pin on the upstream shell-pipe arm: a value
+        // carrying both `|` and a backtick (``"../caixa-teia |
+        // <backtick>tee log<backtick>"`` — the canonical pipeline-to-
+        // command-substitution paste idiom) routes through
+        // `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellCommandSubstitution`. The pipeline-tail
+        // paste is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | `tee log`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_command_substitution() {
+        // Cascade pin on the upstream shell-redirection arm: a value
+        // carrying both `>` and a backtick (``"../caixa-teia>log
+        // <backtick>date<backtick>"`` — the canonical "I pasted a
+        // `cmd > log <backtick>date<backtick>` redirect-plus-
+        // substitution chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellCommandSubstitution`. The input/output
+        // redirection metachar carries the more self-locating `byte`
+        // payload (it names which of `<` or `>` triggered), so the
+        // prior arm wins on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log `date`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_command_substitution() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and a backtick (``"..\caixa-teia
+        // <backtick>whoami<backtick>"`` — the canonical "I pasted a
+        // Windows-shell `cd ..\path <backtick>whoami<backtick>`
+        // chain") routes through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellCommandSubstitution`. The cross-host-OS-
+        // separator divergence is the load-bearing axis on every
+        // probe-as-both value (an author who removes the `\` is the
+        // root-cause edit; the backtick falls away in the same edit
+        // since it's downstream of the Windows-shell convention).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia `whoami`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_command_substitution() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and a backtick (`"../foo\n
+        // `whoami`"` — the canonical paste-from-multiline-doc
+        // footgun where a newline landed mid-caminho between two
+        // paste fragments) routes through `FonteCaminhoControlChar`
+        // not `FonteCaminhoShellCommandSubstitution`. The POSIX-
+        // syscall-rejected-byte / NUL-`CString::new`-fail diagnostic
+        // is the load-bearing axis on every value that probes
+        // positive for both — mirrors the cascade discipline on
+        // every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n`whoami`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_command_substitution() {
+        // Cascade pin on the load-bearing leading-byte arm: a
+        // leading `/` value with embedded backtick (``"/etc/passwd
+        // <backtick>whoami<backtick>"``) routes through
+        // `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellCommandSubstitution` — the host-layout-
+        // leak diagnostic is the load-bearing axis, the backtick
+        // byte is the secondary observation. Same precedence logic
+        // as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd `whoami`".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both a backtick and a trailing `/`
+        // (``"../`whoami`/"`` — the canonical "I tab-completed a
+        // path that already had a backticked `whoami` substitution
+        // tail" footgun) routes through
+        // `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-metachar
+        // is the more semantic-locating axis (an author who removes
+        // the backtick typically also drops the trailing separator
+        // since both are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_background_diagnostic_carries_offending_dep_and_caminho`
+        // on the closest single-byte peer arm): the error's Display
+        // surfaces the offending `:nome` and the offending `:caminho`
+        // verbatim, and names the shell-command-substitution footgun
+        // explicitly so a `feira lint` run can render the diagnostic
+        // without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/`whoami`".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia/`whoami`"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains('`'),
+            "diagnostic must reference the backtick footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("command-substitution"),
+            "diagnostic must name the shell-command-substitution footgun: {rendered:?}",
         );
     }
 
