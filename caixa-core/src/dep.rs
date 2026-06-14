@@ -307,10 +307,10 @@ impl DepSource {
     /// THEORY.md §V.2 render-determinism axis.
     ///
     /// Extracted from [`Self::validate`]'s `Self::Path` arm because the
-    /// per-arm cascade now spans six diagnostic shapes — every new
-    /// `:caminho` arm (the future leading-whitespace arm, the future
-    /// trailing-`/` arm, a future `<` / `>` shell-redirection arm)
-    /// lands here rather than re-inflating `Self::validate`. The
+    /// per-arm cascade now spans nine diagnostic shapes — every new
+    /// `:caminho` arm (a future `&` / `;` / `|` shell-metachar arm,
+    /// a future glob-metachar `*` / `?` arm) lands here rather than
+    /// re-inflating `Self::validate`. The
     /// function stays a thin per-arm linear walk for one reason: each
     /// arm's diagnostic carries a distinct typed [`DepError`] variant
     /// rather than a parser-shaped `reason` string, so collapsing the
@@ -733,6 +733,71 @@ impl DepSource {
                 return Err(DepError::FonteCaminhoBackslash {
                     nome: nome.to_string(),
                     caminho: caminho.to_string(),
+                });
+            }
+        }
+        // Reproducibility gate's shell-redirection arm. The 3a4e1d7 backslash
+        // arm closes the cross-host-OS-separator vector; `<` (`0x3C`) and `>`
+        // (`0x3E`) are the orthogonal shell-redirection sentinels — same
+        // paste-from-shell-prompt footgun class, different syntactic surface.
+        // POSIX `std::path::Path` treats `<` / `>` as literal bytes inside a
+        // single path component (so `../caixa-teia>output` is one directory
+        // named literally `../caixa-teia>output`, sibling of `.` and `..`),
+        // but every interactive shell (bash / zsh / fish / nushell) lexes
+        // `<` / `>` as input / output redirection operators — a `:caminho
+        // "../caixa-teia>build.log"` (the canonical "I pasted a shell
+        // pipeline that wrote build output and forgot to trim the redirect"
+        // footgun) or `:caminho "../<input.lisp"` (the symmetric input-
+        // redirection paste idiom) silently passes every prior arm because
+        // `Path::is_absolute` returns false, `<` / `>` are neither leading-
+        // byte sentinels nor control bytes nor `\`, and the value's last byte
+        // isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./..\caixa-teia>build.log` subdirectory and fails at resolve time
+        // with a non-self-locating `No such file or directory` error far
+        // from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `<` / `>` byte lands in
+        // the BLAKE3 closure and rides downstream as part of the build's
+        // identity. The bytes carry a second class of hazard the prior
+        // separator-shaped arms don't: every typed-string slot whose value
+        // ever flows verbatim into a shell-spawned subprocess (the caixa-
+        // resolver's `git clone` invocation, a future `feira tofu` shell-
+        // out, a future operator-side `nix flake check` spawn) is the
+        // canonical CRLF-at-subprocess-argument / shell-metachar injection
+        // surface that every peer single-token-shaped typed slot already
+        // closes. The peer path-shaped axis `[crate::render::is_gateway_api_http_path]`
+        // (caixa-core/src/render.rs:506) rejects `<` / `>` as part of its
+        // eleven-byte RFC-3986-reserved set on `:entrada :paths`, and the
+        // peer git-ref-shaped axis `[crate::render::is_git_ref_name]` rejects
+        // `<` / `>` on `:fonte :tag` / `:fonte :branch` under the same
+        // shell-metachar-injection banner. The `:caminho` axis was the last
+        // typed string surface still admitting these two bytes; this arm
+        // closes the gap so the substrate-wide "no shell-redirection
+        // metacharacter anywhere in a typed string slot" invariant is now
+        // structurally consistent across every path-shaped typed surface.
+        //
+        // The arm fires AFTER the control-char arm + backslash arm because
+        // both prior arms carry more self-locating diagnostics on values
+        // that probe as both (`"..\foo<bar"` carries both `\` and `<` — the
+        // cross-OS-separator divergence is the load-bearing axis, so the
+        // backslash arm wins; `"../foo\n<bar"` carries both LF and `<` —
+        // the POSIX-syscall-rejected byte is the load-bearing axis, so the
+        // control-char arm wins). The arm fires BEFORE the trailing-`/` arm
+        // because the embedded redirection byte is the more semantic-
+        // locating axis on probe-as-both values (`"../foo</"` ends in `/`
+        // but the load-bearing diagnostic is the embedded `<` shell-
+        // redirection — the trailing `/` is the secondary observation, and
+        // an author who removes the `<` is likely to also tab-strip the
+        // trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'<' || b == b'>' {
+                return Err(DepError::FonteCaminhoShellRedirection {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
                 });
             }
         }
@@ -1338,6 +1403,35 @@ pub enum DepError {
          \"../caixa-teia\" for a sibling workspace dep)"
     )]
     FonteCaminhoBackslash { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         redirection metacharacter 0x{byte:02x} `{ch}` (every interactive shell — bash / \
+         zsh / fish / nushell — lexes `<` and `>` as input / output redirection \
+         operators, so `:caminho \"../caixa-teia>build.log\"` is the canonical \
+         paste-from-shell-pipeline footgun where an author copies a `command > log` \
+         tail without trimming the redirect; POSIX `std::path::Path` treats both bytes \
+         as literal path-component bytes, so the resolver folds the value through \
+         `Path::new(caminho).join(<file>)` looking for a literal `./{caminho}` \
+         subdirectory and fails at resolve time with a non-self-locating `No such \
+         file or directory` error far from the source caixa.lisp. The lacre pipeline \
+         embeds the value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, so the byte lands in the BLAKE3 closure \
+         and rides into every shell-spawned subprocess (the resolver's `git clone`, a \
+         future `feira tofu` shell-out, a future operator-side `nix` spawn) as the \
+         canonical CRLF-at-subprocess-argument / shell-metachar injection surface every \
+         peer single-token-shaped typed slot already closes. The peer `:fonte :tag` / \
+         `:fonte :branch` axis already rejects `<` / `>` via `is_git_ref_name`, and \
+         `:entrada :paths` rejects them via `is_gateway_api_http_path`'s eleven-byte \
+         RFC-3986-reserved set. Express the path as a bare relative single-token like \
+         \"../caixa-teia\" — the sibling-workspace directory name carries no shell-\
+         redirection semantic.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellRedirection {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} has a trailing \
          `/` (the resolver's `Path::join` resolves `\"../caixa-teia\"` and \
@@ -3368,6 +3462,224 @@ mod tests {
         assert!(
             rendered.contains("trailing"),
             "diagnostic must reference the trailing-slash footgun: {rendered:?}",
+        );
+    }
+
+    // -- :caminho shell-redirection metacharacter arm -----------------------
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_gt_redirection() {
+        // The fail-before-pass-after pin for the canonical output-redirection
+        // paste footgun: an author copies a shell pipeline tail
+        // (`"../caixa-teia>build.log"` — the canonical "I selected the whole
+        // line including the `> build.log` redirect" idiom) and silently
+        // passed every prior arm (`Path::is_absolute` false on `..`, no
+        // control bytes, no backslash, doesn't end in `/`). The lacre
+        // embedded the value verbatim, the resolver folded it through
+        // `Path::join` looking for a literal `./../caixa-teia>build.log`
+        // subdirectory, and the failure surfaced at resolve time with a
+        // non-self-locating `No such file or directory` error. The new arm
+        // moves the rejection to validate time and names the offending dep
+        // + caminho + byte verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>build.log".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellRedirection {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellRedirection, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia>build.log");
+        assert_eq!(byte, b'>');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_lt_redirection() {
+        // The symmetric input-redirection paste shape
+        // (`"../caixa-teia<input.lisp"` — the canonical "I copied a
+        // `command < input.lisp` line from a tatara-lisp REPL log"
+        // idiom). Pinned separately from the `>` shape so the gate's
+        // contract is "any `<` or `>` anywhere", not single-byte coverage.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia<input.lisp".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellRedirection { byte, .. } = err else {
+            panic!("expected FonteCaminhoShellRedirection, got {err:?}");
+        };
+        assert_eq!(byte, b'<');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_gt_redirection() {
+        // Leading-position `>` shape (`">../caixa-teia"` — the degenerate
+        // "I forgot the source side of the redirect" idiom). Pinned
+        // separately from the embedded-byte shapes so the gate covers
+        // every position, not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: ">../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_double_gt_append() {
+        // The bash append-redirection shape (`"../caixa-teia>>build.log"` —
+        // the canonical "I copied a `>>` append redirect" idiom). The arm
+        // fires on the first `>` encountered; pinned so a future arm that
+        // tries to distinguish `>` from `>>` doesn't break the broader
+        // contract.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>>build.log".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_redirection() {
+        // The positive-control pin: the gate targets only `<` / `>`,
+        // never adjacent printable ASCII or POSIX-valid bytes. The
+        // canonical relative POSIX path (`"../caixa-teia"`) and a
+        // nested deeply-pathed variant (`"../caixa-teia/foo/bar"`) must
+        // continue to validate cleanly so the gate doesn't widen to a
+        // "no printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/foo/bar".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_redirection() {
+        // Cascade pin on the immediate-predecessor arm: a value carrying
+        // both `\` and `<` / `>` (`"..\caixa-teia>build.log"` — the
+        // canonical "I pasted a Windows-shell command with output
+        // redirect" footgun) routes through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellRedirection`. The cross-host-OS-separator
+        // divergence is the load-bearing axis (an author who removes
+        // the `\` is the root-cause edit; the `>` falls away in the
+        // same edit since it's downstream of the Windows-shell
+        // convention).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia>build.log".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_redirection() {
+        // Cascade pin on the embedded-control-byte arm: a value carrying
+        // both a control byte and `<` / `>` (`"../foo\n>bar"` — the
+        // canonical paste-from-multiline-doc footgun where a newline
+        // landed mid-caminho) routes through `FonteCaminhoControlChar`
+        // not `FonteCaminhoShellRedirection`. The POSIX-syscall-
+        // rejected-byte / NUL-`CString::new`-fail diagnostic is the
+        // load-bearing axis on every value that probes positive for
+        // both — mirrors the cascade discipline on every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n>bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_redirection() {
+        // Cascade pin on the load-bearing leading-byte arm: a leading
+        // `/` value with embedded `<` / `>` (`"/etc/passwd>out"`)
+        // routes through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellRedirection` — the host-layout-leak
+        // diagnostic is the load-bearing axis, the `>` byte is the
+        // secondary observation. Same precedence logic as every prior
+        // leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd>out".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value carrying
+        // both `<` / `>` and a trailing `/` (`"../foo></"` — the
+        // canonical "I tab-completed a path that already had a
+        // redirect" footgun) routes through `FonteCaminhoShellRedirection`
+        // not `FonteCaminhoTrailingSlash`. The embedded shell-metachar is
+        // the more semantic-locating axis (an author who removes the
+        // `<` / `>` typically also drops the trailing separator since
+        // both are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo></".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_diagnostic_carries_offending_dep_caminho_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_control_diagnostic_carries_offending_dep_caminho_byte`'s
+        // payload assertion on the closest peer arm that also carries a
+        // `byte` field): the error's Display surfaces the offending
+        // `:nome`, the offending `:caminho` verbatim, and the offending
+        // byte in hex (`0x3c` for `<`, `0x3e` for `>`) so a `feira lint`
+        // run can render the diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>build.log".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia>build.log"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x3e"),
+            "diagnostic must name the offending byte in hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("redirection"),
+            "diagnostic must name the shell-redirection footgun: {rendered:?}",
         );
     }
 
