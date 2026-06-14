@@ -25,8 +25,8 @@ pub mod upgrade;
 pub mod version;
 
 pub use aplicacao::{
-    AplicacaoError, AplicacaoSpec, CircuitBreaker, Entrada, Membro, MeshPolicy,
-    POLICY_BREAKER_MAX_FAILURES_MAX, POLICY_BREAKER_WINDOW_MAX, POLICY_RATE_LIMIT_MAX,
+    AplicacaoError, AplicacaoSpec, CircuitBreaker, DEFAULT_SERVICO_PORT, Entrada, Membro,
+    MeshPolicy, POLICY_BREAKER_MAX_FAILURES_MAX, POLICY_BREAKER_WINDOW_MAX, POLICY_RATE_LIMIT_MAX,
     POLICY_RETRIES_MAX, POLICY_TIMEOUT_MAX, Placement, PlacementStrategy, RateLimit, WitContract,
     WitTarget,
 };

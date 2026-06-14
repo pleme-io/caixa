@@ -1709,8 +1709,76 @@ pub struct Entrada {
     pub port: u16,
 }
 
+/// Canonical default L4 port every typed Servico exposes on its
+/// in-cluster K8s Service (the `trigger.service.port` axis the
+/// `pleme-computeunit` library chart emits, the `:entrada :port` author
+/// surface defaults to when the author omits the slot, and the
+/// `caixa-mesh` `CiliumNetworkPolicy` L4-fallback substitutes when no
+/// `:entrada` block matches the per-`:contratos` destination Servico).
+/// The single source of truth all three typed-port consumers reach for:
+///
+///   - [`Entrada::port`]'s serde default (via the
+///     [`default_port`] helper this constant feeds); the author surface
+///     `(:entrada (:host … :para …))` without an explicit `:port` slot
+///     reads back as a typed [`Entrada`] carrying this exact value;
+///   - the
+///     [`caixa_mesh::cilium_network_policies`][cm] `CiliumNetworkPolicy`
+///     emitter's per-`(:de, :para)` L4 `toPorts[].ports[].port`
+///     fallback, fired when the typed `:entrada` block doesn't name
+///     the per-`:contratos` destination Servico — the typed
+///     `:contratos` graph carries no per-destination port axis (the
+///     destination port is the destination Servico's
+///     `lareira-<nome>` chart's `trigger.service.port`, which the
+///     Aplicacao-level renderer has no visibility into without a
+///     resolver round-trip), so the renderer falls back to the
+///     substrate's canonical Servico-port assumption — by
+///     construction the same value the destination's own
+///     `pleme-computeunit` chart emits, the same value the
+///     destination's own typed `:entrada :port` slot defaults to;
+///   - every future per-Servico renderer the absorption-roadmap
+///     acknowledges (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+///     CR materializer's per-edge port resolver, the future
+///     per-`:politicas :rate-limit` `CiliumClusterwideEnvoyConfig`
+///     emitter's per-route bucket key, the future caixa-otel
+///     collector-pipeline emitter's per-Servico scrape port).
+///
+/// Until this lift landed the value `8080` lived at two production-code
+/// call-sites: the [`default_port`] helper at
+/// `caixa-core/src/aplicacao.rs:1712` (the typed slot's serde default)
+/// and the `.unwrap_or(8080)` literal at
+/// `caixa-mesh/src/lib.rs:344` (the L4-fallback in
+/// [`caixa_mesh::cilium_network_policies`]'s per-`(:de, :para)` port
+/// resolver). A future Servico-port rebrand — the substrate moving the
+/// canonical port to `80` (HTTP's IANA-assigned port) once the cluster
+/// gateway grows direct `:80` listeners, to `8443` once the substrate
+/// moves to mTLS-by-default at the Servico boundary, to a per-cluster
+/// override the operator pins through a future
+/// `:placement :default-port` slot — without a coordinated edit on
+/// both sides would silently emit Servicos listening on one port and
+/// their Aplicacao's `CiliumNetworkPolicy` whitelisting a drifted one.
+/// The CNP's apply-time symptom (the policy is admitted but every L4
+/// flow on the destination Servico's actual port silently drops because
+/// it doesn't match the whitelisted port) is far from the rebrand
+/// commit's source, and Cilium's per-L4-drop diagnostic surfaces only
+/// in hubble traces, not in `kubectl describe`. Lifting the literal to
+/// a shared constant closes the drift footgun structurally — both
+/// consumers read from the same `u16`, so any rebrand reaches both
+/// sites by construction.
+///
+/// Mirrors the [`crate::DEFAULT_NAMESPACE`] lift (a085b26) on the peer
+/// per-renderer canonical-K8s-axis constant — the namespace string
+/// and the canonical Servico port both lived as duplicated literals
+/// across caixa-core / caixa-mesh / caixa-flux before their respective
+/// lifts. Same "the typed constant lives in one place" discipline the
+/// [`crate::PLEME_LABEL_PREFIX`] / [`crate::LAREIRA_CHART_NAME_PREFIX`]
+/// / [`crate::KUBE_KEY_API_VERSION`] lifts apply on the peer
+/// shared-string axes.
+///
+/// [cm]: ../../caixa_mesh/fn.cilium_network_policies.html
+pub const DEFAULT_SERVICO_PORT: u16 = 8080;
+
 const fn default_port() -> u16 {
-    8080
+    DEFAULT_SERVICO_PORT
 }
 
 // ── the typed view ───────────────────────────────────────────────────
@@ -1822,7 +1890,7 @@ impl AplicacaoSpec {
             // deadlock. The pub-sub shape slipped through entirely
             // (`detect_sync_cycles` excludes `WitTarget::PubSub`, so a
             // `nats:pub-sub` edge from a member to itself silently
-            // validated, then rendered a CiliumNetworkPolicy whose
+            // validated, then rendered a `CiliumNetworkPolicy` whose
             // endpointSelector and fromEndpoints both name the same
             // program — a self-allow rule that is a no-op, since
             // intra-pod traffic never traverses the mesh). A self-edge's
@@ -2020,7 +2088,7 @@ impl AplicacaoSpec {
             // programs.yaml entry's `name:` (caixa-mesh/src/lib.rs:133),
             // the [`crate::LABEL_PROGRAM`] label value on every CNP
             // endpointSelector / fromEndpoints (caixa-mesh/src/lib.rs:263,
-            // 272), the composed CiliumNetworkPolicy `metadata.name`
+            // 272), the composed `CiliumNetworkPolicy` `metadata.name`
             // (caixa-mesh/src/lib.rs:250), and the Gateway API HTTPRoute
             // `metadata.name` when the member is the `:entrada :para`
             // target (caixa-mesh/src/lib.rs:423). Each apiserver-side
@@ -2964,7 +3032,7 @@ pub enum AplicacaoError {
     #[error(
         ":contratos entry {de:?} → {para:?} (:wit {wit:?} {target}) appears more \
          than once (the typed graph edges are a set, not a multiset; duplicate \
-         contracts would render as colliding CiliumNetworkPolicy `metadata.name` \
+         contracts would render as colliding `CiliumNetworkPolicy` `metadata.name` \
          values that K8s admission rejects far from the source caixa.lisp)"
     )]
     ContratoDuplicate {
@@ -6170,7 +6238,7 @@ mod tests {
         // (de, para, wit, endpoint) — and validate() must reject it.
         // Until this gate landed the typed surface accepted the
         // duplicate silently and caixa-mesh's `cilium_network_policies`
-        // emitted two `CiliumNetworkPolicy` objects with identical
+        // emitted two ``CiliumNetworkPolicy`` objects with identical
         // `metadata.name` (`<aplicacao>-<de>-to-<para>`), which K8s
         // admission rejects on `kubectl apply` far from the source.
         let mut s = three_member_spec();
@@ -10146,6 +10214,71 @@ mod tests {
         assert!(
             msg.contains("lists itself"),
             "diagnostic must use the canonical `lists itself` framing (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn default_servico_port_constant_pins_canonical_8080_literal() {
+        // The canonical-constant arm — pins [`DEFAULT_SERVICO_PORT`]
+        // at the verbatim `8080` literal both consumers (the
+        // `Entrada::port` serde default via [`default_port`] and the
+        // `caixa-mesh` `CiliumNetworkPolicy` L4-fallback at
+        // `caixa-mesh/src/lib.rs:344`) read from. Peer with the
+        // [`crate::DEFAULT_NAMESPACE`]-pins-`"tatara-system"`
+        // discipline (a085b26) on the per-renderer canonical-K8s-axis
+        // string-constant axis: a future refactor that drifts the
+        // constant out from under either consumer surfaces here ahead
+        // of every per-renderer's first emission. The literal value
+        // matches the well-known HTTP-alt port the `pleme-computeunit`
+        // library chart already emits as its `trigger.service.port`
+        // default — by construction the same value the substrate
+        // assumes about every Servico's in-cluster L4 listener.
+        assert_eq!(
+            DEFAULT_SERVICO_PORT, 8080,
+            "canonical Servico port literal must remain `8080` verbatim — \
+             this is the value both the `Entrada::port` serde default and the \
+             caixa-mesh `CiliumNetworkPolicy` L4-fallback read from"
+        );
+    }
+
+    #[test]
+    fn default_port_helper_returns_canonical_servico_port_constant() {
+        // The bridge-arm — pins that the [`default_port`] helper
+        // [`Entrada::port`]'s `#[serde(default = "default_port")]`
+        // attribute hooks routes through the lifted
+        // [`DEFAULT_SERVICO_PORT`] constant, not an open-coded
+        // literal. A future refactor that re-introduces the `8080`
+        // literal at the helper's return site (silently re-opening
+        // the drift footgun this lift closed) surfaces here ahead of
+        // every author-side `(:entrada (:host … :para …))` slot
+        // without an explicit `:port`. Peer with the
+        // `default_namespace_re_export_points_at_caixa_core_canonical`
+        // pin on the caixa-mesh-side re-export axis.
+        assert_eq!(
+            default_port(),
+            DEFAULT_SERVICO_PORT,
+            "the serde-default helper must route through the lifted constant"
+        );
+    }
+
+    #[test]
+    fn entrada_serde_default_port_inherits_canonical_servico_port_constant() {
+        // The end-to-end pin — an author-surface `(:entrada (:host …
+        // :para …))` without an explicit `:port` slot deserializes to
+        // a typed [`Entrada`] carrying [`DEFAULT_SERVICO_PORT`]
+        // verbatim. Routes the canonical lifted constant through both
+        // the serde-default machinery (the `#[serde(default =
+        // "default_port")]` attribute) and the typed-value-shape
+        // contract (the resulting [`Entrada::port`] value). A future
+        // refactor that drifts either axis — replacing the serde
+        // hook's helper, changing the typed slot's wire shape — would
+        // surface here before any per-renderer's CNP / Gateway /
+        // HTTPRoute emission consumed the drifted default.
+        let entrada: Entrada =
+            serde_yaml::from_str("host: checkout.quero.cloud\npara: cart\n").expect("yaml parses");
+        assert_eq!(
+            entrada.port, DEFAULT_SERVICO_PORT,
+            "the serde default must materialize as the lifted canonical Servico port"
         );
     }
 }
