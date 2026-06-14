@@ -299,6 +299,71 @@ impl DepSource {
                         nome: nome.to_string(),
                     });
                 }
+                // Reproducibility gate on the `:fonte (:tipo path …)`
+                // `:caminho` axis. The lacre pipeline embeds the value
+                // verbatim in its per-dep content-address
+                // (`conteudo: format!("path:{caminho}")`,
+                // caixa-resolver/src/resolve.rs:189) and that string
+                // folds into the BLAKE3 closure the lacre keys every
+                // downstream consumer (the substrate's reproducibility
+                // contract, CAIXA-SDLC §III.2 — the lacre is the
+                // build's content-addressed identity, peer of the Nix
+                // store path) against. Until this gate landed an
+                // absolute `:caminho` (`/home/me/work/caixa-teia` — the
+                // canonical "I dragged the folder out of Finder into
+                // my editor" footgun; `/Users/alice/dev/caixa-teia` on
+                // the macOS path-layout peer; the
+                // `${WORKSPACE}/caixa-teia` shell-expanded literal
+                // pasted from a CI manifest) silently passed validate
+                // and the failure surfaced *as a successful build with
+                // a divergent lacre*: the BLAKE3 closure on Alice's
+                // workstation differed from the closure on Bob's
+                // workstation, two CI runners with different
+                // `${HOME}` layouts emitted two distinct
+                // content-addresses for the byte-identical caixa, and
+                // the substrate's "the lacre is the build's identity"
+                // contract silently broke far from the source
+                // caixa.lisp — the most insidious failure mode the
+                // typed slot can carry (no error surfaces; the
+                // divergence is invisible until two machines compare
+                // lacres). The same THEORY.md §V.2 render-determinism
+                // discipline `is_sandboxed_relative_path` already
+                // applies on the M2 typed path-slots
+                // (`:behavior :on-*`, `:upgrade-from :state-change
+                // :script`, `:bibliotecas`, `:exe`, `:servicos`), here
+                // narrowed to the absolute-vs-relative axis only:
+                // `:fonte :caminho`'s canonical author-surface form is
+                // the `..`-traversing sibling-workspace path
+                // (`"../caixa-teia"`, the in-tree dev-dep frame), so a
+                // full `is_sandboxed_relative_path` lift would
+                // structurally reject every legitimate path-fonte
+                // dep. The narrower
+                // `std::path::Path::is_absolute` cut admits the
+                // sibling-workspace form while still rejecting the
+                // host-layout-leaking absolute shape — the
+                // reproducibility contract bites at exactly the
+                // absolute boundary, and that's the axis the
+                // substrate-level invariant is meant to hold. Same
+                // diagnostic shape every per-axis value-shape lift on
+                // the surrounding [`DepError::Fonte*`] cluster carries
+                // (the offending `:nome` + offending `:caminho`
+                // quoted verbatim so the author can grep their
+                // caixa.lisp for the `:caminho "<value>"` literal and
+                // fix it in one edit). The empty arm strictly
+                // precedes this arm so the blank-string footgun
+                // surfaces the more self-locating
+                // `FonteCaminhoEmpty` diagnostic (the empty string
+                // is not absolute under `Path::new("").is_absolute()`
+                // so the precedence is a no-op at value level — the
+                // pin matters only at the diagnostic-shape level if
+                // a future codec round-trip ever produces an empty
+                // string that probes as absolute).
+                if std::path::Path::new(caminho).is_absolute() {
+                    return Err(DepError::FonteCaminhoAbsolute {
+                        nome: nome.to_string(),
+                        caminho: caminho.clone(),
+                    });
+                }
                 Ok(())
             }
         }
@@ -721,6 +786,17 @@ pub enum DepError {
          resolver convention)"
     )]
     FonteCaminhoEmpty { nome: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} is \
+         absolute (the lacre pipeline embeds the value verbatim in its \
+         per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, so an absolute path makes the \
+         BLAKE3 closure differ across machines — defeating the \
+         reproducibility contract that's load-bearing for CSE; express \
+         the path relative to the caixa.lisp location, e.g. \
+         \"../caixa-teia\" for a sibling workspace dep)"
+    )]
+    FonteCaminhoAbsolute { nome: String, caminho: String },
     #[error(
         "{list} carries duplicate entry :nome {nome:?} — every dep list keys its \
          entries by caixa name (Cargo's [dependencies] / [dev-dependencies] tables \
@@ -1800,6 +1876,67 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_path_fonte_with_absolute_caminho() {
+        // The fail-before-pass-after pin for the absolute-`:caminho`
+        // shape: `(:tipo path :caminho "/home/me/work/caixa-teia")`.
+        // Until this gate landed an absolute `:caminho` silently
+        // passed validate; the lacre pipeline embedded the
+        // host-specific filesystem path verbatim in its
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so the BLAKE3 closure
+        // differed per machine — the build succeeded but two CI
+        // runners with different `${HOME}` layouts emitted two
+        // distinct lacres for the byte-identical caixa, silently
+        // breaking the THEORY.md §V.2 render-determinism contract
+        // far from the source caixa.lisp. The new gate moves the
+        // check to validate time and names the offending dep +
+        // caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/home/me/work/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoAbsolute { nome, caminho } = err else {
+            panic!("expected FonteCaminhoAbsolute, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "/home/me/work/caixa-teia");
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_parent_escape_caminho() {
+        // The canonical sibling-workspace dep form
+        // (`:caminho "../caixa-teia"`) remains accepted. The
+        // absolute-path gate above is specifically narrower than the
+        // shared [`crate::render::is_sandboxed_relative_path`]
+        // predicate (which additionally forbids `..` traversal): a
+        // local-path dep's canonical author surface is the in-tree
+        // sibling-workspace path, so a full sandboxed-relative-path
+        // lift would structurally reject every legitimate path-fonte
+        // dep. Pinned so a future tightening to the full predicate
+        // surfaces here as a structural decision, not a silent break.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_deeply_nested_relative_caminho() {
+        // A multi-segment relative `:caminho`
+        // (`"vendor/forks/caixa-teia"`) remains accepted — the
+        // absolute-path gate brackets the host-layout-leaking shape
+        // at the leading-`/` boundary only; every relative shape past
+        // the empty arm continues to pass. Pinned alongside the
+        // `..`-traversal positive control so a future tightening
+        // surfaces the full set of legitimate relative forms here
+        // rather than at a downstream consumer.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "vendor/forks/caixa-teia".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
     fn fonte_repo_empty_fires_before_pin_missing() {
         // Order pin: empty `:repo` is the more self-locating diagnostic
         // (every git source needs a repo; the pin discussion is
@@ -1883,7 +2020,7 @@ mod tests {
         // The diagnostic-shape pin: every :fonte error variant names
         // the offending dep's :nome verbatim, so the author can grep
         // caixa.lisp for the `:nome "<n>"` block and fix it in one
-        // edit. Cover all six variants so a future variant addition
+        // edit. Cover all seven variants so a future variant addition
         // forces a parallel diagnostic-shape decision.
         for (case, fonte) in [
             (
@@ -1935,6 +2072,12 @@ mod tests {
                 "caminho-empty",
                 DepSource::Path {
                     caminho: String::new(),
+                },
+            ),
+            (
+                "caminho-absolute",
+                DepSource::Path {
+                    caminho: "/home/me/work/caixa-teia".into(),
                 },
             ),
         ] {
