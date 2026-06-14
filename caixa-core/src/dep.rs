@@ -320,6 +320,14 @@ impl DepSource {
     /// [`crate::render::is_git_repo_url`], etc.) lives on the
     /// reason-string-shaped axes; the `:caminho` axis keeps its
     /// per-arm variant shape.
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the per-arm cascade is structurally flat by design — every \
+                  `:caminho` arm carries its own typed [`DepError`] variant + \
+                  per-arm Why comment, so collapsing the cascade onto a generic \
+                  [`crate::render`] predicate would regress the per-arm self-locating \
+                  diagnostic the `feira lint` consumer surface depends on"
+    )]
     fn validate_caminho(nome: &str, caminho: &str) -> Result<(), DepError> {
         if caminho.is_empty() {
             return Err(DepError::FonteCaminhoEmpty {
@@ -1081,6 +1089,73 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-glob arm. The c4d62b3 shell-command-
+        // substitution arm closes the backtick byte; `*` (`0x2A`) and `?`
+        // (`0x3F`) are the orthogonal POSIX glob-expansion sentinels — same
+        // paste-from-shell-prompt footgun class, different syntactic surface.
+        // Every POSIX shell (sh / bash / zsh / dash / ksh / fish / nushell)
+        // lexes `*` and `?` as pathname-expansion wildcards: `*` matches any
+        // sequence of characters in a path component (including the empty
+        // sequence), `?` matches exactly one character. POSIX
+        // `std::path::Path` treats both bytes as literal path-component bytes
+        // (so `../caixa-teia/*.lisp` is one directory named literally
+        // `../caixa-teia/*.lisp`, sibling of `.` and `..`).
+        //
+        // A `:caminho "../caixa-teia/*"` (the canonical "I pasted a
+        // `ls ../caixa-teia/*` shell-listing one-liner into the `:caminho`
+        // slot" footgun) or `:caminho "../foo?"` (the symmetric "I copied a
+        // `rm foo?` single-char-wildcard removal idiom") silently passes
+        // every prior arm because `Path::is_absolute` returns false on `..`,
+        // `*` / `?` are neither leading-byte sentinels nor control bytes nor
+        // `\` nor `<` / `>` nor `|` nor `;` nor `&` nor backtick, and the
+        // value's last byte isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./../caixa-teia/*` subdirectory and fails at resolve time with a
+        // non-self-locating `No such file or directory` error far from the
+        // source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `*` or `?` byte lands in
+        // the BLAKE3 closure and rides downstream as part of the build's
+        // identity into every shell-spawned subprocess (the caixa-resolver's
+        // `git clone` invocation, a future `feira tofu` shell-out, a future
+        // operator-side `nix flake check` spawn) as the canonical
+        // shell-metachar / pathname-expansion surface every peer
+        // single-token-shaped typed slot already closes. The peer path-shaped
+        // axis [`crate::render::is_gateway_api_http_path`]
+        // (caixa-core/src/render.rs:506) rejects `*` and `?` as part of its
+        // eleven-byte RFC-3986-reserved set on `:entrada :paths`. The
+        // `:caminho` axis was the last typed path-string surface still
+        // admitting these two bytes; this arm closes the gap so the
+        // substrate-wide "no shell-composition / glob-expansion
+        // metacharacter anywhere in a typed string slot that flows verbatim
+        // into a shell-spawned subprocess" invariant extends from
+        // shell-command-substitution (backtick) to glob-expansion
+        // (`*` / `?`) on the `:caminho` axis.
+        //
+        // The arm fires AFTER the backtick arm because the prior arm's
+        // CWE-78 shell-command-injection vector is the load-bearing
+        // diagnostic on values that probe as both (a `"../`whoami`/*"`
+        // carries both backtick and `*` — the command-substitution paste
+        // is the load-bearing root-cause edit, so
+        // `FonteCaminhoShellCommandSubstitution` wins; same cascade
+        // discipline every prior `:caminho` arm establishes). The arm
+        // fires BEFORE the trailing-`/` arm because the embedded glob
+        // byte is the more semantic-locating axis on probe-as-both values
+        // (`"../foo*/"` ends in `/` but the load-bearing diagnostic is the
+        // embedded `*` glob metachar — the trailing `/` is the secondary
+        // observation, and an author who removes the `*` is likely to
+        // also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'*' || b == b'?' {
+                return Err(DepError::FonteCaminhoShellGlob {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -1810,6 +1885,36 @@ pub enum DepError {
          directory name carries no shell-command-substitution semantic."
     )]
     FonteCaminhoShellCommandSubstitution { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         glob / pathname-expansion metacharacter 0x{byte:02x} `{ch}` (every POSIX shell — \
+         sh / bash / zsh / dash / ksh / fish / nushell — lexes `*` and `?` as pathname-\
+         expansion wildcards: `*` matches any sequence of characters in a path component \
+         and `?` matches exactly one character, so a `:caminho \"../caixa-teia/*\"` is the \
+         canonical paste-from-shell-listing footgun where an author copies a \
+         `ls ../caixa-teia/*` listing without trimming the wildcard, and `:caminho \
+         \"../foo?\"` is the symmetric single-char-wildcard paste shape; POSIX \
+         `std::path::Path` treats both bytes as literal path-component bytes, so the \
+         resolver folds the value through `Path::new(caminho).join(<file>)` looking for \
+         a literal `./{caminho}` subdirectory and fails at resolve time with a non-self-\
+         locating `No such file or directory` error far from the source caixa.lisp. The \
+         lacre pipeline embeds the value verbatim in its per-dep content-address \
+         `path:{caminho}` at caixa-resolver/src/resolve.rs:189, so the byte lands in the \
+         BLAKE3 closure and rides into every shell-spawned subprocess (the resolver's \
+         `git clone`, a future `feira tofu` shell-out, a future operator-side `nix` \
+         spawn) as the canonical shell-metachar / glob-expansion surface every peer \
+         single-token-shaped typed slot already closes. The peer `:entrada :paths` axis \
+         rejects `*` and `?` via `is_gateway_api_http_path`'s eleven-byte RFC-3986-\
+         reserved set. Express the path as a bare relative single-token like \
+         \"../caixa-teia\" — the sibling-workspace directory name carries no shell-glob \
+         / pathname-expansion semantic.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellGlob {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} has a trailing \
          `/` (the resolver's `Path::join` resolves `\"../caixa-teia\"` and \
@@ -5055,6 +5160,343 @@ mod tests {
         assert!(
             rendered.contains("command-substitution"),
             "diagnostic must name the shell-command-substitution footgun: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_star_glob() {
+        // The fail-before-pass-after pin for the canonical pathname-
+        // expansion paste footgun: an author copies an `ls
+        // ../caixa-teia/*` shell-listing tail into the `:caminho`
+        // slot and silently passes every prior arm
+        // (`Path::is_absolute` false on `..`, no control bytes, no
+        // `\`, no `<` / `>`, no `|`, no `;`, no `&`, no backtick,
+        // doesn't end in `/`). The lacre embedded the value
+        // verbatim, the resolver folded it through `Path::join`
+        // looking for a literal `./../caixa-teia/*` subdirectory,
+        // and the failure surfaced at resolve time with a non-self-
+        // locating `No such file or directory` error. The new arm
+        // moves the rejection to validate time and names the
+        // offending dep + caminho + byte verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellGlob {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellGlob, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia/*");
+        assert_eq!(byte, b'*');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_question_glob() {
+        // The symmetric single-char-wildcard paste shape
+        // (`"../foo?"` — the canonical "I copied a `rm foo?` line
+        // out of shell history" idiom). Pinned separately from the
+        // `*` shape so the gate's contract is "any `*` or `?`
+        // anywhere", not single-byte coverage.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo?".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellGlob { byte, .. } = err else {
+            panic!("expected FonteCaminhoShellGlob, got {err:?}");
+        };
+        assert_eq!(byte, b'?');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_star_glob() {
+        // Leading-position `*` shape (`"*/caixa-teia"` — the
+        // degenerate "I selected only the wildcard prefix out of a
+        // shell-glob expression" idiom). Pinned separately from the
+        // embedded-byte shapes so the gate covers every position,
+        // not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "*/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_double_star_recursive_glob() {
+        // The bash/zsh `globstar` recursive-glob shape
+        // (`"../caixa-teia/**/foo"` — the canonical "I copied a
+        // `find ../caixa-teia/**/foo` recursive expansion" idiom).
+        // The arm fires on the first `*` encountered; pinned so a
+        // future arm that tries to distinguish single `*` from
+        // double `**` doesn't break the broader contract.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/**/foo".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_dotted_extension_glob() {
+        // The canonical extension-glob shape (`"../caixa-teia/*.lisp"`
+        // — the "I selected `*.lisp` to mean every Lisp source file
+        // in the dep root" footgun the prior arms structurally
+        // cannot catch since `.` is a POSIX-valid path-component
+        // byte). Pinned so the gate's contract covers the most
+        // idiomatic glob-paste shape every author meets first.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*.lisp".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_glob() {
+        // The positive-control pin: the gate targets only `*` /
+        // `?`, never adjacent printable ASCII or POSIX-valid bytes.
+        // The canonical relative POSIX path (`"../caixa-teia"`) and
+        // a nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue
+        // to validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_shell_glob() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both a backtick and `*` (``"../`whoami`/*"`` —
+        // the canonical "I pasted a `cd <backtick>whoami<backtick>/*`
+        // command-substitution + glob chain") routes through
+        // `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoShellGlob`. The CWE-78 shell-command-
+        // injection vector is the load-bearing root-cause edit on
+        // every probe-as-both value — same cascade discipline every
+        // prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`/*".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_glob() {
+        // Cascade pin on the upstream shell-background arm: a value
+        // carrying both `&` and `*` (`"../caixa-teia & ls /*"` — the
+        // canonical "I pasted a `cmd & ls /*` background + glob
+        // chain" footgun) routes through `FonteCaminhoShellBackground`
+        // not `FonteCaminhoShellGlob`. The background-launch tail is
+        // the load-bearing root-cause edit on every probe-as-both
+        // value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & ls /*".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_glob() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and `*` (`"../caixa-teia; rm *"` — the
+        // canonical sequential-cleanup + glob paste idiom) routes
+        // through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellGlob`. The sequential-command-separator
+        // paste is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; rm *".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_glob() {
+        // Cascade pin on the upstream shell-pipe arm: a value
+        // carrying both `|` and `*` (`"../caixa-teia | ls *"` — the
+        // canonical pipeline-to-glob paste idiom) routes through
+        // `FonteCaminhoShellPipe` not `FonteCaminhoShellGlob`. The
+        // pipeline-tail paste is the load-bearing root-cause edit
+        // on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | ls *".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_glob() {
+        // Cascade pin on the upstream shell-redirection arm: a value
+        // carrying both `>` and `*` (`"../caixa-teia>log *"` — the
+        // canonical "I pasted a `cmd > log *` redirect-plus-glob
+        // chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not `FonteCaminhoShellGlob`.
+        // The input/output redirection metachar carries the more
+        // self-locating `byte` payload (it names which of `<` or `>`
+        // triggered), so the prior arm wins on every probe-as-both
+        // value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log *".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_glob() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and `*` (`"..\caixa-teia\*"` — the
+        // canonical "I pasted a Windows-shell `cd ..\path\*` glob
+        // expression" footgun) routes through
+        // `FonteCaminhoBackslash` not `FonteCaminhoShellGlob`. The
+        // cross-host-OS-separator divergence is the load-bearing
+        // axis on every probe-as-both value (an author who removes
+        // the `\` is the root-cause edit; the `*` falls away in the
+        // same edit since it's downstream of the Windows-shell
+        // convention).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia\\*".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_glob() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `*` (`"../foo\n*"` — the
+        // canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho between two paste fragments)
+        // routes through `FonteCaminhoControlChar` not
+        // `FonteCaminhoShellGlob`. The POSIX-syscall-rejected-byte /
+        // NUL-`CString::new`-fail diagnostic is the load-bearing
+        // axis on every value that probes positive for both —
+        // mirrors the cascade discipline on every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n*".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_glob() {
+        // Cascade pin on the load-bearing leading-byte arm: a
+        // leading `/` value with embedded `*` (`"/etc/*"`) routes
+        // through `FonteCaminhoAbsolute` not `FonteCaminhoShellGlob`
+        // — the host-layout-leak diagnostic is the load-bearing
+        // axis, the glob byte is the secondary observation. Same
+        // precedence logic as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/*".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both `*` and a trailing `/` (`"../foo*/"` — the
+        // canonical "I tab-completed a path that already had a
+        // glob-expansion tail" footgun) routes through
+        // `FonteCaminhoShellGlob` not `FonteCaminhoTrailingSlash`.
+        // The embedded shell-metachar is the more semantic-locating
+        // axis (an author who removes the `*` typically also drops
+        // the trailing separator since both are paste-from-shell
+        // artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo*/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_redirection_diagnostic_*` on the
+        // closest two-byte peer arm): the error's Display surfaces
+        // the offending `:nome`, the offending `:caminho` verbatim,
+        // the offending byte's hex / character form, and names the
+        // shell-glob / pathname-expansion footgun explicitly so a
+        // `feira lint` run can render the diagnostic without
+        // re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*.lisp".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia/*.lisp"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x2a"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("glob"),
+            "diagnostic must name the shell-glob footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("pathname-expansion"),
+            "diagnostic must reference the POSIX pathname-expansion vocabulary: {rendered:?}",
         );
     }
 
