@@ -293,224 +293,319 @@ impl DepSource {
                 }
                 Ok(())
             }
-            Self::Path { caminho } => {
-                if caminho.is_empty() {
-                    return Err(DepError::FonteCaminhoEmpty {
-                        nome: nome.to_string(),
-                    });
-                }
-                // Reproducibility gate on the `:fonte (:tipo path …)`
-                // `:caminho` axis. The lacre pipeline embeds the value
-                // verbatim in its per-dep content-address
-                // (`conteudo: format!("path:{caminho}")`,
-                // caixa-resolver/src/resolve.rs:189) and that string
-                // folds into the BLAKE3 closure the lacre keys every
-                // downstream consumer (the substrate's reproducibility
-                // contract, CAIXA-SDLC §III.2 — the lacre is the
-                // build's content-addressed identity, peer of the Nix
-                // store path) against. Until this gate landed an
-                // absolute `:caminho` (`/home/me/work/caixa-teia` — the
-                // canonical "I dragged the folder out of Finder into
-                // my editor" footgun; `/Users/alice/dev/caixa-teia` on
-                // the macOS path-layout peer; the
-                // `${WORKSPACE}/caixa-teia` shell-expanded literal
-                // pasted from a CI manifest) silently passed validate
-                // and the failure surfaced *as a successful build with
-                // a divergent lacre*: the BLAKE3 closure on Alice's
-                // workstation differed from the closure on Bob's
-                // workstation, two CI runners with different
-                // `${HOME}` layouts emitted two distinct
-                // content-addresses for the byte-identical caixa, and
-                // the substrate's "the lacre is the build's identity"
-                // contract silently broke far from the source
-                // caixa.lisp — the most insidious failure mode the
-                // typed slot can carry (no error surfaces; the
-                // divergence is invisible until two machines compare
-                // lacres). The same THEORY.md §V.2 render-determinism
-                // discipline `is_sandboxed_relative_path` already
-                // applies on the M2 typed path-slots
-                // (`:behavior :on-*`, `:upgrade-from :state-change
-                // :script`, `:bibliotecas`, `:exe`, `:servicos`), here
-                // narrowed to the absolute-vs-relative axis only:
-                // `:fonte :caminho`'s canonical author-surface form is
-                // the `..`-traversing sibling-workspace path
-                // (`"../caixa-teia"`, the in-tree dev-dep frame), so a
-                // full `is_sandboxed_relative_path` lift would
-                // structurally reject every legitimate path-fonte
-                // dep. The narrower
-                // `std::path::Path::is_absolute` cut admits the
-                // sibling-workspace form while still rejecting the
-                // host-layout-leaking absolute shape — the
-                // reproducibility contract bites at exactly the
-                // absolute boundary, and that's the axis the
-                // substrate-level invariant is meant to hold. Same
-                // diagnostic shape every per-axis value-shape lift on
-                // the surrounding [`DepError::Fonte*`] cluster carries
-                // (the offending `:nome` + offending `:caminho`
-                // quoted verbatim so the author can grep their
-                // caixa.lisp for the `:caminho "<value>"` literal and
-                // fix it in one edit). The empty arm strictly
-                // precedes this arm so the blank-string footgun
-                // surfaces the more self-locating
-                // `FonteCaminhoEmpty` diagnostic (the empty string
-                // is not absolute under `Path::new("").is_absolute()`
-                // so the precedence is a no-op at value level — the
-                // pin matters only at the diagnostic-shape level if
-                // a future codec round-trip ever produces an empty
-                // string that probes as absolute).
-                if std::path::Path::new(caminho).is_absolute() {
-                    return Err(DepError::FonteCaminhoAbsolute {
-                        nome: nome.to_string(),
-                        caminho: caminho.clone(),
-                    });
-                }
-                // Reproducibility gate's tilde-expansion arm. The b94fd83
-                // `FonteCaminhoAbsolute` closes the leading-`/`
-                // host-layout-leak; a `:caminho "~/work/caixa-teia"` (the
-                // canonical paste-from-shell-prompt / paste-from-`cd ~`-
-                // doc footgun) silently passed both the empty arm and
-                // the absolute arm because `Path::new("~").is_absolute()`
-                // returns `false` — `~` is a shell-expansion convention,
-                // not a POSIX path component, so `std::path::Path` treats
-                // it as a literal directory-name segment. The lacre
-                // pipeline then embedded the value verbatim
-                // (`conteudo: format!("path:~/work/caixa-teia")`) and the
-                // failure mode forked per consumer:
-                //
-                //   - The caixa-resolver's `Path` arm folds `:caminho`
-                //     through `Path::new(caminho).join(<file>)` without
-                //     `~`-expansion, so the build looked for a literal
-                //     `./~/work/caixa-teia` subdirectory and failed at
-                //     resolve time with a `No such file or directory`
-                //     error far from the source caixa.lisp (the lacre
-                //     itself, though, was already byte-identical across
-                //     machines — every machine emitted the same
-                //     `path:~/work/caixa-teia` content-address).
-                //   - A future caixa-resolver pass that *does* expand `~`
-                //     (the canonical shell-convention idiom every
-                //     resolver eventually reaches for once an author
-                //     reports the literal-`~`-directory bug) would re-
-                //     introduce the host-layout-leak the b94fd83 absolute
-                //     gate closes: Alice's `~` expands to `/home/alice`,
-                //     Bob's to `/home/bob`, two CI runners with different
-                //     `$HOME` layouts resolve to two distinct paths for
-                //     the byte-identical caixa, and the substrate's
-                //     "the lacre is the build's identity" contract
-                //     silently breaks far from the source caixa.lisp.
-                //
-                // Closing the gate at `DepSource::validate` (here at the
-                // canonical caixa-build-time boundary, peer with the
-                // absolute arm above) refuses both failure modes
-                // structurally: the typed accepted set excludes every
-                // `~`-prefixed authoring shape, so the resolver is
-                // free to grow `~`-expansion (or any other convention-
-                // expansion the substrate adopts) without re-opening
-                // the host-layout-leak at the typed boundary. Same
-                // diagnostic shape every per-axis value-shape gate on
-                // the surrounding [`DepError::Fonte*`] cluster carries
-                // (the offending `:nome` + offending `:caminho` quoted
-                // verbatim so the author can grep their caixa.lisp for
-                // the `:caminho "<value>"` literal and fix it in one
-                // edit).
-                //
-                // The cascade preserves narrower-diagnostic-first
-                // ordering: `FonteCaminhoEmpty` → `FonteCaminhoAbsolute`
-                // → `FonteCaminhoTildeExpansion`. The empty arm
-                // structurally precedes both (the bytes "" / "~" don't
-                // overlap), and the absolute arm structurally precedes
-                // the tilde arm (an absolute path can't start with `~`
-                // since absolute paths start with `/`; the bytes "/" /
-                // "~" don't overlap either). Both arms are
-                // value-disjoint, so the precedence is a no-op at value
-                // level — the pin matters only at the diagnostic-shape
-                // level if a future codec round-trip ever produces a
-                // value that probes as both absolute and tilde-prefixed.
-                if caminho.starts_with('~') {
-                    return Err(DepError::FonteCaminhoTildeExpansion {
-                        nome: nome.to_string(),
-                        caminho: caminho.clone(),
-                    });
-                }
-                // Reproducibility gate's shell-variable-expansion arm.
-                // The b94fd83 `FonteCaminhoAbsolute` closes the leading-`/`
-                // host-layout-leak; the a5c248e `FonteCaminhoTildeExpansion`
-                // closes the leading-`~` shell-home-expansion shape; the
-                // leading-`$` is the sibling shell-variable-expansion shape
-                // — same host-layout-leaking semantic, different syntactic
-                // surface. A `:caminho "$HOME/work/caixa-teia"` (the
-                // canonical paste-from-`echo $HOME`-doc footgun) and the
-                // `${VAR}`-braced variant (`"${WORKSPACE}/caixa-teia"` —
-                // the canonical paste-from-CI-manifest footgun every
-                // GitHub Actions / GitLab CI / Drone manifest carries)
-                // silently passed every prior arm because
-                // `Path::is_absolute` returns false on `$` (the `$` is a
-                // shell convention, not a POSIX path component, so
-                // `std::path::Path` treats it as a literal directory-name
-                // segment) and the tilde arm's `starts_with('~')` doesn't
-                // fire.
-                //
-                // Same per-consumer failure-fork the tilde arm closes:
-                //
-                //   - The caixa-resolver's `Path` arm folds `:caminho`
-                //     through `Path::new(caminho).join(<file>)` without
-                //     `$`-expansion, so the build looks for a literal
-                //     `./$HOME/work/caixa-teia` subdirectory and fails at
-                //     resolve time with a `No such file or directory`
-                //     error far from the source caixa.lisp.
-                //   - A future caixa-resolver pass that *does* expand
-                //     `$VAR` (the shell-convention idiom every resolver
-                //     eventually reaches for once an author reports the
-                //     literal-`$HOME`-directory bug, especially for CI's
-                //     `${WORKSPACE}` idiom) would re-introduce the host-
-                //     layout-leak the b94fd83 absolute gate closes:
-                //     Alice's `$HOME` expands to `/home/alice`, Bob's to
-                //     `/home/bob`, two CI runners with different
-                //     `${WORKSPACE}` layouts resolve to two distinct
-                //     paths for the byte-identical caixa, and the
-                //     substrate's "the lacre is the build's identity"
-                //     contract silently breaks far from the source
-                //     caixa.lisp.
-                //
-                // Closing the gate at `DepSource::validate` (here at the
-                // canonical caixa-build-time boundary, peer with the
-                // absolute + tilde arms above) refuses both failure modes
-                // structurally. Same diagnostic shape every per-axis
-                // value-shape gate on the surrounding [`DepError::Fonte*`]
-                // cluster carries (the offending `:nome` + offending
-                // `:caminho` quoted verbatim).
-                //
-                // The cascade preserves narrower-diagnostic-first ordering:
-                // `FonteCaminhoEmpty` → `FonteCaminhoAbsolute` →
-                // `FonteCaminhoTildeExpansion` → `FonteCaminhoVarExpansion`.
-                // The empty arm structurally precedes all three subsequent
-                // arms; the absolute arm structurally precedes both the
-                // tilde and the var arms (absolute paths start with `/`,
-                // the bytes `/` / `~` / `$` don't overlap at the leading
-                // position); the tilde arm structurally precedes the var
-                // arm (`~` and `$` don't overlap at the leading position).
-                // Every pair is value-disjoint, so the precedence is a
-                // no-op at value level — the pin matters only at the
-                // diagnostic-shape level if a future codec round-trip ever
-                // produces a probe-as-both value.
-                //
-                // The gate covers every leading-`$` shape: the canonical
-                // `"$HOME/work/caixa-teia"` (POSIX shell), the braced
-                // `"${HOME}/work/caixa-teia"` (POSIX shell braces), the
-                // CI-manifest idiom `"${WORKSPACE}/caixa-teia"` (the
-                // GitHub Actions / GitLab CI / Drone paste footgun), the
-                // XDG idiom `"$XDG_CONFIG_HOME/caixa"`, and the bare `$`
-                // (degenerate "I meant `$HOME` and forgot the rest"). All
-                // shapes route through the same `caminho.starts_with('$')`
-                // byte check.
-                if caminho.starts_with('$') {
-                    return Err(DepError::FonteCaminhoVarExpansion {
-                        nome: nome.to_string(),
-                        caminho: caminho.clone(),
-                    });
-                }
-                Ok(())
+            Self::Path { caminho } => Self::validate_caminho(nome, caminho),
+        }
+    }
+
+    /// Reproducibility + path-API gate on the `:fonte (:tipo path …)`
+    /// `:caminho` axis. Walks the leading-byte cascade closed by the
+    /// b94fd83 (`/`), a5c248e (`~`), and f4efe9c (`$`) arms then the
+    /// orthogonal embedded-control-byte arm covering `0x00..=0x1F` plus
+    /// `0x7F` anywhere in the value.
+    ///
+    /// Extracted from [`Self::validate`]'s `Self::Path` arm because the
+    /// per-arm cascade now spans five diagnostic shapes — every new
+    /// `:caminho` arm (the future Windows-path-separator `\` arm, the
+    /// future leading-whitespace arm, the future trailing-`/` arm)
+    /// lands here rather than re-inflating `Self::validate`. The
+    /// function stays a thin per-arm linear walk for one reason: each
+    /// arm's diagnostic carries a distinct typed [`DepError`] variant
+    /// rather than a parser-shaped `reason` string, so collapsing the
+    /// cascade onto a generic [`crate::render`] predicate would regress
+    /// the per-arm self-locating diagnostic that `feira lint` consumers
+    /// depend on. The wrapped predicate trajectory ([`crate::render::is_dns_1123_label`],
+    /// [`crate::render::is_git_repo_url`], etc.) lives on the
+    /// reason-string-shaped axes; the `:caminho` axis keeps its
+    /// per-arm variant shape.
+    fn validate_caminho(nome: &str, caminho: &str) -> Result<(), DepError> {
+        if caminho.is_empty() {
+            return Err(DepError::FonteCaminhoEmpty {
+                nome: nome.to_string(),
+            });
+        }
+        // Reproducibility gate on the `:fonte (:tipo path …)`
+        // `:caminho` axis. The lacre pipeline embeds the value
+        // verbatim in its per-dep content-address
+        // (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189) and that string
+        // folds into the BLAKE3 closure the lacre keys every
+        // downstream consumer (the substrate's reproducibility
+        // contract, CAIXA-SDLC §III.2 — the lacre is the
+        // build's content-addressed identity, peer of the Nix
+        // store path) against. Until this gate landed an
+        // absolute `:caminho` (`/home/me/work/caixa-teia` — the
+        // canonical "I dragged the folder out of Finder into
+        // my editor" footgun; `/Users/alice/dev/caixa-teia` on
+        // the macOS path-layout peer; the
+        // `${WORKSPACE}/caixa-teia` shell-expanded literal
+        // pasted from a CI manifest) silently passed validate
+        // and the failure surfaced *as a successful build with
+        // a divergent lacre*: the BLAKE3 closure on Alice's
+        // workstation differed from the closure on Bob's
+        // workstation, two CI runners with different
+        // `${HOME}` layouts emitted two distinct
+        // content-addresses for the byte-identical caixa, and
+        // the substrate's "the lacre is the build's identity"
+        // contract silently broke far from the source
+        // caixa.lisp — the most insidious failure mode the
+        // typed slot can carry (no error surfaces; the
+        // divergence is invisible until two machines compare
+        // lacres). The same THEORY.md §V.2 render-determinism
+        // discipline `is_sandboxed_relative_path` already
+        // applies on the M2 typed path-slots
+        // (`:behavior :on-*`, `:upgrade-from :state-change
+        // :script`, `:bibliotecas`, `:exe`, `:servicos`), here
+        // narrowed to the absolute-vs-relative axis only:
+        // `:fonte :caminho`'s canonical author-surface form is
+        // the `..`-traversing sibling-workspace path
+        // (`"../caixa-teia"`, the in-tree dev-dep frame), so a
+        // full `is_sandboxed_relative_path` lift would
+        // structurally reject every legitimate path-fonte
+        // dep. The narrower
+        // `std::path::Path::is_absolute` cut admits the
+        // sibling-workspace form while still rejecting the
+        // host-layout-leaking absolute shape — the
+        // reproducibility contract bites at exactly the
+        // absolute boundary, and that's the axis the
+        // substrate-level invariant is meant to hold. Same
+        // diagnostic shape every per-axis value-shape lift on
+        // the surrounding [`DepError::Fonte*`] cluster carries
+        // (the offending `:nome` + offending `:caminho`
+        // quoted verbatim so the author can grep their
+        // caixa.lisp for the `:caminho "<value>"` literal and
+        // fix it in one edit). The empty arm strictly
+        // precedes this arm so the blank-string footgun
+        // surfaces the more self-locating
+        // `FonteCaminhoEmpty` diagnostic (the empty string
+        // is not absolute under `Path::new("").is_absolute()`
+        // so the precedence is a no-op at value level — the
+        // pin matters only at the diagnostic-shape level if
+        // a future codec round-trip ever produces an empty
+        // string that probes as absolute).
+        if std::path::Path::new(caminho).is_absolute() {
+            return Err(DepError::FonteCaminhoAbsolute {
+                nome: nome.to_string(),
+                caminho: caminho.to_string(),
+            });
+        }
+        // Reproducibility gate's tilde-expansion arm. The b94fd83
+        // `FonteCaminhoAbsolute` closes the leading-`/`
+        // host-layout-leak; a `:caminho "~/work/caixa-teia"` (the
+        // canonical paste-from-shell-prompt / paste-from-`cd ~`-
+        // doc footgun) silently passed both the empty arm and
+        // the absolute arm because `Path::new("~").is_absolute()`
+        // returns `false` — `~` is a shell-expansion convention,
+        // not a POSIX path component, so `std::path::Path` treats
+        // it as a literal directory-name segment. The lacre
+        // pipeline then embedded the value verbatim
+        // (`conteudo: format!("path:~/work/caixa-teia")`) and the
+        // failure mode forked per consumer:
+        //
+        //   - The caixa-resolver's `Path` arm folds `:caminho`
+        //     through `Path::new(caminho).join(<file>)` without
+        //     `~`-expansion, so the build looked for a literal
+        //     `./~/work/caixa-teia` subdirectory and failed at
+        //     resolve time with a `No such file or directory`
+        //     error far from the source caixa.lisp (the lacre
+        //     itself, though, was already byte-identical across
+        //     machines — every machine emitted the same
+        //     `path:~/work/caixa-teia` content-address).
+        //   - A future caixa-resolver pass that *does* expand `~`
+        //     (the canonical shell-convention idiom every
+        //     resolver eventually reaches for once an author
+        //     reports the literal-`~`-directory bug) would re-
+        //     introduce the host-layout-leak the b94fd83 absolute
+        //     gate closes: Alice's `~` expands to `/home/alice`,
+        //     Bob's to `/home/bob`, two CI runners with different
+        //     `$HOME` layouts resolve to two distinct paths for
+        //     the byte-identical caixa, and the substrate's
+        //     "the lacre is the build's identity" contract
+        //     silently breaks far from the source caixa.lisp.
+        //
+        // Closing the gate at `DepSource::validate` (here at the
+        // canonical caixa-build-time boundary, peer with the
+        // absolute arm above) refuses both failure modes
+        // structurally: the typed accepted set excludes every
+        // `~`-prefixed authoring shape, so the resolver is
+        // free to grow `~`-expansion (or any other convention-
+        // expansion the substrate adopts) without re-opening
+        // the host-layout-leak at the typed boundary. Same
+        // diagnostic shape every per-axis value-shape gate on
+        // the surrounding [`DepError::Fonte*`] cluster carries
+        // (the offending `:nome` + offending `:caminho` quoted
+        // verbatim so the author can grep their caixa.lisp for
+        // the `:caminho "<value>"` literal and fix it in one
+        // edit).
+        //
+        // The cascade preserves narrower-diagnostic-first
+        // ordering: `FonteCaminhoEmpty` → `FonteCaminhoAbsolute`
+        // → `FonteCaminhoTildeExpansion`. The empty arm
+        // structurally precedes both (the bytes "" / "~" don't
+        // overlap), and the absolute arm structurally precedes
+        // the tilde arm (an absolute path can't start with `~`
+        // since absolute paths start with `/`; the bytes "/" /
+        // "~" don't overlap either). Both arms are
+        // value-disjoint, so the precedence is a no-op at value
+        // level — the pin matters only at the diagnostic-shape
+        // level if a future codec round-trip ever produces a
+        // value that probes as both absolute and tilde-prefixed.
+        if caminho.starts_with('~') {
+            return Err(DepError::FonteCaminhoTildeExpansion {
+                nome: nome.to_string(),
+                caminho: caminho.to_string(),
+            });
+        }
+        // Reproducibility gate's shell-variable-expansion arm.
+        // The b94fd83 `FonteCaminhoAbsolute` closes the leading-`/`
+        // host-layout-leak; the a5c248e `FonteCaminhoTildeExpansion`
+        // closes the leading-`~` shell-home-expansion shape; the
+        // leading-`$` is the sibling shell-variable-expansion shape
+        // — same host-layout-leaking semantic, different syntactic
+        // surface. A `:caminho "$HOME/work/caixa-teia"` (the
+        // canonical paste-from-`echo $HOME`-doc footgun) and the
+        // `${VAR}`-braced variant (`"${WORKSPACE}/caixa-teia"` —
+        // the canonical paste-from-CI-manifest footgun every
+        // GitHub Actions / GitLab CI / Drone manifest carries)
+        // silently passed every prior arm because
+        // `Path::is_absolute` returns false on `$` (the `$` is a
+        // shell convention, not a POSIX path component, so
+        // `std::path::Path` treats it as a literal directory-name
+        // segment) and the tilde arm's `starts_with('~')` doesn't
+        // fire.
+        //
+        // Same per-consumer failure-fork the tilde arm closes:
+        //
+        //   - The caixa-resolver's `Path` arm folds `:caminho`
+        //     through `Path::new(caminho).join(<file>)` without
+        //     `$`-expansion, so the build looks for a literal
+        //     `./$HOME/work/caixa-teia` subdirectory and fails at
+        //     resolve time with a `No such file or directory`
+        //     error far from the source caixa.lisp.
+        //   - A future caixa-resolver pass that *does* expand
+        //     `$VAR` (the shell-convention idiom every resolver
+        //     eventually reaches for once an author reports the
+        //     literal-`$HOME`-directory bug, especially for CI's
+        //     `${WORKSPACE}` idiom) would re-introduce the host-
+        //     layout-leak the b94fd83 absolute gate closes:
+        //     Alice's `$HOME` expands to `/home/alice`, Bob's to
+        //     `/home/bob`, two CI runners with different
+        //     `${WORKSPACE}` layouts resolve to two distinct
+        //     paths for the byte-identical caixa, and the
+        //     substrate's "the lacre is the build's identity"
+        //     contract silently breaks far from the source
+        //     caixa.lisp.
+        //
+        // Closing the gate at `DepSource::validate` (here at the
+        // canonical caixa-build-time boundary, peer with the
+        // absolute + tilde arms above) refuses both failure modes
+        // structurally. Same diagnostic shape every per-axis
+        // value-shape gate on the surrounding [`DepError::Fonte*`]
+        // cluster carries (the offending `:nome` + offending
+        // `:caminho` quoted verbatim).
+        //
+        // The cascade preserves narrower-diagnostic-first ordering:
+        // `FonteCaminhoEmpty` → `FonteCaminhoAbsolute` →
+        // `FonteCaminhoTildeExpansion` → `FonteCaminhoVarExpansion`.
+        // The empty arm structurally precedes all three subsequent
+        // arms; the absolute arm structurally precedes both the
+        // tilde and the var arms (absolute paths start with `/`,
+        // the bytes `/` / `~` / `$` don't overlap at the leading
+        // position); the tilde arm structurally precedes the var
+        // arm (`~` and `$` don't overlap at the leading position).
+        // Every pair is value-disjoint, so the precedence is a
+        // no-op at value level — the pin matters only at the
+        // diagnostic-shape level if a future codec round-trip ever
+        // produces a probe-as-both value.
+        //
+        // The gate covers every leading-`$` shape: the canonical
+        // `"$HOME/work/caixa-teia"` (POSIX shell), the braced
+        // `"${HOME}/work/caixa-teia"` (POSIX shell braces), the
+        // CI-manifest idiom `"${WORKSPACE}/caixa-teia"` (the
+        // GitHub Actions / GitLab CI / Drone paste footgun), the
+        // XDG idiom `"$XDG_CONFIG_HOME/caixa"`, and the bare `$`
+        // (degenerate "I meant `$HOME` and forgot the rest"). All
+        // shapes route through the same `caminho.starts_with('$')`
+        // byte check.
+        if caminho.starts_with('$') {
+            return Err(DepError::FonteCaminhoVarExpansion {
+                nome: nome.to_string(),
+                caminho: caminho.to_string(),
+            });
+        }
+        // Reproducibility gate's embedded-control-byte arm. The
+        // b94fd83 + a5c248e + f4efe9c arms closed the three
+        // leading-byte host-layout-leak shapes (`/` / `~` / `$`);
+        // this arm closes the orthogonal embedded-control-byte
+        // axis — any ASCII control byte (`0x00..=0x1F` plus
+        // `0x7F` DEL) appearing anywhere in `:caminho`. Same
+        // shape every peer single-token-typed-slot value-shape
+        // predicate the surrounding [`crate::render`] cluster
+        // gates against (the lifted `is_git_repo_url` arm on
+        // `:fonte :repo`, the `is_git_ref_name` arm on
+        // `:tag`/`:branch`, the `is_chart_description_shape` /
+        // `is_chart_maintainer_name_shape` /
+        // `is_chart_keyword_shape` arms on the
+        // Helm-chart-shaped axes); now consistent on the
+        // `:caminho` axis too.
+        //
+        // Until this gate landed any embedded control byte
+        // silently passed validate, the lacre pipeline embedded
+        // the value verbatim in its per-dep content-address
+        // (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), and the failure
+        // forked per byte and per consumer:
+        //
+        //   - NUL (`0x00`) the canonical "POSIX paths cannot
+        //     contain a NUL byte" shape: every `std::fs` syscall
+        //     routes the path through `CString::new`, which
+        //     fails with `NulError` on the first NUL byte; the
+        //     build would surface a `NulError` at resolve time
+        //     far from the source caixa.lisp.
+        //   - LF (`0x0A`) / CR (`0x0D`) the canonical paste-from-
+        //     multiline-doc footgun: a `:caminho
+        //     "../caixa-teia\nrm -rf /"` value (paste landed mid-
+        //     `:caminho` block from a multi-line code-fence)
+        //     silently round-trips through `Path::join` but the
+        //     embedded newline class is a sibling of the CRLF-at-
+        //     subprocess-argument injection vector
+        //     `is_git_repo_url` already closes on `:repo`.
+        //   - Tab (`0x09`) the canonical paste-from-aligned-table
+        //     footgun: the tab is invisible in most editors, and
+        //     the lacre embeds the value verbatim so two
+        //     paste-from-distinct-tables yield divergent lacres
+        //     across host editors that strip vs preserve tabs.
+        //   - DEL (`0x7F`) + every other `0x00..=0x1F` byte: the
+        //     paste-from-binary-blob shape every peer single-
+        //     token-shaped slot rejects under the same
+        //     `b < 0x20 || b == 0x7F` predicate.
+        //
+        // Mirrors the cascade discipline every prior `:caminho`
+        // arm establishes: `FonteCaminhoEmpty` →
+        // `FonteCaminhoAbsolute` → `FonteCaminhoTildeExpansion`
+        // → `FonteCaminhoVarExpansion` → `FonteCaminhoControlChar`.
+        // The four leading-byte arms structurally precede the
+        // embedded-byte arm because the leading-byte shapes are
+        // the more self-locating diagnostic on values that probe
+        // as both (e.g. `:caminho "/etc/passwd\n"` surfaces the
+        // narrower `FonteCaminhoAbsolute` rather than the broader
+        // embedded-control-byte arm); the precedence pin matters
+        // at the diagnostic-shape level even though the empty /
+        // absolute / tilde / var arms are value-disjoint from a
+        // bare control byte (which would itself be a leading
+        // byte under the empty / absolute / tilde / var arms'
+        // leading-position semantics, but those arms guard the
+        // specific shell-convention characters `/` / `~` / `$`
+        // — a leading `0x01` byte falls through to this arm).
+        for &b in caminho.as_bytes() {
+            if b < 0x20 || b == 0x7F {
+                return Err(DepError::FonteCaminhoControlChar {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
             }
         }
+        Ok(())
     }
 }
 
@@ -984,6 +1079,26 @@ pub enum DepError {
          explicitly if a workstation-rooted dep is genuinely intended)"
     )]
     FonteCaminhoVarExpansion { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains \
+         ASCII control byte 0x{byte:02x} (POSIX paths reject NUL `0x00` outright — \
+         every `std::fs` syscall routes the path through `CString::new` which \
+         fails with `NulError` at resolve time; the lacre pipeline embeds the \
+         value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189 so a control byte anywhere in the \
+         value lands in the BLAKE3 closure and breaks the THEORY.md §V.2 render-\
+         determinism contract — the canonical paste-from-multiline-doc \
+         (`\\n`/`\\r`), paste-from-aligned-table (`\\t`), or paste-from-binary-\
+         blob (`0x00`-DEL) footgun every peer single-token-shaped axis \
+         (`:fonte :repo`, `:fonte :tag`/`:branch`, the Helm chart-string axes) \
+         already gates against. Express the path as a relative single-line ASCII \
+         string, e.g. \"../caixa-teia\" for a sibling workspace dep)"
+    )]
+    FonteCaminhoControlChar {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
     #[error(
         "{list} carries duplicate entry :nome {nome:?} — every dep list keys its \
          entries by caixa name (Cargo's [dependencies] / [dev-dependencies] tables \
@@ -2337,6 +2452,190 @@ mod tests {
         assert!(
             rendered.contains('$'),
             "diagnostic must reference the dollar footgun: {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_nul() {
+        // The fail-before-pass-after pin for the load-bearing NUL byte:
+        // POSIX paths cannot contain `0x00` (every `std::fs` syscall
+        // routes the path through `CString::new` which fails with
+        // `NulError`); until this gate landed a `:caminho
+        // "../caixa\0teia"` silently passed validate, the lacre
+        // pipeline embedded the value verbatim, and the failure
+        // surfaced at the resolver's `Path::join` → `CString::new`
+        // boundary with a non-self-locating `NulError` far from the
+        // source caixa.lisp. The new gate moves the check to validate
+        // time and names the offending dep + caminho + offending byte
+        // verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa\0teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoControlChar {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoControlChar, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa\0teia");
+        assert_eq!(byte, 0x00);
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_newline() {
+        // The canonical paste-from-multiline-doc footgun on `:caminho`
+        // — author copies `"../caixa-teia\n"` (trailing newline) out
+        // of a multi-line code-fence or, worse, a `:caminho
+        // "../caixa-teia\nrm -rf /"` value (CRLF-at-subprocess-argument
+        // injection sibling on the path axis the `is_git_repo_url`
+        // control-char arm already closes on `:repo`). Pinned
+        // separately from the NUL arm so a future relaxation that
+        // catches one but not the other surfaces here.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia\n".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoControlChar { byte, .. } = err else {
+            panic!("expected FonteCaminhoControlChar, got {err:?}");
+        };
+        assert_eq!(byte, 0x0A);
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_carriage_return() {
+        // The CRLF sibling of the LF arm — Windows-line-ending
+        // paste-from-multiline-doc on a `\r\n`-terminated buffer
+        // leaves a stray `\r` mid-string after the LF strip. Pinned
+        // separately from the LF arm so a future relaxation that
+        // only catches LF surfaces here.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia\r".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoControlChar { byte, .. } = err else {
+            panic!("expected FonteCaminhoControlChar, got {err:?}");
+        };
+        assert_eq!(byte, 0x0D);
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_tab() {
+        // The canonical paste-from-aligned-table footgun — a `\t`
+        // mid-`:caminho` is invisible in most editors but rides
+        // through the lacre's content-address verbatim, so two
+        // paste-from-distinct-tables (one editor strips tabs, one
+        // preserves them) yield divergent lacres for the byte-
+        // identical-looking caixa. Pinned separately from the
+        // whitespace-shaped LF/CR arms so a future relaxation that
+        // narrows to line-terminator-only surfaces here.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa\tteia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoControlChar { byte, .. } = err else {
+            panic!("expected FonteCaminhoControlChar, got {err:?}");
+        };
+        assert_eq!(byte, 0x09);
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_del() {
+        // The DEL byte (`0x7F`) closes the upper-end paste-from-
+        // binary-blob footgun — the gate's contract is `b < 0x20 ||
+        // b == 0x7F`, matching the `is_git_repo_url` /
+        // `is_git_ref_name` predicates' control-char arms. Pinned
+        // separately from the lower-range arms so a future narrowing
+        // to `< 0x20` only surfaces here.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa\x7fteia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoControlChar { byte, .. } = err else {
+            panic!("expected FonteCaminhoControlChar, got {err:?}");
+        };
+        assert_eq!(byte, 0x7F);
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_high_bit_utf8() {
+        // The control-byte arm targets `0x00..=0x1F` + `0x7F` only —
+        // high-bit / non-ASCII UTF-8 bytes are not gated. POSIX paths
+        // are opaque byte sequences and UTF-8 multi-byte sequences
+        // are a legitimate filename shape (the `café-teia/foo` idiom).
+        // Pinned so the gate doesn't widen to a full ASCII-only sweep
+        // that would break every legitimate-shape UTF-8 path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../café-teia/foo".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_var_fires_before_control_char() {
+        // Cascade pin: the var-expansion arm structurally precedes the
+        // control-char arm. A value like `"$\n"` probes positive on
+        // both arms (`starts_with('$')` and contains LF), but the
+        // narrower leading-byte diagnostic (`FonteCaminhoVarExpansion`)
+        // wins so the author sees the more self-locating shell-
+        // expansion arm first. Mirrors the
+        // `fonte_caminho_tilde_fires_before_var_expansion` cascade
+        // discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$HOME\n".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_control_char() {
+        // Cascade pin on the sibling leading-byte arm: a leading `/`
+        // value with embedded control byte (`"/etc/passwd\n"`) routes
+        // through `FonteCaminhoAbsolute` not `FonteCaminhoControlChar`
+        // — the host-layout-leak diagnostic is the load-bearing axis,
+        // the control byte is the secondary observation. Same precedence
+        // logic on every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd\n".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_diagnostic_carries_offending_dep_caminho_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_var_diagnostic_carries_offending_dep_and_caminho`'s
+        // payload assertion on the immediate-predecessor arm): the
+        // error's Display surfaces the offending `:nome`, the
+        // offending `:caminho` verbatim, and the offending byte in
+        // hex form (`0x09` for tab) so a `feira lint` run can render
+        // the diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa\tteia".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa\tteia"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x09"),
+            "diagnostic must name the offending byte in hex: {rendered:?}",
         );
     }
 
