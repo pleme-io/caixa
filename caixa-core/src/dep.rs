@@ -801,6 +801,66 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-pipe arm. The e457141 shell-redirection
+        // arm closes the `<` / `>` input/output redirection sentinels; `|`
+        // (`0x7C`) is the orthogonal shell-pipe sentinel — same paste-from-
+        // shell-prompt footgun class, different syntactic surface. POSIX
+        // `std::path::Path` treats `|` as a literal path-component byte (so
+        // `../caixa-teia|tee` is one directory named literally
+        // `../caixa-teia|tee`, sibling of `.` and `..`), but every interactive
+        // shell (bash / zsh / fish / nushell) lexes `|` as the pipe operator
+        // — a `:caminho "../caixa-teia | grep foo"` (the canonical "I copied a
+        // `ls ../caixa-teia | grep` line out of a shell-history block and
+        // forgot to trim the pipeline tail" footgun) or `:caminho
+        // "../foo||bar"` (the symmetric "I copied a `cmd-a || cmd-b` short-
+        // circuit OR line" idiom) silently passes every prior arm because
+        // `Path::is_absolute` returns false on `..`, `|` is neither a leading-
+        // byte sentinel nor a control byte nor `\` nor `<` / `>`, and the
+        // value's last byte isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./../caixa-teia | grep foo` subdirectory and fails at resolve time
+        // with a non-self-locating `No such file or directory` error far
+        // from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `|` byte lands in the
+        // BLAKE3 closure and rides downstream as part of the build's identity
+        // into every shell-spawned subprocess (the caixa-resolver's `git
+        // clone` invocation, a future `feira tofu` shell-out, a future
+        // operator-side `nix flake check` spawn) as the canonical CRLF-at-
+        // subprocess-argument / shell-metachar injection surface every peer
+        // single-token-shaped typed slot already closes. The peer path-shaped
+        // axis [`crate::render::is_gateway_api_http_path`]
+        // (caixa-core/src/render.rs:506) rejects `|` as part of its eleven-
+        // byte RFC-3986-reserved set on `:entrada :paths`. The `:caminho`
+        // axis was the last typed path-string surface still admitting this
+        // byte; this arm closes the gap so the substrate-wide "no shell-
+        // composition metacharacter anywhere in a typed string slot that
+        // flows verbatim into a shell-spawned subprocess" invariant extends
+        // from shell-redirection (`<` / `>`) to shell-pipe (`|`) on the
+        // `:caminho` axis.
+        //
+        // The arm fires AFTER the shell-redirection arm because the prior
+        // arm's two-byte `byte: u8` payload is the more self-locating axis on
+        // values that probe as both (`"../caixa-teia<input|tee"` carries both
+        // `<` and `|` — the input-redirection-paste idiom is the load-bearing
+        // root-cause edit, so `FonteCaminhoShellRedirection` wins; same
+        // cascade discipline every prior `:caminho` arm establishes). The arm
+        // fires BEFORE the trailing-`/` arm because the embedded pipe byte is
+        // the more semantic-locating axis on probe-as-both values
+        // (`"../foo|tee/"` ends in `/` but the load-bearing diagnostic is the
+        // embedded `|` shell-pipe — the trailing `/` is the secondary
+        // observation, and an author who removes the `|` is likely to also
+        // tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'|' {
+                return Err(DepError::FonteCaminhoShellPipe {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -1432,6 +1492,29 @@ pub enum DepError {
         caminho: String,
         byte: u8,
     },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-pipe \
+         metacharacter `|` (every interactive shell — bash / zsh / fish / nushell — lexes \
+         `|` as the pipe operator that wires one command's stdout to the next command's \
+         stdin, so `:caminho \"../caixa-teia | grep foo\"` is the canonical paste-from-\
+         shell-history footgun where an author copies a `ls ../caixa-teia | grep` line \
+         without trimming the pipeline tail, and `:caminho \"../foo||bar\"` is the \
+         symmetric `cmd-a || cmd-b` short-circuit-OR paste shape; POSIX `std::path::Path` \
+         treats `|` as a literal path-component byte, so the resolver folds the value \
+         through `Path::new(caminho).join(<file>)` looking for a literal `./{caminho}` \
+         subdirectory and fails at resolve time with a non-self-locating `No such file or \
+         directory` error far from the source caixa.lisp. The lacre pipeline embeds the \
+         value verbatim in its per-dep content-address `path:{caminho}` at caixa-resolver/\
+         src/resolve.rs:189, so the byte lands in the BLAKE3 closure and rides into every \
+         shell-spawned subprocess (the resolver's `git clone`, a future `feira tofu` \
+         shell-out, a future operator-side `nix` spawn) as the canonical CRLF-at-\
+         subprocess-argument / shell-metachar injection surface every peer single-token-\
+         shaped typed slot already closes. The peer `:entrada :paths` axis rejects `|` \
+         via `is_gateway_api_http_path`'s eleven-byte RFC-3986-reserved set. Express the \
+         path as a bare relative single-token like \"../caixa-teia\" — the sibling-\
+         workspace directory name carries no shell-pipe semantic."
+    )]
+    FonteCaminhoShellPipe { nome: String, caminho: String },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} has a trailing \
          `/` (the resolver's `Path::join` resolves `\"../caixa-teia\"` and \
@@ -3680,6 +3763,218 @@ mod tests {
         assert!(
             rendered.contains("redirection"),
             "diagnostic must name the shell-redirection footgun: {rendered:?}",
+        );
+    }
+
+    // -- :caminho shell-pipe metacharacter arm ----------------------------
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_pipe() {
+        // The fail-before-pass-after pin for the canonical shell-pipe
+        // paste footgun: an author copies a shell-history line
+        // (`"../caixa-teia | grep foo"` — the canonical "I selected
+        // the whole `ls dir | grep` line out of zsh history") and
+        // silently passed every prior arm (`Path::is_absolute` false
+        // on `..`, no control bytes, no backslash, no `<` / `>`,
+        // doesn't end in `/`). The lacre embedded the value verbatim,
+        // the resolver folded it through `Path::join` looking for a
+        // literal `./../caixa-teia | grep foo` subdirectory, and the
+        // failure surfaced at resolve time with a non-self-locating
+        // `No such file or directory` error. The new arm moves the
+        // rejection to validate time and names the offending dep +
+        // caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | grep foo".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellPipe { nome, caminho } = err else {
+            panic!("expected FonteCaminhoShellPipe, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia | grep foo");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_pipe() {
+        // Leading-position `|` shape (`"|../caixa-teia"` — the
+        // degenerate "I forgot the source side of the pipe" idiom).
+        // Pinned separately from the embedded-byte shape so the gate
+        // covers every position, not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "|../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_double_pipe_or() {
+        // The bash short-circuit-OR shape (`"../caixa-teia||fallback"`
+        // — the canonical "I copied a `cmd-a || cmd-b` fallback line"
+        // idiom). The arm fires on the first `|` encountered; pinned
+        // so a future arm that tries to distinguish `|` from `||`
+        // doesn't break the broader contract.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia||fallback".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_pipe() {
+        // The positive-control pin: the gate targets only `|`, never
+        // adjacent printable ASCII or POSIX-valid bytes. The canonical
+        // relative POSIX path (`"../caixa-teia"`) and a nested deeply-
+        // pathed variant with adjacent printable punctuation
+        // (`"../caixa-teia/sub-dir.v2"`) must continue to validate
+        // cleanly so the gate doesn't widen to a "no printable
+        // punctuation anywhere" sweep that would defeat the entire
+        // path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_pipe() {
+        // Cascade pin on the immediate-predecessor arm: a value carrying
+        // both `<` / `>` and `|` (`"../caixa-teia<input|tee"` — the
+        // canonical "I pasted a `cmd < input | tee` pipeline tail"
+        // footgun) routes through `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellPipe`. The input/output redirection
+        // metachar carries the more self-locating `byte: u8` payload
+        // (it names which of `<` or `>` triggered), so the prior arm
+        // wins on every probe-as-both value — same cascade discipline
+        // every prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia<input|tee".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'<', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_pipe() {
+        // Cascade pin on the upstream backslash arm: a value carrying
+        // both `\` and `|` (`"..\caixa-teia|tee"` — the canonical
+        // "I pasted a Windows-shell command with pipe to tee"
+        // footgun) routes through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellPipe`. The cross-host-OS-separator
+        // divergence is the load-bearing axis on every probe-as-both
+        // value (an author who removes the `\` is the root-cause edit;
+        // the `|` falls away in the same edit since it's downstream of
+        // the Windows-shell convention).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia|tee".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_pipe() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `|` (`"../foo\n|bar"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho) routes through
+        // `FonteCaminhoControlChar` not `FonteCaminhoShellPipe`. The
+        // POSIX-syscall-rejected-byte / NUL-`CString::new`-fail
+        // diagnostic is the load-bearing axis on every value that
+        // probes positive for both — mirrors the cascade discipline
+        // on every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n|bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_pipe() {
+        // Cascade pin on the load-bearing leading-byte arm: a leading
+        // `/` value with embedded `|` (`"/etc/passwd|tee"`) routes
+        // through `FonteCaminhoAbsolute` not `FonteCaminhoShellPipe`
+        // — the host-layout-leak diagnostic is the load-bearing axis,
+        // the `|` byte is the secondary observation. Same precedence
+        // logic as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd|tee".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value carrying
+        // both `|` and a trailing `/` (`"../foo|tee/"` — the canonical
+        // "I tab-completed a path that already had a pipeline tail"
+        // footgun) routes through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-metachar is
+        // the more semantic-locating axis (an author who removes the
+        // `|` typically also drops the trailing separator since both
+        // are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo|tee/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_backslash_diagnostic_carries_offending_dep_and_caminho`
+        // on the closest single-byte peer arm): the error's Display
+        // surfaces the offending `:nome` and the offending `:caminho`
+        // verbatim, and names the shell-pipe footgun explicitly so a
+        // `feira lint` run can render the diagnostic without
+        // re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | grep foo".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia | grep foo"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains('|'),
+            "diagnostic must reference the pipe footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("pipe"),
+            "diagnostic must name the shell-pipe footgun: {rendered:?}",
         );
     }
 
