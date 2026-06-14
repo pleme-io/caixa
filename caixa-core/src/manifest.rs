@@ -5490,6 +5490,45 @@ mod tests {
     }
 
     #[test]
+    fn validate_repositorio_rejects_query_string() {
+        // Paste-from-browser-address-bar footgun on the
+        // `:repositorio` axis (peer with the a68f818 fragment-`#`
+        // arm on the same axis). An author copies a GitHub tab
+        // deep-link out of the address bar and forgets to trim
+        // the `?tab=…` query tail. The shared `is_git_repo_url`
+        // predicate refuses the byte at the URL-grammar layer
+        // (GitHub / GitLab / Bitbucket silently ignore the
+        // `?query` tail and serve the same repo regardless, so
+        // the byte rides verbatim into the rendered `Chart.yaml`
+        // `home:` and FluxCD `GitRepository` `url:` fields but
+        // is silently masked at the wire — two manifest variants
+        // whose values differ only in their query tail lock to
+        // two distinct rendered artifacts for the byte-identical
+        // clone, defeating the THEORY.md §V.2 render-determinism
+        // contract on the `:repositorio` axis the peer `:fonte
+        // :repo` axis already closes).
+        let c = caixa_with_repositorio(Some(
+            "https://github.com/pleme-io/hello-rio?tab=readme-ov-file",
+        ));
+        let err = c.validate_repositorio().unwrap_err();
+        let ManifestError::RepositorioInvalid {
+            repositorio,
+            reason,
+        } = err
+        else {
+            panic!("expected RepositorioInvalid, got {err:?}");
+        };
+        assert_eq!(
+            repositorio,
+            "https://github.com/pleme-io/hello-rio?tab=readme-ov-file"
+        );
+        assert!(
+            reason.contains("must not contain `?`"),
+            "reason must surface the query-`?` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_repositorio_empty_takes_precedence_over_shape() {
         // Empty-first cascade pin: the empty `Some("")` surfaces the
         // narrower `RepositorioEmpty` not the shape-predicate-wrapped
