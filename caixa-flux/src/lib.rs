@@ -95,6 +95,20 @@ pub enum Error {
 /// future per-target renderer the substrate adds.
 pub use caixa_core::DEFAULT_NAMESPACE;
 
+/// Canonical Helm library-chart name every `lareira-<nome>` chart
+/// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
+/// so the load-bearing string lives in exactly one place across every
+/// caixa renderer. The wrap key the `cluster_bundle` `helmrelease.yaml`
+/// template uses under `spec.values.<library>:` to thread the per-cluster
+/// overrides through to the rendered chart's dep block must match the
+/// peer `caixa-helm` chart's `dependencies[0].name` axis exactly
+/// (Helm's per-dep alias convention scopes values under the dep's
+/// `name:` when no `alias:` is set), and both axes now consult the same
+/// `&'static str`. Same shape as the [`caixa_core::DEFAULT_NAMESPACE`]
+/// (a085b26) / [`caixa_core::DEFAULT_SERVICO_PORT`] (1e22add) lifts on
+/// the peer canonical-K8s-axis-constant surface.
+pub use caixa_core::DEFAULT_LIBRARY_NAME;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -398,6 +412,20 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         gitref_field = gitref_field,
     );
 
+    // The values wrap key under `spec.values.<library>:` must match the
+    // peer caixa-helm chart's `dependencies[0].name` axis exactly —
+    // Helm's per-dep alias convention scopes values under the
+    // dependency's `name:` when no `alias:` is set, so a wrap-key drift
+    // silently routes the per-cluster `enabled: true` override nowhere
+    // at `helm template` / `helm install` time. Both axes now consult
+    // the same lifted [`caixa_core::DEFAULT_LIBRARY_NAME`] constant
+    // (`caixa-helm`'s `RenderOpts::library_name` defaults to the same
+    // re-export), so a future per-edition library-chart rebrand reaches
+    // both consumers through one `&'static str` by construction. Peer
+    // with the [`DEFAULT_NAMESPACE`] (a085b26) /
+    // [`DEFAULT_SERVICO_PORT`] (1e22add) lifts on the sibling
+    // canonical-K8s-axis-constant surface — duplicated load-bearing
+    // string axes lifted to one source of truth.
     let helmrelease = format!(
         "---\n\
          # HelmRelease consumes the chart caixa-helm renders for this\n\
@@ -425,12 +453,13 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                retries: 3\n      \
                remediateLastFailure: true\n  \
            values:\n    \
-             pleme-computeunit:\n      \
+             {library_name}:\n      \
                enabled: true\n",
         name = name,
         namespace = opts.namespace,
         interval = opts.interval,
         chart_path = opts.chart_path,
+        library_name = DEFAULT_LIBRARY_NAME,
     );
 
     let kustomization = format!(
@@ -1041,5 +1070,124 @@ spec:
             .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
             .unwrap();
         assert!(gitrepo.contents.contains("v0.1.0"));
+    }
+
+    #[test]
+    fn default_library_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::DEFAULT_LIBRARY_NAME` is
+        // the single source of truth for the Helm library-chart wrap
+        // key the `cluster_bundle` `helmrelease.yaml` template scopes
+        // the per-cluster `enabled: true` override under. Pin the
+        // equality (and the static-data identity, peer with the
+        // sibling `default_namespace_re_export_points_at_caixa_core_canonical`
+        // pin) so any local re-introduction of a sibling `pub const
+        // DEFAULT_LIBRARY_NAME: &str = "…"` (the canonical drift
+        // footgun this lift closes — two production-code consumers of
+        // the same load-bearing Helm library-chart name across
+        // caixa-helm + caixa-flux, lifted to one re-export at the
+        // caixa-core boundary) is a build-time test failure naming
+        // the offending drift, not a silent apply-time wrap-key
+        // mismatch routing the per-cluster override nowhere. Peer to
+        // `caixa_helm::tests::default_library_name_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(DEFAULT_LIBRARY_NAME, caixa_core::DEFAULT_LIBRARY_NAME);
+        assert!(
+            std::ptr::eq(
+                DEFAULT_LIBRARY_NAME.as_ptr(),
+                caixa_core::DEFAULT_LIBRARY_NAME.as_ptr(),
+            ),
+            "DEFAULT_LIBRARY_NAME must be a re-export of caixa_core::DEFAULT_LIBRARY_NAME, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_values_wrap_key_uses_lifted_constant() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`'s
+        // `spec.values.<library>:` wrap key — the scope under which
+        // per-cluster overrides like `enabled: true` reach the
+        // dependent library chart at `helm template` / `helm install`
+        // time — must spell out the lifted [`DEFAULT_LIBRARY_NAME`]
+        // verbatim. Before the lift this site carried an inline
+        // `pleme-computeunit:` literal in the format string; a future
+        // per-edition library-chart rebrand (the substrate forking
+        // `pleme-computeunit` to `<registry>-computeunit` for a per-
+        // cluster image-registry mirror, or to `aplicacao-computeunit`
+        // for the M4 typed-Aplicacao renderer's sibling library chart,
+        // or any per-tenant variant the absorption-roadmap names) on
+        // the sibling caixa-helm `RenderOpts::library_name` axis
+        // without a coordinated edit here would have silently routed
+        // the per-cluster override nowhere — the cluster's apply would
+        // come up with the library chart's defaults, far from the
+        // rebrand commit's source.
+        //
+        // The pin is structural: parse the rendered YAML and assert
+        // the wrap key under `spec.values` equals the lifted constant.
+        // A regression that re-introduces an inline literal surfaces
+        // as a key mismatch (the inline literal would survive, but
+        // the lifted-constant-keyed assertion would fail).
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let values = parsed
+            .get("spec")
+            .and_then(|s| s.get("values"))
+            .and_then(|v| v.as_mapping())
+            .expect("spec.values mapping present");
+        assert!(
+            values
+                .get(serde_yaml::Value::String(DEFAULT_LIBRARY_NAME.into()))
+                .is_some(),
+            "spec.values must wrap under the lifted DEFAULT_LIBRARY_NAME \
+             ({DEFAULT_LIBRARY_NAME:?}); a drifted literal here silently \
+             routes per-cluster overrides nowhere at helm template time"
+        );
+        // The wrapped block must carry the canonical `enabled: true`
+        // overlay — the per-cluster override the bundle path threads
+        // through. Pin the round-trip so a refactor that hoists the
+        // overlay out of the wrap can't silently drop it.
+        let wrapped = values
+            .get(serde_yaml::Value::String(DEFAULT_LIBRARY_NAME.into()))
+            .and_then(|v| v.as_mapping())
+            .expect("wrapped library mapping");
+        assert_eq!(
+            wrapped
+                .get(serde_yaml::Value::String("enabled".into()))
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_wrap_key_pins_canonical_pleme_computeunit_string() {
+        // Bridge-arm pin: the lifted [`DEFAULT_LIBRARY_NAME`] constant
+        // resolves to the canonical `"pleme-computeunit"` string today,
+        // and the rendered `helmrelease.yaml`'s wrap key must spell
+        // it out verbatim. Pin the literal here (peer with the
+        // [`caixa_helm::tests::values_yaml_wraps_under_pleme_computeunit_key`]
+        // canonical-default arm on the chart-render side) so a future
+        // rebrand of the lifted constant surfaces here as a coordinated
+        // edit-point — same trajectory as the
+        // `default_servico_port_constant_pins_canonical_8080_literal`
+        // bridge-arm pin in caixa-core.
+        assert_eq!(DEFAULT_LIBRARY_NAME, "pleme-computeunit");
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .unwrap();
+        assert!(
+            hr.contents.contains("pleme-computeunit:"),
+            "helmrelease.yaml must spell the canonical library-chart wrap \
+             key under spec.values (got: {contents:?})",
+            contents = hr.contents
+        );
     }
 }
