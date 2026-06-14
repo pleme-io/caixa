@@ -5529,6 +5529,43 @@ mod tests {
     }
 
     #[test]
+    fn validate_repositorio_rejects_embedded_backslash() {
+        // Windows-file-path-confusion footgun on the `:repositorio`
+        // axis (peer with the prior fragment-`#` / query-`?` arms on
+        // the same axis, and peer with the new dep-level `:fonte :repo`
+        // backslash arm on the URL-grammar trajectory). An author
+        // pastes a Windows Explorer address-bar `file:///C:\Users\me\
+        // hello-rio` into the `:repositorio` slot, expecting the
+        // `lareira-<nome>` chart's `home:` field and the FluxCD
+        // `GitRepository` `url:` field to render the canonical local
+        // file-URI. The shared `is_git_repo_url` predicate refuses
+        // the byte at the URL-grammar layer (libcurl silently
+        // translates `\` → `/` on some platforms and refuses it on
+        // others, so the byte rides verbatim into the rendered
+        // artifacts but is silently rewritten or rejected at the wire
+        // — two manifest variants whose values differ only in
+        // backslash-vs-forward-slash lock to two distinct rendered
+        // artifacts for the byte-identical clone, defeating the
+        // THEORY.md §V.2 render-determinism contract on the
+        // `:repositorio` axis the peer `:fonte :repo` axis already
+        // closes).
+        let c = caixa_with_repositorio(Some("file:///C:\\Users\\me\\hello-rio"));
+        let err = c.validate_repositorio().unwrap_err();
+        let ManifestError::RepositorioInvalid {
+            repositorio,
+            reason,
+        } = err
+        else {
+            panic!("expected RepositorioInvalid, got {err:?}");
+        };
+        assert_eq!(repositorio, "file:///C:\\Users\\me\\hello-rio");
+        assert!(
+            reason.contains("must not contain `\\`"),
+            "reason must surface the backslash-`\\` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_repositorio_empty_takes_precedence_over_shape() {
         // Empty-first cascade pin: the empty `Some("")` surfaces the
         // narrower `RepositorioEmpty` not the shape-predicate-wrapped

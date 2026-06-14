@@ -2886,6 +2886,107 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_embedded_backslash() {
+        // The fail-before-pass-after pin for the canonical Windows-
+        // file-path-confusion footgun on `:repo` (peer with the 3a4e1d7
+        // backslash arm on the sibling `:caminho` path-fonte axis).
+        // An author pastes a Windows Explorer address-bar / PowerShell
+        // `Get-Location` output into a `file://` URL slot, producing
+        // `file:///C:\Users\me\caixa-teia`. Until this arm landed the
+        // value silently passed every prior arm (no whitespace, no
+        // control chars, no non-ASCII, no `#`, no `?`, doesn't start
+        // with `-` or `:`); libcurl's URL parser silently translates
+        // `\` → `/` on some platforms and refuses it on others, so
+        // the byte rides verbatim into the lacre's per-dep content-
+        // address but is silently rewritten / rejected at the wire —
+        // two authors whose `:repo` values differ only in backslash-
+        // vs-forward-slash (`file:///C:\path` vs `file:///C:/path`)
+        // resolve to the byte-identical local clone but lock to two
+        // distinct BLAKE3 closures, defeating the THEORY.md §V.2
+        // render-determinism contract on the same axis the `#`
+        // fragment and `?` query arms close. Same value-shape axis-
+        // floor every peer typed surface enforces; the `:caminho`
+        // 3a4e1d7 arm closes the same byte on the path-fonte axis.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "file:///C:\\Users\\me\\caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "file:///C:\\Users\\me\\caixa-teia");
+        assert!(
+            reason.contains("must not contain `\\`"),
+            "reason must surface the backslash-`\\` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("Windows"),
+            "reason must name the Windows-path-confusion footgun, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_mangled_https_backslashes() {
+        // The symmetric Win32-shell-mangled-slashes footgun — an author
+        // copies `https://github.com/foo/bar` into a Win32 shell that
+        // rewrites every `/` to `\` (the canonical `cmd.exe` path-
+        // separator-coercion bug), pastes the result into a `:repo`
+        // slot, and produces `https:\\github.com\foo\bar`. Pinned
+        // separately from the `file://` Explorer-paste arm so a future
+        // relaxation that narrows to one URL scheme surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https:\\\\github.com\\pleme-io\\caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `\\`"),
+            "reason must surface the backslash-`\\` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("path separator") || reason.contains("path-segment separator"),
+            "reason must name the URL path-segment separator grammar, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_backslash_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the backslash-`\` arm
+        // are both per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte order
+        // wins. A `:repo "https://github.com/p/x#readme\\foo"` carries
+        // both `#` and `\`; the `#` byte appears first, so the fragment-
+        // `#` arm fires, surfacing the more self-locating diagnostic on
+        // the byte the author pasted earliest in the URL. Mirrors the
+        // peer cascade discipline `fonte_repo_fragment_fires_before_query_when_fragment_first`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme\\foo".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before backslash-`\\` when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
