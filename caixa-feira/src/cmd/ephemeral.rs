@@ -85,6 +85,7 @@ pub struct GraphArgs {
 
 impl GraphArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         let processes = lower_file(&self.path, &self.namespace)?;
         for p in &processes {
             println!("---");
@@ -108,6 +109,7 @@ pub struct PlanArgs {
 
 impl PlanArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         let processes = lower_file(&self.path, &self.namespace)?;
         let mut buf = String::new();
         for p in &processes {
@@ -151,6 +153,7 @@ pub struct UpArgs {
 
 impl UpArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         let processes = lower_file(&self.path, &self.namespace)?;
         let timeout = humantime::parse_duration(&self.timeout)
             .with_context(|| format!("--timeout {} is not a humantime duration", self.timeout))?;
@@ -202,6 +205,7 @@ pub struct DownArgs {
 
 impl DownArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = runtime::client().await?;
             let deleted = runtime::delete_process(client, &self.namespace, &self.name).await?;
@@ -232,6 +236,7 @@ pub struct StatusArgs {
 
 impl StatusArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = runtime::client().await?;
             let process = runtime::get_process(client, &self.namespace, &self.name)
@@ -260,6 +265,7 @@ pub struct ListArgs {
 
 impl ListArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = runtime::client().await?;
             let processes =

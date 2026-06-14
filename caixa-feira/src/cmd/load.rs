@@ -244,6 +244,110 @@ pub(crate) fn validate_cluster_arg(cluster: &str) -> Result<()> {
     })
 }
 
+/// Validate a `feira` verb's `--namespace <name>` flag value at the
+/// per-verb entry-point against the canonical DNS-1123 label shape every
+/// K8s Namespace `metadata.name` consumer demands.
+///
+/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5 — "the
+/// duplication budget is zero") on the per-verb `--namespace` axis,
+/// peer with the [`validate_cluster_arg`] lift (feb3103) on the
+/// sibling per-verb `--cluster` axis. Before this lift the same
+/// `--namespace` value passed through fourteen unprotected
+/// [`kube::Api::namespaced(client, &self.namespace)`] / per-CR
+/// `metadata.namespace = Some(self.namespace)` call-sites across the
+/// three cluster-touching verb families — `feira pool …`
+/// (`PoolListArgs::run` / `PoolScaleArgs::run` / `PoolDeleteArgs::run` /
+/// `PoolStatusArgs::run`, `cmd/pool.rs`), `feira ephemeral …`
+/// (`GraphArgs::run` / `PlanArgs::run` / `UpArgs::run` /
+/// `DownArgs::run` / `StatusArgs::run` / `ListArgs::run`,
+/// `cmd/ephemeral.rs`), `feira allocation …` (`RequestArgs::run` /
+/// `ReleaseArgs::run` / `ListArgs::run` / `StatusArgs::run`,
+/// `cmd/allocation.rs`) — with no shape gate at all. Fourteen
+/// unprotected call-sites of the same load-bearing shape, each one
+/// another place a future change to the canonical namespace-name
+/// discipline has to remember to touch — the future `feira pool
+/// drain --namespace <ns>` per-pool reaper, the future `feira
+/// allocation request --namespace <ns>` per-PR allocation verb the
+/// absorption-roadmap acknowledges, the future `feira ephemeral
+/// gc --namespace <ns>` cluster-wide ephemeral reaper — each one
+/// landing on a per-verb open-coded gate is a coordinated rewrite of
+/// every verb-entry-point that either gets it right at every site or
+/// quietly drifts at one.
+///
+/// Without the gate three authoring footguns silently passed:
+///
+///   - `--namespace ""` — the canonical "I forgot the flag value"
+///     footgun (the bare `--namespace=` flag on a CI invocation with
+///     an unset shell variable). The K8s apiserver rejects empty
+///     namespace values at admission time with a "field is required"
+///     diagnostic far from the source flag; lifting the gate to the
+///     verb entry-point surfaces the empty-value axis verbatim
+///     ahead of the kube-rs round-trip.
+///   - `--namespace "MyTeam"` / `--namespace "team_a"` /
+///     `--namespace "team.a"` — the wrong-case / wrong-separator /
+///     wrong-shape footguns the K8s apiserver refuses at admission
+///     time on every namespaced `metadata.namespace` consumer
+///     downstream (every EphemeralPool / EphemeralAllocation /
+///     Process CR's apiserver-side admission rule). Silent passage
+///     through the verb arg-entry surfaced the failure at kube-rs
+///     RTT as a "Namespace MyTeam is invalid: metadata.namespace:
+///     Invalid value" rejection, far from the source `--namespace`
+///     flag.
+///   - `--namespace "default/.."` — the path-traversal-shaped
+///     footgun. The kube-rs Api builder URL-joins the namespace into
+///     the API path (`/api/v1/namespaces/<ns>/…`); the bare `..`
+///     segment either reaches the cluster-scope `/api/v1/<resource>`
+///     accidentally on URL-normalize or fails kube-rs's per-request
+///     `ApiResource` builder with no diagnostic naming the escape.
+///     The DNS-1123 label gate refuses `/` and `.` outright with the
+///     offending value named verbatim.
+///
+/// After the lift every per-verb `--namespace` consumer routes
+/// through this helper: the DNS-1123 label gate fires at the verb's
+/// entry-point, the diagnostic carries the offending `--namespace
+/// <value>` verbatim plus a parser-shaped reason naming the specific
+/// violation, and the canonical "what shape must `--namespace`
+/// carry?" decision lives at exactly one call-site. Mirrors
+/// [`validate_cluster_arg`] on the peer per-verb-arg axis — together
+/// the two helpers form the canonical DNS-1123-label CLI-arg surface
+/// every per-verb `metadata.name` / `metadata.namespace` entry-point
+/// composes from, sharing the lifted [`caixa_core::is_dns_1123_label`]
+/// predicate so the substrate-wide "valid K8s label-shaped CLI arg"
+/// set is single-sourced across the typed-slot and CLI-arg surfaces.
+///
+/// The `"default"` literal — the canonical fallback every
+/// `--namespace`-taking verb's clap `default_value = "default"`
+/// attribute carries — passes the DNS-1123 label gate cleanly (six
+/// lowercase letters), so a verb invoked without the flag inherits
+/// the validated canonical default through this helper without
+/// special-casing the absent-flag arm.
+pub(crate) fn validate_namespace_arg(namespace: &str) -> Result<()> {
+    // Empty is gated first with a self-locating diagnostic — the
+    // canonical "I forgot the flag value" footgun a bare
+    // `--namespace=` shape produces (a CI invocation with an unset
+    // shell variable interpolated into the flag). Peer with the
+    // [`validate_cluster_arg`] empty-arm on the sibling per-verb
+    // axis.
+    if namespace.is_empty() {
+        bail!(
+            "--namespace value is empty (every `feira` verb that scopes a \
+             `kube::Api` to a namespaced resource requires a non-empty \
+             namespace name — e.g. `--namespace default`, `--namespace \
+             pleme-system`, or omit the flag to inherit the canonical \
+             `\"default\"` fallback)"
+        );
+    }
+    caixa_core::is_dns_1123_label(namespace).map_err(|reason| {
+        anyhow::anyhow!(
+            "--namespace {namespace:?} is not a valid DNS-1123 label: {reason} \
+             (every K8s Namespace `metadata.name` is bounded by the DNS-1123 \
+             label grammar; the apiserver rejects any non-DNS-1123-label name \
+             at admission time on every namespaced CR `metadata.namespace` \
+             axis downstream — EphemeralPool, EphemeralAllocation, Process)"
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -668,6 +772,180 @@ mod tests {
                 "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
             );
         }
+    }
+
+    #[test]
+    fn validate_namespace_arg_accepts_canonical_dns_1123_label_names() {
+        // The canonical happy-path arm — the K8s-canonical
+        // `"default"` namespace literal every `--namespace`-taking
+        // verb's `default_value = "default"` clap attribute carries
+        // passes the lifted DNS-1123 label gate cleanly, alongside
+        // the realistic operator-side shapes (`kube-system`,
+        // `pleme-system`, `cert-manager`, `argocd`) and DNS-1123 edge
+        // shapes (`a`, `a0`). Peer with the
+        // [`validate_cluster_arg`] happy-path pin on the sibling
+        // per-verb axis — the same DNS-1123 label discipline both
+        // helpers gate against, single-sourced through the lifted
+        // [`caixa_core::is_dns_1123_label`] predicate.
+        for namespace in [
+            "default",
+            "kube-system",
+            "pleme-system",
+            "cert-manager",
+            "argocd",
+            "a",
+            "a0",
+        ] {
+            validate_namespace_arg(namespace)
+                .unwrap_or_else(|_| panic!("canonical namespace {namespace:?} must accept"));
+        }
+    }
+
+    #[test]
+    fn validate_namespace_arg_rejects_empty_with_self_locating_diagnostic() {
+        // The canonical "I forgot the flag value" footgun a bare
+        // `--namespace=` shape produces (a CI invocation with an
+        // unset shell variable interpolated into the flag). Silently
+        // passing the empty string would surface at the kube-rs API
+        // round-trip as a "Namespace is required" rejection far
+        // from the source flag. The gate refuses with a self-
+        // locating diagnostic naming the `--namespace` flag and the
+        // empty-value axis, peer with the
+        // [`validate_cluster_arg`] empty-arm.
+        let err = validate_namespace_arg("").expect_err("empty --namespace must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("--namespace"),
+            "diagnostic must name the offending flag (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("empty"),
+            "diagnostic must name the empty-value axis (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_namespace_arg_rejects_path_traversal_with_named_value() {
+        // The path-traversal-shaped footgun: `--namespace
+        // "default/.."` URL-joined into the kube-rs API path
+        // (`/api/v1/namespaces/default/../<resource>`) either
+        // reaches the cluster-scope `/api/v1/<resource>` on
+        // URL-normalize or surfaces a per-request `ApiResource`
+        // builder error with no diagnostic naming the escape. The
+        // DNS-1123 label gate refuses `/` and `.` outright, so the
+        // parent-escape attempt surfaces with the offending value
+        // named verbatim — peer with the [`validate_cluster_arg`]
+        // path-traversal arm on the sibling per-verb axis.
+        for bad in ["default/..", "../default", "default/sub", "."] {
+            let err = match validate_namespace_arg(bad) {
+                Err(e) => e,
+                Ok(()) => panic!("path-traversal {bad:?} must reject"),
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("--namespace"),
+                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_namespace_arg_rejects_uppercase_with_named_value_and_canonical_lowercase_hint() {
+        // The wrong-case footgun: `--namespace "MyTeam"` lands as
+        // the K8s `metadata.namespace` axis on every namespaced CR
+        // (EphemeralPool / EphemeralAllocation / Process) the kube-rs
+        // round-trip targets, which the apiserver rejects at
+        // admission time with a "Namespace MyTeam is invalid" /
+        // "metadata.namespace: Invalid value" diagnostic far from
+        // the source flag. The lifted `is_dns_1123_label` predicate
+        // carries a canonical-lowercase hint in its reason wording
+        // ("use {lower:?}") so the diagnostic names the canonical
+        // fix verbatim — peer with the
+        // [`validate_cluster_arg`] uppercase arm.
+        let err = validate_namespace_arg("MyTeam").expect_err("uppercase --namespace must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("--namespace"),
+            "diagnostic must name the offending flag (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("MyTeam"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("myteam"),
+            "diagnostic must surface the canonical lowercase remediation (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_namespace_arg_rejects_underscore_with_named_value_and_hyphen_hint() {
+        // The wrong-separator footgun: `--namespace "team_a"` is a
+        // common author error (the K8s `metadata.namespace` axis
+        // allows hyphen-separated tokens, not snake_case). The lifted
+        // `is_dns_1123_label` predicate's reason wording names `-` as
+        // the canonical separator ("use `-` instead") so the
+        // diagnostic surfaces the fix verbatim — peer with the
+        // [`validate_cluster_arg`] underscore arm.
+        let err = validate_namespace_arg("team_a").expect_err("underscore --namespace must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("--namespace"),
+            "diagnostic must name the offending flag (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("team_a"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains('`'),
+            "diagnostic must surface the hyphen-separator remediation (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_namespace_arg_rejects_leading_hyphen_with_named_value() {
+        // The boundary-char footgun: `--namespace "-default"`
+        // violates the DNS-1123 label rule that names must start and
+        // end with an alphanumeric (the K8s apiserver rejects
+        // leading / trailing `-` outright at admission time). The
+        // lifted predicate's reason wording names the boundary rule
+        // verbatim — peer with the [`validate_cluster_arg`]
+        // boundary-hyphen arm.
+        for bad in ["-default", "default-"] {
+            let err = match validate_namespace_arg(bad) {
+                Err(e) => e,
+                Ok(()) => panic!("boundary-`-` {bad:?} must reject"),
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("--namespace"),
+                "diagnostic must name the offending flag for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_namespace_arg_accepts_canonical_default_fallback_literal() {
+        // Pins that the canonical fallback literal every
+        // `--namespace`-taking verb's clap `default_value =
+        // "default"` attribute carries (six lowercase letters)
+        // passes the gate cleanly. A future refactor of either the
+        // clap default or the gate that drifts the two out of
+        // alignment — say, lowercasing the gate's reject set or
+        // renaming the canonical fallback — surfaces as a test
+        // regression here, ahead of every per-verb's first
+        // namespace-less invocation. Peer with the [`load_caixa`]
+        // parse-context pin on the sibling per-verb IO axis.
+        validate_namespace_arg("default").expect("canonical default literal must accept");
     }
 
     #[test]
