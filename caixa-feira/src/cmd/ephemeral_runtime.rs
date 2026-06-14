@@ -9,9 +9,9 @@
 
 use std::time::Duration;
 
-use anyhow::{anyhow, Context, Result};
-use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams, PostParams};
+use anyhow::{Context, Result, anyhow};
 use kube::Client;
+use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams, PostParams};
 use tatara_process::phase::ProcessPhase;
 use tatara_process::prelude::Process;
 

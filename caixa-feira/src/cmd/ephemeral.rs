@@ -29,7 +29,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Args, Subcommand};
 
 use tatara_process::ephemeral::compile_ephemeral_source;
@@ -241,12 +241,7 @@ impl StatusArgs {
             let client = runtime::client().await?;
             let process = runtime::get_process(client, &self.namespace, &self.name)
                 .await?
-                .ok_or_else(|| {
-                    anyhow!(
-                        "Process {}/{} not found",
-                        self.namespace, self.name
-                    )
-                })?;
+                .ok_or_else(|| anyhow!("Process {}/{} not found", self.namespace, self.name))?;
             print_status_summary(&process);
             Ok::<_, anyhow::Error>(())
         })
@@ -268,8 +263,7 @@ impl ListArgs {
         super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = runtime::client().await?;
-            let processes =
-                runtime::list_processes(client, &self.namespace, !self.all).await?;
+            let processes = runtime::list_processes(client, &self.namespace, !self.all).await?;
             if processes.is_empty() {
                 eprintln!(
                     "no {}Processes in {}",
@@ -278,7 +272,10 @@ impl ListArgs {
                 );
                 return Ok::<_, anyhow::Error>(());
             }
-            println!("{:<40} {:<14} {:<10} {}", "NAME", "PHASE", "LIFETIME", "AGE");
+            println!(
+                "{:<40} {:<14} {:<10} {}",
+                "NAME", "PHASE", "LIFETIME", "AGE"
+            );
             for p in processes {
                 let name = p.metadata.name.as_deref().unwrap_or("?");
                 let phase = p
@@ -345,10 +342,7 @@ fn print_status_summary(p: &Process) {
     println!("  phase: {phase}");
     println!("  pid:   {pid}");
     if let Some(att) = status.and_then(|s| s.attestation.as_ref()) {
-        println!(
-            "  attestation generation: {}",
-            att.generation
-        );
+        println!("  attestation generation: {}", att.generation);
         println!("  composed_root: {}", att.composed_root);
     }
     if let Some(s) = status {
@@ -366,8 +360,7 @@ fn print_status_summary(p: &Process) {
 /// Pure pipeline: file → (defephemeral …) → EphemeralSpec → ProcessSpec → Process CR.
 /// No cluster access. The caller decides whether to apply.
 fn lower_file(path: &Path, namespace: &str) -> Result<Vec<Process>> {
-    let src = fs::read_to_string(path)
-        .with_context(|| format!("read {}", path.display()))?;
+    let src = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     let defs = compile_ephemeral_source(&src)
         .map_err(|e| anyhow!("compile (defephemeral …) form: {e}"))?;
     if defs.is_empty() {
@@ -416,7 +409,10 @@ mod tests {
         std::fs::write(&path, SAMPLE).unwrap();
         let processes = lower_file(&path, "akeyless-test").unwrap();
         assert_eq!(processes.len(), 1);
-        assert_eq!(processes[0].metadata.name.as_deref(), Some("akeyless-closed-loop-attest"));
+        assert_eq!(
+            processes[0].metadata.name.as_deref(),
+            Some("akeyless-closed-loop-attest")
+        );
         assert_eq!(
             processes[0].metadata.namespace.as_deref(),
             Some("akeyless-test")

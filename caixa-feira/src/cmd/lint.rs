@@ -66,8 +66,8 @@ impl Lint {
                 };
                 let mut applied_in_path = 0usize;
                 loop {
-                    let diags = lint_source(&src)
-                        .with_context(|| format!("linting {}", path.display()))?;
+                    let diags =
+                        lint_source(&src).with_context(|| format!("linting {}", path.display()))?;
                     let result = apply_fixes(&src, &diags, safety);
                     if result.applied == 0 {
                         break;

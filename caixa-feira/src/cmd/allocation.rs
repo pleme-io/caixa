@@ -1,6 +1,6 @@
 //! `feira allocation …` — operator UX for `EphemeralAllocation` CRs.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Args, Subcommand};
 use kube::api::{Api, DeleteParams, ListParams, PostParams};
 use kube::{Client, Resource};
@@ -260,4 +260,3 @@ where
         .context("build tokio runtime")?;
     runtime.block_on(fut)
 }
-

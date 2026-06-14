@@ -102,10 +102,18 @@ pub struct RenderEphemeralLifetime {
 
 impl From<RenderEphemeralLifetime> for EphemeralLifetime {
     fn from(v: RenderEphemeralLifetime) -> Self {
+        // `..Default::default()` fills `exports` (added upstream in
+        // tatara-process @ c99fdb36, the typed export-trigger axis on
+        // ephemeral lifetimes) with its documented `Vec::new()` default
+        // — the existing typed surface here has no `:exports` slot, so
+        // the canonical "no exports declared" shape carries forward
+        // unchanged. Same posture every peer "future-typed-axis default-
+        // forward" lift uses on the tatara-process bridge.
         Self {
             ttl: v.ttl,
             teardown_policy: v.teardown_policy,
             max_concurrent: v.max_concurrent,
+            ..Default::default()
         }
     }
 }
@@ -161,6 +169,15 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
             ephemeral: Some(inputs.lifetime.clone().into()),
             ..Lifetime::default()
         },
+        // Added upstream in tatara-process @ c99fdb36 alongside the
+        // ephemeral-lifetime `:exports` axis (handled in the
+        // `RenderEphemeralLifetime → EphemeralLifetime` bridge). Both
+        // are `Option<...>` and the existing typed `caixa-tatara`
+        // surface declares no `:routing` / `:encapsulates` slot — the
+        // canonical "no routing/encapsulation declared" shape carries
+        // forward as `None`, the apiserver-side documented default.
+        routing: None,
+        encapsulates: None,
         suspended: false,
     };
 
@@ -245,10 +262,7 @@ mod tests {
 
         // Name + namespace landed.
         assert_eq!(process.metadata.name.as_deref(), Some("akeyless-attest"));
-        assert_eq!(
-            process.metadata.namespace.as_deref(),
-            Some("akeyless-test")
-        );
+        assert_eq!(process.metadata.namespace.as_deref(), Some("akeyless-test"));
 
         // Intent::Aplicacao resolves with correct chart_ref shape.
         match process.spec.intent.variant().expect("intent") {
@@ -259,17 +273,11 @@ mod tests {
                 );
                 assert_eq!(a.version, "0.1.0");
                 assert_eq!(a.profile, "gateway-with-internal-saas");
-                assert_eq!(
-                    a.release_name.as_deref(),
-                    Some("lareira-akeyless-attest")
-                );
+                assert_eq!(a.release_name.as_deref(), Some("lareira-akeyless-attest"));
                 assert_eq!(a.target_namespace.as_deref(), Some("akeyless-test"));
                 assert_eq!(a.install_timeout.as_deref(), Some("25m"));
                 // Values overlay preserved.
-                assert_eq!(
-                    a.values_overlay["cluster"]["name"],
-                    "ephemeral-test-01"
-                );
+                assert_eq!(a.values_overlay["cluster"]["name"], "ephemeral-test-01");
             }
             other => panic!("expected Aplicacao, got {other:?}"),
         }

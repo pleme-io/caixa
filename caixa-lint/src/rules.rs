@@ -193,17 +193,9 @@ fn check_nome_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
 /// `paired-kwargs` on legitimate Lisp idioms.
 const POSITIONAL_KW_HEADS: &[&str] = &[
     // Type / pattern-matching forms — keywords are tag values, not pairs.
-    "enum",
-    "list-of",
-    "set-of",
-    "case",
-    "cond",
-    "match",
-    "is?",
+    "enum", "list-of", "set-of", "case", "cond", "match", "is?",
     // Type-system tags that take keyword type names directly.
-    "the",
-    "type-of",
-    "declare",
+    "the", "type-of", "declare",
 ];
 
 fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {

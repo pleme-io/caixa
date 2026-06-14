@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::{Args, Subcommand};
-use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams};
 use kube::Client;
+use kube::api::{Api, DeleteParams, ListParams, Patch, PatchParams};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -95,13 +95,9 @@ impl PoolScaleArgs {
             let client = client().await?;
             let api: Api<EphemeralPool> = Api::namespaced(client, &self.namespace);
             let patch = json!({ "spec": { "desiredSize": self.desired_size } });
-            api.patch(
-                &self.name,
-                &PatchParams::default(),
-                &Patch::Merge(&patch),
-            )
-            .await
-            .with_context(|| format!("scale Pool {}/{}", self.namespace, self.name))?;
+            api.patch(&self.name, &PatchParams::default(), &Patch::Merge(&patch))
+                .await
+                .with_context(|| format!("scale Pool {}/{}", self.namespace, self.name))?;
             eprintln!(
                 "scaled Pool {}/{} → desiredSize={}",
                 self.namespace, self.name, self.desired_size
@@ -255,4 +251,3 @@ where
         .context("build tokio runtime")?;
     runtime.block_on(fut)
 }
-

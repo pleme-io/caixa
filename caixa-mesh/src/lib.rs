@@ -983,11 +983,13 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert!(
-                p.get(serde_yaml::Value::String("affinity".into())).is_none(),
+                p.get(serde_yaml::Value::String("affinity".into()))
+                    .is_none(),
                 "placement.affinity must be absent when :affinity is None"
             );
             assert!(
-                p.get(serde_yaml::Value::String("shardKey".into())).is_none(),
+                p.get(serde_yaml::Value::String("shardKey".into()))
+                    .is_none(),
                 "placement.shardKey must be absent when :shard-key is None"
             );
             // Exactly 2 keys remain — estrategia + clusters.
