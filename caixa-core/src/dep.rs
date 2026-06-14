@@ -924,6 +924,81 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-background / logical-AND arm. The
+        // 05c358e shell-command-separator arm closes the `;` byte; `&`
+        // (`0x26`) is the orthogonal shell-background / list-AND sentinel
+        // — same paste-from-shell-prompt footgun class, different
+        // syntactic surface. POSIX `std::path::Path` treats `&` as a
+        // literal path-component byte (so `../caixa-teia & sleep 1` is
+        // one directory named literally `../caixa-teia & sleep 1`,
+        // sibling of `.` and `..`), but every interactive shell
+        // (bash / zsh / fish / nushell) lexes `&` two ways:
+        //
+        //   - Single `&` as the background-task terminator that detaches
+        //     the prior command into the background and returns control
+        //     to the prompt immediately (the canonical `cmd &` idiom
+        //     every long-running pipeline uses);
+        //   - Double `&&` as the logical-AND list operator that fires
+        //     the next command only if the prior command succeeded (the
+        //     canonical `make && make install` idiom every build script
+        //     carries).
+        //
+        // A `:caminho "../caixa-teia & sleep 1"` (the canonical "I
+        // pasted a `cd path & sleep 1` background-launch into the
+        // `:caminho` slot" footgun) or `:caminho "../caixa-teia && make"`
+        // (the symmetric "I copied a `cd path && make` build chain"
+        // idiom) silently passes every prior arm because
+        // `Path::is_absolute` returns false on `..`, `&` is neither a
+        // leading-byte sentinel nor a control byte nor `\` nor
+        // `<` / `>` nor `|` nor `;`, and the value's last byte isn't `/`.
+        // The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./../caixa-teia & sleep 1` subdirectory and fails at resolve
+        // time with a non-self-locating `No such file or directory`
+        // error far from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so an `&` byte lands in
+        // the BLAKE3 closure and rides downstream as part of the build's
+        // identity into every shell-spawned subprocess (the
+        // caixa-resolver's `git clone` invocation, a future `feira tofu`
+        // shell-out, a future operator-side `nix flake check` spawn) as
+        // the canonical shell-metachar injection surface every peer
+        // single-token-shaped typed slot already closes. The peer
+        // path-shaped axis [`crate::render::is_gateway_api_http_path`]
+        // (caixa-core/src/render.rs:506) rejects `&` as part of its
+        // eleven-byte RFC-3986-reserved set on `:entrada :paths`. The
+        // `:caminho` axis was the last typed path-string surface still
+        // admitting this byte; this arm closes the gap so the
+        // substrate-wide "no shell-composition metacharacter anywhere
+        // in a typed string slot that flows verbatim into a
+        // shell-spawned subprocess" invariant extends from
+        // shell-command-separator (`;`) to shell-background /
+        // logical-AND (`&`) on the `:caminho` axis.
+        //
+        // The arm fires AFTER the shell-command-separator arm because
+        // the prior arm's `cmd-a; cmd-b` shape is the more common
+        // shell-history paste idiom on values that probe as both
+        // (`"../caixa-teia; rm & sleep"` carries both `;` and `&` — the
+        // command-separator-tail paste is the load-bearing root-cause
+        // edit, so `FonteCaminhoShellSemicolon` wins; same cascade
+        // discipline every prior `:caminho` arm establishes). The arm
+        // fires BEFORE the trailing-`/` arm because the embedded
+        // background / list-AND byte is the more semantic-locating axis
+        // on probe-as-both values (`"../foo&bar/"` ends in `/` but the
+        // load-bearing diagnostic is the embedded `&` shell-background
+        // / logical-AND metachar — the trailing `/` is the secondary
+        // observation, and an author who removes the `&` is likely to
+        // also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'&' {
+                return Err(DepError::FonteCaminhoShellBackground {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -1602,6 +1677,30 @@ pub enum DepError {
          workspace directory name carries no shell-command-separator semantic."
     )]
     FonteCaminhoShellSemicolon { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         background / list-AND metacharacter `&` (every interactive shell — bash / zsh \
+         / fish / nushell — lexes `&` two ways: single `&` as the background-task \
+         terminator detaching the prior command and returning control immediately to \
+         the prompt, double `&&` as the logical-AND list operator firing the next \
+         command only if the prior succeeded; POSIX `std::path::Path` treats it as a \
+         literal byte. The canonical paste-from-shell-prompt footgun is a `cd path & \
+         sleep 1` background-launch one-liner or a `cd path && make install` build-\
+         chain idiom selected whole into the `:caminho` slot — the prior `;` arm at \
+         05c358e closed the sequential-command-separator vector, this arm closes the \
+         orthogonal background-task / logical-AND vector on the same paste-from-shell-\
+         prompt class. The lacre pipeline embeds the value verbatim in its per-dep \
+         content-address `path:{caminho}` at caixa-resolver/src/resolve.rs:189, so the \
+         byte lands in the BLAKE3 closure and rides into every shell-spawned \
+         subprocess (the resolver's `git clone`, a future `feira tofu` shell-out, a \
+         future operator-side `nix` spawn) as the canonical shell-metachar injection \
+         surface every peer single-token-shaped typed slot already closes. The peer \
+         `:entrada :paths` axis rejects `&` via `is_gateway_api_http_path`'s eleven-\
+         byte RFC-3986-reserved set. Express the path as a bare relative single-token \
+         like \"../caixa-teia\" — the sibling-workspace directory name carries no \
+         shell-background / logical-AND semantic."
+    )]
+    FonteCaminhoShellBackground { nome: String, caminho: String },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} has a trailing \
          `/` (the resolver's `Path::join` resolves `\"../caixa-teia\"` and \
@@ -4291,6 +4390,259 @@ mod tests {
         assert!(
             rendered.contains("command-separator"),
             "diagnostic must name the shell-command-separator footgun: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_ampersand() {
+        // The fail-before-pass-after pin for the canonical shell-
+        // background-task paste footgun: an author copies a shell one-
+        // liner (`"../caixa-teia & sleep 1"` — the canonical "I selected
+        // the whole `cd path & sleep 1` background-launch out of a
+        // shell-history block") and silently passed every prior arm
+        // (`Path::is_absolute` false on `..`, no control bytes, no
+        // backslash, no `<` / `>`, no `|`, no `;`, doesn't end in `/`).
+        // The lacre embedded the value verbatim, the resolver folded it
+        // through `Path::join` looking for a literal `./../caixa-teia &
+        // sleep 1` subdirectory, and the failure surfaced at resolve
+        // time with a non-self-locating `No such file or directory`
+        // error. The new arm moves the rejection to validate time and
+        // names the offending dep + caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & sleep 1".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellBackground { nome, caminho } = err else {
+            panic!("expected FonteCaminhoShellBackground, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia & sleep 1");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_ampersand() {
+        // Leading-position `&` shape (`"&../caixa-teia"` — the
+        // degenerate "I forgot the prior command side of the
+        // background terminator" idiom). Pinned separately from the
+        // embedded-byte shape so the gate covers every position, not
+        // only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "&../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_double_ampersand() {
+        // The logical-AND `&&` shape (`"../caixa-teia && make"` — the
+        // canonical "I copied a `cd path && make` build chain" idiom
+        // every Makefile / shell-script wraps). The arm fires on the
+        // first `&` encountered; pinned so a future arm that tries to
+        // distinguish `&` from `&&` doesn't break the broader contract.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia && make".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_ampersand() {
+        // The positive-control pin: the gate targets only `&`, never
+        // adjacent printable ASCII or POSIX-valid bytes. The canonical
+        // relative POSIX path (`"../caixa-teia"`) and a nested deeply-
+        // pathed variant with adjacent printable punctuation
+        // (`"../caixa-teia/sub-dir.v2"`) must continue to validate
+        // cleanly so the gate doesn't widen to a "no printable
+        // punctuation anywhere" sweep that would defeat the entire
+        // path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_background() {
+        // Cascade pin on the immediate-predecessor arm: a value carrying
+        // both `;` and `&` (`"../caixa-teia; rm & sleep"` — the
+        // canonical "I pasted a `cmd; cleanup & sleep` chain" footgun)
+        // routes through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellBackground`. The sequential-command-
+        // separator paste is the more common shell-history paste idiom
+        // on every probe-as-both value (an author who removes the `;`
+        // typically also drops the trailing `& sleep` since both are
+        // paste-from-shell-history artifacts) — same cascade discipline
+        // every prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; rm & sleep".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_background() {
+        // Cascade pin on the upstream shell-pipe arm: a value carrying
+        // both `|` and `&` (`"../caixa-teia | tee & sleep"` — the
+        // canonical "I pasted a `cmd | tee & sleep` background-pipeline
+        // chain" footgun) routes through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellBackground`. The pipeline-tail paste is the
+        // load-bearing root-cause edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | tee & sleep".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_background() {
+        // Cascade pin on the upstream shell-redirection arm: a value
+        // carrying both `>` and `&` (`"../caixa-teia>log & sleep"` —
+        // the canonical "I pasted a `cmd > log & sleep` background-
+        // redirect chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellBackground`. The input/output redirection
+        // metachar carries the more self-locating `byte: u8` payload
+        // (it names which of `<` or `>` triggered), so the prior arm
+        // wins on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log & sleep".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_background() {
+        // Cascade pin on the upstream backslash arm: a value carrying
+        // both `\` and `&` (`"..\caixa-teia & sleep"` — the canonical
+        // "I pasted a Windows-shell `cd ..\path & sleep` background-
+        // launch chain") routes through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellBackground`. The cross-host-OS-separator
+        // divergence is the load-bearing axis on every probe-as-both
+        // value (an author who removes the `\` is the root-cause edit;
+        // the `&` falls away in the same edit since it's downstream of
+        // the Windows-shell convention).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia & sleep".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_background() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `&` (`"../foo\n&sleep"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho) routes through
+        // `FonteCaminhoControlChar` not `FonteCaminhoShellBackground`.
+        // The POSIX-syscall-rejected-byte / NUL-`CString::new`-fail
+        // diagnostic is the load-bearing axis on every value that
+        // probes positive for both — mirrors the cascade discipline on
+        // every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n&sleep".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_background() {
+        // Cascade pin on the load-bearing leading-byte arm: a leading
+        // `/` value with embedded `&` (`"/etc/passwd & sleep"`) routes
+        // through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellBackground` — the host-layout-leak
+        // diagnostic is the load-bearing axis, the `&` byte is the
+        // secondary observation. Same precedence logic as every prior
+        // leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd & sleep".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value carrying
+        // both `&` and a trailing `/` (`"../foo&sleep/"` — the
+        // canonical "I tab-completed a path that already had a `&
+        // sleep` background-launch tail" footgun) routes through
+        // `FonteCaminhoShellBackground` not `FonteCaminhoTrailingSlash`.
+        // The embedded shell-metachar is the more semantic-locating
+        // axis (an author who removes the `&` typically also drops
+        // the trailing separator since both are paste-from-shell
+        // artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo&sleep/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_semicolon_diagnostic_carries_offending_dep_and_caminho`
+        // on the closest single-byte peer arm): the error's Display
+        // surfaces the offending `:nome` and the offending `:caminho`
+        // verbatim, and names the shell-background / logical-AND
+        // footgun explicitly so a `feira lint` run can render the
+        // diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & sleep 1".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia & sleep 1"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains('&'),
+            "diagnostic must reference the ampersand footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("background") || rendered.contains("list-AND"),
+            "diagnostic must name the shell-background / logical-AND footgun: {rendered:?}",
         );
     }
 
