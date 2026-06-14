@@ -431,6 +431,83 @@ impl DepSource {
                         caminho: caminho.clone(),
                     });
                 }
+                // Reproducibility gate's shell-variable-expansion arm.
+                // The b94fd83 `FonteCaminhoAbsolute` closes the leading-`/`
+                // host-layout-leak; the a5c248e `FonteCaminhoTildeExpansion`
+                // closes the leading-`~` shell-home-expansion shape; the
+                // leading-`$` is the sibling shell-variable-expansion shape
+                // — same host-layout-leaking semantic, different syntactic
+                // surface. A `:caminho "$HOME/work/caixa-teia"` (the
+                // canonical paste-from-`echo $HOME`-doc footgun) and the
+                // `${VAR}`-braced variant (`"${WORKSPACE}/caixa-teia"` —
+                // the canonical paste-from-CI-manifest footgun every
+                // GitHub Actions / GitLab CI / Drone manifest carries)
+                // silently passed every prior arm because
+                // `Path::is_absolute` returns false on `$` (the `$` is a
+                // shell convention, not a POSIX path component, so
+                // `std::path::Path` treats it as a literal directory-name
+                // segment) and the tilde arm's `starts_with('~')` doesn't
+                // fire.
+                //
+                // Same per-consumer failure-fork the tilde arm closes:
+                //
+                //   - The caixa-resolver's `Path` arm folds `:caminho`
+                //     through `Path::new(caminho).join(<file>)` without
+                //     `$`-expansion, so the build looks for a literal
+                //     `./$HOME/work/caixa-teia` subdirectory and fails at
+                //     resolve time with a `No such file or directory`
+                //     error far from the source caixa.lisp.
+                //   - A future caixa-resolver pass that *does* expand
+                //     `$VAR` (the shell-convention idiom every resolver
+                //     eventually reaches for once an author reports the
+                //     literal-`$HOME`-directory bug, especially for CI's
+                //     `${WORKSPACE}` idiom) would re-introduce the host-
+                //     layout-leak the b94fd83 absolute gate closes:
+                //     Alice's `$HOME` expands to `/home/alice`, Bob's to
+                //     `/home/bob`, two CI runners with different
+                //     `${WORKSPACE}` layouts resolve to two distinct
+                //     paths for the byte-identical caixa, and the
+                //     substrate's "the lacre is the build's identity"
+                //     contract silently breaks far from the source
+                //     caixa.lisp.
+                //
+                // Closing the gate at `DepSource::validate` (here at the
+                // canonical caixa-build-time boundary, peer with the
+                // absolute + tilde arms above) refuses both failure modes
+                // structurally. Same diagnostic shape every per-axis
+                // value-shape gate on the surrounding [`DepError::Fonte*`]
+                // cluster carries (the offending `:nome` + offending
+                // `:caminho` quoted verbatim).
+                //
+                // The cascade preserves narrower-diagnostic-first ordering:
+                // `FonteCaminhoEmpty` → `FonteCaminhoAbsolute` →
+                // `FonteCaminhoTildeExpansion` → `FonteCaminhoVarExpansion`.
+                // The empty arm structurally precedes all three subsequent
+                // arms; the absolute arm structurally precedes both the
+                // tilde and the var arms (absolute paths start with `/`,
+                // the bytes `/` / `~` / `$` don't overlap at the leading
+                // position); the tilde arm structurally precedes the var
+                // arm (`~` and `$` don't overlap at the leading position).
+                // Every pair is value-disjoint, so the precedence is a
+                // no-op at value level — the pin matters only at the
+                // diagnostic-shape level if a future codec round-trip ever
+                // produces a probe-as-both value.
+                //
+                // The gate covers every leading-`$` shape: the canonical
+                // `"$HOME/work/caixa-teia"` (POSIX shell), the braced
+                // `"${HOME}/work/caixa-teia"` (POSIX shell braces), the
+                // CI-manifest idiom `"${WORKSPACE}/caixa-teia"` (the
+                // GitHub Actions / GitLab CI / Drone paste footgun), the
+                // XDG idiom `"$XDG_CONFIG_HOME/caixa"`, and the bare `$`
+                // (degenerate "I meant `$HOME` and forgot the rest"). All
+                // shapes route through the same `caminho.starts_with('$')`
+                // byte check.
+                if caminho.starts_with('$') {
+                    return Err(DepError::FonteCaminhoVarExpansion {
+                        nome: nome.to_string(),
+                        caminho: caminho.clone(),
+                    });
+                }
                 Ok(())
             }
         }
@@ -885,6 +962,28 @@ pub enum DepError {
          dep is genuinely intended)"
     )]
     FonteCaminhoTildeExpansion { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} starts \
+         with `$` (the leading-`$` is a shell-variable-expansion convention, \
+         not a POSIX path component — `Path::is_absolute` returns false on it \
+         and the a5c248e tilde gate doesn't catch it, but the lacre pipeline \
+         embeds the value verbatim in its per-dep content-address \
+         `path:{caminho}` at caixa-resolver/src/resolve.rs:189 and the \
+         caixa-resolver folds it through `Path::join` without `$`-expansion, \
+         so the build looks for a literal `./{caminho}` subdirectory and \
+         fails at resolve time far from the source caixa.lisp; even worse, a \
+         future caixa-resolver pass that *does* expand `$VAR` (the canonical \
+         shell-convention idiom that CI's `${{WORKSPACE}}` paste-idiom \
+         invites) would silently re-open the host-layout-leak the b94fd83 \
+         absolute gate closes — Alice's `$HOME` resolves to `/home/alice`, \
+         Bob's to `/home/bob`, two CI runners with different `${{WORKSPACE}}` \
+         layouts resolve to two distinct paths for the byte-identical caixa, \
+         defeating the THEORY.md §V.2 render-determinism contract; express \
+         the path relative to the caixa.lisp location, e.g. \"../caixa-teia\" \
+         for a sibling workspace dep, or spell out the full relative path \
+         explicitly if a workstation-rooted dep is genuinely intended)"
+    )]
+    FonteCaminhoVarExpansion { nome: String, caminho: String },
     #[error(
         "{list} carries duplicate entry :nome {nome:?} — every dep list keys its \
          entries by caixa name (Cargo's [dependencies] / [dev-dependencies] tables \
@@ -2123,6 +2222,121 @@ mod tests {
         assert!(
             rendered.contains('~'),
             "diagnostic must reference the tilde footgun: {rendered}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_dollar_prefix_caminho() {
+        // The fail-before-pass-after pin for the shell-variable-
+        // expansion `:caminho` shape: `(:tipo path :caminho
+        // "$HOME/work/caixa-teia")`. Until this gate landed the
+        // b94fd83 absolute arm + the a5c248e tilde arm both let
+        // `$HOME/foo` through (`Path::is_absolute` returns false on
+        // a leading `$` — the `$` is a shell convention, not a POSIX
+        // path component; `starts_with('~')` returns false too), so
+        // the lacre embedded the value verbatim and the resolver
+        // folded it through `Path::join` without `$`-expansion,
+        // looking for a literal `./$HOME/work/caixa-teia`
+        // subdirectory and failing at resolve time with a
+        // `No such file or directory` error far from the source
+        // caixa.lisp. The new gate moves the check to validate time
+        // and names the offending dep + caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$HOME/work/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoVarExpansion { nome, caminho } = err else {
+            panic!("expected FonteCaminhoVarExpansion, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "$HOME/work/caixa-teia");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_dollar_brace_prefix_caminho() {
+        // Sweep over every leading-`$` shape: the `${VAR}`-braced
+        // form (canonical "paste-from-CI-manifest" footgun every
+        // GitHub Actions / GitLab CI / Drone manifest carries on
+        // `${WORKSPACE}`), the XDG idiom (`$XDG_CONFIG_HOME/caixa`,
+        // canonical "I'm referencing a per-user config dir"),
+        // and the bare `$` (canonical "I meant `$HOME` and forgot
+        // the rest"). All shapes route through the same gate's
+        // byte check. Pinned so the gate doesn't narrow to a
+        // single shape (e.g. `$HOME/` only).
+        for s in [
+            "${HOME}/work/caixa-teia",
+            "${WORKSPACE}/caixa-teia",
+            "$XDG_CONFIG_HOME/caixa",
+            "$",
+        ] {
+            let d = dep_with_fonte(DepSource::Path { caminho: s.into() });
+            let err = d.validate().unwrap_err();
+            assert!(
+                matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+                "{s:?} → {err:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_mid_path_dollar_caminho() {
+        // The leading-`$` is the canonical shell-variable-expansion
+        // footgun — a `$` mid-path (`"../foo$bar/caixa-teia"` — the
+        // canonical "I have a file with `$` in its name" idiom; `$`
+        // is a valid POSIX filename byte) is a legitimate path with
+        // no shell-expansion semantic at the non-leading position.
+        // Pinned so the gate doesn't widen to a full no-dollar-
+        // anywhere sweep that would break every legitimate-shape
+        // dollar-in-filename path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$bar/caixa-teia".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_tilde_fires_before_var_expansion() {
+        // Cascade pin: the tilde arm structurally precedes the var
+        // arm (the bytes `~` and `$` don't overlap at the leading
+        // position), but the pin establishes the precedence at the
+        // diagnostic-shape level should a future codec round-trip
+        // ever produce a probe-as-both value. Mirrors the peer
+        // `fonte_caminho_empty_fires_before_tilde_expansion` cascade
+        // discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "~/work/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoTildeExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_tilde_diagnostic_carries_offending_dep_and_caminho`'s
+        // payload assertion on the immediate-predecessor arm): the
+        // error's Display surfaces both the offending `:nome` and
+        // the offending `:caminho` verbatim plus the `$` footgun
+        // character itself so a `feira lint` run can render the
+        // diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "${WORKSPACE}/caixa-teia".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("${WORKSPACE}/caixa-teia"),
+            "diagnostic must quote the offending caminho: {rendered}",
+        );
+        assert!(
+            rendered.contains('$'),
+            "diagnostic must reference the dollar footgun: {rendered}",
         );
     }
 
