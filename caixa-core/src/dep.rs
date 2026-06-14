@@ -299,14 +299,17 @@ impl DepSource {
 
     /// Reproducibility + path-API gate on the `:fonte (:tipo path …)`
     /// `:caminho` axis. Walks the leading-byte cascade closed by the
-    /// b94fd83 (`/`), a5c248e (`~`), and f4efe9c (`$`) arms then the
-    /// orthogonal embedded-control-byte arm covering `0x00..=0x1F` plus
-    /// `0x7F` anywhere in the value.
+    /// b94fd83 (`/`), a5c248e (`~`), and f4efe9c (`$`) arms; the
+    /// orthogonal embedded-control-byte arm (d624c8d) covering
+    /// `0x00..=0x1F` plus `0x7F` anywhere in the value; and the
+    /// embedded-`\` Windows-path-separator arm closing the
+    /// cross-host-OS-separator divergence vector on the same
+    /// THEORY.md §V.2 render-determinism axis.
     ///
     /// Extracted from [`Self::validate`]'s `Self::Path` arm because the
-    /// per-arm cascade now spans five diagnostic shapes — every new
-    /// `:caminho` arm (the future Windows-path-separator `\` arm, the
-    /// future leading-whitespace arm, the future trailing-`/` arm)
+    /// per-arm cascade now spans six diagnostic shapes — every new
+    /// `:caminho` arm (the future leading-whitespace arm, the future
+    /// trailing-`/` arm, a future `<` / `>` shell-redirection arm)
     /// lands here rather than re-inflating `Self::validate`. The
     /// function stays a thin per-arm linear walk for one reason: each
     /// arm's diagnostic carries a distinct typed [`DepError`] variant
@@ -602,6 +605,68 @@ impl DepSource {
                     nome: nome.to_string(),
                     caminho: caminho.to_string(),
                     byte: b,
+                });
+            }
+        }
+        // Reproducibility gate's Windows-path-separator arm. The four
+        // leading-byte arms (`/` / `~` / `$`) and the embedded-
+        // control-byte arm close the host-layout-leaking + paste-from-
+        // multiline-doc shapes; the leading-`\` / embedded-`\` byte is
+        // the orthogonal cross-host-OS-separator shape — same render-
+        // determinism axis, different semantic mechanism. POSIX
+        // [`std::path::Path`] treats `\` (0x5C) as a literal byte
+        // inside a single path component (so `..\caixa-teia` is one
+        // directory named literally `..\caixa-teia`, sibling of `.`
+        // and `..`); Windows [`std::path::Path`] treats `\` as a
+        // primary path separator equal to `/` (so `..\caixa-teia` is
+        // the parent's sibling directory `caixa-teia`). The lacre
+        // pipeline embeds the value verbatim in its per-dep content-
+        // address (`conteudo: format!("path:{caminho}")`, caixa-
+        // resolver/src/resolve.rs:189), so byte-identical caixa.lisp
+        // values resolve to two distinct directories across runner
+        // OSes — the same THEORY.md §V.2 render-determinism contract
+        // the absolute / tilde / var arms protect, here against the
+        // cross-host-OS-separator divergence vector. Even on POSIX-
+        // only resolvers (the canonical pleme-io substrate posture),
+        // a `..\caixa-teia` (the Windows-Explorer "copy as path" /
+        // PowerShell `Get-Location` paste-idiom footgun) silently
+        // passes every prior arm because `Path::is_absolute` returns
+        // false on `..` and `\` is neither a leading-byte sentinel
+        // nor a control byte, then the resolver folds the value
+        // through `Path::new(caminho).join(<file>)` looking for a
+        // literal `./..\caixa-teia` subdirectory and fails at
+        // resolve time with a non-self-locating `No such file or
+        // directory` error far from the source caixa.lisp.
+        //
+        // The peer single-token-shaped axes on the same git-CLI /
+        // path-CLI consumer cluster already reject `\` under the same
+        // Windows-path-leak banner: [`crate::render::is_git_ref_name`]
+        // line 1441 (`"must not contain \\ … the canonical Windows-
+        // path-leak footgun; use / for hierarchical refs"`) gates
+        // `:fonte :tag` / `:fonte :branch` against the same byte,
+        // and [`crate::render::is_gateway_api_http_path`] line 506
+        // includes `\` in the eleven-byte RFC-3986-reserved rejection
+        // set on `:entrada :paths`. Closing the same byte on `:fonte
+        // :caminho` makes the substrate-wide "no Windows path
+        // separator anywhere in a typed string slot" invariant
+        // structurally consistent across every path-shaped typed
+        // surface (the `:caminho` axis was the last typed string
+        // surface still admitting `\`).
+        //
+        // The arm fires AFTER the control-char arm because the
+        // control-char diagnostic is the more self-locating axis on
+        // values that probe as both (`"..\caixa\0teia"` carries both
+        // a `\` and a NUL — NUL is the load-bearing POSIX-syscall-
+        // rejected byte, so `FonteCaminhoControlChar` wins). Same
+        // narrower-diagnostic-first cascade discipline every prior
+        // arm establishes. A pure-`\` value
+        // (`"..\caixa-teia"` with no control bytes) falls through
+        // every prior arm and lands here.
+        for &b in caminho.as_bytes() {
+            if b == b'\\' {
+                return Err(DepError::FonteCaminhoBackslash {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
                 });
             }
         }
@@ -1099,6 +1164,27 @@ pub enum DepError {
         caminho: String,
         byte: u8,
     },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains `\\` \
+         (POSIX `std::path::Path` treats `\\` as a literal byte inside a single path \
+         component, so `..\\caixa-teia` is one directory named literally `..\\caixa-teia` — \
+         not the parent's sibling — and the caixa-resolver folds the value through \
+         `Path::join` looking for a literal `./{caminho}` subdirectory that fails at \
+         resolve time with a non-self-locating `No such file or directory` error far \
+         from the source caixa.lisp; Windows `std::path::Path` treats `\\` as a \
+         primary path separator equal to `/`, so byte-identical caixa.lisp values \
+         resolve to two distinct directories across runner OSes — the lacre pipeline \
+         embeds the value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, defeating the THEORY.md §V.2 render-\
+         determinism contract via the cross-host-OS-separator divergence vector. The \
+         canonical Windows-Explorer `Copy as path` / PowerShell `Get-Location` \
+         paste-idiom footgun; peer `:fonte :tag` / `:fonte :branch` axis already \
+         rejects `\\` via `is_git_ref_name` for the same Windows-path-leak reason, \
+         and `:entrada :paths` rejects `\\` via `is_gateway_api_http_path`'s eleven-\
+         byte RFC-3986-reserved set. Express the path with `/` as the separator, e.g. \
+         \"../caixa-teia\" for a sibling workspace dep)"
+    )]
+    FonteCaminhoBackslash { nome: String, caminho: String },
     #[error(
         "{list} carries duplicate entry :nome {nome:?} — every dep list keys its \
          entries by caixa name (Cargo's [dependencies] / [dev-dependencies] tables \
@@ -2636,6 +2722,172 @@ mod tests {
         assert!(
             rendered.contains("0x09"),
             "diagnostic must name the offending byte in hex: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_backslash() {
+        // The fail-before-pass-after pin for the canonical Windows-
+        // path-separator paste footgun: an author who pastes a path
+        // from Windows-Explorer's `Copy as path`, PowerShell's
+        // `Get-Location`, or any CMD/Cygwin/MSYS shell prompt
+        // produces `..\caixa-teia`-shape values that silently passed
+        // every prior arm (`Path::is_absolute("..\\caixa-teia")` is
+        // false; `\` is neither a leading-byte sentinel nor a
+        // control byte). On POSIX resolvers the value rides through
+        // `Path::join` as a literal directory name and fails at
+        // resolve time with `No such file or directory`; on Windows
+        // resolvers the value resolves to the parent's sibling — two
+        // distinct directories for the byte-identical caixa.lisp.
+        // The new arm moves the rejection to validate time and names
+        // the offending dep + caminho verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoBackslash { nome, caminho } = err else {
+            panic!("expected FonteCaminhoBackslash, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "..\\caixa-teia");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_windows_drive_letter() {
+        // The Windows drive-letter paste shape (`C:\work\caixa-teia`
+        // out of Explorer / `cd`-and-`pwd`-on-Windows). On POSIX
+        // hosts `Path::is_absolute("C:\\work\\caixa-teia")` returns
+        // false (POSIX absolute paths start with `/`, drive letters
+        // are not a POSIX concept), so the b94fd83 absolute arm
+        // doesn't fire; the value contains `\` bytes that this arm
+        // now catches with the more self-locating Windows-path-
+        // separator diagnostic. Pinned separately from the bare
+        // `..\caixa-teia` shape so a future arm that targets only
+        // leading-`..\` doesn't regress the drive-letter coverage.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "C:\\work\\caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_trailing_backslash() {
+        // The trailing-`\` shape (`..\caixa-teia\` — the canonical
+        // PowerShell tab-completion-on-a-directory append). Pinned
+        // separately from the embedded-`\` shape so the gate's
+        // contract is "any `\` anywhere", not "any `\` not at end".
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia\\".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_legitimate_forward_slash() {
+        // The positive-control pin: the gate targets `\` only,
+        // never `/`. The canonical relative POSIX path
+        // (`../caixa-teia/foo/bar`) must continue to validate cleanly
+        // so legitimate nested-directory deps aren't broken. Pinned
+        // so the gate doesn't accidentally widen to a "no path
+        // separators at all" sweep.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/foo/bar".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_backslash() {
+        // Cascade pin: the control-char arm structurally precedes the
+        // backslash arm. A value like `"..\caixa\0teia"` probes
+        // positive on both (`\` byte + NUL byte), but the control-
+        // char diagnostic wins so the author sees the more self-
+        // locating POSIX-syscall-rejected-byte diagnostic first
+        // (NUL outright breaks `CString::new` at every `std::fs`
+        // syscall boundary; the `\` divergence is the cross-OS-
+        // separator axis). Mirrors the
+        // `fonte_caminho_var_fires_before_control_char` cascade
+        // discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa\0teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_backslash() {
+        // Cascade pin on the load-bearing leading-byte arm: a leading
+        // `/` value with embedded `\` (`/etc/passwd\foo`) routes
+        // through `FonteCaminhoAbsolute` not `FonteCaminhoBackslash`
+        // — the host-layout-leak diagnostic is the load-bearing
+        // axis, the `\` byte is the secondary observation. Same
+        // precedence logic as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd\\foo".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_fires_before_backslash() {
+        // Cascade pin on the var-expansion arm: a leading-`$` value
+        // with embedded `\` (`$WORKSPACE\caixa-teia` — the canonical
+        // PowerShell-env-var paste-from-CI-manifest footgun) routes
+        // through `FonteCaminhoVarExpansion` not `FonteCaminhoBackslash`.
+        // The shell-expansion diagnostic is the more self-locating
+        // axis since both the leading `$` and the embedded `\`
+        // are Windows-shell artifacts but the `$` is the root-cause
+        // surface (an author who removes the `$` is likely to leave
+        // the `\` too).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$WORKSPACE\\caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with the prior
+        // `fonte_caminho_*_diagnostic_carries_*` payload assertions
+        // on every preceding arm): the error's Display surfaces the
+        // offending `:nome` and the offending `:caminho` verbatim
+        // so a `feira lint` run can render the diagnostic without
+        // re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("..\\caixa-teia"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains('\\'),
+            "diagnostic must reference the backslash footgun: {rendered:?}",
         );
     }
 
