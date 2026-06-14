@@ -162,7 +162,19 @@ pub struct ChartDependency {
 /// via `RenderOpts::library_repo` to point at the published OCI registry.
 pub const DEFAULT_LIBRARY_REPO: &str = "file://../pleme-computeunit";
 pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
-pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
+/// Canonical Helm library-chart name every `lareira-<nome>` chart depends
+/// on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`] so
+/// the load-bearing string lives in exactly one place across every
+/// caixa renderer (caixa-helm's `RenderOpts::library_name` default
+/// here + caixa-flux's `cluster_bundle` `helmrelease.yaml` wrap key).
+/// A future per-edition library-chart fork — every entry on the
+/// absorption-roadmap that names a per-cluster / per-namespace /
+/// per-tenant variant of the canonical library chart — reaches both
+/// consumers through one `&'static str` by construction. Same shape
+/// as the [`caixa_core::DEFAULT_NAMESPACE`] (a085b26) /
+/// [`caixa_core::DEFAULT_SERVICO_PORT`] (1e22add) lifts on the peer
+/// canonical-K8s-axis-constant surface.
+pub use caixa_core::DEFAULT_LIBRARY_NAME;
 
 /// Knobs that don't come from the Caixa manifest.
 #[derive(Debug, Clone)]
@@ -880,5 +892,52 @@ spec:
         assert!(chart_root.join("Chart.yaml").exists());
         assert!(chart_root.join("values.yaml").exists());
         assert!(chart_root.join("README.md").exists());
+    }
+
+    #[test]
+    fn default_library_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub const DEFAULT_LIBRARY_NAME` was lifted to a
+        // re-export of [`caixa_core::DEFAULT_LIBRARY_NAME`] so the Helm
+        // library-chart name lives in exactly one place across every
+        // caixa renderer (caixa-helm's `RenderOpts::library_name`
+        // default here + caixa-flux's `cluster_bundle` `helmrelease.yaml`
+        // wrap key on the sibling deploy-path crate). Pin the equality
+        // here so any local re-introduction of a sibling `pub const
+        // DEFAULT_LIBRARY_NAME: &str = "…"` (the canonical drift footgun
+        // the prior `DEFAULT_NAMESPACE` / `DEFAULT_SERVICO_PORT` lift
+        // commits' bodies acknowledged as the recurring shape) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time wrap-key mismatch routing the per-cluster
+        // `enabled: true` override nowhere on `helm template` /
+        // `helm install`. Peer to
+        // `caixa_flux::tests::default_library_name_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(DEFAULT_LIBRARY_NAME, caixa_core::DEFAULT_LIBRARY_NAME);
+        assert!(
+            std::ptr::eq(
+                DEFAULT_LIBRARY_NAME.as_ptr(),
+                caixa_core::DEFAULT_LIBRARY_NAME.as_ptr(),
+            ),
+            "DEFAULT_LIBRARY_NAME must be a re-export of caixa_core::DEFAULT_LIBRARY_NAME, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn render_opts_default_library_name_follows_lifted_constant() {
+        // [`RenderOpts::default()`] sets `library_name` from
+        // [`DEFAULT_LIBRARY_NAME`]; pin that the lift preserves the
+        // default-knob value bit-for-bit. A future refactor that
+        // detaches `RenderOpts::default()` from the lifted constant —
+        // accidentally re-introducing an inline `"pleme-computeunit"`
+        // literal in the impl — would silently break the shared-shape
+        // contract with caixa-flux (which uses the same constant
+        // directly for its `helmrelease.yaml` wrap key); this test
+        // surfaces the regression at build time rather than at
+        // apply time as a silent values-routing no-op.
+        let opts = RenderOpts::default();
+        assert_eq!(opts.library_name, caixa_core::DEFAULT_LIBRARY_NAME);
+        assert_eq!(opts.library_name, "pleme-computeunit");
     }
 }

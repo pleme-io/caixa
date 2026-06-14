@@ -3270,6 +3270,93 @@ pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 /// [cm]: ../../caixa_mesh/index.html
 pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 
+/// Canonical Helm library-chart name every `lareira-<nome>` chart depends
+/// on — the `pleme-computeunit` library chart in
+/// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
+/// resource templates (ComputeUnit + Service + ScaledObject + ConfigMap)
+/// every per-Servico chart consumes via Helm's per-dep alias convention
+/// (when no `alias:` is set on a dependency, values are scoped under the
+/// dependency's `name:`).
+///
+/// The single source of truth all three downstream library-name consumers
+/// reach for:
+///
+///   - [`caixa-helm`][ch]'s `DEFAULT_LIBRARY_NAME` re-export — the
+///     default value of `RenderOpts::library_name`, which drives both
+///     the Chart.yaml `dependencies[0].name` axis
+///     (`build_chart_yaml`) and the values.yaml wrap key
+///     (`build_values_yaml`) so the rendered `lareira-<nome>` chart's
+///     dep declaration and its values block agree by construction
+///     (the 17ebd1a `opts.library_name` lift).
+///   - [`caixa-flux`][cf]'s `DEFAULT_LIBRARY_NAME` re-export — the
+///     wrap key the `cluster_bundle` `helmrelease.yaml` template uses
+///     under `spec.values.<library>:` to thread the per-cluster
+///     overrides (`enabled: true`) through to the rendered chart's
+///     dep block. Helm's per-dep alias convention scopes those values
+///     under the dependency's `name:`, so this wrap key must match the
+///     chart's `dependencies[0].name` exactly — drift here silently
+///     routes the values block nowhere at `helm template` /
+///     `helm install` time, and the cluster comes up with the library
+///     chart's defaults rather than the typed per-cluster overrides.
+///   - Every future per-Servico renderer the absorption-roadmap
+///     acknowledges (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+///     materializer's per-edge library-chart resolver, the future
+///     per-cluster image-registry mirror's `<registry>-computeunit`
+///     fork, the future per-edition library-chart variant the
+///     substrate forks once `pleme-computeunit` outlives its scoping
+///     intent).
+///
+/// Until this lift landed the canonical library-chart name lived as
+/// two production-code call sites: a `pub const DEFAULT_LIBRARY_NAME:
+/// &str = "pleme-computeunit"` in `caixa-helm` (the
+/// `RenderOpts::library_name` default, consumed by both the chart's dep
+/// name axis and the values.yaml wrap key axis) and an inline literal
+/// `pleme-computeunit:` in `caixa-flux`'s `cluster_bundle`
+/// `helmrelease.yaml` format-string template (the wrap key the per-
+/// cluster `enabled: true` override is scoped under). Both consumers
+/// reach for the same load-bearing Helm library-chart name, but no
+/// shared constant linked them — the canonical
+/// "duplicated `pub const` / inline literal across two renderers"
+/// drift footgun the [`DEFAULT_NAMESPACE`] (a085b26) and
+/// [`DEFAULT_SERVICO_PORT`] (1e22add) lifts close on the peer
+/// canonical-K8s-axis-constant surface.
+///
+/// A future library-chart rebrand — the substrate forking
+/// `pleme-computeunit` to `<registry>-computeunit` for a per-cluster
+/// image-registry mirror, or to `aplicacao-computeunit` for the M4
+/// typed-Aplicacao renderer's sibling library chart, or to any
+/// per-edition variant the absorption-roadmap names — without a
+/// coordinated edit on both consumers would have silently emitted a
+/// per-Servico chart whose dep declared the new library name (because
+/// the chart-side override flowed through `opts.library_name`) but
+/// whose flux-side `HelmRelease.values.pleme-computeunit:` wrap key
+/// still scoped under the old literal. Helm's per-dep values router
+/// would route the per-cluster `enabled: true` override to *nowhere*
+/// at `helm template` / `helm install` time, and the cluster's apply
+/// would come up with the library chart's defaults — `enabled: false`,
+/// the typed values block from the chart's own `values.yaml` rather
+/// than the flux-side override — silently no-op'ing every per-cluster
+/// override the operator set, far from the rebrand commit's source.
+/// The apply-time symptom (the workload comes up with the library
+/// chart's defaults instead of the per-cluster overrides) is invisible
+/// at admission and surfaces only as "the service is up but not doing
+/// what we configured it to do", typically far from the rebrand commit.
+///
+/// Lifting it to caixa-core's render-constants block alongside the
+/// peer [`DEFAULT_NAMESPACE`] / [`DEFAULT_SERVICO_PORT`] makes the
+/// library-name axis discipline structural: every renderer that
+/// reaches for the canonical library-chart name consults the same
+/// `&'static str`, and every future renderer inherits the same value
+/// by construction with no opportunity for per-renderer drift. Same
+/// "the typed constant lives in one place" discipline the
+/// [`PLEME_LABEL_PREFIX`] (a8d4d57) / [`KUBE_KEY_API_VERSION`] /
+/// [`LAREIRA_CHART_NAME_PREFIX`] lifts apply on the peer
+/// shared-string axes.
+///
+/// [ch]: ../../caixa_helm/index.html
+/// [cf]: ../../caixa_flux/index.html
+pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
+
 /// Canonical Helm chart-name prefix for every per-Servico chart the
 /// substrate emits — the `"lareira-"` segment of the well-known
 /// `lareira-<nome>` shape every caixa Servico renderer prepends to a
