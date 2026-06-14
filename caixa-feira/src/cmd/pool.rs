@@ -52,6 +52,7 @@ pub struct PoolListArgs {
 
 impl PoolListArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralPool> = Api::namespaced(client, &self.namespace);
@@ -89,6 +90,7 @@ pub struct PoolScaleArgs {
 
 impl PoolScaleArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralPool> = Api::namespaced(client, &self.namespace);
@@ -118,6 +120,7 @@ pub struct PoolDeleteArgs {
 
 impl PoolDeleteArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralPool> = Api::namespaced(client, &self.namespace);
@@ -189,6 +192,7 @@ pub struct PoolStatusArgs {
 
 impl PoolStatusArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralPool> = Api::namespaced(client, &self.namespace);

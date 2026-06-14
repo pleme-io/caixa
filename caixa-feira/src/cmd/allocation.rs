@@ -78,6 +78,7 @@ pub struct RequestArgs {
 
 impl RequestArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         let pool_ref = self.pool.clone().map(|name| AllocationRef {
             name,
             namespace: self.namespace.clone(),
@@ -124,6 +125,7 @@ pub struct ReleaseArgs {
 
 impl ReleaseArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralAllocation> = Api::namespaced(client, &self.namespace);
@@ -150,6 +152,7 @@ pub struct ListArgs {
 
 impl ListArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralAllocation> = Api::namespaced(client, &self.namespace);
@@ -199,6 +202,7 @@ pub struct StatusArgs {
 
 impl StatusArgs {
     pub fn run(self) -> Result<()> {
+        super::load::validate_namespace_arg(&self.namespace)?;
         run_async(async move {
             let client = client().await?;
             let api: Api<EphemeralAllocation> = Api::namespaced(client, &self.namespace);
