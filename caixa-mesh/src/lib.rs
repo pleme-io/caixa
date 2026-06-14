@@ -34,8 +34,8 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
-    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT,
+    WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
     pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
@@ -336,12 +336,29 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             // store get L4-only (Cilium can't introspect those protocols).
             let mut to_port = serde_yaml::Mapping::new();
             let mut port_entry = serde_yaml::Mapping::new();
+            // Fallback to the canonical substrate Servico port
+            // ([`DEFAULT_SERVICO_PORT`], lifted in caixa-core) when the
+            // typed `:entrada` block doesn't name the per-`:contratos`
+            // destination Servico — the typed `:contratos` graph
+            // carries no per-destination port axis (the destination
+            // port is the destination Servico's `lareira-<nome>`
+            // chart's `trigger.service.port`, which the Aplicacao-level
+            // renderer has no visibility into without a resolver
+            // round-trip). The fallback is the substrate's canonical
+            // assumption — by construction the same value the
+            // destination's own `pleme-computeunit` chart emits and the
+            // same value the destination's own typed `:entrada :port`
+            // slot defaults to (via `Entrada`'s `default_port` serde
+            // hook, which now also reads from
+            // [`DEFAULT_SERVICO_PORT`]). The literal `8080` previously
+            // duplicated here is now load-bearing only at the lifted
+            // constant's definition site.
             let port = spec
                 .entrada
                 .as_ref()
                 .filter(|e| e.para == c.para)
                 .map(|e| e.port)
-                .unwrap_or(8080);
+                .unwrap_or(DEFAULT_SERVICO_PORT);
             port_entry.insert(
                 serde_yaml::Value::String("port".into()),
                 serde_yaml::Value::String(port.to_string()),
@@ -2209,6 +2226,59 @@ mod tests {
                 .and_then(|a| a.get("mode"))
                 .and_then(|v| v.as_str()),
             Some("required")
+        );
+    }
+
+    #[test]
+    fn cnp_l4_fallback_port_routes_through_lifted_default_servico_port() {
+        // The L4-fallback in [`cilium_network_policies`] (the
+        // `.unwrap_or(DEFAULT_SERVICO_PORT)` branch fired when the
+        // typed `:entrada` block doesn't name the per-`:contratos`
+        // destination Servico) must read from the lifted
+        // [`caixa_core::DEFAULT_SERVICO_PORT`] constant — not from an
+        // open-coded `8080` literal that could drift if the
+        // substrate's canonical Servico port ever moved. The fixture's
+        // `cart → payment` HTTP contrato exercises this arm: the
+        // fixture's `:entrada` block names `:para "cart"`, so the
+        // sibling `cart → catalog` and `cart → payment` contratos
+        // don't match the entrada's `:para` axis (the entrada is the
+        // ingress *to* cart, not *to* payment / catalog), and the
+        // renderer falls back to DEFAULT_SERVICO_PORT on the per-CNP
+        // L4 port. Pin the rendered L4 port at `DEFAULT_SERVICO_PORT`
+        // verbatim so a future rebrand of the constant reaches this
+        // consumer by construction, peer with the
+        // `default_namespace_re_export_points_at_caixa_core_canonical`
+        // pin on the namespace-axis lifted-constant.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let cart_to_payment = policies
+            .iter()
+            .find(|p| {
+                p.get("metadata")
+                    .and_then(|m| m.get("name"))
+                    .and_then(|n| n.as_str())
+                    == Some("checkout-cart-to-payment")
+            })
+            .expect("cart→payment CNP present");
+        let port_value = cart_to_payment
+            .get("spec")
+            .and_then(|s| s.get("ingress"))
+            .and_then(|i| i.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|i| i.get("toPorts"))
+            .and_then(|t| t.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|tp| tp.get("ports"))
+            .and_then(|p| p.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|p| p.get("port"))
+            .and_then(|v| v.as_str())
+            .expect("toPorts[0].ports[0].port present");
+        assert_eq!(
+            port_value,
+            DEFAULT_SERVICO_PORT.to_string(),
+            "the L4 fallback must render the lifted DEFAULT_SERVICO_PORT \
+             constant verbatim — drift here means the constant lift no \
+             longer reaches this consumer"
         );
     }
 
