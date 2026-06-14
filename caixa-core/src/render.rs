@@ -1822,6 +1822,33 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     bar#packageName`) with the bare git `:repo` shape" footgun;
 ///     `:repo` is a git URL, not a Nix flake reference, so the `#`-
 ///     suffix is structurally meaningless on this axis;
+///   - no `?` URL-query-component byte (RFC 3986 §3.4) — every
+///     documented `:repo` shape (`github:org/repo` shorthand,
+///     `https://…` / `ssh://…` / `git://…` / `file://…` URL schemes,
+///     `git@host:path` scp-style SSH) carries none; GitHub /
+///     GitLab / Bitbucket all silently ignore the `?query` tail on
+///     a repo URL (the canonical `https://github.com/foo/bar?
+///     tab=readme-ov-file` browser-tab deep-link, the `?ref=main`
+///     GitHub-tree-URL parameter, the `?utm_source=…` campaign-
+///     tracker shape every social-share / newsletter / Slack
+///     unfurl appends) and serve the same repo regardless, so the
+///     byte rides verbatim into the lacre's per-dep content-
+///     address but is silently masked at the wire — two repos
+///     whose values differ only in their query tail
+///     (`":repo "https://github.com/foo/bar?tab=readme-ov-file"` vs
+///     `":repo "https://github.com/foo/bar?utm_source=twitter"`)
+///     resolve to the byte-identical upstream `git clone` but lock
+///     to two distinct BLAKE3 closures, defeating the THEORY.md
+///     §V.2 render-determinism contract on the same axis the `#`
+///     fragment arm closes. The Smart-HTTP transport (the layer
+///     `git clone <https-url>` uses) appends its own
+///     `?service=git-upload-pack` query internally; an
+///     author-supplied `?` byte additionally collides with that
+///     internal axis at every git porcelain entry-point. The
+///     canonical "I copy-pasted the GitHub tree-URL out of the
+///     browser address bar and forgot to trim the `?tab=…` /
+///     `?ref=…` tail" footgun, peer with the `#` fragment arm on
+///     the same paste-from-browser-address-bar trajectory;
 ///   - must contain a `:` separator at a non-leading position — every
 ///     documented form carries one (`github:org/repo`, `https://…`,
 ///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
@@ -1865,8 +1892,8 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-`-` / whitespace / control-char / non-ASCII /
-/// fragment-`#` / missing-`:` separator / leading-`:`), without
-/// wrapping in any error variant — every caller maps the same
+/// fragment-`#` / query-`?` / missing-`:` separator / leading-`:`),
+/// without wrapping in any error variant — every caller maps the same
 /// `String` into its own typed `*Invalid { axis, reason }` enum variant.
 #[allow(
     clippy::too_many_lines,
@@ -1952,6 +1979,37 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  not a Nix flake reference, so the `#`-suffix is \
                  structurally meaningless on this axis. Drop the \
                  `#fragment` tail; pin the ref via the typed `:tag` / \
+                 `:branch` / `:rev` slot instead)"
+                .to_string());
+        }
+        if b == b'?' {
+            return Err("must not contain `?` (RFC 3986 §3.4 URL query \
+                 component; every documented `:fonte :repo` shape \
+                 (`github:org/repo` shorthand, `https://…` / \
+                 `ssh://…` / `git://…` / `file://…` URL schemes, \
+                 `git@host:path` scp-style SSH) carries none. GitHub / \
+                 GitLab / Bitbucket all silently ignore the `?query` \
+                 tail on a repo URL and serve the same repo \
+                 regardless, so the byte rides verbatim into the \
+                 lacre's per-dep content-address but is silently \
+                 masked at the wire — two authors whose `:repo` \
+                 values differ only in their query tail \
+                 (`?tab=readme-ov-file` vs `?utm_source=twitter`) \
+                 resolve to the byte-identical upstream `git clone` \
+                 but lock to two distinct BLAKE3 closures, defeating \
+                 the THEORY.md §V.2 render-determinism contract on \
+                 the same axis the fragment-`#` arm closes. The \
+                 Smart-HTTP transport (the layer \
+                 `git clone <https-url>` uses) additionally appends \
+                 its own `?service=git-upload-pack` query internally; \
+                 an author-supplied `?` byte collides with that \
+                 internal axis at every git porcelain entry-point. \
+                 The canonical paste-from-browser-address-bar \
+                 footgun (`?tab=readme-ov-file` GitHub-tab deep-link, \
+                 `?ref=main` GitHub-tree-URL parameter, \
+                 `?utm_source=…` campaign-tracker every social-share / \
+                 newsletter / Slack-unfurl appends). Drop the \
+                 `?query` tail; pin the ref via the typed `:tag` / \
                  `:branch` / `:rev` slot instead)"
                 .to_string());
         }

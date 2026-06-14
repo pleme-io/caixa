@@ -2749,6 +2749,118 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_query_string() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // browser-address-bar footgun on `:repo` (peer with the
+        // a68f818 fragment-`#` arm on the same axis). An author
+        // copies a GitHub tab deep-link out of the address bar and
+        // forgets to trim the `?tab=…` query tail. Until this arm
+        // landed `:repo "https://github.com/pleme-io/caixa-teia?tab=readme-ov-file"`
+        // silently passed every prior arm (no whitespace, no control
+        // chars, no non-ASCII, no `#` fragment, contains a `:`,
+        // doesn't start with `-` or `:`); GitHub silently ignored
+        // the `?query` tail and served the same repo regardless;
+        // the lacre embedded the value verbatim in its per-dep
+        // BLAKE3 closure — two authors whose values differ only in
+        // their query tail (`?tab=readme-ov-file` vs `?ref=main` vs
+        // `?utm_source=twitter`) resolve to the byte-identical
+        // upstream `git clone` but lock to two distinct lacres,
+        // defeating the THEORY.md §V.2 render-determinism contract
+        // on the same axis the `#` fragment arm closes. Same value-
+        // shape axis-floor every peer typed surface enforces; peer
+        // `:fonte :tag` / `:fonte :branch` already reject the byte-
+        // class through `is_git_ref_name`'s alphabet (refspec glob
+        // wildcards, caixa-core/src/render.rs:1426) and `:entrada
+        // :paths` rejects `?` as the query separator in
+        // `is_gateway_api_http_path` (caixa-core/src/render.rs:473).
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia?tab=readme-ov-file".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(
+            repo,
+            "https://github.com/pleme-io/caixa-teia?tab=readme-ov-file"
+        );
+        assert!(
+            reason.contains("must not contain `?`"),
+            "reason must surface the query-`?` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("query"),
+            "reason must name the URL query grammar, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_utm_tracker() {
+        // The symmetric paste-from-social-share footgun — an author
+        // copies a repo URL out of a Slack unfurl / Twitter share /
+        // newsletter link / Discord embed and forgets to trim the
+        // `?utm_source=…` / `?utm_medium=…` / `?utm_campaign=…`
+        // campaign-tracker tail. Every major social-share / unfurl /
+        // newsletter platform appends these UTM parameters; the
+        // canonical near-miss on the `:repo` axis. Pinned separately
+        // from the GitHub-tab-deep-link arm so a future relaxation
+        // that narrows to one query-parameter class surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia?utm_source=twitter&utm_campaign=launch"
+                .into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `?`"),
+            "reason must surface the query-`?` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("campaign-tracker"),
+            "reason must name the campaign-tracker paste footgun, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_query_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the query-`?` arm are
+        // both per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte
+        // order wins. A `:repo "https://github.com/p/x#readme?ref=main"`
+        // (fragment before query — unusual URL-grammar but value-
+        // disjoint at byte level) carries both `#` and `?`; the `#`
+        // byte appears first, so the fragment-`#` arm fires, surfacing
+        // the more self-locating diagnostic on the byte the author
+        // pasted earliest in the URL. Mirrors the peer cascade
+        // discipline `fonte_repo_control_char_fires_before_fragment`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme?ref=main".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before query-`?` when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn fonte_repo_control_char_fires_before_fragment() {
         // Cascade pin: the control-char arm structurally precedes the
         // fragment-`#` arm. A value like `"github:p/x\n#readme"` probes
