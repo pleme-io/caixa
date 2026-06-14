@@ -2674,6 +2674,106 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_fragment_anchor() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // browser-address-bar footgun on `:repo`: an author copies a
+        // GitHub permalink to a README anchor / line-permalink and
+        // forgets to trim the `#fragment` tail. Until this arm landed
+        // `:repo "https://github.com/pleme-io/caixa-teia#readme"`
+        // silently passed every prior arm (no whitespace, no control
+        // chars, no non-ASCII, contains a `:`, doesn't start with `-`
+        // or `:`), libcurl's URL parser stripped the `#readme` tail
+        // before opening the HTTPS transport, and the lacre embedded
+        // the value verbatim in its per-dep BLAKE3 closure — two
+        // authors whose values differ only in their fragment anchor
+        // (`#readme` vs `#L42`) resolve to the byte-identical upstream
+        // `git clone` but lock to two distinct lacres, defeating the
+        // THEORY.md §V.2 render-determinism contract. Same value-shape
+        // axis-floor every peer typed surface enforces; peer `:fonte
+        // :tag` / `:fonte :branch` already reject the byte-class through
+        // `is_git_ref_name`'s alphabet (refs are leaf identifiers, no
+        // URL grammar admitted) and `:entrada :paths` rejects `#` as
+        // part of `is_gateway_api_http_path`'s RFC-3986-reserved set.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia#readme");
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("fragment"),
+            "reason must name the URL fragment grammar, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_flake_ref_fragment() {
+        // The symmetric paste-from-Nix-flake-ref footgun — an author
+        // confuses the Nix flake-reference idiom (`github:foo/
+        // bar#packageName`, where `#packageName` selects a flake
+        // output) with the bare git `:repo` shape. The pleme-io
+        // substrate authors compose flakes downstream of caixa
+        // (caixa-flake renders a flake.nix), so the cross-idiom leak
+        // is the canonical near-miss: the author writes the
+        // flake-ref shape into a git `:repo` slot. Pinned separately
+        // from the HTTPS-anchor arm so a future relaxation that
+        // narrows to one URL scheme surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia#caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("Nix flake"),
+            "reason must name the Nix-flake-ref cross-idiom footgun, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_control_char_fires_before_fragment() {
+        // Cascade pin: the control-char arm structurally precedes the
+        // fragment-`#` arm. A value like `"github:p/x\n#readme"` probes
+        // positive on both arms (contains LF and `#`), but the narrower
+        // POSIX-syscall-rejected / CRLF-injection-class diagnostic
+        // (`control character`) wins so the author sees the more
+        // self-locating arm first. Mirrors the peer cascade discipline
+        // every prior `:repo` byte-class arm establishes.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia\n#readme".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("control character"),
+            "reason must surface the control-char arm, got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form

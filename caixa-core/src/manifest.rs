@@ -5458,6 +5458,38 @@ mod tests {
     }
 
     #[test]
+    fn validate_repositorio_rejects_fragment_anchor() {
+        // Paste-from-browser-address-bar footgun on the
+        // `:repositorio` axis — an author copies a GitHub permalink
+        // to a README section / line-permalink and forgets to trim
+        // the `#fragment` tail. The shared `is_git_repo_url`
+        // predicate refuses the byte at the URL-grammar layer
+        // (libcurl strips the fragment before opening the
+        // transport, so the byte rides verbatim into the rendered
+        // `Chart.yaml` `home:` and FluxCD `GitRepository` `url:`
+        // fields but is silently dropped on the wire — two
+        // manifest variants whose values differ only in their
+        // fragment anchor lock to two distinct rendered artifacts
+        // for the byte-identical clone, defeating the THEORY.md
+        // §V.2 render-determinism contract on the `:repositorio`
+        // axis the peer `:fonte :repo` axis already closes).
+        let c = caixa_with_repositorio(Some("https://github.com/pleme-io/hello-rio#readme"));
+        let err = c.validate_repositorio().unwrap_err();
+        let ManifestError::RepositorioInvalid {
+            repositorio,
+            reason,
+        } = err
+        else {
+            panic!("expected RepositorioInvalid, got {err:?}");
+        };
+        assert_eq!(repositorio, "https://github.com/pleme-io/hello-rio#readme");
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm, got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_repositorio_empty_takes_precedence_over_shape() {
         // Empty-first cascade pin: the empty `Some("")` surfaces the
         // narrower `RepositorioEmpty` not the shape-predicate-wrapped

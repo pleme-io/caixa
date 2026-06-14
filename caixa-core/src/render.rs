@@ -1801,6 +1801,27 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     normalization on APFS / case-folding filesystems, the same
 ///     intersection-floor [`is_git_ref_name`] enforces on the peer
 ///     refname axes;
+///   - no `#` URL-fragment-identifier byte (RFC 3986 §3.5) — every
+///     documented `:repo` shape (`github:org/repo` shorthand,
+///     `https://…` / `ssh://…` / `git://…` / `file://…` URL schemes,
+///     `git@host:path` scp-style SSH) carries none; libcurl's URL
+///     parser (the layer `git clone <https-url>` invokes) and git's
+///     own URL handlers strip the `#fragment` tail before opening
+///     the transport, so the byte rides verbatim into the lacre's
+///     per-dep content-address (`conteudo: format!("git:{repo}…")`,
+///     caixa-resolver/src/resolve.rs) but is silently dropped on the
+///     wire — two repos whose values differ only in their fragment
+///     anchor (`":repo "https://github.com/foo/bar#readme"` vs
+///     `":repo "https://github.com/foo/bar#L42"`) resolve to the
+///     byte-identical upstream `git clone` but lock to two distinct
+///     BLAKE3 closures, defeating the THEORY.md §V.2 render-
+///     determinism contract. The canonical "I copy-pasted the
+///     permalink-to-line / anchor-to-README URL out of the browser
+///     address bar and forgot to trim the `#`-tail" footgun, and the
+///     symmetric "I confused the Nix flake-ref idiom (`github:foo/
+///     bar#packageName`) with the bare git `:repo` shape" footgun;
+///     `:repo` is a git URL, not a Nix flake reference, so the `#`-
+///     suffix is structurally meaningless on this axis;
 ///   - must contain a `:` separator at a non-leading position — every
 ///     documented form carries one (`github:org/repo`, `https://…`,
 ///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
@@ -1844,9 +1865,19 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-`-` / whitespace / control-char / non-ASCII /
-/// missing-`:` separator / leading-`:`), without wrapping in any error
-/// variant — every caller maps the same `String` into its own typed
-/// `*Invalid { axis, reason }` enum variant.
+/// fragment-`#` / missing-`:` separator / leading-`:`), without
+/// wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { axis, reason }` enum variant.
+#[allow(
+    clippy::too_many_lines,
+    reason = "the per-byte rejection cascade is structurally flat by design — \
+              every arm carries its own self-locating diagnostic with the offending \
+              byte named verbatim plus the canonical paste-from-shape footgun the \
+              gate closes, so collapsing onto a single shared `for &b in …` loop \
+              would regress the per-arm `feira lint` consumer surface — peer with \
+              the `clippy::too_many_lines` allow on `DepSource::validate_caminho` \
+              (caixa-core/src/dep.rs:323) on the same cascade-shape rationale"
+)]
 pub fn is_git_repo_url(s: &str) -> Result<(), String> {
     if s.is_empty() {
         return Err("must not be empty".to_string());
@@ -1900,6 +1931,29 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  across NFC/NFD normalization on APFS / case-folding \
                  filesystems)"
             ));
+        }
+        if b == b'#' {
+            return Err("must not contain `#` (RFC 3986 §3.5 URL fragment \
+                 identifier; libcurl's URL parser — the layer `git \
+                 clone <https-url>` invokes — strips the `#fragment` \
+                 tail before opening the transport, so the byte rides \
+                 verbatim into the lacre's per-dep content-address but \
+                 is silently dropped on the wire, defeating the \
+                 THEORY.md §V.2 render-determinism contract: two \
+                 authors whose `:repo` values differ only in their \
+                 fragment anchor (`#readme` vs `#L42`) resolve to the \
+                 byte-identical upstream `git clone` but lock to two \
+                 distinct BLAKE3 closures. The canonical \
+                 paste-from-browser-address-bar footgun (every web URL \
+                 to a README section / line-permalink carries one), \
+                 and the canonical \"I confused the Nix flake-ref \
+                 idiom (`github:foo/bar#packageName`) with the bare \
+                 git `:repo` shape\" footgun — `:repo` is a git URL, \
+                 not a Nix flake reference, so the `#`-suffix is \
+                 structurally meaningless on this axis. Drop the \
+                 `#fragment` tail; pin the ref via the typed `:tag` / \
+                 `:branch` / `:rev` slot instead)"
+                .to_string());
         }
     }
     if s.starts_with(':') {
