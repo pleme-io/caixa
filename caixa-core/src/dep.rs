@@ -670,6 +670,63 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
+        // closes the leading-`/` host-layout-leak; the embedded-control-byte
+        // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
+        // backslash arm closes the cross-host-OS-separator vector. The
+        // trailing-`/` is the orthogonal shell-tab-completion-on-a-directory
+        // footgun — `Path::join("../caixa-teia")` and
+        // `Path::join("../caixa-teia/")` resolve to the same directory
+        // (POSIX path-component-walk treats trailing `/` as a no-op for
+        // directory targets, which `:caminho` always names — the sibling-
+        // workspace dep root is structurally a directory). The lacre
+        // pipeline embeds the value verbatim in its per-dep content-address
+        // (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so byte-identical caixa
+        // semantic-meaning yields two distinct BLAKE3 closures depending on
+        // whether the author shell-tab-completed the path (every interactive
+        // shell appends `/` on tab-completing a directory, idiomatic in
+        // bash / zsh / fish / nushell), pasted from `pwd` (which on most
+        // shells emits without trailing `/`, but `realpath -e -m` on a
+        // directory with trailing `/` preserves it), or copied a Cargo
+        // `path = "../caixa-teia/"` entry from cross-substrate documentation
+        // (Cargo accepts both shapes and folds them the same way). Two
+        // workstations whose authors differ only in tab-completion habits
+        // emit byte-divergent lacres for the byte-identical-semantic caixa,
+        // and the substrate's "the lacre is the build's identity" contract
+        // (CAIXA-SDLC §III.2) silently breaks far from the source caixa.lisp.
+        //
+        // Same THEORY.md §V.2 render-determinism axis every prior `:caminho`
+        // arm protects, here against the trailing-separator divergence
+        // vector: every typed slot's accepted set excludes byte-divergent
+        // values that round-trip to the same downstream semantic. The peer
+        // path-shaped axes already reject trailing separators on the same
+        // contract: [`crate::render::is_gateway_api_http_path`] gates
+        // `:entrada :paths` against any non-canonical normalization, and
+        // [`crate::render::is_sandboxed_relative_path`] gates the M2 typed
+        // path-slots (`:behavior :on-*`, `:upgrade-from :state-change
+        // :script`, `:bibliotecas`, `:exe`, `:servicos`) against shapes
+        // whose canonical form would re-introduce determinism divergence.
+        //
+        // The arm fires last in the cascade because every prior arm carries
+        // a more self-locating diagnostic on values that probe as both
+        // (e.g. `:caminho "../foo/\0/"` ends in `/` but the load-bearing
+        // diagnostic is the NUL byte's POSIX-syscall-rejection — the
+        // control-char arm wins; `:caminho "/etc/passwd/"` ends in `/` but
+        // the load-bearing diagnostic is the absolute host-layout-leak —
+        // the absolute arm wins; `:caminho "..\caixa-teia/"` ends in `/`
+        // but the load-bearing diagnostic is the Windows-separator cross-
+        // OS divergence — the backslash arm wins). The arm covers every
+        // shape where the last byte is `/` regardless of length, including
+        // the degenerate single-`/` (which the absolute arm catches first)
+        // and the consecutive-`//` (where every prior arm passes on the
+        // bytes other than the trailing `/`).
+        if caminho.as_bytes().last() == Some(&b'/') {
+            return Err(DepError::FonteCaminhoTrailingSlash {
+                nome: nome.to_string(),
+                caminho: caminho.to_string(),
+            });
+        }
         Ok(())
     }
 }
@@ -1185,6 +1242,22 @@ pub enum DepError {
          \"../caixa-teia\" for a sibling workspace dep)"
     )]
     FonteCaminhoBackslash { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} has a trailing \
+         `/` (the resolver's `Path::join` resolves `\"../caixa-teia\"` and \
+         `\"../caixa-teia/\"` to the same directory, but the lacre pipeline embeds the \
+         value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, so two authors whose only difference is \
+         shell tab-completion emit byte-divergent BLAKE3 closures for the same caixa — \
+         defeating the THEORY.md §V.2 render-determinism contract via the trailing-\
+         separator vector (the canonical paste-from-shell-tab-completion + paste-from-\
+         `pwd`-with-`/`-suffix footgun, and the canonical Cargo-style `path = \
+         \"../caixa-teia/\"` paste-from-Cargo-manifest cross-idiom leak). Drop the \
+         trailing `/`; every `:caminho` value names a sibling-workspace directory \
+         already, so the trailing separator carries no information. Use \
+         `\"../caixa-teia\"` rather than `\"../caixa-teia/\"`)"
+    )]
+    FonteCaminhoTrailingSlash { nome: String, caminho: String },
     #[error(
         "{list} carries duplicate entry :nome {nome:?} — every dep list keys its \
          entries by caixa name (Cargo's [dependencies] / [dev-dependencies] tables \
@@ -2888,6 +2961,187 @@ mod tests {
         assert!(
             rendered.contains('\\'),
             "diagnostic must reference the backslash footgun: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_trailing_slash() {
+        // The fail-before-pass-after pin for the canonical trailing-`/`
+        // paste footgun: an author who shell-tab-completes a sibling
+        // directory (every interactive shell — bash/zsh/fish/nushell —
+        // appends `/` on tab-completing a directory) produces
+        // `"../caixa-teia/"`-shape values that silently passed every
+        // prior arm (the leading byte is `.`, no control bytes, no
+        // backslash). `Path::join` resolves both shapes to the same
+        // directory at the resolver, but the lacre embeds the value
+        // verbatim and the BLAKE3 closures diverge across two
+        // workstations whose authors differ only in tab-completion
+        // habits.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoTrailingSlash { nome, caminho } = err else {
+            panic!("expected FonteCaminhoTrailingSlash, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia/");
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_bare_dot_slash() {
+        // The `"./"` shape (the canonical "I meant the caixa.lisp's own
+        // directory and tab-completed it" footgun). Pinned separately
+        // from the canonical `"../caixa-teia/"` shape so the gate's
+        // contract is "any trailing `/`", not "trailing `/` after a leaf
+        // name".
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "./".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoTrailingSlash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_consecutive_trailing_slashes() {
+        // The `"foo//"` shape (the canonical "I pasted from a CI manifest
+        // that double-templated `${VAR}/` over an already-`/`-suffixed
+        // path" footgun). The gate fires on the last byte being `/`
+        // regardless of how many `/` precede it; the arm contract is
+        // "the value ends with `/`", structurally.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia//".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoTrailingSlash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_dotdot_trailing_slash() {
+        // The `"../"` shape (the canonical "I want the parent" tab-
+        // completion footgun on a bare `..` path). Pinned separately so
+        // the gate doesn't accidentally narrow to "trailing `/` only on
+        // multi-segment paths".
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoTrailingSlash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_internal_slashes() {
+        // The positive-control pin: the gate targets the trailing byte
+        // only, never internal `/` separators. The canonical nested
+        // relative POSIX path (`"../caixa-teia/foo/bar"`) must continue
+        // to validate cleanly so legitimate deeply-nested deps aren't
+        // broken. Pinned so the gate doesn't accidentally widen to a
+        // "no `/` separators anywhere" sweep that would defeat the
+        // entire path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/foo/bar".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_bare_dot() {
+        // The positive-control pin on the degenerate single-`.` shape
+        // (the canonical "the caixa.lisp's own directory" idiom). The
+        // gate fires on the trailing byte being `/`, not on the path
+        // being short, so `"."` (one byte, not `/`) must continue to
+        // validate cleanly.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: ".".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_trailing_slash() {
+        // Cascade pin: the control-char arm structurally precedes the
+        // trailing-slash arm. A value like `"../foo\n/"` ends in `/`
+        // but the embedded LF (`0x0A`) is the load-bearing diagnostic
+        // (control bytes are the paste-from-multiline-doc footgun the
+        // d624c8d arm already closes). Mirrors the
+        // `fonte_caminho_control_char_fires_before_backslash` cascade
+        // discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_trailing_slash() {
+        // Cascade pin on the backslash arm: a value like `"..\foo/"`
+        // ends in `/` but the embedded `\` is the load-bearing
+        // diagnostic (the cross-host-OS-separator divergence vector
+        // the 3a4e1d7 arm closes). Same precedence logic as the prior
+        // narrower-diagnostic-first cascade.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_trailing_slash() {
+        // Cascade pin on the load-bearing leading-byte arm: a leading
+        // `/` value with a trailing `/` (`"/etc/passwd/"`) routes
+        // through `FonteCaminhoAbsolute` not `FonteCaminhoTrailingSlash`
+        // — the host-layout-leak diagnostic is the load-bearing axis,
+        // the trailing `/` is the secondary observation. Same
+        // precedence logic as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_trailing_slash_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with the prior
+        // `fonte_caminho_*_diagnostic_carries_*` payload assertions on
+        // every preceding arm): the error's Display surfaces the
+        // offending `:nome` and the offending `:caminho` verbatim so a
+        // `feira lint` run can render the diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia/"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("trailing"),
+            "diagnostic must reference the trailing-slash footgun: {rendered:?}",
         );
     }
 
