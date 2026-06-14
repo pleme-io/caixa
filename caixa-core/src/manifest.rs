@@ -5566,6 +5566,47 @@ mod tests {
     }
 
     #[test]
+    fn validate_repositorio_rejects_uri_template_placeholder() {
+        // URI Template (RFC 6570) placeholder footgun on the
+        // `:repositorio` axis (peer with the prior fragment-`#` /
+        // query-`?` / backslash-`\` arms on the same axis, and peer
+        // with the new dep-level `:fonte :repo` `{` / `}` arm on the
+        // URL-grammar trajectory). An author pastes a quick-start
+        // README snippet / OpenAPI `servers:` URL / Helm chart
+        // `home:` template carrying unresolved `{org}` / `{repo}`
+        // placeholders into the `:repositorio` slot, expecting the
+        // substrate to resolve the placeholder downstream. The
+        // shared `is_git_repo_url` predicate refuses the byte at the
+        // URL-grammar layer (libcurl percent-encodes `{` / `}` to
+        // `%7B` / `%7D` on the wire, so the byte round-trips
+        // inconsistently between the rendered `Chart.yaml home:` /
+        // FluxCD `GitRepository url:` and the resolver's `git clone`
+        // invocation, defeating the THEORY.md §V.2 render-
+        // determinism contract on the `:repositorio` axis the peer
+        // `:fonte :repo` axis already closes; every git porcelain
+        // entry-point additionally fetches a nonexistent literal-
+        // `{placeholder}`-named path far from the source caixa.lisp).
+        let c = caixa_with_repositorio(Some("https://github.com/{org}/hello-rio"));
+        let err = c.validate_repositorio().unwrap_err();
+        let ManifestError::RepositorioInvalid {
+            repositorio,
+            reason,
+        } = err
+        else {
+            panic!("expected RepositorioInvalid, got {err:?}");
+        };
+        assert_eq!(repositorio, "https://github.com/{org}/hello-rio");
+        assert!(
+            reason.contains("must not contain `{`"),
+            "reason must surface the open-brace `{{` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("URI Template") || reason.contains("RFC 6570"),
+            "reason must name the RFC 6570 URI Template grammar, got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_repositorio_empty_takes_precedence_over_shape() {
         // Empty-first cascade pin: the empty `Some("")` surfaces the
         // narrower `RepositorioEmpty` not the shape-predicate-wrapped
