@@ -110,7 +110,11 @@ impl Diagnostic {
     /// Convenience: attach a single-edit safe fix that replaces this
     /// diagnostic's own span with `replacement`.
     #[must_use]
-    pub fn with_fix_replace(self, description: impl Into<String>, replacement: impl Into<String>) -> Self {
+    pub fn with_fix_replace(
+        self,
+        description: impl Into<String>,
+        replacement: impl Into<String>,
+    ) -> Self {
         let span = self.span;
         self.with_fix(Fix {
             description: description.into(),

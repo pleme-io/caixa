@@ -10,14 +10,12 @@
 //! ecosystem primitive.
 
 use caixa_core::{RestartPolicy, RestartStrategy, UpgradeInstruction};
-use gen_platform::{catalog, TypedDispatcherTrait};
+use gen_platform::{TypedDispatcherTrait, catalog};
 
 #[test]
 fn upgrade_instruction_registers_into_fleet_catalog() {
-    let entry =
-        catalog::by_label("caixa.upgrade-instruction").expect(
-            "caixa-core must register the UpgradeInstruction dispatcher",
-        );
+    let entry = catalog::by_label("caixa.upgrade-instruction")
+        .expect("caixa-core must register the UpgradeInstruction dispatcher");
     assert_eq!(entry.label, "caixa.upgrade-instruction");
     assert_eq!((entry.variant_count)(), 5);
 }
@@ -31,7 +29,13 @@ fn variant_kinds_match_otp_appup_kebab() {
     // `code:purge`) plus the typed fallback `Restart`.
     assert_eq!(
         kinds,
-        vec!["load-module", "state-change", "soft-purge", "purge", "restart"]
+        vec![
+            "load-module",
+            "state-change",
+            "soft-purge",
+            "purge",
+            "restart"
+        ]
     );
 }
 
@@ -73,10 +77,7 @@ fn reflection_round_trips_through_serde_tags() {
             UpgradeInstruction::SoftPurge { module: "y".into() },
             "soft-purge",
         ),
-        (
-            UpgradeInstruction::Purge { module: "z".into() },
-            "purge",
-        ),
+        (UpgradeInstruction::Purge { module: "z".into() }, "purge"),
         (UpgradeInstruction::Restart, "restart"),
     ];
     for (sample, expected_kind) in &samples {
@@ -102,20 +103,23 @@ fn variant_count_matches_reflected_kinds_len() {
 
 #[test]
 fn restart_strategy_registers_into_catalog() {
-    let entry = catalog::by_label("caixa.restart-strategy")
-        .expect("RestartStrategy must register");
+    let entry = catalog::by_label("caixa.restart-strategy").expect("RestartStrategy must register");
     assert_eq!((entry.variant_count)(), 4);
     let kinds = (entry.variant_kinds)();
     assert_eq!(
         kinds,
-        vec!["one-for-one", "one-for-all", "rest-for-one", "simple-one-for-one"]
+        vec![
+            "one-for-one",
+            "one-for-all",
+            "rest-for-one",
+            "simple-one-for-one"
+        ]
     );
 }
 
 #[test]
 fn restart_policy_registers_into_catalog() {
-    let entry =
-        catalog::by_label("caixa.restart-policy").expect("RestartPolicy must register");
+    let entry = catalog::by_label("caixa.restart-policy").expect("RestartPolicy must register");
     assert_eq!((entry.variant_count)(), 3);
     let kinds = (entry.variant_kinds)();
     assert_eq!(kinds, vec!["permanent", "temporary", "transient"]);
@@ -126,7 +130,12 @@ fn restart_strategy_kinds_via_trait() {
     assert_eq!(RestartStrategy::variant_count(), 4);
     assert_eq!(
         RestartStrategy::variant_kinds(),
-        vec!["one-for-one", "one-for-all", "rest-for-one", "simple-one-for-one"]
+        vec![
+            "one-for-one",
+            "one-for-all",
+            "rest-for-one",
+            "simple-one-for-one"
+        ]
     );
 }
 
