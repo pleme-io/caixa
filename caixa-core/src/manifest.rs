@@ -681,7 +681,7 @@ impl Caixa {
     /// diagnostic is self-locating (the author can grep their
     /// `caixa.lisp` for `:versao "<value>"` and fix it in one edit).
     /// Same diagnostic shape as [`ManifestError::NomeInvalid`]
-    /// (6c992f8) and [`crate::UpgradeError::BadFromVersion`]
+    /// (6c992f8) and [`crate::UpgradeError::FromInvalid`]
     /// (b0c8389) on the peer axes. With this gate, the typed `:versao`
     /// surfaces — top-level `:versao`, `:upgrade-from :from` — are
     /// now structurally equivalent (every value past validate is

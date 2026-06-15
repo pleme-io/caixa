@@ -958,7 +958,7 @@ impl LayoutInvariants for StandardLayout {
         // validate time. Runs *after* the per-entry shape pass + the
         // cross-entry duplicate gate so the precedence diagnostic
         // fires on already-parseable `:from`/`:versao` values (a
-        // malformed `:from` surfaces as `BadFromVersion` first; a
+        // malformed `:from` surfaces as `FromInvalid` first; a
         // malformed `:versao` falls through silently here and is
         // gated by the narrower `ManifestError::VersaoInvalid` arm
         // at its load-bearing call site). Mirrors the
@@ -5017,14 +5017,20 @@ mod tests {
     }
 
     #[test]
-    fn upgrade_bad_from_version_surfaces_as_layout_violation() {
-        // The `:from` semver gate (`UpgradeError::BadFromVersion`)
+    fn upgrade_from_invalid_surfaces_as_layout_violation() {
+        // The `:from` semver gate (`UpgradeError::FromInvalid`)
         // was likewise unreachable before this wiring landed — a
         // typo-shaped `:from "v0.1.0"` (git-tag-shape leaking into
         // the semver slot) silently passed `feira build` and
         // surfaced only when the operator's hot-upgrade decision
         // engine tried to match against the version key it couldn't
-        // parse. Now wired through `UpgradeViolation`.
+        // parse. Now wired through `UpgradeViolation` with the
+        // peer-shaped `{ from, reason }` payload — the
+        // parser-shaped `reason` flows through `Display` so the
+        // wrapped issue string carries both the offending value
+        // *and* the SemVer-2 parser's wording (peer with the
+        // `VersaoInvalid` / `MembroVersaoInvalid` envelopes on the
+        // sibling SemVer-2 axes).
         use crate::{UpgradeFromEntry, UpgradeInstruction};
         use std::path::PathBuf;
         let root = PathBuf::from("/tmp/x");
@@ -5046,8 +5052,24 @@ mod tests {
         };
         assert_eq!(caixa, "demo");
         assert!(
-            issue.contains("v0.1.0") || issue.contains(":from"),
-            "issue must name the offending :from value or slot: {issue}"
+            issue.contains("v0.1.0"),
+            "UpgradeViolation issue must name the offending :from value verbatim, got {issue:?}"
+        );
+        assert!(
+            issue.contains(":from"),
+            "UpgradeViolation issue must name the :from slot verbatim, got {issue:?}"
+        );
+        // Pin the parser-shaped reason flow-through: the renamed
+        // `FromInvalid { from, reason }` carries the SemVer-2 parser's
+        // wording verbatim, and the [`UpgradeError`] Display routes it
+        // into the wrapped `issue` string so the layout envelope
+        // surfaces both the offending value *and* the parser's
+        // diagnosis. Mirrors the peer flow-through on
+        // `ManifestError::VersaoInvalid` (top-level `:versao`) and
+        // `AplicacaoError::MembroVersaoInvalid` (`:membros :versao`).
+        assert!(
+            issue.contains("SemVer-2"),
+            "UpgradeViolation issue must carry the parser-shaped reason (\"SemVer-2\"), got {issue:?}"
         );
     }
 }

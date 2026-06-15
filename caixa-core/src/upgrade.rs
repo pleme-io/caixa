@@ -129,7 +129,10 @@ impl UpgradeFromEntry {
     /// total — see [`Self::validate_cleanup_singularity`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
-        Version::parse(&self.from).map_err(|_| UpgradeError::BadFromVersion(self.from.clone()))?;
+        Version::parse(&self.from).map_err(|e| UpgradeError::FromInvalid {
+            from: self.from.clone(),
+            reason: e.to_string(),
+        })?;
         // Per-instruction typed shape: kind-tagged `:module` /
         // `:script` value-shape gates fire here, *before* the
         // within-entry restart-exclusivity gate below — so a
@@ -847,7 +850,7 @@ impl UpgradeFromEntry {
 /// coordinating with the operator's match step.
 ///
 /// Per-entry shape errors fire before the duplicate gate so the
-/// diagnostic names the malformed slot (`BadFromVersion`, `EmptyScript`,
+/// diagnostic names the malformed slot (`FromInvalid`, `EmptyScript`,
 /// `ModuleInvalid`, …) rather than collapsing two unrelated authoring
 /// errors into a single duplicate diagnostic. Mirrors the
 /// `*_invalid_fires_before_duplicate_check` order pins on every peer
@@ -860,7 +863,7 @@ pub fn validate_upgrade_from(entries: &[UpgradeFromEntry]) -> Result<(), Upgrade
     for entry in entries {
         entry.validate()?;
         // `entry.validate()` accepted this `:from`, so parse cannot
-        // fail here — the BadFromVersion arm above is the only gate
+        // fail here — the FromInvalid arm above is the only gate
         // and both call `Version::parse(&self.from)`.
         let parsed = Version::parse(&entry.from).expect(
             "UpgradeFromEntry::validate must accept `:from` iff Version::parse does — keep the \
@@ -931,14 +934,14 @@ pub fn validate_upgrade_from(entries: &[UpgradeFromEntry]) -> Result<(), Upgrade
 ///
 ///   - When `versao` itself doesn't parse as semver, this gate
 ///     returns `Ok(())` silently — the narrower
-///     [`crate::ManifestError::VersaoInvalid`] / [`UpgradeError::BadFromVersion`]
+///     [`crate::ManifestError::VersaoInvalid`] / [`UpgradeError::FromInvalid`]
 ///     diagnostics are the load-bearing surfaces for those failure
 ///     modes, and surfacing a `FromNotBeforeVersao` over an
 ///     unparseable `:versao` would mask the more actionable root
 ///     cause.
 ///   - Likewise, an entry whose `:from` itself doesn't parse falls
 ///     through to its narrower diagnostic surface
-///     ([`UpgradeError::BadFromVersion`]), which is expected to fire
+///     ([`UpgradeError::FromInvalid`]), which is expected to fire
 ///     via [`validate_upgrade_from`] *before* this gate runs at the
 ///     [`crate::LayoutInvariants`] call site.
 ///
@@ -959,7 +962,7 @@ pub fn validate_upgrade_from_against_versao(
         // by [`validate_upgrade_from`] / [`UpgradeFromEntry::validate`]
         // upstream at the LayoutInvariants call site; an unparseable
         // `:from` here falls through silently to keep the
-        // BadFromVersion diagnostic load-bearing. Same fall-through
+        // FromInvalid diagnostic load-bearing. Same fall-through
         // posture as the `versao` arm above.
         let Ok(prior) = Version::parse(&entry.from) else {
             continue;
@@ -1285,8 +1288,18 @@ fn validate_module(kind: &'static str, module: &str) -> Result<(), UpgradeError>
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum UpgradeError {
-    #[error("upgrade-from :from must be a valid semver, got {0:?}")]
-    BadFromVersion(String),
+    #[error(
+        ":upgrade-from :from {from:?} is not a valid SemVer-2 version: {reason} (the substrate \
+         consumes this string as `semver::Version` — three-part `MAJOR.MINOR.PATCH` with optional \
+         `-prerelease` and `+build`, the same shape every top-level `:versao` carries — across \
+         every artifact derived from `:from`: the wasm-operator's `:from`-match dispatch loads \
+         the running version through `semver::Version::parse` and matches it against each entry's \
+         `:from`, so a malformed `:from` is structurally unreachable at dispatch time; use a \
+         SemVer-2 literal like `\"0.1.0\"`, `\"0.2.0-rc.1\"`, or `\"1.0.0+build.42\"` — not a \
+         git-tag-shape like `\"v0.1.0\"`, a docker-tag-shape like `\"latest\"`, a \
+         requirement-shape like `\"^0.1\"`, or a four-part `\"0.1.0.0\"`)"
+    )]
+    FromInvalid { from: String, reason: String },
     #[error(
         "upgrade instruction `{kind}` :module is empty (every appup module reference \
          must name a caixa; use a non-empty caixa name like `\"hello-rio\"` or omit \
@@ -1601,7 +1614,35 @@ mod tests {
     fn validate_rejects_non_semver_from() {
         let e = entry("not-a-semver", vec![]);
         let err = e.validate().unwrap_err();
-        assert!(matches!(err, UpgradeError::BadFromVersion(_)));
+        assert!(
+            matches!(err, UpgradeError::FromInvalid { ref from, .. } if from == "not-a-semver")
+        );
+    }
+
+    #[test]
+    fn from_invalid_diagnostic_carries_offending_from_and_reason() {
+        // Diagnostic-shape pin: the error names the offending
+        // `:upgrade-from :from` verbatim with a non-empty parser-shaped
+        // reason, so a `feira lint` run can render the diagnostic
+        // without re-parsing — the author can grep their caixa.lisp for
+        // `:from "<value>"` and fix it in one edit. Mirrors the peer
+        // `versao_invalid_diagnostic_carries_offending_versao` pin on
+        // the sibling SemVer-2 axis (the top-level `:versao`), the
+        // peer `membro_versao_invalid_diagnostic_carries_offending_value`
+        // pin on `:membros :versao`, and the peer
+        // `deps_invalid_diagnostic_carries_offending_value` pin on
+        // `:deps :versao` — every SemVer-2-parsing slot's invalid
+        // diagnostic is now structurally equivalent.
+        let e = entry("v0.1.0", vec![]);
+        let err = e.validate().unwrap_err();
+        let UpgradeError::FromInvalid { from, reason } = err else {
+            panic!("expected FromInvalid variant, got {err:?}");
+        };
+        assert_eq!(from, "v0.1.0");
+        assert!(
+            !reason.is_empty(),
+            "FromInvalid `reason` must carry the parser's wording verbatim"
+        );
     }
 
     #[test]
@@ -2208,7 +2249,7 @@ mod tests {
     #[test]
     fn validate_upgrade_from_per_entry_shape_fires_before_duplicate() {
         // Order pin: a malformed `:from` on the second entry surfaces
-        // its `BadFromVersion` diagnostic, not a (less-useful)
+        // its `FromInvalid` diagnostic, not a (less-useful)
         // `DuplicateFrom`. The per-entry shape pass runs *inline*
         // before the duplicate-key insert — parallel to
         // `child_versao_invalid_fires_before_duplicate_check`
@@ -2222,8 +2263,8 @@ mod tests {
         ];
         let err = validate_upgrade_from(&entries).unwrap_err();
         assert!(
-            matches!(err, UpgradeError::BadFromVersion(ref s) if s == "not-a-semver"),
-            "malformed `:from` on a non-duplicate entry must surface as BadFromVersion, got {err:?}"
+            matches!(err, UpgradeError::FromInvalid { ref from, .. } if from == "not-a-semver"),
+            "malformed `:from` on a non-duplicate entry must surface as FromInvalid, got {err:?}"
         );
     }
 
@@ -2428,12 +2469,12 @@ mod tests {
         // [`UpgradeFromEntry::validate`] / [`validate_upgrade_from`]
         // upstream at the LayoutInvariants call site. Surfacing the
         // precedence error over an unparseable `:from` from this
-        // gate alone would mask the narrower `BadFromVersion`
+        // gate alone would mask the narrower `FromInvalid`
         // diagnostic that's expected to lead — same fall-through
         // posture as the unparseable-`:versao` arm above. The
         // wiring in `LayoutInvariants::verify` runs
         // `validate_upgrade_from` *before* this gate, so in practice
-        // an unparseable `:from` surfaces as `BadFromVersion` first
+        // an unparseable `:from` surfaces as `FromInvalid` first
         // and this gate is never reached on that input.
         let entries = vec![entry("not-a-semver", vec![UpgradeInstruction::Restart])];
         validate_upgrade_from_against_versao(&entries, "0.2.0").unwrap();
