@@ -2882,6 +2882,77 @@ fn find_unicode_bidi_override(s: &str) -> Option<char> {
     })
 }
 
+/// Scan `s` for any of the three non-ASCII Unicode line-break
+/// codepoints UAX #14 (Unicode Line Breaking Algorithm) and the
+/// YAML 1.1 §4.1 b-char production both treat as line terminators
+/// outside the two single-byte ASCII shapes (`\n` LF / `\r` CR) the
+/// per-byte arm on the calling predicate already closes:
+///
+///   - U+0085 `NEL` NEXT LINE
+///   - U+2028 `LS`  LINE SEPARATOR
+///   - U+2029 `PS`  PARAGRAPH SEPARATOR
+///
+/// YAML 1.2 §5.4 ("Line Break Characters") explicitly retired these
+/// three from the YAML line-break set per the UTR #20 recommendation,
+/// so a YAML 1.2-strict parser (the `serde_yaml` / `yaml-rust2` family)
+/// preserves them as literal codepoints inside the rendered Chart.yaml
+/// scalar — but YAML 1.1 parsers (go-yaml v2 which Helm v3 / kubectl /
+/// every Kubernetes client library transitively links, and `ruamel.yaml`
+/// in compat mode) still treat them as line terminators per the YAML 1.1
+/// b-char production, so the same `:descricao` / `:autores` value
+/// authored with an embedded U+2028 parses as a single-line plain-style
+/// scalar through one downstream consumer and a multi-line block scalar
+/// through another. The cross-parser line-break disagreement breaks the
+/// THEORY.md §V.2 render-determinism contract every typed slot carries
+/// on the same axis the per-byte `\n` / `\r` arms close for ASCII; the
+/// substrate refuses the three codepoints at validate time so the
+/// rendered Chart.yaml carries the single-line shape every conformant
+/// YAML parser agrees on. Independently, every UAX #14 conformant text
+/// consumer (editors, terminals, web UIs like `helm list` /
+/// `helm search` / Artifact Hub) breaks the visual line at these
+/// codepoints regardless of YAML version, so the author's editor view
+/// of `caixa.lisp` disagrees with the chart-consumer's rendered view
+/// even when both YAML parsers agree on the byte-level shape.
+///
+/// Returns the first offending codepoint in document order, or `None`
+/// when `s` carries none of them. Iterates `chars()` once (single
+/// UTF-8 decode pass, peer of [`find_unicode_bidi_override`] and every
+/// other UTF-8-aware predicate in this module) — the per-predicate
+/// caller folds the `Some(c)` into its axis-specific reason wording
+/// with the offending codepoint named verbatim as `U+XXXX`.
+///
+/// Lifted as a shared helper rather than inlined into each per-axis
+/// predicate (the PRIME DIRECTIVE duplication-budget rule —
+/// THEORY.md §I.3.5: "every recurring shape becomes a generator
+/// before it becomes a pattern; every pattern becomes a library
+/// before it becomes duplicated code. The duplication budget is
+/// zero.") because two predicates ([`is_chart_description_shape`],
+/// [`is_chart_maintainer_name_shape`]) carry the same UTF-8
+/// free-form-prose accepted set and would otherwise inline the same
+/// three-codepoint match arm verbatim — sibling lift to the
+/// [`find_unicode_bidi_override`] helper one trajectory earlier on
+/// the same two predicates. The third caller — every future
+/// per-axis free-form-prose surface (a future Aplicacao-level
+/// `:descricao` summary axis, a future per-`:contratos` edge
+/// `:descricao` annotation, the future per-`:autores`-email-suffix
+/// shape gate) — lands as a thin `if let Some(c) =
+/// find_unicode_line_break(s) { … }` wrapper rather than re-inlining
+/// the same codepoint match.
+///
+/// The arm is structurally distinct from the per-byte control-char
+/// arm `[is_chart_description_shape]` already carries: the ASCII
+/// line-break bytes `\n` (`0x0A`) and `\r` (`0x0D`) are caught at the
+/// per-byte pass; the three non-ASCII line-break codepoints all
+/// decode to multi-byte UTF-8 sequences (`C2 85` for U+0085, `E2 80
+/// A8` for U+2028, `E2 80 A9` for U+2029) — every byte ≥ 0x80 per
+/// UTF-8 grammar — that the per-byte non-ASCII pass deliberately
+/// accepts (Unicode letters, em-dash, arrows are canonical
+/// `:descricao` shapes). Only the typed codepoint scan catches them.
+fn find_unicode_line_break(s: &str) -> Option<char> {
+    s.chars()
+        .find(|c| matches!(*c, '\u{0085}' | '\u{2028}' | '\u{2029}'))
+}
+
 /// Predicate: assert that `s` is a valid chart-description shape.
 /// The `:descricao` axis is a free-form prose summary that lands in
 /// the rendered `lareira-<nome>` Helm chart's `Chart.yaml`
@@ -2942,6 +3013,29 @@ fn find_unicode_bidi_override(s: &str) -> Option<char> {
 ///     THEORY.md §V.2 render-determinism contract every typed
 ///     slot carries on the same axis the per-byte CR/LF/control
 ///     arms above close for ASCII.
+///   - no non-ASCII Unicode line-break codepoints (U+0085 `NEL`,
+///     U+2028 `LS`, U+2029 `PS`) — the three codepoints UAX #14
+///     (Unicode Line Breaking Algorithm) and the YAML 1.1 §4.1
+///     b-char production both treat as line terminators outside
+///     the ASCII `\n` / `\r` arms above. YAML 1.2 §5.4 retired
+///     them per UTR #20, so YAML 1.2-strict parsers preserve them
+///     verbatim while YAML 1.1 parsers (go-yaml v2 which Helm v3 /
+///     kubectl link, `ruamel.yaml` in compat mode) split the
+///     scalar on them — the same `:descricao` value parses as
+///     single-line through one consumer and multi-line through
+///     another, breaking cross-parser determinism on the same
+///     axis the per-byte `\n` / `\r` arms close for ASCII.
+///     Independently, every UAX #14 conformant text consumer
+///     (editors, terminals, `helm list` / Artifact Hub web UIs)
+///     breaks the visual line at these codepoints regardless of
+///     YAML version, so the author's editor view of `caixa.lisp`
+///     and the chart-consumer's rendered view diverge even when
+///     both YAML parsers agree on the byte-level shape. Routed
+///     through the lifted [`find_unicode_line_break`] helper so
+///     the same three-codepoint accepted set is shared with
+///     [`is_chart_maintainer_name_shape`], peer of the
+///     [`find_unicode_bidi_override`] lift on the same two
+///     predicates one trajectory earlier.
 ///
 /// The predicate is a *structural* floor — it enforces the
 /// single-line printable-UTF-8 shape every realistic chart
@@ -2982,9 +3076,10 @@ fn find_unicode_bidi_override(s: &str) -> Option<char> {
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-whitespace / trailing-whitespace /
 /// tab / newline / carriage-return / other-control-byte /
-/// Unicode-bidi-override-codepoint), without wrapping in any error
-/// variant — every caller maps the same `String` into its own typed
-/// `*Invalid { <axis>, reason }` enum variant.
+/// Unicode-bidi-override-codepoint / Unicode-line-break-codepoint),
+/// without wrapping in any error variant — every caller maps the
+/// same `String` into its own typed `*Invalid { <axis>, reason }`
+/// enum variant.
 pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
     if s.is_empty() {
         return Err("must not be empty".to_string());
@@ -3094,6 +3189,48 @@ pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
                 .join(" "),
         ));
     }
+    if let Some(c) = find_unicode_line_break(s) {
+        return Err(format!(
+            "must not contain Unicode line-break codepoint U+{cp:04X} (the three \
+             codepoints UAX #14 / YAML 1.1 §4.1 name as line terminators outside \
+             the ASCII `\\n` / `\\r` arms above: U+0085 `NEL` NEXT LINE, U+2028 \
+             `LS` LINE SEPARATOR, U+2029 `PS` PARAGRAPH SEPARATOR. YAML 1.2 §5.4 \
+             retired them per UTR #20 so YAML 1.2-strict parsers preserve them \
+             verbatim, but YAML 1.1 parsers (go-yaml v2 which Helm v3 / kubectl / \
+             every Kubernetes client library transitively links, `ruamel.yaml` in \
+             compat mode) still split scalars on them — the same `:descricao` \
+             value parses as a single-line plain-style scalar through one \
+             downstream consumer and a multi-line block scalar through another, \
+             breaking cross-parser determinism on the same axis the per-byte \
+             `\\n` / `\\r` arms close for ASCII. Independently, every UAX #14 \
+             conformant text consumer (editors, terminals, `helm list` / \
+             `helm search` / Artifact Hub web UIs) breaks the visual line at \
+             these codepoints regardless of YAML version, so the author's editor \
+             view of `caixa.lisp` and the chart-consumer's rendered view of the \
+             `description:` field diverge even when both YAML parsers agree on \
+             the byte-level shape, defeating the THEORY.md §V.2 render-\
+             determinism contract every typed slot carries. The byte sequence \
+             ({utf8_seq}) rides verbatim into the rendered Chart.yaml at the \
+             same axis the per-byte `\\n` / `\\r` arms close for ASCII. Routed \
+             through the shared [`find_unicode_line_break`] helper so the same \
+             three-codepoint accepted set lives in exactly one place across the \
+             [`is_chart_maintainer_name_shape`] sibling YAML-plain-style-scalar \
+             surface, peer of the [`find_unicode_bidi_override`] lift on the \
+             same two predicates one trajectory earlier. Drop the non-ASCII \
+             line-break codepoint; split the value into separate logical lines \
+             at the source if a multi-line summary is intended (the \
+             `:descricao` axis is single-line by contract — the multi-paragraph \
+             shape belongs in the chart `README.md` body, not the YAML \
+             `description:` scalar))",
+            cp = c as u32,
+            utf8_seq = c
+                .encode_utf8(&mut [0u8; 4])
+                .bytes()
+                .map(|b| format!("0x{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
+    }
     Ok(())
 }
 
@@ -3165,6 +3302,26 @@ pub const CHART_MAINTAINER_NAME_MAX_LEN: usize = 128;
 ///     sibling `:descricao` axis. Routed through the same lifted
 ///     [`find_unicode_bidi_override`] helper so the nine-codepoint
 ///     accepted set is shared, structurally consistent.
+///   - no non-ASCII Unicode line-break codepoints (U+0085 `NEL`,
+///     U+2028 `LS`, U+2029 `PS`) — the three codepoints UAX #14
+///     (Unicode Line Breaking Algorithm) and YAML 1.1 §4.1 b-char
+///     production both treat as line terminators outside the
+///     ASCII `\n` / `\r` arms above. YAML 1.2 §5.4 retired them
+///     per UTR #20 so the cross-parser line-break disagreement
+///     (go-yaml v2 / YAML 1.1 still splits; YAML 1.2-strict
+///     parsers preserve) breaks the THEORY.md §V.2 render-
+///     determinism contract on the same axis the per-byte `\n` /
+///     `\r` arms close for ASCII. A maintainer-name with an
+///     embedded U+2028 parses as one entry through a YAML 1.2
+///     parser and as two `maintainers:` array entries through a
+///     YAML 1.1 parser — same paste-from-multiline-doc class the
+///     `\n` arm above closes, extended to the non-ASCII line-break
+///     codepoints the per-byte non-ASCII pass deliberately
+///     admits for Unicode letters. Routed through the same lifted
+///     [`find_unicode_line_break`] helper so the three-codepoint
+///     accepted set is shared with [`is_chart_description_shape`]
+///     on the sibling YAML-plain-style-scalar surface,
+///     structurally consistent.
 ///
 /// Same structural single-line printable-UTF-8 floor as
 /// [`is_chart_description_shape`] — both `:descricao` and `:autores`
@@ -3300,6 +3457,46 @@ pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
              surface, structurally consistent. Drop the bidi-override codepoint; \
              pure visual right-to-left maintainer names (Hebrew, Arabic) are \
              accepted natively without explicit direction marks)",
+            cp = c as u32,
+            utf8_seq = c
+                .encode_utf8(&mut [0u8; 4])
+                .bytes()
+                .map(|b| format!("0x{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
+    }
+    if let Some(c) = find_unicode_line_break(s) {
+        return Err(format!(
+            "must not contain Unicode line-break codepoint U+{cp:04X} (the three \
+             codepoints UAX #14 / YAML 1.1 §4.1 name as line terminators outside \
+             the ASCII `\\n` / `\\r` arms above: U+0085 `NEL` NEXT LINE, U+2028 \
+             `LS` LINE SEPARATOR, U+2029 `PS` PARAGRAPH SEPARATOR. YAML 1.2 §5.4 \
+             retired them per UTR #20 so YAML 1.2-strict parsers preserve them \
+             verbatim, but YAML 1.1 parsers (go-yaml v2 which Helm v3 / kubectl / \
+             every Kubernetes client library transitively links, `ruamel.yaml` in \
+             compat mode) still split scalars on them — an `:autores` entry with \
+             an embedded U+2028 parses as one `maintainers:` array entry through \
+             a YAML 1.2 parser and as two entries through a YAML 1.1 parser, \
+             breaking cross-parser determinism on the same axis the per-byte \
+             `\\n` / `\\r` arms close for ASCII. Independently, every UAX #14 \
+             conformant text consumer (editors, terminals, `helm list` / \
+             Artifact Hub's maintainer column) breaks the visual line at these \
+             codepoints regardless of YAML version, so the author's editor view \
+             of `caixa.lisp` and the chart-consumer's rendered view of the \
+             `maintainers:` entry diverge even when both YAML parsers agree on \
+             the byte-level shape, defeating the THEORY.md §V.2 render-\
+             determinism contract every typed slot carries. The byte sequence \
+             ({utf8_seq}) rides verbatim into the rendered Chart.yaml at the \
+             same axis the per-byte `\\n` / `\\r` arms close for ASCII. Routed \
+             through the shared [`find_unicode_line_break`] helper so the same \
+             three-codepoint accepted set lives in exactly one place across the \
+             [`is_chart_description_shape`] sibling YAML-plain-style-scalar \
+             surface, peer of the [`find_unicode_bidi_override`] lift on the \
+             same two predicates one trajectory earlier. Drop the non-ASCII \
+             line-break codepoint; split the value into separate `:autores` \
+             list entries at the source — the per-entry shape is single-line by \
+             contract)",
             cp = c as u32,
             utf8_seq = c
                 .encode_utf8(&mut [0u8; 4])
@@ -8182,6 +8379,71 @@ mod tests {
         }
     }
 
+    #[test]
+    fn chart_description_shape_rejects_each_unicode_line_break_codepoint() {
+        // The non-ASCII Unicode line-break arm — pins each of the three
+        // UAX #14 / YAML 1.1 §4.1 line-break codepoints outside the
+        // ASCII `\n` / `\r` bytes already caught at the per-byte pass.
+        // Each case carries an alphabet-valid prefix + suffix so only
+        // the line-break arm fires; the per-byte `\n` / `\r` arms
+        // would shadow the codepoint scan if the line-break helper
+        // accepted single-byte ASCII line terminators. A future drop
+        // of any one arm here surfaces as a `must be rejected` panic
+        // at this one place rather than as a silent regression
+        // through YAML 1.1-compat downstream consumers (go-yaml v2 /
+        // Helm v3 / kubectl). Mirrors the peer
+        // `chart_maintainer_name_shape_rejects_each_unicode_line_break_codepoint`
+        // on the sibling predicate — both predicates route through the
+        // same lifted `find_unicode_line_break` helper.
+        for (cp, name) in [
+            ('\u{0085}', "U+0085"),
+            ('\u{2028}', "U+2028"),
+            ('\u{2029}', "U+2029"),
+        ] {
+            let s = format!("first line{cp}second line");
+            let err = is_chart_description_shape(&s)
+                .err()
+                .unwrap_or_else(|| panic!("chart description with {name} must be rejected"));
+            assert!(
+                err.contains(name),
+                "chart description reason for {name} must name the codepoint verbatim; got {err:?}"
+            );
+            assert!(
+                err.contains("line-break") || err.contains("UAX #14") || err.contains("YAML 1.1"),
+                "chart description reason for {name} must name the Unicode-line-break banner; \
+                 got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_description_shape_accepts_non_line_break_unicode() {
+        // Positive control on the line-break arm: the predicate must
+        // accept every non-line-break Unicode shape the canonical
+        // fixtures carry. Pinned alongside the per-codepoint rejection
+        // sweep so a future helper widening that accidentally rejects
+        // a non-line-break codepoint (the structural-floor regression
+        // class) surfaces here as a single-source-of-truth pin. The
+        // canonical multilingual descriptions, RTL text, em-dash and
+        // arrows must all pass.
+        for s in [
+            "Canonical Rust→wasm32-wasip2 caixa Servico.",
+            "FIXME — describe this caixa",
+            "Caixa para שלום",
+            "日本語の説明テスト",
+            // U+00A0 NO-BREAK SPACE is NOT a line-break codepoint
+            // (UAX #14 class GL — Glue, non-breaking) — must pass.
+            "Caixa\u{00A0}for tests",
+        ] {
+            is_chart_description_shape(s).unwrap_or_else(|e| {
+                panic!(
+                    "non-line-break Unicode chart description {s:?} must pass without rejection: \
+                     {e:?}"
+                )
+            });
+        }
+    }
+
     // ── is_chart_maintainer_name_shape — shared `:autores` chart-maintainer predicate ──
 
     #[test]
@@ -8382,6 +8644,74 @@ mod tests {
     }
 
     #[test]
+    fn chart_maintainer_name_shape_rejects_each_unicode_line_break_codepoint() {
+        // The non-ASCII Unicode line-break arm — pins each of the three
+        // UAX #14 / YAML 1.1 §4.1 line-break codepoints outside the
+        // ASCII `\n` / `\r` bytes already caught at the per-byte pass.
+        // The canonical YAML-1.1-vs-YAML-1.2 paste-from-doc footgun: an
+        // `:autores "alice\u{2028}bob"` entry parses as one
+        // `maintainers:` array entry through a YAML 1.2-strict parser
+        // and as two entries through a YAML 1.1 parser (go-yaml v2 /
+        // Helm v3). Mirrors
+        // `chart_description_shape_rejects_each_unicode_line_break_codepoint`
+        // on the peer predicate — both predicates route through the
+        // same lifted `find_unicode_line_break` helper, so dropping
+        // any one of the three arms from the helper's match would
+        // regress both peer test sweeps simultaneously at this one
+        // structural floor.
+        for (cp, name) in [
+            ('\u{0085}', "U+0085"),
+            ('\u{2028}', "U+2028"),
+            ('\u{2029}', "U+2029"),
+        ] {
+            let s = format!("alice{cp}bob");
+            let err = is_chart_maintainer_name_shape(&s)
+                .err()
+                .unwrap_or_else(|| panic!("chart maintainer name with {name} must be rejected"));
+            assert!(
+                err.contains(name),
+                "chart maintainer name reason for {name} must name the codepoint verbatim; \
+                 got {err:?}"
+            );
+            assert!(
+                err.contains("line-break") || err.contains("UAX #14") || err.contains("YAML 1.1"),
+                "chart maintainer name reason for {name} must name the Unicode-line-break banner; \
+                 got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_accepts_non_line_break_unicode() {
+        // Positive control on the line-break arm: the predicate must
+        // accept every non-line-break Unicode shape canonical
+        // maintainer names carry. Pinned alongside the per-codepoint
+        // rejection sweep so a future helper widening that
+        // accidentally rejects a non-line-break codepoint surfaces
+        // here as a single-source-of-truth pin. Peer of
+        // `chart_description_shape_accepts_non_line_break_unicode`
+        // on the sibling YAML-plain-style-scalar surface.
+        for s in [
+            "François Dupont",
+            "日本語の名前",
+            "naïve <naive@example.com>",
+            "André",
+            // U+00A0 NO-BREAK SPACE is NOT a line-break codepoint
+            // (UAX #14 class GL — Glue, non-breaking) and is the
+            // canonical authoring shape for unbreakable space inside
+            // a multi-token maintainer name — must pass.
+            "Acme\u{00A0}Corp",
+        ] {
+            is_chart_maintainer_name_shape(s).unwrap_or_else(|e| {
+                panic!(
+                    "non-line-break Unicode chart maintainer name {s:?} must pass without \
+                     rejection: {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
     fn find_unicode_bidi_override_pins_the_nine_codepoint_accepted_set() {
         // The shared helper's accepted set — pinned in one place so
         // every per-predicate caller (`is_chart_description_shape`,
@@ -8426,6 +8756,68 @@ mod tests {
         // call-site contract on any future caller that doesn't gate
         // emptiness ahead of the scan.
         assert_eq!(find_unicode_bidi_override(""), None);
+    }
+
+    #[test]
+    fn find_unicode_line_break_pins_the_three_codepoint_accepted_set() {
+        // The shared helper's accepted set — pinned in one place so
+        // every per-predicate caller (`is_chart_description_shape`,
+        // `is_chart_maintainer_name_shape`, every future free-form-
+        // prose surface) reads from one canonical accepted set. The
+        // three UAX #14 / YAML 1.1 §4.1 non-ASCII line-break
+        // codepoints in document order, plus negative controls on
+        // bytes the helper must NOT reject (ASCII text, Unicode
+        // letters / arrows / em-dash / RTL letters, the canonical
+        // non-line-break U+00A0 NBSP shape downstream YAML 1.2 +
+        // Helm v3 + every chart-aware UI round-trip losslessly). A
+        // future shift in the accepted set surfaces here as a
+        // single-source-of-truth edit at this one test rather than
+        // across every per-predicate per-arm sweep. Peer of
+        // `find_unicode_bidi_override_pins_the_nine_codepoint_accepted_set`
+        // on the sibling lifted-helper one trajectory earlier.
+        for cp in ['\u{0085}', '\u{2028}', '\u{2029}'] {
+            let s = format!("a{cp}b");
+            assert_eq!(
+                find_unicode_line_break(&s),
+                Some(cp),
+                "helper must flag line-break codepoint U+{:04X} on input {s:?}",
+                cp as u32
+            );
+        }
+        for s in [
+            "alice",
+            "Canonical Rust→wasm32-wasip2",
+            "FIXME — describe this caixa",
+            "François Dupont",
+            "日本語の説明",
+            "naïve",
+            "שלום",
+            "مرحبا",
+            // U+00A0 NO-BREAK SPACE — UAX #14 class GL (Glue,
+            // non-breaking) — must NOT be rejected: the canonical
+            // unbreakable-space shape every typed maintainer-name
+            // axis admits.
+            "Acme\u{00A0}Corp",
+            // U+0009 TAB and U+000A LF and U+000D CR — ASCII
+            // line-break / whitespace bytes the per-byte arm on the
+            // calling predicate already closes; the helper must NOT
+            // claim them as its own (single-source-of-truth: ASCII
+            // arms live in the per-byte loop, the helper closes the
+            // non-ASCII codepoints).
+            "alice\tbob",
+            "alice\nbob",
+            "alice\rbob",
+        ] {
+            assert_eq!(
+                find_unicode_line_break(s),
+                None,
+                "helper must accept {s:?} (no non-ASCII line-break codepoint)"
+            );
+        }
+        // Empty input — defensive precondition for the helper's
+        // call-site contract on any future caller that doesn't gate
+        // emptiness ahead of the scan.
+        assert_eq!(find_unicode_line_break(""), None);
     }
 
     // ── is_chart_keyword_shape — shared `:etiquetas` chart-keyword predicate ──
