@@ -1378,6 +1378,35 @@ pub fn is_git_ref_name(s: &str) -> Result<(), String> {
             },
         ));
     }
+    if s.starts_with('-') {
+        return Err(
+            "must not start with `-` (the canonical CLI-argument-injection \
+             footgun on the `:tag` / `:branch` axis — caixa-resolver's \
+             `git::checkout` invocation routes the ref name verbatim into \
+             `git checkout --quiet --detach <ref>` (caixa-resolver/src/git.rs:41) \
+             without a `--` argument-list terminator, so a leading `-` value \
+             (`:tag \"-stable\"`, `:branch \"-X\"`, `:tag \"-c=core.merge=ours\"`) \
+             silently escapes the subprocess argument boundary and gets \
+             reinterpreted by `git checkout`'s argument parser as a CLI flag — \
+             the canonical short-flag / long-option / config-injection vector. \
+             Git's `check-ref-format` grammar does NOT reject a leading `-` \
+             (it admits the byte mid-name as a legitimate kebab separator), so \
+             every prior shape arm on this predicate passes the value through; \
+             the diagnostic moves the gate to the subprocess-argument \
+             boundary the resolver consumes. Peer with the \
+             [`is_git_repo_url`] leading-`-` arm (the CLI-arg-injection \
+             vector on the sibling `:repo` axis where `git clone <repo>` \
+             reinterprets a leading `-` as a flag like `-upload-pack=…` / \
+             `--config=…`), [`is_cargo_feature_name`] leading-`-` arm, and \
+             [`is_dns_1123_label`] leading-`-` arm — every single-token typed \
+             string slot the substrate routes through a downstream subprocess \
+             / parser rejects the same leading-byte CLI-arg-injection shape \
+             at validate time. Drop the leading `-`; use a kebab-separator-\
+             between-alphanumeric-segments form like `\"v0.1.0\"` / \
+             `\"feature-x\"` / `\"main\"` instead)"
+                .to_string(),
+        );
+    }
     for &b in s.as_bytes() {
         if b == b' ' || b == b'\t' {
             return Err(format!(
@@ -6391,6 +6420,101 @@ mod tests {
         // those arms.
         assert!(err.contains("OID"), "got: {err:?}");
         assert!(err.contains(":rev"), "got: {err:?}");
+    }
+
+    #[test]
+    fn git_ref_name_rejects_leading_hyphen_cli_arg_injection() {
+        // The CLI-arg-injection arm pin on the `:tag` / `:branch` axis.
+        // Git's `check-ref-format` grammar admits a leading `-` (the
+        // byte is a legitimate kebab continuation), so every prior
+        // shape arm passes the value through; the diagnostic moves
+        // the gate to the subprocess-argument boundary the resolver
+        // consumes. Pinned across the canonical CLI-arg-injection
+        // shapes — short-flag-shaped `"-X"`, long-option-shaped
+        // `"-stable"`, git-config-injection-shaped
+        // `"-c=core.merge=ours"`, the canonical
+        // `"--upload-pack=…"` long-flag form, and the
+        // `"--config"`-shape repeat-arg form — every shape would
+        // silently escape `git checkout --quiet --detach <ref>` (the
+        // resolver's invocation in `caixa-resolver/src/git.rs:41`,
+        // no `--` argument-list terminator) and get reinterpreted by
+        // `git checkout`'s argument parser. Peer with the
+        // `is_git_repo_url` leading-`-` arm (same vector on the
+        // sibling `:repo` axis), `is_cargo_feature_name` leading-`-`
+        // arm, and `is_dns_1123_label` leading-`-` arm — the
+        // substrate-wide "no leading `-` anywhere in a typed
+        // single-token string slot routed through a subprocess
+        // argument" invariant is now structurally consistent across
+        // every value-shape-gated typed surface.
+        for s in [
+            "-X",                     // short-flag-shape
+            "-stable",                // long-option-shape
+            "-c=core.merge=ours",     // git-config-injection-shape
+            "--upload-pack=cat /etc", // long-flag with-value
+            "--config",               // repeat-arg shape
+            "-",                      // degenerate single-byte
+        ] {
+            let err = is_git_ref_name(s)
+                .err()
+                .unwrap_or_else(|| panic!("git ref {s:?} must be rejected"));
+            assert!(
+                err.contains("`-`"),
+                "git ref {s:?} reason must surface the leading-`-` arm: {err:?}"
+            );
+            assert!(
+                err.contains("CLI-argument-injection"),
+                "git ref {s:?} reason must name the CLI-argument-injection \
+                 vector: {err:?}"
+            );
+        }
+        // Positive control: a mid-name `-` (the canonical kebab
+        // separator) passes — `"v0-1-0"`, `"feature-x"`, `"main-2"`
+        // — pinning that the arm only fires at the leading position,
+        // not anywhere else.
+        for s in ["v0-1-0", "feature-x", "main-2"] {
+            is_git_ref_name(s).unwrap_or_else(|e| {
+                panic!("mid-name `-` ref {s:?} must pass the leading-`-` arm: {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn git_ref_name_leading_hyphen_fires_before_per_byte_scan() {
+        // Cascade-precedence pin: a `"-flag\n"` value carries both a
+        // leading `-` and an embedded `\n` control byte; the leading-`-`
+        // arm fires first (the byte sits at the leading position the
+        // arm probes, before the per-byte cascade loop's control-byte
+        // arm). Mirrors the order pin
+        // `git_ref_name_partition_arm_fires_before_per_byte_scan`
+        // establishes on the canonical-OID partition arm — both
+        // pre-loop arms structurally precede the per-byte scan.
+        let err = is_git_ref_name("-flag\n").unwrap_err();
+        assert!(err.contains("`-`"), "got: {err:?}");
+        assert!(
+            !err.contains("control character"),
+            "leading-`-` arm must fire before the control-byte per-byte arm: {err:?}"
+        );
+    }
+
+    #[test]
+    fn git_ref_name_leading_hyphen_fires_after_canonical_oid_partition() {
+        // Cascade-precedence pin: the partition arm structurally
+        // precedes the leading-`-` arm because a canonical OID shape
+        // (40 / 64 lowercase hex bytes) cannot start with `-` — the
+        // byte sets are disjoint, so the precedence pin is a no-op at
+        // value level. The pin matters only at the diagnostic-shape
+        // level — it ensures a future codec round-trip that
+        // synthesizes a probe-as-both value (impossible today;
+        // possible if the OID partition arm ever relaxes its byte
+        // set) surfaces the more self-locating `:rev`-mis-slot
+        // diagnostic rather than the broader CLI-arg-injection one.
+        let oid = "0123456789abcdef0123456789abcdef01234567";
+        let err = is_git_ref_name(oid).unwrap_err();
+        assert!(err.contains("OID"), "got: {err:?}");
+        assert!(
+            !err.contains("CLI-argument-injection"),
+            "OID partition arm must precede leading-`-` arm: {err:?}"
+        );
     }
 
     // ── is_git_oid — `:fonte :rev` value-shape predicate ────────────────
