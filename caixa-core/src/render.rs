@@ -2953,6 +2953,123 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
         .find(|c| matches!(*c, '\u{0085}' | '\u{2028}' | '\u{2029}'))
 }
 
+/// Scan `s` for any of the four BMP Unicode invisible-format
+/// codepoints — the Cf-category zero-width codepoints that have no
+/// visible glyph in any conforming font yet ride verbatim through
+/// string equality and parser lookup:
+///
+///   - U+00AD `SHY`    SOFT HYPHEN
+///   - U+200B `ZWSP`   ZERO WIDTH SPACE
+///   - U+2060 `WJ`     WORD JOINER
+///   - U+FEFF `ZWNBSP` ZERO WIDTH NO-BREAK SPACE (BOM)
+///
+/// These codepoints break the THEORY.md §V.2 render-determinism
+/// contract on a third axis from the visual-order class the sibling
+/// [`find_unicode_bidi_override`] helper closes (the nine UAX #9
+/// explicit-direction codepoints flip the rendered visual order) and
+/// the single-line/multi-line class the sibling
+/// [`find_unicode_line_break`] helper closes (the three UAX #14
+/// non-ASCII line-break codepoints split a YAML 1.1 scalar): the
+/// *invisible-identity* divergence. The author's editor view of
+/// `caixa.lisp`, the chart-consumer's `helm list` / `helm search` /
+/// Artifact Hub maintainer column, and every conformant terminal /
+/// browser / editor agree on the visible glyph sequence (the
+/// codepoint renders as nothing, so `"alice"` and
+/// `"alice\u{200B}"` look identical end-to-end) — but the byte
+/// sequence the YAML-plain-style-scalar carries verbatim differs
+/// from the byte sequence the same author intends to read back, so
+/// every byte-level grep / diff / equality comparison over the
+/// rendered Chart.yaml disagrees with the visible-glyph match, the
+/// Artifact Hub maintainer / description search index lookup misses
+/// the authored identity entry because the byte sequence carries
+/// invisible codepoints between letters, and a future per-author
+/// CLA-signer lookup matches a visually-identical-but-byte-distinct
+/// identity (the canonical "invisible-codepoint homograph" footgun).
+/// The canonical authoring shapes that introduce these codepoints:
+/// paste-from-Microsoft-Word (SHY auto-inserted at every hyphenation
+/// candidate), paste-from-text-editor-saved-as-UTF-8-with-BOM (BOM
+/// leading byte from Notepad / older VS Code defaults / Excel CSV
+/// export), paste-from-typesetting-doc (ZWSP / WJ invisible word-
+/// break hints from InDesign / LaTeX-rendered PDF copy-paste).
+///
+/// Returns the first offending codepoint in document order, or
+/// `None` when `s` carries none of them. Iterates `chars()` once
+/// (single UTF-8 decode pass, peer of [`find_unicode_bidi_override`]
+/// and [`find_unicode_line_break`]) — the per-predicate caller folds
+/// the `Some(c)` into its axis-specific reason wording with the
+/// offending codepoint named verbatim as `U+XXXX`.
+///
+/// Excluded from the rejected set, on purpose:
+///
+///   - U+200C `ZWNJ` ZERO WIDTH NON-JOINER and U+200D `ZWJ` ZERO
+///     WIDTH JOINER — both carry semantic compositional load in
+///     Devanagari / Bengali / Persian script clusters (the
+///     canonical "Persian name authoring" shape relies on ZWNJ to
+///     break inappropriate ligatures) and in modern emoji ZWJ
+///     sequences (👨‍💻 is `MAN` + U+200D `ZWJ` + `LAPTOP`); the
+///     `:autores` / `:descricao` axes admit Unicode prose where
+///     such sequences are the canonical authoring shape and a ban
+///     would regress legitimate maintainer-name fixtures.
+///   - U+200E `LRM` LEFT-TO-RIGHT MARK and U+200F `RLM`
+///     RIGHT-TO-LEFT MARK — both are legitimate single-character
+///     direction *hints* (not overrides) in mixed-script prose
+///     (the canonical "Arabic name with embedded ASCII email"
+///     shape relies on RLM to render the visual order reliably
+///     across YAML / HTML consumers); the visible-order risk on
+///     these axes is closed by the bidi-*override* helper (the 9
+///     codepoints UAX #9 names as the Trojan Source vector), not
+///     by the bidi-*marks*, so LRM/RLM remain accepted natively.
+///   - U+2061–U+2064 (`FUNCTION APPLICATION`, `INVISIBLE TIMES`,
+///     `INVISIBLE SEPARATOR`, `INVISIBLE PLUS`) — math-formula
+///     invisible operators with no realistic footprint in chart
+///     metadata. A future tightening that closes them lands as a
+///     single-place edit at this helper's match arm with no
+///     per-predicate diff.
+///   - Codepoints outside the BMP — Variation Selectors
+///     Supplement (U+E0100..U+E01EF), Tag characters
+///     (U+E0001..U+E007F) — sit outside the BMP and rarely
+///     surface in realistic Helm chart metadata pasted from
+///     editors; the BMP-restricted set captures the canonical
+///     paste-from-Word / paste-from-BOM-editor / paste-from-
+///     typesetting-doc class without committing to a full Unicode
+///     `Default_Ignorable_Code_Point` table.
+///
+/// Lifted as a shared helper rather than inlined into each per-axis
+/// predicate (the PRIME DIRECTIVE duplication-budget rule —
+/// THEORY.md §I.3.5: "every recurring shape becomes a generator
+/// before it becomes a pattern; every pattern becomes a library
+/// before it becomes duplicated code. The duplication budget is
+/// zero.") because two predicates ([`is_chart_description_shape`],
+/// [`is_chart_maintainer_name_shape`]) carry the same UTF-8
+/// free-form-prose accepted set and would otherwise inline the same
+/// four-codepoint match arm verbatim — third lift in the UAX-driven
+/// render-determinism trio (peer of [`find_unicode_bidi_override`]
+/// on the visual-order axis and [`find_unicode_line_break`] on the
+/// single-line/multi-line axis). The third caller — every future
+/// per-axis free-form-prose surface (a future Aplicacao-level
+/// `:descricao` summary axis, a future per-`:contratos` edge
+/// `:descricao` annotation, the future per-`:autores`-email-suffix
+/// shape gate) — lands as a thin `if let Some(c) =
+/// find_unicode_invisible_format(s) { … }` wrapper rather than
+/// re-inlining the same codepoint match.
+///
+/// The arm is structurally distinct from every prior arm on the
+/// calling predicates: the per-byte control-char arm catches ASCII
+/// `0x00..=0x1F` plus `0x7F` DEL; the per-byte non-ASCII pass
+/// admits multi-byte UTF-8 sequences (Unicode letters, em-dash,
+/// arrows are canonical shapes); the bidi-override helper catches
+/// the 9 visual-order codepoints; the line-break helper catches
+/// the 3 single-line-vs-multi-line codepoints. None overlap the
+/// four invisible-format codepoints here — each decodes to a
+/// distinct multi-byte UTF-8 sequence (`C2 AD` for U+00AD,
+/// `E2 80 8B` for U+200B, `E2 81 A0` for U+2060, `EF BB BF` for
+/// U+FEFF) the per-byte non-ASCII pass deliberately accepts; only
+/// the typed codepoint scan catches them.
+fn find_unicode_invisible_format(s: &str) -> Option<char> {
+    s.chars()
+        .find(|c| matches!(*c, '\u{00AD}' | '\u{200B}' | '\u{2060}' | '\u{FEFF}'))
+}
+
 /// Predicate: assert that `s` is a valid chart-description shape.
 /// The `:descricao` axis is a free-form prose summary that lands in
 /// the rendered `lareira-<nome>` Helm chart's `Chart.yaml`
@@ -3036,6 +3153,35 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
 ///     [`is_chart_maintainer_name_shape`], peer of the
 ///     [`find_unicode_bidi_override`] lift on the same two
 ///     predicates one trajectory earlier.
+///   - no Unicode invisible-format codepoints (U+00AD `SHY`,
+///     U+200B `ZWSP`, U+2060 `WJ`, U+FEFF `ZWNBSP` / BOM) — the
+///     four BMP Cf-category zero-width codepoints with no visible
+///     glyph in any conforming font. The author's editor view of
+///     `caixa.lisp` and the chart-consumer's `helm list` /
+///     Artifact Hub description column agree on the visible glyph
+///     sequence (`"Canonical Servico"` and
+///     `"Canonical\u{200B}Servico"` render identically), but the
+///     byte sequence the YAML-plain-style-scalar carries verbatim
+///     differs — every byte-level grep / diff / equality
+///     comparison and the Artifact Hub description-search index
+///     lookup disagree silently with the visible-glyph match.
+///     Closes the canonical paste-from-Microsoft-Word (SHY auto-
+///     inserted at hyphenation candidates), paste-from-text-
+///     editor-saved-as-UTF-8-with-BOM (leading BOM byte), and
+///     paste-from-typesetting-doc (ZWSP / WJ invisible word-break
+///     hints) footguns. Routed through the lifted
+///     [`find_unicode_invisible_format`] helper so the same
+///     four-codepoint accepted set is shared with
+///     [`is_chart_maintainer_name_shape`], third lift in the
+///     UAX-driven render-determinism trio (peer of
+///     [`find_unicode_bidi_override`] on the visual-order axis
+///     and [`find_unicode_line_break`] on the single-line/multi-
+///     line axis). The four-codepoint set excludes U+200C `ZWNJ` /
+///     U+200D `ZWJ` (legitimate compositional load in Indic /
+///     Persian scripts and emoji ZWJ sequences) and U+200E `LRM` /
+///     U+200F `RLM` (legitimate single-character direction hints
+///     in mixed-script prose); the visible-order risk on bidi
+///     overrides — not marks — is closed by the prior helper.
 ///
 /// The predicate is a *structural* floor — it enforces the
 /// single-line printable-UTF-8 shape every realistic chart
@@ -3231,6 +3377,55 @@ pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
                 .join(" "),
         ));
     }
+    if let Some(c) = find_unicode_invisible_format(s) {
+        return Err(format!(
+            "must not contain Unicode invisible-format codepoint U+{cp:04X} (the \
+             four BMP Cf-category zero-width codepoints with no visible glyph in \
+             any conforming font: U+00AD `SHY` SOFT HYPHEN, U+200B `ZWSP` ZERO \
+             WIDTH SPACE, U+2060 `WJ` WORD JOINER, U+FEFF `ZWNBSP` ZERO WIDTH \
+             NO-BREAK SPACE / BOM. The invisible-identity divergence: the \
+             author's editor view of `caixa.lisp`, the chart-consumer's \
+             `helm list` / `helm search` / Artifact Hub description column, \
+             and every conformant terminal / browser / editor agree on the \
+             visible glyph sequence (the codepoint renders as nothing, so \
+             `\"Canonical Servico\"` and `\"Canonical\\u{{200B}}Servico\"` look \
+             identical end-to-end), but the byte sequence the YAML-plain-style-\
+             scalar carries verbatim differs — every byte-level grep / diff / \
+             equality comparison over the rendered Chart.yaml `description:` \
+             value disagrees with the visible-glyph match, and the Artifact Hub \
+             description-search index lookup misses the authored entry because \
+             the byte sequence carries an extra invisible codepoint between \
+             letters. The canonical authoring shapes that silently introduce \
+             these codepoints: paste-from-Microsoft-Word (SHY auto-inserted at \
+             every hyphenation candidate), paste-from-text-editor-saved-as-UTF-8-\
+             with-BOM (BOM leading byte from Notepad / older VS Code defaults), \
+             paste-from-typesetting-doc (ZWSP / WJ invisible word-break hints \
+             from InDesign / LaTeX-rendered PDF copy-paste). The byte sequence \
+             ({utf8_seq}) rides verbatim into the rendered Chart.yaml at the \
+             same axis the per-byte CR/LF/control arms close for ASCII, but \
+             renders as nothing across consumers, defeating the THEORY.md §V.2 \
+             render-determinism contract on a third axis from the bidi-override \
+             (visual-order) and line-break (single-line vs multi-line) classes \
+             the prior arms close. Routed through the shared \
+             [`find_unicode_invisible_format`] helper so the four-codepoint \
+             accepted set lives in exactly one place across the \
+             [`is_chart_maintainer_name_shape`] sibling YAML-plain-style-scalar \
+             surface, third lift in the UAX-driven render-determinism trio \
+             (peer of [`find_unicode_bidi_override`] on the visual-order axis \
+             and [`find_unicode_line_break`] on the single-line/multi-line \
+             axis). Drop the invisible codepoint; emoji ZWJ sequences (U+200D \
+             for the 👨‍💻 family) and bidi direction-mark codepoints (U+200E \
+             `LRM` / U+200F `RLM`) are accepted natively — only the four \
+             zero-semantic-content codepoints are rejected)",
+            cp = c as u32,
+            utf8_seq = c
+                .encode_utf8(&mut [0u8; 4])
+                .bytes()
+                .map(|b| format!("0x{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
+    }
     Ok(())
 }
 
@@ -3322,6 +3517,31 @@ pub const CHART_MAINTAINER_NAME_MAX_LEN: usize = 128;
 ///     accepted set is shared with [`is_chart_description_shape`]
 ///     on the sibling YAML-plain-style-scalar surface,
 ///     structurally consistent.
+///   - no Unicode invisible-format codepoints (U+00AD `SHY`,
+///     U+200B `ZWSP`, U+2060 `WJ`, U+FEFF `ZWNBSP` / BOM) — the
+///     four BMP Cf-category zero-width codepoints with no visible
+///     glyph. A maintainer-name with an embedded U+200B
+///     (`"alice\u{200B}"`) renders identically to `"alice"` in
+///     `helm list` / Artifact Hub's maintainer column, yet the
+///     byte sequence is distinct — the Artifact Hub maintainer-
+///     index lookup misses the authored `"alice"` entry, and a
+///     future CLA-signer lookup matches a visually-identical-but-
+///     byte-distinct identity (the canonical invisible-codepoint
+///     homograph footgun on the maintainer-identity axis). Closes
+///     the canonical paste-from-Microsoft-Word (SHY), paste-from-
+///     text-editor-saved-as-UTF-8-with-BOM (BOM), and paste-from-
+///     typesetting-doc (ZWSP / WJ) footguns. Routed through the
+///     same lifted [`find_unicode_invisible_format`] helper so the
+///     four-codepoint accepted set is shared with
+///     [`is_chart_description_shape`], third lift in the UAX-
+///     driven render-determinism trio (peer of
+///     [`find_unicode_bidi_override`] on the visual-order axis
+///     and [`find_unicode_line_break`] on the single-line/multi-
+///     line axis). The four-codepoint set excludes U+200C `ZWNJ` /
+///     U+200D `ZWJ` (emoji ZWJ sequences are canonical for modern
+///     maintainer-display names) and U+200E `LRM` / U+200F `RLM`
+///     (mixed-script direction hints are canonical for "Arabic
+///     name with embedded ASCII email" shapes).
 ///
 /// Same structural single-line printable-UTF-8 floor as
 /// [`is_chart_description_shape`] — both `:descricao` and `:autores`
@@ -3497,6 +3717,54 @@ pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
              line-break codepoint; split the value into separate `:autores` \
              list entries at the source — the per-entry shape is single-line by \
              contract)",
+            cp = c as u32,
+            utf8_seq = c
+                .encode_utf8(&mut [0u8; 4])
+                .bytes()
+                .map(|b| format!("0x{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
+    }
+    if let Some(c) = find_unicode_invisible_format(s) {
+        return Err(format!(
+            "must not contain Unicode invisible-format codepoint U+{cp:04X} (the \
+             four BMP Cf-category zero-width codepoints with no visible glyph: \
+             U+00AD `SHY` SOFT HYPHEN, U+200B `ZWSP` ZERO WIDTH SPACE, U+2060 \
+             `WJ` WORD JOINER, U+FEFF `ZWNBSP` ZERO WIDTH NO-BREAK SPACE / BOM. \
+             The maintainer-identity divergence: the author's editor view of \
+             `caixa.lisp` and the `helm list` / Artifact Hub maintainer column \
+             agree on the visible glyph sequence (`\"alice\"` and \
+             `\"alice\\u{{200B}}\"` render identically as `alice`), but the byte \
+             sequence the YAML-plain-style-scalar carries verbatim differs — \
+             the Artifact Hub maintainer-index lookup misses the authored \
+             `\"alice\"` entry because the byte sequence carries an extra \
+             invisible codepoint, a future per-maintainer CLA-signer lookup \
+             matches a visually-identical-but-byte-distinct identity (the \
+             canonical invisible-codepoint homograph footgun), and every \
+             byte-level diff / grep / equality comparison over the Chart.yaml \
+             `maintainers:` array disagrees with the visible-glyph match. The \
+             canonical authoring shapes that silently introduce these \
+             codepoints: paste-from-Microsoft-Word (SHY auto-inserted at \
+             every hyphenation candidate), paste-from-text-editor-saved-as-\
+             UTF-8-with-BOM (BOM leading byte from Notepad / older VS Code \
+             defaults / Excel CSV export), paste-from-typesetting-doc (ZWSP / \
+             WJ invisible word-break hints from InDesign / LaTeX-rendered PDF \
+             copy-paste). The byte sequence ({utf8_seq}) rides verbatim into \
+             the rendered Chart.yaml, but renders as nothing across consumers, \
+             defeating the THEORY.md §V.2 render-determinism contract on a \
+             third axis from the bidi-override (visual-order) and line-break \
+             (single-line vs multi-line) classes the prior arms close. Routed \
+             through the shared [`find_unicode_invisible_format`] helper so the \
+             four-codepoint accepted set is shared with \
+             [`is_chart_description_shape`], third lift in the UAX-driven \
+             render-determinism trio (peer of [`find_unicode_bidi_override`] \
+             on the visual-order axis and [`find_unicode_line_break`] on the \
+             single-line/multi-line axis). Drop the invisible codepoint; emoji \
+             ZWJ sequences (U+200D for the 👨‍💻 family) and bidi direction-mark \
+             codepoints (U+200E `LRM` / U+200F `RLM`) are accepted natively \
+             for mixed-script maintainer names — only the four zero-semantic-\
+             content codepoints are rejected)",
             cp = c as u32,
             utf8_seq = c
                 .encode_utf8(&mut [0u8; 4])
@@ -8444,6 +8712,86 @@ mod tests {
         }
     }
 
+    #[test]
+    fn chart_description_shape_rejects_each_unicode_invisible_format_codepoint() {
+        // The Unicode invisible-format arm — pins each of the four BMP
+        // Cf-category zero-width codepoints with no visible glyph in
+        // any conforming font. The per-byte non-ASCII pass deliberately
+        // admits multi-byte UTF-8 sequences (Unicode letters / arrows /
+        // em-dash are canonical fixtures); only the typed codepoint
+        // scan catches these four. Each case carries an alphabet-valid
+        // prefix + suffix so only the invisible-format arm fires. A
+        // future drop of any one arm here surfaces as a `must be
+        // rejected` panic at this one place rather than as a silent
+        // regression through invisible-codepoint-homograph downstream
+        // consumers (Artifact Hub description-search misses, byte-
+        // level diff / grep / equality disagreement with the
+        // visible-glyph match). Peer of
+        // `chart_maintainer_name_shape_rejects_each_unicode_invisible_format_codepoint`
+        // on the sibling predicate — both predicates route through the
+        // same lifted `find_unicode_invisible_format` helper.
+        for (cp, name) in [
+            ('\u{00AD}', "U+00AD"),
+            ('\u{200B}', "U+200B"),
+            ('\u{2060}', "U+2060"),
+            ('\u{FEFF}', "U+FEFF"),
+        ] {
+            let s = format!("Canonical{cp}Servico");
+            let err = is_chart_description_shape(&s)
+                .err()
+                .unwrap_or_else(|| panic!("chart description with {name} must be rejected"));
+            assert!(
+                err.contains(name),
+                "chart description reason for {name} must name the codepoint verbatim; got {err:?}"
+            );
+            assert!(
+                err.contains("invisible-format")
+                    || err.contains("Cf-category")
+                    || err.contains("zero-width"),
+                "chart description reason for {name} must name the invisible-format banner; \
+                 got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_description_shape_accepts_non_invisible_format_unicode() {
+        // Positive control on the invisible-format arm: the predicate
+        // must accept every non-invisible-format Unicode shape canonical
+        // fixtures carry — including U+200C ZWNJ / U+200D ZWJ
+        // (legitimate compositional load in Indic / Persian scripts and
+        // emoji ZWJ sequences) and U+200E LRM / U+200F RLM (legitimate
+        // single-character direction hints in mixed-script prose). A
+        // future helper widening that accidentally rejects any of these
+        // would regress legitimate fixture shapes and surfaces here as
+        // a single-source-of-truth pin. Mirrors
+        // `chart_maintainer_name_shape_accepts_non_invisible_format_unicode`
+        // on the sibling predicate.
+        for s in [
+            "Canonical Rust→wasm32-wasip2 caixa Servico.",
+            "FIXME — describe this caixa",
+            // Emoji ZWJ sequence (U+200D) — must NOT be rejected: the
+            // canonical multi-codepoint emoji authoring shape every
+            // chart-aware UI renders as a single glyph.
+            "Caixa for the 👨\u{200D}💻 family",
+            // ZWNJ (U+200C) — legitimate Persian / Indic script
+            // composition; the helper must NOT claim it.
+            "Caixa for می\u{200C}باشد",
+            // Bidi marks LRM (U+200E) and RLM (U+200F) — legitimate
+            // single-character direction hints, separate class from
+            // the bidi *overrides* the prior helper rejects.
+            "Caixa for ASCII\u{200E}embedded in RTL",
+            "Caixa for \u{200F}RTL hint",
+        ] {
+            is_chart_description_shape(s).unwrap_or_else(|e| {
+                panic!(
+                    "non-invisible-format Unicode chart description {s:?} must pass without \
+                     rejection: {e:?}"
+                )
+            });
+        }
+    }
+
     // ── is_chart_maintainer_name_shape — shared `:autores` chart-maintainer predicate ──
 
     #[test]
@@ -8712,6 +9060,82 @@ mod tests {
     }
 
     #[test]
+    fn chart_maintainer_name_shape_rejects_each_unicode_invisible_format_codepoint() {
+        // The Unicode invisible-format arm — pins each of the four BMP
+        // Cf-category zero-width codepoints with no visible glyph. The
+        // canonical maintainer-identity homograph footgun: an
+        // `:autores "alice\u{200B}"` entry renders identically to
+        // `:autores "alice"` in `helm list` / Artifact Hub's
+        // maintainer column, but the byte sequence is distinct — the
+        // Artifact Hub maintainer-index lookup misses the authored
+        // `"alice"` entry, a future CLA-signer lookup matches a
+        // visually-identical-but-byte-distinct identity. Mirrors
+        // `chart_description_shape_rejects_each_unicode_invisible_format_codepoint`
+        // on the peer predicate — both predicates route through the
+        // same lifted `find_unicode_invisible_format` helper, so
+        // dropping any one of the four arms from the helper's match
+        // would regress both peer test sweeps simultaneously at this
+        // one structural floor.
+        for (cp, name) in [
+            ('\u{00AD}', "U+00AD"),
+            ('\u{200B}', "U+200B"),
+            ('\u{2060}', "U+2060"),
+            ('\u{FEFF}', "U+FEFF"),
+        ] {
+            let s = format!("alice{cp}bob");
+            let err = is_chart_maintainer_name_shape(&s)
+                .err()
+                .unwrap_or_else(|| panic!("chart maintainer name with {name} must be rejected"));
+            assert!(
+                err.contains(name),
+                "chart maintainer name reason for {name} must name the codepoint verbatim; \
+                 got {err:?}"
+            );
+            assert!(
+                err.contains("invisible-format")
+                    || err.contains("Cf-category")
+                    || err.contains("zero-width"),
+                "chart maintainer name reason for {name} must name the invisible-format banner; \
+                 got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_accepts_non_invisible_format_unicode() {
+        // Positive control on the invisible-format arm: the predicate
+        // must accept the legitimate-use codepoints the helper
+        // deliberately excludes — U+200C ZWNJ / U+200D ZWJ (emoji ZWJ
+        // sequences are canonical for modern maintainer-display names;
+        // Indic / Persian script composition relies on ZWNJ to break
+        // inappropriate ligatures) and U+200E LRM / U+200F RLM
+        // (mixed-script direction hints are canonical for "Arabic name
+        // with embedded ASCII email" shapes). Peer of
+        // `chart_description_shape_accepts_non_invisible_format_unicode`
+        // on the sibling YAML-plain-style-scalar surface.
+        for s in [
+            "François Dupont",
+            "naïve <naive@example.com>",
+            // Emoji ZWJ sequence (U+200D) — canonical multi-codepoint
+            // emoji authoring shape.
+            "Joe 👨\u{200D}💻 Developer",
+            // ZWNJ (U+200C) — legitimate Persian / Indic composition.
+            "Persian می\u{200C}باشد maintainer",
+            // Bidi marks LRM / RLM — legitimate direction hints in
+            // mixed-script maintainer names.
+            "Arabic\u{200F}name <maintainer@example.com>",
+            "ASCII\u{200E}embedded in RTL context",
+        ] {
+            is_chart_maintainer_name_shape(s).unwrap_or_else(|e| {
+                panic!(
+                    "non-invisible-format Unicode chart maintainer name {s:?} must pass without \
+                     rejection: {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
     fn find_unicode_bidi_override_pins_the_nine_codepoint_accepted_set() {
         // The shared helper's accepted set — pinned in one place so
         // every per-predicate caller (`is_chart_description_shape`,
@@ -8818,6 +9242,81 @@ mod tests {
         // call-site contract on any future caller that doesn't gate
         // emptiness ahead of the scan.
         assert_eq!(find_unicode_line_break(""), None);
+    }
+
+    #[test]
+    fn find_unicode_invisible_format_pins_the_four_codepoint_accepted_set() {
+        // The shared helper's accepted set — pinned in one place so
+        // every per-predicate caller (`is_chart_description_shape`,
+        // `is_chart_maintainer_name_shape`, every future free-form-
+        // prose surface) reads from one canonical accepted set. The
+        // four BMP Cf-category zero-width codepoints in document order,
+        // plus negative controls on codepoints the helper must NOT
+        // reject — the deliberate exclusions: U+200C ZWNJ / U+200D ZWJ
+        // (emoji ZWJ sequences + Indic / Persian script composition)
+        // and U+200E LRM / U+200F RLM (mixed-script direction hints).
+        // A future shift in the accepted set surfaces here as a
+        // single-source-of-truth edit at this one test rather than
+        // across every per-predicate per-arm sweep. Third pin in the
+        // UAX-driven render-determinism trio (peer of
+        // `find_unicode_bidi_override_pins_the_nine_codepoint_accepted_set`
+        // on the visual-order axis and
+        // `find_unicode_line_break_pins_the_three_codepoint_accepted_set`
+        // on the single-line/multi-line axis).
+        for cp in ['\u{00AD}', '\u{200B}', '\u{2060}', '\u{FEFF}'] {
+            let s = format!("a{cp}b");
+            assert_eq!(
+                find_unicode_invisible_format(&s),
+                Some(cp),
+                "helper must flag invisible-format codepoint U+{:04X} on input {s:?}",
+                cp as u32
+            );
+        }
+        for s in [
+            "alice",
+            "Canonical Rust→wasm32-wasip2",
+            "FIXME — describe this caixa",
+            "François Dupont",
+            "日本語の説明",
+            "naïve",
+            "שלום",
+            "مرحبا",
+            // U+00A0 NO-BREAK SPACE — class GL (Glue), visible-width
+            // codepoint — must NOT be claimed by the invisible-format
+            // helper (the canonical unbreakable-space shape).
+            "Acme\u{00A0}Corp",
+            // U+200C ZWNJ — deliberately excluded (Indic / Persian
+            // composition + emoji ZWJ-adjacent context).
+            "می\u{200C}باشد",
+            // U+200D ZWJ — deliberately excluded (emoji ZWJ
+            // sequences are canonical: 👨‍💻 is MAN + ZWJ + LAPTOP).
+            "Joe 👨\u{200D}💻 Developer",
+            // U+200E LRM — deliberately excluded (direction-hint
+            // mark, not a direction-override; legitimate in
+            // mixed-script prose).
+            "ASCII\u{200E}embedded",
+            // U+200F RLM — deliberately excluded (mirror of LRM
+            // on the RTL axis).
+            "Arabic\u{200F}name",
+            // Bidi-override codepoints (U+202A..U+202E, U+2066..U+2069)
+            // — caught by the sibling `find_unicode_bidi_override`
+            // helper, not this one (single-source-of-truth: each
+            // helper closes exactly its class).
+            "alice\u{202E}bob",
+            // Line-break codepoints (U+0085, U+2028, U+2029) — caught
+            // by the sibling `find_unicode_line_break` helper.
+            "alice\u{2028}bob",
+        ] {
+            assert_eq!(
+                find_unicode_invisible_format(s),
+                None,
+                "helper must accept {s:?} (no invisible-format codepoint in the four-codepoint set)"
+            );
+        }
+        // Empty input — defensive precondition for the helper's
+        // call-site contract on any future caller that doesn't gate
+        // emptiness ahead of the scan.
+        assert_eq!(find_unicode_invisible_format(""), None);
     }
 
     // ── is_chart_keyword_shape — shared `:etiquetas` chart-keyword predicate ──
