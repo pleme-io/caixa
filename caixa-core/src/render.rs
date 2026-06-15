@@ -2953,7 +2953,7 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
         .find(|c| matches!(*c, '\u{0085}' | '\u{2028}' | '\u{2029}'))
 }
 
-/// Scan `s` for any of the four BMP Unicode invisible-format
+/// Scan `s` for any of the eight BMP Unicode invisible-format
 /// codepoints — the Cf-category zero-width codepoints that have no
 /// visible glyph in any conforming font yet ride verbatim through
 /// string equality and parser lookup:
@@ -2961,6 +2961,10 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
 ///   - U+00AD `SHY`    SOFT HYPHEN
 ///   - U+200B `ZWSP`   ZERO WIDTH SPACE
 ///   - U+2060 `WJ`     WORD JOINER
+///   - U+2061 `FA`     FUNCTION APPLICATION
+///   - U+2062 `IT`     INVISIBLE TIMES
+///   - U+2063 `IS`     INVISIBLE SEPARATOR
+///   - U+2064 `IP`     INVISIBLE PLUS
 ///   - U+FEFF `ZWNBSP` ZERO WIDTH NO-BREAK SPACE (BOM)
 ///
 /// These codepoints break the THEORY.md §V.2 render-determinism
@@ -3019,20 +3023,15 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
 ///     these axes is closed by the bidi-*override* helper (the 9
 ///     codepoints UAX #9 names as the Trojan Source vector), not
 ///     by the bidi-*marks*, so LRM/RLM remain accepted natively.
-///   - U+2061–U+2064 (`FUNCTION APPLICATION`, `INVISIBLE TIMES`,
-///     `INVISIBLE SEPARATOR`, `INVISIBLE PLUS`) — math-formula
-///     invisible operators with no realistic footprint in chart
-///     metadata. A future tightening that closes them lands as a
-///     single-place edit at this helper's match arm with no
-///     per-predicate diff.
 ///   - Codepoints outside the BMP — Variation Selectors
 ///     Supplement (U+E0100..U+E01EF), Tag characters
 ///     (U+E0001..U+E007F) — sit outside the BMP and rarely
 ///     surface in realistic Helm chart metadata pasted from
 ///     editors; the BMP-restricted set captures the canonical
 ///     paste-from-Word / paste-from-BOM-editor / paste-from-
-///     typesetting-doc class without committing to a full Unicode
-///     `Default_Ignorable_Code_Point` table.
+///     typesetting-doc / paste-from-math-formula class without
+///     committing to a full Unicode `Default_Ignorable_Code_Point`
+///     table.
 ///
 /// Lifted as a shared helper rather than inlined into each per-axis
 /// predicate (the PRIME DIRECTIVE duplication-budget rule —
@@ -3042,7 +3041,7 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
 /// zero.") because two predicates ([`is_chart_description_shape`],
 /// [`is_chart_maintainer_name_shape`]) carry the same UTF-8
 /// free-form-prose accepted set and would otherwise inline the same
-/// four-codepoint match arm verbatim — third lift in the UAX-driven
+/// eight-codepoint match arm verbatim — third lift in the UAX-driven
 /// render-determinism trio (peer of [`find_unicode_bidi_override`]
 /// on the visual-order axis and [`find_unicode_line_break`] on the
 /// single-line/multi-line axis). The third caller — every future
@@ -3060,14 +3059,41 @@ fn find_unicode_line_break(s: &str) -> Option<char> {
 /// arrows are canonical shapes); the bidi-override helper catches
 /// the 9 visual-order codepoints; the line-break helper catches
 /// the 3 single-line-vs-multi-line codepoints. None overlap the
-/// four invisible-format codepoints here — each decodes to a
+/// eight invisible-format codepoints here — each decodes to a
 /// distinct multi-byte UTF-8 sequence (`C2 AD` for U+00AD,
-/// `E2 80 8B` for U+200B, `E2 81 A0` for U+2060, `EF BB BF` for
-/// U+FEFF) the per-byte non-ASCII pass deliberately accepts; only
-/// the typed codepoint scan catches them.
+/// `E2 80 8B` for U+200B, `E2 81 A0` for U+2060, `E2 81 A1` for
+/// U+2061, `E2 81 A2` for U+2062, `E2 81 A3` for U+2063, `E2 81
+/// A4` for U+2064, `EF BB BF` for U+FEFF) the per-byte non-ASCII
+/// pass deliberately accepts; only the typed codepoint scan catches
+/// them.
+///
+/// The four math-invisible operators U+2061..=U+2064 carry their
+/// semantic load only inside mathematical typesetting (MathML
+/// `<mo>` invisible operators, LaTeX `\,\,` thin-space-as-invisible-
+/// times) — no realistic Helm chart `:descricao` or `:autores`
+/// value is a math formula. The canonical authoring footgun is the
+/// paste-from-MathJax-rendered-doc / paste-from-LaTeX-equation /
+/// paste-from-InDesign-math-equation shape where MathJax /
+/// LaTeX2RTF / InDesign export an invisible-operator codepoint
+/// between adjacent symbols to preserve the semantic operator
+/// reading for screen readers, and the codepoint silently rides
+/// into the YAML scalar — same invisible-identity divergence class
+/// the BMP four (SHY / ZWSP / WJ / BOM) close on the paste-from-
+/// Word / paste-from-BOM-editor / paste-from-typesetting-doc class.
 fn find_unicode_invisible_format(s: &str) -> Option<char> {
-    s.chars()
-        .find(|c| matches!(*c, '\u{00AD}' | '\u{200B}' | '\u{2060}' | '\u{FEFF}'))
+    s.chars().find(|c| {
+        matches!(
+            *c,
+            '\u{00AD}'
+                | '\u{200B}'
+                | '\u{2060}'
+                | '\u{2061}'
+                | '\u{2062}'
+                | '\u{2063}'
+                | '\u{2064}'
+                | '\u{FEFF}'
+        )
+    })
 }
 
 /// Predicate: assert that `s` is a valid chart-description shape.
@@ -3154,34 +3180,42 @@ fn find_unicode_invisible_format(s: &str) -> Option<char> {
 ///     [`find_unicode_bidi_override`] lift on the same two
 ///     predicates one trajectory earlier.
 ///   - no Unicode invisible-format codepoints (U+00AD `SHY`,
-///     U+200B `ZWSP`, U+2060 `WJ`, U+FEFF `ZWNBSP` / BOM) — the
-///     four BMP Cf-category zero-width codepoints with no visible
-///     glyph in any conforming font. The author's editor view of
-///     `caixa.lisp` and the chart-consumer's `helm list` /
-///     Artifact Hub description column agree on the visible glyph
-///     sequence (`"Canonical Servico"` and
-///     `"Canonical\u{200B}Servico"` render identically), but the
-///     byte sequence the YAML-plain-style-scalar carries verbatim
-///     differs — every byte-level grep / diff / equality
+///     U+200B `ZWSP`, U+2060 `WJ`, U+2061 `FA` FUNCTION
+///     APPLICATION, U+2062 `IT` INVISIBLE TIMES, U+2063 `IS`
+///     INVISIBLE SEPARATOR, U+2064 `IP` INVISIBLE PLUS, U+FEFF
+///     `ZWNBSP` / BOM) — the eight BMP Cf-category zero-width
+///     codepoints with no visible glyph in any conforming font.
+///     The author's editor view of `caixa.lisp` and the chart-
+///     consumer's `helm list` / Artifact Hub description column
+///     agree on the visible glyph sequence (`"Canonical Servico"`
+///     and `"Canonical\u{200B}Servico"` render identically), but
+///     the byte sequence the YAML-plain-style-scalar carries
+///     verbatim differs — every byte-level grep / diff / equality
 ///     comparison and the Artifact Hub description-search index
 ///     lookup disagree silently with the visible-glyph match.
 ///     Closes the canonical paste-from-Microsoft-Word (SHY auto-
 ///     inserted at hyphenation candidates), paste-from-text-
-///     editor-saved-as-UTF-8-with-BOM (leading BOM byte), and
+///     editor-saved-as-UTF-8-with-BOM (leading BOM byte),
 ///     paste-from-typesetting-doc (ZWSP / WJ invisible word-break
-///     hints) footguns. Routed through the lifted
+///     hints), and paste-from-MathJax/LaTeX-rendered-formula
+///     (FUNCTION APPLICATION / INVISIBLE TIMES / INVISIBLE
+///     SEPARATOR / INVISIBLE PLUS — the four math-formula
+///     invisible operators MathJax / LaTeX export between
+///     adjacent symbols for screen-reader operator semantics)
+///     footguns. Routed through the lifted
 ///     [`find_unicode_invisible_format`] helper so the same
-///     four-codepoint accepted set is shared with
+///     eight-codepoint accepted set is shared with
 ///     [`is_chart_maintainer_name_shape`], third lift in the
 ///     UAX-driven render-determinism trio (peer of
 ///     [`find_unicode_bidi_override`] on the visual-order axis
 ///     and [`find_unicode_line_break`] on the single-line/multi-
-///     line axis). The four-codepoint set excludes U+200C `ZWNJ` /
-///     U+200D `ZWJ` (legitimate compositional load in Indic /
-///     Persian scripts and emoji ZWJ sequences) and U+200E `LRM` /
-///     U+200F `RLM` (legitimate single-character direction hints
-///     in mixed-script prose); the visible-order risk on bidi
-///     overrides — not marks — is closed by the prior helper.
+///     line axis). The eight-codepoint set excludes U+200C
+///     `ZWNJ` / U+200D `ZWJ` (legitimate compositional load in
+///     Indic / Persian scripts and emoji ZWJ sequences) and
+///     U+200E `LRM` / U+200F `RLM` (legitimate single-character
+///     direction hints in mixed-script prose); the visible-order
+///     risk on bidi overrides — not marks — is closed by the
+///     prior helper.
 ///
 /// The predicate is a *structural* floor — it enforces the
 /// single-line printable-UTF-8 shape every realistic chart
@@ -3380,9 +3414,11 @@ pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
     if let Some(c) = find_unicode_invisible_format(s) {
         return Err(format!(
             "must not contain Unicode invisible-format codepoint U+{cp:04X} (the \
-             four BMP Cf-category zero-width codepoints with no visible glyph in \
+             eight BMP Cf-category zero-width codepoints with no visible glyph in \
              any conforming font: U+00AD `SHY` SOFT HYPHEN, U+200B `ZWSP` ZERO \
-             WIDTH SPACE, U+2060 `WJ` WORD JOINER, U+FEFF `ZWNBSP` ZERO WIDTH \
+             WIDTH SPACE, U+2060 `WJ` WORD JOINER, U+2061 `FA` FUNCTION \
+             APPLICATION, U+2062 `IT` INVISIBLE TIMES, U+2063 `IS` INVISIBLE \
+             SEPARATOR, U+2064 `IP` INVISIBLE PLUS, U+FEFF `ZWNBSP` ZERO WIDTH \
              NO-BREAK SPACE / BOM. The invisible-identity divergence: the \
              author's editor view of `caixa.lisp`, the chart-consumer's \
              `helm list` / `helm search` / Artifact Hub description column, \
@@ -3400,23 +3436,28 @@ pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
              every hyphenation candidate), paste-from-text-editor-saved-as-UTF-8-\
              with-BOM (BOM leading byte from Notepad / older VS Code defaults), \
              paste-from-typesetting-doc (ZWSP / WJ invisible word-break hints \
-             from InDesign / LaTeX-rendered PDF copy-paste). The byte sequence \
-             ({utf8_seq}) rides verbatim into the rendered Chart.yaml at the \
-             same axis the per-byte CR/LF/control arms close for ASCII, but \
-             renders as nothing across consumers, defeating the THEORY.md §V.2 \
-             render-determinism contract on a third axis from the bidi-override \
-             (visual-order) and line-break (single-line vs multi-line) classes \
-             the prior arms close. Routed through the shared \
-             [`find_unicode_invisible_format`] helper so the four-codepoint \
-             accepted set lives in exactly one place across the \
-             [`is_chart_maintainer_name_shape`] sibling YAML-plain-style-scalar \
-             surface, third lift in the UAX-driven render-determinism trio \
-             (peer of [`find_unicode_bidi_override`] on the visual-order axis \
-             and [`find_unicode_line_break`] on the single-line/multi-line \
-             axis). Drop the invisible codepoint; emoji ZWJ sequences (U+200D \
-             for the 👨‍💻 family) and bidi direction-mark codepoints (U+200E \
-             `LRM` / U+200F `RLM`) are accepted natively — only the four \
-             zero-semantic-content codepoints are rejected)",
+             from InDesign / LaTeX-rendered PDF copy-paste), and paste-from-\
+             MathJax/LaTeX-rendered-formula (FUNCTION APPLICATION / INVISIBLE \
+             TIMES / INVISIBLE SEPARATOR / INVISIBLE PLUS — MathJax / LaTeX2RTF \
+             / InDesign math-equation export emit one of these between adjacent \
+             symbols to preserve operator semantics for screen readers, and the \
+             codepoint silently rides into the YAML scalar with no visible \
+             trace). The byte sequence ({utf8_seq}) rides verbatim into the \
+             rendered Chart.yaml at the same axis the per-byte CR/LF/control \
+             arms close for ASCII, but renders as nothing across consumers, \
+             defeating the THEORY.md §V.2 render-determinism contract on a \
+             third axis from the bidi-override (visual-order) and line-break \
+             (single-line vs multi-line) classes the prior arms close. Routed \
+             through the shared [`find_unicode_invisible_format`] helper so \
+             the eight-codepoint accepted set lives in exactly one place \
+             across the [`is_chart_maintainer_name_shape`] sibling \
+             YAML-plain-style-scalar surface, third lift in the UAX-driven \
+             render-determinism trio (peer of [`find_unicode_bidi_override`] \
+             on the visual-order axis and [`find_unicode_line_break`] on the \
+             single-line/multi-line axis). Drop the invisible codepoint; emoji \
+             ZWJ sequences (U+200D for the 👨‍💻 family) and bidi direction-mark \
+             codepoints (U+200E `LRM` / U+200F `RLM`) are accepted natively — \
+             only the eight zero-semantic-content codepoints are rejected)",
             cp = c as u32,
             utf8_seq = c
                 .encode_utf8(&mut [0u8; 4])
@@ -3518,30 +3559,37 @@ pub const CHART_MAINTAINER_NAME_MAX_LEN: usize = 128;
 ///     on the sibling YAML-plain-style-scalar surface,
 ///     structurally consistent.
 ///   - no Unicode invisible-format codepoints (U+00AD `SHY`,
-///     U+200B `ZWSP`, U+2060 `WJ`, U+FEFF `ZWNBSP` / BOM) — the
-///     four BMP Cf-category zero-width codepoints with no visible
-///     glyph. A maintainer-name with an embedded U+200B
-///     (`"alice\u{200B}"`) renders identically to `"alice"` in
-///     `helm list` / Artifact Hub's maintainer column, yet the
-///     byte sequence is distinct — the Artifact Hub maintainer-
-///     index lookup misses the authored `"alice"` entry, and a
-///     future CLA-signer lookup matches a visually-identical-but-
-///     byte-distinct identity (the canonical invisible-codepoint
-///     homograph footgun on the maintainer-identity axis). Closes
-///     the canonical paste-from-Microsoft-Word (SHY), paste-from-
-///     text-editor-saved-as-UTF-8-with-BOM (BOM), and paste-from-
-///     typesetting-doc (ZWSP / WJ) footguns. Routed through the
-///     same lifted [`find_unicode_invisible_format`] helper so the
-///     four-codepoint accepted set is shared with
+///     U+200B `ZWSP`, U+2060 `WJ`, U+2061 `FA` FUNCTION
+///     APPLICATION, U+2062 `IT` INVISIBLE TIMES, U+2063 `IS`
+///     INVISIBLE SEPARATOR, U+2064 `IP` INVISIBLE PLUS, U+FEFF
+///     `ZWNBSP` / BOM) — the eight BMP Cf-category zero-width
+///     codepoints with no visible glyph. A maintainer-name with
+///     an embedded U+200B (`"alice\u{200B}"`) renders identically
+///     to `"alice"` in `helm list` / Artifact Hub's maintainer
+///     column, yet the byte sequence is distinct — the Artifact
+///     Hub maintainer-index lookup misses the authored `"alice"`
+///     entry, and a future CLA-signer lookup matches a visually-
+///     identical-but-byte-distinct identity (the canonical
+///     invisible-codepoint homograph footgun on the maintainer-
+///     identity axis). Closes the canonical paste-from-Microsoft-
+///     Word (SHY), paste-from-text-editor-saved-as-UTF-8-with-BOM
+///     (BOM), paste-from-typesetting-doc (ZWSP / WJ), and
+///     paste-from-MathJax/LaTeX-rendered-formula (FUNCTION
+///     APPLICATION / INVISIBLE TIMES / INVISIBLE SEPARATOR /
+///     INVISIBLE PLUS — math-formula invisible operators
+///     MathJax / LaTeX2RTF / InDesign emit between symbols for
+///     screen-reader operator semantics) footguns. Routed through
+///     the same lifted [`find_unicode_invisible_format`] helper
+///     so the eight-codepoint accepted set is shared with
 ///     [`is_chart_description_shape`], third lift in the UAX-
 ///     driven render-determinism trio (peer of
 ///     [`find_unicode_bidi_override`] on the visual-order axis
 ///     and [`find_unicode_line_break`] on the single-line/multi-
-///     line axis). The four-codepoint set excludes U+200C `ZWNJ` /
-///     U+200D `ZWJ` (emoji ZWJ sequences are canonical for modern
-///     maintainer-display names) and U+200E `LRM` / U+200F `RLM`
-///     (mixed-script direction hints are canonical for "Arabic
-///     name with embedded ASCII email" shapes).
+///     line axis). The eight-codepoint set excludes U+200C
+///     `ZWNJ` / U+200D `ZWJ` (emoji ZWJ sequences are canonical
+///     for modern maintainer-display names) and U+200E `LRM` /
+///     U+200F `RLM` (mixed-script direction hints are canonical
+///     for "Arabic name with embedded ASCII email" shapes).
 ///
 /// Same structural single-line printable-UTF-8 floor as
 /// [`is_chart_description_shape`] — both `:descricao` and `:autores`
@@ -3729,9 +3777,11 @@ pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
     if let Some(c) = find_unicode_invisible_format(s) {
         return Err(format!(
             "must not contain Unicode invisible-format codepoint U+{cp:04X} (the \
-             four BMP Cf-category zero-width codepoints with no visible glyph: \
+             eight BMP Cf-category zero-width codepoints with no visible glyph: \
              U+00AD `SHY` SOFT HYPHEN, U+200B `ZWSP` ZERO WIDTH SPACE, U+2060 \
-             `WJ` WORD JOINER, U+FEFF `ZWNBSP` ZERO WIDTH NO-BREAK SPACE / BOM. \
+             `WJ` WORD JOINER, U+2061 `FA` FUNCTION APPLICATION, U+2062 `IT` \
+             INVISIBLE TIMES, U+2063 `IS` INVISIBLE SEPARATOR, U+2064 `IP` \
+             INVISIBLE PLUS, U+FEFF `ZWNBSP` ZERO WIDTH NO-BREAK SPACE / BOM. \
              The maintainer-identity divergence: the author's editor view of \
              `caixa.lisp` and the `helm list` / Artifact Hub maintainer column \
              agree on the visible glyph sequence (`\"alice\"` and \
@@ -3750,20 +3800,26 @@ pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
              UTF-8-with-BOM (BOM leading byte from Notepad / older VS Code \
              defaults / Excel CSV export), paste-from-typesetting-doc (ZWSP / \
              WJ invisible word-break hints from InDesign / LaTeX-rendered PDF \
-             copy-paste). The byte sequence ({utf8_seq}) rides verbatim into \
-             the rendered Chart.yaml, but renders as nothing across consumers, \
-             defeating the THEORY.md §V.2 render-determinism contract on a \
-             third axis from the bidi-override (visual-order) and line-break \
-             (single-line vs multi-line) classes the prior arms close. Routed \
-             through the shared [`find_unicode_invisible_format`] helper so the \
-             four-codepoint accepted set is shared with \
+             copy-paste), and paste-from-MathJax/LaTeX-rendered-formula \
+             (FUNCTION APPLICATION / INVISIBLE TIMES / INVISIBLE SEPARATOR / \
+             INVISIBLE PLUS — MathJax / LaTeX2RTF / InDesign math-equation \
+             export emit one of these between adjacent symbols to preserve \
+             operator semantics for screen readers, and the codepoint silently \
+             rides into the YAML scalar with no visible trace). The byte \
+             sequence ({utf8_seq}) rides verbatim into the rendered \
+             Chart.yaml, but renders as nothing across consumers, defeating \
+             the THEORY.md §V.2 render-determinism contract on a third axis \
+             from the bidi-override (visual-order) and line-break (single-\
+             line vs multi-line) classes the prior arms close. Routed through \
+             the shared [`find_unicode_invisible_format`] helper so the \
+             eight-codepoint accepted set is shared with \
              [`is_chart_description_shape`], third lift in the UAX-driven \
              render-determinism trio (peer of [`find_unicode_bidi_override`] \
              on the visual-order axis and [`find_unicode_line_break`] on the \
              single-line/multi-line axis). Drop the invisible codepoint; emoji \
              ZWJ sequences (U+200D for the 👨‍💻 family) and bidi direction-mark \
              codepoints (U+200E `LRM` / U+200F `RLM`) are accepted natively \
-             for mixed-script maintainer names — only the four zero-semantic-\
+             for mixed-script maintainer names — only the eight zero-semantic-\
              content codepoints are rejected)",
             cp = c as u32,
             utf8_seq = c
@@ -8714,26 +8770,39 @@ mod tests {
 
     #[test]
     fn chart_description_shape_rejects_each_unicode_invisible_format_codepoint() {
-        // The Unicode invisible-format arm — pins each of the four BMP
-        // Cf-category zero-width codepoints with no visible glyph in
-        // any conforming font. The per-byte non-ASCII pass deliberately
-        // admits multi-byte UTF-8 sequences (Unicode letters / arrows /
-        // em-dash are canonical fixtures); only the typed codepoint
-        // scan catches these four. Each case carries an alphabet-valid
-        // prefix + suffix so only the invisible-format arm fires. A
-        // future drop of any one arm here surfaces as a `must be
-        // rejected` panic at this one place rather than as a silent
-        // regression through invisible-codepoint-homograph downstream
-        // consumers (Artifact Hub description-search misses, byte-
-        // level diff / grep / equality disagreement with the
-        // visible-glyph match). Peer of
+        // The Unicode invisible-format arm — pins each of the eight
+        // BMP Cf-category zero-width codepoints with no visible glyph
+        // in any conforming font. The per-byte non-ASCII pass
+        // deliberately admits multi-byte UTF-8 sequences (Unicode
+        // letters / arrows / em-dash are canonical fixtures); only the
+        // typed codepoint scan catches these eight. Each case carries
+        // an alphabet-valid prefix + suffix so only the invisible-
+        // format arm fires. A future drop of any one arm here surfaces
+        // as a `must be rejected` panic at this one place rather than
+        // as a silent regression through invisible-codepoint-homograph
+        // downstream consumers (Artifact Hub description-search
+        // misses, byte-level diff / grep / equality disagreement with
+        // the visible-glyph match). Peer of
         // `chart_maintainer_name_shape_rejects_each_unicode_invisible_format_codepoint`
         // on the sibling predicate — both predicates route through the
-        // same lifted `find_unicode_invisible_format` helper.
+        // same lifted `find_unicode_invisible_format` helper. Covers
+        // the four paste-from-Word / paste-from-BOM-editor / paste-
+        // from-typesetting shapes (U+00AD / U+200B / U+2060 / U+FEFF)
+        // and the four math-formula invisible operators (U+2061
+        // FUNCTION APPLICATION / U+2062 INVISIBLE TIMES / U+2063
+        // INVISIBLE SEPARATOR / U+2064 INVISIBLE PLUS — the canonical
+        // paste-from-MathJax / paste-from-LaTeX-rendered-formula
+        // footgun where the renderer emits an invisible operator
+        // between adjacent symbols for screen-reader operator
+        // semantics).
         for (cp, name) in [
             ('\u{00AD}', "U+00AD"),
             ('\u{200B}', "U+200B"),
             ('\u{2060}', "U+2060"),
+            ('\u{2061}', "U+2061"),
+            ('\u{2062}', "U+2062"),
+            ('\u{2063}', "U+2063"),
+            ('\u{2064}', "U+2064"),
             ('\u{FEFF}', "U+FEFF"),
         ] {
             let s = format!("Canonical{cp}Servico");
@@ -9061,9 +9130,9 @@ mod tests {
 
     #[test]
     fn chart_maintainer_name_shape_rejects_each_unicode_invisible_format_codepoint() {
-        // The Unicode invisible-format arm — pins each of the four BMP
-        // Cf-category zero-width codepoints with no visible glyph. The
-        // canonical maintainer-identity homograph footgun: an
+        // The Unicode invisible-format arm — pins each of the eight
+        // BMP Cf-category zero-width codepoints with no visible glyph.
+        // The canonical maintainer-identity homograph footgun: an
         // `:autores "alice\u{200B}"` entry renders identically to
         // `:autores "alice"` in `helm list` / Artifact Hub's
         // maintainer column, but the byte sequence is distinct — the
@@ -9073,13 +9142,23 @@ mod tests {
         // `chart_description_shape_rejects_each_unicode_invisible_format_codepoint`
         // on the peer predicate — both predicates route through the
         // same lifted `find_unicode_invisible_format` helper, so
-        // dropping any one of the four arms from the helper's match
+        // dropping any one of the eight arms from the helper's match
         // would regress both peer test sweeps simultaneously at this
-        // one structural floor.
+        // one structural floor. Covers the four paste-from-Word /
+        // paste-from-BOM-editor / paste-from-typesetting shapes
+        // (U+00AD / U+200B / U+2060 / U+FEFF) and the four math-
+        // formula invisible operators (U+2061 FUNCTION APPLICATION /
+        // U+2062 INVISIBLE TIMES / U+2063 INVISIBLE SEPARATOR /
+        // U+2064 INVISIBLE PLUS — paste-from-MathJax / paste-from-
+        // LaTeX-rendered-formula footgun).
         for (cp, name) in [
             ('\u{00AD}', "U+00AD"),
             ('\u{200B}', "U+200B"),
             ('\u{2060}', "U+2060"),
+            ('\u{2061}', "U+2061"),
+            ('\u{2062}', "U+2062"),
+            ('\u{2063}', "U+2063"),
+            ('\u{2064}', "U+2064"),
             ('\u{FEFF}', "U+FEFF"),
         ] {
             let s = format!("alice{cp}bob");
@@ -9245,25 +9324,35 @@ mod tests {
     }
 
     #[test]
-    fn find_unicode_invisible_format_pins_the_four_codepoint_accepted_set() {
+    fn find_unicode_invisible_format_pins_the_eight_codepoint_accepted_set() {
         // The shared helper's accepted set — pinned in one place so
         // every per-predicate caller (`is_chart_description_shape`,
         // `is_chart_maintainer_name_shape`, every future free-form-
         // prose surface) reads from one canonical accepted set. The
-        // four BMP Cf-category zero-width codepoints in document order,
-        // plus negative controls on codepoints the helper must NOT
-        // reject — the deliberate exclusions: U+200C ZWNJ / U+200D ZWJ
-        // (emoji ZWJ sequences + Indic / Persian script composition)
-        // and U+200E LRM / U+200F RLM (mixed-script direction hints).
-        // A future shift in the accepted set surfaces here as a
-        // single-source-of-truth edit at this one test rather than
-        // across every per-predicate per-arm sweep. Third pin in the
-        // UAX-driven render-determinism trio (peer of
+        // eight BMP Cf-category zero-width codepoints in document
+        // order — the four paste-from-Word / paste-from-BOM-editor /
+        // paste-from-typesetting-doc shapes (U+00AD SHY / U+200B ZWSP /
+        // U+2060 WJ / U+FEFF ZWNBSP-BOM) and the four math-formula
+        // invisible operators (U+2061 FUNCTION APPLICATION / U+2062
+        // INVISIBLE TIMES / U+2063 INVISIBLE SEPARATOR / U+2064
+        // INVISIBLE PLUS — paste-from-MathJax / paste-from-LaTeX-
+        // rendered-formula / paste-from-InDesign-math-equation
+        // shapes) — plus negative controls on codepoints the helper
+        // must NOT reject — the deliberate exclusions: U+200C ZWNJ /
+        // U+200D ZWJ (emoji ZWJ sequences + Indic / Persian script
+        // composition) and U+200E LRM / U+200F RLM (mixed-script
+        // direction hints). A future shift in the accepted set
+        // surfaces here as a single-source-of-truth edit at this one
+        // test rather than across every per-predicate per-arm sweep.
+        // Third pin in the UAX-driven render-determinism trio (peer of
         // `find_unicode_bidi_override_pins_the_nine_codepoint_accepted_set`
         // on the visual-order axis and
         // `find_unicode_line_break_pins_the_three_codepoint_accepted_set`
         // on the single-line/multi-line axis).
-        for cp in ['\u{00AD}', '\u{200B}', '\u{2060}', '\u{FEFF}'] {
+        for cp in [
+            '\u{00AD}', '\u{200B}', '\u{2060}', '\u{2061}', '\u{2062}', '\u{2063}', '\u{2064}',
+            '\u{FEFF}',
+        ] {
             let s = format!("a{cp}b");
             assert_eq!(
                 find_unicode_invisible_format(&s),
