@@ -3321,6 +3321,110 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_shell_pipe() {
+        // The fail-before-pass-after pin for the canonical
+        // paste-from-shell-prompt-with-piped-pipeline footgun on
+        // `:repo` (peer with the 124106f pipe arm on the sibling
+        // `:caminho` path-fonte axis). An author pastes a shell
+        // pipeline (`git clone <url> | tee build.log`,
+        // `git ls-remote <url> | head`) into the `:repo` slot,
+        // forgetting to trim the `| <consumer>` tail. Until this arm
+        // landed the value silently passed every prior arm (no
+        // whitespace, no control chars, no non-ASCII, no `#`, no `?`,
+        // no `\`, no `{`/`}`, no `<`/`>`, no `` ` ``, doesn't start
+        // with `-` or `:`); RFC 3986 §2 lists the pipe byte in the
+        // 'unwise' set and the WHATWG URL spec's fragment percent-
+        // encode set maps `|` → `%7C` on the wire, so the byte rides
+        // verbatim into the lacre's per-dep BLAKE3 closure but is
+        // silently rewritten or rejected at libcurl's URL-parser
+        // layer — two authors whose values differ only in their pipe
+        // tail (`|tee build.log` vs nothing) resolve to the byte-
+        // identical upstream `git clone` but lock to two distinct
+        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // contract. Peer with the `:caminho` axis's
+        // `FonteCaminhoShellPipe` arm (124106f) on the sibling path-
+        // fonte axis, and `is_gateway_api_http_path`'s eleven-byte
+        // RFC-3986-reserved set on `:entrada :paths`.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia|tee build.log".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia|tee build.log");
+        assert!(
+            reason.contains("must not contain `|`"),
+            "reason must surface the shell-pipe arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("pipe") || reason.contains("'unwise'"),
+            "reason must name the shell-pipe / RFC-3986-unwise rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_pipe_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the pipe arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()` loop,
+        // so the byte that appears first in the value's byte order
+        // wins. A `:repo "https://github.com/p/x#readme|tee"` carries
+        // both `#` and `|`; the `#` byte appears first, so the
+        // fragment-`#` arm fires, surfacing the more self-locating
+        // diagnostic on the byte the author pasted earliest in the
+        // URL. Mirrors the peer cascade discipline
+        // `fonte_repo_fragment_fires_before_backtick_when_fragment_first`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme|tee".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before pipe when `#` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_backtick_fires_before_pipe_when_backtick_first() {
+        // Cascade pin: the backtick arm and the pipe arm are both per-
+        // byte arms inside the same `for &b in s.as_bytes()` loop, so
+        // the byte that appears first in the value's byte order wins.
+        // A `:repo "https://github.com/p/x/`whoami`|tee"` carries both
+        // `` ` `` and `|`; the backtick byte appears first, so the
+        // backtick arm fires, surfacing the more self-locating
+        // diagnostic on the byte the author pasted earliest in the
+        // URL. Pins the natural-order cascade so a future reorder of
+        // the per-byte arms surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia/`whoami`|tee".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `` ` ``"),
+            "reason must surface the backtick arm (fires before pipe when `` ` `` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
