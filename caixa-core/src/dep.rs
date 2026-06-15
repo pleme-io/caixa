@@ -3183,6 +3183,114 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_backtick_command_substitution() {
+        // The fail-before-pass-after pin for the canonical
+        // paste-from-shell-prompt-with-backticked-substitution footgun
+        // on `:repo` (peer with the c4d62b3 backtick arm on the sibling
+        // `:caminho` path-fonte axis). An author pastes a URL whose
+        // segment carries a backticked command-substitution wrapper
+        // (`` `whoami` ``, `` `git config user.name` ``, `` `pwd` ``)
+        // from a doc / README quick-start snippet that expected the
+        // substrate to substitute the value downstream. Until this arm
+        // landed the value silently passed every prior arm (no
+        // whitespace, no control chars, no non-ASCII, no `#`, no `?`,
+        // no `\`, no `{`/`}`, no `<`/`>`, doesn't start with `-` or
+        // `:`); RFC 3986 §2 lists the backtick byte in the 'delims' /
+        // 'unwise' set and the WHATWG URL spec's fragment percent-
+        // encode set maps `` ` `` → `%60` on the wire, so the byte
+        // rides verbatim into the lacre's per-dep BLAKE3 closure but
+        // is silently rewritten or rejected at libcurl's URL-parser
+        // layer — two authors whose values differ only in their
+        // backtick wrapper (`` `whoami` `` vs nothing) resolve to the
+        // byte-identical upstream `git clone` but lock to two distinct
+        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // contract. Peer with the `:caminho` axis's
+        // `FonteCaminhoShellCommandSubstitution` arm (c4d62b3) on the
+        // sibling path-fonte axis, and `is_gateway_api_http_path`'s
+        // eleven-byte RFC-3986-reserved set on `:entrada :paths`.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/`whoami`/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/`whoami`/caixa-teia");
+        assert!(
+            reason.contains("must not contain `` ` ``"),
+            "reason must surface the backtick command-substitution arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("command-substitution") || reason.contains("'unwise'"),
+            "reason must name the shell-command-substitution / RFC-3986-unwise rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_backtick_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the backtick command-
+        // substitution arm are both per-byte arms inside the same
+        // `for &b in s.as_bytes()` loop, so the byte that appears first
+        // in the value's byte order wins. A `:repo
+        // "https://github.com/p/x#readme/`whoami`"` carries both `#`
+        // and backtick; the `#` byte appears first, so the fragment-
+        // `#` arm fires, surfacing the more self-locating diagnostic
+        // on the byte the author pasted earliest in the URL. Mirrors
+        // the peer cascade discipline
+        // `fonte_repo_fragment_fires_before_shell_redirection_when_fragment_first`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme/`whoami`".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before backtick when `#` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_shell_redirection_fires_before_backtick_when_redirection_first() {
+        // Cascade pin: the shell-redirection `<` / `>` arm and the
+        // backtick command-substitution arm are both per-byte arms
+        // inside the same `for &b in s.as_bytes()` loop, so the byte
+        // that appears first in the value's byte order wins. A `:repo
+        // "https://github.com/p/x>build.log/`whoami`"` carries both
+        // `>` and backtick; the `>` byte appears first, so the
+        // shell-redirection arm fires, surfacing the more self-
+        // locating diagnostic on the byte the author pasted earliest
+        // in the URL. Pins the natural-order cascade so a future
+        // reorder of the per-byte arms surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia>build.log/`whoami`".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `>`"),
+            "reason must surface the shell-redirection `>` arm (fires before backtick when \
+             `>` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn fonte_repo_fragment_fires_before_shell_redirection_when_fragment_first() {
         // Cascade pin: the fragment-`#` arm and the shell-redirection
         // `<` / `>` arm are both per-byte arms inside the same
