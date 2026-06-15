@@ -2812,6 +2812,76 @@ pub fn is_spdx_expression_shape(s: &str) -> Result<(), String> {
 /// short-identifier-class axis.
 pub const CHART_DESCRIPTION_MAX_LEN: usize = 512;
 
+/// Scan `s` for the Unicode bidirectional-override / isolate format
+/// codepoints UAX #9 names as the structural prerequisite of the
+/// "Trojan Source" attack class (CVE-2021-42574 / Boucher & Anderson
+/// 2021): nine codepoints in two contiguous blocks that flip the
+/// rendered visual order of every following character until a
+/// matching pop, so a string visible to a human reader and the same
+/// string consumed by a parser/renderer can disagree on the order of
+/// its content bytes.
+///
+/// The accepted set (rejection list):
+///
+///   - U+202A `LRE` LEFT-TO-RIGHT EMBEDDING
+///   - U+202B `RLE` RIGHT-TO-LEFT EMBEDDING
+///   - U+202C `PDF` POP DIRECTIONAL FORMATTING
+///   - U+202D `LRO` LEFT-TO-RIGHT OVERRIDE
+///   - U+202E `RLO` RIGHT-TO-LEFT OVERRIDE
+///   - U+2066 `LRI` LEFT-TO-RIGHT ISOLATE
+///   - U+2067 `RLI` RIGHT-TO-LEFT ISOLATE
+///   - U+2068 `FSI` FIRST STRONG ISOLATE
+///   - U+2069 `PDI` POP DIRECTIONAL ISOLATE
+///
+/// Returns the first offending codepoint in document order, or
+/// `None` when `s` carries none of them. Iterates `chars()` once
+/// (single UTF-8 decode pass, peer of every other UTF-8-aware
+/// predicate in this module) — the per-predicate caller folds the
+/// `Some(c)` into its axis-specific reason wording with the
+/// offending codepoint named verbatim as `U+XXXX`.
+///
+/// Lifted as a shared helper rather than inlined into each per-axis
+/// predicate (the PRIME DIRECTIVE duplication-budget rule —
+/// THEORY.md §I.3.5: "every recurring shape becomes a generator
+/// before it becomes a pattern; every pattern becomes a library
+/// before it becomes duplicated code. The duplication budget is
+/// zero.") because two predicates ([`is_chart_description_shape`],
+/// [`is_chart_maintainer_name_shape`]) carry the same UTF-8
+/// free-form-prose accepted set and would otherwise inline the same
+/// nine-codepoint match arm verbatim. The third caller — every
+/// future per-axis free-form-prose surface (a future Aplicacao-
+/// level `:descricao` summary axis, a future per-`:contratos` edge
+/// `:descricao` annotation, the future per-`:autores`-email-suffix
+/// shape gate) — lands as a thin `if let Some(c) =
+/// find_unicode_bidi_override(s) { … }` wrapper rather than
+/// re-inlining the same codepoint match.
+///
+/// The arm is structurally distinct from the per-byte control-char
+/// arm `[is_chart_description_shape]` already carries: ASCII control
+/// bytes (`0x00..=0x1F` plus `0x7F`) are caught at the per-byte
+/// pass; the bidi codepoints all decode to non-ASCII three-byte
+/// UTF-8 sequences (`E2 80 AA..=E2 80 AE` for U+202A..=U+202E,
+/// `E2 81 A6..=E2 81 A9` for U+2066..=U+2069) — every byte ≥ 0x80
+/// per UTF-8 grammar — that the per-byte non-ASCII pass deliberately
+/// accepts (Unicode letters, em-dash, arrows are canonical
+/// `:descricao` shapes). Only the typed codepoint scan catches them.
+fn find_unicode_bidi_override(s: &str) -> Option<char> {
+    s.chars().find(|c| {
+        matches!(
+            *c,
+            '\u{202A}'
+                | '\u{202B}'
+                | '\u{202C}'
+                | '\u{202D}'
+                | '\u{202E}'
+                | '\u{2066}'
+                | '\u{2067}'
+                | '\u{2068}'
+                | '\u{2069}'
+        )
+    })
+}
+
 /// Predicate: assert that `s` is a valid chart-description shape.
 /// The `:descricao` axis is a free-form prose summary that lands in
 /// the rendered `lareira-<nome>` Helm chart's `Chart.yaml`
@@ -2848,7 +2918,30 @@ pub const CHART_DESCRIPTION_MAX_LEN: usize = 512;
 ///     Rust→wasm32-wasip2 caixa Servico."`, `"FIXME — describe
 ///     this caixa"`) carry `→` (U+2192) and `—` (U+2014) and every
 ///     downstream consumer (YAML 1.2, Helm v3, every chart-aware
-///     UI) round-trips Unicode losslessly.
+///     UI) round-trips Unicode losslessly;
+///   - no Unicode bidirectional-override / isolate format
+///     codepoints (U+202A `LRE`, U+202B `RLE`, U+202C `PDF`,
+///     U+202D `LRO`, U+202E `RLO`, U+2066 `LRI`, U+2067 `RLI`,
+///     U+2068 `FSI`, U+2069 `PDI`) — the nine codepoints UAX #9
+///     names as the structural prerequisite of the "Trojan Source"
+///     attack class (CVE-2021-42574 / Boucher & Anderson 2021)
+///     that flip the rendered visual order of every following
+///     character until a matching pop. Routed through the lifted
+///     [`find_unicode_bidi_override`] helper so the same
+///     nine-codepoint accepted set is shared with
+///     [`is_chart_maintainer_name_shape`] on the sibling
+///     YAML-plain-style-scalar surface, structurally consistent.
+///     The non-ASCII byte arm above admits Unicode letters /
+///     em-dash / arrows because YAML 1.2 + Helm v3 + every
+///     chart-aware UI round-trip them losslessly; the bidi-override
+///     codepoints break that round-trip discipline by class
+///     (the byte sequence rides verbatim into the rendered
+///     `Chart.yaml`'s `description:` value but renders differently
+///     in `helm show chart` / Artifact Hub / `helm list` vs the
+///     author's editor view of `caixa.lisp`), defeating the
+///     THEORY.md §V.2 render-determinism contract every typed
+///     slot carries on the same axis the per-byte CR/LF/control
+///     arms above close for ASCII.
 ///
 /// The predicate is a *structural* floor — it enforces the
 /// single-line printable-UTF-8 shape every realistic chart
@@ -2888,10 +2981,10 @@ pub const CHART_DESCRIPTION_MAX_LEN: usize = 512;
 ///
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-whitespace / trailing-whitespace /
-/// tab / newline / carriage-return / other-control-byte), without
-/// wrapping in any error variant — every caller maps the same
-/// `String` into its own typed `*Invalid { <axis>, reason }` enum
-/// variant.
+/// tab / newline / carriage-return / other-control-byte /
+/// Unicode-bidi-override-codepoint), without wrapping in any error
+/// variant — every caller maps the same `String` into its own typed
+/// `*Invalid { <axis>, reason }` enum variant.
 pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
     if s.is_empty() {
         return Err("must not be empty".to_string());
@@ -2970,6 +3063,37 @@ pub fn is_chart_description_shape(s: &str) -> Result<(), String> {
             ));
         }
     }
+    if let Some(c) = find_unicode_bidi_override(s) {
+        return Err(format!(
+            "must not contain Unicode bidirectional-override codepoint U+{cp:04X} \
+             (the nine codepoints UAX #9 names as the structural prerequisite of \
+             the \"Trojan Source\" attack class — CVE-2021-42574 / Boucher & \
+             Anderson 2021: U+202A `LRE`, U+202B `RLE`, U+202C `PDF`, U+202D `LRO`, \
+             U+202E `RLO`, U+2066 `LRI`, U+2067 `RLI`, U+2068 `FSI`, U+2069 `PDI` \
+             — flip the rendered visual order of every following character until a \
+             matching pop, so a `:descricao` string visible to a human reading \
+             `caixa.lisp` and the same string consumed by `helm show chart` / \
+             `helm list` / Artifact Hub / every chart-aware UI disagree on the \
+             order of the displayed content bytes. The byte sequence \
+             ({utf8_seq}) rides verbatim into the rendered Chart.yaml's \
+             `description:` value at the same axis the per-byte CR/LF/control \
+             arms close for ASCII, but renders differently across consumers, \
+             defeating the THEORY.md §V.2 render-determinism contract every typed \
+             slot carries. The non-ASCII byte arm above admits Unicode letters / \
+             em-dash / arrows because YAML 1.2 + Helm v3 round-trip them \
+             losslessly; this codepoint breaks that round-trip discipline by \
+             class. Drop the bidi-override codepoint; pure visual right-to-left \
+             text (Hebrew, Arabic) is accepted natively without explicit \
+             direction marks)",
+            cp = c as u32,
+            utf8_seq = c
+                .encode_utf8(&mut [0u8; 4])
+                .bytes()
+                .map(|b| format!("0x{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
+    }
     Ok(())
 }
 
@@ -3024,7 +3148,23 @@ pub const CHART_MAINTAINER_NAME_MAX_LEN: usize = 128;
 ///     — realistic maintainer names carry Unicode (`"François"`,
 ///     `"日本語"`, `"naïve"`) and every downstream consumer
 ///     (YAML 1.2, Helm v3, every chart-aware UI) round-trips
-///     Unicode losslessly.
+///     Unicode losslessly;
+///   - no Unicode bidirectional-override / isolate format
+///     codepoints (U+202A `LRE`, U+202B `RLE`, U+202C `PDF`,
+///     U+202D `LRO`, U+202E `RLO`, U+2066 `LRI`, U+2067 `RLI`,
+///     U+2068 `FSI`, U+2069 `PDI`) — the nine codepoints UAX #9
+///     names as the structural prerequisite of the "Trojan Source"
+///     attack class (CVE-2021-42574). A maintainer-name with an
+///     embedded `RLO` flips the visual order of every trailing
+///     byte, so an `:autores "alice\u{202E}example.com<bob@"` (the
+///     paste-from-attacker-crafted-doc footgun) renders in
+///     `helm list`'s maintainer column / Artifact Hub as
+///     `alice<@bob>moc.elpmaxe` but rides verbatim into the
+///     rendered Chart.yaml `maintainers:` array — same Trojan
+///     Source class [`is_chart_description_shape`] closes on the
+///     sibling `:descricao` axis. Routed through the same lifted
+///     [`find_unicode_bidi_override`] helper so the nine-codepoint
+///     accepted set is shared, structurally consistent.
 ///
 /// Same structural single-line printable-UTF-8 floor as
 /// [`is_chart_description_shape`] — both `:descricao` and `:autores`
@@ -3054,10 +3194,10 @@ pub const CHART_MAINTAINER_NAME_MAX_LEN: usize = 128;
 ///
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-whitespace / trailing-whitespace / tab /
-/// newline / carriage-return / other-control-byte), without
-/// wrapping in any error variant — every caller maps the same
-/// `String` into its own typed `*Invalid { <axis>, reason }` enum
-/// variant.
+/// newline / carriage-return / other-control-byte /
+/// Unicode-bidi-override-codepoint), without wrapping in any error
+/// variant — every caller maps the same `String` into its own typed
+/// `*Invalid { <axis>, reason }` enum variant.
 pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
     if s.is_empty() {
         return Err("must not be empty".to_string());
@@ -3137,6 +3277,37 @@ pub fn is_chart_maintainer_name_shape(s: &str) -> Result<(), String> {
                  and fail at `helm lint` time far from the source caixa.lisp)"
             ));
         }
+    }
+    if let Some(c) = find_unicode_bidi_override(s) {
+        return Err(format!(
+            "must not contain Unicode bidirectional-override codepoint U+{cp:04X} \
+             (the nine codepoints UAX #9 names as the structural prerequisite of \
+             the \"Trojan Source\" attack class — CVE-2021-42574 / Boucher & \
+             Anderson 2021: U+202A `LRE`, U+202B `RLE`, U+202C `PDF`, U+202D `LRO`, \
+             U+202E `RLO`, U+2066 `LRI`, U+2067 `RLI`, U+2068 `FSI`, U+2069 `PDI` \
+             — flip the rendered visual order of every following character until a \
+             matching pop, so an `:autores` entry visible to a human reading \
+             `caixa.lisp` and the same entry consumed by `helm list` / Artifact \
+             Hub's maintainer column disagree on the order of the displayed \
+             content bytes. The byte sequence ({utf8_seq}) rides verbatim into \
+             the rendered Chart.yaml `maintainers:` array at the same axis the \
+             per-byte CR/LF/control arms close for ASCII, but renders \
+             differently across consumers, defeating the THEORY.md §V.2 \
+             render-determinism contract every typed slot carries. Routed through \
+             the shared [`find_unicode_bidi_override`] helper so the same \
+             nine-codepoint accepted set lives in exactly one place across the \
+             [`is_chart_description_shape`] sibling YAML-plain-style-scalar \
+             surface, structurally consistent. Drop the bidi-override codepoint; \
+             pure visual right-to-left maintainer names (Hebrew, Arabic) are \
+             accepted natively without explicit direction marks)",
+            cp = c as u32,
+            utf8_seq = c
+                .encode_utf8(&mut [0u8; 4])
+                .bytes()
+                .map(|b| format!("0x{b:02X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        ));
     }
     Ok(())
 }
@@ -7941,6 +8112,76 @@ mod tests {
         assert!(err.contains("513"), "got: {err:?}");
     }
 
+    #[test]
+    fn chart_description_shape_rejects_each_unicode_bidi_override_codepoint() {
+        // The Trojan Source (CVE-2021-42574) arm — pins every UAX #9
+        // bidirectional-override / isolate format codepoint as a
+        // structural rejection on the typed `:descricao` axis. The
+        // per-byte non-ASCII pass deliberately admits Unicode letters
+        // / em-dash / arrows because the canonical fixtures carry them
+        // (`Canonical Rust→wasm32-wasip2`, `FIXME — describe this
+        // caixa`); only the typed codepoint scan catches the nine
+        // bidi-override codepoints that flip the rendered visual order
+        // of every following character, so a future drop of any one
+        // arm here surfaces as a `must be rejected` panic at this one
+        // place rather than as a silent regression downstream. Each
+        // case carries an alphabet-valid prefix + suffix so only the
+        // bidi-override arm fires.
+        for (cp, name) in [
+            ('\u{202A}', "U+202A"),
+            ('\u{202B}', "U+202B"),
+            ('\u{202C}', "U+202C"),
+            ('\u{202D}', "U+202D"),
+            ('\u{202E}', "U+202E"),
+            ('\u{2066}', "U+2066"),
+            ('\u{2067}', "U+2067"),
+            ('\u{2068}', "U+2068"),
+            ('\u{2069}', "U+2069"),
+        ] {
+            let s = format!("alice{cp}bob");
+            let err = is_chart_description_shape(&s)
+                .err()
+                .unwrap_or_else(|| panic!("chart description with {name} must be rejected"));
+            assert!(
+                err.contains(name),
+                "chart description reason for {name} must name the codepoint verbatim; got {err:?}"
+            );
+            assert!(
+                err.contains("bidirectional-override")
+                    || err.contains("Unicode bidi")
+                    || err.contains("Trojan Source"),
+                "chart description reason for {name} must name the Trojan-Source banner; \
+                 got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_description_shape_accepts_pure_rtl_text_without_bidi_override() {
+        // Positive control on the bidi-override arm: pure visual
+        // right-to-left scripts (Hebrew, Arabic) decode to non-bidi-
+        // override codepoints and the predicate must accept them
+        // natively — banning all RTL would regress every Hebrew /
+        // Arabic-authored caixa, which the substrate explicitly
+        // supports via the non-ASCII byte arm. The structural axis the
+        // bidi-override arm closes is the explicit direction-mark
+        // codepoint, not the RTL script itself.
+        for s in [
+            // Hebrew word (RTL script, no bidi-override codepoint).
+            "שלום",
+            // Arabic word (RTL script, no bidi-override codepoint).
+            "مرحبا",
+            // Mixed LTR / RTL caixa — the canonical multilingual
+            // description shape every YAML 1.2 + Helm v3 + Artifact
+            // Hub consumer round-trips losslessly.
+            "Caixa para שלום",
+        ] {
+            is_chart_description_shape(s).unwrap_or_else(|e| {
+                panic!("pure-RTL chart description {s:?} must pass without bidi override: {e:?}")
+            });
+        }
+    }
+
     // ── is_chart_maintainer_name_shape — shared `:autores` chart-maintainer predicate ──
 
     #[test]
@@ -8064,6 +8305,127 @@ mod tests {
         let err = is_chart_maintainer_name_shape(&too_long).unwrap_err();
         assert!(err.contains("128"), "got: {err:?}");
         assert!(err.contains("129"), "got: {err:?}");
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_rejects_each_unicode_bidi_override_codepoint() {
+        // The Trojan Source (CVE-2021-42574) arm — pins every UAX #9
+        // bidirectional-override / isolate format codepoint as a
+        // structural rejection on the typed `:autores` axis. Mirrors
+        // `chart_description_shape_rejects_each_unicode_bidi_override_codepoint`
+        // on the peer predicate — both predicates route through the
+        // same lifted `find_unicode_bidi_override` helper, so dropping
+        // any one of the nine arms from the helper's match would
+        // regress both peer test sweeps simultaneously at this one
+        // structural floor rather than at piecemeal per-axis call
+        // sites. The canonical attacker shape: an `:autores
+        // "alice\u{202E}example.com<bob@"` entry renders in `helm
+        // list`'s maintainer column / Artifact Hub as the visually-
+        // reversed `alice<@bob>moc.elpmaxe` while riding verbatim
+        // into the Chart.yaml `maintainers:` array — exactly the
+        // class this arm closes.
+        for (cp, name) in [
+            ('\u{202A}', "U+202A"),
+            ('\u{202B}', "U+202B"),
+            ('\u{202C}', "U+202C"),
+            ('\u{202D}', "U+202D"),
+            ('\u{202E}', "U+202E"),
+            ('\u{2066}', "U+2066"),
+            ('\u{2067}', "U+2067"),
+            ('\u{2068}', "U+2068"),
+            ('\u{2069}', "U+2069"),
+        ] {
+            let s = format!("alice{cp}bob");
+            let err = is_chart_maintainer_name_shape(&s)
+                .err()
+                .unwrap_or_else(|| panic!("chart maintainer name with {name} must be rejected"));
+            assert!(
+                err.contains(name),
+                "chart maintainer name reason for {name} must name the codepoint verbatim; \
+                 got {err:?}"
+            );
+            assert!(
+                err.contains("bidirectional-override")
+                    || err.contains("Unicode bidi")
+                    || err.contains("Trojan Source"),
+                "chart maintainer name reason for {name} must name the Trojan-Source banner; \
+                 got {err:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn chart_maintainer_name_shape_accepts_pure_rtl_text_without_bidi_override() {
+        // Positive control on the bidi-override arm: pure visual
+        // right-to-left scripts (Hebrew, Arabic) decode to non-bidi-
+        // override codepoints and the predicate must accept them
+        // natively — banning all RTL would regress every Hebrew /
+        // Arabic-authored maintainer-name entry, which the substrate
+        // supports via the non-ASCII byte arm. Peer of
+        // `chart_description_shape_accepts_pure_rtl_text_without_bidi_override`
+        // on the sibling YAML-plain-style-scalar surface.
+        for s in [
+            // Pure Hebrew maintainer name.
+            "שלום",
+            // Pure Arabic maintainer name.
+            "مرحبا",
+            // Mixed-script — canonical multilingual maintainer
+            // shape every YAML 1.2 + Helm v3 round-trips losslessly.
+            "Acme שלום",
+        ] {
+            is_chart_maintainer_name_shape(s).unwrap_or_else(|e| {
+                panic!(
+                    "pure-RTL chart maintainer name {s:?} must pass without bidi override: {e:?}"
+                )
+            });
+        }
+    }
+
+    #[test]
+    fn find_unicode_bidi_override_pins_the_nine_codepoint_accepted_set() {
+        // The shared helper's accepted set — pinned in one place so
+        // every per-predicate caller (`is_chart_description_shape`,
+        // `is_chart_maintainer_name_shape`, every future free-form-
+        // prose surface) reads from one canonical accepted set. The
+        // nine UAX #9 bidirectional-override / isolate format
+        // codepoints in document order, plus negative controls on
+        // bytes the helper must NOT reject (ASCII / non-bidi Unicode
+        // letters / arrows / em-dash / RTL letters). A future shift
+        // in the accepted set surfaces here as a single-source-of-
+        // truth edit at this one test rather than across every
+        // per-predicate per-arm sweep.
+        for cp in [
+            '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}',
+            '\u{2068}', '\u{2069}',
+        ] {
+            let s = format!("a{cp}b");
+            assert_eq!(
+                find_unicode_bidi_override(&s),
+                Some(cp),
+                "helper must flag bidi override U+{:04X} on input {s:?}",
+                cp as u32
+            );
+        }
+        for s in [
+            "alice",
+            "Canonical Rust→wasm32-wasip2",
+            "FIXME — describe this caixa",
+            "François Dupont",
+            "日本語の説明",
+            "naïve",
+            "שלום",
+            "مرحبا",
+        ] {
+            assert_eq!(
+                find_unicode_bidi_override(s),
+                None,
+                "helper must accept {s:?} (no bidi-override codepoint)"
+            );
+        }
+        // Empty input — defensive precondition for the helper's
+        // call-site contract on any future caller that doesn't gate
+        // emptiness ahead of the scan.
+        assert_eq!(find_unicode_bidi_override(""), None);
     }
 
     // ── is_chart_keyword_shape — shared `:etiquetas` chart-keyword predicate ──
