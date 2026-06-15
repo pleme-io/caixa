@@ -51,6 +51,20 @@ pub struct Add {
 
 impl Add {
     pub fn run(self) -> Result<()> {
+        // Gate the positional `<nome>` against the canonical DNS-1123
+        // label shape *before* any manifest mutation — the bare arg
+        // is used verbatim as the new dep's `:nome` slot in the
+        // rendered `caixa.lisp`. A wrong-case / wrong-separator /
+        // path-traversal shape would silently land in the manifest
+        // and the failure surfaces only at `feira build` /
+        // `feira resolve` time as a downstream
+        // [`caixa_core::DepError::NomeInvalid`] rejection, far from
+        // the source `feira add` invocation, with the diagnostic
+        // naming `:deps :nome` rather than the `<nome>` positional.
+        // The lifted gate refuses every shape the typed-slot axis
+        // already refuses, single-sourced through the lifted
+        // [`caixa_core::is_dns_1123_label`] predicate.
+        super::load::validate_nome_arg(&self.nome)?;
         let root = caixa_root(self.path.as_deref());
         let manifest_path = caixa_manifest_path(&root);
         let mut caixa = load_caixa(&root)?;
