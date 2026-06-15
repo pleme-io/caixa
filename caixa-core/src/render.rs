@@ -1942,6 +1942,26 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     defeating the THEORY.md §V.2 render-determinism contract on
 ///     the same axis the `#` fragment / `?` query / `\` backslash /
 ///     `{` / `}` template arms close;
+///   - no embedded `` ` `` (backtick) byte — RFC 3986 §2 lists the
+///     backtick in the 'delims' / 'unwise' set every URL parser is
+///     required to refuse or percent-encode, and no git URL grammar
+///     admits the byte: the WHATWG URL spec's 'fragment percent-
+///     encode set' maps `` ` `` → `%60` so every conformant URL
+///     parser refuses or rewrites the literal byte on the wire.
+///     Beyond the URL-grammar violation, every POSIX shell lexes the
+///     backtick as the legacy command-substitution operator
+///     (`` `<cmd>` `` runs `<cmd>` in a subshell and substitutes its
+///     stdout) — the canonical paste-from-shell-prompt RCE-class
+///     footgun the peer [`crate::DepError::FonteCaminhoShellCommandSubstitution`]
+///     arm (commit c4d62b3) closes on the sibling `:fonte :caminho`
+///     path-fonte axis. The byte rides verbatim into the lacre's
+///     per-dep content-address while libcurl percent-encodes it on
+///     the wire — two authors whose `:repo` values differ only in
+///     backtick presence resolve to the byte-identical upstream `git
+///     clone` but lock to two distinct BLAKE3 closures, defeating
+///     the THEORY.md §V.2 render-determinism contract on the same
+///     axis the `#` fragment / `?` query / `\` backslash / `{` / `}`
+///     template / `<` / `>` shell-redirection arms close;
 ///   - must contain a `:` separator at a non-leading position — every
 ///     documented form carries one (`github:org/repo`, `https://…`,
 ///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
@@ -1986,9 +2006,10 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-`-` / whitespace / control-char / non-ASCII /
 /// fragment-`#` / query-`?` / backslash-`\` / template-`{`-or-`}` /
-/// shell-redirection-`<`-or-`>` / missing-`:` separator / leading-`:`),
-/// without wrapping in any error variant — every caller maps the same
-/// `String` into its own typed `*Invalid { axis, reason }` enum variant.
+/// shell-redirection-`<`-or-`>` / shell-command-substitution-backtick /
+/// missing-`:` separator / leading-`:`), without wrapping in any error
+/// variant — every caller maps the same `String` into its own typed
+/// `*Invalid { axis, reason }` enum variant.
 #[allow(
     clippy::too_many_lines,
     reason = "the per-byte rejection cascade is structurally flat by design — \
@@ -2230,6 +2251,58 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  for a local workspace dep)",
                 ch = b as char
             ));
+        }
+        if b == b'`' {
+            return Err(
+                "must not contain `` ` `` (RFC 3986 §2 lists the backtick byte \
+                 in the 'delims' / 'unwise' set every URL parser is required \
+                 to refuse or percent-encode, peer with the `<` / `>` \
+                 shell-redirection arm on the same paragraph of the same RFC. \
+                 No git URL grammar admits the byte: the `github:org/repo` \
+                 shorthand carries an alphanumeric / `-` / `_` / `/` alphabet, \
+                 every `https://` / `ssh://` / `git://` / `file://` URL scheme \
+                 percent-encodes `` ` `` to `%60` on the wire (the WHATWG URL \
+                 spec's 'fragment percent-encode set' canonical mapping every \
+                 conformant URL parser applies), and the `git@host:path` \
+                 scp-style SSH shape names a POSIX path component that \
+                 carries no shell-metachar bytes. Beyond the URL-grammar \
+                 violation, every POSIX shell (sh / bash / zsh / dash / ksh / \
+                 fish) lexes the backtick as the legacy command-substitution \
+                 operator — `` `<cmd>` `` runs `<cmd>` in a subshell and \
+                 substitutes its stdout, the canonical RCE-class injection \
+                 vector when a string lands in a shell context. A `:repo \
+                 \"https://github.com/foo/`whoami`/bar\"` (the canonical \
+                 paste-from-shell-prompt footgun where the author copies a \
+                 backtick-templated URL from a doc / README quick-start \
+                 snippet that expected the substrate to substitute the value \
+                 downstream) or the symmetric `:repo \"`git config user.name`\"` \
+                 (the dynamic-config-substitution paste idiom every \
+                 dev-environment-setup script footnotes) is the canonical \
+                 paste-from-shell-prompt footgun the typed slot's accepted \
+                 set must exclude. The byte rides verbatim into the lacre's \
+                 per-dep content-address (`conteudo: format!(\"git:{repo}\")` \
+                 peer of the path-axis embedding at \
+                 caixa-resolver/src/resolve.rs) and into the resolver's `git \
+                 clone <repo>` (caixa-resolver/src/git.rs) subprocess \
+                 invocation, where libcurl's URL parser percent-encodes the \
+                 byte on the wire — so two authors whose `:repo` values \
+                 differ only in their backtick presence (one paste-trimmed \
+                 the substitution wrapper, the other didn't) resolve to the \
+                 byte-identical upstream `git clone` but lock to two distinct \
+                 BLAKE3 closures, defeating the THEORY.md §V.2 render-\
+                 determinism contract on the same axis the fragment-`#`, \
+                 query-`?`, backslash-`\\`, template-`{` / `}`, and \
+                 shell-redirection-`<` / `>` arms close. The peer `:fonte \
+                 :caminho` axis (c4d62b3) closes the same byte under the \
+                 shell-command-substitution banner via \
+                 `DepError::FonteCaminhoShellCommandSubstitution`; the peer \
+                 `:entrada :paths` axis closes the same byte as part of \
+                 `is_gateway_api_http_path`'s eleven-byte RFC-3986-reserved \
+                 set. Drop the backtick wrapper — substitute the literal \
+                 value at author time, or use `:fonte (:tipo path :caminho \
+                 \"<local-path>\")` for a local workspace dep)"
+                    .to_string(),
+            );
         }
     }
     if s.starts_with(':') {
