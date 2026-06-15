@@ -22,6 +22,23 @@ pub struct Init {
 
 impl Init {
     pub fn run(self) -> Result<()> {
+        // Gate the positional `<nome>` against the canonical DNS-1123
+        // label shape *before* any directory creation / file write —
+        // the bare arg is used verbatim as the target dir
+        // (`PathBuf::from(&self.nome)`), as the lisp filename inside
+        // `lib/<nome>.lisp`, and as the `:nome` slot in the scaffolded
+        // manifest. A path-traversal shape (`"../escape"`,
+        // `"lib/../escape"`) silently escapes the target dir at the
+        // `create_dir_all` / `write` calls below; a wrong-case /
+        // wrong-separator shape (`"MyCaixa"`, `"my_caixa"`) lands in
+        // the manifest and surfaces at `feira build` time, far from
+        // the source `feira init` invocation, with the diagnostic
+        // naming `:nome` rather than the `<nome>` positional. The
+        // lifted gate refuses every shape the typed-slot axes
+        // ([`caixa_core::ManifestError::NomeInvalid`] on the top-level
+        // `:nome`) already refuse, single-sourced through the lifted
+        // [`caixa_core::is_dns_1123_label`] predicate.
+        super::load::validate_nome_arg(&self.nome)?;
         let root = self
             .path
             .clone()

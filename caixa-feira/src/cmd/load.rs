@@ -348,6 +348,129 @@ pub(crate) fn validate_namespace_arg(namespace: &str) -> Result<()> {
     })
 }
 
+/// Validate a `feira` verb's positional `<nome>` argument value at the
+/// per-verb entry-point against the canonical DNS-1123 label shape every
+/// downstream consumer (the typed [`caixa_core::Caixa::nome`] /
+/// [`caixa_core::Dep::nome`] axes, the rendered
+/// `lareira-<nome>` Helm chart name, every K8s `metadata.name` materializer
+/// the substrate emits) demands.
+///
+/// Closes the PRIME DIRECTIVE duplication (THEORY.md §I.3.5 — "the
+/// duplication budget is zero") on the per-verb `<nome>` positional axis,
+/// peer with the [`validate_cluster_arg`] / [`validate_namespace_arg`]
+/// lifts on the sibling `--cluster` / `--namespace` flag axes. Before
+/// this lift the same `<nome>` value passed through both
+/// [`super::init::Init::run`] (the per-caixa scaffold's
+/// `<nome>/lib/<nome>.lisp` path join) and [`super::add::Add::run`] (the
+/// per-dep `:nome` slot landing in the rendered `caixa.lisp`) with no
+/// shape gate at all — every footgun the author surface's `:nome` /
+/// `:deps :nome` typed slots already refuse through
+/// [`caixa_core::ManifestError::NomeInvalid`] (the 6c992f8 lift on the
+/// top-level `:nome` typed axis) and
+/// [`caixa_core::DepError::NomeInvalid`] (the 2420c44-trajectory lift on
+/// the per-dep `:nome` axis) silently passed at the verb arg-entry. Two
+/// unprotected call-sites of the same load-bearing shape, each one
+/// another place a future change to the canonical caixa-name discipline
+/// has to remember to touch — a future `feira fork <nome>` verb that
+/// scaffolds a derivative caixa, a future `feira rename <nome>` verb
+/// that rewrites the manifest's `:nome` slot, a future `feira oci pull
+/// <nome>` verb that fetches a caixa by name from the future OCI
+/// registry — each one landing on a per-verb open-coded gate is a
+/// coordinated rewrite of every verb-entry-point that either gets it
+/// right at every site or quietly drifts at one.
+///
+/// Without the gate four authoring footguns silently passed:
+///
+///   - `feira init ""` / `feira add ""` — the canonical "I forgot the
+///     positional arg" footgun (a CI invocation with an unset shell
+///     variable interpolated into the positional). On `feira init` the
+///     bare empty `<nome>` joined to `./` as the target dir (the current
+///     working directory) and to `./lib/.lisp` as the lisp entry file;
+///     the scaffolded `caixa.lisp` carried `:nome ""` which the
+///     downstream `caixa_core::Caixa::validate_nome` arm rejected at
+///     `feira build` time, far from the source `feira init` invocation,
+///     with the bad-shape diagnostic naming `:nome` rather than the
+///     `<nome>` positional arg the author typed. On `feira add` the
+///     bare empty `<nome>` landed verbatim as `:deps :nome ""` and the
+///     same downstream cascade fired — both verbs surface the failure
+///     after the manifest has already been mutated on disk, rather than
+///     before any I/O is observable.
+///   - `feira init "../escape"` / `feira init "lib/../escape"` — the
+///     canonical path-traversal footgun. On `feira init` the bare
+///     `<nome>` arg is used verbatim as the target directory
+///     (`PathBuf::from(&nome)`) and as the lisp filename inside the
+///     scaffolded `lib/<nome>.lisp` path; the bare `..` segment either
+///     creates a sibling directory the operator didn't intend, or
+///     scaffolds a `lib/../escape.lisp` whose `caixa.lisp` references a
+///     library file at the parent of `lib/` — escaping the target dir
+///     before any other I/O is observable. The DNS-1123 label gate
+///     refuses `/`, `.`, and the bare `..` outright with the offending
+///     value named verbatim, closing the canonical "I pasted a relative
+///     path into the `<nome>` slot" footgun ahead of any directory
+///     creation.
+///   - `feira init "MyCaixa"` / `feira add "Caixa-Teia"` — the
+///     wrong-case footgun (the canonical "I copied the README header"
+///     typo). The K8s `metadata.name` axes downstream
+///     (`lareira-<nome>` Chart.yaml `name:`, the `HelmRelease`
+///     `release_name`, every per-Servico / per-Aplicacao CR
+///     `metadata.name`) all enforce the DNS-1123-label rule at admission
+///     time on a lowercase floor; silent passage through the verb
+///     arg-entry surfaced the failure at `feira chart` /
+///     `feira deploy` / `kubectl apply` time as a "field is invalid"
+///     rejection, far from the source positional arg. The lifted
+///     [`caixa_core::is_dns_1123_label`] predicate carries a
+///     canonical-lowercase remediation hint in its reason wording ("use
+///     {lower:?}") so the diagnostic names the canonical fix verbatim.
+///   - `feira init "caixa_teia"` / `feira add "my_dep"` — the
+///     wrong-separator footgun (the Python / Go module-name leak — both
+///     use underscores; K8s `metadata.name` consumers accept only
+///     hyphens). The lifted predicate's reason wording names `-` as the
+///     canonical separator so the diagnostic surfaces the fix verbatim.
+///
+/// After the lift every per-verb `<nome>` positional consumer routes
+/// through this helper: the DNS-1123 label gate fires at the verb's
+/// entry-point before any directory creation / manifest mutation, the
+/// diagnostic carries the offending `<nome>` verbatim plus a parser-
+/// shaped reason naming the specific violation, and the canonical "what
+/// shape must `<nome>` carry?" decision lives at exactly one call-site.
+/// Mirrors the per-slot
+/// [`caixa_core::ManifestError::NomeInvalid`] /
+/// [`caixa_core::DepError::NomeInvalid`] discipline on the typed-Caixa
+/// author surface — the same DNS-1123 label shape both the typed
+/// `:nome` / `:deps :nome` slots and the per-verb `<nome>` positional
+/// arg refuse drift against, sharing the lifted
+/// [`caixa_core::is_dns_1123_label`] predicate so the substrate-wide
+/// "valid caixa name" set is single-sourced across the typed-slot and
+/// CLI-arg surfaces.
+pub(crate) fn validate_nome_arg(nome: &str) -> Result<()> {
+    // Empty is gated first with a self-locating diagnostic — the
+    // canonical "I forgot the positional arg" footgun a bare
+    // `feira init ""` / `feira add ""` shape produces (a CI invocation
+    // with an unset shell variable interpolated into the positional).
+    // Peer with the [`validate_cluster_arg`] / [`validate_namespace_arg`]
+    // empty-arms on the sibling per-verb flag axes and with the
+    // [`caixa_core::ManifestError::NomeEmpty`] /
+    // [`caixa_core::DepError::NomeEmpty`] arms on the typed-slot axes.
+    if nome.is_empty() {
+        bail!(
+            "<nome> value is empty (every `feira` verb that consumes a positional \
+             caixa-name argument requires a non-empty DNS-1123 label — e.g. \
+             `feira init hello-rio`, `feira add caixa-teia`)"
+        );
+    }
+    caixa_core::is_dns_1123_label(nome).map_err(|reason| {
+        anyhow::anyhow!(
+            "<nome> {nome:?} is not a valid DNS-1123 label: {reason} \
+             (a caixa's `:nome` lands as the `lareira-<nome>` K8s `metadata.name` \
+             on every downstream chart/release/CR consumer; the apiserver rejects \
+             any non-DNS-1123-label name at admission time, and `feira init` joins \
+             the value verbatim into the `<nome>/lib/<nome>.lisp` scaffold path so \
+             a path-traversal shape escapes the target dir before any other I/O is \
+             observable)"
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -946,6 +1069,204 @@ mod tests {
         // namespace-less invocation. Peer with the [`load_caixa`]
         // parse-context pin on the sibling per-verb IO axis.
         validate_namespace_arg("default").expect("canonical default literal must accept");
+    }
+
+    #[test]
+    fn validate_nome_arg_accepts_canonical_dns_1123_label_names() {
+        // The canonical happy-path arm — the in-tree fixture
+        // names (`hello-rio`, `caixa-teia`, `iac-forge-ir`),
+        // every example caixa name (`checkout`, `cart`,
+        // `catalog`, `payment`), and the DNS-1123 edge shapes
+        // (`a`, `a0`) all pass the lifted gate cleanly. Peer
+        // with [`validate_cluster_arg`] /
+        // [`validate_namespace_arg`] happy-path pins on the
+        // sibling per-verb axes — the same DNS-1123 label
+        // discipline all three helpers gate against,
+        // single-sourced through the lifted
+        // [`caixa_core::is_dns_1123_label`] predicate.
+        for nome in [
+            "hello-rio",
+            "caixa-teia",
+            "iac-forge-ir",
+            "checkout",
+            "cart",
+            "catalog",
+            "payment",
+            "a",
+            "a0",
+        ] {
+            validate_nome_arg(nome)
+                .unwrap_or_else(|_| panic!("canonical caixa name {nome:?} must accept"));
+        }
+    }
+
+    #[test]
+    fn validate_nome_arg_rejects_empty_with_self_locating_diagnostic() {
+        // The canonical "I forgot the positional arg" footgun a
+        // bare `feira init ""` / `feira add ""` shape produces
+        // (a CI invocation with an unset shell variable
+        // interpolated into the positional). Silently passing
+        // the empty string would scaffold `./` as the target
+        // dir and `./lib/.lisp` as the lisp entry on
+        // `feira init`, and would land `:deps :nome ""` in the
+        // manifest on `feira add` — both surface their failure
+        // far from the source positional. The gate refuses
+        // with a self-locating diagnostic naming the `<nome>`
+        // positional and the empty-value axis, peer with the
+        // [`validate_cluster_arg`] / [`validate_namespace_arg`]
+        // empty-arms on the sibling per-verb flag axes.
+        let err = validate_nome_arg("").expect_err("empty <nome> must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("<nome>"),
+            "diagnostic must name the offending positional (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("empty"),
+            "diagnostic must name the empty-value axis (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_nome_arg_rejects_path_traversal_with_named_value() {
+        // The canonical path-traversal footgun: `feira init
+        // "../escape"` would use the bare `<nome>` arg verbatim
+        // as the target dir (`PathBuf::from(&nome)`) and as
+        // the lisp filename inside `lib/<nome>.lisp` — the
+        // bare `..` segment escapes the target dir before any
+        // other I/O is observable. The DNS-1123 label gate
+        // refuses `/`, `.`, and the bare `..` outright, so the
+        // parent-escape attempt surfaces with the offending
+        // value named verbatim — peer with the
+        // [`validate_cluster_arg`] / [`validate_namespace_arg`]
+        // path-traversal arms on the sibling per-verb axes.
+        for bad in ["../escape", "lib/../escape", "foo/bar", ".", ".."] {
+            let err = match validate_nome_arg(bad) {
+                Err(e) => e,
+                Ok(()) => panic!("path-traversal {bad:?} must reject"),
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("<nome>"),
+                "diagnostic must name the offending positional for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_nome_arg_rejects_uppercase_with_named_value_and_canonical_lowercase_hint() {
+        // The wrong-case footgun: `feira init "MyCaixa"` /
+        // `feira add "Caixa-Teia"` (the canonical "I copied
+        // the README header" typo). The K8s `metadata.name`
+        // axes downstream (`lareira-<nome>` Chart.yaml `name:`,
+        // every per-Servico / per-Aplicacao CR `metadata.name`)
+        // all enforce the DNS-1123-label rule at admission
+        // time on a lowercase floor; silent passage through
+        // the verb arg-entry surfaced the failure at
+        // `feira chart` / `feira deploy` / `kubectl apply`
+        // time as a "field is invalid" rejection, far from
+        // the source positional. The lifted
+        // [`caixa_core::is_dns_1123_label`] predicate carries
+        // a canonical-lowercase remediation hint in its reason
+        // wording — peer with the
+        // [`validate_cluster_arg`] uppercase arm.
+        let err = validate_nome_arg("MyCaixa").expect_err("uppercase <nome> must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("<nome>"),
+            "diagnostic must name the offending positional (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("MyCaixa"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("mycaixa"),
+            "diagnostic must surface the canonical lowercase remediation (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_nome_arg_rejects_underscore_with_named_value_and_hyphen_hint() {
+        // The wrong-separator footgun: `feira init
+        // "caixa_teia"` / `feira add "my_dep"` (the Python /
+        // Go module-name leak — both use underscores; K8s
+        // `metadata.name` consumers accept only hyphens). The
+        // lifted predicate's reason wording names `-` as the
+        // canonical separator so the diagnostic surfaces the
+        // fix verbatim — peer with the [`validate_cluster_arg`]
+        // underscore arm.
+        let err = validate_nome_arg("caixa_teia").expect_err("underscore <nome> must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("<nome>"),
+            "diagnostic must name the offending positional (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("caixa_teia"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains('`'),
+            "diagnostic must surface the hyphen-separator remediation (got: {rendered:?})"
+        );
+    }
+
+    #[test]
+    fn validate_nome_arg_rejects_leading_hyphen_with_named_value() {
+        // The boundary-char footgun: `feira init "-hello"`
+        // violates the DNS-1123 label rule that names must
+        // start and end with an alphanumeric (the K8s
+        // apiserver rejects leading / trailing `-` outright
+        // at admission time, and on `feira init` a leading
+        // `-` is structurally indistinguishable from a clap
+        // flag prefix without `--` separator discipline). The
+        // lifted predicate's reason wording names the boundary
+        // rule verbatim — peer with the
+        // [`validate_cluster_arg`] / [`validate_namespace_arg`]
+        // boundary-hyphen arms.
+        for bad in ["-hello", "hello-"] {
+            let err = match validate_nome_arg(bad) {
+                Err(e) => e,
+                Ok(()) => panic!("boundary-`-` {bad:?} must reject"),
+            };
+            let rendered = format!("{err:?}");
+            assert!(
+                rendered.contains("<nome>"),
+                "diagnostic must name the offending positional for {bad:?} (got: {rendered:?})"
+            );
+            assert!(
+                rendered.contains(bad),
+                "diagnostic must name the offending value verbatim for {bad:?} (got: {rendered:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_nome_arg_rejects_space_with_named_value() {
+        // The paste-from-doc footgun: `feira init "my caixa"`
+        // (an embedded space from a paste-from-aligned-doc).
+        // The K8s `metadata.name` axes enforce the DNS-1123
+        // label rule that names contain only `[a-z0-9-]`; the
+        // embedded space surfaces at the apiserver-side
+        // admission rule as a "field is invalid" rejection
+        // far from the source positional. The lifted gate
+        // refuses the embedded space with the offending value
+        // named verbatim.
+        let err = validate_nome_arg("my caixa").expect_err("space <nome> must reject");
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("<nome>"),
+            "diagnostic must name the offending positional (got: {rendered:?})"
+        );
+        assert!(
+            rendered.contains("my caixa"),
+            "diagnostic must name the offending value verbatim (got: {rendered:?})"
+        );
     }
 
     #[test]
