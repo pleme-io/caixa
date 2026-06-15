@@ -1923,6 +1923,25 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 ///     `?` query / `\` backslash arms close; every git porcelain
 ///     entry-point additionally fetches a nonexistent
 ///     `{placeholder}`-named path far from the source caixa.lisp;
+///   - no embedded `<` / `>` byte — RFC 3986 §2 excludes the pair
+///     from URL syntax under the same 'delims' / 'unwise' banner the
+///     `{` / `}` arm cites, and no git URL grammar admits either byte:
+///     the WHATWG URL spec's 'fragment percent-encode set' maps `<`
+///     → `%3C` and `>` → `%3E` so every conformant URL parser
+///     refuses or rewrites the literal byte on the wire. Beyond the
+///     URL-grammar violation, every POSIX shell lexes `<` as the
+///     input-redirection operator and `>` as the output-redirection
+///     operator — the canonical paste-from-shell-prompt footgun the
+///     peer [`DepError::FonteCaminhoShellRedirection`] arm
+///     (commit e457141) closes on the sibling `:fonte :caminho`
+///     path-fonte axis. The byte rides verbatim into the lacre's
+///     per-dep content-address while libcurl percent-encodes it on
+///     the wire — two authors whose `:repo` values differ only in
+///     `<`/`>` presence resolve to the byte-identical upstream
+///     `git clone` but lock to two distinct BLAKE3 closures,
+///     defeating the THEORY.md §V.2 render-determinism contract on
+///     the same axis the `#` fragment / `?` query / `\` backslash /
+///     `{` / `}` template arms close;
 ///   - must contain a `:` separator at a non-leading position — every
 ///     documented form carries one (`github:org/repo`, `https://…`,
 ///     `ssh://…`, `git://…`, `file://…`, `git@host:path`); the
@@ -1967,9 +1986,9 @@ pub const GIT_REPO_URL_MAX_LEN: usize = 2048;
 /// Returns the parser-shaped reason naming the specific violation
 /// (length / leading-`-` / whitespace / control-char / non-ASCII /
 /// fragment-`#` / query-`?` / backslash-`\` / template-`{`-or-`}` /
-/// missing-`:` separator / leading-`:`), without wrapping in any error
-/// variant — every caller maps the same `String` into its own typed
-/// `*Invalid { axis, reason }` enum variant.
+/// shell-redirection-`<`-or-`>` / missing-`:` separator / leading-`:`),
+/// without wrapping in any error variant — every caller maps the same
+/// `String` into its own typed `*Invalid { axis, reason }` enum variant.
 #[allow(
     clippy::too_many_lines,
     reason = "the per-byte rejection cascade is structurally flat by design — \
@@ -2150,6 +2169,65 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  (`https://github.com/pleme-io/hello-rio`), or use \
                  `:fonte (:tipo path :caminho \"<local-path>\")` for a \
                  local workspace dep)",
+                ch = b as char
+            ));
+        }
+        if b == b'<' || b == b'>' {
+            return Err(format!(
+                "must not contain `{ch}` (RFC 3986 §2 excludes `<` / `>` \
+                 from URL syntax — they sit in the 'delims' / 'unwise' \
+                 byte set every URL parser is required to refuse or \
+                 percent-encode, peer with the `{{` / `}}` URI Template \
+                 arm on the same paragraph of the same RFC. No git URL \
+                 grammar admits either byte: the `github:org/repo` \
+                 shorthand carries an alphanumeric / `-` / `_` / `/` \
+                 alphabet, every `https://` / `ssh://` / `git://` / \
+                 `file://` URL scheme percent-encodes `<` to `%3C` and \
+                 `>` to `%3E` on the wire (the WHATWG URL spec's \
+                 'fragment percent-encode set' canonical mapping every \
+                 conformant URL parser applies), and the `git@host:path` \
+                 scp-style SSH shape names a POSIX path component that \
+                 carries no shell-metachar bytes. Beyond the URL-grammar \
+                 violation, every POSIX shell (sh / bash / zsh / dash / \
+                 ksh / fish / nushell) lexes `<` as the input-redirection \
+                 operator and `>` as the output-redirection operator — \
+                 a `:repo \"https://github.com/foo/bar>build.log\"` (the \
+                 canonical 'I pasted a shell pipeline that wrote build \
+                 output and forgot to trim the redirect' footgun) or \
+                 `:repo \"<README.md\"` (the symmetric input-redirection \
+                 paste idiom every doc-quick-start `git clone <…>` line \
+                 footnotes) is the canonical paste-from-shell-prompt \
+                 footgun the typed slot's accepted set must exclude. The \
+                 byte rides verbatim into the lacre's per-dep content-\
+                 address (`conteudo: format!(\"git:{{repo}}\")` peer of \
+                 the path-axis embedding at caixa-resolver/src/resolve.rs:189) \
+                 and into the resolver's `git clone <repo>` \
+                 (caixa-resolver/src/git.rs:21) subprocess invocation, \
+                 where libcurl's URL parser percent-encodes the byte on \
+                 the wire — so two authors whose `:repo` values differ \
+                 only in their `<`/`>` presence (one paste-trimmed the \
+                 redirect tail, the other didn't) resolve to the byte-\
+                 identical upstream `git clone` but lock to two distinct \
+                 BLAKE3 closures, defeating the THEORY.md §V.2 render-\
+                 determinism contract on the same axis the fragment-`#`, \
+                 query-`?`, backslash-`\\`, and template-`{{` / `}}` arms \
+                 close. The peer `:fonte :caminho` axis (e457141) closes \
+                 the same `<` / `>` byte under the shell-redirection \
+                 banner via `DepError::FonteCaminhoShellRedirection`; the \
+                 peer `:entrada :paths` axis closes the same bytes as part \
+                 of `is_gateway_api_http_path`'s eleven-byte RFC-3986-\
+                 reserved set; the peer `:fonte :tag` / `:fonte :branch` \
+                 axes (e70d213) close the same bytes as part of \
+                 `is_git_ref_name`'s shell-metachar-injection cascade. \
+                 The `:repo` URL axis was the last typed git-source \
+                 surface still admitting these two bytes; this arm closes \
+                 the gap so the substrate-wide 'no shell-redirection / \
+                 RFC-3986-unwise byte anywhere in a typed git-source slot' \
+                 invariant is now structurally consistent across every \
+                 git-source-shaped typed surface. Drop the `<` / `>` tail \
+                 — pin the ref via the typed `:tag` / `:branch` / `:rev` \
+                 slot, or use `:fonte (:tipo path :caminho \"<local-path>\")` \
+                 for a local workspace dep)",
                 ch = b as char
             ));
         }

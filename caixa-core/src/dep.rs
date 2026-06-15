@@ -3110,6 +3110,109 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_output_redirection() {
+        // The fail-before-pass-after pin for the canonical
+        // shell-output-redirection footgun on `:repo`: an author
+        // pastes a shell-pipeline tail (`git clone <repo> > build.log`
+        // / `… >output.txt`) into the `:repo` slot without trimming
+        // the redirect. Until this arm landed the value silently
+        // passed every prior arm (no whitespace, no control chars,
+        // no non-ASCII, no `#`, no `?`, no `\`, no `{`/`}`, doesn't
+        // start with `-` or `:`); RFC 3986 §2 lists `<` / `>` in the
+        // 'delims' / 'unwise' set and the WHATWG URL spec's fragment
+        // percent-encode set maps `>` → `%3E` on the wire, so the
+        // byte rides verbatim into the lacre's per-dep BLAKE3 closure
+        // but is silently rewritten or rejected at libcurl's URL-
+        // parser layer — two authors whose values differ only in
+        // their redirect tail (`>build.log` vs nothing) resolve to
+        // the byte-identical upstream `git clone` but lock to two
+        // distinct lacres, defeating the THEORY.md §V.2 render-
+        // determinism contract. Peer with the `:caminho` axis's
+        // `FonteCaminhoShellRedirection` arm (e457141) on the sibling
+        // path-fonte axis, and `is_gateway_api_http_path`'s eleven-
+        // byte RFC-3986-reserved set on `:entrada :paths`.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia>build.log".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia>build.log");
+        assert!(
+            reason.contains("must not contain `>`"),
+            "reason must surface the output-redirection `>` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("redirection") || reason.contains("'delims'"),
+            "reason must name the shell-redirection / RFC-3986-unwise rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_input_redirection() {
+        // The symmetric shell-input-redirection footgun — an author
+        // pastes a shell-pipeline head (`git clone <input.url` /
+        // `cat <README.md`) into the `:repo` slot. Pinned separately
+        // from the `>`-output arm so a future relaxation that only
+        // catches one of the two redirect bytes surfaces here. Peer
+        // with the `:caminho` axis's `FonteCaminhoShellRedirection`
+        // arm which closes both `<` and `>` under the same banner.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia<input.url".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `<`"),
+            "reason must surface the input-redirection `<` arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("RFC 3986") || reason.contains("'unwise'"),
+            "reason must name the RFC 3986 'unwise' grammar, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_shell_redirection_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the shell-redirection
+        // `<` / `>` arm are both per-byte arms inside the same
+        // `for &b in s.as_bytes()` loop, so the byte that appears
+        // first in the value's byte order wins. A `:repo
+        // "https://github.com/p/x#readme>build.log"` carries both
+        // `#` and `>`; the `#` byte appears first, so the fragment-
+        // `#` arm fires, surfacing the more self-locating diagnostic
+        // on the byte the author pasted earliest in the URL. Mirrors
+        // the peer cascade discipline
+        // `fonte_repo_fragment_fires_before_template_placeholder_when_fragment_first`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme>build.log".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before shell-redirection `>` when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
