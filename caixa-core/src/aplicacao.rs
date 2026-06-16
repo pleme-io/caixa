@@ -1585,13 +1585,53 @@ mod rate_limit_codec {
             }
             return Err(format!("rate-limit rate {rate_str:?} not a u32"));
         }
-        // The digit-only gate guarantees every byte is `[0-9]`, so the
-        // only way `u32::from_str` can fail here is overflow (the
-        // magnitude exceeds `u32::MAX`). Surface that with an
-        // overflow-shaped wording so the diagnostic names the offending
-        // magnitude verbatim rather than collapsing onto the
-        // non-canonical arm. Same shape `supervisor::duration_codec`
-        // (1c55a2a) carries on the peer duration-codec axis.
+        // Leading-zero arm — peer with the prior `"+100/s"` arm above
+        // (4eeae98's predecessor) on the same canonical-form
+        // render-determinism axis. The digit-only gate accepts
+        // `"0100/s"`, `"00/s"`, `"007/h"` as `u32::from_str` parses
+        // them losslessly (= 100, 0, 7), but `render` emits the
+        // leading-zero-stripped form (`"100/s"`, `"0/s"`, `"7/h"`) —
+        // a *different* canonical string on the next emit, breaking
+        // the THEORY.md Part V render-determinism contract the same
+        // way `"+100/s"` did before the leading-`+` arm landed. The
+        // single-byte magnitude `"0"` itself round-trips losslessly
+        // through `render` (`render(0)` emits `"0/s"`) — the
+        // downstream [`AplicacaoError::PolicyRateLimitZero`] gate is
+        // what refuses rate-zero authoring, so `"0/s"` stays in the
+        // accepted set at this codec layer and the diagnostic
+        // partitioning between canonical-form drift (this arm) and
+        // semantic-zero (the downstream gate) remains stable.
+        // Peer with the future leading-zero arms on the three peer
+        // typed-magnitude codecs the trajectory acknowledges:
+        // `supervisor::duration_codec`, `limits::parse_duration`,
+        // `limits::parse_byte_size` — each carries the same
+        // canonical-form-drift class today; this gate lands the
+        // discipline on the fourth typed-magnitude codec in
+        // caixa-core first because the peer `"+100/s"` arm above is
+        // the closest predecessor on the trajectory.
+        if rate_trim.len() > 1 && rate_trim.as_bytes()[0] == b'0' {
+            return Err(format!(
+                "rate-limit: rate {rate_trim:?} has a non-canonical leading zero — the \
+                 canonical authoring form for `:politicas :rate-limit` is \
+                 `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) \
+                 with no leading-zero padding on the magnitude. A leading-zero magnitude \
+                 (`\"0100/s\"`, `\"00/s\"`, `\"007/h\"`) round-trips through `render` to \
+                 a *different* canonical form (`\"100/s\"`, `\"0/s\"`, `\"7/h\"`) on \
+                 first serialize — breaking the THEORY.md Part V render-determinism \
+                 contract every typed slot carries. Strip the leading zeros (write \
+                 `\"100/s\"` instead of `\"0100/s\"`)"
+            ));
+        }
+        // The digit-only gate guarantees every byte is `[0-9]`, and
+        // the leading-zero arm above guarantees the magnitude is
+        // either the single byte `"0"` or starts with `[1-9]`, so
+        // the only way `u32::from_str` can fail here is overflow
+        // (the magnitude exceeds `u32::MAX`). Surface that with an
+        // overflow-shaped wording so the diagnostic names the
+        // offending magnitude verbatim rather than collapsing onto
+        // the non-canonical arm. Same shape
+        // `supervisor::duration_codec` (1c55a2a) carries on the peer
+        // duration-codec axis.
         let rate: u32 = rate_trim.parse::<u32>().map_err(|_| {
             format!("rate-limit rate {rate_trim:?} (digit-only magnitude overflows u32)")
         })?;
@@ -10090,6 +10130,121 @@ mod tests {
         assert!(
             msg.contains("\"4294967296\""),
             "missing offending magnitude in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_leading_zero_magnitude() {
+        // `"0100/s"` is digit-only, so the existing
+        // non-digit-only / sign / fractional arm doesn't catch it —
+        // `u32::from_str("0100")` returns `Ok(100)`, so before this
+        // gate `"0100/s"` parsed to `RateLimit { 100, 1s }` and
+        // round-tripped through `render` to `"100/s"` — a *different*
+        // canonical string on the next emit, breaking the THEORY.md
+        // Part V render-determinism contract exactly the way the
+        // peer `"+100/s"` case did before the leading-`+` arm landed.
+        // This is the load-bearing class the leading-zero gate closes
+        // beyond what the existing digit-only / sign / fractional
+        // gates cover, and the peer arm to the leading-`+` test
+        // (`rate_limit_serde_rejects_leading_plus_sign`) on the same
+        // canonical-form-drift axis.
+        let payload = r#"{"rateLimit":"0100/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"0100\""), "missing magnitude in {msg:?}");
+        assert!(
+            msg.contains("THEORY.md"),
+            "missing render-determinism contract citation in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_multi_digit_zero_magnitude() {
+        // `"00/s"` is the degenerate leading-zero case — every byte
+        // is `0`, the magnitude parses to `u32` = 0, and `render(0)`
+        // emits `"0/s"`. Round-trip drift: `"00/s"` → 0 → `"0/s"`,
+        // a *different* canonical string, same render-determinism
+        // violation. The single-byte `"0/s"` itself is in the
+        // accepted set (round-trips losslessly through `render`,
+        // refused downstream by `PolicyRateLimitZero`); the
+        // multi-byte `"00/s"` is not. Pins the boundary between the
+        // accepted single-`0` and the rejected leading-zero class.
+        let payload = r#"{"rateLimit":"00/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"00\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_leading_zero_per_hour_window() {
+        // Cross-window pin — the gate is window-agnostic; the
+        // leading-zero class is a property of the magnitude, not the
+        // unit. `"007/h"` → 7 → `"7/h"`, same drift. Mirrors the
+        // peer `rate_limit_serde_rejects_leading_plus_sign` arm's
+        // single-window coverage extended across the three canonical
+        // windows the codec accepts.
+        let payload = r#"{"rateLimit":"007/h"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"007\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_accepts_single_zero_magnitude_at_codec_layer() {
+        // The boundary case — `"0/s"` is the canonical form
+        // `render(RateLimit { 0, 1s })` emits, so the codec accepts
+        // it at the parse layer; the downstream
+        // [`AplicacaoError::PolicyRateLimitZero`] gate refuses
+        // `rate == 0` at the typed-validate layer above. Pins the
+        // partition: the leading-zero gate at the codec layer does
+        // not poach the rate-zero semantic-validation arm at the
+        // typed-validate layer above (a future stricter codec must
+        // not reject `"0/s"` here, or it'd collapse the diagnostic
+        // partitioning that lets `PolicyRateLimitZero` name the
+        // offending typed slot).
+        let payload = r#"{"rateLimit":"0/s"}"#;
+        let policy: MeshPolicy = serde_json::from_str(payload).unwrap_or_else(|e| {
+            panic!("`\"0/s\"` must parse cleanly through rate_limit_codec: {e}")
+        });
+        let rl = policy.rate_limit.expect("rate_limit must be Some");
+        assert_eq!(rl.rate, 0, "single-`0` magnitude must parse to rate=0");
+        assert_eq!(
+            rl.window,
+            Duration::from_secs(1),
+            "single-`0` magnitude with `s` unit must parse to window=1s"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_accepts_canonical_magnitude_with_leading_one() {
+        // The complementary boundary pin — every magnitude
+        // `render` emits starts with `[1-9]` (or is the single byte
+        // `"0"`), so the canonical-form predicate is `(len == 1) ||
+        // (first byte != '0')`. Pinning the `len > 1 && first byte ==
+        // '1'` case explicitly so a future tightening of the gate
+        // (e.g. an over-eager "no leading digit < 5" rule, or a
+        // mistakenly anchored start-of-magnitude byte check) lands
+        // here before the canonical-forms-iterating test would catch
+        // it.
+        let payload = r#"{"rateLimit":"100/s"}"#;
+        let policy: MeshPolicy = serde_json::from_str(payload)
+            .unwrap_or_else(|e| panic!("canonical `\"100/s\"` must parse cleanly: {e}"));
+        let rl = policy.rate_limit.expect("rate_limit must be Some");
+        assert_eq!(
+            rl.rate, 100,
+            "canonical-100 magnitude must parse to rate=100"
         );
     }
 
