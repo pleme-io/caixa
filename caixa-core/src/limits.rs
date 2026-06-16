@@ -707,6 +707,17 @@ pub enum LimitsError {
          `\"1536\"` instead of `\"1.5KiB\"`; `\"512MiB\"` instead of `\"0.5GiB\"`)"
     )]
     NonIntegerByteMagnitude { value: String },
+    #[error(
+        "byte-size: magnitude {value:?} has a non-canonical leading zero — the canonical \
+         authoring form for `:limits :memory` is `<integer><unit>` (e.g. `\"64MiB\"`, \
+         `\"1GiB\"`, `\"512KiB\"`, `\"1024\"`) with no leading-zero padding on the magnitude. \
+         A leading-zero magnitude (`\"064MiB\"`, `\"01024\"`, `\"00KiB\"`, `\"0500MB\"`) round-trips \
+         through `render_byte_size` to a *different* canonical form (`\"64MiB\"`, `\"1KiB\"`, \
+         `\"0\"`, `\"500MB\"`) on first serialize — breaking the THEORY.md Part V \
+         render-determinism contract every typed slot carries. Strip the leading zeros \
+         (write `\"64MiB\"` instead of `\"064MiB\"`)"
+    )]
+    LeadingZeroByteMagnitude { value: String },
     #[error("duration: missing magnitude in {0:?}")]
     EmptyDuration(String),
     #[error("duration: unknown unit {unit:?} (expected one of ms, s, m, h)")]
@@ -927,6 +938,31 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
             });
         }
         return Err(LimitsError::BadByteMagnitude(num_part.into()));
+    }
+    // Leading-zero arm — peer with the `parse_duration` leading-zero
+    // arm (39762d7), the `supervisor::duration_codec` leading-zero arm
+    // (9178904) and the `rate_limit_codec` leading-zero arm (4f46830)
+    // on the same canonical-form render-determinism axis. The
+    // digit-only gate accepts `"0064MiB"`, `"01024"`, `"00KiB"`,
+    // `"0500MB"` as `u64::from_str` parses them losslessly (= 64, 1024,
+    // 0, 500), but `render_byte_size` emits the leading-zero-stripped
+    // form (`"64MiB"`, `"1KiB"`, `"0"`, `"500MB"`) — a *different*
+    // canonical string on the next emit, breaking the THEORY.md Part V
+    // render-determinism contract the same way `"+1024"` did before the
+    // leading-`+` arm landed. The single-byte magnitude `"0"` (or
+    // `"0B"` / `"0KiB"`) round-trips losslessly through
+    // `render_byte_size` (`render_byte_size(0)` emits `"0"`) — the
+    // downstream semantic-zero gate [`LimitsError::MemoryZero`] refuses
+    // zero-magnitude authoring at the typed-validate layer above, so
+    // the single-byte `"0"` stays in the accepted set at this codec
+    // layer and the diagnostic partitioning between canonical-form
+    // drift (this arm) and semantic-zero (the downstream gate) remains
+    // stable. Same codec-layer / typed-validate-layer partition the
+    // peer codecs preserve.
+    if num_trim.len() > 1 && num_trim.as_bytes()[0] == b'0' {
+        return Err(LimitsError::LeadingZeroByteMagnitude {
+            value: num_trim.into(),
+        });
     }
     // `digit_only` guarantees every byte is `[0-9]`, so the only way
     // u64::from_str can fail here is overflow (the magnitude exceeds
@@ -2142,6 +2178,181 @@ mod tests {
         assert!(
             reason.contains("overflow"),
             "overflow diagnostic must mention overflow (got {reason:?})"
+        );
+    }
+
+    // ── canonical-form: leading-zero byte-size codec gate ─────────────────
+    //
+    // Direct successor to the `parse_duration` leading-zero arm (39762d7),
+    // the `supervisor::duration_codec` leading-zero arm (9178904), and the
+    // `rate_limit_codec` leading-zero arm (4f46830) — the same canonical-
+    // form render-determinism axis applied to the last typed-numeric codec
+    // that still admitted leading-zero magnitudes. The digit-only gate
+    // immediately above accepts every `u64::from_str`-parseable magnitude
+    // including leading-zero padding, but `render_byte_size` always emits
+    // the stripped form (`64MiB`, never `064MiB`) — silently drifting the
+    // canonical string across a parse/render round-trip. Pins each
+    // canonical leading-zero shape across the unit-set the codec admits
+    // (KB / MB / GB / KiB / MiB / GiB / bare-integer), the all-zero
+    // degenerate case, the codec-vs-validate-layer partition (single-byte
+    // `"0"` stays accepted at the codec because the typed-validate gate
+    // `MemoryZero` refuses semantic-zero authoring), the complement-side
+    // pin (`1`..=`9`-led magnitudes stay accepted), and the serde-path pin
+    // (the gate fires at deserialize, before any validate gate runs).
+
+    #[test]
+    fn parse_byte_size_rejects_leading_zero_magnitude() {
+        // The fail-before-pass-after pin: `"064MiB"` parsed cleanly on
+        // every pre-gate codebase (`u64::from_str` accepts the leading
+        // zero), the codec produced 64 MiB, and
+        // `render_byte_size(64*1024*1024)` emitted `"64MiB"` on the next
+        // serialize — silently dropping the leading zero and drifting
+        // the canonical form away from the author's intent. The new
+        // gate surfaces the round-trip break at the parser layer with a
+        // self-locating diagnostic, peer with
+        // `parse_duration_rejects_leading_zero_magnitude` on the sibling
+        // codec.
+        let err = parse_byte_size("064MiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroByteMagnitude { ref value } if value == "064"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_multi_digit_zero_magnitude() {
+        // `"00MiB"` is the degenerate leading-zero case — every byte is
+        // `0`. `u64::from_str("00")` = 0, and the codec produces 0;
+        // `render_byte_size(0)` emits `"0"` on the next serialize —
+        // drift from `"00MiB"` to `"0"`. The leading-zero arm refuses
+        // the drift class at the codec layer while leaving the
+        // canonical single-byte `"0"` accepted. Peer with
+        // `parse_duration_rejects_multi_digit_zero_magnitude` on the
+        // sibling codec.
+        let err = parse_byte_size("00MiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroByteMagnitude { ref value } if value == "00"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_leading_zero_in_gib_unit() {
+        // `"01GiB"` parses to 1 GiB; the renderer emits `"1GiB"` on the
+        // next serialize. The leading-zero class is a property of the
+        // magnitude, not the unit — pin a per-GiB magnitude alongside
+        // the per-MiB / per-KiB / bare-integer pins so the gate's
+        // coverage is structural across every canonical unit suffix
+        // the codec accepts. Mirrors the per-hour pin
+        // `parse_duration_rejects_leading_zero_in_hour_window` carries
+        // on the sibling codec.
+        let err = parse_byte_size("01GiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroByteMagnitude { ref value } if value == "01"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_leading_zero_in_kib_unit() {
+        // `"0512KiB"` parses to 512 KiB; the renderer emits `"512KiB"`
+        // on the next serialize. Pin the per-KiB magnitude alongside
+        // the per-MiB / per-GiB pins so the gate's coverage extends to
+        // the smallest-unit power-of-1024 suffix the codec admits.
+        let err = parse_byte_size("0512KiB").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroByteMagnitude { ref value } if value == "0512"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_leading_zero_in_decimal_units() {
+        // `"0500MB"` parses to 500 MB (decimal-unit family — `KB` /
+        // `MB` / `GB` powers of 1000, distinct from the `KiB` / `MiB` /
+        // `GiB` powers-of-1024 family); the renderer emits the
+        // appropriate canonical form on the next serialize. Pin the
+        // decimal-unit family alongside the power-of-1024 family so the
+        // gate's coverage is structural across both unit families the
+        // codec admits.
+        for (s, expected) in [("0500MB", "0500"), ("01KB", "01"), ("00GB", "00")] {
+            let err = parse_byte_size(s).unwrap_err();
+            assert!(
+                matches!(err, LimitsError::LeadingZeroByteMagnitude { value: ref v } if v == expected),
+                "got {err:?} for {s:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_leading_zero_bare_integer() {
+        // The bare-integer (no unit) shorthand inherits the leading-
+        // zero arm: `"01024"` parses losslessly to 1024 bytes but
+        // `render_byte_size(1024)` emits `"1KiB"` on the next serialize.
+        // Pin the bare-integer path so a future relaxation that
+        // special-cases the unitless shorthand surfaces here as a test
+        // failure. Mirrors the bare-integer pin
+        // `parse_duration_rejects_leading_zero_bare_integer_as_seconds`
+        // carries on the sibling codec.
+        let err = parse_byte_size("01024").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroByteMagnitude { ref value } if value == "01024"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_accepts_single_zero_magnitude_at_codec_layer() {
+        // The codec-layer / typed-validate-layer boundary pin: the
+        // single-byte `"0"` magnitude round-trips losslessly through
+        // `render_byte_size` (`render_byte_size(0)` emits `"0"`), so it
+        // stays accepted at this codec layer across every canonical
+        // unit suffix. The downstream `LimitsError::MemoryZero` gate is
+        // what refuses zero-magnitude authoring at the typed-validate
+        // layer above — the partition keeps the canonical-form-drift
+        // diagnostic (this arm) and the semantic-zero diagnostic (the
+        // validate gate) disjoint. Mirrors the
+        // `parse_duration_accepts_single_zero_magnitude_at_codec_layer`
+        // partition pin on the sibling codec.
+        assert_eq!(parse_byte_size("0").unwrap(), 0);
+        assert_eq!(parse_byte_size("0B").unwrap(), 0);
+        assert_eq!(parse_byte_size("0KiB").unwrap(), 0);
+        assert_eq!(parse_byte_size("0MiB").unwrap(), 0);
+        assert_eq!(parse_byte_size("0GiB").unwrap(), 0);
+        assert_eq!(parse_byte_size("0KB").unwrap(), 0);
+    }
+
+    #[test]
+    fn parse_byte_size_accepts_canonical_magnitude_with_leading_one() {
+        // The complement-side pin on the leading-zero arm: magnitudes
+        // beginning with `1`..=`9` stay accepted across every canonical
+        // unit suffix the codec accepts. Pin this so a future
+        // tightening cannot drift into rejecting valid canonical
+        // magnitudes — peer with the
+        // `parse_duration_accepts_canonical_magnitude_with_leading_one`
+        // pin on the sibling codec.
+        assert_eq!(parse_byte_size("1").unwrap(), 1);
+        assert_eq!(parse_byte_size("1KiB").unwrap(), 1024);
+        assert_eq!(parse_byte_size("1MiB").unwrap(), 1024 * 1024);
+        assert_eq!(parse_byte_size("1GiB").unwrap(), 1024 * 1024 * 1024);
+        assert_eq!(parse_byte_size("64MiB").unwrap(), 64 * 1024 * 1024);
+        assert_eq!(parse_byte_size("9").unwrap(), 9);
+    }
+
+    #[test]
+    fn de_byte_size_rejects_leading_zero_through_serde() {
+        // The serde-path pin: a `:limits :memory` carrying a
+        // leading-zero magnitude (`"064MiB"`) must fail at deserialize
+        // time, not silently round-trip the value through the parser.
+        // The gate fires at deserialize, before any validate gate runs
+        // — peer with `de_duration_rejects_leading_zero_through_serde`
+        // on the sibling codec.
+        let json = r#"{"memory":"064MiB"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("leading zero"),
+            "serde diagnostic must surface the leading-zero reason verbatim (got {msg:?})"
         );
     }
 
