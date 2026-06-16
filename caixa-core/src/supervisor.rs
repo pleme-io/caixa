@@ -830,8 +830,55 @@ pub mod duration_codec {
             }
             return Err(format!("bad duration magnitude in {s:?}"));
         }
-        // The digit-only gate guarantees every byte is `[0-9]`, so the
-        // only way `u64::from_str` can fail here is overflow (the
+        // Leading-zero arm — peer with the `rate_limit_codec` leading-
+        // zero arm (4f46830) on the same canonical-form render-
+        // determinism axis. The digit-only gate accepts `"030s"`,
+        // `"00s"`, `"01h"`, `"0500ms"` as `u64::from_str` parses them
+        // losslessly (= 30, 0, 1, 500), but `render` emits the leading-
+        // zero-stripped form (`"30s"`, `"0s"`, `"1h"`, `"500ms"`) — a
+        // *different* canonical string on the next emit, breaking the
+        // THEORY.md Part V render-determinism contract the same way
+        // `"+30s"` did before the leading-`+` arm landed. The single-
+        // byte magnitude `"0"` (or `"0s"` / `"0ms"`) round-trips
+        // losslessly through `render` (`render(Duration::ZERO)` emits
+        // `"0s"`) — the downstream semantic-zero gates (e.g.
+        // `SupervisorError::ZeroRestartWindow` on
+        // `:supervisor :restart-window`,
+        // `AplicacaoError::PolicyTimeoutZero` /
+        // `PolicyCircuitBreakerWindowZero` on the typed `:politicas`
+        // duration slots) refuse zero-magnitude authoring at the typed-
+        // validate layer above, so the single-byte `"0"` stays in the
+        // accepted set at this codec layer and the diagnostic
+        // partitioning between canonical-form drift (this arm) and
+        // semantic-zero (the downstream gates) remains stable.
+        // Peer with the future leading-zero arms on the two remaining
+        // typed-magnitude codecs the trajectory acknowledges:
+        // `limits::parse_duration` backing `:limits :wall-clock`,
+        // `limits::parse_byte_size` backing `:limits :memory` — each
+        // carries the same canonical-form-drift class today; this
+        // gate lands the discipline on the shared duration codec
+        // first because the `rate_limit_codec` predecessor on the
+        // same canonical-form-drift axis is the closest peer on the
+        // trajectory.
+        if num_trim.len() > 1 && num_trim.as_bytes()[0] == b'0' {
+            return Err(format!(
+                "duration: magnitude {num_trim:?} has a non-canonical leading zero — the \
+                 canonical authoring form for the typed duration slots routed through \
+                 this shared codec (`:supervisor :restart-window`, `:politicas :timeout`, \
+                 `:politicas :circuit-breaker :window`) is `<integer><unit>` (e.g. \
+                 `\"30s\"`, `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no leading-zero padding \
+                 on the magnitude. A leading-zero magnitude (`\"030s\"`, `\"00s\"`, \
+                 `\"01h\"`, `\"0500ms\"`) round-trips through `render` to a *different* \
+                 canonical form (`\"30s\"`, `\"0s\"`, `\"1h\"`, `\"500ms\"`) on first \
+                 serialize — breaking the THEORY.md Part V render-determinism contract \
+                 every typed slot carries. Strip the leading zeros (write \
+                 `\"30s\"` instead of `\"030s\"`)"
+            ));
+        }
+        // The digit-only gate guarantees every byte is `[0-9]`, and
+        // the leading-zero arm above guarantees the magnitude is
+        // either the single byte `"0"` or starts with `[1-9]`, so
+        // the only way `u64::from_str` can fail here is overflow (the
         // magnitude exceeds `u64::MAX`). Surface that with an
         // overflow-shaped wording so the diagnostic names the offending
         // magnitude verbatim rather than collapsing onto the
@@ -2694,5 +2741,147 @@ mod tests {
             msg.contains("not a non-negative integer"),
             "missing canonical-form reason in {msg:?}"
         );
+    }
+
+    #[test]
+    fn parse_rejects_leading_zero_magnitude() {
+        // `"030s"` is digit-only, so the existing non-digit-only / sign
+        // / fractional arm doesn't catch it — `u64::from_str("030")`
+        // returns `Ok(30)`, so before this gate `"030s"` parsed to
+        // `Duration::from_secs(30)` and round-tripped through `render`
+        // to `"30s"` — a *different* canonical string on the next emit,
+        // breaking the THEORY.md Part V render-determinism contract
+        // exactly the way `"+30s"` did before the leading-`+` arm
+        // landed. Peer with the `rate_limit_codec` leading-zero arm
+        // (4f46830) on the same canonical-form-drift axis.
+        let err = duration_codec::parse("030s").unwrap_err();
+        assert!(
+            err.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {err:?}"
+        );
+        assert!(err.contains("\"030\""), "missing magnitude in {err:?}");
+        assert!(
+            err.contains("\"30s\""),
+            "missing canonical-form remediation in {err:?}"
+        );
+        assert!(
+            err.contains("THEORY.md"),
+            "missing render-determinism citation in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_multi_digit_zero_magnitude() {
+        // `"00s"` and `"00ms"` are the all-zero leading-zero footgun —
+        // digit-only, parse losslessly to `Duration::ZERO`, but render
+        // back to `"0s"` (the single-byte canonical form) on the next
+        // emit. The leading-zero arm refuses the drift class at the
+        // codec layer; the semantic-zero gate downstream
+        // (`SupervisorError::ZeroRestartWindow`, etc.) would refuse
+        // the single-byte canonical form `"0s"` separately on the
+        // typed-validate layer.
+        let err = duration_codec::parse("00s").unwrap_err();
+        assert!(
+            err.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {err:?}"
+        );
+        assert!(err.contains("\"00\""), "missing magnitude in {err:?}");
+    }
+
+    #[test]
+    fn parse_rejects_leading_zero_per_hour_window() {
+        // `"01h"` is the per-hour-window footgun — multi-byte magnitude
+        // starting with `0`, parses losslessly to `Duration::from_secs(3600)`,
+        // renders to `"1h"` (DRIFT). The arm is unit-agnostic: every
+        // canonical unit suffix the codec accepts (`ms` / `s` / `m` /
+        // `h` / bare-integer-as-seconds) inherits the same gate.
+        let err = duration_codec::parse("01h").unwrap_err();
+        assert!(
+            err.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {err:?}"
+        );
+        assert!(err.contains("\"01\""), "missing magnitude in {err:?}");
+    }
+
+    #[test]
+    fn parse_rejects_leading_zero_bare_integer_as_seconds() {
+        // The `parse_accepts_bare_integer_as_seconds` happy-path
+        // (`"30"` → 30s) inherits the leading-zero arm: `"030"` is
+        // multi-byte starts-with-`0`, parses losslessly to
+        // `Duration::from_secs(30)`, renders to `"30s"` (DRIFT). The
+        // bare-integer surface accepts permissive unit-empty
+        // shorthand but still must reject leading-zero padding.
+        let err = duration_codec::parse("030").unwrap_err();
+        assert!(
+            err.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {err:?}"
+        );
+        assert!(err.contains("\"030\""), "missing magnitude in {err:?}");
+    }
+
+    #[test]
+    fn parse_accepts_single_zero_magnitude_at_codec_layer() {
+        // The codec-layer / typed-validate-layer boundary: `"0s"` /
+        // `"0ms"` / `"0"` are the single-byte canonical-zero forms —
+        // each round-trips losslessly through `render`
+        // (`render(Duration::ZERO)` → `"0s"`), so the codec layer
+        // accepts them. The downstream semantic-zero gates
+        // (`SupervisorError::ZeroRestartWindow`,
+        // `AplicacaoError::PolicyTimeoutZero`,
+        // `AplicacaoError::PolicyCircuitBreakerWindowZero`) refuse
+        // zero-magnitude authoring at the typed-validate layer above,
+        // peer with the `rate_limit_codec` codec-layer / typed-
+        // validate-layer partition for `"0/s"`.
+        assert_eq!(duration_codec::parse("0s").unwrap(), Duration::ZERO);
+        assert_eq!(duration_codec::parse("0ms").unwrap(), Duration::ZERO);
+        assert_eq!(duration_codec::parse("0").unwrap(), Duration::ZERO);
+    }
+
+    #[test]
+    fn parse_accepts_canonical_magnitude_with_leading_one() {
+        // The complementary boundary: a future tightening cannot
+        // drift into rejecting valid canonical magnitudes that
+        // happen to start with `1` (or any digit `[1-9]`). Pin
+        // every canonical-unit suffix so the leading-zero arm
+        // remains strictly narrower than the digit-only arm.
+        assert_eq!(
+            duration_codec::parse("100ms").unwrap(),
+            Duration::from_millis(100)
+        );
+        assert_eq!(
+            duration_codec::parse("100s").unwrap(),
+            Duration::from_secs(100)
+        );
+        assert_eq!(
+            duration_codec::parse("10m").unwrap(),
+            Duration::from_secs(600)
+        );
+        assert_eq!(
+            duration_codec::parse("10h").unwrap(),
+            Duration::from_secs(36_000)
+        );
+    }
+
+    #[test]
+    fn restart_window_serde_rejects_leading_zero() {
+        // The shared codec backs `SupervisorSpec::restart_window`
+        // (`with = "duration_codec"`) — so the leading-zero arm
+        // applies on serde deserialize for the typed Supervisor slot.
+        // A `{"restartWindow":"030s"}` payload that previously round-
+        // tripped to a different canonical string on next serialize
+        // is now refused at deserialize with the leading-zero
+        // diagnostic. Peer with `restart_window_serde_rejects_leading_plus`
+        // / `restart_window_serde_rejects_fractional_seconds` on the
+        // same canonical-form-drift axis.
+        let payload = r#"{"estrategia":"OneForOne","maxRestarts":5,
+            "restartWindow":"030s",
+            "children":[{"caixa":"w","versao":"^0.1","restart":"Permanent"}]}"#;
+        let err = serde_json::from_str::<SupervisorSpec>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-canonical leading zero"),
+            "expected leading-zero diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("\"030\""), "missing magnitude in {msg:?}");
     }
 }
