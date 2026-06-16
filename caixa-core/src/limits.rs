@@ -725,6 +725,17 @@ pub enum LimitsError {
          `\"1500ms\"` instead of `\"1.5s\"`; `\"30s\"` instead of `\"0.5m\"`)"
     )]
     NonIntegerDurationMagnitude { value: String },
+    #[error(
+        "duration: magnitude {value:?} has a non-canonical leading zero — the canonical \
+         authoring form for `:limits :wall-clock` is `<integer><unit>` (e.g. `\"30s\"`, \
+         `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no leading-zero padding on the magnitude. \
+         A leading-zero magnitude (`\"030s\"`, `\"00s\"`, `\"01h\"`, `\"0500ms\"`) round-trips \
+         through `render_duration` to a *different* canonical form (`\"30s\"`, `\"0s\"`, \
+         `\"1h\"`, `\"500ms\"`) on first serialize — breaking the THEORY.md Part V \
+         render-determinism contract every typed slot carries. Strip the leading zeros \
+         (write `\"30s\"` instead of `\"030s\"`)"
+    )]
+    LeadingZeroDurationMagnitude { value: String },
     #[error("millicores: bad value {0:?} (expected `<int>m` or `<int>`)")]
     BadMillicores(String),
     #[error(
@@ -1035,8 +1046,35 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
         }
         return Err(LimitsError::BadDurationMagnitude(num_part.into()));
     }
-    // `digit_only` guarantees every byte is `[0-9]`, so the only way
-    // u64::from_str can fail here is overflow.
+    // Leading-zero arm — peer with the `supervisor::duration_codec`
+    // leading-zero arm (9178904) and the `rate_limit_codec`
+    // leading-zero arm (4f46830) on the same canonical-form
+    // render-determinism axis. The digit-only gate accepts `"030s"`,
+    // `"00s"`, `"01h"`, `"0500ms"` as `u64::from_str` parses them
+    // losslessly (= 30, 0, 1, 500), but `render_duration` emits the
+    // leading-zero-stripped form (`"30s"`, `"0s"`, `"1h"`, `"500ms"`)
+    // — a *different* canonical string on the next emit, breaking the
+    // THEORY.md Part V render-determinism contract the same way
+    // `"+30s"` did before the leading-`+` arm landed. The single-byte
+    // magnitude `"0"` (or `"0s"` / `"0ms"`) round-trips losslessly
+    // through `render_duration` (`render_duration(Duration::ZERO)`
+    // emits `"0s"`) — the downstream semantic-zero gate
+    // [`LimitsError::WallClockZero`] refuses zero-magnitude authoring
+    // at the typed-validate layer above, so the single-byte `"0"`
+    // stays in the accepted set at this codec layer and the
+    // diagnostic partitioning between canonical-form drift (this arm)
+    // and semantic-zero (the downstream gate) remains stable. Same
+    // codec-layer / typed-validate-layer partition the peer codecs
+    // preserve.
+    if num_trim.len() > 1 && num_trim.as_bytes()[0] == b'0' {
+        return Err(LimitsError::LeadingZeroDurationMagnitude {
+            value: num_trim.into(),
+        });
+    }
+    // The digit-only gate guarantees every byte is `[0-9]`, and the
+    // leading-zero arm above guarantees the magnitude is either the
+    // single byte `"0"` or starts with `[1-9]`, so the only way
+    // `u64::from_str` can fail here is overflow.
     let num: u64 = num_trim.parse::<u64>().map_err(|_| {
         LimitsError::BadDurationMagnitude(format!(
             "{num_trim} (digit-only magnitude overflows u64)"
@@ -2282,6 +2320,142 @@ mod tests {
             reason.contains("overflow"),
             "overflow diagnostic must mention overflow (got {reason:?})"
         );
+    }
+
+    // ── canonical-form: leading-zero duration codec gate ─────────────────
+    //
+    // Direct successor to the `supervisor::duration_codec` leading-zero
+    // arm (9178904) and the `rate_limit_codec` leading-zero arm (4f46830)
+    // — closes the leading-zero canonical-form-drift class on the
+    // `:limits :wall-clock` codec. Every magnitude `render_duration`
+    // emits is a non-negative integer with no leading-zero padding; the
+    // parser's accepted set must match for parse → render → parse to
+    // round-trip without canonical-form drift. The single-byte `"0"`
+    // round-trips losslessly (`render_duration(Duration::ZERO)` emits
+    // `"0s"`) and the downstream [`LimitsError::WallClockZero`] gate
+    // refuses zero-magnitude authoring at the typed-validate layer above
+    // — the codec-layer / typed-validate-layer partition is what keeps
+    // the diagnostic partitioning stable.
+
+    #[test]
+    fn parse_duration_rejects_leading_zero_magnitude() {
+        // The fail-before-pass-after pin: `"030s"` parsed cleanly on
+        // every pre-gate codebase (`u64::from_str` accepts the leading
+        // zero), the codec produced 30s, and `render_duration(30s)`
+        // emitted `"30s"` on the next serialize — silently dropping
+        // the leading zero and drifting the canonical form away from
+        // the author's intent. The new gate surfaces the round-trip
+        // break at the parser layer with a self-locating diagnostic.
+        let err = parse_duration("030s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroDurationMagnitude { ref value } if value == "030"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_multi_digit_zero_magnitude() {
+        // `"00s"` is the degenerate leading-zero case — every byte is
+        // `0`. `u64::from_str("00")` = 0, and the codec produces
+        // `Duration::ZERO`; `render_duration(Duration::ZERO)` emits
+        // `"0s"` on the next serialize — drift from `"00s"` to `"0s"`.
+        // The leading-zero arm refuses the drift class at the codec
+        // layer while leaving the canonical single-byte `"0s"` accepted.
+        let err = parse_duration("00s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroDurationMagnitude { ref value } if value == "00"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_leading_zero_in_hour_window() {
+        // `"01h"` parses to 1h; the renderer emits `"1h"` on the next
+        // serialize. The leading-zero class is a property of the
+        // magnitude, not the unit — pin a per-hour magnitude alongside
+        // the per-second / per-ms pins so the gate's coverage is
+        // structural across every canonical unit suffix the codec
+        // accepts. Mirrors the `_per_hour_window` pin the
+        // `supervisor::duration_codec` and `rate_limit_codec` leading-
+        // zero arms carry on the peer codecs.
+        let err = parse_duration("01h").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroDurationMagnitude { ref value } if value == "01"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_leading_zero_bare_integer_as_seconds() {
+        // The bare-integer-as-seconds shorthand (`"30"` → 30s, no unit
+        // suffix because the parser routes the empty `unit` slot to
+        // `Duration::from_secs`) inherits the leading-zero arm: `"030"`
+        // parses losslessly to 30s but `render_duration(30s)` emits
+        // `"30s"` on the next serialize. Pin the bare-integer path so a
+        // future relaxation that special-cases the unitless shorthand
+        // surfaces here as a test failure.
+        let err = parse_duration("030").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroDurationMagnitude { ref value } if value == "030"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_accepts_single_zero_magnitude_at_codec_layer() {
+        // The codec-layer / typed-validate-layer boundary pin: the
+        // single-byte `"0"` magnitude round-trips losslessly through
+        // `render_duration` (`render_duration(Duration::ZERO)` emits
+        // `"0s"`), so it stays accepted at this codec layer across
+        // every canonical unit suffix. The downstream
+        // `LimitsError::WallClockZero` gate is what refuses
+        // zero-magnitude authoring at the typed-validate layer above
+        // — the partition keeps the canonical-form-drift diagnostic
+        // (this arm) and the semantic-zero diagnostic (the validate
+        // gate) disjoint.
+        assert_eq!(parse_duration("0s").unwrap(), Duration::ZERO);
+        assert_eq!(parse_duration("0ms").unwrap(), Duration::ZERO);
+        assert_eq!(parse_duration("0m").unwrap(), Duration::ZERO);
+        assert_eq!(parse_duration("0h").unwrap(), Duration::ZERO);
+        assert_eq!(parse_duration("0").unwrap(), Duration::ZERO);
+    }
+
+    #[test]
+    fn parse_duration_accepts_canonical_magnitude_with_leading_one() {
+        // The complement-side pin on the leading-zero arm: magnitudes
+        // beginning with `1`..=`9` stay accepted across every canonical
+        // unit suffix the codec accepts. Pin this so a future
+        // tightening cannot drift into rejecting valid canonical
+        // magnitudes — peer with the `_accepts_canonical_magnitude_with_leading_one`
+        // pin the `supervisor::duration_codec` and `rate_limit_codec`
+        // leading-zero arms carry.
+        assert_eq!(parse_duration("1ms").unwrap(), Duration::from_millis(1));
+        assert_eq!(parse_duration("1s").unwrap(), Duration::from_secs(1));
+        assert_eq!(parse_duration("1m").unwrap(), Duration::from_secs(60));
+        assert_eq!(parse_duration("1h").unwrap(), Duration::from_secs(3600));
+        assert_eq!(parse_duration("100ms").unwrap(), Duration::from_millis(100));
+        assert_eq!(parse_duration("500ms").unwrap(), Duration::from_millis(500));
+    }
+
+    #[test]
+    fn de_duration_rejects_leading_zero_through_serde() {
+        // The serde-path pin: a `:limits :wall-clock` carrying a
+        // leading-zero magnitude (`"030s"`) must fail at deserialize
+        // time, not silently round-trip the value through the parser.
+        // The gate fires at deserialize, before any validate gate runs
+        // — peer with the existing `de_duration_rejects_fractional_value_through_serde`
+        // pin on the same canonical-form-drift axis.
+        let json = r#"{"wallClock":"030s"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("leading zero"),
+            "serde diagnostic must surface the leading-zero reason verbatim (got {msg:?})"
+        );
+
+        let json = r#"{"wallClock":"30s"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.wall_clock, Some(Duration::from_secs(30)));
     }
 
     #[test]
