@@ -764,6 +764,18 @@ pub enum LimitsError {
     )]
     NonIntegerMillicoreMagnitude { value: String },
     #[error(
+        "millicores: magnitude {value:?} has a non-canonical leading zero — the canonical \
+         authoring form for `:limits :cpu` is `<integer>m` (Kubernetes millicores, e.g. \
+         `\"500m\"` for half a core, `\"2000m\"` for two cores) or the bare-core shorthand \
+         `<integer>` (e.g. `\"2\"` = `\"2000m\"`) with no leading-zero padding on the \
+         magnitude. A leading-zero magnitude (`\"0500m\"`, `\"00m\"`, `\"02\"`, `\"01500m\"`) \
+         round-trips through `render_millicores` to a *different* canonical form (`\"500m\"`, \
+         `\"0m\"`, `\"2000m\"`, `\"1500m\"`) on first serialize — breaking the THEORY.md Part \
+         V render-determinism contract every typed slot carries. Strip the leading zeros \
+         (write `\"500m\"` instead of `\"0500m\"`; `\"2\"` instead of `\"02\"`)"
+    )]
+    LeadingZeroMillicoreMagnitude { value: String },
+    #[error(
         ":limits :memory must be > 0 — wasmtime StoreLimits refuses a zero memory cap; omit the field for unbounded"
     )]
     MemoryZero,
@@ -1235,7 +1247,37 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
         }
         return Err(LimitsError::BadMillicores(s.into()));
     }
-    // `digit_only` guarantees every byte is `[0-9]`, so the only way
+    // Leading-zero arm — peer with the `parse_byte_size` leading-zero
+    // arm (cea9a78), the `parse_duration` leading-zero arm (39762d7),
+    // the `supervisor::duration_codec` leading-zero arm (9178904) and
+    // the `rate_limit_codec` leading-zero arm (4f46830) on the same
+    // canonical-form render-determinism axis. The digit-only gate
+    // accepts `"0500m"`, `"00m"`, `"02"`, `"01500m"` as `u32::from_str`
+    // parses them losslessly (= 500, 0, 2, 1500), but `render_millicores`
+    // emits the leading-zero-stripped form (`"500m"`, `"0m"`, `"2000m"`,
+    // `"1500m"`) — a *different* canonical string on the next emit,
+    // breaking the THEORY.md Part V render-determinism contract the
+    // same way `"+500m"` did before the leading-`+` arm landed. The
+    // single-byte magnitude `"0"` (or `"0m"`) round-trips losslessly
+    // through `render_millicores` (`render_millicores(0)` emits `"0m"`)
+    // — the downstream semantic-zero gate [`LimitsError::CpuZero`]
+    // refuses zero-magnitude authoring at the typed-validate layer
+    // above, so the single-byte `"0"` stays in the accepted set at this
+    // codec layer and the diagnostic partitioning between canonical-
+    // form drift (this arm) and semantic-zero (the downstream gate)
+    // remains stable. Same codec-layer / typed-validate-layer partition
+    // the peer codecs preserve. Closes the sixth (and last) typed
+    // numeric-codec surface in caixa-core on the integer-magnitude
+    // leading-zero axis — the trajectory the prior `parse_byte_size`
+    // arm (cea9a78) explicitly named.
+    if magnitude.len() > 1 && magnitude.as_bytes()[0] == b'0' {
+        return Err(LimitsError::LeadingZeroMillicoreMagnitude {
+            value: magnitude.into(),
+        });
+    }
+    // The digit-only gate guarantees every byte is `[0-9]`, and the
+    // leading-zero arm above guarantees the magnitude is either the
+    // single byte `"0"` or starts with `[1-9]`, so the only way
     // `u32::from_str` can fail here is overflow (the magnitude exceeds
     // `u32::MAX`). Surface that as `BadMillicores` with an overflow-
     // shaped wording so the diagnostic names the offending magnitude
@@ -2985,6 +3027,156 @@ mod tests {
         assert!(
             msg.contains("non-negative integer"),
             "serde diagnostic must surface the integer-magnitude reason verbatim \
+             (got {msg:?})"
+        );
+
+        // The integer-form complement — same author-side intent
+        // (500 millicores), written in the canonical form the renderer
+        // would emit, deserializes cleanly.
+        let json = r#"{"cpu":"500m"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.cpu, Some(500));
+    }
+
+    // ── canonical-form: leading-zero millicores codec gate ────────────────
+    //
+    // Direct successor to the `parse_byte_size` / `parse_duration` /
+    // `supervisor::duration_codec` / `rate_limit_codec` leading-zero
+    // arms (cea9a78 / 39762d7 / 9178904 / 4f46830) — closes the sixth
+    // (and last) typed numeric-codec surface in caixa-core on the
+    // integer-magnitude leading-zero axis. Every magnitude
+    // `render_millicores` emits is the leading-zero-stripped form
+    // (`format!("{m}m")` — no leading-zero padding), so a digit-only-
+    // but-leading-zero magnitude parses losslessly through `u32::from_str`
+    // and serde silently round-trips the value to a *different*
+    // canonical string on the next emit. Pins every canonical-drift
+    // shape on the `m`-suffix and bare-core paths, the codec-vs-
+    // typed-validate-layer boundary (the single-byte `"0"` stays in the
+    // codec's accepted set; `CpuZero` refuses it at validate), the
+    // complement-side pin (every canonical leading-`[1-9]` magnitude
+    // continues to parse cleanly), and the serde-path pin.
+
+    #[test]
+    fn parse_millicores_rejects_leading_zero_magnitude_with_suffix() {
+        // The fail-before-pass-after pin on the `m`-suffix path:
+        // `"0500m"` parsed cleanly on no pre-gate codebase
+        // (`u32::from_str` accepts `"0500"` → 500), then `render_millicores`
+        // emitted `"500m"` on the next serialize — canonical-form drift.
+        // The leading-zero arm routes the same input to
+        // `LeadingZeroMillicoreMagnitude` with the canonical-form
+        // remediation wording. Peer with the `parse_byte_size` `"064MiB"`
+        // case and the `parse_duration` `"030s"` case.
+        let err = parse_millicores("0500m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroMillicoreMagnitude { ref value } if value == "0500"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_multi_digit_zero_magnitude_with_suffix() {
+        // The multi-zero pin on the `m`-suffix path: `"00m"` parses to 0
+        // millicores at the codec, but the renderer emits `"0m"` on the
+        // next serialize — the single canonical zero form on this axis.
+        // The leading-zero arm rejects multi-byte leading-zero shapes
+        // even when the value is zero; the single-byte `"0m"` /
+        // bare-`"0"` stays in the codec's accepted set per the boundary
+        // pin below. Peer with the `parse_byte_size` `"00MiB"` case and
+        // the `parse_duration` `"00s"` case.
+        let err = parse_millicores("00m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroMillicoreMagnitude { ref value } if value == "00"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_leading_zero_bare_core() {
+        // The leading-zero pin on the bare-core path: `"02"` parsed to
+        // 2 cores → 2000 millicores at the codec, but `render_millicores`
+        // emits `"2000m"` on the next serialize — canonical-form drift.
+        // The bare-core shorthand carries the same leading-zero discipline
+        // as the `m`-suffix path; both authoring paths converge to the
+        // same gate. Peer with the `parse_byte_size` bare-integer
+        // `"01024"` case.
+        let err = parse_millicores("02").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroMillicoreMagnitude { ref value } if value == "02"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_leading_zero_multi_digit_with_suffix() {
+        // The multi-digit leading-zero pin on the `m`-suffix path:
+        // `"01500m"` parses to 1500 millicores at the codec, but the
+        // renderer emits `"1500m"` on the next serialize — canonical-form
+        // drift on a non-zero magnitude. Sweeps a different magnitude
+        // shape than the `"0500m"` case so a future tightening that
+        // misses the multi-digit-leading-zero class surfaces here.
+        let err = parse_millicores("01500m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::LeadingZeroMillicoreMagnitude { ref value } if value == "01500"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_accepts_single_zero_magnitude_at_codec_layer() {
+        // The codec-layer / typed-validate-layer boundary pin: the
+        // single-byte magnitude `"0"` (bare) and `"0m"` (with suffix)
+        // round-trip losslessly through `render_millicores` (which
+        // emits `"0m"` for 0 millicores), so they stay in the codec's
+        // accepted set. The downstream `CpuZero` gate refuses
+        // semantic-zero authoring at the typed-validate layer above —
+        // the diagnostic partitioning between canonical-form drift
+        // (the leading-zero arm) and semantic-zero (the `CpuZero` gate)
+        // remains stable. Same codec-layer / typed-validate-layer
+        // partition the peer codecs preserve.
+        assert_eq!(parse_millicores("0").unwrap(), 0);
+        assert_eq!(parse_millicores("0m").unwrap(), 0);
+    }
+
+    #[test]
+    fn parse_millicores_accepts_canonical_magnitude_with_leading_one() {
+        // The complement-side pin: every canonical leading-`[1-9]`
+        // magnitude continues to parse cleanly through the leading-zero
+        // arm, on both the `m`-suffix and bare-core paths. Sweep the
+        // canonical values the renderer emits across the unit-multiplier
+        // boundary (sub-core, single-core, multi-core) so a future
+        // tightening cannot drift into rejecting valid canonical
+        // magnitudes. Same complement-side discipline the peer
+        // `parse_byte_size_accepts_canonical_magnitude_with_leading_one`
+        // and `parse_duration_accepts_canonical_magnitude_with_leading_one`
+        // pins enforce on the sibling codecs.
+        assert_eq!(parse_millicores("1m").unwrap(), 1);
+        assert_eq!(parse_millicores("500m").unwrap(), 500);
+        assert_eq!(parse_millicores("1500m").unwrap(), 1500);
+        assert_eq!(parse_millicores("9000m").unwrap(), 9000);
+        assert_eq!(parse_millicores("1").unwrap(), 1000);
+        assert_eq!(parse_millicores("2").unwrap(), 2000);
+        assert_eq!(parse_millicores("9").unwrap(), 9000);
+    }
+
+    #[test]
+    fn de_millicores_rejects_leading_zero_through_serde() {
+        // The serde-path pin: a `:limits :cpu` carrying a leading-zero
+        // magnitude (`"0500m"`) must fail at deserialize time, not
+        // silently round-trip the value through `u32::from_str`'s
+        // leading-zero-permissive accepting. Pin both the success-on-
+        // canonical path (the leading-zero-stripped form deserializes
+        // cleanly) and the failure-on-non-canonical path (the leading-
+        // zero form is rejected by the codec before any validate gate
+        // runs). Peer with the
+        // `de_byte_size_rejects_leading_zero_through_serde` and
+        // `de_duration_rejects_leading_zero_through_serde` pins on the
+        // sibling codecs.
+        let json = r#"{"cpu":"0500m"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("leading zero"),
+            "serde diagnostic must surface the leading-zero reason verbatim \
              (got {msg:?})"
         );
 
