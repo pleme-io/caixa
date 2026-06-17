@@ -3425,6 +3425,112 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_shell_command_separator() {
+        // The fail-before-pass-after pin for the canonical
+        // paste-from-shell-prompt-with-sequential-command-tail footgun
+        // on `:repo` (peer with the 05c358e `;` arm on the sibling
+        // `:caminho` path-fonte axis). An author pastes a shell
+        // one-liner that chained a cleanup tail after the URL
+        // (`git clone <url>; rm -rf build`, `git ls-remote <url>;
+        // echo done`) into the `:repo` slot, forgetting to trim the
+        // `; <cmd>` tail. Until this arm landed the value silently
+        // passed every prior `is_git_repo_url` arm (no whitespace, no
+        // control chars, no non-ASCII, no `#`, no `?`, no `\`, no
+        // `{`/`}`, no `<`/`>`, no `` ` ``, no `|`, doesn't start with
+        // `-` or `:`); RFC 3986 §2 lists `;` in the 'sub-delims' /
+        // reserved set and the WHATWG URL spec's fragment percent-
+        // encode set maps `;` → `%3B` on the wire, so the byte rides
+        // verbatim into the lacre's per-dep BLAKE3 closure but is
+        // silently rewritten at libcurl's URL-parser layer — two
+        // authors whose values differ only in their sequential-command
+        // tail (`; rm -rf build` vs nothing) resolve to the byte-
+        // identical upstream `git clone` but lock to two distinct
+        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // contract. Peer with the `:caminho` axis's
+        // `FonteCaminhoShellSemicolon` arm (05c358e) on the sibling
+        // path-fonte axis, and `is_gateway_api_http_path`'s eleven-
+        // byte RFC-3986-reserved set on `:entrada :paths`.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia; rm -rf build".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia; rm -rf build");
+        assert!(
+            reason.contains("must not contain `;`"),
+            "reason must surface the shell-command-separator arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("sequential-command") || reason.contains("'sub-delims'"),
+            "reason must name the shell-command-separator / RFC-3986-sub-delims \
+             rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_semicolon_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the semicolon arm are
+        // both per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte
+        // order wins. A `:repo "https://github.com/p/x#readme; rm"`
+        // carries both `#` and `;`; the `#` byte appears first, so the
+        // fragment-`#` arm fires, surfacing the more self-locating
+        // diagnostic on the byte the author pasted earliest in the URL.
+        // Mirrors the peer cascade discipline
+        // `fonte_repo_fragment_fires_before_pipe_when_fragment_first`
+        // pins on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme; rm".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before semicolon when `#` \
+             byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_pipe_fires_before_semicolon_when_pipe_first() {
+        // Cascade pin: the pipe arm and the semicolon arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()` loop,
+        // so the byte that appears first in the value's byte order
+        // wins. A `:repo "https://github.com/p/x|tee; rm"` carries
+        // both `|` and `;`; the `|` byte appears first, so the
+        // pipe arm fires, surfacing the more self-locating diagnostic
+        // on the byte the author pasted earliest in the URL. Pins the
+        // natural-order cascade so a future reorder of the per-byte
+        // arms surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia|tee; rm".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `|`"),
+            "reason must surface the pipe arm (fires before semicolon when `|` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
