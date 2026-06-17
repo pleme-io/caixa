@@ -2408,6 +2408,69 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  \"<local-path>\")` for a local workspace dep)"
                 .to_string());
         }
+        if b == b'&' {
+            return Err("must not contain `&` (RFC 3986 §2 lists the ampersand \
+                 byte in the 'sub-delims' / reserved set every URL parser is \
+                 required to percent-encode at the path-segment boundary, peer \
+                 with the `{` / `}` URI Template, `<` / `>` shell-redirection, \
+                 `` ` `` shell-command-substitution, `|` shell-pipe, and `;` \
+                 shell-command-separator arms on the same paragraph of the same \
+                 RFC. The byte is also the canonical RFC 3986 §3.4 URL query \
+                 `key=value` pair separator (`?a=1&b=2`), but the prior `?` arm \
+                 already excludes any `?query` tail on a `:repo` value — every \
+                 documented `:fonte :repo` shape (`github:org/repo` shorthand, \
+                 `https://…` / `ssh://…` / `git://…` / `file://…` URL schemes, \
+                 `git@host:path` scp-style SSH) carries no query component, so \
+                 the `&` byte cannot appear in a legitimate query position past \
+                 the `?` gate either. Every `https://` / `ssh://` / `git://` / \
+                 `file://` URL scheme percent-encodes `&` to `%26` on the wire \
+                 (the WHATWG URL spec's 'fragment percent-encode set' canonical \
+                 mapping every conformant URL parser applies), and the \
+                 `git@host:path` scp-style SSH shape names a POSIX path \
+                 component that carries no shell-metachar bytes. Beyond the \
+                 URL-grammar violation, every interactive shell (bash / zsh / \
+                 fish / nushell) lexes `&` two ways: single `&` as the \
+                 background-task terminator that detaches the prior command \
+                 into the background and returns control to the prompt \
+                 immediately (the canonical `cmd &` idiom every long-running \
+                 pipeline uses), and double `&&` as the logical-AND list \
+                 operator that fires the next command only if the prior \
+                 command succeeded (the canonical `make && make install` idiom \
+                 every build script carries). A `:repo \
+                 \"https://github.com/foo/bar & sleep 1\"` (the canonical \
+                 'I pasted a `git clone <url> & sleep 1` background-launch \
+                 one-liner and forgot to trim the `& <cmd>` tail' footgun) or \
+                 `:repo \"github:p/x && echo done\"` (the symmetric \
+                 paste-from-shell-prompt `cd path && cmd` build-chain idiom \
+                 every quick-start `git clone <…> && cd <…>` line footnotes) \
+                 is the canonical paste-from-shell-prompt footgun the typed \
+                 slot's accepted set must exclude. The byte rides verbatim \
+                 into the lacre's per-dep content-address (`conteudo: \
+                 format!(\"git:{repo}\")` peer of the path-axis embedding at \
+                 caixa-resolver/src/resolve.rs) and into the resolver's `git \
+                 clone <repo>` (caixa-resolver/src/git.rs) subprocess \
+                 invocation, where libcurl's URL parser percent-encodes the \
+                 byte on the wire — so two authors whose `:repo` values \
+                 differ only in their ampersand presence (one paste-trimmed \
+                 the background-launch tail, the other didn't) resolve to \
+                 the byte-identical upstream `git clone` but lock to two \
+                 distinct BLAKE3 closures, defeating the THEORY.md §V.2 \
+                 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, backslash-`\\`, template-`{` / `}`, \
+                 shell-redirection-`<` / `>`, backtick-`` ` ``, shell-pipe-`|`, \
+                 and shell-command-separator-`;` arms close. The peer `:fonte \
+                 :caminho` axis (e12e4f3) closes the same byte under the \
+                 shell-background / logical-AND banner via \
+                 `DepError::FonteCaminhoShellBackground`; the peer `:entrada \
+                 :paths` axis closes the same byte as part of \
+                 `is_gateway_api_http_path`'s eleven-byte RFC-3986-reserved \
+                 set; the peer `:fonte :tag` / `:fonte :branch` axes close \
+                 the same byte as part of `is_git_ref_name`'s shell-metachar-\
+                 injection cascade. Drop the `&` tail — substitute the literal \
+                 value at author time, or use `:fonte (:tipo path :caminho \
+                 \"<local-path>\")` for a local workspace dep)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
