@@ -2728,6 +2728,88 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  \"<local-path>\")` for a local workspace dep)"
                 .to_string());
         }
+        if b == b'\'' {
+            return Err("must not contain `'` (RFC 3986 §2.2 lists the \
+                 single-quote byte in the 'sub-delims' set the URL grammar \
+                 admits inside a path segment but every WHATWG-conformant \
+                 special-scheme URL parser percent-encodes inside a query \
+                 component via the 'special-query percent-encode set' — \
+                 the peer position the prior `*` / `(` / `)` 'sub-delims' \
+                 arms close and the partner ASCII string-delimiter to the \
+                 `\"` 'delims' double-quote byte the prior arm closes. The \
+                 byte is the second ASCII shell-string-delimiter — `\"` \
+                 and `'` are the only two ASCII bytes a byte-level string \
+                 parser sharing a value-shape with a shell argument must \
+                 refuse on a URL-shaped slot for paste-from-doc safety. No \
+                 documented `:fonte :repo` shape admits the byte: the \
+                 `github:org/repo` shorthand carries an alphanumeric / `-` \
+                 / `_` / `/` alphabet, every `https://` / `ssh://` / \
+                 `git://` / `file://` URL scheme keeps host / path bodies \
+                 inside the `unreserved` alphanumeric / `-` / `.` / `_` / \
+                 `~` set that excludes the byte, and the `git@host:path` \
+                 scp-style SSH shape names a POSIX path component that \
+                 carries no shell-metachar bytes. Every POSIX shell (sh / \
+                 bash / zsh / dash / ksh / fish / nushell) lexes `'` as \
+                 the single-quote / strong-quote string delimiter — a \
+                 `'<text>'` form suppresses every form of expansion on \
+                 `<text>` (no `$`, no `` ` ``, no `\\`, no glob, no \
+                 word-splitting), the canonical 'strong-quote the URL so \
+                 the shell doesn't re-lex anything inside' idiom every \
+                 doc / README quick-start snippet wraps the URL argument \
+                 with as the stricter, security-conscious alternative to \
+                 the `\"…\"` weak-quote shape the prior arm closes. A \
+                 `:repo \"'https://github.com/pleme-io/caixa-teia'\"` (the \
+                 canonical paste-from-doc-shell-quoting footgun where the \
+                 author copies `$ git clone 'https://…'` from a README's \
+                 quick-start snippet and keeps the surrounding strong-\
+                 quote bytes — the doc strong-quotes the URL so the shell \
+                 doesn't re-lex any metachars inside, but the typed slot \
+                 is itself a byte-level string parser, not a shell \
+                 context, so the quote bytes ride into the value verbatim; \
+                 the strong-quote idiom is more common than `\"…\"` in \
+                 security-conscious docs because it forecloses every \
+                 expansion the weak-quote form still admits inside) or \
+                 `:repo \"github:p/x'tail\"` (the symmetric stray-quote \
+                 paste idiom every shell-history `git clone …` line \
+                 carries when the author paste-trimmed one boundary but \
+                 not the other) is the canonical paste-from-shell-quoting \
+                 footgun the typed slot's accepted set must exclude. The \
+                 byte additionally carries the canonical English-\
+                 typography apostrophe footgun: an author writes `:repo \
+                 \"github:p/repo's-fork\"` (the possessive-form paste-\
+                 from-prose idiom every README / commit-message / chat-\
+                 thread reference to a repo carries) expecting the \
+                 substrate to coerce it to a kebab-case slug; the byte \
+                 rides verbatim into the lacre's per-dep content-address \
+                 (`conteudo: format!(\"git:{repo}\")` peer of the path-\
+                 axis embedding at caixa-resolver/src/resolve.rs) and \
+                 into the resolver's `git clone <repo>` (caixa-resolver/\
+                 src/git.rs) subprocess invocation, where the upstream \
+                 host's git porcelain fetches a literal apostrophe-bearing \
+                 path that no host's repo registry resolves (GitHub / \
+                 GitLab / Bitbucket / Codeberg / sourcehut all reject `'` \
+                 in repo slugs at admission time) — so the lacre locks \
+                 to a `git:github:p/repo's-fork` closure that never \
+                 resolves at clone time, surfacing as a quoting-confused \
+                 'remote ref not found' porcelain error far from the \
+                 source caixa.lisp, defeating the THEORY.md §V.2 render-\
+                 determinism contract on the same axis the fragment-`#`, \
+                 query-`?`, backslash-`\\`, template-`{` / `}`, \
+                 shell-redirection-`<` / `>`, backtick-`` ` ``, \
+                 shell-pipe-`|`, shell-command-separator-`;`, shell-\
+                 background-`&`, shell-variable-expansion-`$`, shell-\
+                 glob-`*`, shell-subshell-grouping-`(` / `)`, and shell-\
+                 double-quote-`\"` arms close. Together with the prior \
+                 `\"` arm, this arm closes both ASCII shell-string-\
+                 delimiter bytes on the typed `:repo` URL axis — every \
+                 byte the canonical `git clone <repo>` doc-paste idiom \
+                 wraps the URL argument with is now refused at validate \
+                 time, before the byte rides into the lacre or the \
+                 resolver subprocess. Drop the `'` wrapper — paste only \
+                 the URL between the quotes, or use `:fonte (:tipo path \
+                 :caminho \"<local-path>\")` for a local workspace dep)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
