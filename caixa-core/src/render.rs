@@ -2540,6 +2540,67 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  :caminho \"<local-path>\")` for a local workspace dep)"
                 .to_string());
         }
+        if b == b'*' {
+            return Err("must not contain `*` (RFC 3986 §2 lists the asterisk \
+                 byte in the 'sub-delims' / reserved set every URL parser is \
+                 required to percent-encode at the path-segment boundary, peer \
+                 with the `;` shell-command-separator, `&` shell-background, \
+                 and `$` shell-variable-expansion arms on the same paragraph of \
+                 the same RFC. No git URL grammar admits the byte: the \
+                 `github:org/repo` shorthand carries an alphanumeric / `-` / \
+                 `_` / `/` alphabet, every `https://` / `ssh://` / `git://` / \
+                 `file://` URL scheme percent-encodes `*` to `%2A` on the wire \
+                 (the WHATWG URL spec's 'special-query percent-encode set' \
+                 canonical mapping every conformant URL parser applies), and \
+                 the `git@host:path` scp-style SSH shape names a POSIX path \
+                 component that carries no shell-metachar bytes. Beyond the \
+                 URL-grammar violation, every POSIX shell (sh / bash / zsh / \
+                 dash / ksh / fish / nushell) lexes `*` as the \
+                 pathname-expansion / glob wildcard operator: a single `*` \
+                 matches any sequence of characters in a path component \
+                 (including the empty sequence), `**` matches across `/` \
+                 boundaries under bash's `globstar` shopt, and `foo*` resolves \
+                 against the cwd-relative filesystem at command-substitution \
+                 time. Beyond shell glob semantics, git itself lexes `*` as \
+                 the refspec wildcard operator (`refs/heads/*:refs/remotes/\
+                 origin/*` — the same byte the peer `is_git_ref_name` \
+                 predicate refuses on `:fonte :tag` / `:fonte :branch`), so a \
+                 `:repo` value carrying `*` is structurally ambiguous with \
+                 every refspec parser the resolver invokes downstream. A \
+                 `:repo \"https://github.com/pleme-io/caixa-*\"` (the canonical \
+                 'I pasted a `ls github.com/pleme-io/caixa-*` shell-listing \
+                 tail and forgot to substitute the literal repo name' \
+                 footgun, identical to the cf9034b peer arm on the sibling \
+                 `:caminho` axis that closes `\"../caixa-teia/*\"`) or `:repo \
+                 \"github:p/*\"` (the symmetric paste-from-shell-prompt \
+                 glob-expansion idiom every quick-listing one-liner footnotes) \
+                 is the canonical paste-from-shell-prompt footgun the typed \
+                 slot's accepted set must exclude. The byte rides verbatim \
+                 into the lacre's per-dep content-address (`conteudo: \
+                 format!(\"git:{repo}\")` peer of the path-axis embedding at \
+                 caixa-resolver/src/resolve.rs) and into the resolver's `git \
+                 clone <repo>` (caixa-resolver/src/git.rs) subprocess \
+                 invocation, where libcurl's URL parser percent-encodes the \
+                 byte on the wire — so two authors whose `:repo` values \
+                 differ only in their asterisk presence (one substituted the \
+                 literal repo name at author time, the other didn't) resolve \
+                 to the byte-identical upstream `git clone` but lock to two \
+                 distinct BLAKE3 closures, defeating the THEORY.md §V.2 \
+                 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, backslash-`\\`, template-`{` / `}`, \
+                 shell-redirection-`<` / `>`, backtick-`` ` ``, shell-pipe-`|`, \
+                 shell-command-separator-`;`, shell-background-`&`, and \
+                 shell-variable-expansion-`$` arms close. The peer `:fonte \
+                 :caminho` axis (cf9034b) closes the same byte under the \
+                 shell-glob / pathname-expansion banner via \
+                 `DepError::FonteCaminhoShellGlob`; the peer `:fonte :tag` / \
+                 `:fonte :branch` axes close the same byte as part of \
+                 `is_git_ref_name`'s refspec-wildcard cascade. Drop the `*` — \
+                 substitute the literal repo name at author time, or use \
+                 `:fonte (:tipo path :caminho \"<local-path>\")` for a local \
+                 workspace dep)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
