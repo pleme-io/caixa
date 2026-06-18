@@ -2664,6 +2664,70 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                 ch = b as char
             ));
         }
+        if b == b'"' {
+            return Err("must not contain `\"` (RFC 3986 §2 lists the \
+                 double-quote byte in the 'delims' set every URL parser is \
+                 required to refuse or percent-encode, peer with the `<` / \
+                 `>` shell-redirection and `` ` `` shell-command-substitution \
+                 arms on the same paragraph of the same RFC — the four-byte \
+                 'delims' subset (`<`, `>`, `\"`, `` ` ``) is the strictest \
+                 of the §2 reserved classes, every member structurally \
+                 incompatible with every URL grammar at every position. No \
+                 git URL grammar admits the byte: the `github:org/repo` \
+                 shorthand carries an alphanumeric / `-` / `_` / `/` \
+                 alphabet, every `https://` / `ssh://` / `git://` / \
+                 `file://` URL scheme percent-encodes `\"` to `%22` on the \
+                 wire (the WHATWG URL spec's 'C0 control percent-encode \
+                 set' canonical mapping every conformant URL parser \
+                 applies), and the `git@host:path` scp-style SSH shape \
+                 names a POSIX path component that carries no \
+                 shell-metachar bytes. Beyond the URL-grammar violation, \
+                 every POSIX shell (sh / bash / zsh / dash / ksh / fish / \
+                 nushell) lexes `\"` as the double-quote string delimiter — \
+                 a `\"<text>\"` form suppresses word-splitting and \
+                 pathname-expansion on `<text>` while still expanding `$`, \
+                 `` ` ``, and `\\` substitutions inside, the canonical \
+                 'quote the URL so the shell doesn't re-lex the bytes' \
+                 idiom every doc / README quick-start snippet wraps the \
+                 URL argument with. A `:repo \
+                 \"\\\"https://github.com/pleme-io/caixa-teia\\\"\"` (the \
+                 canonical paste-from-doc footgun where the author copies \
+                 `$ git clone \"https://…\"` from a README's quick-start \
+                 snippet and keeps the surrounding double-quote bytes — \
+                 the doc quotes the URL so the shell doesn't re-lex \
+                 metachars inside, but the typed slot is itself a \
+                 byte-level string parser, not a shell context, so the \
+                 quote bytes ride into the value verbatim) or `:repo \
+                 \"github:p/x\\\"tail\"` (the symmetric stray-quote paste \
+                 idiom every shell-history `git clone …` line footnotes) \
+                 is the canonical paste-from-shell-quoting footgun the \
+                 typed slot's accepted set must exclude. The byte rides \
+                 verbatim into the lacre's per-dep content-address \
+                 (`conteudo: format!(\"git:{repo}\")` peer of the path-\
+                 axis embedding at caixa-resolver/src/resolve.rs) and into \
+                 the resolver's `git clone <repo>` \
+                 (caixa-resolver/src/git.rs) subprocess invocation, where \
+                 libcurl's URL parser percent-encodes the byte on the wire \
+                 — so two authors whose `:repo` values differ only in \
+                 their double-quote presence (one paste-trimmed the quote \
+                 wrapper, the other didn't) resolve to the byte-identical \
+                 upstream `git clone` but lock to two distinct BLAKE3 \
+                 closures, defeating the THEORY.md §V.2 render-determinism \
+                 contract on the same axis the fragment-`#`, query-`?`, \
+                 backslash-`\\`, template-`{` / `}`, shell-redirection-\
+                 `<` / `>`, backtick-`` ` ``, shell-pipe-`|`, \
+                 shell-command-separator-`;`, shell-background-`&`, \
+                 shell-variable-expansion-`$`, shell-glob-`*`, and \
+                 shell-subshell-grouping-`(` / `)` arms close. The peer \
+                 `:entrada :paths` axis closes the same byte as part of \
+                 `is_gateway_api_http_path`'s RFC-3986-reserved set; the \
+                 `:fonte :tag` / `:fonte :branch` axes close the same byte \
+                 as part of `is_git_ref_name`'s shell-metachar-injection \
+                 cascade. Drop the `\"` wrapper — paste only the URL \
+                 between the quotes, or use `:fonte (:tipo path :caminho \
+                 \"<local-path>\")` for a local workspace dep)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
