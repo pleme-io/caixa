@@ -4351,6 +4351,128 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_shell_history_expansion() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // shell-history footgun on `:repo`. An author copies a `git
+        // clone <url>!sudo make install` one-liner from a README's
+        // quick-start snippet, intending the trailing `!sudo` as a
+        // shell-history-expansion reference but the typed slot is itself
+        // a byte-level string parser, not a shell context, so the byte
+        // rides into the value verbatim. Until this arm landed the `!`
+        // byte silently passed every prior `is_git_repo_url` arm (no
+        // whitespace, no control chars, no non-ASCII, no `#`, no `?`,
+        // no `\`, no `{`/`}`, no `<`/`>`, no `` ` ``, no `|`, no `;`,
+        // no `&`, no `$`, no `*`, no `(`/`)`, no `"`, no `'`, doesn't
+        // start with `-` or `:`); bash with the default `histexpand`
+        // mode rewrites `!command` to the most recent history entry
+        // beginning with `command`, the canonical RCE-class injection
+        // vector when the byte rides into a shell argument.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia!sudo".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia!sudo");
+        assert!(
+            reason.contains("must not contain `!`"),
+            "reason must surface the shell-history-expansion arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("history-expansion") || reason.contains("bang"),
+            "reason must name the shell-history-expansion / bang rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_double_bang_history_reference() {
+        // The symmetric `!!` repeat-prior-command pin: an author paste-
+        // trims a `git clone <url>` retry idiom from shell history that
+        // expands to the previous command via `!!`. Pinned separately
+        // from the wrapped `!command` shape so a future diagnostic-
+        // surface change that only checked the leading or paired-bang
+        // position surfaces here — the per-byte arm fires anywhere `!`
+        // appears in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia!!".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `!`"),
+            "reason must surface the shell-history-expansion arm on the trailing-`!!` shape, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_bang_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the bang arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()` loop,
+        // so the byte that appears first in the value's byte order
+        // wins. A `:repo "https://github.com/p/x#readme!tail"` carries
+        // both `#` and `!`; the `#` byte appears first, so the
+        // fragment-`#` arm fires, surfacing the more self-locating
+        // diagnostic on the byte the author pasted earliest in the URL.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme!tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before bang when `#` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_single_quote_fires_before_bang_when_single_quote_first() {
+        // Cascade pin: the single-quote-`'` arm (the immediate-predecessor
+        // byte-class arm, e7a109f) and the bang arm are both per-byte
+        // arms inside the same `for &b in s.as_bytes()` loop, so the
+        // byte that appears first in the value's byte order wins. A
+        // `:repo "github:p/x'mid!tail"` carries both `'` and `!`; the
+        // `'` byte appears first, so the single-quote arm fires,
+        // surfacing the more self-locating diagnostic on the byte the
+        // author pasted earliest in the URL. Pins the natural-order
+        // cascade so a future reorder of the per-byte arms surfaces
+        // here — `!` is the most recent byte-class arm, so the
+        // cascade-pin sweep extends to cover the immediately prior `'`
+        // byte arm firing first when ordered ahead of `!` in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia'mid!tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `'`"),
+            "reason must surface the single-quote arm (fires before bang when `'` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form

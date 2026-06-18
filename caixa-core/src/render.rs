@@ -2810,6 +2810,90 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  :caminho \"<local-path>\")` for a local workspace dep)"
                 .to_string());
         }
+        if b == b'!' {
+            return Err("must not contain `!` (RFC 3986 §2.2 lists the bang byte \
+                 in the 'sub-delims' set the URL grammar admits inside a \
+                 path segment but every WHATWG-conformant special-scheme \
+                 URL parser percent-encodes inside a query component via \
+                 the 'special-query percent-encode set' — the peer position \
+                 the prior `*` / `(` / `)` / `'` 'sub-delims' arms close. \
+                 No documented `:fonte :repo` shape admits the byte: the \
+                 `github:org/repo` shorthand carries an alphanumeric / `-` \
+                 / `_` / `/` alphabet, every `https://` / `ssh://` / \
+                 `git://` / `file://` URL scheme keeps host / path bodies \
+                 inside the RFC 3986 `unreserved` alphanumeric / `-` / \
+                 `.` / `_` / `~` set that excludes the byte, and the \
+                 `git@host:path` scp-style SSH shape names a POSIX path \
+                 component that carries no shell-metachar bytes. Beyond \
+                 the URL-grammar question, every interactive POSIX shell \
+                 with history enabled (bash / ksh / zsh's `bashcompat` \
+                 mode / csh / tcsh) lexes `!` as the history-expansion \
+                 prefix — `!command` re-runs the most recent history \
+                 entry beginning with `command`, `!!` re-runs the prior \
+                 command verbatim, `!$` substitutes the last word of the \
+                 prior command, `!:N` substitutes the Nth word, the \
+                 canonical RCE-class injection vector when a string lands \
+                 in a shell context with `set -o histexpand` (bash's \
+                 default for interactive sessions). A `:repo \
+                 \"https://github.com/foo/bar!sudo\"` (the canonical \
+                 paste-from-shell-history footgun where the author copies \
+                 a `git clone <url>!sudo make install` one-liner from a \
+                 README's quick-start snippet, intending the trailing \
+                 `!sudo` as a shell-history reference but the typed slot \
+                 is itself a byte-level string parser, not a shell \
+                 context, so the bytes ride into the value verbatim) or \
+                 `:repo \"github:p/repo!!\"` (the symmetric `!!` repeat-\
+                 prior-command paste idiom every shell-history `git \
+                 clone …` retry line carries) is the canonical paste-\
+                 from-shell-history footgun the typed slot's accepted \
+                 set must exclude. Beyond shell-history, the bang byte \
+                 carries the canonical English-typography emphasis \
+                 footgun: an author writes `:repo \
+                 \"github:p/awesome-repo!\"` (the exclamation-form paste-\
+                 from-prose idiom every README / chat-thread / commit-\
+                 message reference to an enthusiastically-named repo \
+                 carries) expecting the substrate to coerce it to a \
+                 kebab-case slug; the byte rides verbatim into the \
+                 lacre's per-dep content-address (`conteudo: \
+                 format!(\"git:{repo}\")` peer of the path-axis \
+                 embedding at caixa-resolver/src/resolve.rs) and into \
+                 the resolver's `git clone <repo>` (caixa-resolver/\
+                 src/git.rs) subprocess invocation, where the upstream \
+                 host's git porcelain fetches a literal bang-bearing \
+                 path that no host's repo registry resolves (GitHub / \
+                 GitLab / Bitbucket / Codeberg / sourcehut all reject \
+                 `!` in repo slugs at admission time) — so the lacre \
+                 locks to a `git:github:p/awesome-repo!` closure that \
+                 never resolves at clone time, surfacing as a 'remote \
+                 ref not found' porcelain error far from the source \
+                 caixa.lisp, defeating the THEORY.md §V.2 render-\
+                 determinism contract on the same axis the fragment-\
+                 `#`, query-`?`, backslash-`\\`, template-`{` / `}`, \
+                 shell-redirection-`<` / `>`, backtick-`` ` ``, shell-\
+                 pipe-`|`, shell-command-separator-`;`, shell-\
+                 background-`&`, shell-variable-expansion-`$`, shell-\
+                 glob-`*`, shell-subshell-grouping-`(` / `)`, shell-\
+                 double-quote-`\"`, and shell-single-quote-`'` arms \
+                 close. The peer `:fonte :tag` / `:fonte :branch` axes \
+                 (`is_git_ref_name`) deliberately admit `!` (git's \
+                 `check-ref-format` accepts it as a printable byte and \
+                 the bang carries no refname-grammar meaning); the \
+                 `:entrada :paths` axis (`is_gateway_api_http_path`) \
+                 similarly admits it (K8s Gateway API HTTPPathMatch.value \
+                 OpenAPI regex accepts it). `:repo` is substrate-\
+                 internal and strictly narrower than its upstream \
+                 grammar by design, so the divergence is intentional: \
+                 the shell-history-expansion footgun is real on the \
+                 typed `:fonte :repo` axis (every `git clone <url>` \
+                 invocation crosses a shell boundary at the caixa-\
+                 resolver / `Command::new(\"git\")` subprocess layer) \
+                 in a way it isn't on the refname / HTTP-path axes that \
+                 never reach shell context. Drop the trailing `!` — \
+                 author the bare alphanumeric / `-` / `_` slug, or use \
+                 `:fonte (:tipo path :caminho \"<local-path>\")` for a \
+                 local workspace dep)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
