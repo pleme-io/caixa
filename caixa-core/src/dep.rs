@@ -3668,6 +3668,150 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_shell_variable_expansion() {
+        // The fail-before-pass-after pin for the canonical
+        // paste-from-shell-prompt-with-unsubstituted-variable footgun
+        // on `:repo` (peer with the f4efe9c `$` arm on the sibling
+        // `:caminho` path-fonte axis). An author pastes a shell one-
+        // liner that referenced an environment variable
+        // (`git clone https://github.com/$ORG/x`, `git clone
+        // github:$USER/repo`) into the `:repo` slot, forgetting to
+        // substitute the literal value at author time. Until this arm
+        // landed the value silently passed every prior
+        // `is_git_repo_url` arm (no whitespace, no control chars, no
+        // non-ASCII, no `#`, no `?`, no `\`, no `{`/`}`, no `<`/`>`,
+        // no `` ` ``, no `|`, no `;`, no `&`, doesn't start with `-`
+        // or `:`); RFC 3986 §2 lists `$` in the 'sub-delims' /
+        // reserved set and the WHATWG URL spec's fragment percent-
+        // encode set maps `$` → `%24` on the wire, so the byte rides
+        // verbatim into the lacre's per-dep BLAKE3 closure but is
+        // silently rewritten at libcurl's URL-parser layer — two
+        // authors whose values differ only in their `$VAR` /
+        // `${VAR}` / `$(cmd)` expansion tail resolve to the byte-
+        // identical upstream `git clone` but lock to two distinct
+        // lacres, defeating the THEORY.md §V.2 render-determinism
+        // contract. Beyond determinism, the value is a structural
+        // host-layout leak: two authors with the same `:repo` slot
+        // but different `$ORG` / `$HOME` / `$WORKSPACE` resolve
+        // different upstreams. Peer with the `:caminho` axis's
+        // `FonteCaminhoVarExpansion` arm (f4efe9c) on the sibling
+        // path-fonte axis, and `is_gateway_api_http_path`'s eleven-
+        // byte RFC-3986-reserved set on `:entrada :paths`.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/$ORG/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/$ORG/caixa-teia");
+        assert!(
+            reason.contains("must not contain `$`"),
+            "reason must surface the shell-variable-expansion arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("variable-expansion") || reason.contains("'sub-delims'"),
+            "reason must name the shell-variable-expansion / RFC-3986-sub-delims \
+             rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_braced_variable_expansion() {
+        // The fail-before-pass-after pin for the symmetric POSIX-
+        // shell braced `${VAR}` expansion paste footgun: an author
+        // pastes a CI-manifest line `git clone
+        // https://github.com/${WORKSPACE}/x` (the canonical GitHub
+        // Actions / GitLab CI / Drone shape) and forgets to
+        // substitute the literal value. The `${...}` shape is the
+        // same `$` byte at the leading position of the expansion;
+        // the per-byte arm fires on the `$`. Pinned separately from
+        // the bare-`$VAR` shape so a future diagnostic-surface
+        // change that special-cased the braced form surfaces here.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/${WORKSPACE}/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `$`"),
+            "reason must surface the shell-variable-expansion arm on the braced `${{...}}` \
+             shape too, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_var_expansion_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the var-expansion-`$`
+        // arm are both per-byte arms inside the same `for &b in
+        // s.as_bytes()` loop, so the byte that appears first in the
+        // value's byte order wins. A `:repo
+        // "https://github.com/p/x#readme$HOME"` carries both `#` and
+        // `$`; the `#` byte appears first, so the fragment-`#` arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL. Mirrors the
+        // peer cascade discipline
+        // `fonte_repo_fragment_fires_before_background_when_fragment_first`
+        // on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme$HOME".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before var-expansion-`$` when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_background_fires_before_var_expansion_when_background_first() {
+        // Cascade pin: the background-`&` arm and the
+        // var-expansion-`$` arm are both per-byte arms inside the
+        // same `for &b in s.as_bytes()` loop, so the byte that
+        // appears first in the value's byte order wins. A `:repo
+        // "https://github.com/p/x&sleep$HOME"` carries both `&` and
+        // `$`; the `&` byte appears first, so the background arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL. Pins the
+        // natural-order cascade so a future reorder of the per-byte
+        // arms surfaces here — `$` is the most recent byte-class arm,
+        // so the cascade-pin sweep extends to cover every immediately
+        // prior byte arm (`#`, `&`) firing first when ordered ahead
+        // of `$` in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia&sleep$HOME".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `&`"),
+            "reason must surface the background-`&` arm (fires before var-expansion-`$` when \
+             `&` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form

@@ -2471,6 +2471,75 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  \"<local-path>\")` for a local workspace dep)"
                 .to_string());
         }
+        if b == b'$' {
+            return Err("must not contain `$` (RFC 3986 §2 lists the dollar \
+                 byte in the 'sub-delims' / reserved set every URL parser is \
+                 required to percent-encode at the path-segment boundary, peer \
+                 with the `;` shell-command-separator and `&` shell-background \
+                 arms on the same paragraph of the same RFC. No git URL grammar \
+                 admits the byte: the `github:org/repo` shorthand carries an \
+                 alphanumeric / `-` / `_` / `/` alphabet, every `https://` / \
+                 `ssh://` / `git://` / `file://` URL scheme percent-encodes `$` \
+                 to `%24` on the wire (the WHATWG URL spec's 'fragment percent-\
+                 encode set' canonical mapping every conformant URL parser \
+                 applies), and the `git@host:path` scp-style SSH shape names a \
+                 POSIX path component that carries no shell-metachar bytes. \
+                 Beyond the URL-grammar violation, every POSIX shell (sh / \
+                 bash / zsh / dash / ksh / fish / nushell) lexes `$` as the \
+                 variable-expansion / command-substitution operator: `$<name>` \
+                 / `${{<name>}}` expands a named variable, `$(<cmd>)` runs a \
+                 subshell and substitutes its stdout, and `$((<expr>))` \
+                 evaluates an arithmetic expression — every form is a \
+                 host-layout / environment-state leak when the byte lands in \
+                 a value the resolver passes to a shell-spawned subprocess. A \
+                 `:repo \"https://github.com/$ORG/caixa-teia\"` (the canonical \
+                 'I pasted a shell one-liner that expanded `$ORG` against the \
+                 author's local environment and forgot to substitute the \
+                 literal org name' footgun, identical to the f4efe9c peer arm \
+                 on the sibling `:caminho` axis that closes `\"$HOME/work/…\"` \
+                 / `\"${{WORKSPACE}}/…\"`) or `:repo \"github:p/$(whoami)/x\"` \
+                 (the symmetric paste-from-shell-prompt command-substitution \
+                 idiom every dev-environment-setup script footnotes) is the \
+                 canonical paste-from-shell-prompt footgun the typed slot's \
+                 accepted set must exclude. The byte rides verbatim into the \
+                 lacre's per-dep content-address (`conteudo: \
+                 format!(\"git:{repo}\")` peer of the path-axis embedding at \
+                 caixa-resolver/src/resolve.rs) and into the resolver's `git \
+                 clone <repo>` (caixa-resolver/src/git.rs) subprocess \
+                 invocation, where libcurl's URL parser percent-encodes the \
+                 byte on the wire — so two authors whose `:repo` values \
+                 differ only in their dollar presence (one substituted the \
+                 literal value at author time, the other didn't) resolve to \
+                 the byte-identical upstream `git clone` but lock to two \
+                 distinct BLAKE3 closures, defeating the THEORY.md §V.2 \
+                 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, backslash-`\\`, template-`{` / `}`, \
+                 shell-redirection-`<` / `>`, backtick-`` ` ``, shell-pipe-`|`, \
+                 shell-command-separator-`;`, and shell-background-`&` arms \
+                 close. Beyond the determinism axis, a value like \
+                 `\"github:$HOME/x\"` is a structural host-layout leak: two \
+                 authors with the same `:repo` slot but different `$HOME` \
+                 / `$WORKSPACE` / `$PWD` resolve different upstream URLs at \
+                 different times — the lacre, far from being a substrate-wide \
+                 identity, becomes a per-workstation snapshot of the author's \
+                 shell environment. The peer `:fonte :caminho` axis (f4efe9c) \
+                 closes the leading-`$` byte under the shell-variable-\
+                 expansion banner via `DepError::FonteCaminhoVarExpansion`; \
+                 the peer `:entrada :paths` axis closes the same byte as part \
+                 of `is_gateway_api_http_path`'s eleven-byte RFC-3986-reserved \
+                 set; the peer `:fonte :tag` / `:fonte :branch` axes close \
+                 the same byte as part of `is_git_ref_name`'s shell-metachar-\
+                 injection cascade — the `:caminho` axis closes only the \
+                 leading position because absolute / tilde / var arms there \
+                 are leading-byte sentinels, but the `:repo` URL axis closes \
+                 the byte anywhere because every per-byte arm on this surface \
+                 is positional-agnostic (the substitution / leak shapes \
+                 `\"https://$HOST/p/x\"` and `\"github:p/$(whoami)\"` both \
+                 carry the byte mid-string). Drop the `$` — substitute the \
+                 literal value at author time, or use `:fonte (:tipo path \
+                 :caminho \"<local-path>\")` for a local workspace dep)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
