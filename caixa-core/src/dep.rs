@@ -3952,6 +3952,142 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_subshell_open_paren() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // shell-prompt subshell-grouping footgun on `:repo`. An author
+        // pastes a doc / README snippet carrying a regex-alternation
+        // grouping shape (`https://github.com/(foo|bar)/repo`) or a
+        // dynamic-config-substitution wrapper (`$(<cmd>)`) into the
+        // `:repo` slot, forgetting to substitute one literal org name.
+        // Until this arm landed the `(` byte silently passed every
+        // prior `is_git_repo_url` arm (no whitespace, no control
+        // chars, no non-ASCII, no `#`, no `?`, no `\`, no `{`/`}`, no
+        // `<`/`>`, no `` ` ``, no `|`, no `;`, no `&`, no `$`, no
+        // `*`, doesn't start with `-` or `:`); RFC 3986 §2 lists `(`
+        // / `)` in the 'sub-delims' / reserved set, and the WHATWG
+        // URL spec's special-query percent-encode set maps `(` →
+        // `%28` and `)` → `%29` on the wire, so the byte rides
+        // verbatim into the lacre's per-dep BLAKE3 closure but is
+        // silently rewritten at libcurl's URL-parser layer —
+        // defeating the THEORY.md §V.2 render-determinism contract on
+        // the same axis the prior twelve byte-class arms close.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/(foo|bar)/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/(foo|bar)/caixa-teia");
+        assert!(
+            reason.contains("must not contain `(`"),
+            "reason must surface the subshell-open-paren arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("subshell-grouping") || reason.contains("'sub-delims'"),
+            "reason must name the shell-subshell-grouping / RFC-3986-sub-delims rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_subshell_close_paren() {
+        // The symmetric arm pin on the closing `)` byte: an author
+        // pastes a `$(date)` command-substitution wrapper or a
+        // regex-alternation `(foo|bar)` tail into the `:repo` slot.
+        // Pinned separately from the opening `(` shape so a future
+        // diagnostic-surface change that only checked one boundary
+        // surfaces here. The `(` byte appears earlier in the
+        // canonical regex / subshell wrapper so the per-byte loop
+        // fires on `(` first; this test exercises a `:repo` value
+        // carrying only the closing `)` byte (no opening paren) so
+        // the `)` arm fires directly — pinning the byte-class arm
+        // independent of order.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia)tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `)`"),
+            "reason must surface the subshell-close-paren arm on the bare `)` shape, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_subshell_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the subshell-`(` arm
+        // are both per-byte arms inside the same `for &b in
+        // s.as_bytes()` loop, so the byte that appears first in the
+        // value's byte order wins. A `:repo
+        // "https://github.com/p/x#readme(tail)"` carries both `#` and
+        // `(`; the `#` byte appears first, so the fragment-`#` arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL. Mirrors the
+        // peer cascade discipline
+        // `fonte_repo_fragment_fires_before_glob_when_fragment_first`
+        // on the prior `:repo` byte-class arm.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme(tail)".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before subshell-`(` when `#` \
+             byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_glob_fires_before_subshell_when_glob_first() {
+        // Cascade pin: the glob-`*` arm (the immediate-predecessor
+        // byte-class arm, 3902a9a) and the subshell-`(` arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte
+        // order wins. A `:repo
+        // "https://github.com/p/x-*-(date)"` carries both `*` and
+        // `(`; the `*` byte appears first, so the glob arm fires,
+        // surfacing the more self-locating diagnostic on the byte
+        // the author pasted earliest in the URL. Pins the natural-
+        // order cascade so a future reorder of the per-byte arms
+        // surfaces here — `(` is the most recent byte-class arm,
+        // so the cascade-pin sweep extends to cover the immediately
+        // prior `*` byte arm firing first when ordered ahead of `(`
+        // in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia-*-(date)".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `*`"),
+            "reason must surface the glob-`*` arm (fires before subshell-`(` when `*` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
