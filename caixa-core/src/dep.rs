@@ -4219,6 +4219,138 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_shell_single_quote() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // doc-strong-quoting footgun on `:repo`. An author copies a
+        // security-conscious README quick-start snippet (`$ git clone
+        // 'https://github.com/foo/bar'`) and keeps the surrounding
+        // single-quote bytes when pasting into the `:repo` slot — the
+        // doc strong-quotes the URL so the shell suppresses every form
+        // of expansion on the bytes inside (no `$`, no backtick, no
+        // glob, no word-splitting), but the typed slot is itself a
+        // byte-level string parser, not a shell context, so the quote
+        // bytes ride into the value verbatim. Until this arm landed the
+        // `'` byte silently passed every prior `is_git_repo_url` arm
+        // (no whitespace, no control chars, no non-ASCII, no `#`, no
+        // `?`, no `\`, no `{`/`}`, no `<`/`>`, no `` ` ``, no `|`, no
+        // `;`, no `&`, no `$`, no `*`, no `(`/`)`, no `"`, doesn't start
+        // with `-` or `:`); RFC 3986 §2.2 lists `'` in the 'sub-delims'
+        // set, peer with the `\"` 'delims' double-quote arm and the
+        // partner ASCII shell-string-delimiter byte every byte-level
+        // string parser sharing a value-shape with a shell argument
+        // must refuse on a URL-shaped slot.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "'https://github.com/pleme-io/caixa-teia'".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "'https://github.com/pleme-io/caixa-teia'");
+        assert!(
+            reason.contains("must not contain `'`"),
+            "reason must surface the shell-single-quote arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("single-quote") || reason.contains("strong-quote"),
+            "reason must name the shell-single-quote / strong-quote rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_english_apostrophe() {
+        // The symmetric English-typography pin: an author writes
+        // `:repo "github:p/repo's-fork"` (the possessive-form paste-
+        // from-prose idiom every README / commit-message / chat-thread
+        // reference to a repo carries) expecting the substrate to
+        // coerce it to a kebab-case slug — but the byte rides into the
+        // lacre verbatim. Pinned separately from the wrapped-quote
+        // shape so a future diagnostic-surface change that only checked
+        // the boundary positions (only leading, only trailing, only
+        // paired) surfaces here — the per-byte arm fires anywhere `'`
+        // appears in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/repo's-fork".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `'`"),
+            "reason must surface the shell-single-quote arm on the mid-string \
+             apostrophe shape, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_single_quote_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the single-quote arm
+        // are both per-byte arms inside the same `for &b in
+        // s.as_bytes()` loop, so the byte that appears first in the
+        // value's byte order wins. A `:repo
+        // "https://github.com/p/x#readme'tail"` carries both `#` and
+        // `'`; the `#` byte appears first, so the fragment-`#` arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme'tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before single-quote when `#` \
+             byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_double_quote_fires_before_single_quote_when_double_quote_first() {
+        // Cascade pin: the double-quote-`"` arm (the immediate-predecessor
+        // byte-class arm, 4267d8b) and the single-quote arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()` loop,
+        // so the byte that appears first in the value's byte order
+        // wins. A `:repo "github:p/x\"mid'tail"` carries both `"` and
+        // `'`; the `"` byte appears first, so the double-quote arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL. Pins the natural-
+        // order cascade so a future reorder of the per-byte arms
+        // surfaces here — `'` is the most recent byte-class arm, so
+        // the cascade-pin sweep extends to cover the immediately prior
+        // `"` byte arm firing first when ordered ahead of `'` in the
+        // value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia\"mid'tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `\"`"),
+            "reason must surface the double-quote arm (fires before single-quote when `\"` \
+             byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
