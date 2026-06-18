@@ -2601,6 +2601,69 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  workspace dep)"
                 .to_string());
         }
+        if b == b'(' || b == b')' {
+            return Err(format!(
+                "must not contain `{ch}` (RFC 3986 §2 excludes `(` / `)` \
+                 from URL syntax — they sit in the 'sub-delims' / reserved \
+                 byte set every URL parser is required to percent-encode at \
+                 the path-segment boundary, peer with the `;` \
+                 shell-command-separator, `&` shell-background, `$` \
+                 shell-variable-expansion, and `*` shell-glob arms on the \
+                 same paragraph of the same RFC. No git URL grammar admits \
+                 either byte: the `github:org/repo` shorthand carries an \
+                 alphanumeric / `-` / `_` / `/` alphabet, every `https://` / \
+                 `ssh://` / `git://` / `file://` URL scheme percent-encodes \
+                 `(` to `%28` and `)` to `%29` on the wire (the WHATWG URL \
+                 spec's 'special-query percent-encode set' canonical mapping \
+                 every conformant URL parser applies), and the \
+                 `git@host:path` scp-style SSH shape names a POSIX path \
+                 component that carries no shell-metachar bytes. Beyond the \
+                 URL-grammar violation, every POSIX shell (sh / bash / zsh / \
+                 dash / ksh / fish / nushell) lexes `(` / `)` as the \
+                 subshell-grouping operator: `(<cmd>)` runs `<cmd>` in a \
+                 child shell with a fresh environment scope (the canonical \
+                 idiom for sandboxing a `cd` or variable assignment), and \
+                 `$(<cmd>)` is the modern Bourne command-substitution shape \
+                 the prior `$` arm closes the leading byte of — the closing \
+                 `)` byte completes that substitution shape and must be \
+                 refused on the same axis. The byte pair is additionally the \
+                 canonical regex-alternation grouping operator (`(foo|bar)`) \
+                 every doc / README quick-start snippet folds into a paste-\
+                 from-doc footgun shape, and the bash brace-expansion \
+                 alternation form (`{{foo,bar}}`) the prior `{{` / `}}` URI \
+                 Template arm closes on the curly-brace axis routes the \
+                 same alternation intent through the parenthesis axis on \
+                 every POSIX-portable script. A `:repo \
+                 \"https://github.com/(foo|bar)/repo\"` (the canonical 'I \
+                 pasted a regex-alternation form from a doc / README and \
+                 forgot to substitute one literal org' footgun) or `:repo \
+                 \"github:p/x(date)\"` (the symmetric paste-from-shell-\
+                 prompt subshell-grouping idiom every dynamic-config-\
+                 substitution one-liner footnotes) is the canonical paste-\
+                 from-shell-prompt footgun the typed slot's accepted set \
+                 must exclude. The byte rides verbatim into the lacre's \
+                 per-dep content-address (`conteudo: \
+                 format!(\"git:{{repo}}\")` peer of the path-axis embedding \
+                 at caixa-resolver/src/resolve.rs) and into the resolver's \
+                 `git clone <repo>` (caixa-resolver/src/git.rs) subprocess \
+                 invocation, where libcurl's URL parser percent-encodes the \
+                 byte on the wire — so two authors whose `:repo` values \
+                 differ only in their parenthesis presence (one paste-\
+                 trimmed the grouping wrapper, the other didn't) resolve to \
+                 the byte-identical upstream `git clone` but lock to two \
+                 distinct BLAKE3 closures, defeating the THEORY.md §V.2 \
+                 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, backslash-`\\`, template-`{{` / \
+                 `}}`, shell-redirection-`<` / `>`, backtick-`` ` ``, \
+                 shell-pipe-`|`, shell-command-separator-`;`, shell-\
+                 background-`&`, shell-variable-expansion-`$`, and shell-\
+                 glob-`*` arms close. Drop the `(` / `)` wrapper — \
+                 substitute the literal value at author time, or use \
+                 `:fonte (:tipo path :caminho \"<local-path>\")` for a local \
+                 workspace dep)",
+                ch = b as char
+            ));
+        }
     }
     if s.starts_with(':') {
         return Err(
