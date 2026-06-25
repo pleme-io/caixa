@@ -3069,6 +3069,102 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  `_` slug)"
                 .to_string());
         }
+        if b == b'%' {
+            return Err(
+                "must not contain `%` (RFC 3986 §2.1 reserves the percent byte \
+                 as the URL percent-encoding escape — `%HH` is the \
+                 mandatory encoding mechanism for every byte outside the \
+                 `unreserved` alphanumeric / `-` / `.` / `_` / `~` set, \
+                 and `%` itself must be percent-encoded as `%25` to appear \
+                 literally inside a URL value, peer with the immediately \
+                 prior `=` / `,` / `!` / `*` / `(` / `)` / `'` 'sub-delims' \
+                 arms on the same RFC. No documented `:fonte :repo` shape \
+                 admits the byte: the `github:org/repo` shorthand carries \
+                 an alphanumeric / `-` / `_` / `/` alphabet, every \
+                 `https://` / `ssh://` / `git://` / `file://` URL scheme \
+                 keeps host / path bodies inside the RFC 3986 `unreserved` \
+                 set that excludes the byte and every percent-encoded \
+                 byte (alphanumeric / `-` / `.` / `_` / `~` — no member \
+                 needs percent-encoding), and the `git@host:path` scp-\
+                 style SSH shape names a POSIX path component that \
+                 carries no percent-encoded bytes (every forge — GitHub / \
+                 GitLab / Bitbucket / Codeberg / sourcehut — refuses `%` \
+                 in repo slugs at admission time, and IDN host labels \
+                 must be pre-encoded as Punycode `xn--…` rather than as \
+                 percent-encoded UTF-8 bytes). Beyond the URL-grammar \
+                 question, the percent byte is the canonical render-\
+                 determinism axis-of-non-determinism the typed `:repo` \
+                 slot must close at the manifest layer. First, the \
+                 paste-from-browser-address-bar percent-encoded-space \
+                 footgun: an author copies \
+                 `https://github.com/p/x%20test` from a browser address \
+                 bar or a percent-encoded README hyperlink, intending \
+                 the `%20` as the URL encoding of a literal space; \
+                 libcurl's URL parser (the layer `git clone <https-url>` \
+                 invokes) re-percent-encodes the `%` byte to `%25` on \
+                 the wire (since `%` is reserved as the escape sequence \
+                 lead-in and must itself be encoded for a literal byte), \
+                 so the wire request becomes \
+                 `https://github.com/p/x%2520test` — a different path \
+                 than the lacre's content-address records, defeating \
+                 the THEORY.md §V.2 render-determinism contract \
+                 directly on the encoding-mechanism axis itself (the \
+                 most direct violation of every prior render-\
+                 determinism arm — `#`, `?`, `\\`, `{`/`}`, `<`/`>`, \
+                 `` ` ``, `|`, `;`, `&`, `$`, `*`, `(`/`)`, `\"`, `'`, \
+                 `!`, `,`, `=` — since `%` is the very encoding step \
+                 those arms reason about). Second, the lone-percent \
+                 malformed-escape footgun: an author writes `:repo \
+                 \"https://github.com/p/x%foo\"` (the `%` not followed \
+                 by two hex digits) — every WHATWG-conformant URL \
+                 parser rejects the value at parse time per RFC 3986 \
+                 §2.1 (`%HH` requires exactly two hex digits to follow), \
+                 but the byte rides into the lacre's per-dep content-\
+                 address (`conteudo: format!(\"git:{repo}\")` peer of \
+                 the path-axis embedding at caixa-resolver/src/resolve.\
+                 rs) before the resolver subprocess fails far from the \
+                 source caixa.lisp. Third, the over-encoded path \
+                 footgun: an author writes `:repo \
+                 \"https://github.com/p%2Fx\"` intending the `%2F` as \
+                 the URL encoding of `/`; the GitHub Smart-HTTP \
+                 transport rejects percent-encoded path-separator bytes \
+                 in repo URLs (the URL's path-segment grammar is \
+                 resolved before the percent-decoding pass), but the \
+                 byte rides verbatim into the lacre and locks a \
+                 `git:https://github.com/p%2Fx` closure that diverges \
+                 from the byte-identical `https://github.com/p/x` form \
+                 every other author authored — two authors whose \
+                 `:repo` values differ only in their `/` vs `%2F` \
+                 presence resolve to the byte-identical upstream `git \
+                 clone` but lock to two distinct BLAKE3 closures, the \
+                 canonical render-determinism violation. The peer \
+                 `:fonte :tag` / `:fonte :branch` axes \
+                 (`is_git_ref_name`) deliberately admit `%` (git's \
+                 `check-ref-format` accepts it as a printable byte and \
+                 the percent carries no refname-grammar meaning); the \
+                 `:entrada :paths` axis (`is_gateway_api_http_path`) \
+                 similarly admits it (K8s Gateway API \
+                 HTTPPathMatch.value OpenAPI regex accepts it as a \
+                 path-segment byte). `:repo` is substrate-internal and \
+                 strictly narrower than its upstream grammar by design, \
+                 so the divergence is intentional: the percent-encoding \
+                 axis is the load-bearing render-determinism axis on \
+                 the typed `:fonte :repo` slot (every byte the wire \
+                 differs from the lacre by even a single `%`-escape \
+                 round-trip violates the substrate's content-addressed-\
+                 closure contract) in a way it isn't on the refname / \
+                 HTTP-path axes whose grammars admit the byte without \
+                 confusion. Drop the `%` — substitute the literal byte \
+                 directly (the typed slot admits the same `unreserved` \
+                 byte-set the URL grammar's percent-decoding pass \
+                 produces, so the percent-encoded form is structurally \
+                 redundant), or split the encoded value into the typed \
+                 slot it belongs in (e.g., a host with non-ASCII bytes \
+                 must be pre-encoded as Punycode `xn--…` rather than \
+                 percent-encoded UTF-8))"
+                    .to_string(),
+            );
+        }
     }
     if s.starts_with(':') {
         return Err(
