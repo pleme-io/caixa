@@ -4604,6 +4604,158 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_shell_env_var_assignment() {
+        // The fail-before-pass-after pin for the canonical
+        // shell-env-var-assignment-belongs-to-shell-grammar footgun
+        // on `:repo`. An author copies
+        // `GIT_TERMINAL_PROMPT=0 git clone <url>` (or
+        // `GIT_SSL_NO_VERIFY=1 git clone <url>`, `HTTPS_PROXY=…
+        // git clone <url>`, etc. — the canonical
+        // git-troubleshooting README idiom for a one-shot env-var
+        // scoped to the `git clone` invocation) from a shell-prompt
+        // one-liner, intending the `KEY=VALUE` prefix as a shell-
+        // grammar env-var assignment but the typed `:repo` slot is
+        // a value parser, not a shell context, so the bytes ride
+        // into the value verbatim. Until this arm landed the `=`
+        // byte silently passed every prior `is_git_repo_url` arm
+        // (no whitespace, no control chars, no non-ASCII, no `#`,
+        // no `?`, no `\`, no `{`/`}`, no `<`/`>`, no `` ` ``, no
+        // `|`, no `;`, no `&`, no `$`, no `*`, no `(`/`)`, no `"`,
+        // no `'`, no `!`, no `,`, doesn't start with `-` or `:`);
+        // the byte rode into the lacre's per-dep content-address
+        // and the resolver's `git clone <repo>` subprocess
+        // invocation, where the upstream host's git porcelain
+        // fetched a literal `GIT_TERMINAL_PROMPT=0 https://…`-shaped
+        // path that no host's repo registry resolves.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "GIT_TERMINAL_PROMPT=0 https://github.com/pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(
+            repo,
+            "GIT_TERMINAL_PROMPT=0 https://github.com/pleme-io/caixa-teia"
+        );
+        // The `=` byte at position 19 of `GIT_TERMINAL_PROMPT=0 …`
+        // appears before the ` ` byte at position 21, so the `=`
+        // arm fires (not the whitespace arm) — both arms guard
+        // the slot, but the per-byte for-loop scans left-to-right
+        // and the first matching byte wins.
+        assert!(
+            reason.contains("must not contain `=`"),
+            "reason must surface the equals-`=` arm on the env-var-assignment \
+             paste shape, got {reason:?}"
+        );
+        assert!(
+            reason.contains("env-var-assignment") || reason.contains("KEY=VALUE"),
+            "reason must name the shell-env-var-assignment rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_gitconfig_url_key_prefix() {
+        // The symmetric paste-from-gitconfig pin: an author copies
+        // `url=https://github.com/p/x` from `git config --get-all
+        // remote.origin.url` output, a `.gitconfig` `[remote
+        // "origin"] url = https://…` ini-stanza paste, or a
+        // `git config remote.origin.url <value>` doc snippet,
+        // intending the `url=` prefix as the ini-key but the typed
+        // `:repo` slot is a URL value parser, not a gitconfig
+        // grammar. With no leading whitespace and no earlier-arm
+        // bytes in the value, the `=` arm itself fires (rather
+        // than cascading to the whitespace arm as in the env-var
+        // paste shape). Pinned separately so a future diagnostic-
+        // surface change that only checked the whitespace-leading
+        // shape surfaces here — the per-byte arm fires anywhere
+        // `=` appears in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "url=https://github.com/pleme-io/caixa-feira".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `=`"),
+            "reason must surface the equals-`=` arm on the `url=…` gitconfig \
+             paste shape, got {reason:?}"
+        );
+        assert!(
+            reason.contains("key-value-separator") || reason.contains("sub-delims"),
+            "reason must name the key-value-separator / RFC-3986-sub-delims \
+             rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_equals_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the `=` arm are
+        // both per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte
+        // order wins. A `:repo "https://github.com/p/x#readme=tail"`
+        // carries both `#` and `=`; the `#` byte appears first, so
+        // the fragment-`#` arm fires, surfacing the more self-
+        // locating diagnostic on the byte the author pasted earliest
+        // in the URL.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme=tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before equals when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_comma_fires_before_equals_when_comma_first() {
+        // Cascade pin: the comma-`,` arm (the immediate-predecessor
+        // byte-class arm, 775b80e) and the `=` arm are both per-byte
+        // arms inside the same `for &b in s.as_bytes()` loop, so
+        // the byte that appears first in the value's byte order
+        // wins. A `:repo "github:p/x,mid=tail"` carries both `,`
+        // and `=`; the `,` byte appears first, so the comma arm
+        // fires, surfacing the more self-locating diagnostic on
+        // the byte the author pasted earliest in the URL. Pins the
+        // natural-order cascade so a future reorder of the per-byte
+        // arms surfaces here — `=` is the most recent byte-class
+        // arm, so the cascade-pin sweep extends to cover the
+        // immediately prior `,` byte arm firing first when ordered
+        // ahead of `=` in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia,mid=tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `,`"),
+            "reason must surface the comma arm (fires before equals when `,` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
