@@ -2972,6 +2972,103 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  `:deps` entries to express multiple repos)"
                 .to_string());
         }
+        if b == b'=' {
+            return Err("must not contain `=` (RFC 3986 §2.2 lists the equals byte \
+                 in the 'sub-delims' set — the URL grammar admits the byte \
+                 inside a path segment, but every WHATWG-conformant special-\
+                 scheme URL parser percent-encodes it inside a query \
+                 component via the 'special-query percent-encode set' (the \
+                 same set the prior `,` / `!` / `*` / `(` / `)` / `'` sub-\
+                 delims arms close on, peer with the immediately prior `,` \
+                 arm on the same paragraph of the same RFC). No documented \
+                 `:fonte :repo` shape admits the byte: the `github:org/repo` \
+                 shorthand carries an alphanumeric / `-` / `_` / `/` \
+                 alphabet, every `https://` / `ssh://` / `git://` / \
+                 `file://` URL scheme keeps host / path bodies inside the \
+                 RFC 3986 `unreserved` alphanumeric / `-` / `.` / `_` / `~` \
+                 set that excludes the byte, and the `git@host:path` scp-\
+                 style SSH shape names a POSIX path component that carries \
+                 no key-value-separator bytes (every forge — GitHub / \
+                 GitLab / Bitbucket / Codeberg / sourcehut — refuses `=` in \
+                 repo slugs at admission time). Beyond the URL-grammar \
+                 question, the equals byte carries three canonical paste-\
+                 from-doc footguns the typed `:repo` slot's accepted set \
+                 must exclude. First, the URL-query key-value-separator \
+                 paste: an author copies `https://github.com/p/x?ref=main` \
+                 from a browser address bar / GitHub-tree-URL deep-link / \
+                 `?utm_source=…` campaign-tracker query string; the prior \
+                 `?` arm (a68f818) closes the query-prefix byte but every \
+                 paste-from-doc snippet that lost its `?` prefix (a copy-\
+                 paste that started mid-query, a shell-pipeline that \
+                 stripped the leading `?` via `cut -d?`, a docs example \
+                 that documented the bare `key=value` pairs without the \
+                 leading `?`) lands a `:repo \"github:p/x ref=main\"` whose \
+                 `=` byte is now the load-bearing footgun. Second, the \
+                 shell env-var-assignment paste: every POSIX shell (sh / \
+                 bash / zsh / dash / ksh / fish) lexes `KEY=VALUE` at the \
+                 start of a command line as a one-shot env-var assignment \
+                 scoped to that command (`GIT_TERMINAL_PROMPT=0 git clone \
+                 <url>` runs `git clone` with the prompt suppressed, \
+                 `GIT_SSL_NO_VERIFY=1 git clone <url>` skips TLS \
+                 verification, `HTTPS_PROXY=… git clone <url>` overrides \
+                 the proxy) — the canonical paste-from-shell-history idiom \
+                 every git-troubleshooting README documents. An author \
+                 copies `:repo \"GIT_TERMINAL_PROMPT=0 https://github.com/\
+                 p/x\"` from a shell-prompt one-liner and the env-var \
+                 prefix rides verbatim into the value, defeating the \
+                 substrate's typed `:repo` axis (the env-var prefix \
+                 belongs to the shell context, not to the URL). Third, the \
+                 git-CLI-flag paste: every `git` porcelain entry-point \
+                 accepts `--config <key>=<value>` (`git -c \
+                 protocol.file.allow=always clone …`, `git -c \
+                 http.extraHeader=…`) and `git config --get <key>` outputs \
+                 `<key>=<value>`-shaped lines; an author copies \
+                 `url=https://github.com/p/x` from `git config --get-all \
+                 remote.origin.url` output or a `.gitconfig` `[remote \
+                 \"origin\"] url = https://…` ini-stanza paste and the \
+                 `url=` prefix rides verbatim into the typed `:repo` slot \
+                 (the ini-key-prefix belongs to the gitconfig grammar, not \
+                 to the URL value). A `:repo \"GIT_TERMINAL_PROMPT=0 \
+                 https://github.com/p/x\"` or `:repo \"url=https://github.\
+                 com/p/x\"` silently passed every prior arm; the byte rode \
+                 into the lacre's per-dep content-address (`conteudo: \
+                 format!(\"git:{repo}\")` peer of the path-axis embedding \
+                 at caixa-resolver/src/resolve.rs) and into the resolver's \
+                 `git clone <repo>` (caixa-resolver/src/git.rs) subprocess \
+                 invocation, where libcurl's URL parser percent-encodes \
+                 the byte to `%3D` on the wire — so two authors whose \
+                 `:repo` values differ only in their `=` presence resolve \
+                 to the byte-identical upstream `git clone` but lock to \
+                 two distinct BLAKE3 closures, defeating the THEORY.md \
+                 §V.2 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, backslash-`\\`, template-`{` / \
+                 `}`, shell-redirection-`<` / `>`, backtick-`` ` ``, shell-\
+                 pipe-`|`, shell-command-separator-`;`, shell-background-\
+                 `&`, shell-variable-expansion-`$`, shell-glob-`*`, shell-\
+                 subshell-grouping-`(` / `)`, shell-double-quote-`\"`, \
+                 shell-single-quote-`'`, shell-history-`!`, and list-\
+                 separator-`,` arms close. The peer `:fonte :tag` / \
+                 `:fonte :branch` axes (`is_git_ref_name`) deliberately \
+                 admit `=` (git's `check-ref-format` accepts it as a \
+                 printable byte and the equals carries no refname-grammar \
+                 meaning); the `:entrada :paths` axis \
+                 (`is_gateway_api_http_path`) similarly admits it (K8s \
+                 Gateway API HTTPPathMatch.value OpenAPI regex accepts \
+                 it). `:repo` is substrate-internal and strictly narrower \
+                 than its upstream grammar by design, so the divergence is \
+                 intentional: the URL-query / shell-env-var-assignment / \
+                 git-config-ini key-value-separator footgun is real on the \
+                 typed `:fonte :repo` axis (every `git clone <repo>` \
+                 invocation crosses a shell boundary at the caixa-\
+                 resolver subprocess layer, and the lacre's per-dep \
+                 content-address must be byte-identical to the wire form) \
+                 in a way it isn't on the refname / HTTP-path axes whose \
+                 grammars admit the byte without confusion. Drop the `=` — \
+                 strip the env-var / config-key prefix from the value \
+                 before the URL, or author the bare alphanumeric / `-` / \
+                 `_` slug)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
