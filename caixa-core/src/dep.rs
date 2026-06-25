@@ -4473,6 +4473,137 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_list_separator_comma() {
+        // The fail-before-pass-after pin for the canonical
+        // list-separator-belongs-to-list-grammar footgun on `:repo`.
+        // An author copies a `git clone <a>, <b>, <c>` paste-from-CSV
+        // one-liner from a multi-repo bootstrap doc, intending the
+        // comma to separate multiple repo entries but the typed
+        // `:repo` slot names *one* repo (the list-separator belongs
+        // to the `:deps` list grammar, not to the value). Until this
+        // arm landed the `,` byte silently passed every prior
+        // `is_git_repo_url` arm (no whitespace, no control chars, no
+        // non-ASCII, no `#`, no `?`, no `\`, no `{`/`}`, no `<`/`>`,
+        // no `` ` ``, no `|`, no `;`, no `&`, no `$`, no `*`, no
+        // `(`/`)`, no `"`, no `'`, no `!`, doesn't start with `-` or
+        // `:`); the byte rode into the lacre's per-dep content-
+        // address and the resolver's `git clone <repo>` subprocess
+        // invocation, where no host's repo registry resolved the
+        // comma-bearing slug.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia,github:pleme-io/caixa-feira".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(
+            repo,
+            "github:pleme-io/caixa-teia,github:pleme-io/caixa-feira"
+        );
+        assert!(
+            reason.contains("must not contain `,`"),
+            "reason must surface the list-separator-comma arm, got {reason:?}"
+        );
+        assert!(
+            reason.contains("list-separator") || reason.contains("sub-delims"),
+            "reason must name the list-separator / RFC-3986-sub-delims rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_trailing_comma() {
+        // The symmetric trailing-`,` paste-from-prose pin: an author
+        // writes `:repo "github:pleme-io/caixa-feira,"` (the trailing
+        // comma every README-prose list-of-projects sentence carries,
+        // mistakenly retained when the slug is pasted mid-sentence)
+        // expecting the substrate to coerce it to a kebab-case slug.
+        // Pinned separately from the wrapped mid-token shape so a
+        // future diagnostic-surface change that only checked the
+        // leading or paired-comma position surfaces here — the
+        // per-byte arm fires anywhere `,` appears in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-feira,".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `,`"),
+            "reason must surface the list-separator-comma arm on the trailing-`,` shape, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_comma_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the comma arm are
+        // both per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte
+        // order wins. A `:repo "https://github.com/p/x#readme,tail"`
+        // carries both `#` and `,`; the `#` byte appears first, so
+        // the fragment-`#` arm fires, surfacing the more self-
+        // locating diagnostic on the byte the author pasted earliest
+        // in the URL.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#readme,tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before comma when `#` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_bang_fires_before_comma_when_bang_first() {
+        // Cascade pin: the bang-`!` arm (the immediate-predecessor
+        // byte-class arm, 7d53c68) and the comma arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()`
+        // loop, so the byte that appears first in the value's byte
+        // order wins. A `:repo "github:p/x!mid,tail"` carries both
+        // `!` and `,`; the `!` byte appears first, so the bang arm
+        // fires, surfacing the more self-locating diagnostic on the
+        // byte the author pasted earliest in the URL. Pins the
+        // natural-order cascade so a future reorder of the per-byte
+        // arms surfaces here — `,` is the most recent byte-class
+        // arm, so the cascade-pin sweep extends to cover the
+        // immediately prior `!` byte arm firing first when ordered
+        // ahead of `,` in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia!mid,tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `!`"),
+            "reason must surface the bang arm (fires before comma when `!` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
