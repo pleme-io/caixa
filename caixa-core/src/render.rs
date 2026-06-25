@@ -2894,6 +2894,84 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                  local workspace dep)"
                 .to_string());
         }
+        if b == b',' {
+            return Err("must not contain `,` (RFC 3986 §2.2 lists the comma byte \
+                 in the 'sub-delims' set the URL grammar admits inside a \
+                 path segment but every WHATWG-conformant special-scheme \
+                 URL parser percent-encodes it inside both the path and \
+                 query percent-encode sets — the peer position the prior \
+                 `!` / `*` / `(` / `)` / `'` 'sub-delims' arms close. No \
+                 documented `:fonte :repo` shape admits the byte: the \
+                 `github:org/repo` shorthand carries an alphanumeric / `-` \
+                 / `_` / `/` alphabet, every `https://` / `ssh://` / \
+                 `git://` / `file://` URL scheme keeps host / path bodies \
+                 inside the RFC 3986 `unreserved` alphanumeric / `-` / \
+                 `.` / `_` / `~` set that excludes the byte, and the \
+                 `git@host:path` scp-style SSH shape names a POSIX path \
+                 component that carries no list-separator bytes (every \
+                 forge — GitHub / GitLab / Bitbucket / Codeberg / \
+                 sourcehut — refuses `,` in repo slugs at admission time). \
+                 Beyond the URL-grammar question, the comma byte carries \
+                 the canonical list-separator-belongs-to-list-grammar \
+                 footgun across every parser-of-record `:fonte :repo` \
+                 lands in: an author copies a `git clone <urlA>, <urlB>` \
+                 paste-from-CSV-list one-liner from a multi-repo \
+                 bootstrap doc (the canonical `git clone --recurse-\
+                 submodules <a>, <b>, <c>` README-quickstart idiom every \
+                 mono-repo carries) or pastes a JSON-array literal `[\"a\", \
+                 \"b\", \"c\"]` from a tooling-config snippet stripped \
+                 of its brackets, intending the comma to separate \
+                 multiple repo entries but the typed `:repo` slot names \
+                 *one* repo (the list-separator belongs to the list \
+                 grammar of the enclosing `:deps` slot, not to the \
+                 individual `:repo` value). A `:repo \
+                 \"github:p/a,github:p/b\"` silently passed every prior \
+                 arm and rode into the lacre's per-dep content-address \
+                 (`conteudo: format!(\"git:{repo}\")` peer of the path-\
+                 axis embedding at caixa-resolver/src/resolve.rs) and \
+                 into the resolver's `git clone <repo>` (caixa-\
+                 resolver/src/git.rs) subprocess invocation, where the \
+                 upstream host's git porcelain fetched a literal comma-\
+                 bearing path that no host's repo registry resolves — \
+                 so the lacre locks to a `git:github:p/a,github:p/b` \
+                 closure that never resolves at clone time, surfacing as \
+                 a 'remote ref not found' porcelain error far from the \
+                 source caixa.lisp, defeating the THEORY.md §V.2 render-\
+                 determinism contract on the same axis the fragment-\
+                 `#`, query-`?`, backslash-`\\`, template-`{` / `}`, \
+                 shell-redirection-`<` / `>`, backtick-`` ` ``, shell-\
+                 pipe-`|`, shell-command-separator-`;`, shell-\
+                 background-`&`, shell-variable-expansion-`$`, shell-\
+                 glob-`*`, shell-subshell-grouping-`(` / `)`, shell-\
+                 double-quote-`\"`, shell-single-quote-`'`, and shell-\
+                 history-`!` arms close. Beyond the multi-repo paste, \
+                 the byte carries the canonical English-typography \
+                 trailing-`,` paste-from-prose footgun: an author writes \
+                 `:repo \"github:pleme-io/caixa-feira,\"` (the trailing \
+                 comma every README-prose list-of-projects sentence \
+                 carries, mistakenly retained when the slug is pasted \
+                 mid-sentence) expecting the substrate to coerce it to \
+                 a kebab-case slug; the byte rides verbatim. The peer \
+                 `:fonte :tag` / `:fonte :branch` axes \
+                 (`is_git_ref_name`) deliberately admit `,` (git's \
+                 `check-ref-format` accepts it as a printable byte and \
+                 the comma carries no refname-grammar meaning); the \
+                 `:entrada :paths` axis (`is_gateway_api_http_path`) \
+                 similarly admits it (K8s Gateway API HTTPPathMatch.value \
+                 OpenAPI regex accepts it). `:repo` is substrate-\
+                 internal and strictly narrower than its upstream \
+                 grammar by design, so the divergence is intentional: \
+                 the list-separator-belongs-to-list-grammar footgun is \
+                 real on the typed `:fonte :repo` axis (every `:deps` \
+                 entry names exactly one repo and the comma between \
+                 entries belongs to the `:deps` list grammar, never to \
+                 the value) in a way it isn't on the refname / HTTP-\
+                 path axes whose grammars admit the byte without \
+                 confusion. Drop the trailing `,` — author the bare \
+                 alphanumeric / `-` / `_` slug, or split into multiple \
+                 `:deps` entries to express multiple repos)"
+                .to_string());
+        }
     }
     if s.starts_with(':') {
         return Err(
