@@ -4756,6 +4756,148 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_percent_encoded_space() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // browser-address-bar percent-encoded-space footgun on `:repo`.
+        // An author copies `https://github.com/p/x%20test` from a
+        // browser address bar (or a percent-encoded README hyperlink,
+        // or a `curl --data-urlencode` shell-pipeline output)
+        // intending `%20` as the URL encoding of a literal space; the
+        // typed `:repo` slot already rejects the literal space byte
+        // (the whitespace arm at the top of `is_git_repo_url`), so an
+        // author trying to express "I really meant a space" reaches
+        // for percent-encoding. Until this arm landed the `%` byte
+        // silently passed every prior `is_git_repo_url` arm and rode
+        // verbatim into the lacre's per-dep content-address — but
+        // libcurl re-percent-encodes `%` to `%25` on the wire (since
+        // `%` is reserved as the escape-sequence lead-in), so the
+        // wire request becomes `https://github.com/p/x%2520test`, a
+        // path the lacre's content-address never names. The classic
+        // render-determinism violation on the encoding-mechanism axis
+        // itself.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia%20test".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia%20test");
+        assert!(
+            reason.contains("must not contain `%`"),
+            "reason must surface the percent-`%` arm on the percent-encoded-space \
+             paste shape, got {reason:?}"
+        );
+        assert!(
+            reason.contains("percent-encoding") || reason.contains("%25"),
+            "reason must name the percent-encoding / `%25` re-encoding rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_percent_encoded_slash() {
+        // The symmetric over-encoded-path-separator pin: an author
+        // writes `:repo "https://github.com/p%2Fx"` intending the
+        // `%2F` as the URL encoding of `/` (the canonical
+        // paste-from-OpenAPI-spec / paste-from-percent-encoded-template
+        // footgun every API client library and OAuth redirect-URI
+        // documentation surfaces — the `/` is the URL-path-separator
+        // and some templates percent-encode it to escape interpretation
+        // as a path separator). The GitHub Smart-HTTP transport
+        // resolves the URL's path-segment grammar before the
+        // percent-decoding pass, so the value identifies a different
+        // resource on the wire than the literal-`/` form the lacre's
+        // content-address must agree with — two authors whose `:repo`
+        // values differ only in their `/` vs `%2F` presence lock to
+        // two distinct BLAKE3 closures for the byte-identical upstream
+        // `git clone`. Pinned separately so a future diagnostic
+        // surface that only catches the `%20` shape surfaces here too.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io%2Fcaixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `%`"),
+            "reason must surface the percent-`%` arm on the over-encoded-path \
+             shape, got {reason:?}"
+        );
+        assert!(
+            reason.contains("render-determinism") || reason.contains("BLAKE3"),
+            "reason must name the render-determinism / BLAKE3-closure rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_fragment_fires_before_percent_when_fragment_first() {
+        // Cascade pin: the fragment-`#` arm and the `%` arm are both
+        // per-byte arms inside the same `for &b in s.as_bytes()` loop,
+        // so the byte that appears first in the value's byte order
+        // wins. A `:repo "https://github.com/p/x#sec%20tail"` carries
+        // both `#` and `%`; the `#` byte appears first, so the
+        // fragment-`#` arm fires, surfacing the more self-locating
+        // diagnostic on the byte the author pasted earliest in the URL.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia#sec%20tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `#`"),
+            "reason must surface the fragment-`#` arm (fires before percent when \
+             `#` byte appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_equals_fires_before_percent_when_equals_first() {
+        // Cascade pin: the equals-`=` arm (the immediate-predecessor
+        // byte-class arm, acf99af) and the `%` arm are both per-byte
+        // arms inside the same `for &b in s.as_bytes()` loop, so the
+        // byte that appears first in the value's byte order wins.
+        // A `:repo "github:p/x=mid%20tail"` carries both `=` and `%`;
+        // the `=` byte appears first, so the equals arm fires,
+        // surfacing the more self-locating diagnostic on the byte the
+        // author pasted earliest in the URL. Pins the natural-order
+        // cascade so a future reorder of the per-byte arms surfaces
+        // here — `%` is the most recent byte-class arm, so the
+        // cascade-pin sweep extends to cover the immediately prior
+        // `=` byte arm firing first when ordered ahead of `%` in the
+        // value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/caixa-teia=mid%20tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `=`"),
+            "reason must surface the equals arm (fires before percent when `=` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
