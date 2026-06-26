@@ -5357,6 +5357,73 @@ pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 /// [cm]: ../../caixa_mesh/index.html
 pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 
+/// Canonical FluxCD installation namespace every `caixa-flux` `Kustomization`
+/// document apply-targets. The single source of truth both axes of the
+/// rendered `kustomization.yaml` document reach for:
+///
+///   - `metadata.namespace` — the namespace the `Kustomization` resource
+///     itself lives in (the FluxCD `kustomize-controller` watches this
+///     namespace by default; a drifted value sits outside the controller's
+///     watch window and is never reconciled);
+///   - `spec.sourceRef.name` — the `GitRepository` the bootstrap pipeline
+///     created at `flux bootstrap` time and the per-Servico `Kustomization`
+///     transitively threads its `path: ./clusters/<cluster>/services/<name>`
+///     reference through. The canonical FluxCD bootstrap convention names
+///     this `GitRepository` after the installation namespace (the
+///     `flux-system` namespace contains a `GitRepository/flux-system`
+///     pointing at the operator's source-of-truth repo); both axes are the
+///     same conceptual "Flux installation namespace" load-bearing string
+///     and must move together on any future rebrand.
+///
+/// Until this lift landed both axes carried inline `flux-system` literals
+/// inside [`cluster_bundle`]'s `kustomization.yaml` format-string template
+/// (caixa-flux/src/lib.rs:477, 483) — two production-code consumers of the
+/// same load-bearing FluxCD-installation-namespace convention, drift-prone
+/// by construction. A future per-cluster Flux installation rebrand (the
+/// operator moving the bootstrap controllers to a different installation
+/// namespace, e.g. `flux-pleme` to match the per-tenant scoping convention
+/// once `flux-system` outlives its scoping intent; or any per-edition
+/// rebrand the FluxCD upgrade docs name) on one axis without a coordinated
+/// edit on the other would have silently emitted a `Kustomization` whose
+/// `metadata.namespace` sat outside the `kustomize-controller` watch
+/// window (controller-side: never reconciled, every `HelmRelease` /
+/// `GitRepository` it gates frozen at last-applied state) or whose
+/// `spec.sourceRef.name` pointed at a `GitRepository` that doesn't exist
+/// in the rebranded namespace (apply-side: the reference dangles, the
+/// dependent chart never pulls). The apply-time symptom (the Servico's
+/// `HelmRelease` is created but never reconciled, or never reaches its
+/// chart source) is invisible at admission and surfaces only as
+/// "the cluster says the resources are applied but nothing changed",
+/// typically far from the rebrand commit's source.
+///
+/// Lifting it to caixa-core's render-constants block alongside the peer
+/// [`DEFAULT_NAMESPACE`] (a085b26, the workload-side
+/// `tatara-system` namespace every emitted resource lives in) makes the
+/// installation-namespace axis discipline structural: both kustomization
+/// axes consult the same `&'static str`, and every future renderer that
+/// reaches for the canonical Flux installation namespace (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `Kustomization`, the future per-edge `Kustomization` the operator
+/// emits for the `CiliumClusterwideEnvoyConfig` pipeline, the future
+/// `caixa-otel` collector-pipeline `Kustomization`) inherits the same
+/// value by construction with no opportunity for per-renderer drift.
+/// Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_NAMESPACE`] (a085b26) / [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`crate::DEFAULT_SERVICO_PORT`] (1e22add) /
+/// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) lifts apply on the
+/// peer canonical-load-bearing-string surface.
+///
+/// The value is a valid DNS-1123 label (the K8s apiserver-side floor every
+/// `metadata.namespace` rule enforces): lowercase ASCII alphanumeric with
+/// `-` separators, no leading / trailing hyphen, length within the
+/// [`DNS_1123_LABEL_MAX_LEN`] (63-byte) cap. A future rebrand on this lift
+/// cannot silently land a value the apiserver refuses, by construction:
+/// the [`default_flux_system_namespace_is_a_valid_dns_1123_label`] pin
+/// trips at caixa-core build time on any drift past the typed floor.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const DEFAULT_FLUX_SYSTEM_NAMESPACE: &str = "flux-system";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -6146,6 +6213,49 @@ mod tests {
         // on the canonical-string-value-pin axis for the
         // `PLEME_LABEL_PREFIX` / `LABEL_*` constants.
         assert_eq!(DEFAULT_NAMESPACE, "tatara-system");
+    }
+
+    #[test]
+    fn default_flux_system_namespace_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the FluxCD installation namespace the rendered
+        // `kustomization.yaml`'s `metadata.namespace` /
+        // `spec.sourceRef.name` axes consume. The string is part of the
+        // cluster-side contract with the `flux bootstrap` pipeline (the
+        // bootstrap convention names the `GitRepository` after the
+        // installation namespace, so both axes are the same load-bearing
+        // string), the `kustomize-controller` watch-window scope (a
+        // drifted value sits outside the controller's watch window and
+        // is never reconciled), and the per-cluster k8s repo's flux
+        // bootstrap manifests; changing it is a coordinated multi-repo
+        // migration, not an incidental edit. Peer to
+        // `default_namespace_pins_canonical_value` on the
+        // canonical-string-value-pin axis for the workload-side
+        // [`DEFAULT_NAMESPACE`] constant.
+        assert_eq!(DEFAULT_FLUX_SYSTEM_NAMESPACE, "flux-system");
+    }
+
+    #[test]
+    fn default_flux_system_namespace_is_a_valid_dns_1123_label() {
+        // Cross-axis invariant: the FluxCD installation namespace lands
+        // as `metadata.namespace` on every emitted `Kustomization`
+        // resource and as `spec.sourceRef.name` (a K8s resource name
+        // under the same DNS-1123 floor), and the K8s apiserver
+        // enforces the DNS-1123 label rule on both. Pinning this here
+        // means a future rebrand on the canonical lift can't silently
+        // land a value the apiserver refuses at the *first*
+        // `kustomization.yaml` apply against a cluster, far from the
+        // rebrand commit's source — the typed [`is_dns_1123_label`]
+        // floor rejects it at caixa-core build time on the canonical
+        // lift, before any renderer consumes the value. Same shape as
+        // `default_namespace_is_a_valid_dns_1123_label` on the
+        // workload-side [`DEFAULT_NAMESPACE`] axis.
+        assert!(
+            is_dns_1123_label(DEFAULT_FLUX_SYSTEM_NAMESPACE).is_ok(),
+            "DEFAULT_FLUX_SYSTEM_NAMESPACE {DEFAULT_FLUX_SYSTEM_NAMESPACE:?} must be a valid \
+             DNS-1123 label — every K8s apiserver-side schema enforces \
+             this rule on `metadata.namespace`"
+        );
     }
 
     #[test]

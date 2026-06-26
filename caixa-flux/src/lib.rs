@@ -95,6 +95,24 @@ pub enum Error {
 /// future per-target renderer the substrate adds.
 pub use caixa_core::DEFAULT_NAMESPACE;
 
+/// Canonical FluxCD installation namespace — re-export of the lifted
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
+/// string lives in exactly one place across every consumer of the
+/// rendered `kustomization.yaml`'s `metadata.namespace` and
+/// `spec.sourceRef.name` axes. Both axes are the same conceptual "Flux
+/// installation namespace" the `flux bootstrap` pipeline names; until
+/// this lift landed they sat as two inline `flux-system` literals inside
+/// [`cluster_bundle`]'s `kustomization.yaml` format-string template, and
+/// any future per-edition Flux-installation-namespace rebrand on one
+/// without a coordinated edit on the other would have silently emitted a
+/// `Kustomization` outside the bootstrap controller's watch window or a
+/// dangling `sourceRef`. Same shape as the
+/// [`caixa_core::DEFAULT_NAMESPACE`] (a085b26) /
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) lifts on the peer
+/// canonical-load-bearing-string surface.
+pub use caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -474,13 +492,13 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          kind: Kustomization\n\
          metadata:\n  \
            name: {name}\n  \
-           namespace: flux-system\n\
+           namespace: {flux_system}\n\
          spec:\n  \
            interval: {interval}\n  \
            prune: true\n  \
            sourceRef:\n    \
              kind: GitRepository\n    \
-             name: flux-system\n  \
+             name: {flux_system}\n  \
            path: ./clusters/{cluster}/services/{name}\n  \
            healthChecks:\n    \
              - apiVersion: helm.toolkit.fluxcd.io/v2\n      \
@@ -492,6 +510,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         namespace = opts.namespace,
         interval = opts.interval,
         cluster = opts.cluster,
+        flux_system = DEFAULT_FLUX_SYSTEM_NAMESPACE,
     );
     // chart_name is reserved for a future kustomization.yaml `resources:`
     // entry pointing at the rendered Chart.yaml; not yet wired.
@@ -1192,6 +1211,132 @@ spec:
             "helmrelease.yaml must spell the canonical library-chart wrap \
              key under spec.values (got: {contents:?})",
             contents = hr.contents
+        );
+    }
+
+    #[test]
+    fn default_flux_system_namespace_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`
+        // is the single source of truth for the FluxCD installation
+        // namespace both axes of the rendered `kustomization.yaml`
+        // document (`metadata.namespace` and `spec.sourceRef.name`)
+        // consume. Pin the equality (and the static-data identity, peer
+        // with the sibling
+        // `default_namespace_re_export_points_at_caixa_core_canonical` /
+        // `default_library_name_re_export_points_at_caixa_core_canonical`
+        // pins) so any local re-introduction of a sibling `pub const
+        // DEFAULT_FLUX_SYSTEM_NAMESPACE: &str = "…"` (the canonical
+        // drift footgun this lift closes — two production-code
+        // consumers of the same load-bearing FluxCD-installation-
+        // namespace inside the kustomization template, lifted to one
+        // re-export at the caixa-core boundary) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // `Kustomization`-outside-controller-watch-window / dangling-
+        // `sourceRef` reconciliation freeze.
+        assert_eq!(
+            DEFAULT_FLUX_SYSTEM_NAMESPACE,
+            caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE
+        );
+        assert!(
+            std::ptr::eq(
+                DEFAULT_FLUX_SYSTEM_NAMESPACE.as_ptr(),
+                caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE.as_ptr(),
+            ),
+            "DEFAULT_FLUX_SYSTEM_NAMESPACE must be a re-export of \
+             caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two is \
+             the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_uses_lifted_flux_system_namespace() {
+        // Fail-before-pass-after pin: the rendered `kustomization.yaml`'s
+        // `metadata.namespace` and `spec.sourceRef.name` axes — the two
+        // physical sites the inline `flux-system` literal previously
+        // sat at (caixa-flux/src/lib.rs:477, 483 in the prior shape) —
+        // must both resolve to the lifted
+        // [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] verbatim. Before this lift
+        // the kustomization template carried two inline `flux-system`
+        // literals; a future per-cluster Flux installation rebrand on
+        // either axis without a coordinated edit on the other would have
+        // silently emitted a `Kustomization` outside the bootstrap
+        // controller's watch window (the `kustomize-controller` watches
+        // the installation namespace by default) or a dangling
+        // `spec.sourceRef.name` pointing at a `GitRepository` that
+        // doesn't exist in the rebranded namespace.
+        //
+        // The pin is structural: parse the rendered YAML and assert
+        // each of the two axes equals the lifted constant by value. A
+        // regression that re-introduces an inline literal at either
+        // axis surfaces here as a key mismatch (the inline literal
+        // would survive, but the lifted-constant-keyed assertion would
+        // fail when the lift's value changes).
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kust = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
+        assert_eq!(
+            parsed
+                .get("metadata")
+                .and_then(|m| m.get("namespace"))
+                .and_then(|n| n.as_str()),
+            Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
+            "kustomization.yaml metadata.namespace must spell the lifted \
+             DEFAULT_FLUX_SYSTEM_NAMESPACE ({DEFAULT_FLUX_SYSTEM_NAMESPACE:?}); \
+             a drifted literal here silently places the Kustomization outside \
+             the bootstrap kustomize-controller's watch window"
+        );
+        assert_eq!(
+            parsed
+                .get("spec")
+                .and_then(|s| s.get("sourceRef"))
+                .and_then(|r| r.get("name"))
+                .and_then(|n| n.as_str()),
+            Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
+            "kustomization.yaml spec.sourceRef.name must spell the lifted \
+             DEFAULT_FLUX_SYSTEM_NAMESPACE ({DEFAULT_FLUX_SYSTEM_NAMESPACE:?}); \
+             a drifted literal here dangles the reference at a GitRepository \
+             that doesn't exist in the rebranded installation namespace"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_pins_canonical_flux_system_string() {
+        // Bridge-arm pin: the lifted [`DEFAULT_FLUX_SYSTEM_NAMESPACE`]
+        // constant resolves to the canonical `"flux-system"` string
+        // today, and both rendered `kustomization.yaml` axes must spell
+        // it out verbatim. Pin the literal here (peer with the
+        // [`default_flux_system_namespace_pins_canonical_value`]
+        // canonical-default arm in caixa-core, and with
+        // [`cluster_bundle_helmrelease_wrap_key_pins_canonical_pleme_computeunit_string`]
+        // on the sibling `DEFAULT_LIBRARY_NAME` axis) so a future
+        // rebrand of the lifted constant surfaces here as a coordinated
+        // edit-point, same trajectory as the
+        // `default_servico_port_constant_pins_canonical_8080_literal`
+        // bridge-arm pin in caixa-core.
+        assert_eq!(DEFAULT_FLUX_SYSTEM_NAMESPACE, "flux-system");
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kust = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .unwrap();
+        assert!(
+            kust.contents.contains("namespace: flux-system\n"),
+            "kustomization.yaml must spell the canonical FluxCD \
+             installation namespace at metadata.namespace (got: {contents:?})",
+            contents = kust.contents
+        );
+        assert!(
+            kust.contents.contains("name: flux-system\n"),
+            "kustomization.yaml must spell the canonical FluxCD \
+             installation namespace at spec.sourceRef.name (got: {contents:?})",
+            contents = kust.contents
         );
     }
 
