@@ -50,7 +50,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, KUBE_KEY_SPEC, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -175,6 +175,25 @@ pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
 /// [`caixa_core::DEFAULT_SERVICO_PORT`] (1e22add) lifts on the peer
 /// canonical-K8s-axis-constant surface.
 pub use caixa_core::DEFAULT_LIBRARY_NAME;
+
+/// Canonical K8s CR top-level `spec` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
+/// exactly one place across every caixa renderer — caixa-helm's
+/// `build_values_yaml` (the upstream ComputeUnit YAML's `spec.*` axis
+/// the rendered `lareira-<nome>` chart's values block re-routes
+/// through the library alias) now consults the same `&'static str` as
+/// the peer caixa-flux / caixa-mesh renderers' `KUBE_KEY_SPEC`
+/// re-exports. The prior inline `"spec"` literal at the production-
+/// code call site would have let a typo (e.g. `"Spec"`, `"specs"`,
+/// `"spec_"`) silently emit a values block that drops every typed
+/// ComputeUnit-side field (`module`, `trigger`, `capabilities`,
+/// `resources`, `serviceAccount`) at the rendered chart's landing
+/// site — the `Error::MissingField("spec")` diagnostic now threads
+/// the same `&'static str` through the diagnostic surface so the
+/// error message stays byte-identical to the key it failed to find.
+/// Same shape as the [`DEFAULT_LIBRARY_NAME`] re-export on the
+/// sibling canonical-Helm-load-bearing-string axis.
+pub use caixa_core::KUBE_KEY_SPEC;
 
 /// Knobs that don't come from the Caixa manifest.
 #[derive(Debug, Clone)]
@@ -327,8 +346,8 @@ fn build_values_yaml(
     // any rebrand without a shared source of truth).
     let library_alias = opts.library_name.as_str();
     let spec = computeunit_yaml
-        .get("spec")
-        .ok_or(Error::MissingField("spec"))?
+        .get(KUBE_KEY_SPEC)
+        .ok_or(Error::MissingField(KUBE_KEY_SPEC))?
         .clone();
 
     // Prepend a comment header so the file is human-friendly.
@@ -919,6 +938,35 @@ spec:
                 caixa_core::DEFAULT_LIBRARY_NAME.as_ptr(),
             ),
             "DEFAULT_LIBRARY_NAME must be a re-export of caixa_core::DEFAULT_LIBRARY_NAME, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_spec_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_SPEC` was lifted from the production-
+        // code inline `"spec"` literal at `build_values_yaml`'s
+        // `computeunit_yaml.get("spec")` ComputeUnit-side spec read (+
+        // its matching `Error::MissingField("spec")` diagnostic) to a
+        // re-export of [`caixa_core::KUBE_KEY_SPEC`] so the canonical
+        // K8s-CR top-level spec-axis string lives in exactly one place
+        // across every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const KUBE_KEY_SPEC: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift. Peer to
+        // [`default_library_name_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axis +
+        // `caixa_flux::tests::kube_key_spec_re_export_points_at_caixa_core_canonical`
+        // / `caixa_mesh::tests::kube_key_spec_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crates.
+        assert_eq!(KUBE_KEY_SPEC, caixa_core::KUBE_KEY_SPEC);
+        assert!(
+            std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
+            "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );

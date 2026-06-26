@@ -5298,6 +5298,28 @@ pub const KUBE_KEY_NAME: &str = "name";
 pub const KUBE_KEY_NAMESPACE: &str = "namespace";
 /// Canonical K8s API key naming the resource's labels (under metadata).
 pub const KUBE_KEY_LABELS: &str = "labels";
+/// Canonical K8s API key naming the resource's per-kind body (sibling
+/// to [`KUBE_KEY_METADATA`] at the K8s CR top level). Every typed
+/// substrate renderer that materializes a CR populates `spec.*` from
+/// the source caixa.lisp — caixa-mesh's `cilium_network_policies`
+/// per-`(:de, :para)` `CiliumNetworkPolicy` emitter (the policy's
+/// `endpointSelector` / `ingress` block lives under spec),
+/// caixa-mesh's `gateway_routes` `Gateway` + `HTTPRoute` emitter (the
+/// listeners / rules / parentRefs block lives under spec),
+/// caixa-flux's `programs_yaml_entry` + `upsert_into_helmrelease_programs`
+/// (the fleet `HelmRelease`'s `spec.values.programs[]` axis),
+/// caixa-helm's `values.yaml` builder (the upstream ComputeUnit YAML's
+/// `spec.*` axis the rendered `lareira-<nome>` chart re-routes through
+/// the library alias). Spelled exactly as the K8s apiserver expects
+/// (the canonical OpenAPI v3 schema property name K8s machinery
+/// validates against on every CR registration), so the rendered YAML
+/// round-trips through every K8s schema parser without per-renderer
+/// string drift. Lifted on the trajectory the peer
+/// [`KUBE_KEY_API_VERSION`] / [`KUBE_KEY_KIND`] /
+/// [`KUBE_KEY_METADATA`] / [`KUBE_KEY_NAME`] / [`KUBE_KEY_NAMESPACE`]
+/// / [`KUBE_KEY_LABELS`] / [`KUBE_KEY_MATCH_LABELS`] canonical-K8s-
+/// API-key constants establish.
+pub const KUBE_KEY_SPEC: &str = "spec";
 /// Canonical K8s API key naming the `matchLabels` axis of a
 /// [`LabelSelector`][k8s-ls] — the equality-based projection of the
 /// selector schema (the other axis, `matchExpressions`, is set-based
@@ -7449,6 +7471,7 @@ mod tests {
         assert_eq!(KUBE_KEY_NAMESPACE, "namespace");
         assert_eq!(KUBE_KEY_LABELS, "labels");
         assert_eq!(KUBE_KEY_MATCH_LABELS, "matchLabels");
+        assert_eq!(KUBE_KEY_SPEC, "spec");
     }
 
     // ── label_selector — typed K8s LabelSelector wrapper ─────────────────
