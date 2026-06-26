@@ -1243,6 +1243,92 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-brace-expansion arm. The 0633c91
+        // shell-subshell-grouping arm closes `(` / `)`; `{` (`0x7b`) and
+        // `}` (`0x7d`) are the orthogonal shell-brace-expansion /
+        // URI-Template-placeholder byte pair — same paste-from-shell-
+        // prompt + paste-from-templated-doc footgun class, different
+        // syntactic surface. Every POSIX-derived shell that implements
+        // brace expansion (bash / zsh / ksh / fish; the canonical
+        // `mkdir -p ../{caixa-teia,caixa-helm,caixa-flux}` /
+        // `cp file{,.bak}` idiom every shell-history block carries)
+        // expands `{a,b,c}` to the cross-product of its comma-separated
+        // members and `{1..10}` to the integer range; RFC 6570 reserves
+        // the matched pair for URI Template placeholders (the canonical
+        // `https://{host}/{org}/{repo}` substitution shape every
+        // OpenAPI / Swagger / Postman / GitHub Octokit client /
+        // Helm chart-URL fragment / Mustache `{{org}}` doubled-brace
+        // form carries), and Tera / Jinja2 / Handlebars / Go html/template
+        // every IaC tool (Helm, Kustomize, Terraform's `${var}` cousin
+        // shape) emit. POSIX `std::path::Path` treats both bytes as
+        // literal path-component bytes (so `../{caixa-teia,caixa-helm}`
+        // is one directory named literally `../{caixa-teia,caixa-helm}`,
+        // sibling of `.` and `..`).
+        //
+        // A `:caminho "../{caixa-teia,caixa-helm}/build"` (the canonical
+        // "I pasted a `cd ../{caixa-teia,caixa-helm}` shell brace-
+        // expansion one-liner that fans across two siblings" footgun)
+        // or `:caminho "../{{org}}/caixa-teia"` (the symmetric "I copied
+        // a `{{org}}` Mustache / Helm template placeholder out of a
+        // README quick-start and forgot to substitute") silently passes
+        // every prior arm because `Path::is_absolute` returns false on
+        // `..`, `{` / `}` are neither leading-byte sentinels nor control
+        // bytes nor `\` nor `<` / `>` nor `|` nor `;` nor `&` nor
+        // backtick nor `*` / `?` nor `(` / `)`, and the value's last
+        // byte isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./../{caixa-teia,caixa-helm}/build` subdirectory and fails
+        // at resolve time with a non-self-locating `No such file or
+        // directory` error far from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `{` or `}` byte
+        // lands in the BLAKE3 closure and rides downstream as part of
+        // the build's identity into every shell-spawned subprocess
+        // (the caixa-resolver's `git clone` invocation, a future
+        // `feira tofu` shell-out, a future operator-side `nix flake
+        // check` spawn) as the canonical shell-metachar / brace-
+        // expansion surface every peer single-token-shaped typed
+        // slot already closes. The peer git-source axis
+        // [`crate::render::is_git_repo_url`] (42d8f9d — the URI Template
+        // placeholder arm) rejects the same byte pair on `:fonte :repo`
+        // under the same RFC-3986-'delims' / RFC-6570-URI-Template /
+        // shell-brace-expansion banner. The `:caminho` axis was the last
+        // typed path-string surface still admitting these two bytes;
+        // this arm closes the gap so the substrate-wide "no shell-
+        // composition metacharacter anywhere in a typed string slot
+        // that flows verbatim into a shell-spawned subprocess"
+        // invariant extends from shell-subshell-grouping (`(` / `)`)
+        // to shell-brace-expansion (`{` / `}`) on the `:caminho` axis,
+        // and the typed `:caminho` accepted set now also structurally
+        // excludes the URI Template / templating-engine placeholder
+        // surface that would silently round-trip through any
+        // downstream IaC templating-engine layer.
+        //
+        // The arm fires AFTER the shell-subshell-grouping arm because
+        // the prior arm's `(` / `)` shape is the more semantic-locating
+        // axis on values that probe as both (`"../{cd foo}(date)"`
+        // carries both `{` and `(` — the parenthesis-pair is the
+        // load-bearing modern-Bourne-command-substitution surface the
+        // prior arm closes; same cascade discipline every prior
+        // `:caminho` arm establishes). The arm fires BEFORE the
+        // trailing-`/` arm because the embedded brace-expansion byte
+        // is the more semantic-locating axis on probe-as-both values
+        // (`"../{caixa-teia,caixa-helm}/"` ends in `/` but the
+        // load-bearing diagnostic is the embedded `{` brace-expansion
+        // metachar — the trailing `/` is the secondary observation,
+        // and an author who removes the `{` is likely to also tab-
+        // strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'{' || b == b'}' {
+                return Err(DepError::FonteCaminhoShellBraceExpansion {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -2033,6 +2119,47 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellSubshellGrouping {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         brace-expansion / URI-Template placeholder metacharacter 0x{byte:02x} `{ch}` \
+         (every POSIX-derived brace-expanding shell — bash / zsh / ksh / fish — lexes `{{` / \
+         `}}` as the brace-expansion operator: `{{a,b,c}}` expands to the cross-product of \
+         comma-separated members and `{{1..10}}` expands to the integer range — the \
+         canonical `mkdir -p ../{{caixa-teia,caixa-helm,caixa-flux}}` / `cp file{{,.bak}}` \
+         idiom every shell-history block carries; RFC 6570 reserves the matched pair for \
+         URI Template placeholders (the canonical `https://{{host}}/{{org}}/{{repo}}` \
+         substitution shape every OpenAPI / Swagger / Postman / GitHub Octokit client \
+         library / Helm chart-URL fragment carries) and the Mustache / Handlebars / \
+         Tera / Jinja2 / Go html/template doubled-brace substitution form every IaC \
+         templating engine (Helm, Kustomize, Terraform's `${{var}}` cousin) emits. POSIX \
+         `std::path::Path` treats the byte as a literal path-component byte, so a \
+         `:caminho \"../{{caixa-teia,caixa-helm}}/build\"` (the canonical paste-from-\
+         shell-history brace-expansion fan-across-siblings footgun) or `:caminho \"../{{{{org}}}}/\
+         caixa-teia\"` (the symmetric paste-from-templated-doc URI-Template placeholder \
+         idiom every README quick-start / OpenAPI spec / Helm chart `home:` field carries) \
+         silently passes every prior arm and the resolver folds the value through \
+         `Path::new(caminho).join(<file>)` looking for a literal subdirectory and fails at \
+         resolve time with a non-self-locating `No such file or directory` error far from \
+         the source caixa.lisp. The lacre pipeline embeds the value verbatim in its \
+         per-dep content-address `path:{caminho}` at caixa-resolver/src/resolve.rs:189, \
+         so the byte lands in the BLAKE3 closure and rides into every shell-spawned \
+         subprocess (the resolver's `git clone`, a future `feira tofu` shell-out, a \
+         future operator-side `nix` spawn) as the canonical shell-metachar / brace-\
+         expansion / URI-Template-placeholder surface every peer single-token-shaped \
+         typed slot already closes. The peer `:fonte :repo` axis (42d8f9d) closes the \
+         same byte pair on `is_git_repo_url` under the same RFC-3986-'delims' / \
+         RFC-6570-URI-Template / shell-brace-expansion banner. Express the path as a \
+         bare relative single-token like \"../caixa-teia\" — the sibling-workspace \
+         directory name carries no shell-brace-expansion / URI-Template-placeholder \
+         semantic; if two siblings actually need pinning, author two separate `:deps` \
+         entries rather than one brace-expanded `:caminho` value.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellBraceExpansion {
         nome: String,
         caminho: String,
         byte: u8,
@@ -8343,6 +8470,449 @@ mod tests {
         assert!(
             rendered.contains("command-substitution"),
             "diagnostic must reference the `$(<cmd>)` command-substitution vocabulary: \
+             {rendered:?}",
+        );
+    }
+
+    // ── shell-brace-expansion / URI-Template-placeholder arm ───────────
+    //
+    // Peer with the prior `FonteCaminhoShellSubshellGrouping` (`(` /
+    // `)`) byte-pair arm: the same per-byte cascade with the same
+    // self-locating `byte: u8` diagnostic on the orthogonal `{` /
+    // `}` brace-expansion / URI-Template placeholder axis. The peer
+    // [`crate::render::is_git_repo_url`] (42d8f9d) closes the same
+    // byte pair on the sibling `:fonte :repo` axis under the same
+    // banner.
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_brace_expansion_fan_across_siblings() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // shell-history brace-expansion footgun: an author copies a
+        // `cd ../{caixa-teia,caixa-helm}/build` shell-history one-
+        // liner whose `{a,b}` brace expansion fans across two siblings
+        // and silently passed every prior arm (`Path::is_absolute`
+        // false on `..`, no control bytes, no `\`, no `<` / `>`, no
+        // `|`, no `;`, no `&`, no backtick, no `*` / `?`, no `(` /
+        // `)`, doesn't end in `/`; the leading-`$` f4efe9c
+        // `FonteCaminhoVarExpansion` arm doesn't fire because the
+        // value starts with `..` not `$`). The lacre embedded the
+        // value verbatim, the resolver folded it through `Path::join`
+        // looking for a literal `./../{caixa-teia,caixa-helm}/build`
+        // subdirectory, and the failure surfaced at resolve time with
+        // a non-self-locating `No such file or directory` error. The
+        // new arm moves the rejection to validate time and names the
+        // offending dep + caminho + byte verbatim. The arm fires on
+        // the first `{` encountered.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{caixa-teia,caixa-helm}/build".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellBraceExpansion {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellBraceExpansion, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../{caixa-teia,caixa-helm}/build");
+        assert_eq!(byte, b'{');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_close_brace() {
+        // The symmetric close-brace paste shape (`"../caixa-teia}"` —
+        // the degenerate "I selected an unbalanced closing brace out
+        // of a shell-history block" idiom that probes for the
+        // cascade's last-byte handling on a value carrying only the
+        // closing byte). Pinned separately from the open-brace shape
+        // so the gate's contract is "any `{` or `}` anywhere", not
+        // single-byte coverage. Mirrors the peer
+        // `validate_rejects_path_fonte_with_caminho_carrying_close_paren`
+        // shape on the immediate-predecessor `FonteCaminhoShellSubshellGrouping`
+        // arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellBraceExpansion { byte, .. } = err else {
+            panic!("expected FonteCaminhoShellBraceExpansion, got {err:?}");
+        };
+        assert_eq!(byte, b'}');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_open_brace() {
+        // Leading-position `{` shape (`"{caixa-teia,caixa-helm}/build"`
+        // — the canonical "I selected a `{a,b}` brace-expansion prefix
+        // out of a shell-history one-liner" idiom). Pinned separately
+        // from the embedded-byte shape so the gate covers every
+        // position, not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "{caixa-teia,caixa-helm}/build".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_uri_template_placeholder() {
+        // The canonical URI-Template / Mustache / Helm doubled-brace
+        // placeholder shape (`"../{{org}}/caixa-teia"` — the canonical
+        // "I copied a `https://github.com/{{org}}/caixa-teia` README
+        // quick-start / OpenAPI spec / Helm chart `home:` template
+        // and forgot to substitute the placeholder" footgun). The arm
+        // fires on the first `{` encountered; pinned so the gate's
+        // coverage extends from the bare-brace shell-history shape to
+        // the doubled-brace URI-Template / templating-engine shape.
+        // Mirrors the peer 42d8f9d `is_git_repo_url` arm on the
+        // sibling `:fonte :repo` axis.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{{org}}/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_brace_range_expansion() {
+        // The canonical bash brace-range-expansion shape (`"../caixa-
+        // v{1..10}"` — the `{1..10}` sequence expansion every bash /
+        // zsh `for i in {1..10}; do …; done` idiom uses, the symmetric
+        // sequence-range form to the `{a,b,c}` comma-separated form).
+        // The arm fires on the first `{` encountered; pinned so the
+        // gate's coverage extends from the comma-separated form to
+        // the integer-range form.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-v{1..10}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_brace_expansion() {
+        // The positive-control pin: the gate targets only `{` / `}`,
+        // never adjacent printable ASCII or POSIX-valid bytes. The
+        // canonical relative POSIX path (`"../caixa-teia"`) and a
+        // nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue to
+        // validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface. Peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_subshell_grouping`
+        // on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_subshell_grouping_fires_before_shell_brace_expansion() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `(` and `{` (`"../(cd foo)/{a,b}"` — the
+        // canonical "I pasted a subshell-grouping followed by a
+        // brace-expansion tail" footgun) routes through
+        // `FonteCaminhoShellSubshellGrouping` not
+        // `FonteCaminhoShellBraceExpansion`. The subshell-grouping
+        // shape is the more semantic-locating axis on every probe-
+        // as-both value because it closes both halves of the modern
+        // Bourne `$(<cmd>)` command-substitution surface — same
+        // cascade discipline every prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../(cd foo)/{a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream shell-glob arm: a value carrying
+        // both `*` and `{` (`"../caixa-teia/*{a,b}"` — the canonical
+        // "I pasted a glob expansion followed by a brace-expansion
+        // tail" footgun) routes through `FonteCaminhoShellGlob` not
+        // `FonteCaminhoShellBraceExpansion`. The pathname-expansion
+        // shape is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*{a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream shell-command-substitution arm:
+        // a value carrying both a backtick and `{` (``"../`whoami`/{a,b}"``
+        // — the canonical "I pasted a legacy-backtick command-
+        // substitution followed by a brace-expansion fan-out" footgun)
+        // routes through `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoShellBraceExpansion`. The CWE-78 shell-
+        // command-injection vector is the load-bearing root-cause
+        // edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`/{a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream shell-background arm: a value
+        // carrying both `&` and `{` (`"../caixa-teia & {a,b}"` — the
+        // canonical "I pasted a `cmd & {fork-fan}` background-launch
+        // + brace-expansion chain" footgun) routes through
+        // `FonteCaminhoShellBackground` not
+        // `FonteCaminhoShellBraceExpansion`. The background-launch
+        // tail is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & {a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and `{` (`"../caixa-teia; {a,b}"` — the
+        // canonical sequential-cleanup + brace-expansion paste
+        // idiom) routes through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellBraceExpansion`. The sequential-command-
+        // separator paste is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; {a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream shell-pipe arm: a value
+        // carrying both `|` and `{` (`"../caixa-teia | {tee,cat}"`
+        // — the canonical pipeline-to-brace-expansion paste idiom)
+        // routes through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellBraceExpansion`. The pipeline-tail paste
+        // is the load-bearing root-cause edit on every probe-as-
+        // both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | {tee,cat}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream shell-redirection arm: a value
+        // carrying both `>` and `{` (`"../caixa-teia>log {a,b}"` —
+        // the canonical "I pasted a `cmd > log {a,b}` redirect-
+        // plus-brace-expansion chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellBraceExpansion`. The input/output
+        // redirection metachar carries the more self-locating
+        // `byte` payload, so the prior arm wins on every probe-
+        // as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log {a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and `{` (`"..\caixa-teia\{a,b}"` — the
+        // canonical "I pasted a Windows-shell `cd ..\path\{a,b}`
+        // chain") routes through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellBraceExpansion`. The cross-host-OS-
+        // separator divergence is the load-bearing axis on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia\\{a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_brace_expansion() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `{` (`"../foo\n{a,b}"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho between two paste fragments)
+        // routes through `FonteCaminhoControlChar` not
+        // `FonteCaminhoShellBraceExpansion`. The POSIX-syscall-
+        // rejected-byte / NUL-`CString::new`-fail diagnostic is the
+        // load-bearing axis on every value that probes positive for
+        // both — mirrors the cascade discipline on every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n{a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_brace_expansion() {
+        // Cascade pin on the load-bearing leading-byte arm: a
+        // leading `/` value with embedded `{` (`"/etc/{a,b}"`)
+        // routes through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellBraceExpansion` — the host-layout-leak
+        // diagnostic is the load-bearing axis, the brace-expansion
+        // byte is the secondary observation. Same precedence logic
+        // as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/{a,b}".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_shell_brace_expansion() {
+        // Cascade pin on the upstream leading-`$` var-expansion
+        // arm: a value carrying both a leading `$` and a `{`
+        // (`"${ORG}/caixa-teia"` — the canonical "I pasted a
+        // `${ORG}` shell-variable + curly-brace expansion at the
+        // head of a sibling-workspace path" footgun) routes through
+        // `FonteCaminhoVarExpansion` not
+        // `FonteCaminhoShellBraceExpansion`. The leading-byte
+        // shell-variable-expansion is the more self-locating
+        // diagnostic on values that probe as both — same
+        // load-bearing-leading-byte cascade discipline every prior
+        // `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "${ORG}/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_brace_expansion_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both `{` and a trailing `/`
+        // (`"../{caixa-teia,caixa-helm}/"` — the canonical "I
+        // tab-completed a path that already had a brace-expansion
+        // expansion tail" footgun) routes through
+        // `FonteCaminhoShellBraceExpansion` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-metachar
+        // is the more semantic-locating axis (an author who removes
+        // the `{` typically also drops the trailing separator since
+        // both are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{caixa-teia,caixa-helm}/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_brace_expansion_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_subshell_grouping_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the closest two-byte peer arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-brace-expansion / URI-Template footgun
+        // explicitly so a `feira lint` run can render the diagnostic
+        // without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{caixa-teia,caixa-helm}/build".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../{caixa-teia,caixa-helm}/build"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x7b"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("brace-expansion"),
+            "diagnostic must name the shell-brace-expansion footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("URI Template"),
+            "diagnostic must reference the RFC-6570 URI-Template-placeholder vocabulary: \
              {rendered:?}",
         );
     }
