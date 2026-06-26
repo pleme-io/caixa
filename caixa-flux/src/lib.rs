@@ -332,7 +332,11 @@ impl ClusterBundleOpts {
                 .repositorio
                 .clone()
                 .unwrap_or_else(|| format!("https://github.com/pleme-io/{}", caixa.nome)),
-            git_ref: GitRefSpec::Tag(format!("v{}", caixa.versao)),
+            git_ref: GitRefSpec::Tag(format!(
+                "{prefix}{versao}",
+                prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
+                versao = caixa.versao,
+            )),
         }
     }
 }
@@ -1188,6 +1192,79 @@ spec:
             "helmrelease.yaml must spell the canonical library-chart wrap \
              key under spec.values (got: {contents:?})",
             contents = hr.contents
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_default_git_tag_uses_lifted_caixa_core_prefix() {
+        // Fail-before-pass-after pin: the [`ClusterBundleOpts::for_caixa`]
+        // constructor's default `git_ref: GitRefSpec::Tag(...)` must
+        // compose the lifted [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`]
+        // against the caixa's `:versao` — not an inline `"v"` byte the
+        // peer `feira publish` `--prefix` default and this deploy-side
+        // default could silently drift on.
+        //
+        // Until this lift landed the deploy-side carried a `format!("v{}",
+        // caixa.versao)` literal while the writer-side (caixa-feira/src/cmd/publish.rs:22)
+        // carried a clap `default_value = "v"` literal — two production-code
+        // consumers of the same git-tag-naming convention on the same
+        // git remote axis, drift-prone by construction. A future
+        // Zig-style-tag rebrand on one side (e.g. moving the publisher to
+        // `release/<versao>` once a sibling forge convention lands)
+        // without a coordinated edit here would silently emit a tag the
+        // FluxCD `GitRepository` reconciler can't resolve — the
+        // dependent `HelmRelease`'s `chart: sourceRef` would never
+        // converge and every per-Servico apply would silently come up
+        // with the prior reconciled state, with the failure surfacing
+        // far from the rebrand commit's source at
+        // `kubectl describe gitrepository` time.
+        //
+        // Pin the equality on the constructed `GitRefSpec::Tag` body and
+        // on the rendered `gitrepository.yaml`'s `ref: { tag: ... }`
+        // field so a regression that re-inlines the `"v"` literal at
+        // either layer (this constructor or the format-string in
+        // [`cluster_bundle`]) surfaces here as a build-time test failure
+        // rather than as a silent deploy-time `GitRepository` reconcile
+        // loop. Peer to the sibling [`caixa-feira`]
+        // `publish_prefix_default_pins_lifted_caixa_core_constant` test
+        // closing the same drift on the writer-side.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        match &opts.git_ref {
+            GitRefSpec::Tag(tag) => {
+                assert!(
+                    tag.starts_with(caixa_core::DEFAULT_PUBLISH_TAG_PREFIX),
+                    "default git_ref tag must start with the lifted \
+                     caixa_core::DEFAULT_PUBLISH_TAG_PREFIX (got: {tag:?})"
+                );
+                assert_eq!(
+                    tag,
+                    &format!(
+                        "{prefix}{versao}",
+                        prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
+                        versao = caixa.versao,
+                    ),
+                    "default git_ref tag must compose the lifted prefix \
+                     against the caixa's :versao verbatim"
+                );
+            }
+            other => panic!("expected GitRefSpec::Tag, got {other:?}"),
+        }
+        let files = cluster_bundle(&caixa, &opts).unwrap();
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .expect("gitrepository.yaml present");
+        let expected_tag = format!(
+            "{prefix}{versao}",
+            prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
+            versao = caixa.versao,
+        );
+        assert!(
+            gr.contents.contains(&format!("tag: {expected_tag:?}")),
+            "gitrepository.yaml must spell the lifted-prefix-composed tag \
+             at ref.tag (expected: {expected_tag:?}, got: {contents:?})",
+            contents = gr.contents
         );
     }
 }
