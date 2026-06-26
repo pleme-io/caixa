@@ -4898,6 +4898,117 @@ mod tests {
     }
 
     #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_caret_history_substitution() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // shell-history footgun on `:repo`. An author copies a
+        // `git clone <url>` line from their terminal followed by a
+        // bash / ksh / zsh `^typo^fix^` quick-edit-and-rerun shell-
+        // history shorthand (the `^old^new^` form re-runs the prior
+        // history entry with the first `old` substituted by `new`,
+        // bash's default behavior on interactive sessions with
+        // `set -o histexpand`), forgetting to trim the trailing
+        // `^...^...` shell-history fragment from the URL value. The
+        // `^` byte sits in the RFC 3986 §2 'unwise' set (peer with
+        // `{`, `}`, `|`, `\\` — the strictest of the §2 reserved
+        // classes), the WHATWG URL spec's 'fragment percent-encode
+        // set' maps `^` → `%5E` on the wire, so the byte rides
+        // verbatim into the lacre's per-dep content-address but
+        // libcurl re-encodes it to `%5E` at `git clone` time — the
+        // classic render-determinism violation on the same axis the
+        // peer `%`, `=`, `,`, `!`, `'`, `"`, `(`, `)`, `*`, `$`,
+        // `&`, `;`, `|`, backtick, `<`, `>`, `{`, `}`, `\\`, `?`,
+        // `#` arms close.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia^typo^fix".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { nome, repo, reason } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(repo, "https://github.com/pleme-io/caixa-teia^typo^fix");
+        assert!(
+            reason.contains("must not contain `^`"),
+            "reason must surface the caret-`^` arm on the paste-from-shell-history \
+             shape, got {reason:?}"
+        );
+        assert!(
+            reason.contains("history-substitution") || reason.contains("%5E"),
+            "reason must name the shell-history-substitution / `%5E` wire-encoding \
+             rationale, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_git_fonte_with_repo_carrying_caret_regex_anchor() {
+        // The symmetric paste-from-doc-grep-pipeline footgun: an
+        // author writes `:repo "github:p/^archived"` after copying a
+        // `grep '^archived'` regex-anchor / negation idiom from a
+        // doc / README quick-listing snippet, expecting the substrate
+        // to coerce it to a literal repo name. The byte rides
+        // verbatim into the lacre's per-dep content-address and
+        // diverges from the byte-identical literal `archived` form
+        // every other author authored — the canonical render-
+        // determinism violation pin on the second footgun shape the
+        // caret-`^` arm closes.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "github:pleme-io/^archived".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `^`"),
+            "reason must surface the caret-`^` arm on the regex-anchor shape, \
+             got {reason:?}"
+        );
+        assert!(
+            reason.contains("render-determinism") || reason.contains("BLAKE3"),
+            "reason must name the render-determinism / BLAKE3-closure rationale, \
+             got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn fonte_repo_percent_fires_before_caret_when_percent_first() {
+        // Cascade pin: the `%` arm (the immediate-predecessor byte-
+        // class arm, a323db8) and the `^` arm are both per-byte arms
+        // inside the same `for &b in s.as_bytes()` loop, so the byte
+        // that appears first in the value's byte order wins. A
+        // `:repo "https://github.com/p/x%20mid^tail"` carries both
+        // `%` and `^`; the `%` byte appears first, so the percent
+        // arm fires, surfacing the more self-locating diagnostic on
+        // the byte the author pasted earliest in the URL. Pins the
+        // natural-order cascade so a future reorder of the per-byte
+        // arms surfaces here — `^` is the most recent byte-class arm,
+        // so the cascade-pin sweep extends to cover the immediately
+        // prior `%` byte arm firing first when ordered ahead of `^`
+        // in the value.
+        let d = dep_with_fonte(DepSource::Git {
+            repo: "https://github.com/pleme-io/caixa-teia%20mid^tail".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteRepoShape { reason, .. } = err else {
+            panic!("expected FonteRepoShape, got other variant");
+        };
+        assert!(
+            reason.contains("must not contain `%`"),
+            "reason must surface the percent arm (fires before caret when `%` byte \
+             appears first in value), got {reason:?}"
+        );
+    }
+
+    #[test]
     fn validate_rejects_git_fonte_with_repo_missing_colon_separator() {
         // The "I dropped the scheme" footgun — `:repo "pleme-io/caixa-teia"`
         // (no `github:` prefix, no scheme). Every documented form
