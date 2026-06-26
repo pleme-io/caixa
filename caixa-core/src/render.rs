@@ -5611,6 +5611,79 @@ pub const FLUX_GITREPOSITORY_API_VERSION: &str = "source.toolkit.fluxcd.io/v1";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KUSTOMIZATION_API_VERSION: &str = "kustomize.toolkit.fluxcd.io/v1";
 
+/// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
+/// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
+/// SIG-Network Gateway API conformance registers the `Gateway` /
+/// `HTTPRoute` / `GatewayClass` / `TCPRoute` / `TLSRoute` / `GRPCRoute`
+/// CRDs at this exact group/version (`gateway.networking.k8s.io/v1`);
+/// drift to a stale `v1beta1` / `v1alpha2` (the pre-GA Gateway API betas
+/// every upstream conformance doc names) silently routes the rendered
+/// `Gateway` / `HTTPRoute` outside the apiserver's CRD-version
+/// registration and breaks at apply time with a non-self-locating "no
+/// kind 'Gateway' is registered for version
+/// 'gateway.networking.k8s.io/v1beta1'" error far from the source
+/// caixa.lisp / the renderer's [`kube_resource_skeleton`] call site.
+///
+/// The single source of truth both Gateway-API CRD axes of the rendered
+/// Aplicacao mesh bundle reach for:
+///
+///   - `Gateway` `apiVersion` — the top-level CRD-group/version the
+///     rendered Gateway document declares (caixa-mesh/src/lib.rs:455 —
+///     the `gateway_routes` per-Aplicacao Gateway skeleton call);
+///   - `HTTPRoute` `apiVersion` — the same Gateway API CRD
+///     group/version every per-`:entrada :paths` HTTPRoute declares
+///     (caixa-mesh/src/lib.rs:496 — the `gateway_routes` HTTPRoute
+///     skeleton call). The K8s SIG-Network Gateway API contract bumps
+///     `Gateway`, `HTTPRoute`, `GatewayClass`, and the rest of the
+///     per-conformance CRD set as a unit; a future Gateway-API GA
+///     promotion (the upstream Gateway API SIG roadmap names per-CRD-
+///     group / per-version migration once the v1 GA branch matures) on
+///     one axis without a coordinated edit on the other would have
+///     silently emitted a `Gateway` / `HTTPRoute` pair pointing at
+///     distinct CRD versions — apply-side: the `Gateway` and
+///     `HTTPRoute` land in two distinct apiserver-side CRD
+///     registrations, the per-route attached-policy resolution
+///     pipeline never binds, every external `:entrada` flow drops at
+///     the gateway with no field naming the version-drift root cause.
+///
+/// Until this lift landed both axes carried inline
+/// `gateway.networking.k8s.io/v1` literals across two production-code
+/// occurrences in caixa-mesh/src/lib.rs:455, 496 (the `gateway_routes`
+/// `Gateway` + `HTTPRoute` skeleton calls) plus a matching pair inside
+/// the in-file `gateway_carries_canonical_kube_skeleton_without_labels`
+/// + `httproute_carries_canonical_kube_skeleton_without_labels` test
+/// fixtures — four occurrences of the same load-bearing Gateway API
+/// CRD-group/version convention, drift-prone by construction.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts established on
+/// the peer Flux-v2-controller-triplet canonical-load-bearing-string
+/// axis — extends the discipline from the cluster-side Flux v2
+/// reconcile contract (the source/helm/kustomize controllers) onto
+/// the cluster-side K8s Gateway API ingress contract (the
+/// Gateway-API-conformant gateway implementation: Cilium, Istio,
+/// Envoy Gateway, NGINX, et al.). The two render-side consumers now
+/// thread the same `&'static str` through their `kube_resource_skeleton`
+/// calls so a future Gateway API CRD-group/version promotion lands in
+/// one place; every future renderer that reaches for the canonical
+/// Gateway API CRD apiVersion (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// Gateway + HTTPRoute, a future per-edge `TCPRoute` / `TLSRoute` /
+/// `GRPCRoute` the caixa-mesh emits for non-HTTP `:entrada` edges,
+/// a future `GatewayClass` the operator emits for per-cluster
+/// gateway-class scoping) inherits the same value by construction
+/// with no opportunity for per-renderer drift.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_API_VERSION: &str = "gateway.networking.k8s.io/v1";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -6748,6 +6821,80 @@ mod tests {
                  triplet shares"
             );
         }
+    }
+
+    #[test]
+    fn gateway_api_api_version_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the K8s SIG-Network Gateway API CRD group/version
+        // the rendered `Gateway` / `HTTPRoute` documents declare. The
+        // string is part of the cluster-side contract with the
+        // upstream Gateway-API-conformant gateway implementation
+        // (Cilium, Istio, Envoy Gateway, NGINX, et al.): the
+        // apiserver-side CRD-version registration watches the exact
+        // `gateway.networking.k8s.io/v1` group/version; a drifted
+        // value to a stale v1beta1 / v1alpha2 lands the rendered
+        // `Gateway` / `HTTPRoute` outside the registration and fails
+        // at apply time with "no kind 'Gateway' is registered for
+        // version 'gateway.networking.k8s.io/v1beta1'"; changing it
+        // is a coordinated Gateway API GA promotion alongside the
+        // upstream SIG-Network deprecation cycle, not an incidental
+        // edit. Peer to `flux_kustomization_api_version_pins_canonical_value`
+        // / `flux_helmrelease_api_version_pins_canonical_value` /
+        // `flux_gitrepository_api_version_pins_canonical_value` on
+        // the canonical-K8s-CRD-axis-pin axis for the sibling
+        // Flux v2 controller-triplet constants — extends the
+        // canonical-string-pin discipline from the cluster-side
+        // Flux v2 reconcile contract onto the cluster-side K8s
+        // Gateway API ingress contract.
+        assert_eq!(GATEWAY_API_API_VERSION, "gateway.networking.k8s.io/v1");
+    }
+
+    #[test]
+    fn gateway_api_api_version_carries_group_and_version_segments() {
+        // Cross-axis invariant: a Kubernetes CRD `apiVersion` is a
+        // `<group>/<version>` pair separated by exactly one `/` byte.
+        // The group segment is a DNS-style multi-segment hostname
+        // (`gateway.networking.k8s.io`) and the version segment is a
+        // Kubernetes API version label (`v1`, `v1beta1`, `v1alpha2` —
+        // peer with the K8s API versioning convention upstream
+        // documents). Pinning this here means a future rebrand on the
+        // canonical lift can't silently land a malformed apiVersion
+        // (no `/`, two `/`, empty group, empty version) that every
+        // downstream YAML-aware deserializer would reject far from the
+        // rebrand commit's source. The single-`/` invariant is the
+        // load-bearing K8s API typed-discovery contract: a value the
+        // apiserver's `RESTMapper` consults to resolve the CRD's
+        // `RESTKind`. Peer to
+        // `flux_kustomization_api_version_carries_group_and_version_segments`
+        // / `flux_helmrelease_api_version_carries_group_and_version_segments`
+        // / `flux_gitrepository_api_version_carries_group_and_version_segments`
+        // on the sibling Flux v2 controller-triplet CRD-axes.
+        let v = GATEWAY_API_API_VERSION;
+        let parts: Vec<&str> = v.split('/').collect();
+        assert_eq!(
+            parts.len(),
+            2,
+            "GATEWAY_API_API_VERSION {v:?} must split into exactly two \
+             `/`-delimited segments (group/version) per the K8s CRD apiVersion \
+             grammar — every downstream YAML-aware deserializer enforces this \
+             shape"
+        );
+        assert!(
+            !parts[0].is_empty(),
+            "GATEWAY_API_API_VERSION {v:?} group segment must be non-empty"
+        );
+        assert!(
+            !parts[1].is_empty(),
+            "GATEWAY_API_API_VERSION {v:?} version segment must be non-empty"
+        );
+        assert!(
+            parts[0].contains('.'),
+            "GATEWAY_API_API_VERSION {v:?} group segment {group:?} must be a \
+             DNS-style multi-segment hostname (the canonical CRD-group convention \
+             every K8s controller-runtime / kube-rs-aware client expects)",
+            group = parts[0]
+        );
     }
 
     #[test]
