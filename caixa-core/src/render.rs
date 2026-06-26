@@ -5684,6 +5684,79 @@ pub const FLUX_KUSTOMIZATION_API_VERSION: &str = "kustomize.toolkit.fluxcd.io/v1
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_API_VERSION: &str = "gateway.networking.k8s.io/v1";
 
+/// Canonical Cilium CRD `apiVersion` every `caixa-mesh`-emitted
+/// `CiliumNetworkPolicy` document declares. The Cilium control plane's
+/// upstream-shipped CRD bundle registers `CiliumNetworkPolicy`,
+/// `CiliumClusterwideNetworkPolicy`, `CiliumEndpoint`, `CiliumIdentity`,
+/// `CiliumNode`, `CiliumLocalRedirectPolicy`, and the rest of the
+/// per-conformance Cilium CRD set at this exact group/version
+/// (`cilium.io/v2`); drift to a stale `v2alpha1` (the historical
+/// pre-stable Cilium-CRD-group/version label upstream Cilium-CRD docs
+/// reference for in-flight per-CRD-version migration) silently routes
+/// the rendered `CiliumNetworkPolicy` outside the cluster's
+/// Cilium-operator-side CRD-version registration and breaks at apply
+/// time with a non-self-locating "no kind 'CiliumNetworkPolicy' is
+/// registered for version 'cilium.io/v2alpha1'" error far from the
+/// source caixa.lisp / the renderer's [`kube_resource_skeleton`] call
+/// site.
+///
+/// The single source of truth the rendered Aplicacao Cilium-side
+/// mesh bundle's CRD-group/version axis reaches for:
+///
+///   - `CiliumNetworkPolicy` `apiVersion` — the top-level CRD-group/
+///     version every emitted CNP document declares
+///     (caixa-mesh/src/lib.rs:326 — the `cilium_network_policies`
+///     per-`(:de, :para)` policy skeleton call). Until this lift
+///     landed both the production-code emit at the per-policy
+///     skeleton call site and the matching in-file
+///     `cilium_policy_carries_canonical_kube_skeleton` test fixture
+///     pin (caixa-mesh/src/lib.rs:1560) carried inline `"cilium.io/v2"`
+///     string literals — two occurrences of the same load-bearing
+///     Cilium-CRD-group/version convention, drift-prone by
+///     construction. The Cilium project bumps the per-conformance
+///     Cilium-CRD set as a unit; a future Cilium-CRD-group/version
+///     promotion (the upstream Cilium roadmap names per-CRD-group /
+///     per-version migration once the `cilium.io/v3` branch lands) on
+///     one axis without a coordinated edit on the other would have
+///     silently emitted a `CiliumNetworkPolicy` document whose
+///     top-level apiVersion drifts off the lifted-test-fixture pin —
+///     apply-side: the policy lands in a stale CRD-version
+///     registration the Cilium operator no longer watches, every
+///     `(:de, :para)` intra-mesh L4 contract drops at the eBPF data
+///     plane with no field naming the version-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_API_VERSION`] (3c6cfc3) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts established on
+/// the peer K8s Gateway API ingress / Flux v2 reconcile canonical-
+/// load-bearing-string axes — extends the discipline from the
+/// cluster-side K8s Gateway API ingress + Flux v2 reconcile contracts
+/// onto the cluster-side Cilium identity-based mesh contract (the
+/// eBPF-anchored Cilium control plane that materializes every
+/// per-`(:de, :para)` L4 / L7 contrato as an identity-keyed eBPF
+/// allow rule). The render-side consumer now threads the same
+/// `&'static str` through its `kube_resource_skeleton` call so a
+/// future Cilium-CRD-group/version promotion lands in one place;
+/// every future renderer that reaches for the canonical
+/// Cilium-CRD apiVersion (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-Aplicacao CiliumNetworkPolicy fan-out, a future
+/// `CiliumClusterwideNetworkPolicy` the caixa-mesh emits for
+/// cluster-scoped baseline-allow / baseline-deny rules, a future
+/// `CiliumLocalRedirectPolicy` the operator emits for per-Servico
+/// local-redirect coordination) inherits the same value by
+/// construction with no opportunity for per-renderer drift.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_API_VERSION: &str = "cilium.io/v2";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -6892,6 +6965,81 @@ mod tests {
             parts[0].contains('.'),
             "GATEWAY_API_API_VERSION {v:?} group segment {group:?} must be a \
              DNS-style multi-segment hostname (the canonical CRD-group convention \
+             every K8s controller-runtime / kube-rs-aware client expects)",
+            group = parts[0]
+        );
+    }
+
+    #[test]
+    fn cilium_api_version_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Cilium CRD group/version the rendered
+        // `CiliumNetworkPolicy` document declares. The string is part
+        // of the cluster-side contract with the upstream Cilium
+        // operator: the Cilium-operator-side CRD-version registration
+        // watches the exact `cilium.io/v2` group/version; a drifted
+        // value to a stale `v2alpha1` lands the rendered
+        // `CiliumNetworkPolicy` outside the registration and fails at
+        // apply time with "no kind 'CiliumNetworkPolicy' is registered
+        // for version 'cilium.io/v2alpha1'"; changing it is a
+        // coordinated Cilium-CRD promotion alongside the upstream
+        // Cilium deprecation cycle, not an incidental edit. Peer to
+        // `gateway_api_api_version_pins_canonical_value` /
+        // `flux_kustomization_api_version_pins_canonical_value` /
+        // `flux_helmrelease_api_version_pins_canonical_value` /
+        // `flux_gitrepository_api_version_pins_canonical_value` on
+        // the canonical-K8s-CRD-axis-pin axis for the sibling
+        // K8s Gateway API + Flux v2 controller-triplet constants —
+        // extends the canonical-string-pin discipline from the
+        // cluster-side K8s Gateway API ingress + Flux v2 reconcile
+        // contracts onto the cluster-side Cilium identity-based mesh
+        // contract.
+        assert_eq!(CILIUM_API_VERSION, "cilium.io/v2");
+    }
+
+    #[test]
+    fn cilium_api_version_carries_group_and_version_segments() {
+        // Cross-axis invariant: a Kubernetes CRD `apiVersion` is a
+        // `<group>/<version>` pair separated by exactly one `/` byte.
+        // The group segment is a DNS-style hostname (`cilium.io`) and
+        // the version segment is a Kubernetes API version label (`v2`,
+        // `v2alpha1` — peer with the K8s API versioning convention
+        // upstream documents). Pinning this here means a future rebrand
+        // on the canonical lift can't silently land a malformed
+        // apiVersion (no `/`, two `/`, empty group, empty version) that
+        // every downstream YAML-aware deserializer would reject far
+        // from the rebrand commit's source. The single-`/` invariant
+        // is the load-bearing K8s API typed-discovery contract: a value
+        // the apiserver's `RESTMapper` consults to resolve the CRD's
+        // `RESTKind`. Peer to
+        // `gateway_api_api_version_carries_group_and_version_segments`
+        // / `flux_kustomization_api_version_carries_group_and_version_segments`
+        // / `flux_helmrelease_api_version_carries_group_and_version_segments`
+        // / `flux_gitrepository_api_version_carries_group_and_version_segments`
+        // on the sibling K8s Gateway API + Flux v2 controller-triplet
+        // CRD-axes.
+        let v = CILIUM_API_VERSION;
+        let parts: Vec<&str> = v.split('/').collect();
+        assert_eq!(
+            parts.len(),
+            2,
+            "CILIUM_API_VERSION {v:?} must split into exactly two \
+             `/`-delimited segments (group/version) per the K8s CRD apiVersion \
+             grammar — every downstream YAML-aware deserializer enforces this \
+             shape"
+        );
+        assert!(
+            !parts[0].is_empty(),
+            "CILIUM_API_VERSION {v:?} group segment must be non-empty"
+        );
+        assert!(
+            !parts[1].is_empty(),
+            "CILIUM_API_VERSION {v:?} version segment must be non-empty"
+        );
+        assert!(
+            parts[0].contains('.'),
+            "CILIUM_API_VERSION {v:?} group segment {group:?} must be a \
+             DNS-style hostname (the canonical CRD-group convention \
              every K8s controller-runtime / kube-rs-aware client expects)",
             group = parts[0]
         );

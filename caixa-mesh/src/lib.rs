@@ -34,10 +34,10 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, GATEWAY_API_API_VERSION, LABEL_APLICACAO,
-    LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec,
-    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay,
+    CILIUM_API_VERSION, Caixa, CaixaKind, DEFAULT_SERVICO_PORT, GATEWAY_API_API_VERSION,
+    LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
+    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -218,6 +218,36 @@ pub use caixa_core::DEFAULT_NAMESPACE;
 /// the canonical-K8s-Gateway-API-CRD-axis surface.
 pub use caixa_core::GATEWAY_API_API_VERSION;
 
+/// Canonical Cilium CRD `apiVersion` every `cilium_network_policies`-
+/// emitted `CiliumNetworkPolicy` document declares. Re-export of the
+/// canonical [`caixa_core::CILIUM_API_VERSION`] so the Cilium-CRD-
+/// group/version string lives in exactly one place across every caixa
+/// renderer — caixa-mesh's `cilium_network_policies` per-`(:de, :para)`
+/// CiliumNetworkPolicy emitter (the single production-code site the
+/// prior inline literal sat at, caixa-mesh/src/lib.rs:326) and every
+/// future per-policy `CiliumClusterwideNetworkPolicy` /
+/// `CiliumLocalRedirectPolicy` emitter the M3.x absorption roadmap
+/// acknowledges now consult the same `&'static str`, so a future
+/// Cilium-CRD-group/version promotion (the upstream Cilium roadmap
+/// names per-CRD-group / per-version migration once the
+/// `cilium.io/v3` branch lands) is a one-line edit on the canonical
+/// [`caixa_core::CILIUM_API_VERSION`] declaration, not a coordinated
+/// rewrite across this crate's `kube_resource_skeleton` call site +
+/// every future per-target renderer the substrate adds. The prior
+/// inline literal would have let a Cilium-CRD bump on one axis without
+/// a coordinated edit on the matching in-file
+/// `cilium_policy_carries_canonical_kube_skeleton` test fixture pin
+/// (caixa-mesh/src/lib.rs:1560) silently emit a `CiliumNetworkPolicy`
+/// whose top-level apiVersion drifts off the lifted-test-fixture pin —
+/// apply-side: the policy lands in a stale apiserver-side CRD-version
+/// registration the Cilium operator no longer watches, every
+/// `(:de, :para)` intra-mesh L4 contract drops at the eBPF data plane
+/// with no field naming the version-drift root cause. Peer to the
+/// [`GATEWAY_API_API_VERSION`] re-export on the sibling
+/// canonical-K8s-Gateway-API-CRD-axis — extends the discipline onto
+/// the canonical-Cilium-CRD-axis surface.
+pub use caixa_core::CILIUM_API_VERSION;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -321,9 +351,13 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // The apiVersion + kind + metadata.{name, namespace, labels}
         // skeleton comes from caixa_core::render::kube_resource_skeleton
         // — same lift as pleme_program_*_selector applied to the K8s-
-        // resource axis. Caller adds spec below.
+        // resource axis. Caller adds spec below. The Cilium-CRD-group/
+        // version string threads through the lifted
+        // [`CILIUM_API_VERSION`] re-export so a future Cilium-CRD bump
+        // lands on the canonical [`caixa_core::CILIUM_API_VERSION`]
+        // declaration, not at this call site.
         let mut policy = kube_resource_skeleton(
-            "cilium.io/v2",
+            CILIUM_API_VERSION,
             "CiliumNetworkPolicy",
             &format!("{}-{}-to-{}", caixa.nome, de, para),
             namespace,
@@ -830,6 +864,82 @@ mod tests {
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
         );
+    }
+
+    #[test]
+    fn cilium_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_API_VERSION` was lifted from the inline
+        // `"cilium.io/v2"` literal at the `cilium_network_policies`
+        // `kube_resource_skeleton` call site (caixa-mesh/src/lib.rs:326 —
+        // the per-`(:de, :para)` CiliumNetworkPolicy emit site) to a
+        // re-export of [`caixa_core::CILIUM_API_VERSION`] so the
+        // Cilium-CRD-group/version string lives in exactly one place
+        // across every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const CILIUM_API_VERSION: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a Cilium-CRD bump on the
+        // caixa-mesh side without a coordinated caixa-core edit silently
+        // land per-`(:de, :para)` CiliumNetworkPolicy objects at one CRD
+        // version and every future per-target Cilium-side renderer's
+        // emitted `CiliumClusterwideNetworkPolicy` /
+        // `CiliumLocalRedirectPolicy` at the drifted other, with every
+        // intra-mesh L4/L7 contrato flow dropping at apply time because
+        // the per-policy attached-identity pipeline never binds across
+        // the version-drifted CRD-group/version pair. Peer to
+        // [`gateway_api_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axes.
+        assert_eq!(CILIUM_API_VERSION, caixa_core::CILIUM_API_VERSION);
+        assert!(
+            std::ptr::eq(
+                CILIUM_API_VERSION.as_ptr(),
+                caixa_core::CILIUM_API_VERSION.as_ptr(),
+            ),
+            "CILIUM_API_VERSION must be a re-export of \
+             caixa_core::CILIUM_API_VERSION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_network_policies_use_lifted_cilium_api_version() {
+        // Fail-before-pass-after pin parsing every rendered
+        // `CiliumNetworkPolicy` document and asserting its top-level
+        // `apiVersion` axis equals the lifted constant by value. Peer to
+        // the canonical-string pin
+        // (`cilium_policy_carries_canonical_kube_skeleton` — still
+        // present below as the bridge-arm pin asserting the inline
+        // canonical string) and the re-export-identity pin
+        // (`cilium_api_version_re_export_points_at_caixa_core_canonical`)
+        // — together the three arms (canonical-string pin,
+        // lifted-uses pin, re-export-identity pin) close the
+        // three-arm drift footgun the inline-literal-pair-across-the-
+        // production-skeleton-call-plus-test-fixture shape carried by
+        // construction. Peer to
+        // [`gateway_routes_gateway_uses_lifted_gateway_api_api_version`]
+        // / [`gateway_routes_httproute_uses_lifted_gateway_api_api_version`]
+        // on the sibling K8s Gateway API CRD-axis lift trajectory.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        assert!(
+            !policies.is_empty(),
+            "the aplicacao fixture must emit at least one CiliumNetworkPolicy \
+             — drift here masks the lifted-uses assertion below"
+        );
+        for p in &policies {
+            assert_eq!(
+                p.get("apiVersion").and_then(|v| v.as_str()),
+                Some(CILIUM_API_VERSION),
+                "every rendered CiliumNetworkPolicy must declare the lifted \
+                 [`CILIUM_API_VERSION`] constant on its top-level apiVersion \
+                 axis — drift here means the per-policy skeleton call no \
+                 longer threads the lifted constant through"
+            );
+        }
     }
 
     #[test]
