@@ -5541,6 +5541,76 @@ pub const FLUX_HELMRELEASE_API_VERSION: &str = "helm.toolkit.fluxcd.io/v2";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_GITREPOSITORY_API_VERSION: &str = "source.toolkit.fluxcd.io/v1";
 
+/// Canonical FluxCD `Kustomization` CRD `apiVersion` every `caixa-flux`
+/// `kustomization.yaml` document emits. The Flux v2 `kustomize-controller`
+/// watches resources at this exact group/version
+/// (`kustomize.toolkit.fluxcd.io/v1`); drift to a stale `v1beta1` /
+/// `v1beta2` (the pre-GA Flux v2 kustomize-controller betas every
+/// upstream Flux GA-migration doc names) silently routes the rendered
+/// `Kustomization` outside the controller's `Watches` and breaks at
+/// apply time with a non-self-locating "no kind 'Kustomization' is
+/// registered for version 'kustomize.toolkit.fluxcd.io/v1beta2'" error
+/// far from the source caixa.lisp / the renderer's format-string
+/// template.
+///
+/// The single source of truth the `kustomization.yaml` `apiVersion`
+/// axis reaches for (caixa-flux/src/lib.rs:531 — the `kustomization`
+/// format-string template). Completes the Flux v2 controller triplet
+/// (source-controller + helm-controller + kustomize-controller) lift
+/// alongside the sibling [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3)
+/// and [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) — every per-
+/// controller CRD-group/version is now a typed substrate-side
+/// `&'static str` consumed through one `pub use caixa_core::FLUX_*`
+/// re-export at the renderer site. The three controllers share the
+/// canonical `.toolkit.fluxcd.io` root (asserted by
+/// [`tests::flux_controller_triplet_api_versions_share_toolkit_fluxcd_io_root`]),
+/// so a future Flux v3 promotion that forks any controller out of the
+/// toolkit group surfaces here as a coordinated cross-axis edit-point
+/// across all three constants.
+///
+/// The rendered `Kustomization`'s `metadata.namespace` (the Flux
+/// installation namespace, [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] —
+/// 7197d38) and `spec.sourceRef.kind: GitRepository`
+/// (referenced through [`FLUX_GITREPOSITORY_API_VERSION`]) and
+/// `spec.healthChecks[].apiVersion` (the rendered `HelmRelease`'s
+/// CRD-group/version, [`FLUX_HELMRELEASE_API_VERSION`]) all share
+/// the cluster-side contract with the upstream Flux v2 controller
+/// triplet: a coordinated edit on any one of these four constants
+/// must move alongside the sibling axes, and the lift makes that
+/// movement a typed substrate-side edit-point rather than a
+/// distributed-across-format-string-template-literals refactor.
+///
+/// Until this lift landed the axis carried an inline
+/// `kustomize.toolkit.fluxcd.io/v1` literal inside [`cluster_bundle`]'s
+/// `kustomization.yaml` format-string template — one occurrence today,
+/// promoted to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts established on
+/// the sibling Flux-v2-load-bearing-string surface. The render-side
+/// consumer now threads the same `&'static str` through its
+/// format-string template so a future Flux v3 promotion lands in one
+/// place; every future renderer that reaches for the canonical Flux
+/// v2 `Kustomization` apiVersion (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `Kustomization`, a future per-edge `Kustomization` the operator
+/// emits for the `CiliumClusterwideEnvoyConfig` pipeline, a future
+/// `caixa-otel` collector-pipeline `Kustomization`) inherits the
+/// same value by construction with no opportunity for per-renderer
+/// drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_NAMESPACE`] (a085b26) / [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`crate::DEFAULT_SERVICO_PORT`] (1e22add) /
+/// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) lifts apply on the
+/// peer canonical-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_KUSTOMIZATION_API_VERSION: &str = "kustomize.toolkit.fluxcd.io/v1";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -6563,6 +6633,121 @@ mod tests {
             "FLUX_HELMRELEASE_API_VERSION group {hr_group:?} must end with the \
              canonical Flux v2 `{ROOT}` root every controller in the triplet shares"
         );
+    }
+
+    #[test]
+    fn flux_kustomization_api_version_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `Kustomization` CRD group/version the
+        // rendered `kustomization.yaml` document declares. The string
+        // is part of the cluster-side contract with the Flux v2
+        // `kustomize-controller` (the controller watches the exact
+        // `kustomize.toolkit.fluxcd.io/v1` group/version; a drifted
+        // value to a stale v1beta1 / v1beta2 lands the rendered
+        // `Kustomization` outside the controller's `Watches` and
+        // fails at apply time with "no kind 'Kustomization' is
+        // registered for version
+        // 'kustomize.toolkit.fluxcd.io/v1beta2'"); changing it is a
+        // coordinated Flux v3 migration alongside the upstream
+        // `kustomize-controller` deprecation cycle, not an
+        // incidental edit. Peer to
+        // `flux_helmrelease_api_version_pins_canonical_value` /
+        // `flux_gitrepository_api_version_pins_canonical_value` on
+        // the canonical-Flux-CRD-axis-pin axis for the sibling
+        // [`FLUX_HELMRELEASE_API_VERSION`] /
+        // [`FLUX_GITREPOSITORY_API_VERSION`] constants — completes
+        // the Flux v2 controller-triplet's per-CRD-axis pin set.
+        assert_eq!(
+            FLUX_KUSTOMIZATION_API_VERSION,
+            "kustomize.toolkit.fluxcd.io/v1"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_api_version_carries_group_and_version_segments() {
+        // Cross-axis invariant: a Kubernetes CRD `apiVersion` is a
+        // `<group>/<version>` pair separated by exactly one `/` byte.
+        // The group segment is a DNS-style multi-segment hostname
+        // (`kustomize.toolkit.fluxcd.io`) and the version segment is a
+        // Kubernetes API version label (`v1`, `v1beta1`, `v1alpha1` —
+        // peer with the K8s API versioning convention upstream
+        // documents). Pinning this here means a future rebrand on the
+        // canonical lift can't silently land a malformed apiVersion
+        // (no `/`, two `/`, empty group, empty version) that every
+        // downstream YAML-aware deserializer would reject far from the
+        // rebrand commit's source. The single-`/` invariant is the
+        // load-bearing K8s API typed-discovery contract: a value the
+        // apiserver's `RESTMapper` consults to resolve the CRD's
+        // `RESTKind`. Peer to
+        // `flux_helmrelease_api_version_carries_group_and_version_segments`
+        // / `flux_gitrepository_api_version_carries_group_and_version_segments`
+        // on the sibling Flux-CRD-axis.
+        let v = FLUX_KUSTOMIZATION_API_VERSION;
+        let parts: Vec<&str> = v.split('/').collect();
+        assert_eq!(
+            parts.len(),
+            2,
+            "FLUX_KUSTOMIZATION_API_VERSION {v:?} must split into exactly two \
+             `/`-delimited segments (group/version) per the K8s CRD apiVersion \
+             grammar — every downstream YAML-aware deserializer enforces this \
+             shape"
+        );
+        assert!(
+            !parts[0].is_empty(),
+            "FLUX_KUSTOMIZATION_API_VERSION {v:?} group segment must be non-empty"
+        );
+        assert!(
+            !parts[1].is_empty(),
+            "FLUX_KUSTOMIZATION_API_VERSION {v:?} version segment must be non-empty"
+        );
+        assert!(
+            parts[0].contains('.'),
+            "FLUX_KUSTOMIZATION_API_VERSION {v:?} group segment {group:?} must be a \
+             DNS-style multi-segment hostname (the canonical CRD-group convention \
+             every K8s controller-runtime / kube-rs-aware client expects)",
+            group = parts[0]
+        );
+    }
+
+    #[test]
+    fn flux_controller_triplet_api_versions_share_toolkit_fluxcd_io_root() {
+        // Cross-axis triplet invariant: the Flux v2 controller triplet
+        // (source-controller + helm-controller + kustomize-controller)
+        // upstream all share the canonical `.toolkit.fluxcd.io` root.
+        // The two-axis sibling pin
+        // [`flux_gitrepository_and_helmrelease_api_versions_share_toolkit_fluxcd_io_root`]
+        // enforces the invariant on the source-/helm- pair; this
+        // pin extends it onto the kustomize-controller axis so a
+        // future Flux v3 promotion that forks any single controller
+        // out of the toolkit group surfaces as a coordinated
+        // cross-axis edit-point across all three constants — the
+        // controller triplet's CRD group/versions move together
+        // upstream, and the lift discipline preserves that
+        // movement at the typed substrate-side `&'static str`
+        // surface.
+        const ROOT: &str = ".toolkit.fluxcd.io";
+        for (name, v) in [
+            (
+                "FLUX_GITREPOSITORY_API_VERSION",
+                FLUX_GITREPOSITORY_API_VERSION,
+            ),
+            ("FLUX_HELMRELEASE_API_VERSION", FLUX_HELMRELEASE_API_VERSION),
+            (
+                "FLUX_KUSTOMIZATION_API_VERSION",
+                FLUX_KUSTOMIZATION_API_VERSION,
+            ),
+        ] {
+            let group = v
+                .split('/')
+                .next()
+                .expect("Flux v2 CRD apiVersion has a group segment");
+            assert!(
+                group.ends_with(ROOT),
+                "{name} group {group:?} must end with the canonical Flux v2 \
+                 `{ROOT}` root every controller in the source/helm/kustomize \
+                 triplet shares"
+            );
+        }
     }
 
     #[test]
