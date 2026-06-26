@@ -34,9 +34,10 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT,
-    WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
-    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
+    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, GATEWAY_API_API_VERSION, LABEL_APLICACAO,
+    LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec,
+    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
+    pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -188,6 +189,34 @@ pub fn typed_view(caixa: &Caixa) -> Result<AplicacaoSpec, Error> {
 /// matches no pods, every L7 contrato flow silently drops) far from
 /// the rebrand commit's source.
 pub use caixa_core::DEFAULT_NAMESPACE;
+
+/// Canonical K8s Gateway API CRD `apiVersion` every `gateway_routes`-
+/// emitted `Gateway` / `HTTPRoute` document declares. Re-export of the
+/// canonical [`caixa_core::GATEWAY_API_API_VERSION`] so the
+/// Gateway-API-conformant CRD-group/version string lives in exactly
+/// one place across every caixa renderer — caixa-mesh's
+/// `gateway_routes` Gateway + HTTPRoute emitters (the two production-
+/// code sites the prior inline literal sat at,
+/// caixa-mesh/src/lib.rs:455, 496) and every future per-edge
+/// `TCPRoute` / `TLSRoute` / `GRPCRoute` emitter the M3.x absorption-
+/// roadmap acknowledges now consult the same `&'static str`, so a
+/// future K8s Gateway API GA promotion (the upstream SIG-Network
+/// roadmap names per-CRD-group / per-version migration once the v1
+/// GA branch matures) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_API_VERSION`] declaration, not a
+/// coordinated rewrite across this crate's two `kube_resource_skeleton`
+/// call sites + every future per-target renderer the substrate adds.
+/// The prior inline literals would have let a Gateway-API GA bump on
+/// one axis without a coordinated edit on the other silently emit a
+/// `Gateway` / `HTTPRoute` pair pointing at distinct CRD versions —
+/// apply-side: the `Gateway` and `HTTPRoute` land in two distinct
+/// apiserver-side CRD registrations, the per-route attached-policy
+/// resolution pipeline never binds, every external `:entrada` flow
+/// drops at the gateway with no field naming the version-drift root
+/// cause. Peer to the [`DEFAULT_NAMESPACE`] re-export on the sibling
+/// canonical-load-bearing-string axis — extends the discipline onto
+/// the canonical-K8s-Gateway-API-CRD-axis surface.
+pub use caixa_core::GATEWAY_API_API_VERSION;
 
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
@@ -452,7 +481,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // identified by its own name + namespace; per-Aplicacao label
     // grouping happens at the HTTPRoute / route-attached-policy axis).
     let mut gateway = kube_resource_skeleton(
-        "gateway.networking.k8s.io/v1",
+        GATEWAY_API_API_VERSION,
         "Gateway",
         &caixa.nome,
         namespace,
@@ -493,7 +522,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // HTTPRoute — all paths route to the entrada.para Servico. Same
     // skeleton lift as Gateway above; caller adds spec.
     let mut route = kube_resource_skeleton(
-        "gateway.networking.k8s.io/v1",
+        GATEWAY_API_API_VERSION,
         "HTTPRoute",
         &format!("{}-{}", caixa.nome, entrada.para),
         namespace,
@@ -761,6 +790,45 @@ mod tests {
             "DEFAULT_NAMESPACE must be a re-export of caixa_core::DEFAULT_NAMESPACE, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_API_VERSION` was lifted from two
+        // inline `"gateway.networking.k8s.io/v1"` literals at the two
+        // `gateway_routes` `kube_resource_skeleton` call sites
+        // (caixa-mesh/src/lib.rs:455, 496 — the `Gateway` + `HTTPRoute`
+        // CRD-group/version axis pair) to a re-export of
+        // [`caixa_core::GATEWAY_API_API_VERSION`] so the Gateway-API-
+        // conformant CRD-group/version string lives in exactly one
+        // place across every caixa renderer. Pin the equality + static-
+        // data identity here so any local re-introduction of a sibling
+        // `pub const GATEWAY_API_API_VERSION: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a Gateway-API GA bump on the
+        // caixa-mesh side without a coordinated caixa-core edit silently
+        // land Gateway / HTTPRoute objects at one CRD version and every
+        // future per-target renderer's emitted `Gateway` / `HTTPRoute` /
+        // `TCPRoute` / `TLSRoute` / `GRPCRoute` at the drifted other,
+        // with every external `:entrada` flow dropping at apply time
+        // because the per-route attached-policy pipeline never binds
+        // across the version-drifted CRD-group/version pair. Peer to
+        // [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axis.
+        assert_eq!(GATEWAY_API_API_VERSION, caixa_core::GATEWAY_API_API_VERSION);
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_API_VERSION.as_ptr(),
+                caixa_core::GATEWAY_API_API_VERSION.as_ptr(),
+            ),
+            "GATEWAY_API_API_VERSION must be a re-export of \
+             caixa_core::GATEWAY_API_API_VERSION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
         );
     }
 
@@ -1594,6 +1662,72 @@ mod tests {
             metadata
                 .get(serde_yaml::Value::String("labels".into()))
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn gateway_routes_gateway_uses_lifted_gateway_api_api_version() {
+        // Fail-before-pass-after pin parsing the rendered `Gateway`
+        // document and asserting its top-level `apiVersion` axis
+        // equals the lifted [`caixa_core::GATEWAY_API_API_VERSION`]
+        // constant by value (not just by the canonical-literal
+        // string, which the sibling
+        // `gateway_carries_canonical_kube_skeleton_without_labels`
+        // pin already enforces). The two pins form the bridge-arm
+        // pair: this pin trips on drift between the renderer-side
+        // threading and the lifted const, the sibling pin trips on
+        // drift between the lifted const and the canonical literal,
+        // and the
+        // [`gateway_api_api_version_re_export_points_at_caixa_core_canonical`]
+        // pin trips on drift between this crate's re-export and the
+        // caixa-core canonical declaration — together they close the
+        // three-arm drift footgun the inline-literal-pair-across-two-
+        // skeleton-calls shape carried by construction. Peer to
+        // `caixa_flux::tests::cluster_bundle_gitrepository_uses_lifted_flux_api_version`
+        // / `cluster_bundle_helmrelease_uses_lifted_flux_api_version`
+        // / `cluster_bundle_kustomization_uses_lifted_flux_api_version`
+        // on the sibling Flux v2 controller-triplet lift trajectory.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("Gateway"))
+            .expect("Gateway present");
+        assert_eq!(
+            gateway.get("apiVersion").and_then(|v| v.as_str()),
+            Some(caixa_core::GATEWAY_API_API_VERSION),
+            "Gateway's top-level apiVersion must equal the lifted \
+             caixa_core::GATEWAY_API_API_VERSION by value — drift here \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_routes_httproute_uses_lifted_gateway_api_api_version() {
+        // Sibling-axis pin to
+        // [`gateway_routes_gateway_uses_lifted_gateway_api_api_version`]
+        // on the HTTPRoute CRD-group/version axis (the second
+        // `kube_resource_skeleton` call site at
+        // caixa-mesh/src/lib.rs:496). The K8s SIG-Network Gateway API
+        // contract bumps `Gateway`, `HTTPRoute`, `GatewayClass`, and
+        // the rest of the per-conformance CRD set as a unit; a future
+        // Gateway-API GA promotion on one axis without a coordinated
+        // edit on the other would land the rendered `Gateway` /
+        // `HTTPRoute` pair pointing at distinct CRD versions, with
+        // the per-route attached-policy resolution pipeline never
+        // binding at apply time. Peer to the sibling Gateway-axis
+        // pin above — together they enforce the per-CRD-axis
+        // movement-as-a-unit invariant at the renderer's exit.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let route = docs
+            .iter()
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .expect("HTTPRoute present");
+        assert_eq!(
+            route.get("apiVersion").and_then(|v| v.as_str()),
+            Some(caixa_core::GATEWAY_API_API_VERSION),
+            "HTTPRoute's top-level apiVersion must equal the lifted \
+             caixa_core::GATEWAY_API_API_VERSION by value — drift here \
+             is the canonical footgun this lift closes"
         );
     }
 
