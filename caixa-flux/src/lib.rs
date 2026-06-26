@@ -134,6 +134,23 @@ pub use caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE;
 /// sibling Flux-installation-namespace axis.
 pub use caixa_core::FLUX_HELMRELEASE_API_VERSION;
 
+/// Canonical FluxCD `GitRepository` CRD `apiVersion` — re-export of the
+/// lifted [`caixa_core::FLUX_GITREPOSITORY_API_VERSION`] so the load-bearing
+/// string lives in exactly one place across the rendered Flux bundle's
+/// `gitrepository.yaml` document `apiVersion` axis. Until this lift landed
+/// the axis sat as an inline `source.toolkit.fluxcd.io/v1` literal at line
+/// 436 of this crate's [`cluster_bundle`] format-string template, and any
+/// future per-Flux-v3-migration version bump on this axis without a
+/// coordinated edit on the sibling [`FLUX_HELMRELEASE_API_VERSION`] axis
+/// would have silently routed the rendered `GitRepository` outside the
+/// Flux v2 `source-controller`'s `Watches` (controller-side: never
+/// reconciled, the dependent HelmRelease's `chart: sourceRef` dangles,
+/// every per-Servico apply silently comes up with the prior reconciled
+/// state). Same shape as the [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts on the
+/// sibling Flux-v2-load-bearing-string axis.
+pub use caixa_core::FLUX_GITREPOSITORY_API_VERSION;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -433,7 +450,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     let gitrepo = format!(
         "---\n\
          # Source — pinned to {tag_human}, rendered by caixa-flux.\n\
-         apiVersion: source.toolkit.fluxcd.io/v1\n\
+         apiVersion: {api_version}\n\
          kind: GitRepository\n\
          metadata:\n  \
            name: {name}\n  \
@@ -443,6 +460,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            url: {url}\n  \
            ref:\n\
          {gitref_field}\n",
+        api_version = FLUX_GITREPOSITORY_API_VERSION,
         tag_human = match &opts.git_ref {
             GitRefSpec::Tag(t) => format!("tag {t}"),
             GitRefSpec::Branch(b) => format!("branch {b}"),
@@ -1552,6 +1570,107 @@ spec:
             "gitrepository.yaml must spell the lifted-prefix-composed tag \
              at ref.tag (expected: {expected_tag:?}, got: {contents:?})",
             contents = gr.contents
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_GITREPOSITORY_API_VERSION`
+        // is the single source of truth for the Flux v2 `GitRepository`
+        // CRD-group/version the rendered `gitrepository.yaml` document
+        // declares at its `apiVersion` axis. Pin the equality (and the
+        // static-data identity, peer with the sibling
+        // `default_flux_system_namespace_re_export_points_at_caixa_core_canonical` /
+        // `default_library_name_re_export_points_at_caixa_core_canonical`
+        // pins) so any local re-introduction of a sibling `pub const
+        // FLUX_GITREPOSITORY_API_VERSION: &str = "…"` (the canonical drift
+        // footgun this lift closes — one production-code consumer of the
+        // load-bearing Flux v2 `GitRepository` CRD-group/version inside
+        // the gitrepository template, lifted to one re-export at the
+        // caixa-core boundary) is a build-time test failure naming the
+        // offending drift, not a silent apply-time `GitRepository`-
+        // outside-controller-watch-window reconciliation freeze.
+        assert_eq!(
+            FLUX_GITREPOSITORY_API_VERSION,
+            caixa_core::FLUX_GITREPOSITORY_API_VERSION
+        );
+        assert!(
+            std::ptr::eq(
+                FLUX_GITREPOSITORY_API_VERSION.as_ptr(),
+                caixa_core::FLUX_GITREPOSITORY_API_VERSION.as_ptr(),
+            ),
+            "FLUX_GITREPOSITORY_API_VERSION must be a re-export of \
+             caixa_core::FLUX_GITREPOSITORY_API_VERSION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two is \
+             the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepository_uses_lifted_flux_api_version() {
+        // Fail-before-pass-after pin: the rendered `gitrepository.yaml`
+        // `apiVersion` axis — the load-bearing Flux v2 CRD-group/version
+        // declaration the `source-controller` watches — must resolve to the
+        // lifted [`FLUX_GITREPOSITORY_API_VERSION`] verbatim. Before this
+        // lift the gitrepository template carried an inline
+        // `source.toolkit.fluxcd.io/v1` literal; a future upstream Flux v3
+        // migration on this axis without a coordinated edit on the sibling
+        // [`FLUX_HELMRELEASE_API_VERSION`] axis (the Flux v2 controller-
+        // triple shares the `.toolkit.fluxcd.io` root and promotes together
+        // on each major bump) would have silently routed the rendered
+        // `GitRepository` outside the controller's `Watches` and broken at
+        // apply time with a non-self-locating "no kind 'GitRepository' is
+        // registered for version 'source.toolkit.fluxcd.io/v1beta2'"
+        // error. Peer with
+        // [`cluster_bundle_helmrelease_uses_lifted_flux_api_version`] on
+        // the sibling [`FLUX_HELMRELEASE_API_VERSION`] lift.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .expect("gitrepository.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        assert_eq!(
+            parsed.get("apiVersion").and_then(|n| n.as_str()),
+            Some(FLUX_GITREPOSITORY_API_VERSION),
+            "gitrepository.yaml apiVersion must spell the lifted \
+             FLUX_GITREPOSITORY_API_VERSION ({FLUX_GITREPOSITORY_API_VERSION:?}); \
+             a drifted literal here routes the GitRepository outside the Flux v2 \
+             source-controller's Watches",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepository_pins_canonical_flux_v1_api_version_string() {
+        // Bridge-arm pin: the lifted [`FLUX_GITREPOSITORY_API_VERSION`]
+        // constant resolves to the canonical
+        // `"source.toolkit.fluxcd.io/v1"` string today, and the rendered
+        // `gitrepository.yaml`'s `apiVersion` axis must spell it out
+        // verbatim. Pin the literal here (peer with the
+        // [`flux_gitrepository_api_version_pins_canonical_value`]
+        // canonical-default arm in caixa-core, and with
+        // [`cluster_bundle_helmrelease_pins_canonical_flux_v2_api_version_string`]
+        // on the sibling `FLUX_HELMRELEASE_API_VERSION` axis) so a future
+        // Flux v3 migration of the lifted constant surfaces here as a
+        // coordinated edit-point.
+        assert_eq!(
+            FLUX_GITREPOSITORY_API_VERSION,
+            "source.toolkit.fluxcd.io/v1"
+        );
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .unwrap();
+        assert!(
+            gr.contents
+                .contains("apiVersion: source.toolkit.fluxcd.io/v1\n"),
+            "gitrepository.yaml must spell the canonical Flux v2 GitRepository \
+             apiVersion at the top-level apiVersion axis (got: {contents:?})",
+            contents = gr.contents,
         );
     }
 }

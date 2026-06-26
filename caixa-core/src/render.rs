@@ -5486,6 +5486,61 @@ pub const DEFAULT_FLUX_SYSTEM_NAMESPACE: &str = "flux-system";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_HELMRELEASE_API_VERSION: &str = "helm.toolkit.fluxcd.io/v2";
 
+/// Canonical FluxCD `GitRepository` CRD `apiVersion` every `caixa-flux`
+/// `gitrepository.yaml` document emits. The Flux v2 `source-controller`
+/// watches resources at this exact group/version
+/// (`source.toolkit.fluxcd.io/v1`); drift to a stale `v1beta1` / `v1beta2`
+/// (the pre-GA Flux v2 source-controller betas every upstream Flux GA-
+/// migration doc names) silently routes the rendered `GitRepository`
+/// outside the controller's `Watches` and breaks at apply time with a
+/// non-self-locating "no kind 'GitRepository' is registered for version
+/// 'source.toolkit.fluxcd.io/v1beta2'" error far from the source
+/// caixa.lisp / the renderer's format-string template.
+///
+/// The single source of truth the `gitrepository.yaml` `apiVersion` axis
+/// reaches for (caixa-flux/src/lib.rs:436 — the `gitrepo` format-string
+/// template). The Flux v2 source/helm/kustomize controller triple pairs
+/// each CRD-group/version against its sibling controller's `Watches`
+/// registration: the rendered `GitRepository` is the chart-source the
+/// sibling `HelmRelease` document's `spec.chart.spec.sourceRef.kind:
+/// GitRepository` references, and the parent `Kustomization`'s
+/// `spec.sourceRef.kind: GitRepository` also points at this same CRD
+/// group/version. A future Flux v3 promotion on this axis without a
+/// coordinated edit on the sibling [`FLUX_HELMRELEASE_API_VERSION`] /
+/// future-`FLUX_KUSTOMIZATION_API_VERSION` axes would silently land the
+/// rendered `GitRepository` outside the source-controller's `Watches`
+/// (controller-side: never reconciled, the dependent HelmRelease's
+/// `chart: sourceRef` dangles, every per-Servico apply silently comes
+/// up with the prior reconciled state).
+///
+/// Until this lift landed the axis carried an inline
+/// `source.toolkit.fluxcd.io/v1` literal inside [`cluster_bundle`]'s
+/// `gitrepository.yaml` format-string template — one occurrence today,
+/// promoted to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts established on the
+/// sibling Flux-v2-load-bearing-string surface. The render-side consumer
+/// now threads the same `&'static str` through its format-string
+/// template so a future Flux v3 promotion lands in one place; every
+/// future renderer that reaches for the canonical Flux v2 `GitRepository`
+/// apiVersion (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `GitRepository`, a future per-edge
+/// `GitRepository` the operator emits for the
+/// `CiliumClusterwideEnvoyConfig` pipeline, a future `caixa-otel`
+/// collector-pipeline `GitRepository`) inherits the same value by
+/// construction with no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_NAMESPACE`] (a085b26) / [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`crate::DEFAULT_SERVICO_PORT`] (1e22add) /
+/// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) lifts apply on the peer
+/// canonical-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_GITREPOSITORY_API_VERSION: &str = "source.toolkit.fluxcd.io/v1";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -6409,6 +6464,104 @@ mod tests {
              caixa-flux/src/lib.rs:928,970 test fixtures' literal values; \
              coordinate the migration across the const + every fixture in \
              one edit"
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_api_version_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `GitRepository` CRD group/version the rendered
+        // `gitrepository.yaml` document declares. The string is part of the
+        // cluster-side contract with the Flux v2 `source-controller` (the
+        // controller watches the exact `source.toolkit.fluxcd.io/v1`
+        // group/version; a drifted value to a stale v1beta1 / v1beta2 lands
+        // the rendered `GitRepository` outside the controller's `Watches`
+        // and fails at apply time with "no kind 'GitRepository' is
+        // registered for version 'source.toolkit.fluxcd.io/v1beta2'");
+        // changing it is a coordinated Flux v3 migration alongside the
+        // upstream `source-controller` deprecation cycle, not an
+        // incidental edit. Peer to
+        // `flux_helmrelease_api_version_pins_canonical_value` on the
+        // canonical-Flux-CRD-axis-pin axis for the sibling
+        // [`FLUX_HELMRELEASE_API_VERSION`] constant.
+        assert_eq!(
+            FLUX_GITREPOSITORY_API_VERSION,
+            "source.toolkit.fluxcd.io/v1"
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_api_version_carries_group_and_version_segments() {
+        // Cross-axis invariant: a Kubernetes CRD `apiVersion` is a
+        // `<group>/<version>` pair separated by exactly one `/` byte.
+        // The group segment is a DNS-style multi-segment hostname
+        // (`source.toolkit.fluxcd.io`) and the version segment is a
+        // Kubernetes API version label (`v1`, `v1beta1`, `v1alpha1` — peer
+        // with the K8s API versioning convention upstream documents).
+        // Pinning this here means a future rebrand on the canonical lift
+        // can't silently land a malformed apiVersion (no `/`, two `/`,
+        // empty group, empty version) that every downstream YAML-aware
+        // deserializer would reject far from the rebrand commit's source.
+        // The single-`/` invariant is the load-bearing K8s API typed-
+        // discovery contract: a value the apiserver's `RESTMapper`
+        // consults to resolve the CRD's `RESTKind`. Peer to
+        // `flux_helmrelease_api_version_carries_group_and_version_segments`
+        // on the sibling Flux-CRD-axis.
+        let v = FLUX_GITREPOSITORY_API_VERSION;
+        let parts: Vec<&str> = v.split('/').collect();
+        assert_eq!(
+            parts.len(),
+            2,
+            "FLUX_GITREPOSITORY_API_VERSION {v:?} must split into exactly two \
+             `/`-delimited segments (group/version) per the K8s CRD apiVersion \
+             grammar — every downstream YAML-aware deserializer enforces this \
+             shape"
+        );
+        assert!(
+            !parts[0].is_empty(),
+            "FLUX_GITREPOSITORY_API_VERSION {v:?} group segment must be non-empty"
+        );
+        assert!(
+            !parts[1].is_empty(),
+            "FLUX_GITREPOSITORY_API_VERSION {v:?} version segment must be non-empty"
+        );
+        assert!(
+            parts[0].contains('.'),
+            "FLUX_GITREPOSITORY_API_VERSION {v:?} group segment {group:?} must be a \
+             DNS-style multi-segment hostname (the canonical CRD-group convention \
+             every K8s controller-runtime / kube-rs-aware client expects)",
+            group = parts[0]
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_and_helmrelease_api_versions_share_toolkit_fluxcd_io_root() {
+        // Cross-axis invariant: every Flux v2 CRD group ends in the canonical
+        // `.toolkit.fluxcd.io` root the upstream `fluxcd/flux2` project pins
+        // for the source-/helm-/kustomize-/notification-controller triplet.
+        // A future Flux v3 promotion that breaks the root suffix (forking
+        // `source-controller` out of the toolkit group, for example) would
+        // surface here as a coordinated cross-axis edit-point — both lifted
+        // constants must move together to preserve the controller-triple
+        // contract.
+        const ROOT: &str = ".toolkit.fluxcd.io";
+        let gr_group = FLUX_GITREPOSITORY_API_VERSION
+            .split('/')
+            .next()
+            .expect("FLUX_GITREPOSITORY_API_VERSION has a group segment");
+        let hr_group = FLUX_HELMRELEASE_API_VERSION
+            .split('/')
+            .next()
+            .expect("FLUX_HELMRELEASE_API_VERSION has a group segment");
+        assert!(
+            gr_group.ends_with(ROOT),
+            "FLUX_GITREPOSITORY_API_VERSION group {gr_group:?} must end with the \
+             canonical Flux v2 `{ROOT}` root every controller in the triplet shares"
+        );
+        assert!(
+            hr_group.ends_with(ROOT),
+            "FLUX_HELMRELEASE_API_VERSION group {hr_group:?} must end with the \
+             canonical Flux v2 `{ROOT}` root every controller in the triplet shares"
         );
     }
 
