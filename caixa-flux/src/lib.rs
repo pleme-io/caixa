@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, KUBE_KEY_SPEC, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -195,6 +195,27 @@ pub use caixa_core::FLUX_KUSTOMIZATION_API_VERSION;
 /// the peer canonical-K8s-axis-constant surface.
 pub use caixa_core::DEFAULT_LIBRARY_NAME;
 
+/// Canonical K8s CR top-level `spec` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
+/// exactly one place across every caixa renderer — caixa-flux's
+/// `programs_yaml_entry` (the upstream ComputeUnit YAML's
+/// `spec.*` axis the rendered programs.yaml entry splices from) and
+/// `upsert_into_helmrelease_programs` (the canonical
+/// `spec.values.programs[]` path the `lareira-fleet-programs`
+/// HelmRelease keys the per-Servico entry list under) now consult the
+/// same `&'static str` as the peer caixa-mesh / caixa-helm renderers'
+/// `KUBE_KEY_SPEC` re-exports. The prior inline `"spec"` literals at
+/// the production-code call sites would have let a typo on one site
+/// (e.g. `"Spec"`, `"specs"`, `"spec_"`) silently emit a
+/// programs.yaml entry that no `lareira-fleet-programs` schema
+/// validator recognizes; the `Error::MissingField("spec")` paths now
+/// thread the same `&'static str` through the diagnostic surface so
+/// the error message stays byte-identical to the key it failed to
+/// find. Same shape as the [`FLUX_HELMRELEASE_API_VERSION`] /
+/// [`DEFAULT_LIBRARY_NAME`] re-exports on the sibling
+/// canonical-Flux-load-bearing-string axes.
+pub use caixa_core::KUBE_KEY_SPEC;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -216,8 +237,8 @@ pub fn programs_yaml_entry(
     caixa_core::require_single_servico(caixa)?;
 
     let spec = computeunit_yaml
-        .get("spec")
-        .ok_or(Error::MissingField("spec"))?;
+        .get(KUBE_KEY_SPEC)
+        .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
 
     let namespace = computeunit_yaml
         .get("metadata")
@@ -289,8 +310,8 @@ pub fn upsert_into_helmrelease_programs(
     };
 
     let spec = root
-        .get_mut(serde_yaml::Value::String("spec".into()))
-        .ok_or(Error::MissingField("spec"))?;
+        .get_mut(serde_yaml::Value::String(KUBE_KEY_SPEC.into()))
+        .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
     let serde_yaml::Value::Mapping(spec_map) = spec else {
         return Err(Error::MissingField("spec must be a mapping"));
     };
@@ -687,6 +708,38 @@ spec:
                 caixa_core::DEFAULT_NAMESPACE.as_ptr(),
             ),
             "DEFAULT_NAMESPACE must be a re-export of caixa_core::DEFAULT_NAMESPACE, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_spec_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_SPEC` was lifted from the
+        // production-code inline `"spec"` literals at the two K8s-CR
+        // top-level-spec-axis call sites (`programs_yaml_entry`'s
+        // `computeunit_yaml.get("spec")` ComputeUnit-side spec read +
+        // its matching `Error::MissingField("spec")` diagnostic;
+        // `upsert_into_helmrelease_programs`'s `root.get_mut("spec")`
+        // HelmRelease-side spec mutate + its matching
+        // `Error::MissingField("spec")` diagnostic) to a re-export of
+        // [`caixa_core::KUBE_KEY_SPEC`] so the canonical K8s-CR
+        // top-level spec-axis string lives in exactly one place across
+        // every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const KUBE_KEY_SPEC: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift. Peer to
+        // [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axis +
+        // `caixa_mesh::tests::kube_key_spec_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(KUBE_KEY_SPEC, caixa_core::KUBE_KEY_SPEC);
+        assert!(
+            std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
+            "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -1513,7 +1566,8 @@ spec:
             .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
             .unwrap();
         assert!(
-            hr.contents.contains("apiVersion: helm.toolkit.fluxcd.io/v2\n"),
+            hr.contents
+                .contains("apiVersion: helm.toolkit.fluxcd.io/v2\n"),
             "helmrelease.yaml must spell the canonical Flux v2 HelmRelease \
              apiVersion at the top-level apiVersion axis (got: {contents:?})",
             contents = hr.contents,

@@ -35,7 +35,7 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     CILIUM_API_VERSION, Caixa, CaixaKind, DEFAULT_SERVICO_PORT, GATEWAY_API_API_VERSION,
-    LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
+    KUBE_KEY_SPEC, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
     aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
     pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
@@ -247,6 +247,27 @@ pub use caixa_core::GATEWAY_API_API_VERSION;
 /// canonical-K8s-Gateway-API-CRD-axis — extends the discipline onto
 /// the canonical-Cilium-CRD-axis surface.
 pub use caixa_core::CILIUM_API_VERSION;
+
+/// Canonical K8s CR top-level `spec` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
+/// exactly one place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` `CiliumNetworkPolicy`
+/// emitter (the `endpointSelector` + `ingress` block under spec),
+/// caixa-mesh's `gateway_routes` `Gateway` + `HTTPRoute` emitter (the
+/// `listeners` / `rules` / `parentRefs` / `hostnames` block under
+/// spec), and every future per-target renderer that materializes a CR
+/// (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` materializer's
+/// per-policy spec block, the future per-Servico `ComputeUnit` schema
+/// reroute) consults the same `&'static str`. The prior inline
+/// `"spec".into()` literals at the three production-code call sites
+/// in this crate would have let a typo / camelCase drift on any one
+/// of the three sites silently emit a CR with no recognizable spec
+/// (the apiserver-side CRD schema validator drops the malformed
+/// document at apply time, naming the unrecognized key but not the
+/// source-side renderer call site). Peer to the
+/// [`GATEWAY_API_API_VERSION`] / [`CILIUM_API_VERSION`] re-exports on
+/// the sibling canonical-K8s-API-axis surfaces.
+pub use caixa_core::KUBE_KEY_SPEC;
 
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
@@ -479,7 +500,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_rule)]),
         );
         policy.insert(
-            serde_yaml::Value::String("spec".into()),
+            serde_yaml::Value::String(KUBE_KEY_SPEC.into()),
             serde_yaml::Value::Mapping(policy_spec),
         );
 
@@ -549,7 +570,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(listener)]),
     );
     gateway.insert(
-        serde_yaml::Value::String("spec".into()),
+        serde_yaml::Value::String(KUBE_KEY_SPEC.into()),
         serde_yaml::Value::Mapping(g_spec),
     );
 
@@ -683,7 +704,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Sequence(rules),
     );
     route.insert(
-        serde_yaml::Value::String("spec".into()),
+        serde_yaml::Value::String(KUBE_KEY_SPEC.into()),
         serde_yaml::Value::Mapping(r_spec),
     );
 
@@ -903,6 +924,36 @@ mod tests {
              caixa_core::CILIUM_API_VERSION, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_spec_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_SPEC` was lifted from three inline
+        // `"spec".into()` literals at the three K8s-CR top-level-spec
+        // insertion sites (the `cilium_network_policies` per-`(:de,
+        // :para)` `CiliumNetworkPolicy` skeleton, the `gateway_routes`
+        // `Gateway` skeleton, the `gateway_routes` `HTTPRoute`
+        // skeleton) to a re-export of [`caixa_core::KUBE_KEY_SPEC`] so
+        // the canonical K8s-CR top-level spec-axis string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_KEY_SPEC: &str
+        // = "…"` (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation)
+        // is a build-time test failure naming the offending drift,
+        // not a silent apply-time symptom. Peer to
+        // [`gateway_api_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`cilium_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axes.
+        assert_eq!(KUBE_KEY_SPEC, caixa_core::KUBE_KEY_SPEC);
+        assert!(
+            std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
+            "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
         );
     }
 
