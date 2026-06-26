@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Result, bail};
-use caixa_core::DEFAULT_PUBLISH_TAG_PREFIX;
+use caixa_core::{DEFAULT_GIT_REMOTE, DEFAULT_PUBLISH_TAG_PREFIX};
 use clap::Args;
 
 use super::load::{caixa_root, load_caixa};
@@ -34,8 +34,25 @@ pub struct Publish {
     #[arg(long, default_value = DEFAULT_PUBLISH_TAG_PREFIX)]
     pub prefix: String,
 
-    /// The Git remote to push to.
-    #[arg(long, default_value = "origin")]
+    /// The Git remote to push to. Defaults to the lifted
+    /// [`caixa_core::DEFAULT_GIT_REMOTE`] (`"origin"`) so the writer-side
+    /// publish verb shares one source of truth with the sibling
+    /// `feira deploy --apply` / `feira app deploy --apply` verbs
+    /// (caixa-feira/src/cmd/deploy.rs, caixa-feira/src/cmd/app.rs)
+    /// whose `push_origin` helpers run `git push <remote> HEAD` against
+    /// the k8s GitOps repo. A future remote-naming-convention rebrand
+    /// (the substrate moving to `upstream` for forge-mirror clusters,
+    /// to a per-tenant remote-naming convention, or to the canonical
+    /// multi-remote `release` + `mirror` split) reaches all three
+    /// consumers through one `&'static str` by construction; drift
+    /// would silently emit a `git push` against a remote that doesn't
+    /// exist on the operator's clone on one writer verb while the
+    /// other two still pushed to the old remote, with the operator-
+    /// observed symptom (the publish landed but the deploy didn't, or
+    /// vice-versa) surfacing as a partial-state rollout far from the
+    /// rebrand commit's source. See the lifted constant's body for the
+    /// full drift-mode analysis.
+    #[arg(long, default_value = DEFAULT_GIT_REMOTE)]
     pub remote: String,
 
     /// Skip the push — create the tag locally only.
@@ -142,6 +159,55 @@ mod tests {
              caixa_core::DEFAULT_PUBLISH_TAG_PREFIX — drift between this \
              writer-side default and the peer caixa-flux deploy-side \
              default silently breaks FluxCD GitRepository tag resolution"
+        );
+    }
+
+    #[test]
+    fn publish_remote_default_pins_lifted_caixa_core_constant() {
+        // Fail-before-pass-after pin: the `--remote` clap default must
+        // resolve to the lifted [`caixa_core::DEFAULT_GIT_REMOTE`], not
+        // an inline `"origin"` literal the sibling writer-side verbs
+        // (`feira deploy --apply` / `feira app deploy --apply`)
+        // `push_origin` helpers could silently drift on.
+        //
+        // Until this lift landed all three writer-side `feira` verbs
+        // carried the bare `"origin"` byte inline — this verb's clap
+        // `default_value = "origin"`, deploy.rs:187's `git(repo,
+        // ["push", "origin", "HEAD"])`, and app.rs:249's symmetric
+        // `git(repo, ["push", "origin", "HEAD"])`. A future remote-
+        // naming-convention rebrand on one side (the substrate moving
+        // to `upstream` for forge-mirror clusters, or to a per-tenant
+        // naming convention, or to the canonical multi-remote
+        // `release` + `mirror` split every Erlang/OTP relup shop
+        // converges on once their git surface grows past one upstream)
+        // without a coordinated edit on the other two would silently
+        // emit a `git push` against a remote that doesn't exist on the
+        // operator's clone on one writer verb while the other two
+        // still pushed to the old remote — the operator-observed
+        // symptom (the publish landed but the deploy didn't, or vice-
+        // versa) surfacing as a partial-state rollout far from the
+        // rebrand commit's source.
+        //
+        // Pin the parsed default through clap's `augment_args` +
+        // `FromArgMatches` so a regression that re-inlines the
+        // `"origin"` literal at this site surfaces here as a build-
+        // time test failure, peer to the sibling
+        // `publish_prefix_default_pins_lifted_caixa_core_constant`
+        // test closing the same drift on the tag-prefix axis.
+        let cmd = Publish::augment_args(clap::Command::new("publish"));
+        let matches = cmd
+            .try_get_matches_from(["publish"])
+            .expect("parsing `publish` with no args must succeed");
+        let parsed = Publish::from_arg_matches(&matches)
+            .expect("from_arg_matches must succeed for defaults");
+        assert_eq!(
+            parsed.remote, DEFAULT_GIT_REMOTE,
+            "Publish::remote default must equal the lifted \
+             caixa_core::DEFAULT_GIT_REMOTE — drift between this \
+             writer-side default and the peer `feira deploy --apply` / \
+             `feira app deploy --apply` `push_origin` helpers silently \
+             emits a `git push` against the wrong remote on one verb \
+             while the others still target the canonical one"
         );
     }
 }

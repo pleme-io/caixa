@@ -111,6 +111,72 @@ impl From<&str> for CaixaVersion {
 /// constant pins.
 pub const DEFAULT_PUBLISH_TAG_PREFIX: &str = "v";
 
+/// Canonical git remote name every `feira` writer-side verb pushes to —
+/// the destination handle the operator-out-of-the-loop publish + deploy
+/// chain (`feira publish`, `feira deploy --apply`, `feira app deploy
+/// --apply`) names when it invokes `git push <remote> <ref>` against
+/// the local clone of the source / k8s GitOps repo.
+///
+/// Three production-code consumers carry this remote name on the same
+/// `git push` axis:
+///
+/// 1. [`caixa-feira`]'s `feira publish` verb (caixa-feira/src/cmd/publish.rs)
+///    — the writer-side publish path. Its `--remote` clap flag defaults
+///    to this string and the verb runs `git push <remote> <tag>` to push
+///    the freshly written `v<versao>` tag upstream.
+/// 2. [`caixa-feira`]'s `feira deploy --apply` verb
+///    (caixa-feira/src/cmd/deploy.rs) — the writer-side Servico cluster-
+///    deploy path. Its `push_origin` helper runs `git push origin HEAD`
+///    against the k8s GitOps repo's working tree after upserting the
+///    Servico's entry into the cluster's lareira-fleet-programs
+///    HelmRelease values.
+/// 3. [`caixa-feira`]'s `feira app deploy --apply` verb
+///    (caixa-feira/src/cmd/app.rs) — the writer-side Aplicacao
+///    cluster-deploy path. Its `push_origin` helper runs the same
+///    `git push origin HEAD` against the k8s GitOps repo after writing
+///    the rendered multi-doc YAML (programs.yaml entries + Cilium
+///    NetworkPolicies + Gateway/HTTPRoute) to the cluster's tree.
+///
+/// Until this lift landed all three consumers carried the bare
+/// `"origin"` byte inline — `publish.rs`'s clap `default_value = "origin"`,
+/// `deploy.rs`'s `git(repo, ["push", "origin", "HEAD"])`, and
+/// `app.rs`'s `git(repo, ["push", "origin", "HEAD"])`. A future
+/// remote-naming-convention rebrand on any one side (the substrate
+/// moving to `upstream` for forge-mirror clusters, to a per-tenant
+/// remote naming convention once the operator-flux pipeline grows the
+/// `:placement :remote` slot, or to the canonical multi-remote
+/// `release` + `mirror` split every Erlang/OTP `release_handler` /
+/// `relup` shop converges on once their git surface grows past one
+/// upstream) without a coordinated edit on the other two would have
+/// silently emitted a `git push` against a remote that doesn't exist
+/// on the operator's clone (`fatal: '<remote>' does not appear to be
+/// a git repository`) on one writer verb while the other two still
+/// pushed to the old remote — operator-observed symptom: the publish
+/// landed but the deploy didn't, or vice-versa, with the failure
+/// surfacing as a partial-state rollout far from the rebrand commit's
+/// source.
+///
+/// Lifting the literal to one `&'static str` constant closes the drift
+/// footgun structurally — all three consumers read from the same
+/// memory, so any future remote-naming rebrand reaches every writer
+/// verb by construction and a CI build that re-introduces a sibling
+/// inline `"origin"` literal trips the peer pinning tests
+/// ([`caixa-feira`]'s `publish_remote_default_pins_lifted_caixa_core_constant`
+/// on the clap-default axis, the sibling structural pins on the two
+/// `push_origin` helpers) at the build-time fail-before-deploy
+/// posture every prior load-bearing-string lift on this surface
+/// ([`crate::DEFAULT_NAMESPACE`] a085b26, [`crate::DEFAULT_LIBRARY_NAME`]
+/// 41438dc, [`crate::DEFAULT_SERVICO_PORT`] 1e22add,
+/// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] 0a6a602,
+/// [`crate::DEFAULT_FLUX_SYSTEM_NAMESPACE`] 7197d38) establishes.
+///
+/// Pairs with [`DEFAULT_PUBLISH_TAG_PREFIX`] on the same git remote
+/// axis — `feira publish` runs `git push <DEFAULT_GIT_REMOTE>
+/// <DEFAULT_PUBLISH_TAG_PREFIX><versao>` to push the typed `:versao`
+/// body composed under the canonical prefix to the canonical remote.
+/// Both halves of the publish-side convention now live in one place.
+pub const DEFAULT_GIT_REMOTE: &str = "origin";
+
 /// Parse a dep's `:versao` string as a [`semver::VersionReq`].
 ///
 /// Treats the literal `"*"` as "any version" (semver's wildcard).
@@ -160,6 +226,30 @@ mod tests {
     fn invalid_version_errors() {
         let v: CaixaVersion = "not-a-version".into();
         assert!(v.parse().is_err());
+    }
+
+    #[test]
+    fn default_git_remote_pins_canonical_origin_byte() {
+        // Bridge-arm pin: [`DEFAULT_GIT_REMOTE`] resolves to the
+        // canonical `"origin"` byte today, the same remote-handle every
+        // `git clone <url>` invocation populates by default and every
+        // peer `feira` writer-side verb (`feira publish`, `feira deploy
+        // --apply`, `feira app deploy --apply`) names when it invokes
+        // `git push <remote> <ref>` against the local clone. Pin the
+        // literal here (peer with the
+        // [`DEFAULT_PUBLISH_TAG_PREFIX`] / [`crate::DEFAULT_SERVICO_PORT`]
+        // / [`crate::DEFAULT_NAMESPACE`] / [`crate::DEFAULT_LIBRARY_NAME`]
+        // / [`crate::DEFAULT_FLUX_SYSTEM_NAMESPACE`] canonical-literal
+        // pins on the sibling lifted-constant surfaces) so a future
+        // remote-naming rebrand surfaces here as a coordinated edit-
+        // point: the sibling [`caixa-feira`]
+        // `publish_remote_default_pins_lifted_caixa_core_constant`
+        // pinning test already pins the equality at the clap-default
+        // axis; this pin closes the second coordinate of the
+        // triangle by anchoring the lifted constant's current byte
+        // to the canonical git-default-remote convention's documented
+        // shape.
+        assert_eq!(DEFAULT_GIT_REMOTE, "origin");
     }
 
     #[test]
