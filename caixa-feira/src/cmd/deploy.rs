@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use caixa_core::Caixa;
+use caixa_core::{Caixa, DEFAULT_GIT_REMOTE};
 use clap::Args;
 
 use super::load::{caixa_root, load_caixa, validate_cluster_arg};
@@ -184,7 +184,12 @@ fn commit_change(
 }
 
 fn push_origin(repo: &std::path::Path) -> Result<()> {
-    git(repo, ["push", "origin", "HEAD"])?;
+    // Remote name read from the lifted [`DEFAULT_GIT_REMOTE`] constant
+    // (caixa-core) so the writer-side deploy path shares one source of
+    // truth with the sibling `feira publish` (`--remote` default) and
+    // `feira app deploy --apply` (`push_origin`) verbs. See the
+    // constant's body for the full drift-mode analysis.
+    git(repo, ["push", DEFAULT_GIT_REMOTE, "HEAD"])?;
     Ok(())
 }
 
@@ -200,4 +205,48 @@ fn git<'a, I: IntoIterator<Item = &'a str>>(cwd: &std::path::Path, args: I) -> R
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn push_origin_remote_arg_reads_from_lifted_caixa_core_constant() {
+        // Structural pin: the Servico-deploy-side `push_origin` helper
+        // threads the lifted [`caixa_core::DEFAULT_GIT_REMOTE`] through
+        // to its `git push <remote> HEAD` argv slot, not an inline
+        // `"origin"` literal the sibling writer-side verbs (`feira
+        // publish` `--remote` default, `feira app deploy --apply`
+        // `push_origin`) could silently drift on. A future remote-
+        // naming-convention rebrand on the lifted constant reaches
+        // this site through one `&'static str` by construction.
+        //
+        // Pin the constant's canonical value through the same module
+        // path the helper resolves (`caixa_core::DEFAULT_GIT_REMOTE`)
+        // so a regression that re-introduces an inline `"origin"` byte
+        // at the `git(repo, ["push", "origin", "HEAD"])` slot — or
+        // routes the slot through a sibling const — surfaces here as a
+        // build-time test failure naming the offending drift, peer to
+        // the sibling [`caixa-feira`]
+        // `publish_remote_default_pins_lifted_caixa_core_constant` test
+        // on the publish-side, the
+        // `push_origin_remote_arg_reads_from_lifted_caixa_core_constant`
+        // test in the Aplicacao-deploy sibling
+        // (caixa-feira/src/cmd/app.rs), and the
+        // `default_git_remote_pins_canonical_origin_byte` canonical-
+        // literal pin on the caixa-core side.
+        assert_eq!(DEFAULT_GIT_REMOTE, "origin");
+        assert_eq!(DEFAULT_GIT_REMOTE, caixa_core::DEFAULT_GIT_REMOTE);
+        assert!(
+            std::ptr::eq(
+                DEFAULT_GIT_REMOTE.as_ptr(),
+                caixa_core::DEFAULT_GIT_REMOTE.as_ptr(),
+            ),
+            "DEFAULT_GIT_REMOTE must resolve through caixa_core, not \
+             a sibling local `pub const` that happens to carry the same \
+             string — drift between the two is the canonical footgun \
+             this lift closes"
+        );
+    }
 }
