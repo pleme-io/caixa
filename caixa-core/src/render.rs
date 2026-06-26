@@ -5424,6 +5424,68 @@ pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 /// [cf]: ../../caixa_flux/index.html
 pub const DEFAULT_FLUX_SYSTEM_NAMESPACE: &str = "flux-system";
 
+/// Canonical FluxCD `HelmRelease` CRD `apiVersion` every `caixa-flux`
+/// `helmrelease.yaml` document emits. The Flux v2 `helm-controller` watches
+/// resources at this exact group/version (`helm.toolkit.fluxcd.io/v2`);
+/// drift to a stale `v2beta1` / `v2beta2` (the pre-GA Flux v2 betas every
+/// upstream Flux GA-migration doc names) silently routes the rendered
+/// `HelmRelease` outside the controller's `Watches` and breaks at apply
+/// time with a non-self-locating "no kind 'HelmRelease' is registered for
+/// version 'helm.toolkit.fluxcd.io/v2beta2'" error far from the source
+/// caixa.lisp / the renderer's format-string template.
+///
+/// The single source of truth both axes of the rendered Flux bundle reach
+/// for:
+///
+///   - `helmrelease.yaml` `apiVersion` — the top-level CRD-group/version
+///     the rendered document declares (caixa-flux/src/lib.rs:455 — the
+///     `helmrelease` format-string template);
+///   - `kustomization.yaml` `spec.healthChecks[]` per-entry `apiVersion`
+///     — the same Flux-v2 `HelmRelease` reference the parent Kustomization
+///     gates its health-check on (caixa-flux/src/lib.rs:504 — the
+///     `kustomization` format-string template). The Flux v2 contract pairs
+///     a `HelmRelease` document with its sibling `Kustomization`'s
+///     `healthChecks[].apiVersion` axis: both must name the same Flux v2
+///     `HelmRelease` CRD group/version for the Kustomization's per-resource
+///     health-gate to bind to the rendered HelmRelease; a future Flux v3
+///     promotion (the upstream Flux roadmap names a per-CRD-group / per-
+///     v3 version migration once the Flux v2 LTS branch closes) on one
+///     axis without a coordinated edit on the other would have silently
+///     emitted a `Kustomization` whose `healthChecks[].apiVersion` pointed
+///     at an obsolete CRD group/version (apply-side: the health check
+///     never resolves, the parent Kustomization sits perpetually in
+///     `Reconciling`).
+///
+/// Until this lift landed both axes carried inline
+/// `helm.toolkit.fluxcd.io/v2` literals inside [`cluster_bundle`]'s
+/// `helmrelease.yaml` + `kustomization.yaml` format-string templates and a
+/// matching pair inside the in-file `upsert_into_helmrelease_programs`
+/// test fixtures (caixa-flux/src/lib.rs:928, 970) — four occurrences of
+/// the same load-bearing FluxCD-CRD-group/version convention, drift-prone
+/// by construction. The PRIME DIRECTIVE duplication-budget rule
+/// (THEORY.md §I.3.5: "every recurring shape becomes a generator before
+/// it becomes a pattern; every pattern becomes a library before it
+/// becomes duplicated code. The duplication budget is zero.") promotes
+/// the constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lift
+/// established on the sibling Flux-installation-namespace axis. The two
+/// render-side consumers now thread the same `&'static str` through their
+/// format-string templates so a future Flux v3 promotion lands in one
+/// place; the test fixtures keep the value as a literal because they
+/// exercise `serde_yaml::from_str` on a static YAML document — the
+/// build-time pin [`default_flux_helmrelease_api_version_matches_caixa_flux_test_fixtures`]
+/// trips if the literals ever drift past the typed const.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_NAMESPACE`] (a085b26) / [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`crate::DEFAULT_SERVICO_PORT`] (1e22add) /
+/// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts apply on the peer
+/// canonical-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_API_VERSION: &str = "helm.toolkit.fluxcd.io/v2";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -6255,6 +6317,98 @@ mod tests {
             "DEFAULT_FLUX_SYSTEM_NAMESPACE {DEFAULT_FLUX_SYSTEM_NAMESPACE:?} must be a valid \
              DNS-1123 label — every K8s apiserver-side schema enforces \
              this rule on `metadata.namespace`"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_api_version_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `HelmRelease` CRD group/version the rendered
+        // `helmrelease.yaml` document declares + the rendered
+        // `kustomization.yaml` document's `healthChecks[].apiVersion`
+        // axis transitively references. The string is part of the
+        // cluster-side contract with the Flux v2 `helm-controller` (the
+        // controller watches the exact `helm.toolkit.fluxcd.io/v2`
+        // group/version; a drifted value to a stale v2beta1 / v2beta2
+        // lands the rendered `HelmRelease` outside the controller's
+        // `Watches` and fails at apply time with "no kind 'HelmRelease'
+        // is registered for version 'helm.toolkit.fluxcd.io/v2beta2'");
+        // changing it is a coordinated Flux v3 migration alongside the
+        // upstream `helm-controller` deprecation cycle, not an
+        // incidental edit. Peer to `default_flux_system_namespace_pins_canonical_value`
+        // on the canonical-Flux-CRD-axis-pin axis for the sibling
+        // [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] constant.
+        assert_eq!(FLUX_HELMRELEASE_API_VERSION, "helm.toolkit.fluxcd.io/v2");
+    }
+
+    #[test]
+    fn flux_helmrelease_api_version_carries_group_and_version_segments() {
+        // Cross-axis invariant: a Kubernetes CRD `apiVersion` is a
+        // `<group>/<version>` pair separated by exactly one `/` byte.
+        // The group segment is a DNS-style multi-segment hostname
+        // (`helm.toolkit.fluxcd.io`) and the version segment is a
+        // Kubernetes API version label (`v2`, `v2beta1`, `v1alpha1` —
+        // peer with the K8s API versioning convention upstream
+        // documents). Pinning this here means a future rebrand on the
+        // canonical lift can't silently land a malformed apiVersion
+        // (no `/`, two `/`, empty group, empty version) that every
+        // downstream YAML-aware deserializer would reject far from the
+        // rebrand commit's source. The single-`/` invariant is the
+        // load-bearing K8s API typed-discovery contract: a value the
+        // apiserver's `RESTMapper` consults to resolve the CRD's
+        // `RESTKind`.
+        let v = FLUX_HELMRELEASE_API_VERSION;
+        let parts: Vec<&str> = v.split('/').collect();
+        assert_eq!(
+            parts.len(),
+            2,
+            "FLUX_HELMRELEASE_API_VERSION {v:?} must split into exactly two \
+             `/`-delimited segments (group/version) per the K8s CRD apiVersion \
+             grammar — every downstream YAML-aware deserializer enforces this \
+             shape"
+        );
+        assert!(
+            !parts[0].is_empty(),
+            "FLUX_HELMRELEASE_API_VERSION {v:?} group segment must be non-empty"
+        );
+        assert!(
+            !parts[1].is_empty(),
+            "FLUX_HELMRELEASE_API_VERSION {v:?} version segment must be non-empty"
+        );
+        assert!(
+            parts[0].contains('.'),
+            "FLUX_HELMRELEASE_API_VERSION {v:?} group segment {group:?} must be a \
+             DNS-style multi-segment hostname (the canonical CRD-group convention \
+             every K8s controller-runtime / kube-rs-aware client expects)",
+            group = parts[0]
+        );
+    }
+
+    #[test]
+    fn default_flux_helmrelease_api_version_matches_caixa_flux_test_fixtures() {
+        // Cross-file drift pin: the four caixa-flux occurrences of
+        // `helm.toolkit.fluxcd.io/v2` all consult the same canonical
+        // constant, but the two `upsert_into_helmrelease_programs` test
+        // fixtures (caixa-flux/src/lib.rs:928, 970) carry the value as
+        // a static raw-string literal inside a `serde_yaml::from_str`
+        // input (the YAML parser is the unit-under-test there, not the
+        // rendering — the literals are intentionally not threaded
+        // through the lift). This pin trips at caixa-core build time
+        // if the canonical constant ever drifts past the literal the
+        // caixa-flux test fixtures carry, so a future Flux v3 migration
+        // surfaces here on the canonical-string axis rather than at the
+        // first failing test fixture far from the rebrand commit. Peer
+        // to the [`default_flux_system_namespace_pins_canonical_value`]
+        // pin on the sibling Flux-namespace axis: both pin the canonical
+        // string at the lift site so a future rebrand lands the
+        // constant + every downstream reference + every test fixture in
+        // one coordinated edit.
+        assert_eq!(
+            FLUX_HELMRELEASE_API_VERSION, "helm.toolkit.fluxcd.io/v2",
+            "drift between FLUX_HELMRELEASE_API_VERSION and the \
+             caixa-flux/src/lib.rs:928,970 test fixtures' literal values; \
+             coordinate the migration across the const + every fixture in \
+             one edit"
         );
     }
 

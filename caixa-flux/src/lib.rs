@@ -113,6 +113,27 @@ pub use caixa_core::DEFAULT_NAMESPACE;
 /// canonical-load-bearing-string surface.
 pub use caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE;
 
+/// Canonical FluxCD `HelmRelease` CRD `apiVersion` — re-export of the
+/// lifted [`caixa_core::FLUX_HELMRELEASE_API_VERSION`] so the load-bearing
+/// string lives in exactly one place across the rendered Flux bundle's
+/// `helmrelease.yaml` document `apiVersion` axis + the rendered
+/// `kustomization.yaml` document's `spec.healthChecks[].apiVersion` axis.
+/// Both axes are the same conceptual "Flux v2 `HelmRelease` CRD group/
+/// version" load-bearing string and must move together on any future
+/// upstream Flux v3 migration; until this lift landed they sat as four
+/// inline `helm.toolkit.fluxcd.io/v2` literals (two render-side at lines
+/// 455, 504 + two test-fixture-side at lines 928, 970), and any future
+/// per-Flux-v3-migration version bump on one without a coordinated edit
+/// on the other would have silently routed the rendered `HelmRelease`
+/// outside the controller's `Watches` (controller-side: never reconciled,
+/// every dependent chart frozen at last-applied state) or made the
+/// `Kustomization`'s health-check dangle (apply-side: the per-resource
+/// health-gate never resolves, the parent Kustomization sits perpetually
+/// in `Reconciling`). Same shape as the
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lift on the
+/// sibling Flux-installation-namespace axis.
+pub use caixa_core::FLUX_HELMRELEASE_API_VERSION;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -452,7 +473,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         "---\n\
          # HelmRelease consumes the chart caixa-helm renders for this\n\
          # caixa Servico. Per-cluster values are injected here.\n\
-         apiVersion: helm.toolkit.fluxcd.io/v2\n\
+         apiVersion: {api_version}\n\
          kind: HelmRelease\n\
          metadata:\n  \
            name: {name}\n  \
@@ -477,6 +498,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            values:\n    \
              {library_name}:\n      \
                enabled: true\n",
+        api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
         interval = opts.interval,
@@ -501,11 +523,12 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              name: {flux_system}\n  \
            path: ./clusters/{cluster}/services/{name}\n  \
            healthChecks:\n    \
-             - apiVersion: helm.toolkit.fluxcd.io/v2\n      \
+             - apiVersion: {api_version}\n      \
                kind: HelmRelease\n      \
                name: {name}\n      \
                namespace: {namespace}\n  \
            timeout: 5m\n",
+        api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
         interval = opts.interval,
@@ -1337,6 +1360,125 @@ spec:
             "kustomization.yaml must spell the canonical FluxCD \
              installation namespace at spec.sourceRef.name (got: {contents:?})",
             contents = kust.contents
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_uses_lifted_flux_api_version() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`
+        // `apiVersion` axis — the load-bearing Flux v2 CRD-group/version
+        // declaration the `helm-controller` watches — must resolve to the
+        // lifted [`FLUX_HELMRELEASE_API_VERSION`] verbatim. Before this
+        // lift the helmrelease template carried an inline
+        // `helm.toolkit.fluxcd.io/v2` literal; a future upstream Flux v3
+        // migration on this axis without a coordinated edit on the
+        // sibling kustomization `healthChecks[].apiVersion` (the second
+        // render-side occurrence the same lift threads through) would
+        // have silently routed the rendered `HelmRelease` outside the
+        // controller's `Watches` and broken at apply time with a non-
+        // self-locating "no kind 'HelmRelease' is registered for version
+        // 'helm.toolkit.fluxcd.io/v2beta2'" error. Peer with
+        // [`cluster_bundle_kustomization_uses_lifted_flux_system_namespace`]
+        // on the sibling [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] lift.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        assert_eq!(
+            parsed.get("apiVersion").and_then(|n| n.as_str()),
+            Some(FLUX_HELMRELEASE_API_VERSION),
+            "helmrelease.yaml apiVersion must spell the lifted \
+             FLUX_HELMRELEASE_API_VERSION ({FLUX_HELMRELEASE_API_VERSION:?}); \
+             a drifted literal here routes the HelmRelease outside the Flux v2 \
+             helm-controller's Watches",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_health_check_uses_lifted_flux_api_version() {
+        // Sibling-axis pin to
+        // `cluster_bundle_helmrelease_uses_lifted_flux_api_version`: the
+        // rendered `kustomization.yaml`'s `spec.healthChecks[].apiVersion`
+        // axis is the Flux v2 contract pairing the parent Kustomization's
+        // per-resource health-gate to the sibling HelmRelease's CRD
+        // group/version. Both axes must resolve to the same lifted
+        // constant by value — a future upstream Flux v3 migration on
+        // either axis without a coordinated edit on the other would
+        // have silently dangled the health-check (apply-side: the per-
+        // resource health-gate never resolves, the parent Kustomization
+        // sits perpetually in `Reconciling`).
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kust = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
+        let health_checks = parsed
+            .get("spec")
+            .and_then(|s| s.get("healthChecks"))
+            .and_then(|h| h.as_sequence())
+            .expect("kustomization.yaml spec.healthChecks present");
+        assert!(
+            !health_checks.is_empty(),
+            "kustomization.yaml spec.healthChecks must carry at least one \
+             entry — the rendered Kustomization gates on its sibling \
+             HelmRelease's health by construction",
+        );
+        for (i, entry) in health_checks.iter().enumerate() {
+            assert_eq!(
+                entry.get("apiVersion").and_then(|n| n.as_str()),
+                Some(FLUX_HELMRELEASE_API_VERSION),
+                "kustomization.yaml spec.healthChecks[{i}].apiVersion must \
+                 spell the lifted FLUX_HELMRELEASE_API_VERSION \
+                 ({FLUX_HELMRELEASE_API_VERSION:?}); a drifted literal here \
+                 dangles the per-resource health-gate at apply time",
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_pins_canonical_flux_v2_api_version_string() {
+        // Bridge-arm pin: the lifted [`FLUX_HELMRELEASE_API_VERSION`]
+        // constant resolves to the canonical
+        // `"helm.toolkit.fluxcd.io/v2"` string today, and both rendered
+        // axes (helmrelease.yaml apiVersion + kustomization.yaml
+        // healthChecks[].apiVersion) must spell it out verbatim. Pin the
+        // literal here (peer with the
+        // [`flux_helmrelease_api_version_pins_canonical_value`] canonical-
+        // default arm in caixa-core, and with
+        // [`cluster_bundle_kustomization_pins_canonical_flux_system_string`]
+        // on the sibling `DEFAULT_FLUX_SYSTEM_NAMESPACE` axis) so a
+        // future Flux v3 migration of the lifted constant surfaces here
+        // as a coordinated edit-point.
+        assert_eq!(FLUX_HELMRELEASE_API_VERSION, "helm.toolkit.fluxcd.io/v2");
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .unwrap();
+        assert!(
+            hr.contents.contains("apiVersion: helm.toolkit.fluxcd.io/v2\n"),
+            "helmrelease.yaml must spell the canonical Flux v2 HelmRelease \
+             apiVersion at the top-level apiVersion axis (got: {contents:?})",
+            contents = hr.contents,
+        );
+        let kust = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .unwrap();
+        assert!(
+            kust.contents
+                .contains("apiVersion: helm.toolkit.fluxcd.io/v2\n"),
+            "kustomization.yaml must spell the canonical Flux v2 HelmRelease \
+             apiVersion at spec.healthChecks[].apiVersion (got: {contents:?})",
+            contents = kust.contents,
         );
     }
 
