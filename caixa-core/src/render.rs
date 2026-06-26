@@ -3165,6 +3165,82 @@ pub fn is_git_repo_url(s: &str) -> Result<(), String> {
                     .to_string(),
             );
         }
+        if b == b'^' {
+            return Err(
+                "must not contain `^` (RFC 3986 §2 lists the circumflex byte \
+                 in the 'unwise' set every URL parser is required to refuse \
+                 or percent-encode at the path-segment boundary, peer with \
+                 the `{` / `}` URI Template, `<` / `>` shell-redirection, \
+                 `` ` `` shell-command-substitution, and `|` shell-pipe arms \
+                 on the same paragraph of the same RFC — the 'unwise' \
+                 four-byte subset (`{`, `}`, `|`, `\\`, `^`) is the strictest \
+                 of the §2 reserved classes, every member structurally \
+                 incompatible with every URL grammar at every position. No \
+                 git URL grammar admits the byte: the `github:org/repo` \
+                 shorthand carries an alphanumeric / `-` / `_` / `/` \
+                 alphabet, every `https://` / `ssh://` / `git://` / \
+                 `file://` URL scheme percent-encodes `^` to `%5E` on the \
+                 wire (the WHATWG URL spec's 'fragment percent-encode set' \
+                 canonical mapping every conformant URL parser applies), \
+                 and the `git@host:path` scp-style SSH shape names a POSIX \
+                 path component that carries no shell-metachar bytes. \
+                 Beyond the URL-grammar violation, every interactive POSIX \
+                 shell with history enabled (bash / ksh / zsh's \
+                 `bashcompat` mode) lexes `^old^new^` as the quick history-\
+                 substitution shorthand — `^foo^bar` re-runs the most \
+                 recent history entry with the first `foo` substituted by \
+                 `bar`, the canonical RCE-class injection vector when a \
+                 string lands in a shell context with `set -o histexpand` \
+                 (bash's default for interactive sessions, peer with the \
+                 `!` history-expansion arm). csh / tcsh lex `^` as the \
+                 history-substitution prefix (`^old^new` substitutes `old` \
+                 with `new` in the prior command's first occurrence). Beyond \
+                 shell history, every regular-expression engine (POSIX BRE \
+                 / ERE, PCRE, RE2, the rust `regex` crate, JavaScript's \
+                 `RegExp`) lexes `^` two ways: leading-position `^` anchors \
+                 the match to the start of the line (the canonical `^foo` \
+                 anchored-prefix idiom every grep / sed / awk one-liner \
+                 carries), and inside-class `[^abc]` negates the character \
+                 class (the canonical exclusion idiom every regex carries). \
+                 PowerShell (Windows / cross-platform) lexes `^` as the \
+                 escape character — `cmd ^> file` escapes the redirection \
+                 operator into a literal byte, the canonical paste-from-\
+                 PowerShell-prompt footgun on a cross-platform caixa.lisp. \
+                 A `:repo \"https://github.com/p/x^old^new\"` (the \
+                 canonical paste-from-shell-history footgun where the \
+                 author copies a `git clone <url>` line followed by a \
+                 `^typo^fix` quick-edit-and-rerun shell-history shorthand \
+                 and forgot to trim the `^...^...` tail) or `:repo \
+                 \"github:p/^archived\"` (the symmetric regex-anchor / \
+                 negation paste idiom every doc-quick-start grep-pipeline \
+                 footnotes) is the canonical paste-from-shell-prompt \
+                 footgun the typed slot's accepted set must exclude. The \
+                 byte rides verbatim into the lacre's per-dep content-\
+                 address (`conteudo: format!(\"git:{repo}\")` peer of the \
+                 path-axis embedding at caixa-resolver/src/resolve.rs) and \
+                 into the resolver's `git clone <repo>` \
+                 (caixa-resolver/src/git.rs) subprocess invocation, where \
+                 libcurl's URL parser percent-encodes the byte on the wire \
+                 — so two authors whose `:repo` values differ only in \
+                 their caret presence (one paste-trimmed the history-\
+                 substitution shorthand, the other didn't) resolve to the \
+                 byte-identical upstream `git clone` but lock to two \
+                 distinct BLAKE3 closures, defeating the THEORY.md §V.2 \
+                 render-determinism contract on the same axis the \
+                 fragment-`#`, query-`?`, backslash-`\\`, template-`{` / \
+                 `}`, shell-redirection-`<` / `>`, backtick-`` ` ``, \
+                 shell-pipe-`|`, shell-command-separator-`;`, shell-\
+                 background-`&`, shell-variable-expansion-`$`, shell-glob-\
+                 `*`, subshell-grouping-`(` / `)`, shell-double-quote-`\"`, \
+                 shell-single-quote-`'`, history-expansion-`!`, list-\
+                 separator-`,`, env-var-assignment-`=`, and percent-\
+                 encoding-`%` arms close. Drop the `^...^...` tail — \
+                 substitute the literal value at author time, or use \
+                 `:fonte (:tipo path :caminho \"<local-path>\")` for a \
+                 local workspace dep)"
+                    .to_string(),
+            );
+        }
     }
     if s.starts_with(':') {
         return Err(
