@@ -63,4 +63,4 @@ pub use upgrade::{
     UpgradeError, UpgradeFromEntry, UpgradeInstruction, validate_upgrade_from,
     validate_upgrade_from_against_behavior, validate_upgrade_from_against_versao,
 };
-pub use version::{CaixaVersion, VersionError, parse_requirement};
+pub use version::{CaixaVersion, DEFAULT_PUBLISH_TAG_PREFIX, VersionError, parse_requirement};
