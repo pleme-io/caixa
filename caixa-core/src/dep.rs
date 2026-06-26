@@ -1329,6 +1329,99 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-bracket-expansion arm. The 598b770
+        // shell-brace-expansion arm closes `{` / `}`; `[` (`0x5b`) and
+        // `]` (`0x5d`) are the orthogonal POSIX glob-character-class /
+        // shell-`test`-builtin byte pair — same paste-from-shell-prompt
+        // footgun class, different syntactic surface. Every POSIX shell
+        // (sh / bash / zsh / dash / ksh / fish / nushell) lexes the
+        // bracket pair as the glob character-class operator: `[abc]`
+        // matches one of `a`, `b`, `c`; `[a-z]` matches any lowercase
+        // ASCII letter; `[^x]` negates (the canonical
+        // `ls *.[ch]` C-source-file glob and the `cd ../[a-z]*`
+        // lowercase-sibling glob every shell-history block carries —
+        // the orthogonal axis to the cf9034b `*` / `?` shell-glob arm
+        // closing the unbounded pathname-expansion sentinels). The
+        // bracket pair additionally carries the POSIX `test` /
+        // `[` builtin command (`[ -d ../caixa-teia ] && cd ...` —
+        // the canonical idiom every shell-script conditional uses) and
+        // bash's `[[ ... ]]` extended-test grammar. Beyond shell, the
+        // bracket pair is the TOML inline-array delimiter
+        // (`features = ["a", "b"]` — the canonical paste-from-Cargo-
+        // manifest cross-idiom-leak vector), the YAML flow-sequence
+        // delimiter (`paths: [/a, /b]` — the canonical paste-from-
+        // values.yaml cross-idiom leak), the JSON array delimiter,
+        // and the POSIX-ERE / PCRE bracket-expression / character-
+        // class anchor (the canonical paste-from-regex-doc shape).
+        // POSIX `std::path::Path` treats both bytes as literal path-
+        // component bytes (so `../[caixa-teia]` is one directory
+        // named literally `../[caixa-teia]`, sibling of `.` and
+        // `..`).
+        //
+        // A `:caminho "../caixa-[a-z]/build"` (the canonical "I
+        // pasted a `cd ../caixa-[a-z]/build` glob-character-class
+        // one-liner that matches every lowercase-sibling-suffix
+        // sibling directory" footgun), `:caminho "../[caixa-teia]/
+        // build"` (the symmetric "I pasted a TOML inline-array /
+        // YAML flow-sequence shape out of an aligned manifest"
+        // idiom), or `:caminho "../caixa-[ch]"` (the canonical
+        // `*.[ch]` C-source character-class paste-from-shell-history
+        // shape) silently passes every prior arm because
+        // `Path::is_absolute` returns false on `..`, `[` / `]` are
+        // neither leading-byte sentinels nor control bytes nor `\`
+        // nor `<` / `>` nor `|` nor `;` nor `&` nor backtick nor
+        // `*` / `?` nor `(` / `)` nor `{` / `}`, and the value's
+        // last byte isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./../caixa-[a-z]/build` subdirectory and fails at resolve
+        // time with a non-self-locating `No such file or directory`
+        // error far from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `[` or `]` byte
+        // lands in the BLAKE3 closure and rides downstream as part of
+        // the build's identity into every shell-spawned subprocess
+        // (the caixa-resolver's `git clone` invocation, a future
+        // `feira tofu` shell-out, a future operator-side `nix flake
+        // check` spawn) as the canonical shell-metachar / glob-
+        // character-class / TOML-array surface every peer single-
+        // token-shaped typed slot already closes. The `:caminho` axis
+        // was the last typed path-string surface still admitting
+        // these two bytes; this arm closes the gap so the substrate-
+        // wide "no shell-composition metacharacter anywhere in a
+        // typed string slot that flows verbatim into a shell-spawned
+        // subprocess" invariant extends from shell-brace-expansion
+        // (`{` / `}`) to shell-bracket-expansion (`[` / `]`) on the
+        // `:caminho` axis. Together with the cf9034b `*` / `?` arm,
+        // the typed `:caminho` accepted set now structurally excludes
+        // the entire POSIX pathname-expansion / glob surface —
+        // unbounded glob (`*` / `?`) AND bounded character-class
+        // (`[abc]` / `[a-z]`).
+        //
+        // The arm fires AFTER the shell-brace-expansion arm because
+        // the prior arm's `{` / `}` shape is the more semantic-
+        // locating axis on values that probe as both
+        // (`"../{a,b}[ch]"` carries both `{` and `[` — the brace-
+        // expansion fan is the load-bearing root-cause edit, so
+        // `FonteCaminhoShellBraceExpansion` wins; same cascade
+        // discipline every prior `:caminho` arm establishes). The arm
+        // fires BEFORE the trailing-`/` arm because the embedded
+        // bracket-expansion byte is the more semantic-locating axis
+        // on probe-as-both values (`"../[a-z]/"` ends in `/` but the
+        // load-bearing diagnostic is the embedded `[` glob-character-
+        // class metachar — the trailing `/` is the secondary
+        // observation, and an author who removes the `[` is likely
+        // to also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'[' || b == b']' {
+                return Err(DepError::FonteCaminhoShellBracketExpansion {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -2160,6 +2253,44 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellBraceExpansion {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         bracket-expansion / POSIX glob-character-class / shell-`test`-builtin metacharacter \
+         0x{byte:02x} `{ch}` (every POSIX shell — sh / bash / zsh / dash / ksh / fish / nushell \
+         — lexes the bracket pair as the glob character-class operator: `[abc]` matches one of \
+         `a` / `b` / `c`, `[a-z]` matches any lowercase ASCII letter, `[^x]` negates — the \
+         canonical `ls *.[ch]` C-source-file glob and `cd ../caixa-[a-z]*` lowercase-sibling \
+         glob every shell-history block carries; the bracket pair additionally carries the \
+         POSIX `test` / `[` builtin command (`[ -d ../caixa-teia ] && cd ...` every shell-\
+         script conditional uses) and bash's `[[ ... ]]` extended-test grammar; beyond shell \
+         the pair is the TOML inline-array delimiter (`features = [\"a\", \"b\"]` — the \
+         canonical paste-from-Cargo-manifest cross-idiom-leak vector), the YAML flow-sequence \
+         delimiter (`paths: [/a, /b]` — the canonical paste-from-values.yaml cross-idiom \
+         leak), the JSON array delimiter, and the POSIX-ERE / PCRE bracket-expression anchor. \
+         POSIX `std::path::Path` treats the byte as a literal path-component byte, so a \
+         `:caminho \"../caixa-[a-z]/build\"` (the canonical paste-from-shell-history glob-\
+         character-class fan-across-siblings footgun) or `:caminho \"../[caixa-teia]/build\"` \
+         (the symmetric paste-from-TOML-array / paste-from-YAML-flow-sequence cross-idiom \
+         leak) silently passes every prior arm and the resolver folds the value through \
+         `Path::new(caminho).join(<file>)` looking for a literal subdirectory and fails at \
+         resolve time with a non-self-locating `No such file or directory` error far from \
+         the source caixa.lisp. The lacre pipeline embeds the value verbatim in its per-dep \
+         content-address `path:{caminho}` at caixa-resolver/src/resolve.rs:189, so the byte \
+         lands in the BLAKE3 closure and rides into every shell-spawned subprocess (the \
+         resolver's `git clone`, a future `feira tofu` shell-out, a future operator-side \
+         `nix` spawn) as the canonical shell-metachar / glob-character-class / TOML-array \
+         surface every peer single-token-shaped typed slot already closes. Express the path \
+         as a bare relative single-token like \"../caixa-teia\" — the sibling-workspace \
+         directory name carries no shell-bracket-expansion / glob-character-class / array-\
+         literal semantic; if a family of sibling caixas actually needs pinning, author \
+         separate `:deps` entries rather than one character-class-expanded `:caminho` value.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellBracketExpansion {
         nome: String,
         caminho: String,
         byte: u8,
@@ -8913,6 +9044,470 @@ mod tests {
         assert!(
             rendered.contains("URI Template"),
             "diagnostic must reference the RFC-6570 URI-Template-placeholder vocabulary: \
+             {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_bracket_glob_character_class() {
+        // The canonical paste-from-shell-history bracket-glob /
+        // character-class footgun: an author copies a
+        // `cd ../caixa-[a-z]/build` shell-history one-liner whose
+        // `[a-z]` POSIX glob character-class matches every lowercase-
+        // ASCII-suffix sibling caixa directory and silently passed
+        // every prior arm (`Path::is_absolute` false on `..`, no
+        // control bytes, no `\`, no `<` / `>`, no `|`, no `;`, no
+        // `&`, no backtick, no `*` / `?`, no `(` / `)`, no `{` /
+        // `}`, doesn't end in `/`; the leading-`$` f4efe9c
+        // `FonteCaminhoVarExpansion` arm doesn't fire because the
+        // value starts with `..` not `$`). The lacre embedded the
+        // value verbatim, the resolver folded it through
+        // `Path::join` looking for a literal `./../caixa-[a-z]/
+        // build` subdirectory, and the failure surfaced at resolve
+        // time with a non-self-locating `No such file or directory`
+        // error. The new arm moves the rejection to validate time
+        // and names the offending dep + caminho + byte verbatim.
+        // The arm fires on the first `[` encountered.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-[a-z]/build".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellBracketExpansion {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellBracketExpansion, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-[a-z]/build");
+        assert_eq!(byte, b'[');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_close_bracket() {
+        // The symmetric close-bracket paste shape (`"../caixa-teia]"`
+        // — the degenerate "I selected an unbalanced closing bracket
+        // out of a glob character-class block" idiom that probes for
+        // the cascade's last-byte handling on a value carrying only
+        // the closing byte). Pinned separately from the open-bracket
+        // shape so the gate's contract is "any `[` or `]` anywhere",
+        // not single-byte coverage. Mirrors the peer
+        // `validate_rejects_path_fonte_with_caminho_carrying_close_brace`
+        // shape on the immediate-predecessor
+        // `FonteCaminhoShellBraceExpansion` arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellBracketExpansion { byte, .. } = err else {
+            panic!("expected FonteCaminhoShellBracketExpansion, got {err:?}");
+        };
+        assert_eq!(byte, b']');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_open_bracket() {
+        // Leading-position `[` shape (`"[caixa-teia]/build"` — the
+        // canonical "I selected a `[caixa-teia]` TOML-table-header /
+        // glob-character-class prefix out of an aligned config /
+        // shell-history one-liner" idiom). Pinned separately from
+        // the embedded-byte shape so the gate covers every position,
+        // not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "[caixa-teia]/build".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBracketExpansion { byte: b'[', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_toml_inline_array() {
+        // The canonical TOML inline-array / YAML flow-sequence
+        // paste shape (`"../[\"a\", \"b\"]/caixa-teia"` — the
+        // canonical "I copied a `features = [\"a\", \"b\"]` TOML
+        // inline-array out of a sibling-Cargo manifest" cross-idiom
+        // leak; the symmetric YAML flow-sequence form `paths: [/a,
+        // /b]` paste-from-values.yaml shape carries the same
+        // bracket pair). The arm fires on the first `[` encountered;
+        // pinned so the gate's coverage extends from the bare-
+        // bracket glob-character-class shape to the TOML / YAML /
+        // JSON array-literal shape.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../[\"a\", \"b\"]/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBracketExpansion { byte: b'[', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_shell_test_builtin() {
+        // The canonical POSIX `test` / `[` builtin command paste
+        // shape (`"../[ -d caixa-teia ]"` — the `[ <expr> ]` shell-
+        // script conditional every paste-from-shell-script idiom
+        // carries; bash's `[[ <expr> ]]` extended-test grammar
+        // would surface the same byte pair). The arm fires on the
+        // first `[` encountered; pinned so the gate's coverage
+        // extends from the embedded-glob-character-class shape to
+        // the leading-`test`-builtin / extended-test form.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../[ -d caixa-teia ]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBracketExpansion { byte: b'[', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_bracket_expansion() {
+        // The positive-control pin: the gate targets only `[` /
+        // `]`, never adjacent printable ASCII or POSIX-valid bytes.
+        // The canonical relative POSIX path (`"../caixa-teia"`) and
+        // a nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue
+        // to validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface. Peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_brace_expansion`
+        // on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_brace_expansion_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `{` and `[` (`"../{a,b}[ch]"` — the
+        // canonical "I pasted a brace-expansion fan followed by a
+        // glob-character-class tail" footgun) routes through
+        // `FonteCaminhoShellBraceExpansion` not
+        // `FonteCaminhoShellBracketExpansion`. The brace-expansion
+        // fan is the load-bearing root-cause edit on every
+        // probe-as-both value because the bracket-class tail
+        // typically rides on a prior brace-expansion expansion;
+        // same cascade discipline every prior `:caminho` arm
+        // establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{a,b}[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_subshell_grouping_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-subshell-grouping arm:
+        // a value carrying both `(` and `[` (`"../(cd foo)/[ch]"` —
+        // the canonical "I pasted a subshell-grouping followed by
+        // a glob-character-class tail" footgun) routes through
+        // `FonteCaminhoShellSubshellGrouping` not
+        // `FonteCaminhoShellBracketExpansion`. The modern Bourne
+        // `$(<cmd>)` command-substitution boundary is the load-
+        // bearing axis on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../(cd foo)/[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-glob arm: a value
+        // carrying both `*` and `[` (`"../caixa-teia/*[ch]"` — the
+        // canonical "I pasted a `*.[ch]` C-source-file glob whose
+        // unbounded `*` precedes the bracket character-class"
+        // footgun) routes through `FonteCaminhoShellGlob` not
+        // `FonteCaminhoShellBracketExpansion`. The unbounded
+        // pathname-expansion sentinel is the load-bearing root-
+        // cause edit on every probe-as-both value — the unbounded
+        // `*` carries the more aggressive expansion vector than
+        // the bounded `[ch]` class, so the prior arm wins.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-command-substitution
+        // arm: a value carrying both a backtick and `[`
+        // (``"../`whoami`/[ch]"`` — the canonical "I pasted a
+        // legacy-backtick command-substitution followed by a
+        // glob-character-class tail" footgun) routes through
+        // `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoShellBracketExpansion`. The CWE-78 shell-
+        // command-injection vector is the load-bearing root-cause
+        // edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`/[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-background arm: a
+        // value carrying both `&` and `[` (`"../caixa-teia & [ch]"`
+        // — the canonical "I pasted a `cmd & [glob]` background-
+        // launch + bracket-class chain" footgun) routes through
+        // `FonteCaminhoShellBackground` not
+        // `FonteCaminhoShellBracketExpansion`. The background-
+        // launch tail is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & [ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and `[` (`"../caixa-teia; [ch]"` — the
+        // canonical sequential-cleanup + bracket-class paste
+        // idiom) routes through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellBracketExpansion`. The sequential-
+        // command-separator paste is the load-bearing root-cause
+        // edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; [ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-pipe arm: a value
+        // carrying both `|` and `[` (`"../caixa-teia | [tee]"` —
+        // the canonical pipeline-to-bracket-class paste idiom)
+        // routes through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellBracketExpansion`. The pipeline-tail
+        // paste is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | [tee]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream shell-redirection arm: a
+        // value carrying both `>` and `[` (`"../caixa-teia>log
+        // [ch]"` — the canonical "I pasted a `cmd > log [glob]`
+        // redirect-plus-bracket chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellBracketExpansion`. The input/output
+        // redirection metachar carries the more self-locating
+        // `byte` payload, so the prior arm wins on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log [ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and `[` (`"..\caixa-teia\[ch]"` — the
+        // canonical "I pasted a Windows-shell `cd ..\path\[glob]`
+        // chain") routes through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellBracketExpansion`. The cross-host-OS-
+        // separator divergence is the load-bearing axis on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia\\[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `[` (`"../foo\n[ch]"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho between two paste fragments)
+        // routes through `FonteCaminhoControlChar` not
+        // `FonteCaminhoShellBracketExpansion`. The POSIX-syscall-
+        // rejected-byte / NUL-`CString::new`-fail diagnostic is
+        // the load-bearing axis on every value that probes
+        // positive for both — mirrors the cascade discipline on
+        // every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the load-bearing leading-byte arm: a
+        // leading `/` value with embedded `[` (`"/etc/[ch]"`)
+        // routes through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellBracketExpansion` — the host-layout-
+        // leak diagnostic is the load-bearing axis, the bracket-
+        // expansion byte is the secondary observation. Same
+        // precedence logic as every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_shell_bracket_expansion() {
+        // Cascade pin on the upstream leading-`$` var-expansion
+        // arm: a value carrying both a leading `$` and a `[`
+        // (`"$DIR/[ch]"` — the canonical "I pasted a `$DIR` shell-
+        // variable + bracket-class at the head of a sibling-
+        // workspace path" footgun) routes through
+        // `FonteCaminhoVarExpansion` not
+        // `FonteCaminhoShellBracketExpansion`. The leading-byte
+        // shell-variable-expansion is the more self-locating
+        // diagnostic on values that probe as both — same
+        // load-bearing-leading-byte cascade discipline every
+        // prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$DIR/[ch]".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_bracket_expansion_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both `[` and a trailing `/` (`"../[a-z]/"` —
+        // the canonical "I tab-completed a path that already had
+        // a bracket-glob-character-class expansion tail" footgun)
+        // routes through `FonteCaminhoShellBracketExpansion` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-metachar
+        // is the more semantic-locating axis (an author who
+        // removes the `[` typically also drops the trailing
+        // separator since both are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../[a-z]/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBracketExpansion { byte: b'[', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_bracket_expansion_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_brace_expansion_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the closest two-byte peer arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-bracket-expansion / glob-character-class
+        // footgun explicitly so a `feira lint` run can render the
+        // diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-[a-z]/build".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-[a-z]/build"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x5b"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("bracket-expansion"),
+            "diagnostic must name the shell-bracket-expansion footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("glob-character-class"),
+            "diagnostic must reference the POSIX glob-character-class vocabulary: \
              {rendered:?}",
         );
     }
