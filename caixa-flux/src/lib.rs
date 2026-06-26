@@ -151,6 +151,36 @@ pub use caixa_core::FLUX_HELMRELEASE_API_VERSION;
 /// sibling Flux-v2-load-bearing-string axis.
 pub use caixa_core::FLUX_GITREPOSITORY_API_VERSION;
 
+/// Canonical FluxCD `Kustomization` CRD `apiVersion` — re-export of the
+/// lifted [`caixa_core::FLUX_KUSTOMIZATION_API_VERSION`] so the load-
+/// bearing string lives in exactly one place across the rendered Flux
+/// bundle's `kustomization.yaml` document `apiVersion` axis. Completes
+/// the Flux v2 controller-triplet (source-controller +
+/// helm-controller + kustomize-controller) lift alongside the sibling
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) and
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) re-exports — every
+/// per-controller CRD-group/version is now a typed substrate-side
+/// `&'static str` consumed through one `pub use caixa_core::FLUX_*`
+/// re-export.
+///
+/// Until this lift landed the axis sat as an inline
+/// `kustomize.toolkit.fluxcd.io/v1` literal in this crate's
+/// [`cluster_bundle`] `kustomization.yaml` format-string template,
+/// and any future per-Flux-v3-migration version bump on this axis
+/// without a coordinated edit on the sibling
+/// [`FLUX_HELMRELEASE_API_VERSION`] / [`FLUX_GITREPOSITORY_API_VERSION`]
+/// axes (the Flux v2 controller triplet's CRD group/versions move
+/// together upstream) would have silently routed the rendered
+/// `Kustomization` outside the Flux v2 `kustomize-controller`'s
+/// `Watches` (apply-side: the parent Kustomization is never
+/// reconciled, every dependent `HelmRelease` / `GitRepository` it
+/// keys off sits perpetually un-applied at the cluster). Same shape
+/// as the [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts on
+/// the sibling Flux-v2-load-bearing-string axis.
+pub use caixa_core::FLUX_KUSTOMIZATION_API_VERSION;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -528,7 +558,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         "---\n\
          # Flux Kustomization that pins the GitRepository + HelmRelease.\n\
          # Paired path: pleme-io/k8s/clusters/{cluster}/services/{name}/\n\
-         apiVersion: kustomize.toolkit.fluxcd.io/v1\n\
+         apiVersion: {kustomization_api_version}\n\
          kind: Kustomization\n\
          metadata:\n  \
            name: {name}\n  \
@@ -546,6 +576,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                name: {name}\n      \
                namespace: {namespace}\n  \
            timeout: 5m\n",
+        kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
         api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
@@ -1671,6 +1702,112 @@ spec:
             "gitrepository.yaml must spell the canonical Flux v2 GitRepository \
              apiVersion at the top-level apiVersion axis (got: {contents:?})",
             contents = gr.contents,
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KUSTOMIZATION_API_VERSION`
+        // is the single source of truth for the Flux v2 `Kustomization`
+        // CRD-group/version the rendered `kustomization.yaml` document
+        // declares at its `apiVersion` axis. Pin the equality (and the
+        // static-data identity, peer with the sibling
+        // [`flux_gitrepository_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`default_flux_system_namespace_re_export_points_at_caixa_core_canonical`]
+        // pins) so any local re-introduction of a sibling `pub const
+        // FLUX_KUSTOMIZATION_API_VERSION: &str = "…"` (the canonical drift
+        // footgun this lift closes — one production-code consumer of the
+        // load-bearing Flux v2 `Kustomization` CRD-group/version inside
+        // the kustomization template, lifted to one re-export at the
+        // caixa-core boundary) is a build-time test failure naming the
+        // offending drift, not a silent apply-time `Kustomization`-
+        // outside-controller-watch-window reconciliation freeze.
+        assert_eq!(
+            FLUX_KUSTOMIZATION_API_VERSION,
+            caixa_core::FLUX_KUSTOMIZATION_API_VERSION
+        );
+        assert!(
+            std::ptr::eq(
+                FLUX_KUSTOMIZATION_API_VERSION.as_ptr(),
+                caixa_core::FLUX_KUSTOMIZATION_API_VERSION.as_ptr(),
+            ),
+            "FLUX_KUSTOMIZATION_API_VERSION must be a re-export of \
+             caixa_core::FLUX_KUSTOMIZATION_API_VERSION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two is \
+             the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_uses_lifted_flux_api_version() {
+        // Fail-before-pass-after pin: the rendered `kustomization.yaml`
+        // top-level `apiVersion` axis — the load-bearing Flux v2
+        // CRD-group/version declaration the `kustomize-controller`
+        // watches — must resolve to the lifted
+        // [`FLUX_KUSTOMIZATION_API_VERSION`] verbatim. Before this lift
+        // the kustomization template carried an inline
+        // `kustomize.toolkit.fluxcd.io/v1` literal; a future upstream
+        // Flux v3 migration on this axis without a coordinated edit on
+        // the sibling [`FLUX_HELMRELEASE_API_VERSION`] /
+        // [`FLUX_GITREPOSITORY_API_VERSION`] axes (the Flux v2
+        // controller triplet shares the `.toolkit.fluxcd.io` root and
+        // promotes together on each major bump) would have silently
+        // routed the rendered `Kustomization` outside the controller's
+        // `Watches` and broken at apply time with a non-self-locating
+        // "no kind 'Kustomization' is registered for version
+        // 'kustomize.toolkit.fluxcd.io/v1beta2'" error. Peer with
+        // [`cluster_bundle_helmrelease_uses_lifted_flux_api_version`] /
+        // [`cluster_bundle_gitrepository_uses_lifted_flux_api_version`]
+        // on the sibling Flux-CRD-axis lifts.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        assert_eq!(
+            parsed.get("apiVersion").and_then(|n| n.as_str()),
+            Some(FLUX_KUSTOMIZATION_API_VERSION),
+            "kustomization.yaml apiVersion must spell the lifted \
+             FLUX_KUSTOMIZATION_API_VERSION ({FLUX_KUSTOMIZATION_API_VERSION:?}); \
+             a drifted literal here routes the Kustomization outside the Flux v2 \
+             kustomize-controller's Watches",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_pins_canonical_flux_v1_api_version_string() {
+        // Bridge-arm pin: the lifted [`FLUX_KUSTOMIZATION_API_VERSION`]
+        // constant resolves to the canonical
+        // `"kustomize.toolkit.fluxcd.io/v1"` string today, and the
+        // rendered `kustomization.yaml`'s top-level `apiVersion` axis
+        // must spell it out verbatim. Pin the literal here (peer with
+        // the [`flux_kustomization_api_version_pins_canonical_value`]
+        // canonical-default arm in caixa-core, and with
+        // [`cluster_bundle_helmrelease_pins_canonical_flux_v2_api_version_string`]
+        // / [`cluster_bundle_gitrepository_pins_canonical_flux_v1_api_version_string`]
+        // on the sibling `FLUX_HELMRELEASE_API_VERSION` /
+        // `FLUX_GITREPOSITORY_API_VERSION` axes) so a future Flux v3
+        // migration of the lifted constant surfaces here as a
+        // coordinated edit-point.
+        assert_eq!(
+            FLUX_KUSTOMIZATION_API_VERSION,
+            "kustomize.toolkit.fluxcd.io/v1"
+        );
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .unwrap();
+        assert!(
+            kz.contents
+                .contains("apiVersion: kustomize.toolkit.fluxcd.io/v1\n"),
+            "kustomization.yaml must spell the canonical Flux v2 Kustomization \
+             apiVersion at the top-level apiVersion axis (got: {contents:?})",
+            contents = kz.contents,
         );
     }
 }
