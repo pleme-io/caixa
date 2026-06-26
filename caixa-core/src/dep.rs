@@ -1156,6 +1156,93 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-subshell-grouping arm. The cf9034b
+        // shell-glob arm closes the `*` / `?` pathname-expansion sentinels;
+        // `(` (`0x28`) and `)` (`0x29`) are the orthogonal POSIX subshell-
+        // grouping sentinels — same paste-from-shell-prompt footgun class,
+        // different syntactic surface. Every POSIX shell (sh / bash / zsh /
+        // dash / ksh / fish / nushell) lexes the parenthesis pair as the
+        // subshell-grouping operator: `(<cmd>)` runs `<cmd>` in a child
+        // shell with a fresh environment scope (the canonical sandboxing
+        // idiom every shell-history `(cd <path> && <cmd>)` one-liner uses
+        // to scope a `cd` to one subshell without disturbing the parent's
+        // working directory), and `$(<cmd>)` is the modern Bourne
+        // command-substitution shape the upstream f4efe9c
+        // `FonteCaminhoVarExpansion` arm closes the leading `$` byte of —
+        // the closing `)` byte completes that substitution shape and must
+        // be refused on the same axis (peer with the
+        // [`crate::render::is_git_repo_url`] 3b99147 arm that closes the
+        // same byte-pair on the sibling `:fonte :repo` axis under the
+        // same shell-subshell-grouping + RFC-3986-sub-delims banner).
+        // POSIX `std::path::Path` treats both bytes as literal path-
+        // component bytes (so `../caixa-teia/(date)` is one directory
+        // named literally `../caixa-teia/(date)`, sibling of `.` and
+        // `..`).
+        //
+        // A `:caminho "../caixa-teia/$(date)/build"` (the canonical "I
+        // pasted a `cd ../caixa-teia/$(date)/build` shell-history one-
+        // liner whose modern command-substitution expansion lands the
+        // current date as a subdirectory name" footgun) or `:caminho
+        // "../(cd foo && pwd)/caixa-teia"` (the symmetric "I copied a
+        // `(cd foo && pwd)` subshell-grouping working-directory probe
+        // idiom") silently passes every prior arm because
+        // `Path::is_absolute` returns false on `..`, `(` / `)` are
+        // neither leading-byte sentinels nor control bytes nor `\` nor
+        // `<` / `>` nor `|` nor `;` nor `&` nor backtick nor `*` / `?`,
+        // and the value's last byte isn't `/`. The resolver folds the
+        // value through `Path::new(caminho).join(<file>)` looking for a
+        // literal `./../caixa-teia/$(date)/build` subdirectory and fails
+        // at resolve time with a non-self-locating `No such file or
+        // directory` error far from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `(` or `)` byte lands
+        // in the BLAKE3 closure and rides downstream as part of the
+        // build's identity into every shell-spawned subprocess (the
+        // caixa-resolver's `git clone` invocation, a future `feira tofu`
+        // shell-out, a future operator-side `nix flake check` spawn) as
+        // the canonical shell-metachar / subshell-grouping surface every
+        // peer single-token-shaped typed slot already closes. The peer
+        // git-source axis [`crate::render::is_git_repo_url`] (3b99147)
+        // rejects the same byte pair on `:fonte :repo` under the same
+        // shell-subshell-grouping / RFC-3986-sub-delims banner. The
+        // `:caminho` axis was the last typed path-string surface still
+        // admitting these two bytes;
+        // this arm closes the gap so the substrate-wide "no shell-
+        // composition metacharacter anywhere in a typed string slot that
+        // flows verbatim into a shell-spawned subprocess" invariant
+        // extends from shell-glob (`*` / `?`) to shell-subshell-grouping
+        // (`(` / `)`) on the `:caminho` axis. Together with the f4efe9c
+        // leading-`$` arm, the typed `:caminho` accepted set now
+        // structurally excludes the entire modern Bourne
+        // command-substitution surface — leading `$` closes the
+        // leading byte of every `$(<cmd>)` shape, this arm closes the
+        // trailing `)` boundary.
+        //
+        // The arm fires AFTER the shell-glob arm because the prior arm's
+        // `*` / `?` pathname-expansion shape is the more common shell-
+        // history paste idiom on values that probe as both
+        // (`"../caixa-teia/*(date)"` carries both `*` and `(` — the
+        // glob-paste-tail is the load-bearing root-cause edit, so
+        // `FonteCaminhoShellGlob` wins; same cascade discipline every
+        // prior `:caminho` arm establishes). The arm fires BEFORE the
+        // trailing-`/` arm because the embedded subshell-grouping byte
+        // is the more semantic-locating axis on probe-as-both values
+        // (`"../foo(date)/"` ends in `/` but the load-bearing diagnostic
+        // is the embedded `(` shell-subshell-grouping metachar — the
+        // trailing `/` is the secondary observation, and an author who
+        // removes the `(` is likely to also tab-strip the trailing
+        // separator).
+        for &b in caminho.as_bytes() {
+            if b == b'(' || b == b')' {
+                return Err(DepError::FonteCaminhoShellSubshellGrouping {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -1911,6 +1998,41 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellGlob {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         subshell-grouping metacharacter 0x{byte:02x} `{ch}` (every POSIX shell — sh / bash / \
+         zsh / dash / ksh / fish / nushell — lexes `(` and `)` as the subshell-grouping \
+         operator: `(<cmd>)` runs `<cmd>` in a child shell with a fresh environment scope \
+         (the canonical `(cd <path> && <cmd>)` shell-history one-liner scopes a `cd` to one \
+         subshell without disturbing the parent's working directory), and `$(<cmd>)` is the \
+         modern Bourne command-substitution shape the leading-`$` `FonteCaminhoVarExpansion` \
+         arm closes the leading byte of — together the two arms now structurally exclude the \
+         entire `$(<cmd>)` substitution surface from the typed `:caminho` accepted set. \
+         POSIX `std::path::Path` treats the byte as a literal path-component byte, so a \
+         `:caminho \"../caixa-teia/$(date)/build\"` (the canonical paste-from-shell-history \
+         modern-command-substitution footgun) or `:caminho \"../(cd foo && pwd)/caixa-teia\"` \
+         (the symmetric subshell-grouping working-directory-probe paste idiom) silently passes \
+         every prior arm and the resolver folds the value through `Path::new(caminho).join(\
+         <file>)` looking for a literal subdirectory and fails at resolve time with a non-\
+         self-locating `No such file or directory` error far from the source caixa.lisp. The \
+         lacre pipeline embeds the value verbatim in its per-dep content-address `path:\
+         {caminho}` at caixa-resolver/src/resolve.rs:189, so the byte lands in the BLAKE3 \
+         closure and rides into every shell-spawned subprocess (the resolver's `git clone`, a \
+         future `feira tofu` shell-out, a future operator-side `nix` spawn) as the canonical \
+         shell-metachar / subshell-grouping surface every peer single-token-shaped typed slot \
+         already closes. The peer `:fonte :repo` axis (3b99147) closes the same byte under the \
+         same shell-subshell-grouping / RFC-3986-sub-delims banner on `is_git_repo_url`, \
+         together with the leading-`$` `FonteCaminhoVarExpansion` arm closing the leading byte \
+         of every `$(<cmd>)` shape. Express the path as a bare relative single-token \
+         like \"../caixa-teia\" — the sibling-workspace directory name carries no shell-\
+         subshell-grouping semantic.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellSubshellGrouping {
         nome: String,
         caminho: String,
         byte: u8,
@@ -7832,6 +7954,396 @@ mod tests {
         assert!(
             rendered.contains("pathname-expansion"),
             "diagnostic must reference the POSIX pathname-expansion vocabulary: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_modern_command_substitution() {
+        // The fail-before-pass-after pin for the canonical modern-Bourne
+        // command-substitution paste footgun: an author copies a
+        // `cd ../caixa-teia/$(date)/build` shell-history one-liner whose
+        // `$(<cmd>)` expansion would land the current date as a
+        // subdirectory name and silently passed every prior arm
+        // (`Path::is_absolute` false on `..`, no control bytes, no `\`,
+        // no `<` / `>`, no `|`, no `;`, no `&`, no backtick, no `*` /
+        // `?`, doesn't end in `/`; the leading-`$` f4efe9c
+        // `FonteCaminhoVarExpansion` arm doesn't fire because the `$`
+        // sits mid-path). The lacre embedded the value verbatim, the
+        // resolver folded it through `Path::join` looking for a literal
+        // `./../caixa-teia/$(date)/build` subdirectory, and the failure
+        // surfaced at resolve time with a non-self-locating `No such
+        // file or directory` error. The new arm moves the rejection to
+        // validate time and names the offending dep + caminho + byte
+        // verbatim. The arm fires on the first `(` encountered (the
+        // opening byte of `$(date)`).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/$(date)/build".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellSubshellGrouping {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellSubshellGrouping, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia/$(date)/build");
+        assert_eq!(byte, b'(');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_close_paren() {
+        // The symmetric close-paren paste shape (`"../caixa-teia)"` —
+        // the degenerate "I selected an unbalanced closing paren out of
+        // a shell-history block" idiom that probes for the cascade's
+        // last-byte handling on a value carrying only the closing byte).
+        // Pinned separately from the open-paren shape so the gate's
+        // contract is "any `(` or `)` anywhere", not single-byte
+        // coverage. Mirrors the peer `validate_rejects_path_fonte_with_\
+        // caminho_carrying_question_glob` shape on the immediate-
+        // predecessor `FonteCaminhoShellGlob` arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellSubshellGrouping { byte, .. } = err else {
+            panic!("expected FonteCaminhoShellSubshellGrouping, got {err:?}");
+        };
+        assert_eq!(byte, b')');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_open_paren() {
+        // Leading-position `(` shape (`"(cd foo)/caixa-teia"` — the
+        // canonical "I selected a `(cd foo)` subshell-grouping prefix
+        // out of a `(cd foo) && cmd` shell-history one-liner" idiom).
+        // Pinned separately from the embedded-byte shape so the gate
+        // covers every position, not only mid-path.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "(cd foo)/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_balanced_subshell_grouping_pair() {
+        // The canonical balanced-pair shape (`"../(cd foo && pwd)/\
+        // caixa-teia"` — the canonical "I copied a `(cd foo && pwd)`
+        // working-directory-probe subshell-grouping idiom every shell-
+        // history block carries" footgun). The arm fires on the first
+        // `(` encountered; pinned so a future arm that tries to
+        // distinguish the opening from the closing byte doesn't break
+        // the broader contract. Mirrors the peer
+        // `validate_rejects_path_fonte_with_caminho_carrying_balanced_\
+        // backtick_pair` shape on the upstream `FonteCaminhoShell\
+        // CommandSubstitution` arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../(cd foo && pwd)/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_subshell_grouping() {
+        // The positive-control pin: the gate targets only `(` / `)`,
+        // never adjacent printable ASCII or POSIX-valid bytes. The
+        // canonical relative POSIX path (`"../caixa-teia"`) and a
+        // nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue to
+        // validate cleanly so the gate doesn't widen to a "no printable
+        // punctuation anywhere" sweep that would defeat the entire
+        // path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `*` and `(` (`"../caixa-teia/*(date)"` — the
+        // canonical "I pasted a glob expansion followed by a
+        // subshell-grouping tail" footgun) routes through
+        // `FonteCaminhoShellGlob` not
+        // `FonteCaminhoShellSubshellGrouping`. The pathname-expansion
+        // shape is the more common shell-history paste idiom on every
+        // probe-as-both value — same cascade discipline every prior
+        // `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*(date)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream shell-command-substitution arm: a
+        // value carrying both a backtick and `(` (``"../`whoami`/$(date)"``
+        // — the canonical "I pasted a legacy-backtick + modern-paren
+        // command-substitution chain" footgun) routes through
+        // `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoShellSubshellGrouping`. The CWE-78 shell-
+        // command-injection vector is the load-bearing root-cause edit
+        // on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`/$(date)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream shell-background arm: a value
+        // carrying both `&` and `(` (`"../caixa-teia & (cd foo)"` —
+        // the canonical "I pasted a `cmd & (cd foo)` background-launch
+        // + subshell-grouping chain" footgun) routes through
+        // `FonteCaminhoShellBackground` not
+        // `FonteCaminhoShellSubshellGrouping`. The background-launch
+        // tail is the load-bearing root-cause edit on every probe-as-
+        // both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & (cd foo)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and `(` (`"../caixa-teia; (cd foo)"` —
+        // the canonical sequential-cleanup + subshell-grouping paste
+        // idiom) routes through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellSubshellGrouping`. The sequential-command-
+        // separator paste is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; (cd foo)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream shell-pipe arm: a value carrying
+        // both `|` and `(` (`"../caixa-teia | (tee log)"` — the
+        // canonical pipeline-to-subshell-grouping paste idiom) routes
+        // through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellSubshellGrouping`. The pipeline-tail paste
+        // is the load-bearing root-cause edit on every probe-as-both
+        // value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | (tee log)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream shell-redirection arm: a value
+        // carrying both `>` and `(` (`"../caixa-teia>log (cd foo)"` —
+        // the canonical "I pasted a `cmd > log (cd foo)` redirect-
+        // plus-subshell-grouping chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellSubshellGrouping`. The input/output
+        // redirection metachar carries the more self-locating `byte`
+        // payload (it names which of `<` or `>` triggered), so the
+        // prior arm wins on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log (cd foo)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream backslash arm: a value carrying
+        // both `\` and `(` (`"..\caixa-teia\(cd foo)"` — the canonical
+        // "I pasted a Windows-shell `cd ..\path\(cmd)` chain") routes
+        // through `FonteCaminhoBackslash` not
+        // `FonteCaminhoShellSubshellGrouping`. The cross-host-OS-
+        // separator divergence is the load-bearing axis on every
+        // probe-as-both value (an author who removes the `\` is the
+        // root-cause edit; the `(` falls away in the same edit since
+        // it's downstream of the Windows-shell convention).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia\\(cd foo)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `(` (`"../foo\n(cd bar)"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho between two paste fragments)
+        // routes through `FonteCaminhoControlChar` not
+        // `FonteCaminhoShellSubshellGrouping`. The POSIX-syscall-
+        // rejected-byte / NUL-`CString::new`-fail diagnostic is the
+        // load-bearing axis on every value that probes positive for
+        // both — mirrors the cascade discipline on every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n(cd bar)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the load-bearing leading-byte arm: a leading
+        // `/` value with embedded `(` (`"/etc/(cd foo)"`) routes
+        // through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellSubshellGrouping` — the host-layout-leak
+        // diagnostic is the load-bearing axis, the subshell-grouping
+        // byte is the secondary observation. Same precedence logic as
+        // every prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/(cd foo)".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_shell_subshell_grouping() {
+        // Cascade pin on the upstream leading-`$` var-expansion arm: a
+        // value carrying both a leading `$` and a `(` (`"$(date)/\
+        // caixa-teia"` — the canonical "I pasted a `$(date)` modern-
+        // command-substitution at the head of a sibling-workspace
+        // path" footgun) routes through `FonteCaminhoVarExpansion` not
+        // `FonteCaminhoShellSubshellGrouping`. The leading-byte
+        // shell-variable-expansion is the more self-locating diagnostic
+        // on values that probe as both — same load-bearing-leading-
+        // byte cascade discipline every prior `:caminho` arm
+        // establishes. Closing both halves of `$(<cmd>)` structurally
+        // (leading `$` here, trailing `)` on the new arm) excludes the
+        // entire modern Bourne command-substitution surface from the
+        // typed `:caminho` accepted set; the cascade preserves the
+        // narrower leading-byte diagnostic on values that probe both
+        // halves at the canonical leading position.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$(date)/caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_subshell_grouping_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value carrying
+        // both `(` and a trailing `/` (`"../(cd foo)/"` — the canonical
+        // "I tab-completed a path that already had a subshell-grouping
+        // expansion tail" footgun) routes through
+        // `FonteCaminhoShellSubshellGrouping` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-metachar is
+        // the more semantic-locating axis (an author who removes the
+        // `(` typically also drops the trailing separator since both
+        // are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../(cd foo)/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_subshell_grouping_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_glob_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the closest two-byte peer arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-subshell-grouping footgun explicitly so a
+        // `feira lint` run can render the diagnostic without re-
+        // parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/$(date)/build".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia/$(date)/build"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x28"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("subshell-grouping"),
+            "diagnostic must name the shell-subshell-grouping footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("command-substitution"),
+            "diagnostic must reference the `$(<cmd>)` command-substitution vocabulary: \
+             {rendered:?}",
         );
     }
 
