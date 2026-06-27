@@ -34,9 +34,8 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    CILIUM_API_VERSION, Caixa, CaixaKind, DEFAULT_SERVICO_PORT, GATEWAY_API_API_VERSION,
-    KUBE_KEY_SPEC, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
-    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT,
+    WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
     pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
@@ -248,6 +247,39 @@ pub use caixa_core::GATEWAY_API_API_VERSION;
 /// the canonical-Cilium-CRD-axis surface.
 pub use caixa_core::CILIUM_API_VERSION;
 
+/// Canonical Cilium CRD `kind` discriminator every
+/// `cilium_network_policies`-emitted `CiliumNetworkPolicy` document
+/// declares at its top-level [`caixa_core::KUBE_KEY_KIND`] axis.
+/// Re-export of the canonical [`caixa_core::CILIUM_KIND_NETWORK_POLICY`]
+/// so the Cilium-operator-side CRD `kind` discriminator string lives in
+/// exactly one place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` CiliumNetworkPolicy
+/// emitter (the single production-code site the prior inline
+/// `"CiliumNetworkPolicy"` literal sat at,
+/// caixa-mesh/src/lib.rs:382 — the `kube_resource_skeleton` kind
+/// argument) and every future per-Cilium-side renderer the M3.x
+/// absorption roadmap acknowledges now consult the same `&'static
+/// str`, so a future Cilium-CRD rebrand (e.g. an upstream rename to
+/// `CiliumNetworkPolicyV2`) is a one-line edit on the canonical
+/// [`caixa_core::CILIUM_KIND_NETWORK_POLICY`] declaration, not a
+/// coordinated rewrite across this crate's `kube_resource_skeleton`
+/// call site + every future per-target renderer the substrate adds.
+/// The prior inline literal would have let a Cilium-CRD bump on the
+/// kind axis without a coordinated edit on the matching in-file
+/// `cilium_policy_carries_canonical_kube_skeleton` test fixture pin
+/// silently emit a `CiliumNetworkPolicy` whose top-level kind drifts
+/// off the lifted-test-fixture pin — apply-side: the policy lands
+/// outside the Cilium-operator-side CRD registration, every
+/// `(:de, :para)` intra-mesh L4/L7 contract drops at the eBPF data
+/// plane with no field naming the kind-drift root cause. Peer to the
+/// [`CILIUM_API_VERSION`] re-export on the sibling
+/// canonical-Cilium-CRD-apiVersion-axis — extends the discipline from
+/// the apiVersion half of the `(apiVersion, kind)` CRD-lookup tuple
+/// onto the kind half, completing the per-Cilium-CRD
+/// kind+apiVersion re-export pair this crate's `cilium_network_policies`
+/// renderer's eBPF data-plane contract rests on.
+pub use caixa_core::CILIUM_KIND_NETWORK_POLICY;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -376,10 +408,16 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // version string threads through the lifted
         // [`CILIUM_API_VERSION`] re-export so a future Cilium-CRD bump
         // lands on the canonical [`caixa_core::CILIUM_API_VERSION`]
-        // declaration, not at this call site.
+        // declaration, not at this call site. The kind axis of the
+        // `(apiVersion, kind)` CRD-lookup tuple now threads through the
+        // matching [`CILIUM_KIND_NETWORK_POLICY`] re-export so a future
+        // Cilium-CRD kind rebrand lands on the canonical
+        // [`caixa_core::CILIUM_KIND_NETWORK_POLICY`] declaration too —
+        // both halves of the tuple move as a unit through one lifted
+        // const each, no per-renderer drift surface.
         let mut policy = kube_resource_skeleton(
             CILIUM_API_VERSION,
-            "CiliumNetworkPolicy",
+            CILIUM_KIND_NETWORK_POLICY,
             &format!("{}-{}-to-{}", caixa.nome, de, para),
             namespace,
             labels,
@@ -955,6 +993,91 @@ mod tests {
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
+    }
+
+    #[test]
+    fn cilium_kind_network_policy_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KIND_NETWORK_POLICY` was lifted from
+        // the inline `"CiliumNetworkPolicy"` literal at the
+        // `cilium_network_policies` `kube_resource_skeleton` kind
+        // argument (caixa-mesh/src/lib.rs:382 — the per-`(:de, :para)`
+        // CiliumNetworkPolicy emit site) to a re-export of
+        // [`caixa_core::CILIUM_KIND_NETWORK_POLICY`] so the
+        // Cilium-CRD-`kind` discriminator string lives in exactly one
+        // place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const CILIUM_KIND_NETWORK_POLICY: &str = "…"`
+        // (the canonical drift footgun where a sibling local `pub
+        // const` could happen to carry the same string at the source
+        // while pointing at a different `&'static` allocation) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let a
+        // Cilium-CRD kind rebrand on the caixa-mesh side without a
+        // coordinated caixa-core edit silently land per-`(:de, :para)`
+        // CiliumNetworkPolicy objects at one CRD kind and every
+        // future per-target Cilium-side renderer's emitted
+        // `CiliumClusterwideNetworkPolicy` / `CiliumLocalRedirectPolicy`
+        // at the drifted other, with every intra-mesh L4/L7 contrato
+        // flow dropping at apply time because the per-policy
+        // attached-identity pipeline never binds across the
+        // kind-drifted CRD-discriminator pair. Peer to
+        // [`cilium_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the sibling Cilium-CRD-apiVersion-re-export axis —
+        // completes the per-Cilium-CRD kind+apiVersion re-export pair
+        // this crate's `cilium_network_policies` renderer's eBPF
+        // data-plane contract rests on.
+        assert_eq!(
+            CILIUM_KIND_NETWORK_POLICY,
+            caixa_core::CILIUM_KIND_NETWORK_POLICY
+        );
+        assert!(
+            std::ptr::eq(
+                CILIUM_KIND_NETWORK_POLICY.as_ptr(),
+                caixa_core::CILIUM_KIND_NETWORK_POLICY.as_ptr(),
+            ),
+            "CILIUM_KIND_NETWORK_POLICY must be a re-export of \
+             caixa_core::CILIUM_KIND_NETWORK_POLICY, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_network_policies_use_lifted_cilium_kind_network_policy() {
+        // Fail-before-pass-after pin parsing every rendered
+        // `CiliumNetworkPolicy` document and asserting its top-level
+        // `kind` axis equals the lifted constant by value. Peer to the
+        // canonical-string pin (`cilium_policy_carries_canonical_kube_skeleton`
+        // — still present below as the bridge-arm pin asserting the
+        // inline canonical string) and the re-export-identity pin
+        // (`cilium_kind_network_policy_re_export_points_at_caixa_core_canonical`)
+        // — together the three arms (canonical-string pin, lifted-uses
+        // pin, re-export-identity pin) close the three-arm drift
+        // footgun the inline-literal-pair-across-the-production-
+        // skeleton-call-plus-test-fixture shape carried by
+        // construction. Peer to
+        // [`cilium_network_policies_use_lifted_cilium_api_version`] on
+        // the sibling Cilium-CRD-apiVersion-axis lift trajectory —
+        // completes the per-Cilium-CRD kind+apiVersion lifted-uses
+        // pin pair the renderer's exit threading through the lifted
+        // [`CILIUM_API_VERSION`] + [`CILIUM_KIND_NETWORK_POLICY`] pair
+        // demands.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        assert!(
+            !policies.is_empty(),
+            "the aplicacao fixture must emit at least one CiliumNetworkPolicy \
+             — drift here masks the lifted-uses assertion below"
+        );
+        for p in &policies {
+            assert_eq!(
+                p.get("kind").and_then(|v| v.as_str()),
+                Some(CILIUM_KIND_NETWORK_POLICY),
+                "every rendered CiliumNetworkPolicy must declare the lifted \
+                 [`CILIUM_KIND_NETWORK_POLICY`] constant on its top-level kind \
+                 axis — drift here means the per-policy skeleton call no \
+                 longer threads the lifted constant through"
+            );
+        }
     }
 
     #[test]
