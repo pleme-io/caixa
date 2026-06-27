@@ -5794,6 +5794,86 @@ pub const FLUX_KIND_HELM_RELEASE: &str = "HelmRelease";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KUSTOMIZATION_API_VERSION: &str = "kustomize.toolkit.fluxcd.io/v1";
 
+/// Canonical FluxCD `Kustomization` CRD `kind` discriminator every
+/// `caixa-flux`-emitted document that names a Flux v2 `Kustomization`
+/// at a [`KUBE_KEY_KIND`]-rooted axis declares. Paired peer to the
+/// sibling [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) — the K8s
+/// apiserver-side CRD resolution contract is the `(apiVersion, kind)`
+/// tuple keyed against the registered `CustomResourceDefinition`, so
+/// drift on the kind axis is exactly as load-bearing as drift on the
+/// apiVersion axis it accompanies (the apiserver's `RESTMapper` consults
+/// both together; a `("kustomize.toolkit.fluxcd.io/v1", "Kustomizaton")`
+/// typo at the production-code call site lands outside the registered
+/// Flux v2 kustomize-controller CRD's `RESTKind` lookup, surfacing
+/// apply-side as a non-self-locating "no kind 'Kustomizaton' is
+/// registered for version 'kustomize.toolkit.fluxcd.io/v1'" error far
+/// from the source caixa.lisp / the renderer's format-string template).
+///
+/// The single source of truth the rendered Flux bundle's
+/// `Kustomization`-naming axis reaches for:
+///
+///   - the rendered `kustomization.yaml` document's top-level
+///     [`KUBE_KEY_KIND`] axis (caixa-flux/src/lib.rs:651 — the
+///     `kustomization` format-string template).
+///
+/// The kind axis names the same K8s CRD discriminator as the sibling
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] apiVersion axis and must move
+/// together on any future Flux v3 rebrand. Until this lift landed the
+/// axis carried an inline `Kustomization` literal across the one
+/// production-code occurrence in caixa-flux/src/lib.rs:651 (the
+/// `cluster_bundle` `kustomization` format-string template) plus a
+/// matching set inside the in-file `cluster_bundle_*` test fixtures —
+/// occurrences of the same load-bearing FluxCD-CRD-`kind`-discriminator
+/// convention, drift-prone by construction. A drift on the top-level
+/// `kustomization.yaml` `kind` axis would have surfaced as a
+/// non-self-locating "no kind 'Kustomizaton' is registered for version
+/// 'kustomize.toolkit.fluxcd.io/v1'" error far from the source
+/// caixa.lisp at apply parse time, with the rendered parent Kustomization
+/// never reconciling and every downstream per-Servico `dependsOn` chain
+/// freezing at the kustomize-controller's CRD-lookup boundary.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) lifts established on
+/// the sibling Flux-v2-load-bearing-string axes — extends the
+/// discipline from the apiVersion half of the `(apiVersion, kind)`
+/// CRD-lookup tuple onto the kind half on the same Flux v2
+/// kustomize-controller CRD. Completes the Flux v2 controller triplet
+/// kind-axis lift (source-controller + helm-controller +
+/// kustomize-controller) alongside the sibling
+/// [`FLUX_KIND_GIT_REPOSITORY`] and [`FLUX_KIND_HELM_RELEASE`] — every
+/// per-controller CRD `kind` discriminator is now a typed substrate-side
+/// `&'static str` consumed through one `pub use caixa_core::FLUX_KIND_*`
+/// re-export at the renderer site. The render-side consumer now threads
+/// the same `&'static str` through its format-string template so a
+/// future Flux v3 rebrand lands in one place; every future renderer
+/// that reaches for the canonical Flux v2 `Kustomization` kind (the
+/// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-Aplicacao `Kustomization`, a future per-edge `Kustomization`
+/// the operator emits for the `CiliumClusterwideEnvoyConfig` pipeline,
+/// a future `caixa-otel` collector-pipeline `Kustomization`) inherits
+/// the same value by construction with no opportunity for per-renderer
+/// drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts apply on the peer
+/// canonical-Flux-v2-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_KIND_KUSTOMIZATION: &str = "Kustomization";
+
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
 /// SIG-Network Gateway API conformance registers the `Gateway` /
@@ -7196,6 +7276,71 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "FLUX_KIND_HELM_RELEASE {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API kind discriminator grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             RESTMapper would reject"
+        );
+    }
+
+    #[test]
+    fn flux_kind_kustomization_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `Kustomization` CRD `kind` discriminator
+        // the rendered `kustomization.yaml`'s top-level `kind` axis
+        // declares. The string is part of the cluster-side contract
+        // with the Flux v2 `kustomize-controller` — the apiserver-side
+        // CRD resolution contract is the `(apiVersion, kind)` tuple
+        // keyed against the registered `CustomResourceDefinition`, so
+        // the kind half of the tuple is exactly as load-bearing as the
+        // sibling [`FLUX_KUSTOMIZATION_API_VERSION`] apiVersion half. A
+        // drifted value (e.g. an upstream Flux v3 rename to
+        // `KustomizationSet`) lands the rendered document outside the
+        // kustomize-controller's CRD registration; changing it is a
+        // coordinated Flux v3 migration alongside the upstream
+        // `kustomize-controller` deprecation cycle, not an incidental
+        // edit. Peer to
+        // `flux_kind_git_repository_pins_canonical_value` /
+        // `flux_kind_helm_release_pins_canonical_value` on the sibling
+        // Flux v2 controller-triplet `kind`-axis surface — completes
+        // the canonical-Flux-v2-CRD-kind-discriminator pin set across
+        // the source-controller + helm-controller + kustomize-controller
+        // triplet.
+        assert_eq!(FLUX_KIND_KUSTOMIZATION, "Kustomization");
+    }
+
+    #[test]
+    fn flux_kind_kustomization_carries_upper_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD `kind` discriminator is
+        // an UpperCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#types-kinds —
+        // "Kinds are always UpperCamelCase"). Pinning the shape here
+        // means a future rebrand on the canonical lift can't silently
+        // land a malformed kind discriminator (snake_case, kebab-case,
+        // lowercase, empty) that every downstream YAML-aware
+        // deserializer would reject far from the rebrand commit's
+        // source. The first-byte uppercase / rest-ASCII-alphanumeric
+        // invariant is the load-bearing K8s API typed-discovery
+        // contract: a value the apiserver's `RESTMapper` consults to
+        // resolve the CRD's `RESTKind`. Peer to
+        // `flux_kind_git_repository_carries_upper_camel_case_shape` /
+        // `flux_kind_helm_release_carries_upper_camel_case_shape` on
+        // the sibling Flux v2 controller-triplet `kind`-axis surface.
+        let v = FLUX_KIND_KUSTOMIZATION;
+        assert!(
+            !v.is_empty(),
+            "FLUX_KIND_KUSTOMIZATION {v:?} must be non-empty per the K8s API \
+             UpperCamelCase kind discriminator grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_uppercase(),
+            "FLUX_KIND_KUSTOMIZATION {v:?} first byte {first:?} must be \
+             ASCII-uppercase per the K8s API UpperCamelCase kind discriminator \
+             grammar (Kinds are always UpperCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_KIND_KUSTOMIZATION {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API kind discriminator grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              RESTMapper would reject"
