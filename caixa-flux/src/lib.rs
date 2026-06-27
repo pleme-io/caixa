@@ -246,6 +246,36 @@ pub use caixa_core::FLUX_KIND_GIT_REPOSITORY;
 /// helm-controller CRD.
 pub use caixa_core::FLUX_KIND_HELM_RELEASE;
 
+/// Canonical FluxCD `Kustomization` CRD `kind` discriminator — re-export
+/// of the lifted [`caixa_core::FLUX_KIND_KUSTOMIZATION`] so the load-
+/// bearing string lives in exactly one place across the rendered Flux
+/// bundle's `Kustomization`-naming axis:
+///
+///   - the rendered `kustomization.yaml` document's top-level `kind`
+///     axis (the Kustomization CR's own discriminator).
+///
+/// Until this lift landed the axis sat as an inline `Kustomization`
+/// literal inside the [`cluster_bundle`] `kustomization` format-string
+/// template (caixa-flux/src/lib.rs:651). The apiserver-side CRD
+/// resolution contract is the `(apiVersion, kind)` tuple keyed against
+/// the registered `CustomResourceDefinition`; a typo at this call site
+/// would have surfaced at apply parse time as a non-self-locating "no
+/// kind 'Kustomizaton' is registered for version
+/// 'kustomize.toolkit.fluxcd.io/v1'" error, with the rendered parent
+/// Kustomization never reconciling and every downstream per-Servico
+/// `dependsOn` chain freezing at the kustomize-controller's CRD-lookup
+/// boundary. Same shape as the [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) lifts on the sibling
+/// Flux-v2-load-bearing-string axes — extends the kind-axis discipline
+/// from the Flux v2 source-controller + helm-controller CRDs onto the
+/// sibling Flux v2 kustomize-controller CRD, completing the
+/// canonical-Flux-v2-CRD-kind-discriminator lift across the
+/// source/helm/kustomize controller triplet.
+pub use caixa_core::FLUX_KIND_KUSTOMIZATION;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -648,7 +678,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # Flux Kustomization that pins the GitRepository + HelmRelease.\n\
          # Paired path: pleme-io/k8s/clusters/{cluster}/services/{name}/\n\
          apiVersion: {kustomization_api_version}\n\
-         kind: Kustomization\n\
+         kind: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
            namespace: {flux_system}\n\
@@ -666,6 +696,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                namespace: {namespace}\n  \
            timeout: 5m\n",
         kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
+        kind = FLUX_KIND_KUSTOMIZATION,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         health_kind = FLUX_KIND_HELM_RELEASE,
         api_version = FLUX_HELMRELEASE_API_VERSION,
@@ -2359,6 +2390,84 @@ spec:
              spec.healthChecks[].kind must spell the same lifted constant \
              — drift here dangles the parent Kustomization's health gate \
              at the Flux v2 kustomize-controller"
+        );
+    }
+
+    #[test]
+    fn flux_kind_kustomization_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KIND_KUSTOMIZATION` is
+        // the single source of truth for the Flux v2 `Kustomization` CRD
+        // `kind` discriminator the rendered Flux bundle's
+        // `Kustomization`-naming axis declares (the `kustomization.yaml`
+        // top-level `kind`). Pin the equality (and the static-data
+        // identity, peer with the sibling
+        // [`flux_kind_git_repository_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`flux_kind_helm_release_re_export_points_at_caixa_core_canonical`]
+        // pins) so any local re-introduction of a sibling
+        // `pub const FLUX_KIND_KUSTOMIZATION: &str = "…"` (the canonical
+        // drift footgun this lift closes — the load-bearing Flux v2
+        // `Kustomization` CRD `kind` discriminator inside the
+        // cluster_bundle template, lifted to one re-export at the
+        // caixa-core boundary) is a build-time test failure naming the
+        // offending drift, not a silent apply-time
+        // `kustomize-controller` CRD-lookup miss that perpetually
+        // freezes the rendered parent Kustomization and every
+        // downstream per-Servico `dependsOn` chain.
+        assert_eq!(FLUX_KIND_KUSTOMIZATION, caixa_core::FLUX_KIND_KUSTOMIZATION);
+        assert!(
+            std::ptr::eq(
+                FLUX_KIND_KUSTOMIZATION.as_ptr(),
+                caixa_core::FLUX_KIND_KUSTOMIZATION.as_ptr(),
+            ),
+            "FLUX_KIND_KUSTOMIZATION must be a re-export of \
+             caixa_core::FLUX_KIND_KUSTOMIZATION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two is \
+             the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_kind_uses_lifted_flux_kind_kustomization() {
+        // Fail-before-pass-after pin: the rendered `kustomization.yaml`
+        // top-level `kind` axis — the load-bearing K8s CRD discriminator
+        // the Flux v2 `kustomize-controller` resolves the rendered
+        // document against — must resolve to the lifted
+        // [`FLUX_KIND_KUSTOMIZATION`] verbatim. Before this lift the
+        // kustomization template carried an inline `Kustomization`
+        // literal; the apiserver-side CRD resolution contract is the
+        // `(apiVersion, kind)` tuple keyed against the registered
+        // `CustomResourceDefinition`, so drift on the kind axis is
+        // exactly as load-bearing as drift on the sibling
+        // [`FLUX_KUSTOMIZATION_API_VERSION`] axis (a future Flux v3
+        // rebrand on this axis without a coordinated edit on the
+        // sibling apiVersion axis silently lands the rendered
+        // `Kustomization` outside the kustomize-controller's `Watches`
+        // and surfaces at apply parse time as a non-self-locating
+        // "no kind 'Kustomization' is registered" error far from the
+        // rebrand commit's source). Peer with
+        // [`cluster_bundle_kustomization_uses_lifted_flux_kustomization_api_version`]
+        // on the sibling apiVersion half of the same CRD-lookup tuple,
+        // and with
+        // [`cluster_bundle_helmrelease_kind_uses_lifted_flux_kind_helm_release`]
+        // /
+        // [`cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository`]
+        // on the sibling Flux v2 controller-triplet CRD kind axes.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        assert_eq!(
+            parsed.get("kind").and_then(|n| n.as_str()),
+            Some(FLUX_KIND_KUSTOMIZATION),
+            "kustomization.yaml top-level kind must spell the lifted \
+             FLUX_KIND_KUSTOMIZATION ({FLUX_KIND_KUSTOMIZATION:?}); a drifted \
+             literal here routes the Kustomization outside the Flux v2 \
+             kustomize-controller's CRD registration",
         );
     }
 }
