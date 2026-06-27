@@ -280,6 +280,40 @@ pub use caixa_core::CILIUM_API_VERSION;
 /// renderer's eBPF data-plane contract rests on.
 pub use caixa_core::CILIUM_KIND_NETWORK_POLICY;
 
+/// Canonical K8s Gateway API CRD `kind` discriminator every
+/// `gateway_routes`-emitted `Gateway` document declares at its top-level
+/// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KIND_GATEWAY`] so the Gateway-API-conformant
+/// CRD `kind` discriminator string lives in exactly one place across
+/// every caixa renderer — caixa-mesh's `gateway_routes` per-Aplicacao
+/// `Gateway` emitter (the single production-code site the prior inline
+/// `"Gateway"` literal sat at, caixa-mesh/src/lib.rs:578 — the
+/// `kube_resource_skeleton` kind argument) and every future per-
+/// Gateway-API-side renderer the M3.x absorption roadmap acknowledges
+/// now consult the same `&'static str`, so a future Gateway-API rebrand
+/// (e.g. an upstream rename to `GatewayV1` post-GA) is a one-line edit
+/// on the canonical [`caixa_core::GATEWAY_API_KIND_GATEWAY`] declaration,
+/// not a coordinated rewrite across this crate's `kube_resource_skeleton`
+/// call site + every future per-target renderer the substrate adds.
+/// The prior inline literal would have let a Gateway-API kind rebrand
+/// on the caixa-mesh side without a coordinated edit on the matching
+/// in-file `gateway_carries_canonical_kube_skeleton_without_labels` /
+/// `render_all_includes_every_artifact_kind` test fixture pins silently
+/// emit a `Gateway` whose top-level kind drifts off the lifted-test-
+/// fixture pins — apply-side: the Gateway lands outside the apiserver-
+/// side CRD registration, every external `:entrada` flow drops at the
+/// gateway-class-controller's reconcile loop with no field naming the
+/// kind-drift root cause. Peer to the [`GATEWAY_API_API_VERSION`]
+/// re-export on the sibling canonical-Gateway-API-CRD-apiVersion-axis —
+/// extends the discipline from the apiVersion half of the
+/// `(apiVersion, kind)` CRD-lookup tuple onto the kind half on the
+/// same Gateway-API-CRD-axis, beginning the per-Gateway-API-CRD
+/// kind+apiVersion re-export pair this crate's `gateway_routes`
+/// renderer's external `:entrada` ingress contract rests on. Peer to
+/// the [`CILIUM_KIND_NETWORK_POLICY`] re-export on the sibling
+/// canonical-Cilium-CRD-kind-discriminator surface.
+pub use caixa_core::GATEWAY_API_KIND_GATEWAY;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -573,9 +607,19 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // spec below. No metadata.labels on Gateway today (the gateway is
     // identified by its own name + namespace; per-Aplicacao label
     // grouping happens at the HTTPRoute / route-attached-policy axis).
+    // The Gateway-API-CRD-group/version string threads through the
+    // lifted [`GATEWAY_API_API_VERSION`] re-export so a future
+    // Gateway-API bump lands on the canonical
+    // [`caixa_core::GATEWAY_API_API_VERSION`] declaration, not at this
+    // call site. The kind axis of the `(apiVersion, kind)` CRD-lookup
+    // tuple now threads through the matching [`GATEWAY_API_KIND_GATEWAY`]
+    // re-export so a future Gateway-API kind rebrand lands on the
+    // canonical [`caixa_core::GATEWAY_API_KIND_GATEWAY`] declaration too
+    // — both halves of the tuple move as a unit through one lifted const
+    // each, no per-renderer drift surface.
     let mut gateway = kube_resource_skeleton(
         GATEWAY_API_API_VERSION,
-        "Gateway",
+        GATEWAY_API_KIND_GATEWAY,
         &caixa.nome,
         namespace,
         BTreeMap::new(),
@@ -1037,6 +1081,54 @@ mod tests {
             ),
             "CILIUM_KIND_NETWORK_POLICY must be a re-export of \
              caixa_core::CILIUM_KIND_NETWORK_POLICY, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KIND_GATEWAY` was lifted from the
+        // inline `"Gateway"` literal at the `gateway_routes`
+        // `kube_resource_skeleton` kind argument
+        // (caixa-mesh/src/lib.rs:578 — the per-Aplicacao Gateway emit
+        // site) to a re-export of [`caixa_core::GATEWAY_API_KIND_GATEWAY`]
+        // so the Gateway-API-conformant CRD `kind` discriminator string
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + static-data identity here so any local
+        // re-introduction of a sibling
+        // `pub const GATEWAY_API_KIND_GATEWAY: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a Gateway-API kind rebrand on
+        // the caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-Aplicacao Gateway objects at one CRD kind
+        // and every future per-target Gateway-API-side renderer's
+        // emitted `GatewayClass` / `TCPRoute` / `TLSRoute` / `GRPCRoute`
+        // at the drifted other, with every external `:entrada` flow
+        // dropping at the gateway-class-controller's reconcile loop
+        // because the per-route attached-policy pipeline never binds
+        // across the kind-drifted CRD-discriminator pair. Peer to
+        // [`gateway_api_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the sibling Gateway-API-CRD-apiVersion-re-export axis —
+        // begins the per-Gateway-API-CRD kind+apiVersion re-export pair
+        // this crate's `gateway_routes` renderer's external `:entrada`
+        // ingress contract rests on. Peer to
+        // [`cilium_kind_network_policy_re_export_points_at_caixa_core_canonical`]
+        // on the sibling Cilium-CRD-kind-discriminator re-export axis.
+        assert_eq!(
+            GATEWAY_API_KIND_GATEWAY,
+            caixa_core::GATEWAY_API_KIND_GATEWAY
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KIND_GATEWAY.as_ptr(),
+                caixa_core::GATEWAY_API_KIND_GATEWAY.as_ptr(),
+            ),
+            "GATEWAY_API_KIND_GATEWAY must be a re-export of \
+             caixa_core::GATEWAY_API_KIND_GATEWAY, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
         );
@@ -1981,6 +2073,46 @@ mod tests {
             Some(caixa_core::GATEWAY_API_API_VERSION),
             "Gateway's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_routes_gateway_uses_lifted_gateway_api_kind_gateway() {
+        // Fail-before-pass-after pin parsing the rendered `Gateway`
+        // document and asserting its top-level `kind` axis equals the
+        // lifted [`caixa_core::GATEWAY_API_KIND_GATEWAY`] constant by
+        // value (not just by the canonical-literal string, which the
+        // sibling `gateway_carries_canonical_kube_skeleton_without_labels`
+        // pin already enforces). The two pins form the bridge-arm pair:
+        // this pin trips on drift between the renderer-side threading
+        // and the lifted const, the sibling pin trips on drift between
+        // the lifted const and the canonical literal, and the
+        // [`gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical`]
+        // pin trips on drift between this crate's re-export and the
+        // caixa-core canonical declaration — together the three arms
+        // (canonical-string pin, lifted-uses pin, re-export-identity
+        // pin) close the three-arm drift footgun the inline-literal-
+        // across-the-production-skeleton-call-plus-test-fixture shape
+        // carried by construction. Peer to
+        // [`gateway_routes_gateway_uses_lifted_gateway_api_api_version`]
+        // on the sibling Gateway-API-CRD-apiVersion-axis lift trajectory
+        // — begins the per-Gateway-API-CRD kind+apiVersion lifted-uses
+        // pin pair the renderer's exit threading through the lifted
+        // [`GATEWAY_API_API_VERSION`] + [`GATEWAY_API_KIND_GATEWAY`]
+        // pair demands. Peer to
+        // [`cilium_network_policies_use_lifted_cilium_kind_network_policy`]
+        // on the sibling Cilium-CRD-kind-axis lift trajectory.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY))
+            .expect("Gateway present");
+        assert_eq!(
+            gateway.get("kind").and_then(|v| v.as_str()),
+            Some(caixa_core::GATEWAY_API_KIND_GATEWAY),
+            "Gateway's top-level kind must equal the lifted \
+             caixa_core::GATEWAY_API_KIND_GATEWAY by value — drift here \
              is the canonical footgun this lift closes"
         );
     }
