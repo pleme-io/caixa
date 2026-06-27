@@ -181,6 +181,39 @@ pub use caixa_core::FLUX_GITREPOSITORY_API_VERSION;
 /// the sibling Flux-v2-load-bearing-string axis.
 pub use caixa_core::FLUX_KUSTOMIZATION_API_VERSION;
 
+/// Canonical FluxCD `GitRepository` CRD `kind` discriminator — re-export
+/// of the lifted [`caixa_core::FLUX_KIND_GIT_REPOSITORY`] so the load-
+/// bearing string lives in exactly one place across the three rendered
+/// Flux bundle axes that name the same K8s CRD discriminator:
+///
+///   - the rendered `gitrepository.yaml` document's top-level `kind`
+///     axis (the GitRepository CR's own discriminator);
+///   - the rendered `helmrelease.yaml` document's
+///     `spec.chart.spec.sourceRef.kind` axis (pointing back at the
+///     sibling GitRepository this chart sources from);
+///   - the rendered `kustomization.yaml` document's `spec.sourceRef.kind`
+///     axis (pointing back at the cluster's bootstrap GitRepository).
+///
+/// Until this lift landed the three axes sat as three inline
+/// `GitRepository` literals across the [`cluster_bundle`] `gitrepo` +
+/// `helmrelease` + `kustomization` format-string templates (caixa-flux
+/// /src/lib.rs:505, 556, 591). The apiserver-side CRD resolution
+/// contract is the `(apiVersion, kind)` tuple keyed against the
+/// registered `CustomResourceDefinition`; a typo at any one of the three
+/// call sites would have silently dangled the corresponding `sourceRef`
+/// at apply time (the `helm-controller` never resolves a chart for the
+/// HelmRelease, the `kustomize-controller` never reconciles the parent
+/// Kustomization, every per-Servico apply silently comes up with the
+/// prior reconciled state) with no diagnostic naming the kind-drift root
+/// cause far from the source caixa.lisp. Same shape as the
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) lifts on the sibling
+/// apiVersion half of the same `(apiVersion, kind)` CRD-lookup tuple —
+/// extends the discipline from the apiVersion axis of the Flux v2
+/// source-controller CRD onto its kind axis.
+pub use caixa_core::FLUX_KIND_GIT_REPOSITORY;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -502,7 +535,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         "---\n\
          # Source — pinned to {tag_human}, rendered by caixa-flux.\n\
          apiVersion: {api_version}\n\
-         kind: GitRepository\n\
+         kind: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
            namespace: {namespace}\n\
@@ -512,6 +545,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            ref:\n\
          {gitref_field}\n",
         api_version = FLUX_GITREPOSITORY_API_VERSION,
+        kind = FLUX_KIND_GIT_REPOSITORY,
         tag_human = match &opts.git_ref {
             GitRefSpec::Tag(t) => format!("tag {t}"),
             GitRefSpec::Branch(b) => format!("branch {b}"),
@@ -553,7 +587,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              spec:\n      \
                chart: {chart_path}\n      \
                sourceRef:\n        \
-                 kind: GitRepository\n        \
+                 kind: {source_kind}\n        \
                  name: {name}\n        \
                  namespace: {namespace}\n  \
            install:\n    \
@@ -568,6 +602,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              {library_name}:\n      \
                enabled: true\n",
         api_version = FLUX_HELMRELEASE_API_VERSION,
+        source_kind = FLUX_KIND_GIT_REPOSITORY,
         name = name,
         namespace = opts.namespace,
         interval = opts.interval,
@@ -588,7 +623,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            interval: {interval}\n  \
            prune: true\n  \
            sourceRef:\n    \
-             kind: GitRepository\n    \
+             kind: {source_kind}\n    \
              name: {flux_system}\n  \
            path: ./clusters/{cluster}/services/{name}\n  \
            healthChecks:\n    \
@@ -598,6 +633,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                namespace: {namespace}\n  \
            timeout: 5m\n",
         kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
+        source_kind = FLUX_KIND_GIT_REPOSITORY,
         api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
@@ -1862,6 +1898,242 @@ spec:
             "kustomization.yaml must spell the canonical Flux v2 Kustomization \
              apiVersion at the top-level apiVersion axis (got: {contents:?})",
             contents = kz.contents,
+        );
+    }
+
+    #[test]
+    fn flux_kind_git_repository_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KIND_GIT_REPOSITORY` is
+        // the single source of truth for the Flux v2 `GitRepository` CRD
+        // `kind` discriminator the rendered Flux bundle's three
+        // `GitRepository`-naming axes declare (the `gitrepository.yaml`
+        // top-level `kind`, the `helmrelease.yaml`
+        // `spec.chart.spec.sourceRef.kind`, and the `kustomization.yaml`
+        // `spec.sourceRef.kind`). Pin the equality (and the static-data
+        // identity, peer with the sibling
+        // [`flux_gitrepository_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_kustomization_api_version_re_export_points_at_caixa_core_canonical`]
+        // pins) so any local re-introduction of a sibling `pub const
+        // FLUX_KIND_GIT_REPOSITORY: &str = "…"` (the canonical drift
+        // footgun this lift closes — three production-code consumers of
+        // the load-bearing Flux v2 `GitRepository` CRD `kind`
+        // discriminator inside the cluster_bundle templates, lifted to one
+        // re-export at the caixa-core boundary) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // `helm-controller` chart-resolution dangle.
+        assert_eq!(
+            FLUX_KIND_GIT_REPOSITORY,
+            caixa_core::FLUX_KIND_GIT_REPOSITORY
+        );
+        assert!(
+            std::ptr::eq(
+                FLUX_KIND_GIT_REPOSITORY.as_ptr(),
+                caixa_core::FLUX_KIND_GIT_REPOSITORY.as_ptr(),
+            ),
+            "FLUX_KIND_GIT_REPOSITORY must be a re-export of \
+             caixa_core::FLUX_KIND_GIT_REPOSITORY, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two is \
+             the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository() {
+        // Fail-before-pass-after pin: the rendered `gitrepository.yaml`
+        // top-level `kind` axis — the load-bearing K8s CRD discriminator
+        // the Flux v2 `source-controller` resolves the rendered document
+        // against — must resolve to the lifted
+        // [`FLUX_KIND_GIT_REPOSITORY`] verbatim. Before this lift the
+        // gitrepository template carried an inline `GitRepository`
+        // literal at one of three sibling production-code call sites
+        // across the cluster_bundle templates; the apiserver-side CRD
+        // resolution contract is the `(apiVersion, kind)` tuple keyed
+        // against the registered `CustomResourceDefinition`, so drift on
+        // the kind axis is exactly as load-bearing as drift on the
+        // sibling [`FLUX_GITREPOSITORY_API_VERSION`] axis (a future Flux
+        // v3 rebrand on this axis without a coordinated edit on the
+        // sibling sourceRef.kind axes silently lands the rendered
+        // `GitRepository` outside the source-controller's `Watches`).
+        // Peer with [`cluster_bundle_gitrepository_uses_lifted_flux_api_version`]
+        // on the sibling apiVersion half of the same CRD-lookup tuple.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .expect("gitrepository.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        assert_eq!(
+            parsed.get("kind").and_then(|n| n.as_str()),
+            Some(FLUX_KIND_GIT_REPOSITORY),
+            "gitrepository.yaml top-level kind must spell the lifted \
+             FLUX_KIND_GIT_REPOSITORY ({FLUX_KIND_GIT_REPOSITORY:?}); a drifted \
+             literal here routes the GitRepository outside the Flux v2 \
+             source-controller's CRD registration",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_source_ref_kind_uses_lifted_flux_kind_git_repository() {
+        // Sibling-axis pin to
+        // `cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository`:
+        // the rendered `helmrelease.yaml`'s `spec.chart.spec.sourceRef.kind`
+        // axis is the Flux v2 contract pairing the HelmRelease's chart-
+        // source resolution to the sibling GitRepository's CRD
+        // discriminator. Both axes must resolve to the same lifted
+        // constant by value — a future Flux v3 rebrand on either axis
+        // without a coordinated edit on the other would have silently
+        // dangled the HelmRelease's chart sourceRef (apply-side: the
+        // `helm-controller` never resolves a chart for the HelmRelease,
+        // the rendered Servico chart never reconciles), with the failure
+        // surfacing far from the rebrand commit's source at
+        // `kubectl describe helmrelease` time. This is the one of the
+        // three call sites whose drift the apiserver can't self-locate
+        // (top-level kind typos surface as "no kind 'X' is registered"
+        // at apply parse time; a nested sourceRef.kind typo silently
+        // dangles a controller-side reference).
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let source_ref_kind = parsed
+            .get("spec")
+            .and_then(|s| s.get("chart"))
+            .and_then(|c| c.get("spec"))
+            .and_then(|s| s.get("sourceRef"))
+            .and_then(|r| r.get("kind"))
+            .and_then(|k| k.as_str())
+            .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
+        assert_eq!(
+            source_ref_kind, FLUX_KIND_GIT_REPOSITORY,
+            "helmrelease.yaml spec.chart.spec.sourceRef.kind must spell the \
+             lifted FLUX_KIND_GIT_REPOSITORY ({FLUX_KIND_GIT_REPOSITORY:?}); a \
+             drifted literal here dangles the HelmRelease's chart sourceRef \
+             at the Flux v2 source-controller's CRD registration",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_source_ref_kind_uses_lifted_flux_kind_git_repository() {
+        // Sibling-axis pin to
+        // `cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository`
+        // / `cluster_bundle_helmrelease_source_ref_kind_uses_lifted_flux_kind_git_repository`:
+        // the rendered `kustomization.yaml`'s `spec.sourceRef.kind` axis is
+        // the Flux v2 contract pairing the parent Kustomization's source
+        // resolution to the cluster's bootstrap GitRepository's CRD
+        // discriminator (paired with [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] on
+        // the namespace axis). Completes the three-axis pin set so any
+        // local re-introduction of an inline `GitRepository` literal at
+        // any one of the three rendered Flux bundle axes is a build-time
+        // test failure, not a silent apply-time dangling-sourceRef
+        // reconciliation freeze.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let source_ref_kind = parsed
+            .get("spec")
+            .and_then(|s| s.get("sourceRef"))
+            .and_then(|r| r.get("kind"))
+            .and_then(|k| k.as_str())
+            .expect("kustomization.yaml spec.sourceRef.kind present");
+        assert_eq!(
+            source_ref_kind, FLUX_KIND_GIT_REPOSITORY,
+            "kustomization.yaml spec.sourceRef.kind must spell the lifted \
+             FLUX_KIND_GIT_REPOSITORY ({FLUX_KIND_GIT_REPOSITORY:?}); a drifted \
+             literal here dangles the parent Kustomization's sourceRef at \
+             the Flux v2 source-controller's CRD registration",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_three_git_repository_kind_axes_share_one_lifted_constant() {
+        // Cross-axis triplet invariant: the three rendered Flux bundle
+        // axes that name the Flux v2 `GitRepository` CRD discriminator
+        // (gitrepository.yaml top-level kind, helmrelease.yaml
+        // spec.chart.spec.sourceRef.kind, kustomization.yaml
+        // spec.sourceRef.kind) all consult one lifted `&'static str`.
+        // The apiserver-side CRD resolution contract is the
+        // `(apiVersion, kind)` tuple keyed against the registered
+        // `CustomResourceDefinition`; the three axes must move
+        // together on any future Flux v3 CRD rename (e.g. `GitSource`)
+        // for the rendered HelmRelease's chart sourceRef + the parent
+        // Kustomization's sourceRef to bind to the sibling
+        // GitRepository's renamed kind discriminator. Peer to the
+        // sibling [`flux_controller_triplet_api_versions_share_toolkit_fluxcd_io_root`]
+        // cross-axis pin on the apiVersion half of the same CRD-lookup
+        // tuple.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+
+        let gr_kind = serde_yaml::from_str::<serde_yaml::Value>(
+            &files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+                .unwrap()
+                .contents,
+        )
+        .unwrap()
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap();
+
+        let hr_source_kind = serde_yaml::from_str::<serde_yaml::Value>(
+            &files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+                .unwrap()
+                .contents,
+        )
+        .unwrap()
+        .get("spec")
+        .and_then(|s| s.get("chart"))
+        .and_then(|c| c.get("spec"))
+        .and_then(|s| s.get("sourceRef"))
+        .and_then(|r| r.get("kind"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap();
+
+        let kz_source_kind = serde_yaml::from_str::<serde_yaml::Value>(
+            &files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+                .unwrap()
+                .contents,
+        )
+        .unwrap()
+        .get("spec")
+        .and_then(|s| s.get("sourceRef"))
+        .and_then(|r| r.get("kind"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap();
+
+        assert_eq!(gr_kind, FLUX_KIND_GIT_REPOSITORY);
+        assert_eq!(hr_source_kind, FLUX_KIND_GIT_REPOSITORY);
+        assert_eq!(kz_source_kind, FLUX_KIND_GIT_REPOSITORY);
+        assert_eq!(
+            gr_kind, hr_source_kind,
+            "gitrepository.yaml top-level kind and helmrelease.yaml \
+             spec.chart.spec.sourceRef.kind must spell the same lifted \
+             constant — drift here dangles the HelmRelease's chart sourceRef"
+        );
+        assert_eq!(
+            gr_kind, kz_source_kind,
+            "gitrepository.yaml top-level kind and kustomization.yaml \
+             spec.sourceRef.kind must spell the same lifted constant — \
+             drift here dangles the parent Kustomization's sourceRef"
         );
     }
 }
