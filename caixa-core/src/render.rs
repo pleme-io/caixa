@@ -6185,6 +6185,79 @@ pub const CILIUM_KIND_NETWORK_POLICY: &str = "CiliumNetworkPolicy";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KIND_GATEWAY: &str = "Gateway";
 
+/// Canonical K8s Gateway API CRD `kind` discriminator the rendered
+/// `HTTPRoute` document declares at its top-level [`KUBE_KEY_KIND`] axis.
+/// Pairs with the sibling [`GATEWAY_API_API_VERSION`] (3c6cfc3) and the
+/// peer [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) — the K8s apiserver-side
+/// CRD resolution contract is the `(apiVersion, kind)` tuple keyed
+/// against the registered `CustomResourceDefinition`, so drift on the
+/// kind axis is exactly as load-bearing as drift on the apiVersion axis
+/// it accompanies (the apiserver's `RESTMapper` consults both together;
+/// a `("gateway.networking.k8s.io/v1", "HTTPRout")` typo at the
+/// production-code call site lands outside the registered Gateway-API-
+/// conformant `HTTPRoute` CRD's `RESTKind` lookup, surfacing apply-side
+/// as a non-self-locating "no kind 'HTTPRout' is registered for version
+/// 'gateway.networking.k8s.io/v1'" error far from the source caixa.lisp /
+/// the renderer's [`kube_resource_skeleton`] call site).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's `HTTPRoute`-naming axis reaches for:
+///
+///   - the rendered `HTTPRoute` document's top-level [`KUBE_KEY_KIND`]
+///     axis (caixa-mesh/src/lib.rs:663 — the `gateway_routes` per-
+///     Aplicacao `HTTPRoute` [`kube_resource_skeleton`] kind argument).
+///
+/// The kind axis names the same Gateway-API-conformant CRD discriminator
+/// as the sibling [`GATEWAY_API_API_VERSION`] apiVersion axis and the
+/// peer [`GATEWAY_API_KIND_GATEWAY`] parent-Gateway axis, and must move
+/// together with both on any future Gateway-API rebrand. Until this lift
+/// landed the axis carried an inline `HTTPRoute` literal at the one
+/// production-code occurrence in caixa-mesh/src/lib.rs:663 (the
+/// `gateway_routes` `HTTPRoute` [`kube_resource_skeleton`] kind argument)
+/// plus a matching set inside the in-file
+/// `httproute_carries_canonical_kube_skeleton_without_labels` /
+/// `render_all_includes_every_artifact_kind` test fixtures plus the
+/// `find()` predicate of every per-HTTPRoute-kind test that picks the
+/// `HTTPRoute` document out of the rendered Aplicacao mesh bundle —
+/// multiple occurrences of the same load-bearing Gateway-API-CRD-`kind`-
+/// discriminator convention, drift-prone by construction.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) /
+/// [`CILIUM_KIND_NETWORK_POLICY`] (eac85cb) /
+/// [`FLUX_KIND_KUSTOMIZATION`] (4114773) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`GATEWAY_API_API_VERSION`] (3c6cfc3) lifts established on the
+/// sibling cluster-side-CRD-`kind`-discriminator + canonical-CRD-
+/// group/version axes — completes the per-Gateway-API-CRD `kind`-axis
+/// lift trajectory across the `(Gateway, HTTPRoute)` pair that the
+/// renderer's `gateway_routes` external `:entrada` ingress contract
+/// emits together. Every guarantee in [MESH-COMPOSITION.md §V][mc] —
+/// "every Aplicacao with `:entrada` emits one `Gateway` + one
+/// `HTTPRoute` per `:paths` entry pointing at the same
+/// `gateway.networking.k8s.io/v1` group/version — now threads through
+/// one lifted `&'static str` apiece for both halves of the pair, so a
+/// future Gateway-API rebrand lands at one substrate-side edit-point
+/// per axis and no per-renderer drift surface remains across the pair.
+///
+/// A future Gateway-API-side renderer the M3.x absorption roadmap
+/// names — `TCPRoute`, `TLSRoute`, `GRPCRoute` for non-HTTP `:entrada`
+/// edges, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HTTPRoute` fan-out, a future per-edge
+/// route-attached-policy renderer (`BackendTLSPolicy`,
+/// `BackendLBPolicy`) — inherits the canonical `HTTPRoute` kind
+/// discriminator by construction with no opportunity for per-renderer
+/// drift.
+///
+/// [mc]: https://github.com/pleme-io/theory/blob/main/MESH-COMPOSITION.md
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -7796,6 +7869,83 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KIND_GATEWAY {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API kind discriminator grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             RESTMapper would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_kind_http_route_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway-API-conformant `HTTPRoute` CRD `kind`
+        // discriminator the rendered HTTPRoute document's top-level
+        // `kind` axis declares. The string is part of the cluster-side
+        // contract with every Gateway-API-conformant gateway
+        // implementation (Cilium, Istio, Envoy Gateway, NGINX) — the
+        // apiserver-side CRD resolution contract is the
+        // `(apiVersion, kind)` tuple keyed against the registered
+        // `CustomResourceDefinition`, so the kind half of the tuple is
+        // exactly as load-bearing as the sibling
+        // [`GATEWAY_API_API_VERSION`] apiVersion half. A drifted value
+        // (e.g. an upstream Gateway-API rebrand to `HTTPRouteV1`) lands
+        // the rendered document outside the apiserver-side CRD
+        // registration; changing it is a coordinated Gateway-API
+        // promotion alongside the upstream SIG-Network deprecation
+        // cycle, not an incidental edit. Peer to
+        // `gateway_api_kind_gateway_pins_canonical_value` /
+        // `cilium_kind_network_policy_pins_canonical_value` /
+        // `flux_kind_kustomization_pins_canonical_value` /
+        // `flux_kind_helm_release_pins_canonical_value` /
+        // `flux_kind_git_repository_pins_canonical_value` on the
+        // sibling cluster-side-CRD-`kind`-discriminator pin set —
+        // completes the per-Gateway-API-CRD `kind`-axis canonical-pin
+        // pair across the `(Gateway, HTTPRoute)` pair the renderer's
+        // `gateway_routes` external `:entrada` ingress contract emits
+        // together.
+        assert_eq!(GATEWAY_API_KIND_HTTP_ROUTE, "HTTPRoute");
+    }
+
+    #[test]
+    fn gateway_api_kind_http_route_carries_upper_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD `kind` discriminator is
+        // an UpperCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#types-kinds —
+        // "Kinds are always UpperCamelCase"). Acronyms like HTTP stay
+        // ASCII-uppercase across the prefix per the same convention
+        // (the K8s API Kinds for `HTTPRoute`, `TCPRoute`, `TLSRoute`,
+        // `GRPCRoute` carry the full-uppercase protocol acronym).
+        // Pinning the shape here means a future rebrand on the
+        // canonical lift can't silently land a malformed kind
+        // discriminator (snake_case, kebab-case, lowercase, empty)
+        // that every downstream YAML-aware deserializer would reject
+        // far from the rebrand commit's source. The first-byte
+        // uppercase / rest-ASCII-alphanumeric invariant is the
+        // load-bearing K8s API typed-discovery contract: a value the
+        // apiserver's `RESTMapper` consults to resolve the CRD's
+        // `RESTKind`. Peer to
+        // `gateway_api_kind_gateway_carries_upper_camel_case_shape` /
+        // `cilium_kind_network_policy_carries_upper_camel_case_shape` /
+        // `flux_kind_kustomization_carries_upper_camel_case_shape` /
+        // `flux_kind_helm_release_carries_upper_camel_case_shape` /
+        // `flux_kind_git_repository_carries_upper_camel_case_shape` on
+        // the sibling cluster-side-CRD-`kind`-discriminator surface.
+        let v = GATEWAY_API_KIND_HTTP_ROUTE;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KIND_HTTP_ROUTE {v:?} must be non-empty per the K8s API \
+             UpperCamelCase kind discriminator grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_uppercase(),
+            "GATEWAY_API_KIND_HTTP_ROUTE {v:?} first byte {first:?} must be \
+             ASCII-uppercase per the K8s API UpperCamelCase kind discriminator \
+             grammar (Kinds are always UpperCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KIND_HTTP_ROUTE {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API kind discriminator grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              RESTMapper would reject"
