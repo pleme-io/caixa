@@ -214,6 +214,38 @@ pub use caixa_core::FLUX_KUSTOMIZATION_API_VERSION;
 /// source-controller CRD onto its kind axis.
 pub use caixa_core::FLUX_KIND_GIT_REPOSITORY;
 
+/// Canonical FluxCD `HelmRelease` CRD `kind` discriminator — re-export
+/// of the lifted [`caixa_core::FLUX_KIND_HELM_RELEASE`] so the load-
+/// bearing string lives in exactly one place across the two rendered
+/// Flux bundle axes that name the same K8s CRD discriminator:
+///
+///   - the rendered `helmrelease.yaml` document's top-level `kind`
+///     axis (the HelmRelease CR's own discriminator);
+///   - the rendered `kustomization.yaml` document's
+///     `spec.healthChecks[].kind` axis (pointing back at the sibling
+///     HelmRelease the Kustomization health-gates on before declaring
+///     its own reconcile complete).
+///
+/// Until this lift landed the two axes sat as two inline `HelmRelease`
+/// literals across the [`cluster_bundle`] `helmrelease` + `kustomization`
+/// format-string templates (caixa-flux/src/lib.rs:580, 631). The
+/// apiserver-side CRD resolution contract is the `(apiVersion, kind)`
+/// tuple keyed against the registered `CustomResourceDefinition`; a
+/// typo at either of the two call sites would have silently lost the
+/// apply-side resolution (top-level `kind` typos surface as "no kind
+/// 'X' is registered" at apply parse time; the nested
+/// `healthChecks[].kind` typo silently dangles the parent
+/// Kustomization at `Reconciling` forever) with no diagnostic naming
+/// the kind-drift root cause far from the source caixa.lisp. Same
+/// shape as the [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) lifts on the sibling
+/// Flux-v2-load-bearing-string axes — extends the kind-axis discipline
+/// from the Flux v2 source-controller CRD onto the sibling Flux v2
+/// helm-controller CRD.
+pub use caixa_core::FLUX_KIND_HELM_RELEASE;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -577,7 +609,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # HelmRelease consumes the chart caixa-helm renders for this\n\
          # caixa Servico. Per-cluster values are injected here.\n\
          apiVersion: {api_version}\n\
-         kind: HelmRelease\n\
+         kind: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
            namespace: {namespace}\n\
@@ -602,6 +634,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              {library_name}:\n      \
                enabled: true\n",
         api_version = FLUX_HELMRELEASE_API_VERSION,
+        kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         name = name,
         namespace = opts.namespace,
@@ -628,12 +661,13 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            path: ./clusters/{cluster}/services/{name}\n  \
            healthChecks:\n    \
              - apiVersion: {api_version}\n      \
-               kind: HelmRelease\n      \
+               kind: {health_kind}\n      \
                name: {name}\n      \
                namespace: {namespace}\n  \
            timeout: 5m\n",
         kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
+        health_kind = FLUX_KIND_HELM_RELEASE,
         api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
@@ -2134,6 +2168,197 @@ spec:
             "gitrepository.yaml top-level kind and kustomization.yaml \
              spec.sourceRef.kind must spell the same lifted constant — \
              drift here dangles the parent Kustomization's sourceRef"
+        );
+    }
+
+    #[test]
+    fn flux_kind_helm_release_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KIND_HELM_RELEASE` is
+        // the single source of truth for the Flux v2 `HelmRelease` CRD
+        // `kind` discriminator the rendered Flux bundle's two
+        // `HelmRelease`-naming axes declare (the `helmrelease.yaml`
+        // top-level `kind`, the `kustomization.yaml`
+        // `spec.healthChecks[].kind`). Pin the equality (and the
+        // static-data identity, peer with the sibling
+        // [`flux_kind_git_repository_re_export_points_at_caixa_core_canonical`]
+        // pin) so any local re-introduction of a sibling `pub const
+        // FLUX_KIND_HELM_RELEASE: &str = "…"` (the canonical drift
+        // footgun this lift closes — two production-code consumers of
+        // the load-bearing Flux v2 `HelmRelease` CRD `kind`
+        // discriminator inside the cluster_bundle templates, lifted to
+        // one re-export at the caixa-core boundary) is a build-time
+        // test failure naming the offending drift, not a silent
+        // apply-time `helm-controller` resolution dangle or a
+        // perpetually-`Reconciling` parent Kustomization.
+        assert_eq!(FLUX_KIND_HELM_RELEASE, caixa_core::FLUX_KIND_HELM_RELEASE);
+        assert!(
+            std::ptr::eq(
+                FLUX_KIND_HELM_RELEASE.as_ptr(),
+                caixa_core::FLUX_KIND_HELM_RELEASE.as_ptr(),
+            ),
+            "FLUX_KIND_HELM_RELEASE must be a re-export of \
+             caixa_core::FLUX_KIND_HELM_RELEASE, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two is \
+             the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_kind_uses_lifted_flux_kind_helm_release() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`
+        // top-level `kind` axis — the load-bearing K8s CRD discriminator
+        // the Flux v2 `helm-controller` resolves the rendered document
+        // against — must resolve to the lifted
+        // [`FLUX_KIND_HELM_RELEASE`] verbatim. Before this lift the
+        // helmrelease template carried an inline `HelmRelease` literal
+        // at one of two sibling production-code call sites across the
+        // cluster_bundle templates; the apiserver-side CRD resolution
+        // contract is the `(apiVersion, kind)` tuple keyed against the
+        // registered `CustomResourceDefinition`, so drift on the kind
+        // axis is exactly as load-bearing as drift on the sibling
+        // [`FLUX_HELMRELEASE_API_VERSION`] axis (a future Flux v3
+        // rebrand on this axis without a coordinated edit on the
+        // sibling healthChecks[].kind axis silently lands the rendered
+        // `HelmRelease` outside the helm-controller's `Watches`).
+        // Peer with [`cluster_bundle_helmrelease_uses_lifted_flux_api_version`]
+        // on the sibling apiVersion half of the same CRD-lookup tuple,
+        // and with
+        // [`cluster_bundle_gitrepository_kind_uses_lifted_flux_kind_git_repository`]
+        // on the sibling Flux-v2 source-controller CRD kind axis.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        assert_eq!(
+            parsed.get("kind").and_then(|n| n.as_str()),
+            Some(FLUX_KIND_HELM_RELEASE),
+            "helmrelease.yaml top-level kind must spell the lifted \
+             FLUX_KIND_HELM_RELEASE ({FLUX_KIND_HELM_RELEASE:?}); a drifted \
+             literal here routes the HelmRelease outside the Flux v2 \
+             helm-controller's CRD registration",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_health_check_kind_uses_lifted_flux_kind_helm_release() {
+        // Sibling-axis pin to
+        // `cluster_bundle_helmrelease_kind_uses_lifted_flux_kind_helm_release`:
+        // the rendered `kustomization.yaml`'s
+        // `spec.healthChecks[].kind` axis is the Flux v2 contract
+        // pairing the parent Kustomization's per-resource health gate
+        // to the sibling HelmRelease's CRD discriminator. Both axes
+        // must resolve to the same lifted constant by value — a
+        // future Flux v3 rebrand on either axis without a coordinated
+        // edit on the other would have silently pinned the parent
+        // Kustomization at `Reconciling` forever (apply-side: the
+        // `kustomize-controller` perpetually re-evaluates an
+        // unmatched health gate, the Kustomization never declares
+        // its reconcile complete, every downstream `dependsOn` chain
+        // freezes), with the failure surfacing far from the rebrand
+        // commit's source at `kubectl describe kustomization` time.
+        // This is one of the two call sites whose drift the
+        // apiserver can't self-locate (top-level kind typos surface
+        // as "no kind 'X' is registered" at apply parse time; a
+        // healthChecks[].kind typo silently dangles a controller-side
+        // health gate). Completes the two-axis pin set so any local
+        // re-introduction of an inline `HelmRelease` literal at
+        // either of the two rendered Flux bundle axes is a
+        // build-time test failure, not a silent apply-time stuck-
+        // Reconciling reconciliation freeze.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let health_checks = parsed
+            .get("spec")
+            .and_then(|s| s.get("healthChecks"))
+            .and_then(|h| h.as_sequence())
+            .expect("kustomization.yaml spec.healthChecks present");
+        assert!(
+            !health_checks.is_empty(),
+            "kustomization.yaml spec.healthChecks must carry at least one \
+             entry — the HelmRelease health gate is the canonical pleme-io \
+             Flux bundle invariant"
+        );
+        let health_kind = health_checks[0]
+            .get("kind")
+            .and_then(|k| k.as_str())
+            .expect("kustomization.yaml spec.healthChecks[0].kind present");
+        assert_eq!(
+            health_kind, FLUX_KIND_HELM_RELEASE,
+            "kustomization.yaml spec.healthChecks[0].kind must spell the \
+             lifted FLUX_KIND_HELM_RELEASE ({FLUX_KIND_HELM_RELEASE:?}); a \
+             drifted literal here dangles the parent Kustomization at \
+             `Reconciling` forever at the Flux v2 kustomize-controller's \
+             health-gate evaluation",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_two_helm_release_kind_axes_share_one_lifted_constant() {
+        // Cross-axis pair invariant: the two rendered Flux bundle axes
+        // that name the Flux v2 `HelmRelease` CRD discriminator
+        // (helmrelease.yaml top-level kind, kustomization.yaml
+        // spec.healthChecks[].kind) both consult one lifted
+        // `&'static str`. The apiserver-side CRD resolution contract
+        // is the `(apiVersion, kind)` tuple keyed against the
+        // registered `CustomResourceDefinition`; the two axes must
+        // move together on any future Flux v3 CRD rename (e.g.
+        // `ChartRelease`) for the parent Kustomization's health gate
+        // to bind to the sibling HelmRelease's renamed kind
+        // discriminator. Peer to the sibling
+        // [`cluster_bundle_three_git_repository_kind_axes_share_one_lifted_constant`]
+        // cross-axis pin on the Flux v2 source-controller CRD kind
+        // axis.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+
+        let hr_kind = serde_yaml::from_str::<serde_yaml::Value>(
+            &files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+                .unwrap()
+                .contents,
+        )
+        .unwrap()
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap();
+
+        let kz_health_kind = serde_yaml::from_str::<serde_yaml::Value>(
+            &files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+                .unwrap()
+                .contents,
+        )
+        .unwrap()
+        .get("spec")
+        .and_then(|s| s.get("healthChecks"))
+        .and_then(|h| h.as_sequence())
+        .and_then(|seq| seq.first())
+        .and_then(|e| e.get("kind"))
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap();
+
+        assert_eq!(hr_kind, FLUX_KIND_HELM_RELEASE);
+        assert_eq!(kz_health_kind, FLUX_KIND_HELM_RELEASE);
+        assert_eq!(
+            hr_kind, kz_health_kind,
+            "helmrelease.yaml top-level kind and kustomization.yaml \
+             spec.healthChecks[].kind must spell the same lifted constant \
+             — drift here dangles the parent Kustomization's health gate \
+             at the Flux v2 kustomize-controller"
         );
     }
 }
