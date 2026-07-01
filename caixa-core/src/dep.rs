@@ -1627,6 +1627,151 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's URL-percent-encoding-escape arm. The 6622063
+        // shell-comment arm closes the `#` URL-fragment-identifier byte; `%`
+        // (`0x25`) is the orthogonal RFC 3986 §2.1 URL percent-encoding-escape
+        // byte — the mandatory encoding mechanism for every byte outside the
+        // `unreserved` alphanumeric / `-` / `.` / `_` / `~` set, and `%`
+        // itself must be percent-encoded as `%25` to appear literally inside
+        // a URL value. The byte carries three distinct render-determinism
+        // hazards on the `:caminho` axis, no prior arm has covered it, and
+        // the peer `:fonte :repo` axis (a323db8 `%` on `is_git_repo_url`)
+        // already closes the same byte under the same URL-percent-encoding
+        // banner — the `:caminho` axis was the last typed path-string surface
+        // still admitting the byte.
+        //
+        // First, the paste-from-browser-address-bar percent-encoded-space
+        // footgun: an author copies `../caixa%20teia` out of a URL-encoded
+        // README hyperlink / a browser address bar / a percent-encoded
+        // permalink expecting `%20` to decode to a literal space at the
+        // filesystem layer. POSIX `std::path::Path` treats the byte as a
+        // literal path-component byte, so `Path::join` looks for a literal
+        // `./../caixa%20teia` subdirectory and fails at resolve time with a
+        // non-self-locating `No such file or directory` error far from the
+        // source caixa.lisp — while the author's mental model was
+        // `../caixa teia`, the decoded shape. Two authors whose only
+        // difference is percent-encoding presence resolve to two distinct
+        // BLAKE3 closures (`path:../caixa%20teia` vs `path:../caixa teia`)
+        // for what they intended as the byte-identical sibling-workspace
+        // dep. The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so the divergence rides
+        // downstream into the BLAKE3 closure and locks the substrate's
+        // "the lacre is the build's identity" contract (CAIXA-SDLC §III.2)
+        // to the wrong encoding — the same THEORY.md §V.2 render-
+        // determinism vector every prior `:caminho` arm protects.
+        //
+        // Second, the printf-format-specifier lead footgun: `%` is the C /
+        // POSIX printf format-directive lead-in (`%s`, `%d`, `%02x`, the
+        // canonical `printf "path=%s\n" ../caixa-teia` invocation every
+        // shell-diagnostic one-liner carries) and the printf builtin is
+        // wired into every POSIX shell (bash / zsh / dash / ksh / busybox
+        // ash) as the format-string lead. A `:caminho "../caixa-%s-teia"`
+        // value flowing into any future `feira` verb that shells out with a
+        // printf-formatted path template silently gets reinterpreted as a
+        // format-directive rather than a literal byte — the canonical
+        // CWE-134 format-string-injection vector.
+        //
+        // Third, the bash-job-control-specifier lead footgun: bash / zsh /
+        // ksh reserve `%N` at word-start as the job-control specifier —
+        // `%1` names "job 1", `%%` names "the current job", `%foo` names
+        // "the most recent job whose command started with `foo`". A future
+        // `feira` verb that invokes `kill %1` on a caminho-scoped
+        // subprocess would silently redirect the signal to a wrong target.
+        //
+        // Beyond the three shell-side hazards, `%` is a first-class parser
+        // byte in three cross-config-DSL layers the substrate's paste-idiom
+        // surface routinely crosses: YAML 1.2 §6.8.1 lexes `%` at
+        // line-start as the directive lead (`%YAML 1.2` / `%TAG` — a
+        // `:caminho "%YAML/1.2/../caixa-teia"` paste from a top-of-doc
+        // YAML directive block silently trips the YAML directive parser on
+        // any downstream emitted YAML manifest); Prometheus / Grafana
+        // template syntax uses `%(var)s` as the substitution lead; and Nix
+        // interpolation uses `${var}` (not `%`) but Envsubst /
+        // Kubernetes / OpenShift template layers use `%VAR%` as the
+        // Windows-shell env-var-reference lead — the paste-from-`.bat` /
+        // paste-from-PowerShell-`%env:PATH%` cross-idiom leak.
+        //
+        // The three malformed-`%HH` classes documented on the peer
+        // `is_git_repo_url` `%` arm (a323db8) apply here too:
+        //
+        //   - The lone-`%` malformed-escape shape (`"../caixa-teia%foo"`
+        //     where `%` isn't followed by two hex digits) — every WHATWG-
+        //     conformant URL parser rejects the value at parse time per
+        //     RFC 3986 §2.1, but the byte rides into the lacre before
+        //     the resolver subprocess crosses the URL-parser boundary.
+        //   - The over-encoded path-separator shape (`"../caixa%2Fteia"`
+        //     intending the `%2F` as the URL encoding of `/`) locks a
+        //     `path:../caixa%2Fteia` BLAKE3 closure that diverges from
+        //     the byte-identical `path:../caixa/teia` form.
+        //   - The double-encoded shape (`"../caixa%2520teia"` — the `%25`
+        //     already itself an encoded `%`, so the intent was likely a
+        //     literal `%20` that survived one round-trip through a
+        //     URL-encoder that shouldn't have run) locks a triply-
+        //     divergent closure across the encoded / once-decoded /
+        //     twice-decoded chain.
+        //
+        // POSIX `std::path::Path` treats the byte as a literal path-
+        // component byte, so a `:caminho "../caixa%20teia"` (the canonical
+        // paste-from-browser-address-bar percent-encoded-space footgun),
+        // `:caminho "%YAML/../caixa-teia"` (the symmetric paste-from-YAML-
+        // directive-block cross-idiom leak), or `:caminho
+        // "../caixa-%s-teia"` (the printf-format-specifier paste-from-
+        // shell-diagnostic-one-liner shape) silently passes every prior arm
+        // because `Path::is_absolute` returns false on `..`, `%` is neither
+        // a leading-byte sentinel nor a control byte nor `\` nor `<` / `>`
+        // nor `|` nor `;` nor `&` nor backtick nor `*` / `?` nor `(` / `)`
+        // nor `{` / `}` nor `[` / `]` nor `'` / `"` nor `#`, and the
+        // value's last byte isn't `/`. The resolver folds the value through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // subdirectory named `../caixa%20teia` and fails at resolve time
+        // with a non-self-locating `No such file or directory` error far
+        // from the source caixa.lisp — while every downstream URL parser /
+        // shell printf builtin / YAML directive parser silently
+        // reinterprets the byte to a different value than the resolver's
+        // `Path::join` sees. Two workstations whose downstream URL / shell
+        // / YAML layers differ in `%HH` recognition emit divergent build
+        // artifacts for the byte-identical caixa.lisp value.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`, caixa-
+        // resolver/src/resolve.rs:189), so the byte lands in the BLAKE3
+        // closure and rides into every shell-spawned subprocess (the
+        // resolver's `git clone`, a future `feira tofu` shell-out, a
+        // future operator-side `nix flake check` spawn) as the canonical
+        // URL-percent-encoding-escape / printf-format-specifier / bash-
+        // job-control-specifier surface every peer single-token-shaped
+        // typed slot already closes. This arm closes the gap so the
+        // substrate-wide "no URL-percent-encoding-escape / printf-format-
+        // specifier / job-control-specifier / YAML-directive-lead byte
+        // anywhere in a typed string slot that flows verbatim into a
+        // shell-spawned subprocess or downstream URL / printf / YAML
+        // parser" invariant extends from shell-comment / URL-fragment
+        // (`#` — 6622063) to URL-percent-encoding-escape (`%`) on the
+        // `:caminho` axis.
+        //
+        // The arm fires AFTER the shell-comment arm because the prior
+        // arm's `#` shape is the more semantic-locating axis on values
+        // that probe as both (`"../caixa%20teia#pin"` carries both `%`
+        // and `#` — the URL-fragment-identifier is the load-bearing
+        // downstream-truncation edit, so `FonteCaminhoShellComment` wins;
+        // same cascade discipline every prior `:caminho` arm establishes).
+        // The arm fires BEFORE the trailing-`/` arm because the embedded
+        // percent-encoding-escape byte is the more semantic-locating axis
+        // on probe-as-both values (`"../caixa%20teia/"` ends in `/` but
+        // the load-bearing diagnostic is the embedded `%` percent-
+        // encoding-escape — the trailing `/` is the secondary observation,
+        // and an author who decodes the `%20` to a literal space is
+        // likely to also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'%' {
+                return Err(DepError::FonteCaminhoUrlPercentEncoding {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -2596,6 +2741,57 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellComment {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains URL-\
+         percent-encoding-escape / printf-format-specifier / bash-job-control-specifier \
+         / YAML-directive-lead metacharacter 0x{byte:02x} `{ch}` (RFC 3986 §2.1 reserves \
+         `%` as the URL percent-encoding-escape — `%HH` is the mandatory encoding \
+         mechanism for every byte outside the `unreserved` alphanumeric / `-` / `.` / \
+         `_` / `~` set, and `%` itself must be percent-encoded as `%25` to appear \
+         literally inside a URL value. The canonical paste-from-browser-address-bar \
+         percent-encoded-space footgun (an author copies `../caixa%20teia` out of a URL-\
+         encoded README hyperlink / browser address bar / percent-encoded permalink \
+         expecting `%20` to decode to a literal space at the filesystem layer) locks two \
+         distinct BLAKE3 closures (`path:../caixa%20teia` vs `path:../caixa teia`) for \
+         what the author intended as the byte-identical sibling-workspace dep. POSIX \
+         `std::path::Path` treats the byte as a literal path-component byte, so \
+         `Path::join` looks for a literal `./{caminho}` subdirectory and fails at \
+         resolve time with a non-self-locating `No such file or directory` error far \
+         from the source caixa.lisp — while every downstream URL parser / shell printf \
+         builtin / YAML directive parser silently reinterprets the byte to a different \
+         value than the resolver's `Path::join` sees. Beyond the URL-encoding hazard, \
+         `%` is the C / POSIX printf format-directive lead-in (`%s`, `%d`, `%02x` — \
+         wired into every POSIX shell's `printf` builtin, the canonical CWE-134 format-\
+         string-injection vector); the bash / zsh / ksh job-control-specifier lead-in \
+         (`%1` names \"job 1\", `%%` names \"the current job\", `%foo` names \"the most \
+         recent job whose command started with `foo`\" — a future `kill %1` invocation \
+         silently redirects the signal to a wrong target); the YAML 1.2 §6.8.1 \
+         directive lead-in (`%YAML 1.2` / `%TAG` — the paste-from-top-of-doc YAML \
+         directive block cross-idiom leak); and the Windows-shell env-var-reference \
+         lead-in (`%PATH%` — the paste-from-`.bat` / paste-from-PowerShell-`%env:PATH%` \
+         cross-idiom leak). The lacre pipeline embeds the value verbatim in its per-dep \
+         content-address `path:{caminho}` at caixa-resolver/src/resolve.rs:189, so the \
+         byte lands in the BLAKE3 closure and rides into every shell-spawned subprocess \
+         (the resolver's `git clone`, a future `feira tofu` shell-out, a future \
+         operator-side `nix` spawn) as the canonical URL-percent-encoding-escape / \
+         printf-format-specifier / job-control-specifier surface every peer single-\
+         token-shaped typed slot already closes. The peer `:fonte :repo` axis closes \
+         the byte under the same URL-percent-encoding-escape banner (a323db8 `%` on \
+         `is_git_repo_url`). Express the path as a bare relative single-token like \
+         \"../caixa-teia\" — the sibling-workspace directory name carries no URL-\
+         percent-encoding-escape / format-specifier / job-control semantic; substitute \
+         any `%20` percent-encoded-space with a literal space then reject the whole \
+         value at the leading-whitespace / embedded-`?` arm on the same axis (a caixa \
+         directory name never carries an embedded space in practice); drop any \
+         `%2F`-encoded path separator in favor of a literal `/`; and drop any leading \
+         `%YAML` / `%PATH%` cross-idiom-leak prefix entirely.",
+        ch = *byte as char
+    )]
+    FonteCaminhoUrlPercentEncoding {
         nome: String,
         caminho: String,
         byte: u8,
@@ -10743,6 +10939,333 @@ mod tests {
         assert!(
             rendered.contains("fragment") || rendered.contains("URL-fragment"),
             "diagnostic must reference the URL-fragment-identifier vocabulary: \
+             {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_url_percent_encoded_space() {
+        // The canonical paste-from-browser-address-bar percent-
+        // encoded-space footgun: an author copies `../caixa%20teia`
+        // out of a URL-encoded README hyperlink / browser address
+        // bar / percent-encoded permalink expecting `%20` to decode
+        // to a literal space at the filesystem layer. POSIX
+        // `std::path::Path` treats `%` as a literal path-component
+        // byte, so `Path::join` looks for a literal
+        // `./../caixa%20teia` subdirectory. `Path::is_absolute`
+        // returns false on `..`, `%` is neither a leading-byte
+        // sentinel nor a control byte nor `\` nor `<` / `>` nor
+        // `|` nor `;` nor `&` nor backtick nor `*` / `?` nor `(` /
+        // `)` nor `{` / `}` nor `[` / `]` nor `'` / `"` nor `#`,
+        // and the value's last byte isn't `/` — so the value
+        // silently passed every prior arm. The new arm moves the
+        // rejection to validate time and names the offending dep +
+        // caminho + byte verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa%20teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoUrlPercentEncoding {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoUrlPercentEncoding, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa%20teia");
+        assert_eq!(byte, b'%');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_url_percent_encoded_slash() {
+        // The over-encoded path-separator shape (`"../caixa%2Fteia"`
+        // intending the `%2F` as the URL encoding of `/`) locks a
+        // `path:../caixa%2Fteia` BLAKE3 closure that diverges from
+        // the byte-identical `path:../caixa/teia` form. Pinned
+        // separately from the space-encoded shape so the gate's
+        // coverage extends past the single canonical `%20` example
+        // to any two-hex-digit percent-encoded sequence.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa%2Fteia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoUrlPercentEncoding { byte: b'%', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_lone_percent() {
+        // The lone-`%` malformed-escape shape (`"../caixa-teia%foo"`
+        // where `%` isn't followed by two hex digits) — every
+        // WHATWG-conformant URL parser rejects the value at parse
+        // time per RFC 3986 §2.1, but the byte would silently ride
+        // into the lacre before the resolver subprocess crosses the
+        // URL-parser boundary. Pinned separately from the well-
+        // formed `%HH` shapes so the gate covers every percent-
+        // occurrence, not only strictly-conformant escapes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia%foo".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoUrlPercentEncoding { byte: b'%', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_yaml_directive() {
+        // The YAML-directive-lead paste shape (`"%YAML/../caixa-teia"`
+        // — the canonical paste-from-top-of-doc YAML directive
+        // block cross-idiom leak per YAML 1.2 §6.8.1). Pinned
+        // separately from embedded shapes so the gate covers the
+        // leading-position `%` too, not only mid-value occurrences.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "%YAML/../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoUrlPercentEncoding { byte: b'%', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_printf_format_specifier() {
+        // The printf-format-specifier paste shape
+        // (`"../caixa-%s-teia"` — the canonical paste-from-shell-
+        // diagnostic-one-liner `printf "path=%s\n" ...` idiom, CWE-
+        // 134 format-string-injection vector). Pinned separately
+        // from the URL-encoding shapes so the gate's rationale
+        // extends past the RFC 3986 axis to the C / POSIX printf
+        // format-directive-lead axis.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-%s-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoUrlPercentEncoding { byte: b'%', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_percent() {
+        // The positive-control pin: the gate targets only `%`,
+        // never adjacent printable ASCII or POSIX-valid bytes. The
+        // canonical relative POSIX path (`"../caixa-teia"`) and a
+        // nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue
+        // to validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface. Peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_shell_comment`
+        // on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_comment_fires_before_url_percent_encoding() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `#` and `%` (`"../caixa-teia#pin%20"` — the
+        // canonical "I pasted a URL-fragment permalink followed by a
+        // percent-encoded space tail" footgun) routes through
+        // `FonteCaminhoShellComment` not
+        // `FonteCaminhoUrlPercentEncoding`. The URL-fragment-
+        // identifier is the load-bearing downstream-truncation edit
+        // on every probe-as-both value; same cascade discipline
+        // every prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia#pin%20".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellComment { byte: b'#', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_quote_grouping_fires_before_url_percent_encoding() {
+        // Cascade pin on the upstream shell-quote-grouping arm: a
+        // value carrying both `'` and `%` (`"../'x'%20teia"` — the
+        // canonical "I pasted a strong-quoted literal followed by
+        // a percent-encoded space" footgun) routes through
+        // `FonteCaminhoShellQuoteGrouping` not
+        // `FonteCaminhoUrlPercentEncoding`. The shell-string-
+        // literal-delimiter is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../'x'%20teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellQuoteGrouping { byte: b'\'', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_url_percent_encoding() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and `%` (`"..\\caixa%20teia"` — the
+        // canonical "I pasted a Windows-shell path followed by a
+        // percent-encoded space" footgun) routes through
+        // `FonteCaminhoBackslash` not
+        // `FonteCaminhoUrlPercentEncoding`. The cross-host-OS-
+        // separator divergence is the load-bearing root-cause edit
+        // on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa%20teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_url_percent_encoding() {
+        // Cascade pin on the upstream control-char arm: a value
+        // carrying both a NUL byte and `%` (`"../caixa\0%20teia"` —
+        // the canonical "I pasted a paste-from-binary-blob path
+        // followed by a percent-encoded space" footgun) routes
+        // through `FonteCaminhoControlChar` not
+        // `FonteCaminhoUrlPercentEncoding`. The POSIX-syscall-
+        // rejected byte is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa\0%20teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { byte: 0x00, .. },),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_url_percent_encoding() {
+        // Cascade pin on the upstream absolute-path arm: a value
+        // that's both absolute and carries `%` (`"/etc/passwd%20"`
+        // — the canonical "I pasted an absolute path with a
+        // percent-encoded space tail" footgun) routes through
+        // `FonteCaminhoAbsolute` not
+        // `FonteCaminhoUrlPercentEncoding`. The host-layout-leak is
+        // the load-bearing root-cause edit on every probe-as-both
+        // value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/passwd%20".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_url_percent_encoding() {
+        // Cascade pin on the upstream var-expansion arm: a value
+        // starting with `$` and carrying `%` (`"$HOME/caixa%20teia"`
+        // — the canonical "I pasted a `$HOME`-rooted path with a
+        // percent-encoded space" footgun) routes through
+        // `FonteCaminhoVarExpansion` not
+        // `FonteCaminhoUrlPercentEncoding`. The shell-variable-
+        // expansion is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$HOME/caixa%20teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_url_percent_encoding_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both `%` and a trailing `/`
+        // (`"../caixa%20teia/"` — the canonical "I tab-completed a
+        // percent-encoded-space-carrying path" footgun) routes
+        // through `FonteCaminhoUrlPercentEncoding` not
+        // `FonteCaminhoTrailingSlash`. The embedded percent-
+        // encoding-escape byte is the more semantic-locating axis
+        // (an author who decodes the `%20` to a literal space is
+        // likely to also tab-strip the trailing separator since
+        // both are paste-from-URL / paste-from-shell-tab-completion
+        // artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa%20teia/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoUrlPercentEncoding { byte: b'%', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_url_percent_encoding_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_comment_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the immediate-predecessor arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the URL-percent-encoding-escape / printf-format-
+        // specifier footgun explicitly so a `feira lint` run can
+        // render the diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa%20teia".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa%20teia"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x25"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("percent-encoding") || rendered.contains("percent-encoded"),
+            "diagnostic must name the URL-percent-encoding-escape footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("printf") || rendered.contains("format-specifier"),
+            "diagnostic must reference the printf-format-specifier vocabulary: \
              {rendered:?}",
         );
     }
