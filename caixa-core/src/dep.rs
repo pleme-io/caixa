@@ -2148,6 +2148,138 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-history-substitution / RFC-3986-unwise
+        // / regex-anchor arm. The immediate-predecessor `!` arm closes the
+        // POSIX `!command` / `!!` / `!$` history-expansion prefix; `^`
+        // (`0x5E`) is the paired-operator half of the same bash-reference
+        // §9.3 histexpand feature — the `^old^new^` "quick substitution"
+        // form (POSIX bash rewrites the prior command's `old` string to
+        // `new` and re-executes it, the canonical typo-correction one-
+        // liner idiom `git clone <bad-url>` → `^bad^good` that pastes the
+        // trailing substitution fragment verbatim into a `:caminho` value
+        // when the author trims only the leading `git clone` prefix). The
+        // peer `:fonte :repo` axis closes the byte under the same
+        // shell-history-substitution / RFC-3986-unwise banner (49e142f `^`
+        // on `is_git_repo_url`); the `:caminho` axis was the last typed
+        // path-string surface still admitting the byte after 6a04767
+        // landed the `!` arm.
+        //
+        // Beyond bash history-substitution, `^` carries five distinct
+        // downstream-reinterpretation surfaces the typed slot's accepted
+        // set must structurally exclude:
+        //
+        // 1. **RFC 3986 §2 'unwise' set** — the four-byte cross-transport
+        //    layer set (`{`, `}`, `|`, `\`) plus `^` every URL parser is
+        //    required to percent-encode-or-refuse at the wire boundary.
+        //    The WHATWG URL spec's 'fragment percent-encode set' maps
+        //    `^` → `%5E` at the query / fragment component transition;
+        //    libcurl silently percent-encodes the byte on the wire, so a
+        //    `:caminho "../foo^bar"` value the resolver's `Path::join`
+        //    sees as a literal `./../foo^bar` subdirectory diverges from
+        //    the byte-transformed `%5E` shape any downstream `feira tofu`
+        //    curl-invocation or artifact-registry-fetch would emit — the
+        //    canonical wire-boundary divergence vector the peer
+        //    `{`, `}`, `|`, `\` `:caminho` arms already close (
+        //    `FonteCaminhoShellBraceExpansion` at 598b770,
+        //    `FonteCaminhoShellPipe` at the pipe arm,
+        //    `FonteCaminhoBackslash` at the backslash arm).
+        // 2. **Regex character-class negation prefix `[^abc]`** — the
+        //    canonical paste-from-doc-regex-pipeline footgun where an
+        //    author copies a `grep '[^abc]'` idiom from a docs quick-
+        //    listing and the character-class negation byte rides in
+        //    verbatim.
+        // 3. **Bitwise XOR operator** in C / C++ / Rust / Python /
+        //    JavaScript / Nix / Go — the paste-from-source-code idiom
+        //    where an author copies an `x ^ y`-shaped expression out of
+        //    a source snippet and the operator crosses the string-
+        //    literal boundary.
+        // 4. **Windows `cmd.exe` escape metacharacter** — the byte
+        //    escapes the next character in a `cmd.exe` batch context (a
+        //    peer of the backslash arm's Windows-separator-leak vector).
+        //    A `:caminho "..^&whoami"` cross-platform paste-from-batch-
+        //    file footgun reinterprets at every `cmd.exe`-spawned
+        //    subprocess (the resolver's future Windows-runner shell-out,
+        //    the operator's WinRM path, a future PowerShell-embedded
+        //    invocation).
+        // 5. **LaTeX / Markdown / BibTeX superscript operator** — the
+        //    paste-from-typeset-doc footgun where a mathematical
+        //    superscript notation (`x^2` / `M^T`) leaks from prose.
+        //
+        // POSIX `std::path::Path` treats `^` as a literal path-component
+        // byte, so `:caminho "../foo^bar/baz"` (embedded quick-
+        // substitution), `:caminho "../foo^"` (trailing history-
+        // substitution-open shape), `:caminho "../[^a-z]/foo"` (regex-
+        // negation-prefix paste from a grep pipeline; note the `[` / `]`
+        // arm at 986963b fires first on this shape), or `:caminho
+        // "../x^y"` (XOR-expression paste-from-source) all silently pass
+        // every prior arm (`^` isn't `\` / `<` / `>` / `|` / `;` / `&` /
+        // backtick / `*` / `?` / `(` / `)` / `{` / `}` / `[` / `]` / `'`
+        // / `"` / `#` / `%` / `$` / `!`) and route through
+        // `Path::new(caminho).join(<file>)` looking for a literal
+        // `./{caminho}` subdirectory that fails at resolve time with a
+        // non-self-locating `No such file or directory` error far from
+        // the source caixa.lisp — while every downstream shell / curl /
+        // regex / `cmd.exe` layer reinterprets the byte to its own
+        // semantic.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so the byte lands in the
+        // BLAKE3 closure and rides into every shell-spawned subprocess
+        // (the resolver's `git clone`, a future `feira tofu` shell-out,
+        // a future operator-side `nix flake check` spawn) as the
+        // canonical shell-history-substitution / RFC-3986-unwise /
+        // regex-negation surface every peer single-token-shaped typed
+        // slot already closes. This arm together with the immediate-
+        // predecessor `!` arm (6a04767) closes the full `set -o
+        // histexpand` operator surface on the `:caminho` axis — the
+        // `!command` / `!!` / `!$` prefix form via `!`, the `^old^new^`
+        // quick-substitution form via `^` — so the substrate-wide "no
+        // shell-history operator anywhere in a typed string slot that
+        // flows verbatim into a shell-spawned subprocess" invariant
+        // extends from the `!` prefix half to the `^` quick-substitution
+        // half. Every peer bash-history operator now fails at manifest-
+        // parse time with a self-locating diagnostic naming the offending
+        // caixa.lisp rather than at resolve-time as a `Path::join`-
+        // derived `No such file or directory` (harmless but non-self-
+        // locating) or worse riding into a downstream `bash -i` context
+        // that reinterprets the byte-pair against ambient history state.
+        //
+        // Frontier inspiration: bash reference §9.3 HISTORY EXPANSION
+        // "Quick substitution. Repeat the previous command, replacing
+        // string1 with string2." + RFC 3986 §2 'unwise' set
+        // ("characters that gateways and other transport agents are
+        // known to sometimes modify") + Pony's capabilities (a path
+        // capability that carries a `^` would be ill-typed at the
+        // reference layer, matching the same structural discipline the
+        // sibling `!` history-expansion arm inherits from Unison's
+        // content-addressed no-ambient-history discipline).
+        //
+        // The arm fires AFTER the shell-history-expansion `!` arm because
+        // a value carrying both `!` and `^` (`"../foo!sudo^bad^good"` —
+        // the canonical "I pasted a `!sudo` history-reference next to a
+        // `^bad^good` quick-substitution") surfaces the narrower prefix-
+        // form `!` diagnostic first — the `!` form is the load-bearing
+        // self-locating edit on every probe-as-both value (an author who
+        // removes the `!sudo` reference is likely to also strip the
+        // paired `^` substitution fragment); same cascade discipline
+        // every prior `:caminho` arm establishes. The arm fires BEFORE
+        // the trailing-`/` arm because the embedded shell-history-
+        // substitution byte is the more semantic-locating axis on
+        // probe-as-both values (`"../foo^bar/"` ends in `/` but the
+        // load-bearing diagnostic is the embedded `^` — the trailing `/`
+        // is the secondary observation, and an author who removes the
+        // `^bar` substitution fragment is likely to also tab-strip the
+        // trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'^' {
+                return Err(DepError::FonteCaminhoShellHistorySubstitution {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -3319,6 +3451,54 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellHistoryExpansion {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         history-substitution / RFC-3986-'unwise' / regex-negation metacharacter 0x{byte:02x} \
+         `{ch}` (POSIX bash's `set -o histexpand` mode — the default for every interactive \
+         session and every `bash -i` subprocess-argument context `feira tofu` / `git clone` / \
+         `nix flake check` cross — lexes `^old^new^` per bash reference §9.3 as the 'quick \
+         substitution' history operator that rewrites the prior command's `old` string to \
+         `new` and re-executes it verbatim, the canonical typo-correction one-liner idiom \
+         (`git clone <bad-url>` → `^bad^good` typo-fix-and-rerun the paste-from-shell-\
+         history author trims only the leading `git clone` prefix from). RFC 3986 §2 lists \
+         `^` in the 'unwise' set every URL parser is required to percent-encode-or-refuse at \
+         the wire boundary, and the WHATWG URL spec's 'fragment percent-encode set' maps \
+         `^` → `%5E` at the query / fragment component transition, so `Path::join` on the \
+         literal value diverges from every downstream `feira tofu` curl-invocation / \
+         artifact-registry-fetch that percent-encodes the byte before the wire. `^` is also \
+         the regex character-class negation prefix (`[^abc]`), the bitwise XOR operator in \
+         C / C++ / Rust / Python / JavaScript / Nix / Go, the Windows `cmd.exe` escape \
+         metacharacter, and the LaTeX / Markdown / BibTeX superscript operator. POSIX \
+         `std::path::Path` treats `^` as a literal path-component byte, so \
+         `:caminho \"../foo^bar/baz\"` (embedded quick-substitution), `:caminho \
+         \"../foo^\"` (trailing history-substitution-open shape), or `:caminho \"../x^y\"` \
+         (XOR-expression paste-from-source) silently pass every prior cascade arm (`^` \
+         isn't `\\` / `<` / `>` / `|` / `;` / `&` / backtick / `*` / `?` / `(` / `)` / `{{` \
+         / `}}` / `[` / `]` / `'` / `\"` / `#` / `%` / `$` / `!`) and route through \
+         `Path::new(caminho).join(<file>)` looking for a literal `./{caminho}` subdirectory \
+         that fails at resolve time with a non-self-locating `No such file or directory` \
+         error far from the source caixa.lisp. The lacre pipeline embeds the value verbatim \
+         in its per-dep content-address `path:{caminho}` at caixa-resolver/src/resolve.rs:189, \
+         so the byte lands in the BLAKE3 closure and rides into every shell-spawned \
+         subprocess (the resolver's `git clone`, a future `feira tofu` shell-out, a future \
+         operator-side `nix flake check` spawn) as the canonical shell-history-substitution \
+         / RFC-3986-unwise surface every peer single-token-shaped typed slot already closes. \
+         The peer `:fonte :repo` axis closes the byte under the same shell-history-\
+         substitution / RFC-3986-unwise banner (49e142f `^` on `is_git_repo_url`). Together \
+         with the immediate-predecessor `!` arm (6a04767) this arm closes the full `set -o \
+         histexpand` operator surface on the `:caminho` axis — the `!command` / `!!` / `!$` \
+         prefix form via `!`, the `^old^new^` quick-substitution form via `^`. Express the \
+         path as a bare relative single-token like \"../caixa-teia\" — the sibling-workspace \
+         directory name carries no shell-history-substitution / regex-negation / XOR-operator \
+         semantic; drop any `^old^new` history-substitution paste-from-shell-history idiom; \
+         drop any trailing `^` history-substitution-open fragment.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellHistorySubstitution {
         nome: String,
         caminho: String,
         byte: u8,
@@ -12363,6 +12543,197 @@ mod tests {
         assert!(
             rendered.contains("bang"),
             "diagnostic must reference the bang-operator vocabulary: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_shell_history_substitution() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // shell-history-quick-substitution footgun on `:caminho`. An
+        // author copies a `git clone <bad-url>` line from their terminal,
+        // corrects it via bash's `^bad^good` quick-substitution history
+        // operator (bash reference §9.3, `set -o histexpand` mode's
+        // default for interactive sessions), and pastes the trailing
+        // `^bad^good` substitution fragment into a `:caminho` value
+        // without trimming the leading `git clone` prefix — the byte
+        // rides into the manifest verbatim. Until this arm landed the
+        // `^` byte silently passed every prior `:caminho` cascade arm
+        // (`^` isn't `\` / `<` / `>` / `|` / `;` / `&` / backtick / `*`
+        // / `?` / `(` / `)` / `{` / `}` / `[` / `]` / `'` / `"` / `#` /
+        // `%` / `$` / `!`); bash with the default `histexpand` mode
+        // rewrites the prior command's `bad` string to `good` and re-
+        // executes it, the paired-operator half of the `set -o
+        // histexpand` feature the peer `!` arm already closes the prefix
+        // half of. The peer `is_git_repo_url` axis rejects the byte at
+        // 49e142f under the same shell-history-substitution / RFC-3986-
+        // unwise banner.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo^bad^good".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellHistorySubstitution {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellHistorySubstitution, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../foo^bad^good");
+        assert_eq!(byte, b'^');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_regex_negation_anchor() {
+        // The symmetric paste-from-doc-grep-pipeline footgun (peer with
+        // `validate_rejects_git_fonte_with_repo_carrying_caret_regex_anchor`
+        // on `is_git_repo_url`). An author copies a `grep '^archived'`
+        // regex-anchor / negation idiom from a doc snippet and the byte
+        // rides in verbatim. Pinned separately from the `^old^new^`
+        // quick-substitution shape so a future diagnostic-surface change
+        // that only checked the paired-caret history-substitution
+        // position surfaces here — the per-byte arm fires anywhere `^`
+        // appears in the value, including at a solitary leading-of-
+        // segment position.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo/^archived".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistorySubstitution { byte: b'^', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_trailing_history_substitution_open() {
+        // The trailing-`^` history-substitution-open shape — an author
+        // starts typing a `^bad^good` quick-substitution but pastes only
+        // the leading `^` sentinel before context-switching (a bash-
+        // reference §9.3 valid histexpand prefix on its own — even a
+        // solitary `^` on the prior command's whole re-execution shape).
+        // Pinned separately from the `^old^new^` full-form and the leading-
+        // of-segment `^archived` regex-anchor shape so the gate's
+        // rationale extends to the paste-from-shell-history-with-only-
+        // the-first-byte-selected surface. None of the prior shell-
+        // metachar arms cover this shape.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia^".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistorySubstitution { byte: b'^', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_caret() {
+        // The positive-control pin (peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_bang`
+        // on the immediate-predecessor arm): the gate targets only
+        // `^`, never adjacent printable ASCII or POSIX-valid bytes.
+        // A relative POSIX path carrying dashes / dots / slashes /
+        // digits / underscore (`"../caixa-teia/sub_v2.rc"`) must
+        // continue to validate cleanly so the gate doesn't widen to
+        // a "no printable punctuation anywhere" sweep that would
+        // defeat the entire path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub_v2.rc".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_history_expansion_fires_before_shell_history_substitution() {
+        // Cascade pin on the immediate-predecessor arm: a value carrying
+        // both embedded `!` and `^` (`"../foo!sudo^bad^good"` — the
+        // canonical "I pasted a `!sudo` history-reference next to a
+        // `^bad^good` quick-substitution") routes through
+        // `FonteCaminhoShellHistoryExpansion` not
+        // `FonteCaminhoShellHistorySubstitution`. The `!` prefix form is
+        // the more semantic-locating axis on probe-as-both values (an
+        // author who removes the `!sudo` reference is likely to also
+        // strip the paired `^` substitution fragment); same cascade
+        // discipline every prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo!sudo^bad^good".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistoryExpansion { byte: b'!', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_history_substitution_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value carrying
+        // both embedded `^` and a trailing `/` (`"../foo^bad^good/"` —
+        // the canonical "I tab-completed a `^bad^good`-carrying path")
+        // routes through `FonteCaminhoShellHistorySubstitution` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-history-
+        // substitution byte is the more semantic-locating axis on probe-
+        // as-both values (an author who removes the `^bad^good`
+        // substitution fragment is likely to also tab-strip the trailing
+        // separator).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo^bad^good/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistorySubstitution { byte: b'^', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_history_substitution_diagnostic_carries_offending_dep_caminho_and_byte()
+    {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_history_expansion_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the immediate-predecessor arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex form, and names the
+        // shell-history-substitution / RFC-3986-'unwise' / regex-
+        // negation footgun explicitly so a `feira lint` run can render
+        // the diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo^bad^good".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../foo^bad^good"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x5e") || rendered.contains("0x5E"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("history-substitution") || rendered.contains("history substitution"),
+            "diagnostic must name the shell-history-substitution footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("unwise"),
+            "diagnostic must reference the RFC-3986 'unwise' set vocabulary: {rendered:?}",
         );
     }
 
