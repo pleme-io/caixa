@@ -222,6 +222,86 @@ pub fn require_single_servico(caixa: &Caixa) -> Result<(), ServicoCountMismatch>
     }
 }
 
+/// Predicate: find the first non-ASCII Unicode-`White_Space` character in
+/// `s`, or `None` if every character lies in the ASCII byte range.
+///
+/// The canonical drift class this closes across every typed-magnitude
+/// codec in caixa-core (`limits::parse_byte_size` backing
+/// `:limits :memory`, `limits::parse_duration` backing `:limits
+/// :wall-clock`, `supervisor::duration_codec::parse` backing
+/// `:supervisor :restart-window` / `:politicas :timeout` /
+/// `:politicas :circuit-breaker :window`, and
+/// `aplicacao::rate_limit_codec::parse` backing `:politicas
+/// :rate-limit`) is the non-ASCII subset of Unicode `White_Space`: NBSP
+/// (`\u{00A0}`), OGHAM SPACE MARK (`\u{1680}`), the EN-QUAD /
+/// EM-QUAD / EN-SPACE / EM-SPACE / THREE-PER-EM-SPACE /
+/// FOUR-PER-EM-SPACE / SIX-PER-EM-SPACE / FIGURE-SPACE /
+/// PUNCTUATION-SPACE / THIN-SPACE / HAIR-SPACE band
+/// (`\u{2000}`..=`\u{200A}`), LINE SEPARATOR (`\u{2028}`), PARAGRAPH
+/// SEPARATOR (`\u{2029}`), NARROW NBSP (`\u{202F}`), MEDIUM
+/// MATHEMATICAL SPACE (`\u{205F}`), and IDEOGRAPHIC SPACE
+/// (`\u{3000}`). Every one of these characters is
+/// [`char::is_whitespace`]`() && !`[`char::is_ascii`]`()`, and every
+/// one of them is silently stripped by [`str::trim`] at the top of
+/// each codec's parse entry — `str::trim` uses `char::is_whitespace`,
+/// which is Unicode `White_Space`, strictly wider than the byte-set
+/// `u8::is_ascii_whitespace` the pre-gate arm on each codec already
+/// refuses. So a paste-from-typography `"\u{00A0}64MiB"` (NBSP
+/// leading) survives the byte-scan (none of its bytes match
+/// `is_ascii_whitespace`), lands on the top-level `s.trim()` which
+/// silently strips the NBSP, parses to `64 * 1024 * 1024` bytes, and
+/// serde round-trips to the *different* canonical `"64MiB"` on next
+/// emit — breaking the THEORY.md Part V render-determinism contract
+/// every typed slot carries. Same class on every peer codec:
+/// `"\u{2028}30s"` (paste-from-web-doc line-separator prefix) →
+/// `Duration::from_secs(30)` → `"30s"`; `"\u{00A0}100/s"`
+/// (paste-from-typography NBSP prefix on `:politicas :rate-limit`) →
+/// `RateLimit { 100, 1s }` → `"100/s"`. The ASCII-whitespace-only
+/// `is_ascii_whitespace` byte-scan closed on each codec by the
+/// immediate predecessors (`limits::parse_byte_size` — 24a8ad4;
+/// `limits::parse_duration` — ebc3a75; `supervisor::duration_codec`
+/// — a7ae622; `rate_limit_codec` — 1ad7755) covers space (`0x20`),
+/// tab (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`); this
+/// predicate closes the strictly-complementary non-ASCII Unicode
+/// `White_Space` class in one lifted source of truth across all four
+/// codec sites in one landing — the trajectory the 24a8ad4 commit
+/// body's `Forward compounding` bullet explicitly named ("the next
+/// canonical-form-drift trajectory … can land as a single lifted
+/// predicate across all four codec sites in one follow-up run rather
+/// than four independent extensions").
+///
+/// The predicate is deliberately narrower than "any non-ASCII
+/// codepoint" — the byte-set restrictions on the accepted magnitude
+/// (`b.is_ascii_digit()` on the digit-only arm, `is_ascii_alphabetic`
+/// on the unit-suffix split) already refuse every non-`White_Space`
+/// non-ASCII codepoint at a downstream arm with a `BadByteMagnitude`
+/// / `BadDurationMagnitude` / equivalent diagnostic. This predicate's
+/// job is exclusively to name the drift class — the Unicode
+/// whitespace subset that survives the byte-scan but that
+/// `str::trim` silently swallows — so the codec's diagnostic can
+/// carry the offending [`char`] and its `U+XXXX` codepoint verbatim
+/// rather than laundering the value through a generic "bad
+/// magnitude" arm at a downstream site far from the paste-origin.
+/// Peer of [`is_dns_1123_label`] / [`is_gateway_api_http_path`] /
+/// [`is_git_repo_url`] — same "typed-slot's valid set matches its
+/// codec's accepted set, structurally" discipline carried at the
+/// codec layer.
+///
+/// Note that BOM (`\u{FEFF}`, ZERO WIDTH NO-BREAK SPACE) and ZWSP
+/// (`\u{200B}`, ZERO WIDTH SPACE) are deliberately *outside* this
+/// predicate's rejection set — both have `char::is_whitespace() ==
+/// false` per the Unicode `White_Space` property, so `str::trim`
+/// does *not* silently strip either, and both currently land on the
+/// downstream `BadByteMagnitude` / `BadDurationMagnitude` arm at
+/// parse time with the byte-shape diagnostic intact. Adding them
+/// here would over-fire on an accepted-diagnostic class already
+/// closed at a peer arm — the render-determinism contract is
+/// unbroken on those inputs today.
+#[must_use]
+pub fn find_non_ascii_whitespace_char(s: &str) -> Option<char> {
+    s.chars().find(|c| c.is_whitespace() && !c.is_ascii())
+}
+
 /// K8s DNS-1123 label rule's max length, in bytes — the floor each
 /// apiserver-side schema enforces independently on every `metadata.name`
 /// / Service name / label value axis a validated identifier lands in.
@@ -12435,5 +12515,85 @@ mod tests {
         let err = is_chart_keyword_shape(&too_long).unwrap_err();
         assert!(err.contains("20"), "got: {err:?}");
         assert!(err.contains("21"), "got: {err:?}");
+    }
+
+    // ── shared predicate: find_non_ascii_whitespace_char ──────────────────
+    //
+    // Pins the accepted / rejected set of the lifted predicate every
+    // typed-magnitude codec in caixa-core calls (byte-size / duration /
+    // shared duration / rate-limit). The predicate's job is exclusively
+    // to name the strictly-complementary drift class the peer
+    // `u8::is_ascii_whitespace` byte-scan cannot see — the non-ASCII
+    // Unicode `White_Space` subset that `str::trim` silently swallows.
+
+    #[test]
+    fn find_non_ascii_whitespace_char_accepts_ascii_only_strings() {
+        // Complement-side pin: every ASCII-only string (canonical form
+        // and ASCII whitespace alike) returns `None`. The predicate is
+        // strictly complementary to the per-codec ASCII byte-scan; it
+        // must not shadow its coverage.
+        assert!(find_non_ascii_whitespace_char("64MiB").is_none());
+        assert!(find_non_ascii_whitespace_char("30s").is_none());
+        assert!(find_non_ascii_whitespace_char("100/s").is_none());
+        assert!(find_non_ascii_whitespace_char(" \t\n").is_none());
+        assert!(find_non_ascii_whitespace_char("").is_none());
+        // Non-whitespace ASCII byte peers stay accepted too.
+        assert!(find_non_ascii_whitespace_char("abcdef0123-_").is_none());
+    }
+
+    #[test]
+    fn find_non_ascii_whitespace_char_flags_nbsp() {
+        // `\u{00A0}` NBSP — the canonical paste-from-typography /
+        // paste-from-word-processor drift class.
+        assert_eq!(
+            find_non_ascii_whitespace_char("64\u{00A0}MiB"),
+            Some('\u{00A0}')
+        );
+        assert_eq!(find_non_ascii_whitespace_char("\u{00A0}"), Some('\u{00A0}'));
+    }
+
+    #[test]
+    fn find_non_ascii_whitespace_char_flags_line_and_paragraph_separators() {
+        // LINE SEPARATOR (`\u{2028}`) / PARAGRAPH SEPARATOR
+        // (`\u{2029}`) — the paste-from-web-doc drift class every
+        // RTF/HTML → plain-text conversion emits at soft-wrap
+        // boundaries.
+        assert_eq!(
+            find_non_ascii_whitespace_char("30s\u{2028}"),
+            Some('\u{2028}')
+        );
+        assert_eq!(
+            find_non_ascii_whitespace_char("30s\u{2029}"),
+            Some('\u{2029}')
+        );
+    }
+
+    #[test]
+    fn find_non_ascii_whitespace_char_flags_ideographic_space() {
+        // IDEOGRAPHIC SPACE (`\u{3000}`) — the CJK-typography drift
+        // class every full-width IME auto-widens ASCII space to on
+        // Japanese / Chinese input methods.
+        assert_eq!(
+            find_non_ascii_whitespace_char("64MiB\u{3000}"),
+            Some('\u{3000}')
+        );
+    }
+
+    #[test]
+    fn find_non_ascii_whitespace_char_does_not_flag_zwsp_or_bom() {
+        // BOM (`\u{FEFF}`, ZERO WIDTH NO-BREAK SPACE) and ZWSP
+        // (`\u{200B}`, ZERO WIDTH SPACE) — both have
+        // `char::is_whitespace() == false` per the Unicode
+        // `White_Space` property, so `str::trim` does *not* strip
+        // either. Both currently land on the downstream
+        // `BadByteMagnitude` / `BadDurationMagnitude` arm at parse time
+        // with the byte-shape diagnostic intact; the render-determinism
+        // contract is unbroken on those inputs today. This test pins
+        // the predicate's exclusion so a future widening that starts
+        // flagging BOM / ZWSP here surfaces as a test failure rather
+        // than a silent over-fire on a class the downstream arm
+        // already closes.
+        assert!(find_non_ascii_whitespace_char("\u{FEFF}64MiB").is_none());
+        assert!(find_non_ascii_whitespace_char("\u{200B}30s").is_none());
     }
 }

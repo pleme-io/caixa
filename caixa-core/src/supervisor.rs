@@ -847,6 +847,47 @@ pub mod duration_codec {
                  whitespace byte (write `\"30s\"` verbatim)"
             ));
         }
+        // Non-ASCII Unicode `White_Space` arm — the strictly-
+        // complementary class the ASCII arm above cannot see.
+        // `str::trim` at the top of every peer codec uses
+        // `char::is_whitespace` (Unicode `White_Space`, strictly wider
+        // than the ASCII byte set), so an NBSP (`\u{00A0}`) / LINE
+        // SEPARATOR (`\u{2028}`) / EM-SPACE (`\u{2003}`) survives the
+        // byte-scan (its UTF-8 bytes are not in `is_ascii_whitespace`),
+        // gets silently stripped by the top-level `s.trim()` below,
+        // and the value round-trips through `render` to a *different*
+        // canonical form (`\"30s\"`) on next emit — breaking the
+        // THEORY.md Part V render-determinism contract on three typed
+        // duration slots at once (`:supervisor :restart-window`,
+        // `:politicas :timeout`, `:politicas :circuit-breaker
+        // :window`) via the shared codec. Closed here and at the
+        // three peer codec sites (`limits::parse_byte_size`,
+        // `limits::parse_duration`, `rate_limit_codec`) through the
+        // shared [`crate::render::find_non_ascii_whitespace_char`]
+        // predicate — the "single lifted predicate across all four
+        // codec sites in one follow-up run" the 24a8ad4 commit body's
+        // `Forward compounding` bullet named as the next compounding
+        // step.
+        if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
+            return Err(format!(
+                "duration: value {s:?} contains non-ASCII Unicode whitespace character \
+                 {ch:?} (U+{cp:04X}) — the canonical authoring form for the typed \
+                 duration slots routed through this shared codec (`:supervisor \
+                 :restart-window`, `:politicas :timeout`, `:politicas :circuit-breaker \
+                 :window`) is `<integer><unit>` (e.g. `\"30s\"`, `\"500ms\"`, `\"2m\"`, \
+                 `\"1h\"`) with no whitespace characters anywhere (ASCII or Unicode). A \
+                 non-ASCII-whitespace-carrying shape (`\"\\u{{00A0}}30s\"`, \
+                 `\"30s\\u{{2028}}\"`, `\"30\\u{{2003}}s\"`) survives the ASCII byte-scan \
+                 but `str::trim` (which uses `char::is_whitespace` — the Unicode \
+                 `White_Space` property, strictly wider than the ASCII byte set) silently \
+                 strips it at parse entry, and the value round-trips through `render` to \
+                 a *different* canonical form (`\"30s\"`) on first serialize — breaking \
+                 the THEORY.md Part V render-determinism contract every typed slot \
+                 carries. Strip every non-ASCII whitespace character (write `\"30s\"` \
+                 verbatim with only ASCII bytes)",
+                cp = ch as u32
+            ));
+        }
         let s = s.trim();
         let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
         let (num_part, unit) = s.split_at(split);
@@ -3071,5 +3112,79 @@ mod tests {
             "expected whitespace diagnostic in {msg:?}"
         );
         assert!(msg.contains("0x20"), "missing offending byte in {msg:?}");
+    }
+
+    // ── canonical-form: non-ASCII Unicode `White_Space` duration gate ─────
+    //
+    // Successor to the ASCII-whitespace arm (a7ae622) on the shared
+    // duration codec — closes the strictly-complementary class the
+    // byte-scan cannot see, through the lifted
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate.
+    // Applies to `:supervisor :restart-window`, `:politicas :timeout`,
+    // and `:politicas :circuit-breaker :window` simultaneously via
+    // this shared codec.
+
+    #[test]
+    fn duration_codec_parse_rejects_leading_nbsp() {
+        // NBSP prefix — the strictly-complementary drift class the
+        // ASCII byte-scan cannot see. `str::trim` strips it silently
+        // and the value drifts to `"30s"` on next serialize.
+        let err = duration_codec::parse("\u{00A0}30s").unwrap_err();
+        assert!(
+            err.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII whitespace diagnostic in {err:?}"
+        );
+        assert!(err.contains("U+00A0"), "missing codepoint in {err:?}");
+    }
+
+    #[test]
+    fn duration_codec_parse_rejects_trailing_line_separator() {
+        // LINE SEPARATOR (`\u{2028}`) trailing — paste-from-web-doc
+        // footgun.
+        let err = duration_codec::parse("30s\u{2028}").unwrap_err();
+        assert!(
+            err.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII whitespace diagnostic in {err:?}"
+        );
+        assert!(err.contains("U+2028"), "missing codepoint in {err:?}");
+    }
+
+    #[test]
+    fn duration_codec_parse_accepts_ascii_only_forms_after_unicode_arm() {
+        // Positive-control pin: every ASCII-only canonical form the
+        // renderer emits stays accepted through the new arm.
+        assert_eq!(
+            duration_codec::parse("30s").unwrap(),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            duration_codec::parse("500ms").unwrap(),
+            Duration::from_millis(500)
+        );
+        assert_eq!(
+            duration_codec::parse("1h").unwrap(),
+            Duration::from_secs(3600)
+        );
+    }
+
+    #[test]
+    fn restart_window_serde_rejects_non_ascii_whitespace() {
+        // The shared codec backs `SupervisorSpec::restart_window` — so
+        // the new non-ASCII Unicode whitespace arm applies on serde
+        // deserialize for the typed Supervisor slot. A
+        // `{"restartWindow":" 30s"}` payload that previously
+        // survived the ASCII byte-scan (only ASCII whitespace was
+        // refused) is now refused at deserialize with the
+        // non-ASCII-whitespace-and-codepoint diagnostic.
+        let payload = "{\"estrategia\":\"OneForOne\",\"maxRestarts\":5,\
+            \"restartWindow\":\"\u{00A0}30s\",\
+            \"children\":[{\"caixa\":\"w\",\"versao\":\"^0.1\",\"restart\":\"Permanent\"}]}";
+        let err = serde_json::from_str::<SupervisorSpec>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("U+00A0"), "missing codepoint in {msg:?}");
     }
 }

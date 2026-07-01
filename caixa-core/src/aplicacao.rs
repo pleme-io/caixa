@@ -1592,6 +1592,44 @@ mod rate_limit_codec {
                  `\"100/s\"` verbatim)"
             ));
         }
+        // Non-ASCII Unicode `White_Space` arm — the strictly-
+        // complementary class the ASCII arm above cannot see.
+        // `str::trim` at the top of every peer codec uses
+        // `char::is_whitespace` (Unicode `White_Space`, strictly
+        // wider than the ASCII byte set), so an NBSP (`\u{00A0}`) /
+        // LINE SEPARATOR (`\u{2028}`) / EM-SPACE (`\u{2003}`)
+        // survives the byte-scan (its UTF-8 bytes are not in
+        // `is_ascii_whitespace`), gets silently stripped by the
+        // top-level `s.trim()` below, and the value round-trips
+        // through `render` to a *different* canonical form
+        // (`\"100/s\"`) on next emit — breaking the THEORY.md Part V
+        // render-determinism contract every typed slot carries.
+        // Closed here (`:politicas :rate-limit`) and at the three
+        // peer codec sites (`limits::parse_byte_size`,
+        // `limits::parse_duration`, `supervisor::duration_codec`)
+        // through the shared
+        // [`crate::render::find_non_ascii_whitespace_char`] predicate
+        // — the "single lifted predicate across all four codec sites
+        // in one follow-up run" the 24a8ad4 commit body's `Forward
+        // compounding` bullet named as the next compounding step.
+        if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
+            return Err(format!(
+                "rate-limit: value {s:?} contains non-ASCII Unicode whitespace character \
+                 {ch:?} (U+{cp:04X}) — the canonical authoring form for `:politicas \
+                 :rate-limit` is `<integer>/<s|m|h>` (e.g. `\"100/s\"`, `\"5000/m\"`, \
+                 `\"10000/h\"`) with no whitespace characters anywhere (ASCII or Unicode). \
+                 A non-ASCII-whitespace-carrying shape (`\"\\u{{00A0}}100/s\"`, \
+                 `\"100/s\\u{{2028}}\"`, `\"100\\u{{2003}}/s\"`) survives the ASCII \
+                 byte-scan but `str::trim` (which uses `char::is_whitespace` — the \
+                 Unicode `White_Space` property, strictly wider than the ASCII byte set) \
+                 silently strips it at parse entry, and the value round-trips through \
+                 `render` to a *different* canonical form (`\"100/s\"`) on first \
+                 serialize — breaking the THEORY.md Part V render-determinism contract \
+                 every typed slot carries. Strip every non-ASCII whitespace character \
+                 (write `\"100/s\"` verbatim with only ASCII bytes)",
+                cp = ch as u32
+            ));
+        }
         let s = s.trim();
         let (rate_str, unit) = s
             .split_once('/')
@@ -10357,6 +10395,55 @@ mod tests {
             msg.contains("0x09"),
             "missing offending tab byte in {msg:?}"
         );
+    }
+
+    // ── canonical-form: non-ASCII Unicode `White_Space` rate-limit gate ───
+    //
+    // Successor to the ASCII-whitespace arm (1ad7755) on
+    // `rate_limit_codec` — closes the strictly-complementary class the
+    // byte-scan cannot see, through the lifted
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate.
+
+    #[test]
+    fn rate_limit_serde_rejects_leading_nbsp() {
+        // NBSP prefix — paste-from-typography footgun. Byte-scan
+        // misses, `str::trim` silently strips it, value drifts to
+        // `"100/s"` on next serialize.
+        let payload = "{\"rateLimit\":\"\u{00A0}100/s\"}";
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("U+00A0"), "missing codepoint in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_internal_em_space() {
+        // EM-SPACE (`\u{2003}`) between magnitude and unit — canonical
+        // paste-from-typography footgun on the `<integer>/<unit>`
+        // shape.
+        let payload = "{\"rateLimit\":\"100\u{2003}/s\"}";
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("U+2003"), "missing codepoint in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_accepts_ascii_only_canonical_forms_after_unicode_arm() {
+        // Positive-control pin: every ASCII-only canonical form the
+        // renderer emits stays accepted through the new arm.
+        for lit in [r#""100/s""#, r#""5000/m""#, r#""10000/h""#] {
+            let payload = format!(r#"{{"rateLimit":{lit}}}"#);
+            let p: MeshPolicy = serde_json::from_str(&payload)
+                .unwrap_or_else(|e| panic!("expected {lit} to parse; got {e}"));
+            assert!(p.rate_limit.is_some());
+        }
     }
 
     #[test]
