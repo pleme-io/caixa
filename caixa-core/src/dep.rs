@@ -1524,6 +1524,109 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-comment / URL-fragment / YAML-comment arm.
+        // The d14cbc5 shell-quote-grouping arm closes `'` / `"`; `#` (`0x23`) is
+        // the orthogonal "byte at which four distinct downstream parsers all
+        // truncate the value at the first occurrence" surface, and no prior arm
+        // has covered it on the `:caminho` axis. Every POSIX shell (sh / bash /
+        // zsh / dash / ksh / fish / nushell) lexes an unquoted `#` at the head
+        // of a word (or after unquoted whitespace) as the comment-lead: from
+        // that byte to the end of the physical line is a comment discarded
+        // before command parsing (`cd ../caixa-teia  # legacy sibling` — the
+        // canonical paste-from-shell-history-with-trailing-annotation shape
+        // every operator-notebook and CI-manifest carries; POSIX.1-2017 §2.3
+        // Token Recognition step 6). YAML 1.2 §6.6 makes `#` the comment lead
+        // at any position preceded by whitespace or at line-start (`path:
+        // ../caixa-teia  # pin` — the canonical paste-from-values.yaml /
+        // paste-from-K8s-manifest cross-idiom-leak shape). tatara-lisp itself
+        // treats `;` as the comment-lead but a growing number of consumer
+        // config-DSL layers (HCL, Terraform, Nix flake attributes, .env
+        // dotenv-style files, gitconfig / .gitignore, ini / TOML) use `#` as
+        // the comment-lead too — the pair extends the cross-config-DSL
+        // paste-idiom surface the d14cbc5 quote-grouping arm and the 598b770
+        // brace-expansion arm already cover on adjacent axes. RFC 3986 §3.5
+        // reserves `#` as the URL fragment-identifier delimiter (the canonical
+        // paste-from-browser-address-bar `github.com/foo/bar#readme` /
+        // `github.com/foo/bar#L42` permalink shape, and the symmetric
+        // Nix-flake-ref cross-idiom leak `github:foo/bar#packageName` where
+        // `#` selects a flake output — the same axis the peer
+        // [`crate::render::is_git_repo_url`] closes on the `:fonte :repo`
+        // surface at a68f818 with the same downstream-drops-the-tail
+        // rationale).
+        //
+        // POSIX `std::path::Path` treats `#` as a literal path-component byte,
+        // so a `:caminho "../caixa-teia # legacy sibling"` (the canonical
+        // paste-from-shell-history-with-trailing-annotation footgun),
+        // `:caminho "../caixa-teia  # pin"` (the symmetric YAML flow-scalar
+        // paste-with-trailing-comment shape), or `:caminho "../caixa-teia
+        // #readme"` (the URL fragment paste-from-browser-address-bar shape)
+        // silently passes every prior arm because `Path::is_absolute` returns
+        // false on `..`, `#` is neither a leading-byte sentinel nor a control
+        // byte nor `\` nor `<` / `>` nor `|` nor `;` nor `&` nor backtick nor
+        // `*` / `?` nor `(` / `)` nor `{` / `}` nor `[` / `]` nor `'` / `"`,
+        // and the value's last byte isn't `/`. The resolver folds the value
+        // through `Path::new(caminho).join(<file>)` looking for a literal
+        // subdirectory named `../caixa-teia # legacy sibling` and fails at
+        // resolve time with a non-self-locating `No such file or directory`
+        // error far from the source caixa.lisp — while every downstream
+        // shell / YAML / URL parser silently truncates the value at the `#`
+        // byte to `../caixa-teia`, so a `feira tofu` shell-out to a
+        // `cd '{caminho}'` command line and a `nix flake check` invocation on
+        // an emitted YAML `path:` scalar disagree with the resolver on which
+        // directory the value names. Two workstations whose downstream
+        // shell / YAML / URL parsing layers differ in unquoted-`#`
+        // recognition emit divergent build artifacts for the byte-identical
+        // caixa.lisp value.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so the byte lands in the BLAKE3
+        // closure and rides downstream as part of the build's identity into
+        // every shell-spawned subprocess (the caixa-resolver's `git clone`
+        // invocation, a future `feira tofu` shell-out, a future operator-side
+        // `nix flake check` spawn) as the canonical shell-metachar /
+        // comment-lead / URL-fragment-delimiter surface every peer
+        // single-token-shaped typed slot already closes. The peer `:fonte
+        // :repo` axis closes the byte under the URL-fragment-identifier
+        // banner (a68f818 `#` on `is_git_repo_url`); the `:caminho` axis was
+        // the last typed path-string surface still admitting the byte. This
+        // arm closes the gap so the substrate-wide "no shell-composition
+        // metacharacter / comment-lead / URL-fragment-delimiter anywhere in a
+        // typed string slot that flows verbatim into a shell-spawned
+        // subprocess or downstream YAML / URL parser" invariant extends from
+        // shell-quote-grouping (`'` / `"`) to shell-comment / URL-fragment
+        // (`#`) on the `:caminho` axis. Together with the peer JSON / YAML /
+        // TOML string-literal delimiters the d14cbc5 quote-grouping arm
+        // closes and the 598b770 `{` / `}` brace-expansion arm closes on the
+        // templating-engine-placeholder boundary, the typed `:caminho`
+        // accepted set now structurally excludes the entire
+        // paste-with-trailing-annotation / paste-from-URL-permalink /
+        // paste-from-YAML-comment cross-idiom-leak surface that would
+        // silently round-trip through any downstream shell / YAML / URL /
+        // dotenv / gitconfig / HCL parsing layer to a different value than
+        // the resolver's `Path::join` sees.
+        //
+        // The arm fires AFTER the shell-quote-grouping arm because the prior
+        // arm's `'` / `"` shape is the more semantic-locating axis on values
+        // that probe as both (`"../'x'#pin"` carries both `'` and `#` — the
+        // shell-string-literal-delimiter is the load-bearing root-cause edit,
+        // so `FonteCaminhoShellQuoteGrouping` wins; same cascade discipline
+        // every prior `:caminho` arm establishes). The arm fires BEFORE the
+        // trailing-`/` arm because the embedded comment-lead / fragment-
+        // delimiter byte is the more semantic-locating axis on probe-as-both
+        // values (`"../caixa-teia#pin/"` ends in `/` but the load-bearing
+        // diagnostic is the embedded `#` — the trailing `/` is the secondary
+        // observation, and an author who removes the `#pin` fragment is
+        // likely to also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'#' {
+                return Err(DepError::FonteCaminhoShellComment {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -2441,6 +2544,58 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellQuoteGrouping {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         comment / URL-fragment-identifier / YAML-comment cross-config-DSL metacharacter \
+         0x{byte:02x} `{ch}` (every POSIX shell — sh / bash / zsh / dash / ksh / fish / \
+         nushell — lexes an unquoted `#` at the head of a word or after unquoted \
+         whitespace as the comment-lead per POSIX.1-2017 §2.3 Token Recognition step 6, \
+         discarding the byte and everything after it to the end of the physical line \
+         before command parsing (`cd ../caixa-teia  # legacy sibling` — the canonical \
+         paste-from-shell-history-with-trailing-annotation shape every operator-notebook \
+         and CI-manifest carries); YAML 1.2 §6.6 makes `#` the comment-lead at any \
+         position preceded by whitespace or at line-start (`path: ../caixa-teia  # pin` \
+         — the canonical paste-from-values.yaml / paste-from-K8s-manifest cross-idiom-\
+         leak); RFC 3986 §3.5 reserves `#` as the URL fragment-identifier delimiter (the \
+         canonical paste-from-browser-address-bar `github.com/foo/bar#readme` / \
+         `github.com/foo/bar#L42` permalink shape, and the symmetric Nix-flake-ref \
+         cross-idiom leak `github:foo/bar#packageName` where `#` selects a flake \
+         output); the same cross-config-DSL surface extends to HCL / Terraform / Nix \
+         flake attributes / dotenv `.env` / gitconfig / .gitignore / ini / TOML where \
+         `#` is likewise the comment-lead. POSIX `std::path::Path` treats the byte as a \
+         literal path-component byte, so a `:caminho \"../caixa-teia # legacy sibling\"` \
+         (the canonical paste-from-shell-history-with-trailing-annotation footgun), \
+         `:caminho \"../caixa-teia  # pin\"` (the symmetric YAML flow-scalar paste-with-\
+         trailing-comment shape), or `:caminho \"../caixa-teia#readme\"` (the URL \
+         fragment paste-from-browser-address-bar shape) silently passes every prior arm \
+         and the resolver folds the value through `Path::new(caminho).join(<file>)` \
+         looking for a literal subdirectory named `../caixa-teia # legacy sibling` and \
+         fails at resolve time with a non-self-locating `No such file or directory` \
+         error far from the source caixa.lisp — while every downstream shell / YAML / \
+         URL parser silently truncates the value at the `#` byte to `../caixa-teia`, so \
+         a `feira tofu` shell-out and a `nix flake check` on an emitted YAML `path:` \
+         scalar disagree with the resolver on which directory the value names. The \
+         lacre pipeline embeds the value verbatim in its per-dep content-address \
+         `path:{caminho}` at caixa-resolver/src/resolve.rs:189, so the byte lands in \
+         the BLAKE3 closure and rides into every shell-spawned subprocess (the \
+         resolver's `git clone`, a future `feira tofu` shell-out, a future operator-\
+         side `nix` spawn) as the canonical shell-metachar / comment-lead / URL-\
+         fragment-delimiter surface every peer single-token-shaped typed slot already \
+         closes. The peer `:fonte :repo` axis closes the byte under the same URL-\
+         fragment-identifier banner (a68f818 `#` on `is_git_repo_url`). Express the \
+         path as a bare relative single-token like \"../caixa-teia\" — the sibling-\
+         workspace directory name carries no shell-comment / URL-fragment / YAML-\
+         comment semantic; move any trailing annotation to a tatara-lisp `;`-comment \
+         on the surrounding form (`;; legacy sibling` above the `(:caminho ...)` slot) \
+         and drop any `#fragment` tail entirely (fragment identifiers select \
+         renderings, not directories, and `:caminho` names a directory).",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellComment {
         nome: String,
         caminho: String,
         byte: u8,
@@ -10118,6 +10273,477 @@ mod tests {
             rendered.contains("string-literal"),
             "diagnostic must reference the cross-config-DSL string-literal-delimiter \
              vocabulary: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_shell_comment_lead() {
+        // The canonical paste-from-shell-history-with-trailing-
+        // annotation footgun: an author pastes a `cd ../caixa-teia
+        // # legacy sibling` shell-history one-liner whose unquoted `#`
+        // comment-lead separates the path from an inline annotation.
+        // The POSIX shell trims the annotation to `../caixa-teia`
+        // (POSIX.1-2017 §2.3 Token Recognition step 6), but
+        // `Path::is_absolute` returns false on `..`, `#` is neither
+        // a leading-byte sentinel nor a control byte nor `\` nor
+        // `<` / `>` nor `|` nor `;` nor `&` nor backtick nor `*` /
+        // `?` nor `(` / `)` nor `{` / `}` nor `[` / `]` nor `'` /
+        // `"`, and the value's last byte isn't `/` — so the value
+        // silently passed every prior arm. The resolver folded the
+        // value through `Path::join` looking for a literal
+        // `./../caixa-teia # legacy sibling` subdirectory and the
+        // failure surfaced at resolve time with a non-self-locating
+        // `No such file or directory` error. The new arm moves the
+        // rejection to validate time and names the offending dep +
+        // caminho + byte verbatim.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia # legacy sibling".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellComment {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellComment, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia # legacy sibling");
+        assert_eq!(byte, b'#');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_yaml_comment_paste() {
+        // The symmetric YAML flow-scalar / values.yaml / K8s-manifest
+        // cross-idiom-leak shape (`"../caixa-teia  # pin"` — the
+        // canonical "I copied a `path: ../caixa-teia  # pin` YAML
+        // scalar-plus-comment entry out of an aligned values.yaml and
+        // dropped it verbatim into the `:caminho` slot" paste-idiom).
+        // Pinned separately from the shell-history shape so the
+        // gate's coverage extends from the single-space `#` shape to
+        // the YAML-canonical double-space `  #` shape. YAML 1.2 §6.6
+        // requires the `#` to be preceded by whitespace to lex as a
+        // comment (bare `foo#bar` is a single scalar); the double-
+        // space paste from an aligned manifest is the canonical
+        // shape.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia  # pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellComment { byte: b'#', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_url_fragment_anchor() {
+        // The URL-fragment-identifier paste shape
+        // (`"../caixa-teia#readme"` — the canonical
+        // paste-from-browser-address-bar permalink shape where the
+        // browser preserved the `#anchor` tail on the copy). Pinned
+        // separately from the whitespace-separated shell / YAML
+        // comment shapes so the gate covers the unpadded RFC 3986
+        // §3.5 fragment-delimiter position too, not only positions
+        // preceded by unquoted whitespace. Peer with the immediate-
+        // sibling `is_git_repo_url` arm on the `:fonte :repo` axis
+        // (a68f818) which closes the same byte under the same URL-
+        // fragment-identifier banner.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia#readme".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellComment { byte: b'#', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_leading_shell_comment() {
+        // Leading-position `#` shape (`"#../caixa-teia"` — the
+        // "I copied a shell-comment-out entry from a commented-out
+        // dep row" footgun). Pinned separately from the embedded
+        // shapes so the gate covers every position, not only
+        // whitespace-preceded / mid-value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "#../caixa-teia".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellComment { byte: b'#', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_shell_comment() {
+        // The positive-control pin: the gate targets only `#`,
+        // never adjacent printable ASCII or POSIX-valid bytes. The
+        // canonical relative POSIX path (`"../caixa-teia"`) and a
+        // nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue
+        // to validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface. Peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_quote_grouping`
+        // on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_quote_grouping_fires_before_shell_comment() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `'` and `#` (`"../'x'#pin"` — the canonical
+        // "I pasted a strong-quoted literal followed by a URL-
+        // fragment permalink tail" footgun) routes through
+        // `FonteCaminhoShellQuoteGrouping` not
+        // `FonteCaminhoShellComment`. The shell-string-literal-
+        // delimiter is the load-bearing root-cause edit on every
+        // probe-as-both value; same cascade discipline every prior
+        // `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../'x'#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellQuoteGrouping { byte: b'\'', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_bracket_expansion_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-bracket-expansion arm:
+        // a value carrying both `[` and `#` (`"../[a-z]#pin"` — the
+        // canonical "I pasted a glob-character-class followed by a
+        // URL-fragment tail" footgun) routes through
+        // `FonteCaminhoShellBracketExpansion` not
+        // `FonteCaminhoShellComment`. The glob-character-class
+        // expansion is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../[a-z]#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBracketExpansion { byte: b'[', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_brace_expansion_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-brace-expansion arm: a
+        // value carrying both `{` and `#` (`"../{a,b}#pin"` — the
+        // canonical "I pasted a brace-expansion fan followed by a
+        // URL-fragment tail" footgun) routes through
+        // `FonteCaminhoShellBraceExpansion` not
+        // `FonteCaminhoShellComment`. The brace-expansion fan is the
+        // load-bearing root-cause edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{a,b}#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_subshell_grouping_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-subshell-grouping arm:
+        // a value carrying both `(` and `#` (`"../(cd foo)#pin"` —
+        // the canonical "I pasted a subshell-grouping followed by a
+        // URL-fragment tail" footgun) routes through
+        // `FonteCaminhoShellSubshellGrouping` not
+        // `FonteCaminhoShellComment`. The modern Bourne `$(<cmd>)`
+        // command-substitution boundary is the load-bearing axis on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../(cd foo)#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-glob arm: a value
+        // carrying both `*` and `#` (`"../caixa-teia/*#pin"` — the
+        // canonical "I pasted a `*` unbounded pathname-expansion
+        // followed by a URL-fragment tail" footgun) routes through
+        // `FonteCaminhoShellGlob` not `FonteCaminhoShellComment`.
+        // The unbounded pathname-expansion sentinel is the load-
+        // bearing root-cause edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-command-substitution
+        // arm: a value carrying both a backtick and `#`
+        // (``"../`whoami`#pin"`` — the canonical "I pasted a
+        // legacy-backtick command-substitution followed by a URL-
+        // fragment tail" footgun) routes through
+        // `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoShellComment`. The CWE-78 shell-command-
+        // injection vector is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-background arm: a value
+        // carrying both `&` and `#` (`"../caixa-teia&pin#tail"` —
+        // the canonical "I pasted a `cmd &` background-launch
+        // followed by a URL-fragment tail" footgun) routes through
+        // `FonteCaminhoShellBackground` not
+        // `FonteCaminhoShellComment`. The background-launch tail is
+        // the load-bearing root-cause edit on every probe-as-both
+        // value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia&pin#tail".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and `#` (`"../caixa-teia;pin#tail"` —
+        // the canonical sequential-cleanup + URL-fragment paste
+        // idiom) routes through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellComment`. The sequential-command-
+        // separator paste is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia;pin#tail".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-pipe arm: a value
+        // carrying both `|` and `#` (`"../caixa-teia|pin#tail"` —
+        // the canonical pipeline-to-URL-fragment paste idiom) routes
+        // through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellComment`. The pipeline-tail paste is
+        // the load-bearing root-cause edit on every probe-as-both
+        // value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia|pin#tail".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_comment() {
+        // Cascade pin on the upstream shell-redirection arm: a
+        // value carrying both `>` and `#` (`"../caixa-teia>log#pin"`
+        // — the canonical "I pasted a `cmd > log` redirect followed
+        // by a URL-fragment tail" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellComment`. The input/output redirection
+        // metachar carries the more self-locating `byte` payload,
+        // so the prior arm wins on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_comment() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and `#` (`"..\caixa-teia#pin"` — the
+        // canonical "I pasted a Windows-shell path followed by a
+        // URL-fragment tail" footgun) routes through
+        // `FonteCaminhoBackslash` not `FonteCaminhoShellComment`.
+        // The cross-host-OS-separator divergence is the load-
+        // bearing axis on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_comment() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `#` (`"../foo\n#pin"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho between the path and an
+        // annotation) routes through `FonteCaminhoControlChar` not
+        // `FonteCaminhoShellComment`. The POSIX-syscall-rejected-
+        // byte diagnostic is the load-bearing axis on every value
+        // that probes positive for both — mirrors the cascade
+        // discipline on every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_comment() {
+        // Cascade pin on the load-bearing leading-byte arm: a
+        // leading `/` value with embedded `#` (`"/etc/foo#pin"`)
+        // routes through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellComment` — the host-layout-leak
+        // diagnostic is the load-bearing axis, the fragment byte is
+        // the secondary observation. Same precedence logic as every
+        // prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/foo#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_shell_comment() {
+        // Cascade pin on the upstream leading-`$` var-expansion
+        // arm: a value carrying both a leading `$` and a `#`
+        // (`"$DIR/foo#pin"` — the canonical "I pasted a `$DIR`
+        // shell-variable at the head of a sibling-workspace path
+        // followed by a URL-fragment tail" footgun) routes through
+        // `FonteCaminhoVarExpansion` not `FonteCaminhoShellComment`.
+        // The leading-byte shell-variable-expansion is the more
+        // self-locating diagnostic on values that probe as both.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$DIR/foo#pin".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_comment_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both `#` and a trailing `/`
+        // (`"../caixa-teia#pin/"` — the canonical "I tab-completed
+        // a URL-fragment-carrying path" footgun) routes through
+        // `FonteCaminhoShellComment` not
+        // `FonteCaminhoTrailingSlash`. The embedded fragment /
+        // comment-lead byte is the more semantic-locating axis (an
+        // author who removes the `#pin` fragment typically also
+        // drops the trailing separator since both are paste-from-
+        // URL / paste-from-shell-tab-completion artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia#pin/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellComment { byte: b'#', .. },),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_comment_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_quote_grouping_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the immediate-predecessor arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-comment / URL-fragment-identifier /
+        // YAML-comment cross-config-DSL footgun explicitly so a
+        // `feira lint` run can render the diagnostic without
+        // re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia#readme".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia#readme"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x23"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("shell-comment") || rendered.contains("comment-lead"),
+            "diagnostic must name the shell-comment footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("fragment") || rendered.contains("URL-fragment"),
+            "diagnostic must reference the URL-fragment-identifier vocabulary: \
+             {rendered:?}",
         );
     }
 
