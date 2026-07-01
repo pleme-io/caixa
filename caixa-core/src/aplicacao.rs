@@ -1525,6 +1525,73 @@ mod rate_limit_codec {
     }
 
     fn parse(s: &str) -> Result<RateLimit, String> {
+        // Whitespace-rejection arm — peer with the leading-`+`
+        // (`"+100/s"`) and leading-zero (`"0100/s"`) arms below on the
+        // same canonical-form render-determinism axis. Until this gate
+        // landed the parser silently tolerated leading / trailing /
+        // internal whitespace via the top-level `s.trim()` and the
+        // per-part `rate_str.trim()` / `unit.trim()` calls, so every
+        // whitespace-carrying shape (`" 100/s"`, `"100/s "`,
+        // `"100 /s"`, `"100/ s"`, `"100 / s"`, `"100/s\n"`,
+        // `"\t100/s"`) parsed to the same `RateLimit { 100, 1s }` and
+        // serde silently round-tripped to `"100/s"` on the next emit
+        // (a *different* canonical string) — breaking the THEORY.md
+        // Part V render-determinism contract on the same
+        // canonical-form-drift axis the leading-`+` arm below (the
+        // 4eeae98 predecessor) and the leading-zero arm below (the
+        // 4f46830 predecessor) already close.
+        //
+        // The canonical author shape is `<integer>/<s|m|h>` with no
+        // whitespace bytes anywhere — every string [`render`] emits
+        // carries none, so the parser's accepted set must match for
+        // serialize / deserialize to round-trip losslessly. This gate
+        // makes the pre-existing `s.trim()` / `rate_str.trim()` /
+        // `unit.trim()` calls below strict no-ops on the accepted set
+        // (every byte-position match they would perform is now already
+        // trimmed away by the accepted set itself), while the arm
+        // surfaces every rejected whitespace-carrying shape with a
+        // self-locating diagnostic naming the offending byte and the
+        // canonical form the author intended, peer with every prior
+        // canonical-form-drift arm on this codec.
+        //
+        // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
+        // bytes every downstream YAML / JSON / TOML parser can feed
+        // through a quoted-scalar value verbatim — space (`0x20`), tab
+        // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
+        // WhatWG-conformant "ASCII whitespace" set (deliberately narrower
+        // than POSIX's `[:space:]` which also admits VT `0x0B`). This is
+        // exactly the set the substrate must refuse on a typed-magnitude
+        // codec whose canonical form is a bare `<digits>/<unit>` string.
+        // Same discipline the peer `is_spdx_expression_shape` predicate
+        // (caixa-core/src/render.rs) applies to the `:licenca` axis's
+        // leading / trailing whitespace arms, extended here to embedded
+        // whitespace because a codec's round-trip axis is stricter than
+        // an SPDX-expression's internal-space-separated shape.
+        //
+        // Peer with the future whitespace-rejection arms on the three
+        // sibling typed-magnitude codecs the trajectory acknowledges:
+        // `supervisor::duration_codec` backing three typed-duration
+        // slots (`:supervisor :restart-window`, `:politicas :timeout`,
+        // `:politicas :circuit-breaker :window`),
+        // `limits::parse_duration` backing `:limits :wall-clock`,
+        // `limits::parse_byte_size` backing `:limits :memory` — each
+        // carries the same whitespace-tolerance drift today; this gate
+        // lands the discipline on the `rate_limit_codec` first because
+        // its leading-`+` and leading-zero arms are the closest peers
+        // on the trajectory.
+        if let Some(b) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+            return Err(format!(
+                "rate-limit: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
+                 authoring form for `:politicas :rate-limit` is `<integer>/<s|m|h>` (e.g. \
+                 `\"100/s\"`, `\"5000/m\"`, `\"10000/h\"`) with no whitespace bytes \
+                 anywhere. A whitespace-carrying shape (`\" 100/s\"`, `\"100/s \"`, \
+                 `\"100 /s\"`, `\"100/ s\"`, `\"100 / s\"`, `\"100/s\\n\"`, `\"\\t100/s\"`) \
+                 round-trips through `render` to a *different* canonical form (`\"100/s\"`) \
+                 on first serialize — breaking the THEORY.md Part V render-determinism \
+                 contract every typed slot carries. Strip every whitespace byte (write \
+                 `\"100/s\"` verbatim)"
+            ));
+        }
         let s = s.trim();
         let (rate_str, unit) = s
             .split_once('/')
@@ -10199,6 +10266,97 @@ mod tests {
             "expected leading-zero diagnostic in {msg:?}"
         );
         assert!(msg.contains("\"007\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_leading_whitespace() {
+        // `" 100/s"` — the canonical paste-from-aligned-doc /
+        // paste-from-YAML-quoted-plain-scalar footgun. Before this gate
+        // the top-level `s.trim()` silently ate the leading space and
+        // parsed the value to `RateLimit { 100, 1s }`, which then
+        // round-tripped through `render` to `"100/s"` (a *different*
+        // canonical string on the next emit) — the exact
+        // canonical-form-drift class the leading-`+` / leading-zero
+        // arms already close, extended to the whitespace byte class.
+        let payload = r#"{"rateLimit":" 100/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("0x20"), "missing offending byte in {msg:?}");
+        assert!(
+            msg.contains("THEORY.md"),
+            "missing render-determinism contract citation in {msg:?}"
+        );
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_trailing_whitespace() {
+        // `"100/s "` — the canonical shell-history / trailing-space
+        // paste footgun. Before this gate the top-level `s.trim()`
+        // silently ate the trailing space and parsed to
+        // `RateLimit { 100, 1s }`, round-tripping to `"100/s"` on the
+        // next emit — same canonical-form drift as the leading-space
+        // sibling, closed on the same whitespace-byte arm.
+        let payload = r#"{"rateLimit":"100/s "}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("0x20"), "missing offending byte in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_internal_whitespace_around_separator() {
+        // `"100 / s"` — the canonical typographically-spaced author
+        // shape (the same idiom every prose reference to a rate limit
+        // renders as, mistakenly retained when the value is pasted
+        // into a codec-shaped slot). Before this gate the per-part
+        // `rate_str.trim()` / `unit.trim()` calls silently ate both
+        // spaces on either side of `/` and parsed to
+        // `RateLimit { 100, 1s }`, round-tripping to `"100/s"` — the
+        // codec's *internal* whitespace-tolerance vector, orthogonal
+        // to the leading / trailing surface but the same canonical-
+        // form-drift class. Pins the arm as strictly stronger than the
+        // pre-existing top-level `s.trim()` behavior: it fires on
+        // whitespace anywhere in the value, not just at the string
+        // boundary.
+        let payload = r#"{"rateLimit":"100 / s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("0x20"), "missing offending byte in {msg:?}");
+    }
+
+    #[test]
+    fn rate_limit_serde_rejects_tab_byte() {
+        // `"\t100/s"` — the canonical paste-from-indented-doc /
+        // paste-from-YAML-block-scalar footgun where a tab byte leads
+        // the magnitude. Pins that the gate covers tab (`0x09`) as
+        // well as space (`0x20`) — both are `u8::is_ascii_whitespace`
+        // members and both would be silently swallowed by `s.trim()`
+        // pre-gate. The `is_ascii_whitespace` coverage extends beyond
+        // space alone to the full ASCII-whitespace set (space `0x20`,
+        // tab `0x09`, LF `0x0A`, FF `0x0C`, CR `0x0D`); this test pins
+        // the tab arm as a representative of the non-space members.
+        let payload = r#"{"rateLimit":"\t100/s"}"#;
+        let err = serde_json::from_str::<MeshPolicy>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {msg:?}"
+        );
+        assert!(
+            msg.contains("0x09"),
+            "missing offending tab byte in {msg:?}"
+        );
     }
 
     #[test]
