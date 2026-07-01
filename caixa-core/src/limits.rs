@@ -747,6 +747,17 @@ pub enum LimitsError {
          (write `\"30s\"` instead of `\"030s\"`)"
     )]
     LeadingZeroDurationMagnitude { value: String },
+    #[error(
+        "duration: value {value:?} contains whitespace byte 0x{byte:02x} — the canonical \
+         authoring form for `:limits :wall-clock` is `<integer><unit>` (e.g. `\"30s\"`, \
+         `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no whitespace bytes anywhere. A \
+         whitespace-carrying shape (`\" 30s\"`, `\"30s \"`, `\"30 s\"`, `\"\\t30s\"`, \
+         `\"30s\\n\"`) round-trips through `render_duration` to a *different* canonical form \
+         (`\"30s\"`) on first serialize — breaking the THEORY.md Part V render-determinism \
+         contract every typed slot carries. Strip every whitespace byte (write `\"30s\"` \
+         verbatim)"
+    )]
+    WhitespaceInDuration { value: String, byte: u8 },
     #[error("millicores: bad value {0:?} (expected `<int>m` or `<int>`)")]
     BadMillicores(String),
     #[error(
@@ -1048,6 +1059,58 @@ fn de_byte_size<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u64>, D::Error
 // ── duration codec ─────────────────────────────────────────────────────
 
 fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
+    // Whitespace-rejection arm — peer with the leading-`+` / fractional
+    // arm below (`"+30s"`, `"1.5s"`) and the leading-zero arm below
+    // (`"030s"`) on the same canonical-form render-determinism axis.
+    // Until this gate landed the parser silently tolerated leading /
+    // trailing / internal whitespace via the top-level `s.trim()` at
+    // parse entry and the per-part `num_part.trim()` / `unit.trim()`
+    // calls below, so every whitespace-carrying shape (`" 30s"` —
+    // paste-from-aligned-doc / YAML-quoted-plain-scalar leading-space;
+    // `"30s "` — paste-from-shell-history trailing-space; `"30 s"` —
+    // paste-from-typography whitespace-between-magnitude-and-unit;
+    // `"\t30s"` — paste-from-indented-doc / YAML-block-scalar tab byte;
+    // `"30s\n"` — trailing newline from a multi-line paste) parsed to
+    // the same `Duration::from_secs(30)` and serde silently round-
+    // tripped to `"30s"` on the next emit (a *different* canonical
+    // string) — breaking the THEORY.md Part V render-determinism
+    // contract every typed slot carries.
+    //
+    // The canonical author shape is `<integer><unit>` (or `<integer>`
+    // for the bare-integer-as-seconds shorthand) with no whitespace
+    // bytes anywhere — every string [`render_duration`] emits carries
+    // none, so the parser's accepted set must match for serialize /
+    // deserialize to round-trip losslessly. This gate makes the pre-
+    // existing `s.trim()` / `num_part.trim()` / `unit.trim()` calls
+    // below strict no-ops on the accepted set (every byte-position
+    // match they would perform is now already trimmed away by the
+    // accepted set itself), while the arm surfaces every rejected
+    // whitespace-carrying shape with a typed `WhitespaceInDuration`
+    // diagnostic naming the offending byte and the canonical form the
+    // author intended, peer with every prior canonical-form-drift arm
+    // on this codec.
+    //
+    // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
+    // bytes every downstream YAML / JSON / TOML parser can feed
+    // through a quoted-scalar value verbatim — space (`0x20`), tab
+    // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
+    // WhatWG-conformant "ASCII whitespace" set (deliberately narrower
+    // than POSIX's `[:space:]` which also admits VT `0x0B`). Same
+    // byte-set the sibling `rate_limit_codec` (1ad7755) and the shared
+    // `supervisor::duration_codec` (a7ae622) whitespace-rejection arms
+    // refuse on their peer typed-magnitude codecs; this gate lifts the
+    // discipline onto the `:limits :wall-clock` codec as the direct
+    // successor on the trajectory the a7ae622 arm's `Forward
+    // compounding` bullet acknowledges. The peer
+    // `limits::parse_byte_size` codec backing `:limits :memory` is the
+    // last remaining typed-magnitude codec on the whitespace-rejection
+    // trajectory, natural next follow-up run.
+    if let Some(byte) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+        return Err(LimitsError::WhitespaceInDuration {
+            value: s.into(),
+            byte,
+        });
+    }
     let s = s.trim();
     if s.is_empty() {
         return Err(LimitsError::EmptyDuration(s.into()));
@@ -2688,6 +2751,168 @@ mod tests {
         assert_eq!(parse_duration("1h").unwrap(), Duration::from_secs(3600));
         assert_eq!(parse_duration("100ms").unwrap(), Duration::from_millis(100));
         assert_eq!(parse_duration("500ms").unwrap(), Duration::from_millis(500));
+    }
+
+    // ── canonical-form: whitespace-rejection duration codec gate ─────────
+    //
+    // Direct successor to the `supervisor::duration_codec` whitespace-
+    // rejection arm (a7ae622) and the `rate_limit_codec` whitespace-
+    // rejection arm (1ad7755) on the same canonical-form
+    // render-determinism axis. The pre-gate top-level `s.trim()` at
+    // parse entry and the per-part `num_part.trim()` / `unit.trim()`
+    // calls silently ate leading / trailing / internal whitespace, so
+    // every whitespace-carrying shape parsed to the same integer
+    // magnitude and round-tripped through `render_duration` to a
+    // *different* canonical string on next serialize — the same
+    // canonical-form-drift class the leading-`+` / fractional /
+    // leading-zero arms already close on this codec. `u8::is_ascii_whitespace`
+    // covers the five WhatWG-conformant ASCII whitespace bytes
+    // (space `0x20`, tab `0x09`, LF `0x0A`, FF `0x0C`, CR `0x0D`).
+
+    #[test]
+    fn parse_duration_rejects_leading_whitespace() {
+        // The fail-before-pass-after pin: `" 30s"` — the canonical
+        // paste-from-aligned-doc / paste-from-YAML-quoted-plain-scalar
+        // footgun. Before this gate the top-level `s.trim()` at parse
+        // entry silently ate the leading space and parsed the value to
+        // `Duration::from_secs(30)`, which then round-tripped through
+        // `render_duration` to `"30s"` (a *different* canonical string
+        // on the next emit) — the exact canonical-form-drift class the
+        // leading-`+` / leading-zero arms already close, extended to
+        // the whitespace-byte class. Peer with the sibling
+        // `supervisor::duration_codec` `parse_rejects_leading_whitespace`
+        // arm (a7ae622) on the shared duration-codec trajectory.
+        let err = parse_duration(" 30s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInDuration { ref value, byte } if value == " 30s" && byte == 0x20),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("whitespace byte 0x20"),
+            "diagnostic must surface the offending byte verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("THEORY.md"),
+            "diagnostic must cite the render-determinism contract (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_trailing_whitespace() {
+        // `"30s "` — the canonical shell-history / trailing-space paste
+        // footgun. Before this gate the top-level `s.trim()` silently
+        // ate the trailing space and parsed to `Duration::from_secs(30)`,
+        // round-tripping to `"30s"` on the next emit — same canonical-
+        // form drift as the leading-space sibling, closed on the same
+        // whitespace-byte arm.
+        let err = parse_duration("30s ").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInDuration { ref value, byte } if value == "30s " && byte == 0x20),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_internal_whitespace_between_magnitude_and_unit() {
+        // `"30 s"` — the canonical typographically-spaced author shape
+        // (the same idiom every prose reference to a duration renders as,
+        // mistakenly retained when the value is pasted into a codec-
+        // shaped slot). Before this gate the per-part `num_part.trim()`
+        // / `unit.trim()` calls silently ate the whitespace between the
+        // magnitude and the unit and parsed the value to
+        // `Duration::from_secs(30)`, round-tripping to `"30s"` — the
+        // codec's *internal* whitespace-tolerance vector, orthogonal
+        // to the leading / trailing surface but the same canonical-
+        // form-drift class. Pins the arm as strictly stronger than the
+        // pre-existing top-level `s.trim()` behavior: it fires on
+        // whitespace anywhere in the value, not just at the string
+        // boundary.
+        let err = parse_duration("30 s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInDuration { ref value, byte } if value == "30 s" && byte == 0x20),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_tab_byte() {
+        // `"\t30s"` — the canonical paste-from-indented-doc /
+        // paste-from-YAML-block-scalar footgun where a tab byte leads
+        // the magnitude. Pins that the gate covers tab (`0x09`) as well
+        // as space (`0x20`) — both are `u8::is_ascii_whitespace` members
+        // and both would be silently swallowed by `s.trim()` pre-gate.
+        // The `is_ascii_whitespace` coverage extends beyond space alone
+        // to the full ASCII-whitespace set (space `0x20`, tab `0x09`,
+        // LF `0x0A`, FF `0x0C`, CR `0x0D`); this test pins the tab arm
+        // as a representative of the non-space members.
+        let err = parse_duration("\t30s").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInDuration { ref value, byte } if value == "\t30s" && byte == 0x09),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_trailing_newline() {
+        // `"30s\n"` — the canonical multi-line-paste footgun where a
+        // trailing LF byte survives the paste. Pins the LF member
+        // (`0x0A`) of the `is_ascii_whitespace` set as a peer to the
+        // space and tab pins above — every non-space non-tab whitespace
+        // byte the WhatWG ASCII-whitespace set covers is refused by
+        // the same arm.
+        let err = parse_duration("30s\n").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInDuration { ref value, byte } if value == "30s\n" && byte == 0x0a),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_accepts_whitespace_free_canonical_forms() {
+        // The complement-side pin: every canonical whitespace-free
+        // authoring form the renderer emits stays accepted post-gate.
+        // Sweep the canonical unit suffixes plus the bare-integer
+        // shorthand so a future tightening of the whitespace arm that
+        // over-fires on the accepted set surfaces here as a test
+        // failure. Peer with the `parse_duration_continues_to_accept_integer_magnitudes`
+        // pin the fractional / leading-`+` gate carries.
+        assert_eq!(parse_duration("30s").unwrap(), Duration::from_secs(30));
+        assert_eq!(parse_duration("500ms").unwrap(), Duration::from_millis(500));
+        assert_eq!(parse_duration("2m").unwrap(), Duration::from_secs(120));
+        assert_eq!(parse_duration("1h").unwrap(), Duration::from_secs(3600));
+        assert_eq!(parse_duration("0s").unwrap(), Duration::ZERO);
+        assert_eq!(parse_duration("3600").unwrap(), Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn de_duration_rejects_whitespace_through_serde() {
+        // The serde-path pin: a `:limits :wall-clock` carrying a
+        // whitespace-byte-carrying value (`" 30s"`) must fail at
+        // deserialize time, not silently round-trip the value through
+        // the pre-existing top-level `s.trim()`. The gate fires at
+        // deserialize, before any validate gate runs — peer with the
+        // existing `de_duration_rejects_leading_zero_through_serde` /
+        // `de_duration_rejects_fractional_value_through_serde` pins on
+        // the same canonical-form-drift axis.
+        let json = r#"{"wallClock":" 30s"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("whitespace byte"),
+            "serde diagnostic must surface the whitespace reason verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("0x20"),
+            "serde diagnostic must name the offending byte (got {msg:?})"
+        );
+
+        // The whitespace-free complement — same author-side intent,
+        // written in the canonical form the renderer would emit,
+        // deserializes cleanly.
+        let json = r#"{"wallClock":"30s"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.wall_clock, Some(Duration::from_secs(30)));
     }
 
     #[test]
