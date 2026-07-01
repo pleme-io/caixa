@@ -601,8 +601,13 @@ pub const WIT_IDENT_MAX_LEN: usize = 128;
 ///   - an optional `/`-separated interface suffix (one or more
 ///     segments — the WIT grammar allows `('/' id)+` after the package);
 ///   - an optional `@<version>` suffix (one trailing `@` only; the
-///     version body is non-empty printable ASCII without `:` or `/`,
-///     since those are reserved for the namespace/interface axes);
+///     version body is a SemVer 2.0.0 identifier — non-empty, restricted
+///     to the accepted set `[0-9A-Za-z.\-+]` — the digits + letters that
+///     make up the `major.minor.patch` numeric core, `.` segment
+///     separators, `-` for the pre-release suffix, `+` for the
+///     build-metadata suffix; the WIT IDL binds `simple-version` to
+///     SemVer verbatim so every other byte fails the upstream WIT
+///     parser at consume time);
 ///   - every identifier segment (namespace, package, each interface)
 ///     is a lowercase kebab-case ASCII identifier: `[a-z]([a-z0-9]|-)*`,
 ///     starting with a lowercase letter, no consecutive `-`, no
@@ -715,6 +720,67 @@ pub fn is_wit_world_ref(s: &str) -> Result<(), String> {
                  are reserved for the namespace and interface axes; the version body \
                  is opaque)"
             ));
+        }
+        // Byte-set gate on the `@<version>` body: SemVer 2.0.0 restricts
+        // every legal version to the accepted set
+        // `[0-9A-Za-z.\-+]` — the digit + letter alphabet for the
+        // `major.minor.patch` numeric core, the `.` segment separator,
+        // and the `-` / `+` sigils that introduce the optional
+        // pre-release and build-metadata suffixes. The WIT IDL binds
+        // `simple-version` to SemVer verbatim (WebAssembly Component
+        // Model design doc `WIT.md#versions` — `version` is parsed
+        // through the `semver` crate), so any printable-ASCII byte
+        // outside that set is guaranteed to fail the upstream WIT
+        // parser at consume time. Until this gate landed the outer
+        // whitespace / control / non-ASCII loop above rejected the
+        // whitespace + control + non-ASCII slices of the byte axis
+        // and the narrower `contains('@')` / `contains(':' | '/')`
+        // arms above closed the WIT-reserved separator bytes, but
+        // every other printable-ASCII byte (`?`, `#`, `!`, `$`, `%`,
+        // `&`, `'`, `"`, `(`, `)`, `*`, `,`, `;`, `<`, `=`, `>`, `[`,
+        // `\`, `]`, `^`, `` ` ``, `{`, `|`, `}`, `~`) silently rode
+        // through — the canonical author-side footguns
+        // (`wasi:http/proxy@0.2.0?rc1` — URL-query-separator paste
+        // where the author copied a versioned link and the trailing
+        // `?ref=…` came along; `wasi:http/proxy@0.2.0#build` —
+        // URL-fragment paste; `wasi:http/proxy@0.2.0 alpha` — the
+        // outer whitespace loop already catches this, but before that
+        // loop landed the space rode through too; `wasi:http/proxy@
+        // 0.2.0!alpha` — accidental history-expansion `!`;
+        // `wasi:http/proxy@0.2.0(rc1)` — parenthetical annotation
+        // from a doc comment) all passed `validate` and failed at
+        // WIT-parse time far from the source caixa.lisp with a
+        // parser diagnostic that names the offending byte but not
+        // the offending `:contratos :wit` slot. Lifting the rejection
+        // to caixa-build time closes the byte-set axis structurally
+        // — every validated `@<version>` body matches the SemVer
+        // 2.0.0 accepted set, and drift between the typed slot's
+        // accepted set and the upstream WIT parser's accepted set is
+        // impossible-by-construction.
+        //
+        // Same top-and-bottom-edge discipline the peer axes carry —
+        // [`is_gateway_api_http_path`]'s eleven-byte RFC-3986-reserved
+        // rejection set for `:entrada :paths` / `:contratos :endpoint`,
+        // [`is_nats_subject`]'s strict `[A-Za-z0-9_-]` per-token
+        // character set for `:contratos :subject`,
+        // [`is_wit_kebab_id`]'s lowercase-kebab enforcement for the
+        // WIT namespace/package/interface segments — the typed slot's
+        // valid set matches the downstream parser's accepted set,
+        // structurally.
+        for &b in ver.as_bytes() {
+            let valid = b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'+';
+            if !valid {
+                return Err(format!(
+                    "version suffix {ver:?} contains invalid character {ch:?} \
+                     (SemVer 2.0.0 restricts the `@<version>` body to the accepted \
+                     set `[0-9A-Za-z.\\-+]` — digits + letters for the \
+                     `major.minor.patch` numeric core, `.` for segment separators, \
+                     `-` for the pre-release suffix, `+` for the build-metadata \
+                     suffix; every other byte fails the upstream WIT parser at \
+                     consume time)",
+                    ch = b as char
+                ));
+            }
         }
     }
     // Then split the head on `:` — exactly one separator, splitting the
@@ -9255,6 +9321,20 @@ mod tests {
             "wasi:http/proxy@0.2.0",
             "wasi:keyvalue/store@0.2.0-rc.1",
             "pleme:cap/audit/v2",
+            // Every legal shape SemVer 2.0.0 admits in the `@<version>`
+            // body — bare numeric core, pre-release suffix (single +
+            // dot-separated identifiers), build-metadata suffix (single
+            // + dot-separated identifiers), combined pre-release +
+            // build-metadata, and leading-zero-avoiding pre-release
+            // identifiers — pinned here so a future tightening of the
+            // per-byte accepted set that rejects a canonical semver
+            // shape surfaces here rather than at the M4 CR materializer's
+            // WIT-parse boundary.
+            "wasi:http/proxy@1.0.0",
+            "wasi:http/proxy@0.2.0-alpha",
+            "wasi:http/proxy@1.0.0-alpha.1",
+            "wasi:http/proxy@2.0.0+build.42",
+            "wasi:http/proxy@0.0.0-rc.1+abc.def",
         ] {
             is_wit_world_ref(s)
                 .unwrap_or_else(|e| panic!("canonical WIT reference {s:?} must pass: {e:?}"));
@@ -9302,6 +9382,20 @@ mod tests {
             ("wasi:http/proxy@0.2:rc1", "must not contain `:` or `/`"),
             // Doubled `@`.
             ("wasi:http/proxy@0.2@beta", "at most one `@`"),
+            // Version body carrying a byte outside the SemVer 2.0.0
+            // accepted set `[0-9A-Za-z.\-+]` — the canonical
+            // author-side paste footguns (`?` from URL-query-separator
+            // paste, `#` from URL-fragment paste, `!` from
+            // history-expansion, `(` from parenthetical doc annotation,
+            // `~` from tilde-range npm/Cargo semver-req paste that
+            // strayed into the version body itself). Each surfaces the
+            // `invalid character` reason substring so the diagnostic
+            // wording is pinned alongside every peer per-byte rejection.
+            ("wasi:http/proxy@0.2.0?rc1", "invalid character"),
+            ("wasi:http/proxy@0.2.0#build", "invalid character"),
+            ("wasi:http/proxy@0.2.0!alpha", "invalid character"),
+            ("wasi:http/proxy@0.2.0(rc1)", "invalid character"),
+            ("wasi:http/proxy@~0.2.0", "invalid character"),
         ] {
             let err = is_wit_world_ref(s)
                 .err()
