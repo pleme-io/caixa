@@ -1019,23 +1019,25 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // author intended, peer with every prior canonical-form-drift arm
     // on this codec.
     //
-    // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
+    // Routed through the lifted
+    // [`crate::render::find_ascii_whitespace_byte`] predicate — the
+    // single source of truth every typed-magnitude codec in
+    // caixa-core (`parse_byte_size` / `parse_duration` /
+    // `parse_millicores` / `supervisor::duration_codec` /
+    // `rate_limit_codec`) shares. `u8::is_ascii_whitespace()` at the
+    // predicate covers the five WhatWG-conformant ASCII whitespace
     // bytes every downstream YAML / JSON / TOML parser can feed
     // through a quoted-scalar value verbatim — space (`0x20`), tab
-    // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
-    // WhatWG-conformant "ASCII whitespace" set (deliberately narrower
-    // than POSIX's `[:space:]` which also admits VT `0x0B`). Same
-    // byte-set the sibling `parse_duration` (ebc3a75),
-    // `rate_limit_codec` (1ad7755), and shared
-    // `supervisor::duration_codec` (a7ae622) whitespace-rejection arms
-    // refuse on their peer typed-magnitude codecs; this gate lifts the
-    // discipline onto the `:limits :memory` codec as the direct
-    // successor on the trajectory the ebc3a75 arm's `Forward
-    // compounding` bullet acknowledges. Closes the whitespace-rejection
-    // axis across every typed-magnitude codec in caixa-core
-    // (`parse_byte_size` / `parse_duration` /
-    // `supervisor::duration_codec` / `rate_limit_codec`).
-    if let Some(byte) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+    // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — deliberately
+    // narrower than POSIX's `[:space:]` which also admits VT
+    // (`0x0B`). Drift between any two codec sites' rejection set is
+    // a single-edit fix at the shared predicate rather than five
+    // independent scans diverging over time — same "single lifted
+    // source of truth" discipline the peer non-ASCII arm below
+    // (routed through [`crate::render::find_non_ascii_whitespace_char`])
+    // carries on the strictly-complementary Unicode `White_Space`
+    // class.
+    if let Some(byte) = crate::render::find_ascii_whitespace_byte(s) {
         return Err(LimitsError::WhitespaceInByteSize {
             value: s.into(),
             byte,
@@ -1257,22 +1259,16 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // author intended, peer with every prior canonical-form-drift arm
     // on this codec.
     //
-    // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
-    // bytes every downstream YAML / JSON / TOML parser can feed
-    // through a quoted-scalar value verbatim — space (`0x20`), tab
-    // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
-    // WhatWG-conformant "ASCII whitespace" set (deliberately narrower
-    // than POSIX's `[:space:]` which also admits VT `0x0B`). Same
-    // byte-set the sibling `rate_limit_codec` (1ad7755) and the shared
-    // `supervisor::duration_codec` (a7ae622) whitespace-rejection arms
-    // refuse on their peer typed-magnitude codecs; this gate lifts the
-    // discipline onto the `:limits :wall-clock` codec as the direct
-    // successor on the trajectory the a7ae622 arm's `Forward
-    // compounding` bullet acknowledges. The peer
-    // `limits::parse_byte_size` codec backing `:limits :memory` is the
-    // last remaining typed-magnitude codec on the whitespace-rejection
-    // trajectory, natural next follow-up run.
-    if let Some(byte) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+    // Routed through the lifted
+    // [`crate::render::find_ascii_whitespace_byte`] predicate — the
+    // same source of truth the four peer typed-magnitude codec sites
+    // share. `u8::is_ascii_whitespace()` at the predicate covers the
+    // five WhatWG-conformant ASCII whitespace bytes (space, tab, LF,
+    // FF, CR); the "single lifted predicate" discipline the peer
+    // non-ASCII arm below carries on the strictly-complementary
+    // Unicode `White_Space` class extends here to the ASCII byte set
+    // as well.
+    if let Some(byte) = crate::render::find_ascii_whitespace_byte(s) {
         return Err(LimitsError::WhitespaceInDuration {
             value: s.into(),
             byte,
@@ -1470,17 +1466,16 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // canonical-form-drift arm on this codec (`NonIntegerMillicoreMagnitude`,
     // `LeadingZeroMillicoreMagnitude`).
     //
-    // `u8::is_ascii_whitespace()` covers the five ASCII whitespace bytes
-    // every downstream YAML / JSON / TOML parser can feed through a
-    // quoted-scalar value verbatim — space (`0x20`), tab (`0x09`), LF
-    // (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the WhatWG-conformant "ASCII
-    // whitespace" set (deliberately narrower than POSIX's `[:space:]`
-    // which also admits VT `0x0B`). Same byte-set the four peer
-    // typed-magnitude codecs refuse; this gate lifts the discipline onto
-    // the `:limits :cpu` codec — the fifth (and last) typed-magnitude
-    // codec on the whitespace-rejection trajectory, closing the axis
-    // across every typed-magnitude codec in caixa-core.
-    if let Some(byte) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+    // Routed through the lifted
+    // [`crate::render::find_ascii_whitespace_byte`] predicate — the
+    // same source of truth the four peer typed-magnitude codec sites
+    // share. `u8::is_ascii_whitespace()` at the predicate covers the
+    // five WhatWG-conformant ASCII whitespace bytes (space, tab, LF,
+    // FF, CR); the "single lifted predicate" discipline the peer
+    // non-ASCII arm below carries on the strictly-complementary
+    // Unicode `White_Space` class extends here to the ASCII byte set
+    // as well.
+    if let Some(byte) = crate::render::find_ascii_whitespace_byte(s) {
         return Err(LimitsError::WhitespaceInMillicores {
             value: s.into(),
             byte,

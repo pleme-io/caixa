@@ -1554,32 +1554,18 @@ mod rate_limit_codec {
         // canonical form the author intended, peer with every prior
         // canonical-form-drift arm on this codec.
         //
-        // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
-        // bytes every downstream YAML / JSON / TOML parser can feed
-        // through a quoted-scalar value verbatim — space (`0x20`), tab
-        // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
-        // WhatWG-conformant "ASCII whitespace" set (deliberately narrower
-        // than POSIX's `[:space:]` which also admits VT `0x0B`). This is
-        // exactly the set the substrate must refuse on a typed-magnitude
-        // codec whose canonical form is a bare `<digits>/<unit>` string.
-        // Same discipline the peer `is_spdx_expression_shape` predicate
-        // (caixa-core/src/render.rs) applies to the `:licenca` axis's
-        // leading / trailing whitespace arms, extended here to embedded
-        // whitespace because a codec's round-trip axis is stricter than
-        // an SPDX-expression's internal-space-separated shape.
-        //
-        // Peer with the future whitespace-rejection arms on the three
-        // sibling typed-magnitude codecs the trajectory acknowledges:
-        // `supervisor::duration_codec` backing three typed-duration
-        // slots (`:supervisor :restart-window`, `:politicas :timeout`,
-        // `:politicas :circuit-breaker :window`),
-        // `limits::parse_duration` backing `:limits :wall-clock`,
-        // `limits::parse_byte_size` backing `:limits :memory` — each
-        // carries the same whitespace-tolerance drift today; this gate
-        // lands the discipline on the `rate_limit_codec` first because
-        // its leading-`+` and leading-zero arms are the closest peers
-        // on the trajectory.
-        if let Some(b) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+        // Routed through the lifted
+        // [`crate::render::find_ascii_whitespace_byte`] predicate — the
+        // same source of truth the four peer typed-magnitude codec
+        // sites (`limits::parse_byte_size`, `limits::parse_duration`,
+        // `limits::parse_millicores`, `supervisor::duration_codec`)
+        // share. `u8::is_ascii_whitespace()` at the predicate covers
+        // the five WhatWG-conformant ASCII whitespace bytes (space,
+        // tab, LF, FF, CR); the "single lifted predicate" discipline
+        // the peer non-ASCII arm below carries on the strictly-
+        // complementary Unicode `White_Space` class extends here to
+        // the ASCII byte set as well.
+        if let Some(b) = crate::render::find_ascii_whitespace_byte(s) {
             return Err(format!(
                 "rate-limit: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
                  authoring form for `:politicas :rate-limit` is `<integer>/<s|m|h>` (e.g. \
