@@ -608,6 +608,100 @@ impl DepSource {
                 caminho: caminho.to_string(),
             });
         }
+        // Reproducibility gate's leading-`-` CLI-argument-injection arm.
+        // The b94fd83 + a5c248e + f4efe9c + LeadingWhitespace arms closed
+        // the four prior leading-byte shapes (`/` / `~` / `$` / space);
+        // this arm closes the orthogonal leading-`-` axis on the same
+        // subprocess-argument-boundary the peer `is_git_repo_url` arm
+        // (render.rs:2037, `-upload-pack=…` on `:fonte :repo`) and
+        // `is_git_ref_name` arm (render.rs:1381, 5a28454, `-stable` on
+        // `:fonte :tag` / `:branch`) already reject.
+        //
+        // The lacre pipeline embeds `:caminho` verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189) and the resolver folds the
+        // value through `Path::join` looking for a literal `./{caminho}`
+        // subdirectory. Every downstream subprocess that consumes the
+        // resolved path — a `git -C {caminho} <verb>` invocation, a
+        // future `feira tofu` `terraform -chdir={caminho}` shell-out, a
+        // future operator-side `nix build --path {caminho}` spawn, an
+        // `xargs` / `find {caminho}` / `stat {caminho}` /
+        // `rm -rf {caminho}` cleanup — reinterprets a leading-`-` value
+        // as a CLI flag rather than a positional path when the
+        // subprocess invocation does not carry a `--` argument-list
+        // terminator between the flag block and the path argument. The
+        // canonical footguns:
+        //
+        //   - `:caminho "-rf"` — bare short-flag paste (`rm -rf` /
+        //     `find -rf` reinterpretation; the byte the peer
+        //     `FonteCaminhoShellSemicolon` arm's `; rm -rf build`
+        //     example paste-idiom carries as its first token).
+        //   - `:caminho "-C"` — `git -C` config-injection paste
+        //     (`git -C -C` reinterprets the second `-C` as another
+        //     `--change-directory` flag rather than the path
+        //     argument; the canonical `git -C <path>` porcelain
+        //     idiom every multi-repo workspace tool carries).
+        //   - `:caminho "--upload-pack=cat /etc/passwd"` — the
+        //     canonical long-flag CLI-arg-injection vector at every
+        //     git porcelain entry point (`git clone`, `git fetch`,
+        //     `git ls-remote`) that consumes a path or URL
+        //     argument; peer with `is_git_repo_url`'s leading-`-`
+        //     arm (render.rs:2037) on the sibling `:fonte :repo`
+        //     axis, which the arm's diagnostic explicitly cites.
+        //   - `:caminho "--config=…"` / `:caminho "-c"` — git-config
+        //     override paste-idiom (paste-from-`git -c foo=bar`
+        //     shell-history footgun that reinterprets the value as
+        //     a `[foo] bar` config injection on every git porcelain
+        //     entry point).
+        //
+        // POSIX `std::path::Path` treats a leading `-` as a literal
+        // filename byte, so the resolver folds `-rf` through `Path::join`
+        // and looks for a literal `./-rf` subdirectory — the failure
+        // surfaces at resolve time with a non-self-locating `No such
+        // file or directory` error far from the source caixa.lisp, and
+        // the value rides through the lacre content-address into every
+        // downstream shell-spawned subprocess. On any consumer that
+        // shells out without the `--` terminator (the common case at
+        // every porcelain entry-point) the reinterpretation is silent
+        // and the failure mode is arbitrary-argument-injection.
+        //
+        // The arm fires AFTER the absolute / tilde / var / leading-space
+        // leading-byte arms (each names the more self-locating shell-
+        // convention diagnostic on values that probe as that arm's
+        // leading-byte sentinel — the byte sets are pairwise disjoint at
+        // the leading position, so the precedence pin is a no-op at
+        // value level, but the ordering keeps every leading-byte arm's
+        // diagnostic-shape stable) and BEFORE the embedded-control-byte
+        // arm (a leading-`-` value with an embedded control byte
+        // surfaces the narrower leading-`-` diagnostic because the
+        // cascade walks leading-byte arms first — peer with how
+        // `FonteCaminhoAbsolute` precedes `FonteCaminhoControlChar` on
+        // `"/etc/passwd\n"`, and how `FonteCaminhoLeadingWhitespace`
+        // precedes `FonteCaminhoControlChar` on `" ../foo\n"`).
+        //
+        // The peer single-token-shaped axes already reject leading `-`
+        // on the same CLI-arg-injection contract:
+        // [`crate::render::is_git_repo_url`] rejects it on `:fonte :repo`
+        // (render.rs:2037), [`crate::render::is_git_ref_name`] rejects
+        // it on `:fonte :tag` / `:fonte :branch` (render.rs:1381,
+        // 5a28454), [`crate::render::is_dns_1123_label`] rejects it on
+        // every DNS-1123-shaped axis (top-level Caixa `:nome`, `:membros
+        // :caixa`, `:children :caixa`, `:deps :nome`, cluster names),
+        // [`crate::render::is_cargo_feature_name`] rejects it on
+        // `:caracteristicas`, and the feira `init` / `add <nome>`
+        // positional gate (868c191) rejects it on the CLI positional
+        // itself. Closing the same byte on `:fonte :caminho` makes the
+        // substrate-wide "no leading `-` anywhere in a typed single-
+        // token string slot routed through a subprocess argument"
+        // invariant structurally consistent across every value-shape-
+        // gated typed surface (the `:caminho` axis was the last typed
+        // string surface still admitting a leading `-` byte).
+        if caminho.starts_with('-') {
+            return Err(DepError::FonteCaminhoLeadingHyphen {
+                nome: nome.to_string(),
+                caminho: caminho.to_string(),
+            });
+        }
         // Reproducibility gate's embedded-control-byte arm. The
         // b94fd83 + a5c248e + f4efe9c arms closed the three
         // leading-byte host-layout-leak shapes (`/` / `~` / `$`);
@@ -659,8 +753,9 @@ impl DepSource {
         // arm establishes: `FonteCaminhoEmpty` →
         // `FonteCaminhoAbsolute` → `FonteCaminhoTildeExpansion`
         // → `FonteCaminhoVarExpansion` →
-        // `FonteCaminhoLeadingWhitespace` → `FonteCaminhoControlChar`.
-        // The five leading-byte arms structurally precede the
+        // `FonteCaminhoLeadingWhitespace` →
+        // `FonteCaminhoLeadingHyphen` → `FonteCaminhoControlChar`.
+        // The six leading-byte arms structurally precede the
         // embedded-byte arm because the leading-byte shapes are
         // the more self-locating diagnostic on values that probe
         // as both (e.g. `:caminho "/etc/passwd\n"` surfaces the
@@ -2501,6 +2596,48 @@ pub enum DepError {
          path as a bare relative single-token like \"../caixa-teia\")"
     )]
     FonteCaminhoLeadingWhitespace { nome: String, caminho: String },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} starts \
+         with `-` (the canonical CLI-argument-injection footgun on the \
+         `:caminho` axis — the lacre pipeline embeds the value verbatim in \
+         its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189 and the caixa-resolver folds it \
+         through `Path::join` looking for a literal `./{caminho}` \
+         subdirectory. Every downstream subprocess that consumes the resolved \
+         path — `git -C {caminho} <verb>`, `terraform -chdir={caminho}`, \
+         `nix build --path {caminho}`, `find {caminho}`, `stat {caminho}`, \
+         `cp -r {caminho} …`, `rm -rf {caminho}` — reinterprets a leading-`-` \
+         value as a CLI flag rather than a positional path when the invocation \
+         does not carry a `--` argument-list terminator between the flag block \
+         and the path (the common case at every porcelain entry point). The \
+         canonical footguns: `:caminho \"-rf\"` (bare short-flag paste), \
+         `:caminho \"-C\"` (`git -C -C` config-injection paste), \
+         `:caminho \"--upload-pack=cat /etc/passwd\"` (the canonical long-flag \
+         CLI-arg-injection vector at every git porcelain entry point that \
+         consumes a path or URL argument, peer with is_git_repo_url's \
+         leading-`-` arm on the sibling `:fonte :repo` axis), \
+         `:caminho \"--config=…\"` (`git -c foo=bar` config-override paste). \
+         POSIX `std::path::Path` treats a leading `-` as a literal filename \
+         byte so the resolver folds `\"-rf\"` through `Path::join` and looks \
+         for a literal `./-rf` subdirectory that fails at resolve time with a \
+         non-self-locating `No such file or directory` error far from the \
+         source caixa.lisp — but on any downstream shell-out without `--` the \
+         reinterpretation is silent and the failure mode is arbitrary-\
+         argument-injection. Peer arms: `is_git_repo_url` (render.rs:2037) \
+         rejects leading `-` on `:fonte :repo` for `git clone <repo>` CLI-\
+         arg-injection; `is_git_ref_name` (render.rs:1381, 5a28454) rejects \
+         leading `-` on `:fonte :tag` / `:branch` for `git checkout <ref>` \
+         CLI-arg-injection; `is_dns_1123_label` rejects leading `-` on every \
+         DNS-1123-shaped axis (top-level Caixa `:nome`, `:membros :caixa`, \
+         `:children :caixa`, `:deps :nome`, cluster names); \
+         `is_cargo_feature_name` rejects leading `-` on `:caracteristicas`; \
+         the feira `init` / `add <nome>` positional gate (868c191) rejects \
+         leading `-` on the CLI positional itself. Express the path as a bare \
+         relative single-token like \"../caixa-teia\" — the sibling-workspace \
+         directory name carries no leading-hyphen semantic, and `./` / `../` \
+         prefixes structurally partition the leading-byte set to safe values.)"
+    )]
+    FonteCaminhoLeadingHyphen { nome: String, caminho: String },
     #[error(
         ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains \
          ASCII control byte 0x{byte:02x} (POSIX paths reject NUL `0x00` outright — \
@@ -7008,6 +7145,166 @@ mod tests {
         assert!(
             matches!(err, DepError::FonteCaminhoAbsolute { .. }),
             "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_leading_hyphen_caminho() {
+        // The fail-before-pass-after pin for the leading-`-` CLI-arg-
+        // injection `:caminho` shape sweep. Until this gate landed
+        // every prior leading-byte arm passed a leading-`-` value
+        // through: `Path::is_absolute` returns false on `-` (the
+        // leading byte is `0x2D`, not `0x2F`), `starts_with('~')` /
+        // `starts_with('$')` / `starts_with(' ')` all return false,
+        // and `0x2D` sits outside the control-byte set. The lacre
+        // embedded the value verbatim and the resolver folded it
+        // through `Path::join` looking for a literal `./-rf` /
+        // `./-C` / `./--upload-pack=…` subdirectory; the failure at
+        // `Path::join` time is non-self-locating but harmless, while
+        // the failure at every downstream `git -C {caminho}` /
+        // `terraform -chdir={caminho}` / `find {caminho}` shell-out
+        // is arbitrary-CLI-arg-injection because none of those
+        // porcelains carry a `--` argument-list terminator between
+        // the flag block and the path argument. The new arm moves the
+        // rejection to `Caixa::from_lisp` boundary time and names
+        // the offending dep + caminho verbatim.
+        //
+        // Sweep spans the canonical CLI-arg-injection shapes matching
+        // the peer sweep on the sibling `is_git_ref_name` /
+        // `is_git_repo_url` axes: short-flag `-rf` (the `rm -rf` /
+        // `find -rf` reinterpretation vector), `-C` (the `git -C`
+        // change-directory-config-injection paste), long-flag
+        // `--upload-pack=cat /etc/passwd` (the canonical
+        // arbitrary-command-execution vector on every git porcelain
+        // entry point), git-config-injection `--config=core.merge=ours`,
+        // and the degenerate single-byte `-` value.
+        for caminho in [
+            "-rf",
+            "-C",
+            "--upload-pack=cat /etc/passwd",
+            "--config=core.merge=ours",
+            "-",
+        ] {
+            let d = dep_with_fonte(DepSource::Path {
+                caminho: caminho.into(),
+            });
+            let err = d.validate().unwrap_err();
+            let DepError::FonteCaminhoLeadingHyphen {
+                nome,
+                caminho: got,
+            } = err
+            else {
+                panic!("expected FonteCaminhoLeadingHyphen for {caminho:?}, got {err:?}");
+            };
+            assert_eq!(nome, "caixa-teia");
+            assert_eq!(got, caminho);
+        }
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_mid_path_hyphen_caminho() {
+        // The leading-`-` is the canonical CLI-arg-injection footgun
+        // — a `-` anywhere else in the path (`"../caixa-teia"` — the
+        // canonical kebab-separator-between-alphanumeric-segments
+        // shape every DNS-1123-shaped caixa name carries; `"../-hidden"`
+        // — a mid-path segment starting with `-`, still a legitimate
+        // POSIX filename byte at that non-leading position because the
+        // subprocess reads the whole `{caminho}` value as one positional
+        // argument, so only the very first byte of the composite path
+        // string is at the CLI-arg-injection boundary) is a legitimate
+        // path with no CLI-flag-reinterpretation semantic at the non-
+        // leading position of the top-level value. Pinned so the gate
+        // doesn't widen to a full no-`-`-anywhere sweep that would
+        // break every legitimate-shape kebab-in-filename path (i.e.
+        // essentially every sibling-workspace caixa dep).
+        for caminho in [
+            "../caixa-teia",
+            "../caixa-teia/-hidden",
+            "./my-lib",
+            "../foo-bar/baz",
+        ] {
+            let d = dep_with_fonte(DepSource::Path {
+                caminho: caminho.into(),
+            });
+            d.validate().unwrap_or_else(|e| {
+                panic!("mid-path `-` caminho {caminho:?} must pass: {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn fonte_caminho_leading_whitespace_fires_before_leading_hyphen() {
+        // Cascade pin: the leading-whitespace arm structurally precedes
+        // the leading-hyphen arm. A value like `" -rf"` probes positive
+        // on both (leading space AND, one byte in, a `-` — though the
+        // leading-hyphen arm probes only the very first byte so it
+        // wouldn't fire on this value; the pin instead documents the
+        // arm order on the more common "leading space then a hyphen"
+        // paste-from-aligned-doc paste-flag-shell-one-liner idiom).
+        // The narrower leading-space diagnostic (the paste-from-aligned-
+        // doc footgun) wins so the author sees the more self-locating
+        // whitespace arm first. Mirrors the
+        // `fonte_caminho_var_fires_before_leading_whitespace` cascade
+        // discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: " -rf".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoLeadingWhitespace { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_leading_hyphen_fires_before_control_char() {
+        // Cascade pin: the leading-hyphen arm structurally precedes
+        // the control-char arm. A value like `"-rf\n"` probes positive
+        // on both (starts with `-` AND contains LF), but the narrower
+        // leading-byte diagnostic (`FonteCaminhoLeadingHyphen`) wins so
+        // the author sees the more self-locating CLI-arg-injection arm
+        // first. Mirrors the
+        // `fonte_caminho_leading_whitespace_fires_before_control_char`
+        // cascade discipline on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "-rf\n".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoLeadingHyphen { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_leading_hyphen_diagnostic_carries_offending_dep_and_caminho() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_leading_whitespace_diagnostic_carries_offending_dep_and_caminho`'s
+        // payload assertion on the immediate-predecessor arm): the
+        // error's Display surfaces both the offending `:nome` and the
+        // offending `:caminho` verbatim plus the CLI-argument-injection
+        // vocabulary, so a `feira lint` run can render the diagnostic
+        // without re-parsing and the author can grep their caixa.lisp
+        // for `:caminho "<value>"` and fix it in one edit.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "--upload-pack=cat /etc/passwd".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("--upload-pack=cat /etc/passwd"),
+            "diagnostic must quote the offending caminho: {rendered}",
+        );
+        assert!(
+            rendered.contains("CLI-argument-injection"),
+            "diagnostic must name the CLI-argument-injection vector: {rendered}",
+        );
+        assert!(
+            rendered.contains("`-`"),
+            "diagnostic must name the offending byte: {rendered}",
         );
     }
 
