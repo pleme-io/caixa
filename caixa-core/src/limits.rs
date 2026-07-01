@@ -842,6 +842,40 @@ pub enum LimitsError {
     )]
     LeadingZeroMillicoreMagnitude { value: String },
     #[error(
+        "millicores: value {value:?} contains whitespace byte 0x{byte:02x} — the canonical \
+         authoring form for `:limits :cpu` is `<integer>m` (Kubernetes millicores, e.g. \
+         `\"500m\"`, `\"2000m\"`) or the bare-core shorthand `<integer>` (e.g. `\"2\"`) \
+         with no whitespace bytes anywhere. A whitespace-carrying shape (`\" 500m\"`, \
+         `\"500m \"`, `\"500 m\"`, `\"\\t500m\"`, `\"500m\\n\"`) round-trips through \
+         `render_millicores` to a *different* canonical form (`\"500m\"`) on first \
+         serialize — breaking the THEORY.md Part V render-determinism contract every \
+         typed slot carries. Strip every whitespace byte (write `\"500m\"` verbatim)"
+    )]
+    WhitespaceInMillicores { value: String, byte: u8 },
+    #[error(
+        "millicores: value {value:?} contains a non-ASCII Unicode whitespace character \
+         {ch:?} (U+{codepoint:04X}) — the canonical authoring form for `:limits :cpu` is \
+         `<integer>m` (Kubernetes millicores, e.g. `\"500m\"`, `\"2000m\"`) or the \
+         bare-core shorthand `<integer>` (e.g. `\"2\"`) with no whitespace characters \
+         anywhere (ASCII or Unicode). A non-ASCII-whitespace-carrying shape \
+         (`\"\\u{{00A0}}500m\"` — paste-from-typography NBSP prefix; \
+         `\"500m\\u{{2028}}\"` — paste-from-web-doc line-separator suffix; \
+         `\"500\\u{{2003}}m\"` — paste-from-typography EM-SPACE between magnitude and \
+         unit) survives the pre-existing `u8::is_ascii_whitespace` byte-scan (none of \
+         its bytes match the ASCII whitespace set) but `str::trim` (which uses \
+         `char::is_whitespace` — the Unicode `White_Space` property, strictly wider than \
+         the ASCII byte set) silently strips it at parse entry, and the value round-trips \
+         through `render_millicores` to a *different* canonical form (`\"500m\"`) on \
+         first serialize — breaking the THEORY.md Part V render-determinism contract \
+         every typed slot carries. Strip every non-ASCII whitespace character (write \
+         `\"500m\"` verbatim with only ASCII bytes)"
+    )]
+    NonAsciiWhitespaceInMillicores {
+        value: String,
+        ch: char,
+        codepoint: u32,
+    },
+    #[error(
         ":limits :memory must be > 0 — wasmtime StoreLimits refuses a zero memory cap; omit the field for unbounded"
     )]
     MemoryZero,
@@ -1405,6 +1439,74 @@ fn de_duration<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Duration>, D::E
 // ── millicores codec ───────────────────────────────────────────────────
 
 fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
+    // Whitespace-rejection arm — peer with the `parse_byte_size` (24a8ad4),
+    // `parse_duration` (ebc3a75), `supervisor::duration_codec` (a7ae622),
+    // and `rate_limit_codec` (1ad7755) whitespace-rejection arms on the
+    // same canonical-form render-determinism axis. Until this gate landed
+    // the parser silently tolerated leading / trailing / internal
+    // whitespace via the top-level `s.trim()` at parse entry and the
+    // per-part `magnitude.trim()` calls below, so every whitespace-carrying
+    // shape (`" 500m"` — paste-from-aligned-doc / YAML-quoted-plain-scalar
+    // leading-space; `"500m "` — paste-from-shell-history trailing-space;
+    // `"500 m"` — paste-from-typography whitespace-between-magnitude-and-
+    // unit; `"\t500m"` — paste-from-indented-doc / YAML-block-scalar tab
+    // byte; `"500m\n"` — trailing newline from a multi-line paste) parsed
+    // to the same 500 millicores and serde silently round-tripped to
+    // `"500m"` on the next emit (a *different* canonical string) —
+    // breaking the THEORY.md Part V render-determinism contract every
+    // typed slot carries.
+    //
+    // The canonical author shape is `<integer>m` (or `<integer>` for the
+    // bare-core shorthand) with no whitespace bytes anywhere — every
+    // string [`render_millicores`] emits carries none, so the parser's
+    // accepted set must match for serialize / deserialize to round-trip
+    // losslessly. This gate makes the pre-existing `s.trim()` /
+    // `magnitude.trim()` calls below strict no-ops on the accepted set
+    // (every byte-position match they would perform is now already
+    // trimmed away by the accepted set itself), while the arm surfaces
+    // every rejected whitespace-carrying shape with a typed
+    // `WhitespaceInMillicores` diagnostic naming the offending byte and
+    // the canonical form the author intended, peer with every prior
+    // canonical-form-drift arm on this codec (`NonIntegerMillicoreMagnitude`,
+    // `LeadingZeroMillicoreMagnitude`).
+    //
+    // `u8::is_ascii_whitespace()` covers the five ASCII whitespace bytes
+    // every downstream YAML / JSON / TOML parser can feed through a
+    // quoted-scalar value verbatim — space (`0x20`), tab (`0x09`), LF
+    // (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the WhatWG-conformant "ASCII
+    // whitespace" set (deliberately narrower than POSIX's `[:space:]`
+    // which also admits VT `0x0B`). Same byte-set the four peer
+    // typed-magnitude codecs refuse; this gate lifts the discipline onto
+    // the `:limits :cpu` codec — the fifth (and last) typed-magnitude
+    // codec on the whitespace-rejection trajectory, closing the axis
+    // across every typed-magnitude codec in caixa-core.
+    if let Some(byte) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+        return Err(LimitsError::WhitespaceInMillicores {
+            value: s.into(),
+            byte,
+        });
+    }
+    // Non-ASCII Unicode `White_Space` arm — the strictly-complementary
+    // class the ASCII arm above cannot see. Same shape as the peer
+    // `parse_byte_size` / `parse_duration` arms (1b75b38): `str::trim`
+    // uses `char::is_whitespace` (Unicode `White_Space`, strictly wider
+    // than the ASCII byte set), so an NBSP (`\u{00A0}`) / LINE SEPARATOR
+    // (`\u{2028}`) / EM-SPACE (`\u{2003}`) survives the byte-scan, gets
+    // silently stripped at parse entry, and round-trips through
+    // `render_millicores` to a *different* canonical form on the next
+    // emit — breaking the THEORY.md Part V render-determinism contract.
+    // Closed here (`:limits :cpu`) through the shared
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate — the
+    // "single lifted predicate across every typed-magnitude codec site"
+    // trajectory 1b75b38 landed on the four peer codecs, extended here
+    // to the fifth.
+    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
+        return Err(LimitsError::NonAsciiWhitespaceInMillicores {
+            value: s.into(),
+            ch,
+            codepoint: ch as u32,
+        });
+    }
     let s_trim = s.trim();
     if s_trim.is_empty() {
         return Err(LimitsError::BadMillicores(s.into()));
@@ -3851,6 +3953,208 @@ mod tests {
         let json = r#"{"cpu":"500m"}"#;
         let l: LimitsSpec = serde_json::from_str(json).unwrap();
         assert_eq!(l.cpu, Some(500));
+    }
+
+    // ── canonical-form: whitespace-rejection millicores codec gate ────────
+    //
+    // Direct successor to the `parse_byte_size` (24a8ad4), `parse_duration`
+    // (ebc3a75), `supervisor::duration_codec` (a7ae622), and
+    // `rate_limit_codec` (1ad7755) whitespace-rejection arms — closes the
+    // fifth (and last) typed-magnitude codec surface in caixa-core on the
+    // ASCII-whitespace axis. The pre-gate top-level `s.trim()` at parse
+    // entry and the per-part `magnitude.trim()` calls silently ate leading
+    // / trailing / internal whitespace, so every whitespace-carrying shape
+    // parsed to the same millicore value and round-tripped through
+    // `render_millicores` to a *different* canonical string on next
+    // serialize — the same canonical-form-drift class the leading-`+` /
+    // fractional / leading-zero arms already close on this codec.
+
+    #[test]
+    fn parse_millicores_rejects_leading_whitespace() {
+        // `" 500m"` — the canonical paste-from-aligned-doc / YAML-quoted-
+        // plain-scalar footgun. Before this gate the top-level `s.trim()`
+        // at parse entry silently ate the leading space and parsed the
+        // value to 500 millicores, round-tripping to `"500m"` on next
+        // serialize.
+        let err = parse_millicores(" 500m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInMillicores { ref value, byte } if value == " 500m" && byte == 0x20),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("whitespace byte 0x20"),
+            "diagnostic must surface the offending byte verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("THEORY.md"),
+            "diagnostic must cite the render-determinism contract (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_trailing_whitespace() {
+        // `"500m "` — the canonical shell-history trailing-space footgun.
+        let err = parse_millicores("500m ").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInMillicores { ref value, byte } if value == "500m " && byte == 0x20),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_internal_whitespace_between_magnitude_and_unit() {
+        // `"500 m"` — the typographically-spaced author shape (the same
+        // idiom every prose reference to millicores renders as). Before
+        // this gate the per-part `magnitude.trim()` silently ate the
+        // internal space and parsed the value to 500 millicores.
+        let err = parse_millicores("500 m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInMillicores { ref value, byte } if value == "500 m" && byte == 0x20),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_tab_byte() {
+        // `"\t500m"` — the paste-from-indented-doc / YAML-block-scalar tab
+        // footgun. Pins the tab (`0x09`) arm alongside the space arm above.
+        let err = parse_millicores("\t500m").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInMillicores { ref value, byte } if value == "\t500m" && byte == 0x09),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_trailing_newline() {
+        // `"500m\n"` — the multi-line-paste footgun where a trailing LF
+        // byte survives the paste. Pins the LF member (`0x0A`) of the
+        // `is_ascii_whitespace` set.
+        let err = parse_millicores("500m\n").unwrap_err();
+        assert!(
+            matches!(err, LimitsError::WhitespaceInMillicores { ref value, byte } if value == "500m\n" && byte == 0x0a),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_accepts_whitespace_free_canonical_forms() {
+        // The complement-side pin: every canonical whitespace-free
+        // authoring form the renderer emits stays accepted post-gate.
+        // Sweep the canonical `m`-suffix path plus the bare-core shorthand
+        // so a future tightening of the whitespace arm that over-fires on
+        // the accepted set surfaces here as a test failure.
+        assert_eq!(parse_millicores("500m").unwrap(), 500);
+        assert_eq!(parse_millicores("2000m").unwrap(), 2000);
+        assert_eq!(parse_millicores("1m").unwrap(), 1);
+        assert_eq!(parse_millicores("0m").unwrap(), 0);
+        assert_eq!(parse_millicores("2").unwrap(), 2000);
+        assert_eq!(parse_millicores("0").unwrap(), 0);
+    }
+
+    #[test]
+    fn de_millicores_rejects_whitespace_through_serde() {
+        // The serde-path pin: a `:limits :cpu` carrying a whitespace-byte-
+        // carrying value (`" 500m"`) must fail at deserialize time, not
+        // silently round-trip the value through the pre-existing top-level
+        // `s.trim()`. Peer with the
+        // `de_byte_size_rejects_whitespace_through_serde` and
+        // `de_duration_rejects_whitespace_through_serde` pins on the
+        // sibling codecs.
+        let json = r#"{"cpu":" 500m"}"#;
+        let err = serde_json::from_str::<LimitsSpec>(json).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("whitespace byte"),
+            "serde diagnostic must surface the whitespace reason verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("0x20"),
+            "serde diagnostic must name the offending byte (got {msg:?})"
+        );
+
+        // The whitespace-free complement — same author-side intent,
+        // written in the canonical form the renderer would emit,
+        // deserializes cleanly.
+        let json = r#"{"cpu":"500m"}"#;
+        let l: LimitsSpec = serde_json::from_str(json).unwrap();
+        assert_eq!(l.cpu, Some(500));
+    }
+
+    // ── canonical-form: non-ASCII Unicode `White_Space` millicores gate ───
+    //
+    // Direct successor to the ASCII-whitespace arm above — closes the
+    // strictly-complementary class the byte-scan cannot see. `str::trim`
+    // uses `char::is_whitespace` (Unicode `White_Space`, strictly wider
+    // than the ASCII byte set); a leading / trailing / internal NBSP
+    // (`\u{00A0}`) / LINE SEPARATOR (`\u{2028}`) / EM-SPACE (`\u{2003}`)
+    // survives the byte-scan but is silently stripped by the top-level
+    // trim, drifting to canonical `"500m"` on round-trip. Pins the arm
+    // through the lifted [`crate::render::find_non_ascii_whitespace_char`]
+    // predicate — the same shared predicate 1b75b38 landed on the four
+    // peer typed-magnitude codecs, extended here to the fifth.
+
+    #[test]
+    fn parse_millicores_rejects_leading_nbsp() {
+        // NBSP (`\u{00A0}` = UTF-8 `0xC2 0xA0`) — the paste-from-typography
+        // / paste-from-word-processor footgun. Before this arm landed the
+        // byte-scan missed it (neither `0xC2` nor `0xA0` is
+        // `is_ascii_whitespace`) and `str::trim` at parse entry silently
+        // stripped it, yielding the same 500 millicores as the whitespace-
+        // free canonical form and drifting to `"500m"` on next serialize.
+        let s = "\u{00A0}500m";
+        let err = parse_millicores(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInMillicores { ref value, ch, codepoint } if value == s && ch == '\u{00A0}' && codepoint == 0x00A0),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("U+00A0"),
+            "diagnostic must surface the codepoint verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("THEORY.md"),
+            "diagnostic must cite the render-determinism contract (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_internal_em_space() {
+        // EM-SPACE (`\u{2003}`) between magnitude and unit — pins the arm
+        // on an internal-position non-NBSP Unicode `White_Space` member.
+        let s = "500\u{2003}m";
+        let err = parse_millicores(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInMillicores { ref value, ch, codepoint } if value == s && ch == '\u{2003}' && codepoint == 0x2003),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_rejects_trailing_line_separator() {
+        // LINE SEPARATOR (`\u{2028}`) — the canonical paste-from-web-doc
+        // footgun (many rendering engines insert `\u{2028}` at soft-wrap
+        // boundaries in RTF/HTML → plain text conversion). Pins the arm on
+        // a trailing-position Unicode `White_Space` member.
+        let s = "500m\u{2028}";
+        let err = parse_millicores(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInMillicores { ref value, ch, codepoint } if value == s && ch == '\u{2028}' && codepoint == 0x2028),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_millicores_accepts_ascii_only_canonical_forms_after_unicode_arm() {
+        // Positive-control pin: every ASCII-only canonical form the
+        // renderer emits stays accepted through the new arm — the lifted
+        // predicate is a strict no-op on ASCII input.
+        assert_eq!(parse_millicores("500m").unwrap(), 500);
+        assert_eq!(parse_millicores("2000m").unwrap(), 2000);
+        assert_eq!(parse_millicores("1m").unwrap(), 1);
+        assert_eq!(parse_millicores("2").unwrap(), 2000);
     }
 
     // ── canonical-form: integer-millisecond :wall-clock gate ──────────────
