@@ -1019,6 +1019,7 @@ fn is_wit_kebab_id(s: &str) -> Result<(), String> {
             prev_hyphen = true;
             continue;
         }
+        let after_hyphen = prev_hyphen;
         prev_hyphen = false;
         if b.is_ascii_uppercase() {
             return Err(format!(
@@ -1026,6 +1027,67 @@ fn is_wit_kebab_id(s: &str) -> Result<(), String> {
                  dispatches `:wit` values on the lowercase canonical shape — \
                  `wasi:http/proxy` is recognized, `WASI:HTTP/proxy` is silently \
                  demoted to a capability-only edge",
+                ch = b as char
+            ));
+        }
+        // Per-word first-byte gate. The doc-comment above binds this
+        // predicate to the WIT IDL rule `id ::= word ('-' word)*` with
+        // `word ::= [a-z][a-z0-9]*` — each hyphen-separated word must
+        // begin with a lowercase letter, not a digit. The full-id
+        // first-byte arm above ([`is_wit_kebab_id`] line ~974) closes
+        // the leading-digit / leading-hyphen / leading-uppercase footguns
+        // for the *first* word (`"1http"`, `"-http"`, `"Http"`); this
+        // arm closes the same "word must begin with a lowercase letter"
+        // rule for *every subsequent* word after a `-` separator. Until
+        // this gate landed the byte-set arm below accepted `[a-z0-9-]`
+        // uniformly across all positions, so an identifier like
+        // `"pub-1sub"` / `"proxy-2beta"` / `"cap-9"` passed the byte-set
+        // gate (every byte lies in `[a-z0-9-]`), passed the leading-`-`
+        // arm (the first byte is `p`/`c`, not `-`), passed the
+        // consecutive-`-` arm (no `--`), passed the trailing-`-` arm
+        // (last byte is a lowercase letter or digit, not `-`), and was
+        // silently accepted — the canonical `abc-<digit>*` word-shape
+        // footgun where an author's paste-from-versioned-slug (`"proxy-2"`
+        // from a `v2`-tagged interface hand-transcribed) or a
+        // programmatic string-interpolation (`format!("{stem}-{n}")` with
+        // a numeric `n`) landed in the `:contratos :wit` slot's segment.
+        // The upstream WIT parser (WebAssembly/component-model spec §WIT
+        // grammar; `wit-parser` crate's `id!` production) then failed at
+        // WIT-parse time far from the source caixa.lisp with a parser
+        // diagnostic that names the offending byte but not the offending
+        // `:contratos :wit` slot, and the typed slot's accepted set drifted
+        // from the upstream parser's accepted set on the exact class the
+        // doc-comment above already documented as rejected — a
+        // documentation-vs-implementation drift, not a novel rule. Lifting
+        // the rejection to caixa-build time closes the per-word-first-byte
+        // axis structurally — every validated WIT identifier past this
+        // predicate matches the WIT IDL word grammar per-word, not just at
+        // the first byte, and drift between the typed slot's accepted set
+        // and the upstream WIT parser's accepted set is impossible-by-
+        // construction on the digit-after-hyphen axis (the last remaining
+        // documented-but-unenforced arm on the WIT kebab predicate).
+        //
+        // Same top-and-bottom-edge discipline the peer axes carry: every
+        // caller ([`is_wit_world_ref`] on the `:contratos :wit` axis, and
+        // through it the M3 `WitContract::target` cross-check at
+        // [`crate::AplicacaoSpec::validate`]) now refuses the canonical
+        // author-side "word two starts with a version-shape digit paste"
+        // footgun at validate time rather than at wit-parser consume
+        // time. Same trajectory as bb4e6c4 (`is_wit_world_ref` byte-set
+        // gate on the `@<version>` suffix) and 9f7b894 (`is_wit_world_ref`
+        // structural SemVer 2.0.0 parse on the `@<version>` suffix) on
+        // the peer per-suffix axes — the same "typed-slot's accepted set
+        // matches the downstream parser's accepted set, structurally"
+        // discipline extended here from the version-body axis to the
+        // per-word first-byte axis of the identifier body itself.
+        if after_hyphen && b.is_ascii_digit() {
+            return Err(format!(
+                "word after `-` starts with digit {ch:?} (WIT identifiers are \
+                 `id ::= word ('-' word)*` with `word ::= [a-z][a-z0-9]*` — every \
+                 word begins with a lowercase letter, not a digit; the upstream WIT \
+                 parser rejects an identifier of this shape at consume time. Insert \
+                 a lowercase-letter prefix on the offending word — `pub-v1sub` \
+                 instead of `pub-1sub`, `proxy-v2beta` instead of `proxy-2beta`)",
                 ch = b as char
             ));
         }
@@ -9588,6 +9650,26 @@ mod tests {
                 "wasi:http/proxy@1.0.0-alpha..beta",
                 "structurally valid SemVer 2.0.0",
             ),
+            // Digit-immediately-after-`-` word-start rule — the WIT IDL
+            // `word ::= [a-z][a-z0-9]*` per-word first-byte gate the
+            // predicate's doc-comment already documented, closed at the
+            // implementation layer. Each identifier passes the outer
+            // `[a-z0-9-]` byte set, the leading-`-` rejection, the
+            // consecutive-`-` rejection, and the trailing-`-` rejection,
+            // and was silently accepted before the arm landed — surfaces
+            // the `word after `-`` reason substring so a future
+            // diagnostic-wording rephrase surfaces here alongside every
+            // peer per-arm substring pin. Canonical author-side
+            // footguns: `"pub-1sub"` (version-shape digit paste),
+            // `"proxy-2beta"` (v2 tag paste), `"cap-9"` (numeric
+            // suffix). Namespace-side and interface-side variants pin
+            // the arm fires uniformly on every WIT segment (`ns:pkg`,
+            // `ns:pkg/iface`, not just the first).
+            ("wasi:pub-1sub", "word after `-`"),
+            ("wasi:proxy-2beta", "word after `-`"),
+            ("wasi:cap-9", "word after `-`"),
+            ("pleme-1cap:audit", "word after `-`"),
+            ("wasi:http/proxy-3rc", "word after `-`"),
         ] {
             let err = is_wit_world_ref(s)
                 .err()
@@ -9597,6 +9679,82 @@ mod tests {
                 "WIT reference {s:?} reason must contain {needle:?}; got {err:?}"
             );
         }
+    }
+
+    #[test]
+    fn wit_world_ref_word_after_hyphen_digit_arm_names_offending_byte_and_word_rule() {
+        // Pin the per-word first-byte arm's diagnostic quality: the
+        // offending byte appears verbatim in the reason, the WIT
+        // grammar production is named (`[a-z][a-z0-9]*`), and the
+        // remediation suggests a lowercase-letter prefix on the
+        // offending word. Mirrors the `wit_world_ref_leading_digit`
+        // sibling pin on the *first-word* first-byte arm — the two
+        // arms enforce the same rule at complementary positions
+        // (whole-id first byte vs. per-hyphen-word first byte), so
+        // their diagnostic shapes stay peer.
+        let err = is_wit_world_ref("wasi:pub-1sub").unwrap_err();
+        assert!(err.contains("'1'"), "must name offending byte: {err:?}");
+        assert!(
+            err.contains("[a-z][a-z0-9]*"),
+            "must name WIT word grammar: {err:?}"
+        );
+        assert!(
+            err.contains("pub-v1sub"),
+            "must suggest the letter-prefix remediation: {err:?}"
+        );
+    }
+
+    #[test]
+    fn wit_world_ref_word_after_hyphen_lowercase_letter_still_accepted() {
+        // Complement-side pin: the per-word first-byte arm strictly
+        // targets *digits* after `-`; every canonical multi-word
+        // lowercase identifier (`pub-sub`, `pub-sub-async`,
+        // `wasi:http/incoming-handler`, `wasi:keyvalue/atomic-batch`)
+        // remains in the accepted set with no new false-positive.
+        // Pinned here so a future tightening that spills the digit-
+        // rejection arm onto the letter-after-hyphen class surfaces
+        // as a test failure at this positive-set pin, not at the M4
+        // CR materializer's WIT-parse boundary. Mirrors the
+        // `wit_world_ref_accepts_canonical_forms` positive-set
+        // sweep, extended here to the multi-word-lowercase axis.
+        for s in [
+            "nats:pub-sub",
+            "wasi:http/incoming-handler",
+            "wasi:keyvalue/atomic-batch",
+            "pleme:cap/audit-log",
+            "http:server-side",
+        ] {
+            is_wit_world_ref(s).unwrap_or_else(|e| {
+                panic!("canonical multi-word WIT identifier {s:?} must pass: {e:?}")
+            });
+        }
+    }
+
+    #[test]
+    fn wit_world_ref_word_after_hyphen_digit_arm_fires_before_byte_set_arm() {
+        // Diagnostic-precedence pin: an identifier that is *both*
+        // digit-after-`-` and byte-set-invalid (`"pub-1$"`) surfaces
+        // the more self-locating word-start diagnostic, not the
+        // generic invalid-character diagnostic. The arm order in the
+        // loop is deliberate — the per-word first-byte gate fires on
+        // the first offending byte (position 4 = the `1`) before the
+        // byte-set gate can reach the `$` at position 5. Pinned here
+        // so a future arm-reordering that moves the byte-set gate
+        // earlier surfaces the drift at this test rather than
+        // silently value-laundering the diagnostic.
+        let err = is_wit_world_ref("wasi:pub-1$").unwrap_err();
+        assert!(
+            err.contains("word after `-`"),
+            "must surface the per-word first-byte diagnostic, not the invalid-character one: {err:?}"
+        );
+        // And the `$` case *without* the digit-after-`-` still lands
+        // on the invalid-character arm — the two diagnostics don't
+        // collide when only one applies.
+        let err = is_wit_world_ref("wasi:pub-x$").unwrap_err();
+        assert!(
+            err.contains("invalid character"),
+            "byte-set-only rejection must still name invalid character: {err:?}"
+        );
     }
 
     #[test]
