@@ -729,6 +729,28 @@ pub enum LimitsError {
          (write `\"64MiB\"` verbatim)"
     )]
     WhitespaceInByteSize { value: String, byte: u8 },
+    #[error(
+        "byte-size: value {value:?} contains a non-ASCII Unicode whitespace character \
+         {ch:?} (U+{codepoint:04X}) — the canonical authoring form for `:limits :memory` \
+         is `<integer><unit>` (e.g. `\"64MiB\"`, `\"1GiB\"`, `\"512KiB\"`, `\"1024\"`) \
+         with no whitespace characters anywhere (ASCII or Unicode). A non-ASCII-whitespace-\
+         carrying shape (`\"\\u{{00A0}}64MiB\"` — paste-from-typography NBSP prefix; \
+         `\"64MiB\\u{{2028}}\"` — paste-from-web-doc line-separator suffix; \
+         `\"64\\u{{2003}}MiB\"` — paste-from-typography EM-SPACE between magnitude and \
+         unit) survives the pre-existing `u8::is_ascii_whitespace` byte-scan (none of \
+         its bytes match the ASCII whitespace set) but `str::trim` (which uses \
+         `char::is_whitespace` — the Unicode `White_Space` property, strictly wider than \
+         the ASCII byte set) silently strips it at parse entry, and the value round-trips \
+         through `render_byte_size` to a *different* canonical form (`\"64MiB\"`) on \
+         first serialize — breaking the THEORY.md Part V render-determinism contract \
+         every typed slot carries. Strip every non-ASCII whitespace character (write \
+         `\"64MiB\"` verbatim with only ASCII bytes)"
+    )]
+    NonAsciiWhitespaceInByteSize {
+        value: String,
+        ch: char,
+        codepoint: u32,
+    },
     #[error("duration: missing magnitude in {0:?}")]
     EmptyDuration(String),
     #[error("duration: unknown unit {unit:?} (expected one of ms, s, m, h)")]
@@ -769,6 +791,28 @@ pub enum LimitsError {
          verbatim)"
     )]
     WhitespaceInDuration { value: String, byte: u8 },
+    #[error(
+        "duration: value {value:?} contains a non-ASCII Unicode whitespace character \
+         {ch:?} (U+{codepoint:04X}) — the canonical authoring form for `:limits :wall-clock` \
+         is `<integer><unit>` (e.g. `\"30s\"`, `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no \
+         whitespace characters anywhere (ASCII or Unicode). A non-ASCII-whitespace-\
+         carrying shape (`\"\\u{{00A0}}30s\"` — paste-from-typography NBSP prefix; \
+         `\"30s\\u{{2028}}\"` — paste-from-web-doc line-separator suffix; \
+         `\"30\\u{{2003}}s\"` — paste-from-typography EM-SPACE between magnitude and \
+         unit) survives the pre-existing `u8::is_ascii_whitespace` byte-scan (none of \
+         its bytes match the ASCII whitespace set) but `str::trim` (which uses \
+         `char::is_whitespace` — the Unicode `White_Space` property, strictly wider than \
+         the ASCII byte set) silently strips it at parse entry, and the value round-trips \
+         through `render_duration` to a *different* canonical form (`\"30s\"`) on first \
+         serialize — breaking the THEORY.md Part V render-determinism contract every \
+         typed slot carries. Strip every non-ASCII whitespace character (write `\"30s\"` \
+         verbatim with only ASCII bytes)"
+    )]
+    NonAsciiWhitespaceInDuration {
+        value: String,
+        ch: char,
+        codepoint: u32,
+    },
     #[error("millicores: bad value {0:?} (expected `<int>m` or `<int>`)")]
     BadMillicores(String),
     #[error(
@@ -961,6 +1005,31 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
         return Err(LimitsError::WhitespaceInByteSize {
             value: s.into(),
             byte,
+        });
+    }
+    // Non-ASCII Unicode `White_Space` arm — the strictly-complementary
+    // class the ASCII arm above cannot see. `str::trim` at the top of
+    // the codec uses `char::is_whitespace` (the Unicode `White_Space`
+    // property, strictly wider than the ASCII byte set), so an NBSP
+    // (`\u{00A0}`) / LINE SEPARATOR (`\u{2028}`) / EM-SPACE
+    // (`\u{2003}`) survives the byte-scan (its UTF-8 bytes are not in
+    // `is_ascii_whitespace`), gets silently stripped by the top-level
+    // `s.trim()` below, and the value round-trips through
+    // `render_byte_size` to a *different* canonical form on the next
+    // emit — breaking the THEORY.md Part V render-determinism
+    // contract every typed slot carries. Same drift class across every
+    // typed-magnitude codec in caixa-core; closed here (byte-size),
+    // and at the peer sites (`parse_duration`,
+    // `supervisor::duration_codec`, `rate_limit_codec`) through the
+    // shared [`crate::render::find_non_ascii_whitespace_char`]
+    // predicate — the "single lifted predicate across all four codec
+    // sites in one follow-up run" the 24a8ad4 commit body's `Forward
+    // compounding` bullet named as the next compounding step.
+    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
+        return Err(LimitsError::NonAsciiWhitespaceInByteSize {
+            value: s.into(),
+            ch,
+            codepoint: ch as u32,
         });
     }
     let s = s.trim();
@@ -1173,6 +1242,24 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
         return Err(LimitsError::WhitespaceInDuration {
             value: s.into(),
             byte,
+        });
+    }
+    // Non-ASCII Unicode `White_Space` arm — the strictly-complementary
+    // class the ASCII arm above cannot see. Same shape as the
+    // `parse_byte_size` peer arm: `str::trim` uses
+    // `char::is_whitespace` (Unicode `White_Space`, strictly wider
+    // than the ASCII byte set), so an NBSP / LINE SEPARATOR / EM-SPACE
+    // survives the byte-scan, gets silently stripped at parse entry,
+    // and round-trips through `render_duration` to a *different*
+    // canonical form on next emit — breaking the THEORY.md Part V
+    // render-determinism contract. Closed here (`:limits :wall-clock`)
+    // and at the three peer codec sites through the shared
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate.
+    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(s) {
+        return Err(LimitsError::NonAsciiWhitespaceInDuration {
+            value: s.into(),
+            ch,
+            codepoint: ch as u32,
         });
     }
     let s = s.trim();
@@ -2690,6 +2777,84 @@ mod tests {
         assert_eq!(l.memory, Some(64 * 1024 * 1024));
     }
 
+    // ── canonical-form: non-ASCII Unicode `White_Space` byte-size gate ────
+    //
+    // Direct successor to the `parse_byte_size` ASCII-whitespace arm
+    // (24a8ad4) — closes the strictly-complementary class the byte-scan
+    // above cannot see. `str::trim` uses `char::is_whitespace` (Unicode
+    // `White_Space`, strictly wider than the ASCII byte set); a leading /
+    // trailing / internal NBSP (`\u{00A0}`) / LINE SEPARATOR (`\u{2028}`)
+    // / EM-SPACE (`\u{2003}`) survives the byte-scan but is silently
+    // stripped by the top-level trim, drifting to canonical `"64MiB"` on
+    // round-trip. Pins the arm through the lifted
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate.
+
+    #[test]
+    fn parse_byte_size_rejects_leading_nbsp() {
+        // NBSP (`\u{00A0}` = UTF-8 `0xC2 0xA0`) — the canonical
+        // paste-from-typography / paste-from-word-processor footgun.
+        // Before this arm landed the byte-scan missed it (neither `0xC2`
+        // nor `0xA0` is `is_ascii_whitespace`) and `str::trim` at parse
+        // entry silently stripped it, yielding the same `64 * 1024 *
+        // 1024` bytes as the whitespace-free canonical form and drifting
+        // to `"64MiB"` on next serialize.
+        let s = "\u{00A0}64MiB";
+        let err = parse_byte_size(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInByteSize { ref value, ch, codepoint } if value == s && ch == '\u{00A0}' && codepoint == 0x00A0),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("U+00A0"),
+            "diagnostic must surface the codepoint verbatim (got {msg:?})"
+        );
+        assert!(
+            msg.contains("THEORY.md"),
+            "diagnostic must cite the render-determinism contract (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_internal_line_separator() {
+        // LINE SEPARATOR (`\u{2028}`) between magnitude and unit — the
+        // canonical paste-from-web-doc footgun (many rendering engines
+        // insert `\u{2028}` at soft-wrap boundaries in RTF/HTML → plain
+        // text conversion). Pins the arm on a non-space non-NBSP Unicode
+        // `White_Space` member.
+        let s = "64\u{2028}MiB";
+        let err = parse_byte_size(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInByteSize { ref value, ch, codepoint } if value == s && ch == '\u{2028}' && codepoint == 0x2028),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_trailing_ideographic_space() {
+        // IDEOGRAPHIC SPACE (`\u{3000}`) — the CJK-typography paste
+        // footgun (canonical U+3000 is the full-width space that
+        // Japanese / Chinese IMEs emit when input is auto-widened). Pins
+        // the arm at the top edge of the `char::is_whitespace` set.
+        let s = "64MiB\u{3000}";
+        let err = parse_byte_size(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInByteSize { ref value, ch, codepoint } if value == s && ch == '\u{3000}' && codepoint == 0x3000),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_byte_size_accepts_ascii_only_canonical_forms_after_unicode_arm() {
+        // Positive-control pin: every ASCII-only canonical form the
+        // renderer emits stays accepted through the new arm — the
+        // lifted predicate is a strict no-op on ASCII input.
+        assert_eq!(parse_byte_size("64MiB").unwrap(), 64 * 1024 * 1024);
+        assert_eq!(parse_byte_size("1GiB").unwrap(), 1024 * 1024 * 1024);
+        assert_eq!(parse_byte_size("512KiB").unwrap(), 512 * 1024);
+        assert_eq!(parse_byte_size("1024").unwrap(), 1024);
+    }
+
     // ── canonical-form: integer-magnitude duration codec gate ─────────────
     //
     // Direct successor to the `parse_byte_size` integer-magnitude gate on
@@ -3142,6 +3307,52 @@ mod tests {
         let json = r#"{"wallClock":"30s"}"#;
         let l: LimitsSpec = serde_json::from_str(json).unwrap();
         assert_eq!(l.wall_clock, Some(Duration::from_secs(30)));
+    }
+
+    // ── canonical-form: non-ASCII Unicode `White_Space` duration gate ─────
+    //
+    // Successor to the `parse_duration` ASCII-whitespace arm (ebc3a75)
+    // — closes the strictly-complementary class the byte-scan cannot
+    // see, through the lifted
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate.
+
+    #[test]
+    fn parse_duration_rejects_leading_nbsp() {
+        // NBSP prefix — paste-from-typography footgun. Byte-scan misses,
+        // `str::trim` strips silently, drifting to `"30s"` on next
+        // emit.
+        let s = "\u{00A0}30s";
+        let err = parse_duration(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInDuration { ref value, ch, codepoint } if value == s && ch == '\u{00A0}' && codepoint == 0x00A0),
+            "got {err:?}"
+        );
+        let msg = err.to_string();
+        assert!(
+            msg.contains("U+00A0"),
+            "diagnostic must name codepoint (got {msg:?})"
+        );
+    }
+
+    #[test]
+    fn parse_duration_rejects_internal_em_space() {
+        // EM-SPACE (`\u{2003}`) between magnitude and unit — canonical
+        // paste-from-typography footgun on the `<integer><unit>` shape.
+        let s = "30\u{2003}s";
+        let err = parse_duration(s).unwrap_err();
+        assert!(
+            matches!(err, LimitsError::NonAsciiWhitespaceInDuration { ref value, ch, codepoint } if value == s && ch == '\u{2003}' && codepoint == 0x2003),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_duration_accepts_ascii_only_canonical_forms_after_unicode_arm() {
+        // Positive-control pin: every ASCII-only canonical form the
+        // renderer emits stays accepted through the new arm.
+        assert_eq!(parse_duration("30s").unwrap(), Duration::from_secs(30));
+        assert_eq!(parse_duration("500ms").unwrap(), Duration::from_millis(500));
+        assert_eq!(parse_duration("1h").unwrap(), Duration::from_secs(3600));
     }
 
     #[test]
