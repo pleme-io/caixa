@@ -7189,11 +7189,7 @@ mod tests {
                 caminho: caminho.into(),
             });
             let err = d.validate().unwrap_err();
-            let DepError::FonteCaminhoLeadingHyphen {
-                nome,
-                caminho: got,
-            } = err
-            else {
+            let DepError::FonteCaminhoLeadingHyphen { nome, caminho: got } = err else {
                 panic!("expected FonteCaminhoLeadingHyphen for {caminho:?}, got {err:?}");
             };
             assert_eq!(nome, "caixa-teia");
@@ -7226,9 +7222,8 @@ mod tests {
             let d = dep_with_fonte(DepSource::Path {
                 caminho: caminho.into(),
             });
-            d.validate().unwrap_or_else(|e| {
-                panic!("mid-path `-` caminho {caminho:?} must pass: {e:?}")
-            });
+            d.validate()
+                .unwrap_or_else(|e| panic!("mid-path `-` caminho {caminho:?} must pass: {e:?}"));
         }
     }
 
