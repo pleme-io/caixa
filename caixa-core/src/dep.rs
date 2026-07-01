@@ -1772,6 +1772,174 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's embedded-`$` shell-variable-expansion /
+        // command-substitution / arithmetic-expansion arm. The f4efe9c
+        // leading-`$` arm at line 540 routes `caminho.starts_with('$')`
+        // through `FonteCaminhoVarExpansion` under the leading-byte-
+        // sentinel host-layout-leak banner (peer with the b94fd83
+        // absolute / a5c248e tilde leading-byte arms), but the arm
+        // fires only at position 0 — a `:caminho "../foo$HOME/bar"`
+        // (embedded `$HOME` in a nested path segment — the canonical
+        // paste-from-`ls ../foo$HOME/bar`-shell-one-liner footgun where
+        // an author copies a partially-substituted shell one-liner and
+        // the leading segment is a literal `../foo` while the mid
+        // segment carries the un-substituted `$HOME` template), a
+        // `:caminho "../foo${WORKSPACE}/bar"` (the symmetric braced-CI-
+        // manifest paste-from-`.gitlab-ci.yml` / paste-from-GitHub-
+        // Actions-workflow shape), a `:caminho "../foo$(whoami)/bar"`
+        // (the paste-from-shell-prompt command-substitution idiom), or
+        // a `:caminho "../foo$((1+2))/bar"` (the arithmetic-expansion
+        // idiom) silently passes every prior arm because
+        // `Path::is_absolute` returns false on `..`, `$` is neither a
+        // leading-byte sentinel (the f4efe9c arm fires only at position
+        // 0) nor a control byte nor `\` nor `<` / `>` nor `|` nor `;`
+        // nor `&` nor backtick nor `*` / `?` nor `(` / `)` nor `{` /
+        // `}` nor `[` / `]` nor `'` / `"` nor `#` nor `%`, and the
+        // value's last byte isn't `/`. Note that `$(...)` command-
+        // substitution and `$((...))` arithmetic-expansion each carry
+        // an embedded `(` byte that the 0633c91 shell-subshell-grouping
+        // arm catches structurally at the earlier `(` position — but
+        // an author who reaches for the sh-brace-substitution
+        // `${VAR}` or the bare `$VAR` shape carries only the `$` byte,
+        // which no prior arm covers. This arm closes the last
+        // positional gap on the `$` byte on the `:caminho` axis so
+        // every position — leading (`FonteCaminhoVarExpansion`) and
+        // embedded (`FonteCaminhoShellVariableExpansion`) — is
+        // structurally rejected.
+        //
+        // Every POSIX shell (sh / bash / zsh / dash / ksh / busybox
+        // ash / fish / nushell) lexes `$` as the variable-expansion /
+        // command-substitution / arithmetic-expansion operator per
+        // POSIX.1-2017 §2.6 (Word Expansions): `$<name>` (Parameter
+        // Expansion) expands a named variable, `${<name>}` (Parameter
+        // Expansion braced form) does the same with an explicit token
+        // boundary, `$(<cmd>)` (Command Substitution modern form,
+        // `` `<cmd>` `` legacy form which the c370458 backtick arm
+        // already closes) runs a subshell and substitutes its stdout,
+        // and `$((<expr>))` (Arithmetic Expansion) evaluates an
+        // arithmetic expression. Every form is a host-layout /
+        // environment-state / shell-subprocess-side-effect leak when
+        // the byte lands in a value the resolver passes to a shell-
+        // spawned subprocess. Beyond the POSIX shell layer, `$` is
+        // the Nix `${var}` string-interpolation lead (the paste-from-
+        // `flake.nix` / paste-from-`.nix`-attribute cross-idiom leak
+        // where an author copies `"${pkgs.hello}/bin/hello"` out of a
+        // nix expression), the Make `$(var)` / `$@` / `$<` automatic-
+        // variable lead (the paste-from-`Makefile` shape), the
+        // JavaScript / TypeScript template-literal `${expr}` interp
+        // lead (the paste-from-JS-template-string idiom in a
+        // multi-lang-monorepo where a `path` attribute gets copied out
+        // of a `package.json` script or a Vite config), the envsubst /
+        // Kubernetes / OpenShift template `${VAR}` interp lead (the
+        // paste-from-Helm-values / paste-from-K8s-manifest cross-idiom
+        // leak), the PHP variable lead (`$_GET`, `$_ENV` — the paste-
+        // from-`.php`-config footgun), the Perl scalar-variable lead
+        // (`$foo`), the SASS / SCSS variable lead (`$primary-color`),
+        // and the SQL bind-parameter lead in PostgreSQL / SQLite
+        // (`$1`, `$2` — the paste-from-`.sql`-migration idiom). The
+        // cross-idiom paste-footgun surface is broader than any single
+        // shell layer — `$` is a first-class parser byte in nearly
+        // every config / templating / build-system DSL the substrate's
+        // paste-idiom surface routinely crosses. The peer `:fonte
+        // :repo` axis closes the byte under the shell-variable-
+        // expansion / URL-sub-delim banner (b9d187c `$` on
+        // `is_git_repo_url`), the peer `:fonte :tag` / `:fonte :branch`
+        // axes close `$` as part of `is_git_ref_name`'s printable-
+        // ASCII-restricted grammar (`git check-ref-format` rejects the
+        // byte outright), and the peer `:entrada :paths` axis closes
+        // `$` via `is_gateway_api_http_path`'s eleven-byte RFC-3986-
+        // reserved set. The `:caminho` axis was the last typed path-
+        // string surface still admitting `$` at positions other than 0.
+        //
+        // POSIX `std::path::Path` treats `$` as a literal path-
+        // component byte, so `:caminho "../foo$HOME/bar"` silently
+        // routes through `Path::new(caminho).join(<file>)` looking for
+        // a literal `./{caminho}` subdirectory that fails at resolve
+        // time with a non-self-locating `No such file or directory`
+        // error far from the source caixa.lisp. But every downstream
+        // shell / envsubst / Nix / Make / K8s-template parser silently
+        // reinterprets the byte to a different value than the
+        // resolver's `Path::join` sees — so a `feira tofu` shell-out
+        // to a `cd '{caminho}'` command line, a `nix flake check`
+        // invocation on an emitted YAML `path:` scalar folded through
+        // envsubst, or a `helm template` invocation with a
+        // `values.yaml` `path: {caminho}` embedded in a `{{`-quoted
+        // template all disagree with the resolver on which directory
+        // the value names. Two workstations whose downstream shell /
+        // envsubst / Nix / Make / K8s-template parsing layers differ
+        // in `$VAR` recognition (or, worse, expand the byte against
+        // divergent environments — Alice's `$HOME=/home/alice`, Bob's
+        // `$HOME=/home/bob`) emit divergent build artifacts for the
+        // byte-identical caixa.lisp value. Even in the case where the
+        // resolver strictly does NOT expand `$VAR` (the current
+        // implementation) the divergence still bites at the lacre-
+        // identity axis: the lacre pipeline embeds the value verbatim
+        // in its per-dep content-address (`conteudo:
+        // format!("path:{caminho}")`, caixa-resolver/src/resolve.rs:189),
+        // so `path:../foo$HOME/bar` locks a BLAKE3 closure distinct
+        // from the byte-identical-semantic `path:../foo/home/alice/bar`
+        // one author would have produced by substituting the literal
+        // value at author time, defeating the THEORY.md §V.2 render-
+        // determinism contract on the same axis every prior `:caminho`
+        // arm protects.
+        //
+        // Beyond the render-determinism / host-layout-leak vectors,
+        // `$` at any position in a value flowing verbatim into a
+        // shell-spawned subprocess is the canonical CWE-78 shell-
+        // command-injection surface every peer single-token-shaped
+        // typed slot already closes. A `:caminho "../foo$(whoami)/bar"`
+        // that rides into a future `feira tofu` shell-out as `cd
+        // '../foo$(whoami)/bar'` gets substituted by the shell at
+        // subprocess-argument-expansion time even inside single quotes
+        // in fewer positions than one might expect (the substitution
+        // fires only outside single-quoting per POSIX §2.2.2, but
+        // eval-style wrappers and `sh -c` layers that route the value
+        // through re-parsing round-trip the substitution — the same
+        // vector the c370458 backtick arm closes at the sibling
+        // command-substitution-legacy-form surface). Every future
+        // `feira` verb that shells out with a `caminho`-formatted
+        // subprocess argument silently inherits this substitution
+        // vector unless the typed slot's accepted set structurally
+        // excludes the byte.
+        //
+        // Frontier inspiration: OTP's `gen_server` return-value grammar
+        // rejects mid-tuple shell-metachar bytes by construction —
+        // `{noreply, State}` never carries a raw `$` because the
+        // Erlang term type system has no notion of "string that gets
+        // shelled out"; caixa's typed slots inherit the same
+        // structural discipline (types-are-theorems, the compounding
+        // mandate's leverage-point-1) by refusing values that would
+        // silently reinterpret at any downstream layer. Peer with
+        // Unison's content-addressed code (no ambient environment —
+        // every reference is a hash, no `$VAR` substitution possible)
+        // and Pony's capabilities (a path capability that carries a
+        // `$` would be ill-typed at the reference layer).
+        //
+        // The arm fires AFTER the URL-percent-encoding-escape arm (the
+        // e3558fa `%` arm) because a value carrying both `%` and `$`
+        // (`"../foo%20$HOME/bar"` — the canonical "I pasted a percent-
+        // encoded space next to a `$HOME` template") surfaces the
+        // narrower URL-encoding diagnostic first — the paste-from-
+        // browser-address-bar shape is the load-bearing self-locating
+        // edit on every probe-as-both value; same cascade discipline
+        // every prior `:caminho` arm establishes (a323db8 %  before
+        // this arm, this arm before trailing-`/`). The arm fires
+        // BEFORE the trailing-`/` arm because the embedded shell-
+        // variable-expansion byte is the more semantic-locating axis
+        // on probe-as-both values (`"../foo$HOME/bar/"` ends in `/`
+        // but the load-bearing diagnostic is the embedded `$` — the
+        // trailing `/` is the secondary observation, and an author
+        // who substitutes the `$HOME` template with a literal value is
+        // likely to also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'$' {
+                return Err(DepError::FonteCaminhoShellVariableExpansion {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -2792,6 +2960,59 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoUrlPercentEncoding {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         variable-expansion / command-substitution / arithmetic-expansion / cross-config-\
+         DSL-interpolation metacharacter 0x{byte:02x} `{ch}` (every POSIX shell — sh / \
+         bash / zsh / dash / ksh / busybox ash / fish / nushell — lexes `$` per \
+         POSIX.1-2017 §2.6 as the variable-expansion `$<name>` / braced-form `${{<name>}}` \
+         / command-substitution `$(<cmd>)` / arithmetic-expansion `$((<expr>))` operator; \
+         Nix uses `${{var}}` as the string-interpolation lead, Make uses `$(var)` / `$@` \
+         / `$<` for variables and automatic-variables, JavaScript / TypeScript template \
+         literals use `${{expr}}` for interpolation, envsubst / Kubernetes / OpenShift \
+         templates use `${{VAR}}` for env-var-reference, PHP uses `$_GET` / `$_ENV` for \
+         superglobals, Perl uses `$foo` for scalars, SASS / SCSS uses `$primary-color` \
+         for variables, and PostgreSQL / SQLite use `$1` / `$2` for bind parameters — \
+         the byte is a first-class parser byte in nearly every config / templating / \
+         build-system DSL the substrate's paste-idiom surface routinely crosses. POSIX \
+         `std::path::Path` treats the byte as a literal path-component byte, so the \
+         canonical paste-from-shell-one-liner `:caminho \"../foo$HOME/bar\"` / paste-\
+         from-CI-manifest `:caminho \"../foo${{WORKSPACE}}/bar\"` / paste-from-shell-\
+         prompt `:caminho \"../foo$(whoami)/bar\"` footguns silently pass every prior \
+         cascade arm (`$` isn't `\\` / `<` / `>` / `|` / `;` / `&` / backtick / `*` / \
+         `?` / `(` / `)` / `{{` / `}}` / `[` / `]` / `'` / `\"` / `#` / `%`) and route \
+         through `Path::new(caminho).join(<file>)` looking for a literal `./{caminho}` \
+         subdirectory that fails at resolve time with a non-self-locating `No such file \
+         or directory` error far from the source caixa.lisp. The lacre pipeline embeds \
+         the value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, so byte-identical caixa.lisp values differing \
+         only in whether the author substituted `$HOME` / `${{WORKSPACE}}` at author \
+         time lock to two distinct BLAKE3 closures across two workstations whose \
+         downstream envsubst / Nix / Make / K8s-template layers differ in `$VAR` \
+         recognition — defeating the THEORY.md §V.2 render-determinism contract on the \
+         same axis every prior `:caminho` arm protects. Beyond the determinism vector, \
+         `$` at any position in a value flowing verbatim into a shell-spawned subprocess \
+         is the canonical CWE-78 shell-command-injection surface every peer single-\
+         token-shaped typed slot already closes: peer `:fonte :repo` axis rejects `$` \
+         under the shell-variable-expansion / URL-sub-delim banner via `is_git_repo_url` \
+         (b9d187c), peer `:fonte :tag` / `:fonte :branch` axes reject `$` as part of \
+         `is_git_ref_name`'s printable-ASCII-restricted grammar (`git check-ref-format` \
+         rejects the byte outright), and peer `:entrada :paths` axis rejects `$` via \
+         `is_gateway_api_http_path`'s eleven-byte RFC-3986-reserved set. The leading-`$` \
+         position on the same axis routes through `FonteCaminhoVarExpansion` at the \
+         f4efe9c leading-byte arm; this arm closes the last positional gap on the byte \
+         so every position — leading and embedded — is structurally rejected. Substitute \
+         the `$VAR` / `${{VAR}}` / `$(cmd)` template with the literal value at author \
+         time, or express the path as a bare relative single-token like \
+         \"../caixa-teia\" — the sibling-workspace directory name carries no shell-\
+         variable-expansion / command-substitution / arithmetic-expansion semantic.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellVariableExpansion {
         nome: String,
         caminho: String,
         byte: u8,
@@ -11267,6 +11488,238 @@ mod tests {
             rendered.contains("printf") || rendered.contains("format-specifier"),
             "diagnostic must reference the printf-format-specifier vocabulary: \
              {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_var_expansion() {
+        // The canonical embedded-`$` shell-variable-expansion paste
+        // shape (`"../foo$HOME/bar"` — an author copies a partially-
+        // substituted shell one-liner where the leading segment is a
+        // literal `../foo` while the mid segment carries the un-
+        // substituted `$HOME` template). The leading-`$` position is
+        // already gated by the f4efe9c leading-byte arm which routes
+        // through `FonteCaminhoVarExpansion`; this arm closes the
+        // last positional gap on `$` — every position on the axis is
+        // structurally rejected.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$HOME/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellVariableExpansion {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellVariableExpansion, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../foo$HOME/bar");
+        assert_eq!(byte, b'$');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_braced_var_expansion() {
+        // The symmetric braced-CI-manifest paste shape
+        // (`"../foo${WORKSPACE}/bar"` — the canonical paste-from-
+        // GitHub-Actions-workflow / paste-from-`.gitlab-ci.yml`
+        // footgun). Pinned separately from the bare-`$VAR` shape so
+        // the gate covers both POSIX shell §2.6 Parameter Expansion
+        // syntactic forms, not only the unbraced variant. The
+        // embedded `{` byte in `${...}` is also caught by the 598b770
+        // shell-brace-expansion arm but that arm fires earlier in
+        // the cascade — the `$` arm's coverage extends to `${...}`
+        // structurally, so the diagnostic asserted here is the
+        // brace-expansion one (which is a valid outcome; the point
+        // of the pin is that the value never survives validation).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo${WORKSPACE}/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. }
+                    | DepError::FonteCaminhoShellVariableExpansion { byte: b'$', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_command_substitution() {
+        // The paste-from-shell-prompt command-substitution idiom
+        // (`"../foo$(whoami)/bar"`). Pinned separately from the bare-
+        // `$VAR` shape so the gate's rationale extends to POSIX shell
+        // §2.6.3 Command Substitution (the modern `$(<cmd>)` form; the
+        // legacy `` `<cmd>` `` form is already closed by the c370458
+        // backtick arm). The embedded `(` byte in `$(...)` is also
+        // caught structurally by the 0633c91 shell-subshell-grouping
+        // arm which fires earlier in the cascade — the diagnostic
+        // asserted here is either outcome, since both structurally
+        // reject the value; the point of the pin is that the value
+        // never survives validation.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$(whoami)/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. }
+                    | DepError::FonteCaminhoShellVariableExpansion { byte: b'$', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_positional_parameter() {
+        // The paste-from-`Makefile` / paste-from-SQL-migration bare-
+        // `$1` positional-parameter shape (`"../foo$1/bar"` — a Make
+        // automatic-variable `$1` or a PostgreSQL bind-parameter `$1`
+        // idiom copied into a caminho template). None of the prior
+        // shell-metachar arms cover this shape (`1` is a bare digit;
+        // no `(` / `{` / letter follows the `$`), so the arm is the
+        // sole gate on the shape.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$1/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellVariableExpansion { byte: b'$', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_dollar() {
+        // The positive-control pin (peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_percent`
+        // on the immediate-predecessor arm): the gate targets only
+        // `$`, never adjacent printable ASCII or POSIX-valid bytes.
+        // A relative POSIX path carrying dashes / dots / slashes /
+        // digits (`"../caixa-teia/sub-dir.v2"`) must continue to
+        // validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_shell_variable_expansion() {
+        // Cascade pin on the leading-`$` sibling arm at line 540: a
+        // value starting with `$` and carrying an embedded `$` too
+        // (`"$HOME/foo$WORKSPACE/bar"` — the canonical "I pasted a
+        // fully-templated CI path with two un-substituted variables")
+        // routes through `FonteCaminhoVarExpansion` not
+        // `FonteCaminhoShellVariableExpansion`. The leading-byte
+        // host-layout-leak is the load-bearing self-locating axis
+        // (the leading position dominates the semantic-locating
+        // rationale on every probe-as-both value); the embedded
+        // arm's positional-agnostic sweep catches only values whose
+        // leading byte doesn't route through the earlier leading-
+        // byte arms.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$HOME/foo$WORKSPACE/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_url_percent_encoding_fires_before_shell_variable_expansion() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `%` and embedded `$` (`"../foo%20$HOME/bar"`
+        // — the canonical "I pasted a percent-encoded space adjacent
+        // to a `$HOME` template") routes through
+        // `FonteCaminhoUrlPercentEncoding` not
+        // `FonteCaminhoShellVariableExpansion`. The URL-percent-
+        // encoding-escape byte is the more semantic-locating axis
+        // (the paste-from-browser-address-bar shape is the load-
+        // bearing self-locating edit); same cascade discipline every
+        // prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo%20$HOME/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoUrlPercentEncoding { byte: b'%', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_variable_expansion_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both embedded `$` and a trailing `/`
+        // (`"../foo$HOME/bar/"` — the canonical "I tab-completed a
+        // `$HOME`-template-carrying path") routes through
+        // `FonteCaminhoShellVariableExpansion` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-variable-
+        // expansion byte is the more semantic-locating axis on
+        // probe-as-both values (an author who substitutes the
+        // `$HOME` template with a literal value is likely to also
+        // tab-strip the trailing separator).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$HOME/bar/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellVariableExpansion { byte: b'$', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_variable_expansion_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_url_percent_encoding_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the immediate-predecessor arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-variable-expansion / command-substitution
+        // footgun explicitly so a `feira lint` run can render the
+        // diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$HOME/bar".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../foo$HOME/bar"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x24"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("variable-expansion") || rendered.contains("variable expansion"),
+            "diagnostic must name the shell-variable-expansion footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("command-substitution") || rendered.contains("command substitution"),
+            "diagnostic must reference the command-substitution vocabulary: {rendered:?}",
         );
     }
 
