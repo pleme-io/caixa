@@ -2035,6 +2035,119 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-history-expansion / RFC-3986-sub-delims
+        // arm. The immediate-predecessor `$` embedded arm closes the shell-
+        // variable-expansion / command-substitution byte; `!` (`0x21`) is the
+        // orthogonal POSIX shell-history-expansion sentinel every interactive
+        // shell with history enabled (bash / ksh / zsh's `bashcompat` /
+        // csh / tcsh) lexes as the history-expansion prefix: `!command`
+        // re-runs the most recent history entry beginning with `command`,
+        // `!!` re-runs the prior command verbatim, `!$` substitutes the
+        // last word of the prior command, `!:N` substitutes the Nth word,
+        // `^old^new` rewrites the prior command's `old` to `new` (the
+        // canonical set of `set -o histexpand` operators bash's default
+        // interactive session enables). Beyond the shell-history layer,
+        // RFC 3986 §2.2 lists `!` in the `sub-delims` set (the URL grammar
+        // admits the byte inside a path segment, but every WHATWG-conformant
+        // special-scheme URL parser percent-encodes it inside a query
+        // component via the 'special-query percent-encode set' the peer
+        // `is_git_repo_url` `*` / `(` / `)` / `'` arms close on); the byte
+        // is also the C / C++ / Rust / JavaScript / Python bang-operator
+        // (logical-negation prefix — the paste-from-source-code idiom where
+        // an author copies `!path.exists()` out of a Rust snippet and the
+        // trailing punctuation crosses the string-literal boundary); the
+        // canonical English-typography emphasis / exclamation mark (the
+        // paste-from-prose enthusiasm-form idiom where an author writes
+        // `:caminho "../caixa-teia!"` expecting the substrate to coerce it
+        // to a kebab-case slug); and the Nix flake-ref import-attribute
+        // `import ./foo.nix { … }` sibling operator surface.
+        //
+        // POSIX `std::path::Path` treats `!` as a literal path-component
+        // byte, so a `:caminho "../caixa-teia!sudo"` (the canonical paste-
+        // from-shell-history footgun where the author copies a `cd
+        // ../caixa-teia && !sudo make install` one-liner from a quick-
+        // start README and the trailing `!sudo` rides in verbatim as a
+        // history-expansion reference), a `:caminho "../foo!!/bar"` (the
+        // `!!` repeat-prior-command paste idiom), a `:caminho
+        // "../caixa-teia!"` (the English-typography enthusiasm-form
+        // paste-from-prose footgun), or a `:caminho "../foo!$"` (the
+        // last-word-substitution shape) silently pass every prior arm
+        // because `Path::is_absolute` returns false on `..`, `!` is neither
+        // a leading-byte sentinel nor a control byte nor `\` nor `<` / `>`
+        // nor `|` nor `;` nor `&` nor backtick nor `*` / `?` nor `(` / `)`
+        // nor `{` / `}` nor `[` / `]` nor `'` / `"` nor `#` nor `%` nor `$`,
+        // and the value's last byte isn't `/`. The resolver folds the value
+        // through `Path::new(caminho).join(<file>)` looking for a literal
+        // `./../caixa-teia!sudo` subdirectory and fails at resolve time
+        // with a non-self-locating `No such file or directory` error far
+        // from the source caixa.lisp — while every downstream interactive
+        // shell with `set -o histexpand` reinterprets the byte as the
+        // history-expansion prefix, and the failure mode forks per
+        // consumer: a `feira tofu` shell-out to a `cd '{caminho}'` command
+        // line executed under `bash -i` (the operator-notebook interactive
+        // shell) substitutes the `!sudo` reference to the most recent
+        // history entry starting with `sudo`, silently invoking whatever
+        // privileged command that entry named.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so the byte lands in the
+        // BLAKE3 closure and rides into every shell-spawned subprocess
+        // (the resolver's `git clone`, a future `feira tofu` shell-out,
+        // a future operator-side `nix flake check` spawn) as the
+        // canonical shell-history-expansion / RFC-3986-sub-delims surface
+        // every peer single-token-shaped typed slot already closes. The
+        // peer `:fonte :repo` axis closes the byte under the same shell-
+        // history-expansion / RFC-3986-sub-delims banner (7d53c68 `!` on
+        // `is_git_repo_url`); the `:caminho` axis was the last typed
+        // path-string surface still admitting the byte. This arm closes
+        // the gap so the substrate-wide "no shell-composition
+        // metacharacter / history-expansion sentinel anywhere in a typed
+        // string slot that flows verbatim into a shell-spawned subprocess"
+        // invariant extends from shell-variable-expansion (`$`) to shell-
+        // history-expansion (`!`) on the `:caminho` axis. Together with
+        // the peer c370458 backtick command-substitution-legacy-form arm
+        // and the b9d187c-`$`-embedded-variable-expansion arm on the
+        // sibling `:repo` axis, the typed `:caminho` accepted set now
+        // structurally excludes every byte the POSIX shell §2.6 Word
+        // Expansions section, §2.3 Token Recognition step 6, and every
+        // history-expansion / brace-expansion / pathname-expansion /
+        // parameter-expansion / command-substitution / arithmetic-
+        // expansion operator lexes as a first-class parser byte.
+        //
+        // Frontier inspiration: Unison's content-addressed code (no
+        // ambient environment — every reference is a hash, no `!<num>`
+        // history-index substitution possible; the caixa substrate's
+        // lacre discipline arrives at the same guarantee by refusing
+        // bytes at manifest-parse time that would reinterpret against
+        // ambient shell history state); Pony's capabilities (a path
+        // capability that carries a `!` would be ill-typed at the
+        // reference layer).
+        //
+        // The arm fires AFTER the shell-variable-expansion arm because a
+        // value carrying both `$` and `!` (`"../foo$HOME/bar!sudo"` — the
+        // canonical "I pasted a `$HOME`-templated path adjacent to a
+        // trailing `!sudo` history-expansion") surfaces the narrower
+        // shell-variable-expansion diagnostic first — the paste-from-CI-
+        // manifest-with-`$VAR`-template shape is the load-bearing self-
+        // locating edit on every probe-as-both value; same cascade
+        // discipline every prior `:caminho` arm establishes. The arm
+        // fires BEFORE the trailing-`/` arm because the embedded shell-
+        // history-expansion byte is the more semantic-locating axis on
+        // probe-as-both values (`"../foo!sudo/"` ends in `/` but the
+        // load-bearing diagnostic is the embedded `!` — the trailing `/`
+        // is the secondary observation, and an author who removes the
+        // `!sudo` history reference is likely to also tab-strip the
+        // trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'!' {
+                return Err(DepError::FonteCaminhoShellHistoryExpansion {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -3150,6 +3263,62 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellVariableExpansion {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         history-expansion / RFC-3986-sub-delims / bang-operator metacharacter 0x{byte:02x} \
+         `{ch}` (every interactive POSIX shell with history enabled — bash / ksh / zsh's \
+         `bashcompat` / csh / tcsh — lexes `!` as the history-expansion prefix per bash \
+         reference §9.3: `!command` re-runs the most recent history entry beginning with \
+         `command`, `!!` re-runs the prior command verbatim, `!$` substitutes the last \
+         word of the prior command, `!:N` substitutes the Nth word of the prior command, \
+         and the substitution fires at every history-expansion-enabled shell context — \
+         `set -o histexpand` is bash's default for interactive sessions and the layer \
+         every `feira tofu` / `git clone` / `nix flake check` subprocess-argument \
+         invocation crosses when spawned under `bash -i`. Beyond shell history, RFC 3986 \
+         §2.2 lists `!` in the `sub-delims` set (the URL grammar admits the byte inside \
+         a path segment, but every WHATWG-conformant special-scheme URL parser percent-\
+         encodes it inside a query component via the 'special-query percent-encode set' \
+         the peer `is_git_repo_url` `*` / `(` / `)` / `'` arms close on); the byte is \
+         also the C / C++ / Rust / JavaScript / Python bang-operator (logical-negation \
+         prefix — the paste-from-source-code idiom where an author copies \
+         `!path.exists()` out of a Rust snippet and the trailing punctuation crosses \
+         the string-literal boundary); the canonical English-typography emphasis / \
+         exclamation mark (the paste-from-prose enthusiasm-form idiom where an author \
+         writes `:caminho \"../caixa-teia!\"` expecting the substrate to coerce it to a \
+         kebab-case slug); and the Nix flake-ref attribute-selection operator surface. \
+         POSIX `std::path::Path` treats `!` as a literal path-component byte, so the \
+         canonical paste-from-shell-history footgun `:caminho \"../caixa-teia!sudo\"` \
+         (an author copies a `cd ../caixa-teia && !sudo make install` one-liner from a \
+         quick-start README and the trailing `!sudo` rides in verbatim as a history-\
+         expansion reference), the symmetric `:caminho \"../foo!!/bar\"` (the `!!` \
+         repeat-prior-command paste idiom), the English-typography `:caminho \
+         \"../caixa-teia!\"` (paste-from-prose enthusiasm-form), and the last-word-\
+         substitution `:caminho \"../foo!$\"` shape silently pass every prior cascade \
+         arm (`!` isn't `\\` / `<` / `>` / `|` / `;` / `&` / backtick / `*` / `?` / `(` \
+         / `)` / `{{` / `}}` / `[` / `]` / `'` / `\"` / `#` / `%` / `$`) and route \
+         through `Path::new(caminho).join(<file>)` looking for a literal `./{caminho}` \
+         subdirectory that fails at resolve time with a non-self-locating `No such file \
+         or directory` error far from the source caixa.lisp. The lacre pipeline embeds \
+         the value verbatim in its per-dep content-address `path:{caminho}` at \
+         caixa-resolver/src/resolve.rs:189, so the byte lands in the BLAKE3 closure and \
+         rides into every shell-spawned subprocess (the resolver's `git clone`, a \
+         future `feira tofu` shell-out, a future operator-side `nix flake check` spawn) \
+         as the canonical shell-history-expansion / RFC-3986-sub-delims surface every \
+         peer single-token-shaped typed slot already closes. The peer `:fonte :repo` \
+         axis closes the byte under the same shell-history-expansion / RFC-3986-sub-\
+         delims banner (7d53c68 `!` on `is_git_repo_url`). Express the path as a bare \
+         relative single-token like \"../caixa-teia\" — the sibling-workspace directory \
+         name carries no shell-history-expansion / bang-operator semantic; drop any \
+         `!sudo` / `!!` / `!$` history-expansion trailing paste-from-shell-history \
+         idiom; and drop any trailing English-typography exclamation mark that pasted \
+         from prose.",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellHistoryExpansion {
         nome: String,
         caminho: String,
         byte: u8,
@@ -12012,6 +12181,188 @@ mod tests {
         assert!(
             rendered.contains("command-substitution") || rendered.contains("command substitution"),
             "diagnostic must reference the command-substitution vocabulary: {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_shell_history_expansion() {
+        // The fail-before-pass-after pin for the canonical paste-from-
+        // shell-history footgun on `:caminho`. An author copies a `cd
+        // ../caixa-teia && !sudo make install` one-liner from a quick-
+        // start README, intending the trailing `!sudo` as a shell-
+        // history-expansion reference but the typed slot is itself a
+        // byte-level string parser, not a shell context, so the byte
+        // rides into the value verbatim. Until this arm landed the `!`
+        // byte silently passed every prior `:caminho` cascade arm
+        // (`!` isn't `\` / `<` / `>` / `|` / `;` / `&` / backtick /
+        // `*` / `?` / `(` / `)` / `{` / `}` / `[` / `]` / `'` / `"` /
+        // `#` / `%` / `$`); bash with the default `histexpand` mode
+        // rewrites `!command` to the most recent history entry
+        // beginning with `command`, the canonical RCE-class injection
+        // vector when the byte rides into a shell argument executed
+        // under `bash -i` (the operator-notebook interactive shell).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia!sudo".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellHistoryExpansion {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellHistoryExpansion, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "../caixa-teia!sudo");
+        assert_eq!(byte, b'!');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_double_bang_history_reference() {
+        // The symmetric `!!` repeat-prior-command paste idiom (peer with
+        // `validate_rejects_git_fonte_with_repo_carrying_double_bang_history_reference`
+        // on `is_git_repo_url`). Pinned separately from the wrapped
+        // `!command` shape so a future diagnostic-surface change that
+        // only checked the leading or paired-bang position surfaces
+        // here — the per-byte arm fires anywhere `!` appears in the
+        // value, including at consecutive positions in the middle.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo!!/bar".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistoryExpansion { byte: b'!', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_trailing_enthusiasm_bang() {
+        // The English-typography enthusiasm-form paste-from-prose
+        // idiom: an author writes `:caminho "../caixa-teia!"`
+        // expecting the substrate to coerce it to a kebab-case slug.
+        // Pinned separately from the `!<word>` shell-history shape so
+        // the gate's rationale extends to the paste-from-prose surface
+        // (the same rationale the peer `is_git_repo_url` bang arm at
+        // 7d53c68 covers). None of the prior shell-metachar arms cover
+        // this shape (no `!<word>` reference and no `!!` repeat), so
+        // the arm is the sole gate on the shape.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia!".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistoryExpansion { byte: b'!', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_bang() {
+        // The positive-control pin (peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_dollar`
+        // on the immediate-predecessor arm): the gate targets only
+        // `!`, never adjacent printable ASCII or POSIX-valid bytes.
+        // A relative POSIX path carrying dashes / dots / slashes /
+        // digits (`"../caixa-teia/sub-dir.v2"`) must continue to
+        // validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_variable_expansion_fires_before_shell_history_expansion() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both embedded `$` and `!` (`"../foo$HOME/bar!sudo"`
+        // — the canonical "I pasted a `$HOME`-templated path adjacent
+        // to a trailing `!sudo` history-expansion") routes through
+        // `FonteCaminhoShellVariableExpansion` not
+        // `FonteCaminhoShellHistoryExpansion`. The shell-variable-
+        // expansion byte is the more semantic-locating axis on
+        // probe-as-both values (the paste-from-CI-manifest-with-`$VAR`-
+        // template shape is the load-bearing self-locating edit);
+        // same cascade discipline every prior `:caminho` arm
+        // establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo$HOME/bar!sudo".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellVariableExpansion { byte: b'$', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_history_expansion_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value carrying
+        // both embedded `!` and a trailing `/` (`"../caixa-teia!sudo/"`
+        // — the canonical "I tab-completed a `!sudo`-carrying path")
+        // routes through `FonteCaminhoShellHistoryExpansion` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-history-
+        // expansion byte is the more semantic-locating axis on probe-
+        // as-both values (an author who removes the `!sudo` history
+        // reference is likely to also tab-strip the trailing separator).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia!sudo/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellHistoryExpansion { byte: b'!', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_history_expansion_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_variable_expansion_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the immediate-predecessor arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-history-expansion / bang-operator footgun
+        // explicitly so a `feira lint` run can render the diagnostic
+        // without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia!sudo".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("../caixa-teia!sudo"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x21"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("history-expansion") || rendered.contains("history expansion"),
+            "diagnostic must name the shell-history-expansion footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("bang"),
+            "diagnostic must reference the bang-operator vocabulary: {rendered:?}",
         );
     }
 
