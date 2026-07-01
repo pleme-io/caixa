@@ -1422,6 +1422,108 @@ impl DepSource {
                 });
             }
         }
+        // Reproducibility gate's shell-quote-grouping arm. The 986963b
+        // shell-bracket-expansion arm closes `[` / `]`; `'` (`0x27`) and
+        // `"` (`0x22`) are the orthogonal POSIX shell-string-literal
+        // delimiter pair — same paste-from-shell-prompt footgun class,
+        // different syntactic surface. Every POSIX shell (sh / bash /
+        // zsh / dash / ksh / fish / nushell) lexes the pair as the
+        // string-literal quoting operator: `'…'` is the strong
+        // (no-expansion) single-quoted string and `"…"` is the weak
+        // (variable-/command-substitution-preserving) double-quoted
+        // string — the canonical `cd '../caixa-teia'` shell-history
+        // idiom every path-with-embedded-whitespace paste block carries,
+        // and the symmetric `git clone "$REPO"` weak-quoted CI-manifest
+        // shape. Beyond shell, the two bytes carry the JSON string-literal
+        // delimiter (`"key": "value"` — the canonical paste-from-JSON-
+        // config cross-idiom-leak vector), the YAML double-quoted +
+        // single-quoted flow-scalar delimiters (`path: "../caixa-teia"`
+        // — the canonical paste-from-values.yaml / paste-from-K8s-YAML-
+        // manifest cross-idiom leak), the TOML basic + literal string
+        // delimiters (`path = "../caixa-teia"` — the canonical paste-
+        // from-Cargo-manifest cross-idiom-leak vector), the tatara-lisp
+        // string-literal delimiter itself (`(:caminho "../caixa-teia")`
+        // — the canonical "I copied the entire `:caminho "..."` slot
+        // rather than just the string body" author-surface footgun),
+        // and RFC 3986 §2.2's `gen-delims` / `sub-delims` grammar which
+        // excludes both bytes from the `unreserved / pct-encoded /
+        // sub-delims / ":" / "@"` `pchar` production. POSIX
+        // `std::path::Path` treats both bytes as literal path-component
+        // bytes (so `../"caixa-teia"` is one directory named literally
+        // `../"caixa-teia"`, sibling of `.` and `..`).
+        //
+        // A `:caminho "'../caixa-teia'"` (the canonical "I pasted a
+        // `cd '../caixa-teia'` shell-history one-liner whose strong-
+        // quoting preserved the sibling-workspace path verbatim across
+        // the whitespace paste boundary" footgun), `:caminho
+        // "\"../caixa-teia\""` (the symmetric weak-quoted paste-from-
+        // JSON / paste-from-YAML flow-scalar / paste-from-TOML basic-
+        // string / paste-from-tatara-lisp string-literal cross-idiom-
+        // leak shape), or `:caminho "../\"caixa-teia\""` (the embedded-
+        // quote "I pasted a JSON key-value pair fragment into the
+        // middle of the path" idiom) silently passes every prior arm
+        // because `Path::is_absolute` returns false on `..` / `'` /
+        // `"`, `'` / `"` are neither leading-byte sentinels nor
+        // control bytes nor `\` nor `<` / `>` nor `|` nor `;` nor `&`
+        // nor backtick nor `*` / `?` nor `(` / `)` nor `{` / `}` nor
+        // `[` / `]`, and the value's last byte isn't `/`. The resolver
+        // folds the value through `Path::new(caminho).join(<file>)`
+        // looking for a literal `./'../caixa-teia'` subdirectory and
+        // fails at resolve time with a non-self-locating `No such file
+        // or directory` error far from the source caixa.lisp.
+        //
+        // The lacre pipeline embeds the value verbatim in its per-dep
+        // content-address (`conteudo: format!("path:{caminho}")`,
+        // caixa-resolver/src/resolve.rs:189), so a `'` or `"` byte
+        // lands in the BLAKE3 closure and rides downstream as part of
+        // the build's identity into every shell-spawned subprocess
+        // (the caixa-resolver's `git clone` invocation, a future
+        // `feira tofu` shell-out, a future operator-side `nix flake
+        // check` spawn) as the canonical shell-metachar / string-
+        // literal-delimiter surface every peer single-token-shaped
+        // typed slot already closes. The peer `:fonte :repo` axis
+        // closes both bytes under the same shell-quote-grouping /
+        // RFC-3986-sub-delims banner (e7a109f `'` shell-single-quote
+        // + 4267d8b `"` shell-double-quote on `is_git_repo_url`). The
+        // `:caminho` axis was the last typed path-string surface
+        // still admitting these two bytes; this arm closes the gap
+        // so the substrate-wide "no shell-composition metacharacter
+        // anywhere in a typed string slot that flows verbatim into a
+        // shell-spawned subprocess" invariant extends from shell-
+        // bracket-expansion (`[` / `]`) to shell-quote-grouping (`'`
+        // / `"`) on the `:caminho` axis. Together with the peer
+        // JSON / YAML / TOML string-literal delimiters closing at
+        // this arm and the 598b770 `{` / `}` brace-expansion arm
+        // closing the templating-engine-placeholder boundary, the
+        // typed `:caminho` accepted set now structurally excludes
+        // the entire cross-config-DSL string-literal / templating
+        // paste-from-aligned-manifest cross-idiom-leak surface that
+        // would silently round-trip through any downstream JSON /
+        // YAML / TOML / HCL / tatara-lisp parsing layer.
+        //
+        // The arm fires AFTER the shell-bracket-expansion arm because
+        // the prior arm's `[` / `]` shape is the more semantic-
+        // locating axis on values that probe as both (`"../[a-z]'x'"`
+        // carries both `[` and `'` — the glob-character-class
+        // expansion is the load-bearing root-cause edit, so
+        // `FonteCaminhoShellBracketExpansion` wins; same cascade
+        // discipline every prior `:caminho` arm establishes). The arm
+        // fires BEFORE the trailing-`/` arm because the embedded
+        // quote-grouping byte is the more semantic-locating axis on
+        // probe-as-both values (`"../'caixa-teia'/"` ends in `/` but
+        // the load-bearing diagnostic is the embedded `'` shell-
+        // string-literal metachar — the trailing `/` is the secondary
+        // observation, and an author who removes the `'` is likely to
+        // also tab-strip the trailing separator).
+        for &b in caminho.as_bytes() {
+            if b == b'\'' || b == b'"' {
+                return Err(DepError::FonteCaminhoShellQuoteGrouping {
+                    nome: nome.to_string(),
+                    caminho: caminho.to_string(),
+                    byte: b,
+                });
+            }
+        }
         // Reproducibility gate's trailing-`/` arm. The b94fd83 absolute arm
         // closes the leading-`/` host-layout-leak; the embedded-control-byte
         // arm closes any byte-in-the-`0x00..=0x1F` / `0x7F` range; the
@@ -2291,6 +2393,54 @@ pub enum DepError {
         ch = *byte as char
     )]
     FonteCaminhoShellBracketExpansion {
+        nome: String,
+        caminho: String,
+        byte: u8,
+    },
+    #[error(
+        ":deps entry {nome:?} :fonte (:tipo path …) :caminho {caminho:?} contains shell-\
+         quote-grouping / cross-config-DSL string-literal-delimiter metacharacter \
+         0x{byte:02x} `{ch}` (every POSIX shell — sh / bash / zsh / dash / ksh / fish / \
+         nushell — lexes `'` as the strong string-literal delimiter (`'…'` — no expansion) \
+         and `\"` as the weak string-literal delimiter (`\"…\"` — variable- / command-\
+         substitution-preserving); the canonical `cd '../caixa-teia'` shell-history idiom \
+         every path-with-embedded-whitespace paste block carries and the symmetric \
+         `git clone \"$REPO\"` weak-quoted CI-manifest shape both leak the pair verbatim. \
+         Beyond shell the pair is the JSON string-literal delimiter (`\"key\": \"value\"` — \
+         the canonical paste-from-JSON-config cross-idiom-leak vector), the YAML double- \
+         and single-quoted flow-scalar delimiter (`path: \"../caixa-teia\"` — the canonical \
+         paste-from-values.yaml / paste-from-K8s-YAML-manifest cross-idiom leak), the TOML \
+         basic and literal string delimiter (`path = \"../caixa-teia\"` — the canonical \
+         paste-from-Cargo-manifest cross-idiom leak), the tatara-lisp string-literal \
+         delimiter itself (`(:caminho \"../caixa-teia\")` — the canonical \"I copied the \
+         entire `:caminho \"...\"` slot rather than just the string body\" author-surface \
+         footgun), and RFC 3986 §2.2's `gen-delims` / `sub-delims` grammar which excludes \
+         both bytes from the `pchar = unreserved / pct-encoded / sub-delims / \":\" / \"@\"` \
+         production. POSIX `std::path::Path` treats the byte as a literal path-component \
+         byte, so a `:caminho \"'../caixa-teia'\"` (the canonical paste-from-shell-history \
+         strong-quoted sibling-workspace path footgun) or `:caminho \"\\\"../caixa-teia\\\"\"` \
+         (the symmetric weak-quoted paste-from-JSON / paste-from-YAML flow-scalar / paste-\
+         from-TOML basic-string / paste-from-tatara-lisp string-literal cross-idiom-leak \
+         shape) silently passes every prior arm and the resolver folds the value through \
+         `Path::new(caminho).join(<file>)` looking for a literal subdirectory and fails at \
+         resolve time with a non-self-locating `No such file or directory` error far from \
+         the source caixa.lisp. The lacre pipeline embeds the value verbatim in its per-dep \
+         content-address `path:{caminho}` at caixa-resolver/src/resolve.rs:189, so the byte \
+         lands in the BLAKE3 closure and rides into every shell-spawned subprocess (the \
+         resolver's `git clone`, a future `feira tofu` shell-out, a future operator-side \
+         `nix` spawn) as the canonical shell-metachar / string-literal-delimiter surface \
+         every peer single-token-shaped typed slot already closes. The peer `:fonte :repo` \
+         axis closes both bytes under the same shell-quote-grouping / RFC-3986-sub-delims \
+         banner (e7a109f `'` shell-single-quote + 4267d8b `\"` shell-double-quote on \
+         `is_git_repo_url`). Express the path as a bare relative single-token like \
+         \"../caixa-teia\" — the sibling-workspace directory name carries no shell-quote-\
+         grouping / string-literal-delimiter semantic; strip the outer quote pair from the \
+         paste (the tatara-lisp `:caminho \"...\"` slot already carries the string-literal \
+         quoting on the outer syntactic layer, so an inner quote pair would nest and \
+         desugar to a broken layer).",
+        ch = *byte as char
+    )]
+    FonteCaminhoShellQuoteGrouping {
         nome: String,
         caminho: String,
         byte: u8,
@@ -9509,6 +9659,465 @@ mod tests {
             rendered.contains("glob-character-class"),
             "diagnostic must reference the POSIX glob-character-class vocabulary: \
              {rendered:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_single_quote_grouping() {
+        // The canonical paste-from-shell-history strong-quoted
+        // sibling-workspace-path footgun: an author copies a
+        // `cd '../caixa-teia'` shell-history one-liner whose strong-
+        // quoting preserved the path across a whitespace paste
+        // boundary and silently passed every prior arm
+        // (`Path::is_absolute` false on `'..`, no control bytes, no
+        // `\`, no `<` / `>`, no `|`, no `;`, no `&`, no backtick, no
+        // `*` / `?`, no `(` / `)`, no `{` / `}`, no `[` / `]`,
+        // doesn't end in `/`; the leading-`$` f4efe9c
+        // `FonteCaminhoVarExpansion` arm doesn't fire because the
+        // value starts with `'` not `$`). The lacre embedded the
+        // value verbatim, the resolver folded it through
+        // `Path::join` looking for a literal `./'../caixa-teia'`
+        // subdirectory, and the failure surfaced at resolve time
+        // with a non-self-locating `No such file or directory`
+        // error. The new arm moves the rejection to validate time
+        // and names the offending dep + caminho + byte verbatim.
+        // The arm fires on the first `'` encountered.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "'../caixa-teia'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellQuoteGrouping {
+            nome,
+            caminho,
+            byte,
+        } = err
+        else {
+            panic!("expected FonteCaminhoShellQuoteGrouping, got {err:?}");
+        };
+        assert_eq!(nome, "caixa-teia");
+        assert_eq!(caminho, "'../caixa-teia'");
+        assert_eq!(byte, b'\'');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_double_quote_grouping() {
+        // The symmetric weak-quoted paste shape (`"\"../caixa-teia\""`
+        // — the canonical paste-from-JSON-config / paste-from-YAML-
+        // flow-scalar / paste-from-TOML-basic-string / paste-from-
+        // tatara-lisp-string-literal cross-idiom leak). Pinned
+        // separately from the single-quote shape so the gate's
+        // contract is "any `'` or `\"` anywhere", not single-byte
+        // coverage. Mirrors the peer
+        // `validate_rejects_path_fonte_with_caminho_carrying_close_bracket`
+        // shape on the immediate-predecessor
+        // `FonteCaminhoShellBracketExpansion` arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "\"../caixa-teia\"".into(),
+        });
+        let err = d.validate().unwrap_err();
+        let DepError::FonteCaminhoShellQuoteGrouping { byte, .. } = err else {
+            panic!("expected FonteCaminhoShellQuoteGrouping, got {err:?}");
+        };
+        assert_eq!(byte, b'"');
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_embedded_double_quote() {
+        // Embedded-position `"` shape (`"../\"caixa-teia\""` — the
+        // canonical "I pasted a JSON key-value pair fragment into
+        // the middle of the path" idiom). Pinned separately from
+        // the leading-byte shape so the gate covers every position,
+        // not only leading.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../\"caixa-teia\"".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellQuoteGrouping { byte: b'"', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_rejects_path_fonte_with_caminho_carrying_yaml_flow_scalar_paste() {
+        // The canonical YAML double-quoted flow-scalar cross-idiom
+        // leak shape (`"path: \"../caixa-teia\""` — the "I copied a
+        // `path: \"...\"` YAML flow-scalar entry out of an aligned
+        // values.yaml / K8s manifest and dropped it verbatim into
+        // the `:caminho` slot including the `path: ` key prefix"
+        // paste-idiom). The arm fires on the first `"` encountered;
+        // pinned so the gate's coverage extends from the bare-quote
+        // paste shape to the aligned-YAML-manifest cross-idiom-leak
+        // shape.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "path: \"../caixa-teia\"".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellQuoteGrouping { byte: b'"', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn validate_accepts_path_fonte_with_caminho_carrying_no_quote_grouping() {
+        // The positive-control pin: the gate targets only `'` /
+        // `"`, never adjacent printable ASCII or POSIX-valid bytes.
+        // The canonical relative POSIX path (`"../caixa-teia"`) and
+        // a nested deeply-pathed variant with adjacent printable
+        // punctuation (`"../caixa-teia/sub-dir.v2"`) must continue
+        // to validate cleanly so the gate doesn't widen to a "no
+        // printable punctuation anywhere" sweep that would defeat
+        // the entire path-fonte author surface. Peer with
+        // `validate_accepts_path_fonte_with_caminho_carrying_no_bracket_expansion`
+        // on the immediate-predecessor arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/sub-dir.v2".into(),
+        });
+        d.validate().unwrap();
+    }
+
+    #[test]
+    fn fonte_caminho_shell_bracket_expansion_fires_before_shell_quote_grouping() {
+        // Cascade pin on the immediate-predecessor arm: a value
+        // carrying both `[` and `'` (`"../[a-z]'x'"` — the canonical
+        // "I pasted a glob-character-class followed by a strong-
+        // quoted literal tail" footgun) routes through
+        // `FonteCaminhoShellBracketExpansion` not
+        // `FonteCaminhoShellQuoteGrouping`. The glob-character-class
+        // expansion is the load-bearing root-cause edit on every
+        // probe-as-both value; same cascade discipline every prior
+        // `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../[a-z]'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBracketExpansion { byte: b'[', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_brace_expansion_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-brace-expansion arm: a
+        // value carrying both `{` and `'` (`"../{a,b}'x'"` — the
+        // canonical "I pasted a brace-expansion fan followed by a
+        // strong-quoted literal tail" footgun) routes through
+        // `FonteCaminhoShellBraceExpansion` not
+        // `FonteCaminhoShellQuoteGrouping`. The brace-expansion fan
+        // is the load-bearing root-cause edit on every probe-as-
+        // both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../{a,b}'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellBraceExpansion { byte: b'{', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_subshell_grouping_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-subshell-grouping arm:
+        // a value carrying both `(` and `'` (`"../(cd foo)/'x'"` —
+        // the canonical "I pasted a subshell-grouping followed by
+        // a strong-quoted literal tail" footgun) routes through
+        // `FonteCaminhoShellSubshellGrouping` not
+        // `FonteCaminhoShellQuoteGrouping`. The modern Bourne
+        // `$(<cmd>)` command-substitution boundary is the load-
+        // bearing axis on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../(cd foo)/'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellSubshellGrouping { byte: b'(', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_glob_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-glob arm: a value
+        // carrying both `*` and `'` (`"../caixa-teia/*'x'"` — the
+        // canonical "I pasted a `*` unbounded pathname-expansion
+        // followed by a strong-quoted literal tail" footgun) routes
+        // through `FonteCaminhoShellGlob` not
+        // `FonteCaminhoShellQuoteGrouping`. The unbounded pathname-
+        // expansion sentinel is the load-bearing root-cause edit
+        // on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia/*'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellGlob { byte: b'*', .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_command_substitution_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-command-substitution
+        // arm: a value carrying both a backtick and `'`
+        // (``"../`whoami`/'x'"`` — the canonical "I pasted a
+        // legacy-backtick command-substitution followed by a
+        // strong-quoted literal tail" footgun) routes through
+        // `FonteCaminhoShellCommandSubstitution` not
+        // `FonteCaminhoShellQuoteGrouping`. The CWE-78 shell-
+        // command-injection vector is the load-bearing root-cause
+        // edit on every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../`whoami`/'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellCommandSubstitution { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_background_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-background arm: a value
+        // carrying both `&` and `'` (`"../caixa-teia & 'x'"` — the
+        // canonical "I pasted a `cmd & 'literal'` background-launch
+        // + quote chain" footgun) routes through
+        // `FonteCaminhoShellBackground` not
+        // `FonteCaminhoShellQuoteGrouping`. The background-launch
+        // tail is the load-bearing root-cause edit on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia & 'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellBackground { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_semicolon_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-semicolon arm: a value
+        // carrying both `;` and `'` (`"../caixa-teia; 'x'"` — the
+        // canonical sequential-cleanup + quote paste idiom) routes
+        // through `FonteCaminhoShellSemicolon` not
+        // `FonteCaminhoShellQuoteGrouping`. The sequential-command-
+        // separator paste is the load-bearing root-cause edit on
+        // every probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia; 'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellSemicolon { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_pipe_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-pipe arm: a value
+        // carrying both `|` and `'` (`"../caixa-teia | 'x'"` — the
+        // canonical pipeline-to-quoted-literal paste idiom) routes
+        // through `FonteCaminhoShellPipe` not
+        // `FonteCaminhoShellQuoteGrouping`. The pipeline-tail paste
+        // is the load-bearing root-cause edit on every probe-as-
+        // both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia | 'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoShellPipe { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_redirection_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream shell-redirection arm: a
+        // value carrying both `>` and `'` (`"../caixa-teia>log 'x'"`
+        // — the canonical "I pasted a `cmd > log 'literal'`
+        // redirect-plus-quote chain" footgun) routes through
+        // `FonteCaminhoShellRedirection` not
+        // `FonteCaminhoShellQuoteGrouping`. The input/output
+        // redirection metachar carries the more self-locating
+        // `byte` payload, so the prior arm wins on every probe-as-
+        // both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../caixa-teia>log 'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellRedirection { byte: b'>', .. }
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_backslash_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream backslash arm: a value
+        // carrying both `\` and `'` (`"..\caixa-teia\'x'"` — the
+        // canonical "I pasted a Windows-shell `cd ..\path\'literal'`
+        // chain" footgun) routes through `FonteCaminhoBackslash`
+        // not `FonteCaminhoShellQuoteGrouping`. The cross-host-OS-
+        // separator divergence is the load-bearing axis on every
+        // probe-as-both value.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "..\\caixa-teia\\'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoBackslash { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_control_char_fires_before_shell_quote_grouping() {
+        // Cascade pin on the embedded-control-byte arm: a value
+        // carrying both a control byte and `'` (`"../foo\n'x'"` —
+        // the canonical paste-from-multiline-doc footgun where a
+        // newline landed mid-caminho between two paste fragments)
+        // routes through `FonteCaminhoControlChar` not
+        // `FonteCaminhoShellQuoteGrouping`. The POSIX-syscall-
+        // rejected-byte / NUL-`CString::new`-fail diagnostic is
+        // the load-bearing axis on every value that probes
+        // positive for both — mirrors the cascade discipline on
+        // every prior arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../foo\n'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoControlChar { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_absolute_fires_before_shell_quote_grouping() {
+        // Cascade pin on the load-bearing leading-byte arm: a
+        // leading `/` value with embedded `'` (`"/etc/'x'"`) routes
+        // through `FonteCaminhoAbsolute` not
+        // `FonteCaminhoShellQuoteGrouping` — the host-layout-leak
+        // diagnostic is the load-bearing axis, the quote byte is
+        // the secondary observation. Same precedence logic as every
+        // prior leading-byte arm.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "/etc/'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoAbsolute { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_var_expansion_fires_before_shell_quote_grouping() {
+        // Cascade pin on the upstream leading-`$` var-expansion
+        // arm: a value carrying both a leading `$` and a `'`
+        // (`"$DIR/'x'"` — the canonical "I pasted a `$DIR` shell-
+        // variable + quoted literal at the head of a sibling-
+        // workspace path" footgun) routes through
+        // `FonteCaminhoVarExpansion` not
+        // `FonteCaminhoShellQuoteGrouping`. The leading-byte
+        // shell-variable-expansion is the more self-locating
+        // diagnostic on values that probe as both — same
+        // load-bearing-leading-byte cascade discipline every
+        // prior `:caminho` arm establishes.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "$DIR/'x'".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(err, DepError::FonteCaminhoVarExpansion { .. }),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_quote_grouping_fires_before_trailing_slash() {
+        // Cascade pin on the immediate-successor arm: a value
+        // carrying both `'` and a trailing `/` (`"../'caixa-teia'/"`
+        // — the canonical "I tab-completed a path whose strong-
+        // quoted body already carried the quoting from a shell-
+        // history paste" footgun) routes through
+        // `FonteCaminhoShellQuoteGrouping` not
+        // `FonteCaminhoTrailingSlash`. The embedded shell-metachar
+        // is the more semantic-locating axis (an author who removes
+        // the `'` typically also drops the trailing separator since
+        // both are paste-from-shell artifacts).
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "../'caixa-teia'/".into(),
+        });
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellQuoteGrouping { byte: b'\'', .. },
+            ),
+            "got {err:?}",
+        );
+    }
+
+    #[test]
+    fn fonte_caminho_shell_quote_grouping_diagnostic_carries_offending_dep_caminho_and_byte() {
+        // Diagnostic-shape pin (peer with
+        // `fonte_caminho_shell_bracket_expansion_diagnostic_carries_offending_dep_caminho_and_byte`
+        // on the closest two-byte peer arm): the error's Display
+        // surfaces the offending `:nome`, the offending `:caminho`
+        // verbatim, the offending byte's hex / character form, and
+        // names the shell-quote-grouping / cross-config-DSL-string-
+        // literal-delimiter footgun explicitly so a `feira lint`
+        // run can render the diagnostic without re-parsing.
+        let d = dep_with_fonte(DepSource::Path {
+            caminho: "'../caixa-teia'".into(),
+        });
+        let rendered = d.validate().unwrap_err().to_string();
+        assert!(
+            rendered.contains("caixa-teia"),
+            "diagnostic must name the offending dep: {rendered}",
+        );
+        assert!(
+            rendered.contains("'../caixa-teia'"),
+            "diagnostic must quote the offending caminho verbatim: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("0x27"),
+            "diagnostic must surface the offending byte hex: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("quote-grouping"),
+            "diagnostic must name the shell-quote-grouping footgun: {rendered:?}",
+        );
+        assert!(
+            rendered.contains("string-literal"),
+            "diagnostic must reference the cross-config-DSL string-literal-delimiter \
+             vocabulary: {rendered:?}",
         );
     }
 
