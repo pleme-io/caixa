@@ -601,12 +601,15 @@ pub const WIT_IDENT_MAX_LEN: usize = 128;
 ///   - an optional `/`-separated interface suffix (one or more
 ///     segments — the WIT grammar allows `('/' id)+` after the package);
 ///   - an optional `@<version>` suffix (one trailing `@` only; the
-///     version body is a SemVer 2.0.0 identifier — non-empty, restricted
-///     to the accepted set `[0-9A-Za-z.\-+]` — the digits + letters that
-///     make up the `major.minor.patch` numeric core, `.` segment
-///     separators, `-` for the pre-release suffix, `+` for the
-///     build-metadata suffix; the WIT IDL binds `simple-version` to
-///     SemVer verbatim so every other byte fails the upstream WIT
+///     version body is a structurally valid SemVer 2.0.0 version —
+///     non-empty, restricted to the accepted set `[0-9A-Za-z.\-+]`, AND
+///     round-trippable through [`semver::Version::parse`]: three-part
+///     `major.minor.patch` numeric core mandatory (two-part `1.0` and
+///     four-part `1.0.0.0` reject), no leading zeros in numeric
+///     identifiers (`01.0.0` rejects), no empty pre-release / build-
+///     metadata identifiers (`1.0.0-` and `1.0.0-.rc1` reject); the WIT
+///     IDL binds `simple-version` to SemVer verbatim so every byte-set-
+///     valid but shape-invalid version body fails the upstream WIT
 ///     parser at consume time);
 ///   - every identifier segment (namespace, package, each interface)
 ///     is a lowercase kebab-case ASCII identifier: `[a-z]([a-z0-9]|-)*`,
@@ -653,10 +656,10 @@ pub const WIT_IDENT_MAX_LEN: usize = 128;
 /// # Errors
 ///
 /// Returns the parser-shaped reason naming the specific violation
-/// (length / separator / character-class / kebab-shape), without
-/// wrapping in any error variant — every caller maps the same
-/// `String` into its own typed `*Invalid { <axis>, reason }` enum
-/// variant.
+/// (length / separator / character-class / kebab-shape / SemVer 2.0.0
+/// structural invariant), without wrapping in any error variant —
+/// every caller maps the same `String` into its own typed `*Invalid
+/// { <axis>, reason }` enum variant.
 pub fn is_wit_world_ref(s: &str) -> Result<(), String> {
     if s.is_empty() {
         return Err("must not be empty".to_string());
@@ -781,6 +784,69 @@ pub fn is_wit_world_ref(s: &str) -> Result<(), String> {
                     ch = b as char
                 ));
             }
+        }
+        // Structural SemVer 2.0.0 parse on the `@<version>` body: every
+        // byte-set-valid version body (`[0-9A-Za-z.\-+]`, the accepted-
+        // set arm above) is not necessarily a *structurally* valid
+        // SemVer version. SemVer 2.0.0 imposes shape rules on top of the
+        // byte set — three-part `major.minor.patch` mandatory (two-part
+        // `1.0` and four-part `1.0.0.0` reject), no leading zeros in
+        // numeric identifiers (`01.0.0` rejects, `10.0.0` accepts,
+        // `1.0.0-01` rejects while `1.0.0-alpha01` accepts because the
+        // pre-release identifier is alphanumeric not numeric), no empty
+        // identifiers (`1.0.0-` and `1.0.0+` reject; `1.0.0-.rc1` and
+        // `1.0.0-alpha..beta` reject; `1.0.0+.abc` and
+        // `1.0.0+build..42` reject). Until this gate landed the byte-set
+        // arm above closed only the per-byte accepted set, and every
+        // *shape*-invalid version body — the canonical author-side
+        // paste footguns (`wasi:http/proxy@1.0` two-part-numeric-core
+        // paste from a Node.js `"engines"` field, `wasi:http/proxy@1`
+        // one-part paste from a Docker `:v1` tag, `wasi:http/proxy@v0.2.0`
+        // `v`-prefixed git-tag paste that strayed into the version body,
+        // `wasi:http/proxy@01.0.0` mistaken zero-padded major from a
+        // date-based version scheme, `wasi:http/proxy@1.0.0.0` four-part
+        // paste from a Microsoft / Java build-number convention,
+        // `wasi:http/proxy@1.0.0-` half-typed pre-release the author
+        // started and left dangling, `wasi:http/proxy@1.0.0+` peer for
+        // build-metadata) rode through the byte-set gate and failed at
+        // WIT-parse time (the WIT IDL's `simple-version` binds through
+        // the `semver` crate at consume time — see WebAssembly Component
+        // Model design doc `WIT.md#versions`, and both the M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-
+        // contract WIT validator (MESH-COMPOSITION §III.2 #5) and the
+        // future per-edge WIT registry resolver strict-parse the
+        // `@<version>` body through the same crate). Failure surfaced
+        // far from the source `caixa.lisp` with a bare `semver::Error`
+        // that names the specific structural violation but not the
+        // offending `:contratos :wit` slot. Lifting the parse to caixa-
+        // build time closes the structural axis: every validated
+        // `@<version>` body past this call is byte-for-byte round-
+        // trippable through [`semver::Version::parse`] without re-
+        // checking at any downstream WIT-consumer layer.
+        //
+        // Thin wrapper around [`semver::Version::parse`] — the same
+        // parser [`crate::Caixa::validate_versao`] (the peer top-level
+        // `:versao` axis) and [`crate::CaixaVersion::parse`] consume,
+        // so the accepted set is structurally identical across every
+        // `:versao`-shaped axis the substrate carries. Maps the
+        // `semver::Error` reason verbatim into a self-locating
+        // diagnostic naming the offending version body + the SemVer
+        // 2.0.0 canonical shape the author intended, so the failure
+        // is grep-locatable in the `caixa.lisp` (search for
+        // `:wit "…@<value>"`) and fixable in one edit. Same top-and-
+        // bottom-edge discipline the peer typed-codec axes carry —
+        // every typed slot whose accepted set the substrate reads is
+        // strict-parsed against the downstream consumer's canonical
+        // parser at build time, not at apply time.
+        if let Err(e) = semver::Version::parse(ver) {
+            return Err(format!(
+                "version suffix {ver:?} is not a structurally valid SemVer 2.0.0 \
+                 version: {e} (the WIT IDL binds `@<version>` to SemVer 2.0.0 \
+                 verbatim — three-part `major.minor.patch` numeric core, no \
+                 leading zeros in numeric identifiers, no empty pre-release / \
+                 build-metadata identifiers; every other shape fails the \
+                 upstream WIT parser at consume time)"
+            ));
         }
     }
     // Then split the head on `:` — exactly one separator, splitting the
@@ -9396,6 +9462,52 @@ mod tests {
             ("wasi:http/proxy@0.2.0!alpha", "invalid character"),
             ("wasi:http/proxy@0.2.0(rc1)", "invalid character"),
             ("wasi:http/proxy@~0.2.0", "invalid character"),
+            // Version body byte-set-valid but *structurally* invalid
+            // SemVer 2.0.0 — the canonical author-side paste footguns
+            // the byte-set gate above cannot catch. Every entry passes
+            // the accepted-set arm `[0-9A-Za-z.\-+]` verbatim and
+            // fails only at [`semver::Version::parse`]: two-part
+            // numeric core (`@1.0` — Node.js `"engines"` field paste),
+            // one-part numeric core (`@1` — Docker `:v1` tag paste),
+            // four-part numeric core (`@1.0.0.0` — Microsoft / Java
+            // build-number convention), `v`-prefixed version body
+            // (`@v0.2.0` — git-tag-shape paste), leading-zero major
+            // (`@01.0.0` — mistaken zero-padded date-based version),
+            // trailing hyphen with empty pre-release (`@1.0.0-` —
+            // half-typed pre-release), trailing plus with empty
+            // build-metadata (`@1.0.0+` — peer for build-metadata),
+            // empty pre-release identifier between dots
+            // (`@1.0.0-.rc1` — accidental leading `.`), empty build-
+            // metadata identifier between dots (`@1.0.0+.abc` — peer
+            // for build-metadata), numeric pre-release identifier
+            // with leading zero (`@1.0.0-01` — SemVer 2.0.0 rule 9),
+            // consecutive dots inside pre-release (`@1.0.0-alpha..beta`).
+            // Each surfaces the `structurally valid SemVer 2.0.0`
+            // reason substring so the diagnostic wording is pinned
+            // alongside every peer structural rejection.
+            ("wasi:http/proxy@1.0", "structurally valid SemVer 2.0.0"),
+            ("wasi:http/proxy@1", "structurally valid SemVer 2.0.0"),
+            ("wasi:http/proxy@1.0.0.0", "structurally valid SemVer 2.0.0"),
+            ("wasi:http/proxy@v0.2.0", "structurally valid SemVer 2.0.0"),
+            ("wasi:http/proxy@01.0.0", "structurally valid SemVer 2.0.0"),
+            ("wasi:http/proxy@1.0.0-", "structurally valid SemVer 2.0.0"),
+            ("wasi:http/proxy@1.0.0+", "structurally valid SemVer 2.0.0"),
+            (
+                "wasi:http/proxy@1.0.0-.rc1",
+                "structurally valid SemVer 2.0.0",
+            ),
+            (
+                "wasi:http/proxy@1.0.0+.abc",
+                "structurally valid SemVer 2.0.0",
+            ),
+            (
+                "wasi:http/proxy@1.0.0-01",
+                "structurally valid SemVer 2.0.0",
+            ),
+            (
+                "wasi:http/proxy@1.0.0-alpha..beta",
+                "structurally valid SemVer 2.0.0",
+            ),
         ] {
             let err = is_wit_world_ref(s)
                 .err()
