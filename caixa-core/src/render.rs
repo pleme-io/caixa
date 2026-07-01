@@ -222,6 +222,58 @@ pub fn require_single_servico(caixa: &Caixa) -> Result<(), ServicoCountMismatch>
     }
 }
 
+/// Predicate: find the first ASCII whitespace byte in `s`, or `None` if
+/// none of the string's bytes match `u8::is_ascii_whitespace`.
+///
+/// The canonical drift class this closes across every typed-magnitude
+/// codec in caixa-core (`limits::parse_byte_size` backing
+/// `:limits :memory`, `limits::parse_duration` backing `:limits
+/// :wall-clock`, `limits::parse_millicores` backing `:limits :cpu`,
+/// `supervisor::duration_codec::parse` backing `:supervisor
+/// :restart-window` / `:politicas :timeout` / `:politicas
+/// :circuit-breaker :window`, and `aplicacao::rate_limit_codec::parse`
+/// backing `:politicas :rate-limit`) is the ASCII subset of Unicode
+/// `White_Space`: space (`0x20`), tab (`0x09`), LF (`0x0A`), FF
+/// (`0x0C`), CR (`0x0D`) — the five WhatWG-conformant "ASCII whitespace"
+/// bytes (deliberately narrower than POSIX's `[:space:]` which also
+/// admits VT `0x0B`). Every downstream YAML / JSON / TOML parser can
+/// feed any of these bytes through a quoted-scalar value verbatim, so
+/// a paste-from-shell-history `"500m "` (trailing space), a
+/// paste-from-aligned-doc `" 64MiB"` (leading space from YAML-quoted-
+/// plain-scalar alignment), a paste-from-typography `"30 s"`
+/// (whitespace between magnitude and unit), a paste-from-indented-doc
+/// `"\t100/s"` (YAML-block-scalar tab byte), or a multi-line-paste
+/// `"30s\n"` (trailing LF) all survive the top-level `s.trim()`
+/// discipline and yield the same typed value at each codec — but
+/// serde round-trips to a *different* canonical form on the next
+/// emit, breaking the THEORY.md Part V render-determinism contract
+/// every typed slot carries.
+///
+/// Peer of [`find_non_ascii_whitespace_char`] — the two predicates
+/// together partition the full Unicode `White_Space` axis (this one
+/// on the ASCII byte range, its peer on the strictly-complementary
+/// non-ASCII `char` range), and every typed-magnitude codec in
+/// caixa-core calls both back-to-back at parse entry so the codec's
+/// accepted set matches its emitted set on the full axis,
+/// structurally. Same "single lifted source of truth" discipline the
+/// peer non-ASCII arm's 1b75b38 landing pinned: drift between any two
+/// codec sites' ASCII-whitespace-rejection set becomes a single-edit
+/// fix at this predicate rather than five independent scans
+/// diverging over time, and a future stricter classification
+/// (BOM `\u{FEFF}` / ZWSP `\u{200B}` / ZWJ `\u{200D}` — the
+/// "invisible but not `char::is_whitespace`" class that the
+/// deliberate exclusion in `find_non_ascii_whitespace_char` leaves
+/// for a follow-up, if a downstream slot proves those are drift
+/// classes) can extend at this shared site in one edit rather than
+/// five. Peer of [`is_dns_1123_label`] / [`is_gateway_api_http_path`]
+/// / [`is_git_repo_url`] — same "typed-slot's valid set matches its
+/// codec's accepted set, structurally" discipline carried at the
+/// codec layer.
+#[must_use]
+pub fn find_ascii_whitespace_byte(s: &str) -> Option<u8> {
+    s.bytes().find(|b| b.is_ascii_whitespace())
+}
+
 /// Predicate: find the first non-ASCII Unicode-`White_Space` character in
 /// `s`, or `None` if every character lies in the ASCII byte range.
 ///
@@ -12673,6 +12725,78 @@ mod tests {
         let err = is_chart_keyword_shape(&too_long).unwrap_err();
         assert!(err.contains("20"), "got: {err:?}");
         assert!(err.contains("21"), "got: {err:?}");
+    }
+
+    // ── shared predicate: find_ascii_whitespace_byte ──────────────────
+    //
+    // Pins the accepted / rejected set of the lifted ASCII byte-scan
+    // every typed-magnitude codec in caixa-core calls (`parse_byte_size`
+    // / `parse_duration` / `parse_millicores` / shared
+    // `duration_codec` / `rate_limit_codec`). Peer of the non-ASCII
+    // `find_non_ascii_whitespace_char` predicate below — together they
+    // partition the full Unicode `White_Space` axis.
+
+    #[test]
+    fn find_ascii_whitespace_byte_accepts_whitespace_free_strings() {
+        // Complement-side pin: every whitespace-free canonical form
+        // the renderers emit returns `None`.
+        assert!(find_ascii_whitespace_byte("64MiB").is_none());
+        assert!(find_ascii_whitespace_byte("30s").is_none());
+        assert!(find_ascii_whitespace_byte("500m").is_none());
+        assert!(find_ascii_whitespace_byte("100/s").is_none());
+        assert!(find_ascii_whitespace_byte("").is_none());
+        assert!(find_ascii_whitespace_byte("abcdef0123-_").is_none());
+        // Non-whitespace ASCII bytes near the whitespace range stay
+        // accepted (the predicate must not over-fire on peer control
+        // bytes like VT `0x0B` which POSIX admits but WhatWG excludes).
+        assert!(find_ascii_whitespace_byte("\u{0B}64MiB").is_none());
+    }
+
+    #[test]
+    fn find_ascii_whitespace_byte_flags_space() {
+        // Space (`0x20`) — the canonical paste-from-shell-history /
+        // paste-from-aligned-doc drift class.
+        assert_eq!(find_ascii_whitespace_byte(" 64MiB"), Some(0x20));
+        assert_eq!(find_ascii_whitespace_byte("30s "), Some(0x20));
+        assert_eq!(find_ascii_whitespace_byte("100 /s"), Some(0x20));
+    }
+
+    #[test]
+    fn find_ascii_whitespace_byte_flags_tab_lf_ff_cr() {
+        // Tab (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) —
+        // the remaining four bytes in the WhatWG ASCII whitespace
+        // set the predicate covers, verbatim.
+        assert_eq!(find_ascii_whitespace_byte("\t500m"), Some(0x09));
+        assert_eq!(find_ascii_whitespace_byte("30s\n"), Some(0x0A));
+        assert_eq!(find_ascii_whitespace_byte("\x0c64MiB"), Some(0x0C));
+        assert_eq!(find_ascii_whitespace_byte("100/s\r"), Some(0x0D));
+    }
+
+    #[test]
+    fn find_ascii_whitespace_byte_returns_first_match_byte_order() {
+        // The predicate returns the *first* offending byte in scan
+        // order — pinning this so a self-locating codec diagnostic can
+        // report "position 0" / "position N" verbatim without the
+        // predicate ever reordering matches.
+        assert_eq!(find_ascii_whitespace_byte(" \t30s"), Some(0x20));
+        assert_eq!(find_ascii_whitespace_byte("\t 30s"), Some(0x09));
+    }
+
+    #[test]
+    fn find_ascii_whitespace_byte_does_not_flag_non_ascii_whitespace() {
+        // NBSP (`\u{00A0}`), LINE SEPARATOR (`\u{2028}`), IDEOGRAPHIC
+        // SPACE (`\u{3000}`) — none of their UTF-8 bytes match
+        // `u8::is_ascii_whitespace` (NBSP's `0xC2 0xA0`, LINE
+        // SEPARATOR's `0xE2 0x80 0xA8`, IDEOGRAPHIC SPACE's `0xE3
+        // 0x80 0x80` all sit above `0x7F` or well outside the
+        // {`0x09`, `0x0A`, `0x0C`, `0x0D`, `0x20`} set). Pinning this
+        // exclusion so the peer `find_non_ascii_whitespace_char`
+        // predicate remains strictly complementary — the two together
+        // partition the full Unicode `White_Space` axis with zero
+        // overlap.
+        assert!(find_ascii_whitespace_byte("\u{00A0}64MiB").is_none());
+        assert!(find_ascii_whitespace_byte("30s\u{2028}").is_none());
+        assert!(find_ascii_whitespace_byte("64MiB\u{3000}").is_none());
     }
 
     // ── shared predicate: find_non_ascii_whitespace_char ──────────────────

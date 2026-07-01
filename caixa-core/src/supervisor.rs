@@ -804,36 +804,21 @@ pub mod duration_codec {
         // canonical form the author intended, peer with every prior
         // canonical-form-drift arm on this codec.
         //
-        // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
-        // bytes every downstream YAML / JSON / TOML parser can feed
-        // through a quoted-scalar value verbatim — space (`0x20`), tab
-        // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
-        // WhatWG-conformant "ASCII whitespace" set (deliberately
-        // narrower than POSIX's `[:space:]` which also admits VT
-        // `0x0B`). This is the exact byte set the sibling
-        // `crate::aplicacao::rate_limit_codec` (1ad7755, the immediate
-        // predecessor on the whitespace-rejection axis) refuses on the
-        // `:politicas :rate-limit` codec; this gate lifts the same
-        // discipline onto the shared duration codec that backs three
-        // typed-duration slots at once, extending the closed
-        // canonical-form-drift set from
-        // `{fractional, signed, leading-zero}` to
-        // `{fractional, signed, leading-zero, whitespace-anywhere}` on
-        // the shared duration codec.
-        //
-        // Peer with the future whitespace-rejection arms on the two
-        // remaining typed-magnitude codecs the trajectory
-        // acknowledges: `limits::parse_duration` backing
-        // `:limits :wall-clock`, `limits::parse_byte_size` backing
-        // `:limits :memory` — each carries the same
-        // whitespace-tolerance drift today; this gate lands the
-        // discipline on the shared duration codec first because it
-        // is the closest peer on the trajectory to the
-        // `rate_limit_codec` predecessor (both are `caixa-core`
-        // typed-magnitude codecs the M3 `:politicas` axis routes
-        // through, and both close the whitespace-drift class on the
-        // same THEORY.md Part V render-determinism contract).
-        if let Some(b) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+        // Routed through the lifted
+        // [`crate::render::find_ascii_whitespace_byte`] predicate —
+        // the same source of truth the four peer typed-magnitude
+        // codec sites (`limits::parse_byte_size`,
+        // `limits::parse_duration`, `limits::parse_millicores`,
+        // `rate_limit_codec`) share. `u8::is_ascii_whitespace()` at
+        // the predicate covers the five WhatWG-conformant ASCII
+        // whitespace bytes (space, tab, LF, FF, CR); the "single
+        // lifted predicate" discipline the peer non-ASCII arm below
+        // carries on the strictly-complementary Unicode `White_Space`
+        // class extends here to the ASCII byte set as well. Covers
+        // three typed-duration slots at once through the shared
+        // codec: `:supervisor :restart-window`, `:politicas
+        // :timeout`, and `:politicas :circuit-breaker :window`.
+        if let Some(b) = crate::render::find_ascii_whitespace_byte(s) {
             return Err(format!(
                 "duration: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
                  authoring form for the typed duration slots routed through this shared codec \
