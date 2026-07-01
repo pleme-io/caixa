@@ -1955,8 +1955,8 @@ mod tests {
             .iter()
             .map(|d| d.get("kind").and_then(|k| k.as_str()).unwrap().to_string())
             .collect();
-        assert!(kinds.contains(&"Gateway".to_string()));
-        assert!(kinds.contains(&"HTTPRoute".to_string()));
+        assert!(kinds.contains(&GATEWAY_API_KIND_GATEWAY.to_string()));
+        assert!(kinds.contains(&GATEWAY_API_KIND_HTTP_ROUTE.to_string()));
     }
 
     #[test]
@@ -1964,7 +1964,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("Gateway"))
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY))
             .unwrap();
         let listener = gateway
             .get("spec")
@@ -1987,7 +1987,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .unwrap();
         let backend = route
             .get("spec")
@@ -2319,16 +2319,16 @@ mod tests {
             })
             .collect();
         // programs entries don't carry `kind:`; cilium + gateway docs do.
-        assert!(kinds.contains(&"CiliumNetworkPolicy".to_string()));
-        assert!(kinds.contains(&"Gateway".to_string()));
-        assert!(kinds.contains(&"HTTPRoute".to_string()));
+        assert!(kinds.contains(&CILIUM_KIND_NETWORK_POLICY.to_string()));
+        assert!(kinds.contains(&GATEWAY_API_KIND_GATEWAY.to_string()));
+        assert!(kinds.contains(&GATEWAY_API_KIND_HTTP_ROUTE.to_string()));
     }
 
     // ── HTTPRoute :politicas :timeout overlay ────────────────────────────
 
     fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .and_then(|d| d.get("spec"))
             .and_then(|s| s.get("rules"))
             .and_then(|r| r.as_sequence())
@@ -2681,7 +2681,7 @@ mod tests {
 
     fn cnp_ingress_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
-            .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some("CiliumNetworkPolicy"))
+            .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(CILIUM_KIND_NETWORK_POLICY))
             .filter_map(|d| {
                 d.get("spec")
                     .and_then(|s| s.get("ingress"))
