@@ -769,6 +769,84 @@ pub mod duration_codec {
     }
 
     pub(crate) fn parse(s: &str) -> Result<Duration, String> {
+        // Whitespace-rejection arm — peer with the leading-`+` /
+        // fractional-magnitude arm below (`"+30s"`, `"1.5s"`) and the
+        // leading-zero arm below (`"030s"`) on the same canonical-form
+        // render-determinism axis. Until this gate landed the parser
+        // silently tolerated leading / trailing / internal whitespace
+        // via the top-level `s.trim()` at parse entry and the per-part
+        // `num_part.trim()` / `unit.trim()` calls below, so every
+        // whitespace-carrying shape (`" 30s"` — paste-from-aligned-doc
+        // / YAML-quoted-plain-scalar leading-space; `"30s "` —
+        // paste-from-shell-history trailing-space; `"30 s"` —
+        // paste-from-typography whitespace-between-magnitude-and-unit;
+        // `"30\ts"` — peer tab byte between magnitude and unit;
+        // `"30s\n"` — trailing newline from a multi-line paste;
+        // `"\t30s"` — paste-from-indented-doc / YAML-block-scalar tab
+        // byte) parsed to the same `Duration::from_secs(30)` and serde
+        // silently round-tripped to `"30s"` on the next emit (a
+        // *different* canonical string) — breaking the THEORY.md Part V
+        // render-determinism contract on three typed-duration slots at
+        // once (`:supervisor :restart-window`, `:politicas :timeout`,
+        // `:politicas :circuit-breaker :window`) via the shared codec.
+        //
+        // The canonical author shape is `<integer><unit>` (or
+        // `<integer>` for the bare-integer-as-seconds shorthand) with
+        // no whitespace bytes anywhere — every string [`render`] emits
+        // carries none, so the parser's accepted set must match for
+        // serialize / deserialize to round-trip losslessly. This gate
+        // makes the pre-existing `s.trim()` / `num_part.trim()` /
+        // `unit.trim()` calls below strict no-ops on the accepted set
+        // (every byte-position match they would perform is now already
+        // trimmed away by the accepted set itself), while the arm
+        // surfaces every rejected whitespace-carrying shape with a
+        // self-locating diagnostic naming the offending byte and the
+        // canonical form the author intended, peer with every prior
+        // canonical-form-drift arm on this codec.
+        //
+        // `u8::is_ascii_whitespace()` covers the five ASCII whitespace
+        // bytes every downstream YAML / JSON / TOML parser can feed
+        // through a quoted-scalar value verbatim — space (`0x20`), tab
+        // (`0x09`), LF (`0x0A`), FF (`0x0C`), CR (`0x0D`) — the
+        // WhatWG-conformant "ASCII whitespace" set (deliberately
+        // narrower than POSIX's `[:space:]` which also admits VT
+        // `0x0B`). This is the exact byte set the sibling
+        // `crate::aplicacao::rate_limit_codec` (1ad7755, the immediate
+        // predecessor on the whitespace-rejection axis) refuses on the
+        // `:politicas :rate-limit` codec; this gate lifts the same
+        // discipline onto the shared duration codec that backs three
+        // typed-duration slots at once, extending the closed
+        // canonical-form-drift set from
+        // `{fractional, signed, leading-zero}` to
+        // `{fractional, signed, leading-zero, whitespace-anywhere}` on
+        // the shared duration codec.
+        //
+        // Peer with the future whitespace-rejection arms on the two
+        // remaining typed-magnitude codecs the trajectory
+        // acknowledges: `limits::parse_duration` backing
+        // `:limits :wall-clock`, `limits::parse_byte_size` backing
+        // `:limits :memory` — each carries the same
+        // whitespace-tolerance drift today; this gate lands the
+        // discipline on the shared duration codec first because it
+        // is the closest peer on the trajectory to the
+        // `rate_limit_codec` predecessor (both are `caixa-core`
+        // typed-magnitude codecs the M3 `:politicas` axis routes
+        // through, and both close the whitespace-drift class on the
+        // same THEORY.md Part V render-determinism contract).
+        if let Some(b) = s.bytes().find(|b| b.is_ascii_whitespace()) {
+            return Err(format!(
+                "duration: value {s:?} contains whitespace byte 0x{b:02x} — the canonical \
+                 authoring form for the typed duration slots routed through this shared codec \
+                 (`:supervisor :restart-window`, `:politicas :timeout`, \
+                 `:politicas :circuit-breaker :window`) is `<integer><unit>` (e.g. \
+                 `\"30s\"`, `\"500ms\"`, `\"2m\"`, `\"1h\"`) with no whitespace bytes \
+                 anywhere. A whitespace-carrying shape (`\" 30s\"`, `\"30s \"`, `\"30 s\"`, \
+                 `\"\\t30s\"`, `\"30s\\n\"`) round-trips through `render` to a *different* \
+                 canonical form (`\"30s\"`) on first serialize — breaking the THEORY.md \
+                 Part V render-determinism contract every typed slot carries. Strip every \
+                 whitespace byte (write `\"30s\"` verbatim)"
+            ));
+        }
         let s = s.trim();
         let split = s.find(|c: char| c.is_ascii_alphabetic()).unwrap_or(s.len());
         let (num_part, unit) = s.split_at(split);
@@ -2883,5 +2961,115 @@ mod tests {
             "expected leading-zero diagnostic in {msg:?}"
         );
         assert!(msg.contains("\"030\""), "missing magnitude in {msg:?}");
+    }
+
+    #[test]
+    fn parse_rejects_leading_whitespace() {
+        // `" 30s"` — the canonical paste-from-aligned-doc /
+        // paste-from-YAML-quoted-plain-scalar footgun. Before this
+        // gate the top-level `s.trim()` at parse entry silently ate
+        // the leading space and parsed the value to
+        // `Duration::from_secs(30)`, which then round-tripped through
+        // `render` to `"30s"` (a *different* canonical string on the
+        // next emit) — the exact canonical-form-drift class the
+        // leading-`+` / leading-zero arms already close, extended
+        // to the whitespace-byte class. Peer with the sibling
+        // `rate_limit_codec` whitespace-rejection arm (1ad7755) on
+        // the M3 `:politicas` axis.
+        let err = duration_codec::parse(" 30s").unwrap_err();
+        assert!(
+            err.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {err:?}"
+        );
+        assert!(err.contains("0x20"), "missing offending byte in {err:?}");
+        assert!(
+            err.contains("THEORY.md"),
+            "missing render-determinism contract citation in {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_rejects_trailing_whitespace() {
+        // `"30s "` — the canonical shell-history / trailing-space
+        // paste footgun. Before this gate the top-level `s.trim()`
+        // silently ate the trailing space and parsed to
+        // `Duration::from_secs(30)`, round-tripping to `"30s"` on the
+        // next emit — same canonical-form drift as the leading-space
+        // sibling, closed on the same whitespace-byte arm.
+        let err = duration_codec::parse("30s ").unwrap_err();
+        assert!(
+            err.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {err:?}"
+        );
+        assert!(err.contains("0x20"), "missing offending byte in {err:?}");
+    }
+
+    #[test]
+    fn parse_rejects_internal_whitespace_between_magnitude_and_unit() {
+        // `"30 s"` — the canonical typographically-spaced author
+        // shape (the same idiom every prose reference to a duration
+        // renders as, mistakenly retained when the value is pasted
+        // into a codec-shaped slot). Before this gate the per-part
+        // `num_part.trim()` / `unit.trim()` calls silently ate the
+        // whitespace between the magnitude and the unit and parsed
+        // the value to `Duration::from_secs(30)`, round-tripping to
+        // `"30s"` — the codec's *internal* whitespace-tolerance
+        // vector, orthogonal to the leading / trailing surface but
+        // the same canonical-form-drift class. Pins the arm as
+        // strictly stronger than the pre-existing top-level
+        // `s.trim()` behavior: it fires on whitespace anywhere in
+        // the value, not just at the string boundary.
+        let err = duration_codec::parse("30 s").unwrap_err();
+        assert!(
+            err.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {err:?}"
+        );
+        assert!(err.contains("0x20"), "missing offending byte in {err:?}");
+    }
+
+    #[test]
+    fn parse_rejects_tab_byte() {
+        // `"\t30s"` — the canonical paste-from-indented-doc /
+        // paste-from-YAML-block-scalar footgun where a tab byte leads
+        // the magnitude. Pins that the gate covers tab (`0x09`) as
+        // well as space (`0x20`) — both are `u8::is_ascii_whitespace`
+        // members and both would be silently swallowed by `s.trim()`
+        // pre-gate. The `is_ascii_whitespace` coverage extends beyond
+        // space alone to the full ASCII-whitespace set (space `0x20`,
+        // tab `0x09`, LF `0x0A`, FF `0x0C`, CR `0x0D`); this test pins
+        // the tab arm as a representative of the non-space members.
+        let err = duration_codec::parse("\t30s").unwrap_err();
+        assert!(
+            err.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {err:?}"
+        );
+        assert!(
+            err.contains("0x09"),
+            "missing offending tab byte in {err:?}"
+        );
+    }
+
+    #[test]
+    fn restart_window_serde_rejects_whitespace() {
+        // The shared codec backs `SupervisorSpec::restart_window`
+        // (`with = "duration_codec"`) — so the whitespace arm
+        // applies on serde deserialize for the typed Supervisor slot.
+        // A `{"restartWindow":" 30s"}` payload that previously round-
+        // tripped to a different canonical string on next serialize
+        // is now refused at deserialize with the whitespace-byte
+        // diagnostic. Peer with `restart_window_serde_rejects_leading_zero`
+        // / `restart_window_serde_rejects_leading_plus` /
+        // `restart_window_serde_rejects_fractional_seconds` on the
+        // same canonical-form-drift axis.
+        let payload = r#"{"estrategia":"OneForOne","maxRestarts":5,
+            "restartWindow":" 30s",
+            "children":[{"caixa":"w","versao":"^0.1","restart":"Permanent"}]}"#;
+        let err = serde_json::from_str::<SupervisorSpec>(payload).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("contains whitespace byte"),
+            "expected whitespace diagnostic in {msg:?}"
+        );
+        assert!(msg.contains("0x20"), "missing offending byte in {msg:?}");
     }
 }
