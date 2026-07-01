@@ -1699,7 +1699,7 @@ mod tests {
         );
 
         let to_ports = cart_to_catalog[0]
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("ingress"))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
@@ -1733,14 +1733,14 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             let endpoint = p
-                .get("spec")
+                .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("endpointSelector"))
                 .and_then(|e| e.get("matchLabels"))
                 .unwrap();
             assert!(endpoint.get(LABEL_PROGRAM).is_some());
             // Source endpoint must include both program + aplicacao labels
             let from = p
-                .get("spec")
+                .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("ingress"))
                 .and_then(|i| i.as_sequence())
                 .and_then(|s| s.first())
@@ -1827,7 +1827,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             let selector = p
-                .get("spec")
+                .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("endpointSelector"))
                 .and_then(|e| e.get("matchLabels"))
                 .and_then(|m| m.as_mapping())
@@ -1855,7 +1855,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             let from = p
-                .get("spec")
+                .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("ingress"))
                 .and_then(|i| i.as_sequence())
                 .and_then(|s| s.first())
@@ -1894,7 +1894,7 @@ mod tests {
             })
             .unwrap();
         let http_rules = cart_to_catalog
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("ingress"))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
@@ -1934,7 +1934,7 @@ mod tests {
             })
             .unwrap();
         let to_ports = nats_policy
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("ingress"))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
@@ -1967,7 +1967,7 @@ mod tests {
             .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY))
             .unwrap();
         let listener = gateway
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("listeners"))
             .and_then(|l| l.as_sequence())
             .and_then(|s| s.first())
@@ -1990,7 +1990,7 @@ mod tests {
             .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .unwrap();
         let backend = route
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("rules"))
             .and_then(|r| r.as_sequence())
             .and_then(|s| s.first())
@@ -2329,7 +2329,7 @@ mod tests {
     fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
             .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
-            .and_then(|d| d.get("spec"))
+            .and_then(|d| d.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get("rules"))
             .and_then(|r| r.as_sequence())
             .cloned()
@@ -2683,7 +2683,7 @@ mod tests {
         docs.iter()
             .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(CILIUM_KIND_NETWORK_POLICY))
             .filter_map(|d| {
-                d.get("spec")
+                d.get(KUBE_KEY_SPEC)
                     .and_then(|s| s.get("ingress"))
                     .and_then(|i| i.as_sequence())
                     .and_then(|s| s.first())
@@ -2898,7 +2898,7 @@ mod tests {
             })
             .expect("pubsub CNP present");
         let rule = nats_policy
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("ingress"))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
@@ -2942,7 +2942,7 @@ mod tests {
             })
             .expect("cart→payment CNP present");
         let port_value = cart_to_payment
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("ingress"))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())

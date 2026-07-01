@@ -1174,7 +1174,7 @@ spec:
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(inserted);
         let arr = modified
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .unwrap()
             .get("values")
             .unwrap()
@@ -1210,7 +1210,7 @@ spec:
         let (modified, inserted) = upsert_into_helmrelease_programs(initial, entry).unwrap();
         assert!(!inserted);
         let arr = modified
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .unwrap()
             .get("values")
             .unwrap()
@@ -1385,7 +1385,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let values = parsed
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("values"))
             .and_then(|v| v.as_mapping())
             .expect("spec.values mapping present");
@@ -1519,7 +1519,7 @@ spec:
         );
         assert_eq!(
             parsed
-                .get("spec")
+                .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("sourceRef"))
                 .and_then(|r| r.get("name"))
                 .and_then(|n| n.as_str()),
@@ -1623,7 +1623,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
         let health_checks = parsed
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("healthChecks"))
             .and_then(|h| h.as_sequence())
             .expect("kustomization.yaml spec.healthChecks present");
@@ -2067,9 +2067,9 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let source_ref_kind = parsed
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("chart"))
-            .and_then(|c| c.get("spec"))
+            .and_then(|c| c.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get("sourceRef"))
             .and_then(|r| r.get("kind"))
             .and_then(|k| k.as_str())
@@ -2106,7 +2106,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         let source_ref_kind = parsed
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("sourceRef"))
             .and_then(|r| r.get("kind"))
             .and_then(|k| k.as_str())
@@ -2161,9 +2161,9 @@ spec:
                 .contents,
         )
         .unwrap()
-        .get("spec")
+        .get(KUBE_KEY_SPEC)
         .and_then(|s| s.get("chart"))
-        .and_then(|c| c.get("spec"))
+        .and_then(|c| c.get(KUBE_KEY_SPEC))
         .and_then(|s| s.get("sourceRef"))
         .and_then(|r| r.get("kind"))
         .and_then(|v| v.as_str())
@@ -2178,7 +2178,7 @@ spec:
                 .contents,
         )
         .unwrap()
-        .get("spec")
+        .get(KUBE_KEY_SPEC)
         .and_then(|s| s.get("sourceRef"))
         .and_then(|r| r.get("kind"))
         .and_then(|v| v.as_str())
@@ -2309,7 +2309,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         let health_checks = parsed
-            .get("spec")
+            .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("healthChecks"))
             .and_then(|h| h.as_sequence())
             .expect("kustomization.yaml spec.healthChecks present");
@@ -2373,7 +2373,7 @@ spec:
                 .contents,
         )
         .unwrap()
-        .get("spec")
+        .get(KUBE_KEY_SPEC)
         .and_then(|s| s.get("healthChecks"))
         .and_then(|h| h.as_sequence())
         .and_then(|seq| seq.first())
