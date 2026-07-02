@@ -1452,6 +1452,67 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
             ),
         });
     }
+    // Peer of the ASCII-whitespace scan above: route the non-ASCII
+    // subset of Unicode `White_Space` through the shared
+    // [`crate::render::find_non_ascii_whitespace_char`] predicate — the
+    // single source of truth every peer non-ASCII-whitespace scan in
+    // caixa-core flows through: `limits::parse_byte_size` (`:limits
+    // :memory`), `limits::parse_duration` (`:limits :wall-clock`),
+    // `limits::parse_millicores` (`:limits :cpu`),
+    // `aplicacao::rate_limit_codec::parse` (`:politicas :rate-limit`),
+    // and `supervisor::duration_codec::parse` (`:supervisor
+    // :restart-window` / `:politicas :timeout` / `:politicas
+    // :circuit-breaker :window`). Before this arm, a NBSP-prefixed host
+    // (`"\u{00A0}checkout.quero.cloud"` — paste-from-typography), a
+    // LINE-SEPARATOR-suffixed host (`"checkout.quero.cloud\u{2028}"` —
+    // paste-from-web-doc), or an EM-SPACE-split host
+    // (`"checkout.\u{2003}quero.cloud"` — paste-from-typography)
+    // survived this predicate's ASCII byte-scan (none of the UTF-8
+    // bytes of `\u{00A0}` / `\u{2028}` / `\u{2003}` match
+    // `u8::is_ascii_whitespace`), then landed on the per-label
+    // `bytes[0].is_ascii_alphanumeric()` arm near the bottom of this
+    // predicate with the generic `label "…" must start and end with an
+    // alphanumeric` diagnostic — a "far from source at build-time"
+    // leak that names the label-shape violation but not the
+    // paste-from-typography origin the author actually needs to fix.
+    // Peer with the four codec sites the 1b75b38 landing pinned: the
+    // typed slot's diagnostic axis names the offending codepoint
+    // (`U+XXXX`) verbatim rather than laundering the value through a
+    // downstream label-shape arm, so the author can grep their
+    // caixa.lisp for the invisible codepoint at the surfaced position
+    // rather than eyeball a multi-byte host for embedded NBSP / LINE
+    // SEPARATOR / EM-SPACE. Same "single lifted source of truth"
+    // discipline the peer ASCII-whitespace arm (720ac3b) carries:
+    // drift between any two typed-slot sites' non-ASCII-whitespace
+    // rejection set becomes a single-edit fix at the shared predicate
+    // rather than N independent inline scans diverging over time, and
+    // a future stricter classification (BOM `\u{FEFF}` / ZWSP
+    // `\u{200B}` / ZWJ `\u{200D}` — the "invisible but not
+    // `char::is_whitespace`" class the peer non-ASCII predicate's
+    // doc-comment names as the follow-up trajectory) extends at the
+    // shared predicate in one edit rather than seven.
+    if let Some(ch) = crate::render::find_non_ascii_whitespace_char(host) {
+        return Err(AplicacaoError::EntradaHostInvalid {
+            host: host.to_string(),
+            reason: format!(
+                "contains non-ASCII Unicode whitespace character {ch:?} \
+                 (U+{codepoint:04X}) — Gateway API v1 Hostname is a \
+                 single-token DNS name limited to `[a-z0-9-]` labels; \
+                 the paste-from-typography footgun silently lands an \
+                 invisible codepoint (NBSP `U+00A0`, LINE SEPARATOR \
+                 `U+2028`, EM-SPACE `U+2003`, IDEOGRAPHIC SPACE \
+                 `U+3000`, and every other member of the Unicode \
+                 `White_Space` property outside the ASCII byte range) \
+                 in `:entrada :host`, which the K8s apiserver's \
+                 Hostname regex refuses at admission time far from the \
+                 caixa.lisp source line. Strip every non-ASCII \
+                 whitespace character and author the bare hostname \
+                 with only ASCII bytes (write \"checkout.quero.cloud\" \
+                 verbatim)",
+                codepoint = ch as u32,
+            ),
+        });
+    }
 
     // Strip the optional single leading wildcard label *before* the
     // trailing-dot check so the bare `"*."` form surfaces the more
@@ -7521,6 +7582,100 @@ mod tests {
         assert!(
             reason.contains("0x0a"),
             "expected offending LF byte 0x0a, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_nbsp_names_offending_codepoint() {
+        // Leading NBSP (`U+00A0`, `\u{00A0}`) in the `:entrada :host`
+        // axis — the canonical paste-from-typography /
+        // paste-from-word-processor footgun. Before the non-ASCII
+        // Unicode `White_Space` scan lifted through the shared
+        // `find_non_ascii_whitespace_char` predicate, the UTF-8 bytes
+        // of NBSP (`0xC2 0xA0`) survived the ASCII byte-scan (neither
+        // `0xC2` nor `0xA0` is `u8::is_ascii_whitespace`) and landed
+        // on the per-label `bytes[0].is_ascii_alphanumeric()` arm
+        // with the far-from-source `label "…" must start and end
+        // with an alphanumeric` diagnostic — burying the
+        // paste-from-typography origin under a label-shape leak.
+        // Peer with the sibling non-ASCII-whitespace pins at
+        // `limits::parse_byte_size` (`parse_byte_size_rejects_leading_nbsp`
+        // — 1b75b38), `limits::parse_duration`,
+        // `limits::parse_millicores`, and the shared duration codec
+        // — same "the diagnostic carries the offending Unicode
+        // codepoint's `U+XXXX` shape" discipline extended from every
+        // typed-magnitude codec to the Gateway API v1 Hostname axis.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "\u{00A0}checkout.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaHostInvalid { reason, .. } = err else {
+            panic!("expected EntradaHostInvalid, got {err:?}");
+        };
+        assert!(
+            reason.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII codepoint-naming diagnostic, got {reason:?}"
+        );
+        assert!(
+            reason.contains("U+00A0"),
+            "expected offending NBSP codepoint U+00A0, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_line_separator_names_offending_codepoint() {
+        // Trailing LINE SEPARATOR (`U+2028`, `\u{2028}`) in the
+        // `:entrada :host` axis — the canonical paste-from-web-doc /
+        // paste-from-published-HTML footgun. `char::is_whitespace`
+        // returns true for `U+2028` per the Unicode `White_Space`
+        // property, so `str::trim` at any downstream site would
+        // silently strip it — same drift class as NBSP but on a
+        // different codepoint region. Pins the second representative
+        // (non-Latin-1 `char::is_whitespace` member) through the
+        // shared predicate. Peer with
+        // `parse_byte_size_rejects_internal_line_separator` on
+        // `limits::parse_byte_size` (1b75b38).
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.quero.cloud\u{2028}".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaHostInvalid { reason, .. } = err else {
+            panic!("expected EntradaHostInvalid, got {err:?}");
+        };
+        assert!(
+            reason.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII codepoint-naming diagnostic, got {reason:?}"
+        );
+        assert!(
+            reason.contains("U+2028"),
+            "expected offending LINE SEPARATOR codepoint U+2028, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_ideographic_space_names_offending_codepoint() {
+        // Embedded IDEOGRAPHIC SPACE (`U+3000`, `\u{3000}`) between
+        // labels in the `:entrada :host` axis — the canonical
+        // paste-from-CJK-typography footgun (CJK IMEs default to
+        // full-width whitespace when the space bar is pressed in
+        // Japanese / Chinese input modes). Pins the third
+        // representative of the non-ASCII Unicode `White_Space` set
+        // through the shared predicate: the CJK block, distinct from
+        // the Latin-1 NBSP `U+00A0` and the punctuation-region LINE
+        // SEPARATOR `U+2028` — covering the same axis breadth the
+        // sibling `parse_byte_size_rejects_trailing_ideographic_space`
+        // (1b75b38) pins on `limits::parse_byte_size`.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout\u{3000}.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaHostInvalid { reason, .. } = err else {
+            panic!("expected EntradaHostInvalid, got {err:?}");
+        };
+        assert!(
+            reason.contains("non-ASCII Unicode whitespace character"),
+            "expected non-ASCII codepoint-naming diagnostic, got {reason:?}"
+        );
+        assert!(
+            reason.contains("U+3000"),
+            "expected offending IDEOGRAPHIC SPACE codepoint U+3000, got {reason:?}"
         );
     }
 
