@@ -511,6 +511,47 @@ pub use caixa_core::KUBE_KEY_API_VERSION;
 /// byte-sequence must reach every rendered artifact.
 pub use caixa_core::KUBE_KEY_NAMESPACE;
 
+/// Canonical K8s CR `metadata.labels` nested-axis key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_LABELS`] so the per-CR labels-axis
+/// retrieval key lives in exactly one place across every caixa renderer
+/// — caixa-mesh's `cilium_policy_metadata_labels_use_lifted_consts`
+/// test-side retrieval of the per-CNP `metadata.labels` mapping (the
+/// LABEL_APLICACAO + LABEL_CONTRATO drift-detection pin's entry point),
+/// caixa-mesh's `cilium_policy_carries_canonical_kube_skeleton` +
+/// `gateway_carries_canonical_kube_skeleton_without_labels` +
+/// `httproute_carries_canonical_kube_skeleton_without_labels` per-CR
+/// metadata-block `.get("labels")` probes (the presence-of-labels /
+/// empty-labels-skip semantic pins on `CiliumNetworkPolicy` /
+/// `Gateway` / `HTTPRoute`), and the
+/// `cilium_policy_metadata_block_iterates_alphabetically` render-
+/// determinism-contract fixture (the alphabetical-iteration `vec!["labels",
+/// "name", KUBE_KEY_NAMESPACE]` fixture whose first entry the alphabetical-
+/// key-ordering `metadata:` block emission pins). The prior five inline
+/// `"labels"` literals at every drift-detection / render-determinism
+/// test-side site in this crate would have let a typo on any one site
+/// (e.g. `"Labels"`, `"lables"`, the canonical transposition `"lablels"`)
+/// silently miss the per-CR metadata.labels retrieval — the
+/// `.get("labels")` chain would then return `None` and the trailing
+/// `.expect("policy metadata.labels mapping")` would panic with the
+/// mapping-shape message, masking the true label-key drift, or the
+/// presence-of-labels / empty-labels-skip semantic pins would compare
+/// `Some(...)`/`None` under the wrong retrieval so the empty-labels-skip
+/// contract's true drift never surfaces, or the alphabetical-iteration
+/// render-determinism fixture would fire on the drifted-fixture rather
+/// than the true render-determinism property. The lift routes every K8s-
+/// CR-metadata-labels-axis retrieval + fixture through the same
+/// `&'static str` so drift between any two sites becomes a single-edit
+/// fix at the caixa-core const definition. Extends the per-K8s-CR
+/// top-level `(apiVersion, kind, metadata, spec)` axis re-export
+/// quartet + the load-bearing nested `metadata.namespace` axis onto
+/// the load-bearing nested `metadata.labels` axis — the axis every
+/// rendered `CiliumNetworkPolicy` document carries at the `pleme.pleme.io/
+/// aplicacao` + `pleme.pleme.io/contrato` grouping key (the Hubble flow-
+/// grouping / operator-policy-filter selection axis every consumer of
+/// the rendered mesh bundle keys off) so exactly one canonical byte-
+/// sequence must reach every rendered artifact.
+pub use caixa_core::KUBE_KEY_LABELS;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1415,6 +1456,64 @@ mod tests {
     }
 
     #[test]
+    fn kube_key_labels_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_LABELS` was lifted from five inline
+        // `"labels"` literals at the test-side K8s-CR metadata.labels-
+        // axis retrieval sites (the `cilium_policy_metadata_labels_use_lifted_consts`
+        // per-CNP metadata.labels retrieval entry point, the
+        // `cilium_policy_carries_canonical_kube_skeleton` +
+        // `gateway_carries_canonical_kube_skeleton_without_labels` +
+        // `httproute_carries_canonical_kube_skeleton_without_labels`
+        // presence-of-labels / empty-labels-skip semantic pins, and the
+        // `cilium_policy_metadata_block_iterates_alphabetically`
+        // render-determinism-contract fixture) to a re-export of
+        // [`caixa_core::KUBE_KEY_LABELS`] so the canonical K8s-CR
+        // metadata.labels-axis string lives in exactly one place
+        // across every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const KUBE_KEY_LABELS: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // symptom — the prior shape would have let a typo on any one
+        // sibling `pub const` declaration silently miss the per-CR
+        // metadata.labels retrieval so the `.get(KUBE_KEY_LABELS)`
+        // chain the LABEL_APLICACAO + LABEL_CONTRATO drift-detection
+        // pin rests on would return `None` under the trailing
+        // `.expect("policy metadata.labels mapping")` panic and mask
+        // the true sibling label-key-axis drift, or the presence-of-
+        // labels / empty-labels-skip semantic pins would compare
+        // `Some(...)`/`None` against the wrong retrieval so the
+        // empty-labels-skip contract's true drift never surfaces, or
+        // the alphabetical-iteration render-determinism fixture would
+        // fire on the drifted-fixture rather than the true render-
+        // determinism property. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] +
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level `(apiVersion, kind,
+        // metadata, spec)` axis re-export quartet + the load-bearing
+        // nested `metadata.namespace` axis re-export — extends the
+        // discipline onto the load-bearing nested `metadata.labels`
+        // axis every rendered `CiliumNetworkPolicy` document carries
+        // at the `pleme.pleme.io/aplicacao` + `pleme.pleme.io/contrato`
+        // grouping key.
+        assert_eq!(KUBE_KEY_LABELS, caixa_core::KUBE_KEY_LABELS);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_LABELS.as_ptr(),
+                caixa_core::KUBE_KEY_LABELS.as_ptr(),
+            ),
+            "KUBE_KEY_LABELS must be a re-export of caixa_core::KUBE_KEY_LABELS, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_kind_network_policy_re_export_points_at_caixa_core_canonical() {
         // The renderer's `CILIUM_KIND_NETWORK_POLICY` was lifted from
         // the inline `"CiliumNetworkPolicy"` literal at the
@@ -2112,7 +2211,7 @@ mod tests {
         for p in &policies {
             let labels = p
                 .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.get("labels"))
+                .and_then(|m| m.get(KUBE_KEY_LABELS))
                 .and_then(|l| l.as_mapping())
                 .expect("policy metadata.labels mapping");
             assert_eq!(
@@ -2393,7 +2492,7 @@ mod tests {
             );
             assert!(
                 metadata
-                    .get(serde_yaml::Value::String("labels".into()))
+                    .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
                     .is_some()
             );
         }
@@ -2434,7 +2533,7 @@ mod tests {
         );
         assert!(
             metadata
-                .get(serde_yaml::Value::String("labels".into()))
+                .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
                 .is_none(),
             "Gateway must not carry metadata.labels (empty-labels-skip \
              contract from kube_resource_skeleton)"
@@ -2469,7 +2568,7 @@ mod tests {
         );
         assert!(
             metadata
-                .get(serde_yaml::Value::String("labels".into()))
+                .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
                 .is_none()
         );
     }
@@ -2646,7 +2745,7 @@ mod tests {
             let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
             assert_eq!(
                 keys,
-                vec!["labels", "name", KUBE_KEY_NAMESPACE],
+                vec![KUBE_KEY_LABELS, "name", KUBE_KEY_NAMESPACE],
                 "metadata block must iterate alphabetically (the kube \
                  skeleton's render-determinism contract)"
             );
