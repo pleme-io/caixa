@@ -418,6 +418,83 @@ pub fn is_leading_zero_padded_magnitude(s: &str) -> bool {
     s.len() > 1 && s.as_bytes()[0] == b'0'
 }
 
+/// Predicate: `s` is a non-empty digit-only magnitude — every byte is
+/// an ASCII digit `[0-9]`.
+///
+/// The canonical drift class this closes across every typed-magnitude
+/// codec in caixa-core (`limits::parse_byte_size` backing
+/// `:limits :memory`, `limits::parse_duration` backing `:limits
+/// :wall-clock`, `limits::parse_millicores` backing `:limits :cpu`,
+/// `supervisor::duration_codec::parse` backing `:supervisor
+/// :restart-window` / `:politicas :timeout` / `:politicas
+/// :circuit-breaker :window`, and `aplicacao::rate_limit_codec::parse`
+/// backing `:politicas :rate-limit`) is the non-digit-only magnitude
+/// shape: every downstream typed-magnitude codec's `render_*`
+/// canonicalizer emits a bare integer magnitude with no leading sign
+/// (`+` / `-`), no decimal point, and no exponent, so a signed
+/// magnitude (`"+30s"`, `"+500m"`, `"+100/s"`, `"+64MiB"`) or a
+/// fractional / decimal magnitude (`"1.5s"`, `"0.5m"`, `"1.0/s"`,
+/// `"1.5KiB"`) round-trips through `render_*` to a *different*
+/// canonical string on the next emit (`"30s"`, `"500m"`, `"100/s"`,
+/// `"64MiB"`, `"1500ms"`, `"30s"`, `"1/s"`, `"1KiB"`) — breaking the
+/// THEORY.md Part V render-determinism contract every typed slot
+/// carries.
+///
+/// The predicate deliberately treats the empty string as non-digit-only
+/// (returning `false`) so an upstream codec that hasn't already
+/// refused the empty-magnitude shape on its own `Empty*` / `Bad*` arm
+/// still routes empty input to the non-canonical branch rather than
+/// silently accepting it via the vacuous `bytes().all(_)` truth. Every
+/// current codec site refuses empty magnitudes on a prior arm before
+/// this predicate is consulted (`limits::parse_byte_size`'s `num_trim`
+/// empty branch, `limits::parse_duration`'s `num_trim` empty branch,
+/// `limits::parse_millicores`'s `magnitude.is_empty()` branch,
+/// `supervisor::duration_codec::parse`'s `num_trim` empty branch,
+/// `aplicacao::rate_limit_codec::parse`'s `rate_trim` empty branch),
+/// so on the reachable inputs the empty-string clause is a no-op; the
+/// clause is defense-in-depth for a future codec that reaches for this
+/// predicate before landing its own upstream empty-magnitude arm.
+///
+/// The predicate deliberately admits the single-byte magnitude `"0"`
+/// (returning `true`) — every codec's `render_*` canonicalizer emits
+/// `"0"` / `"0s"` / `"0m"` / `"0/s"` verbatim for the zero magnitude,
+/// so the single-byte form round-trips losslessly through the codec
+/// layer. The downstream semantic-zero gates
+/// ([`crate::LimitsError::MemoryZero`],
+/// [`crate::LimitsError::WallClockZero`],
+/// [`crate::LimitsError::CpuZero`],
+/// [`crate::SupervisorError::ZeroRestartWindow`],
+/// [`crate::AplicacaoError::PolicyTimeoutZero`],
+/// [`crate::AplicacaoError::PolicyCircuitBreakerWindowZero`],
+/// [`crate::AplicacaoError::PolicyRateLimitZero`]) refuse the
+/// semantic-zero authoring at the typed-validate layer above; the
+/// codec-layer / typed-validate-layer partition between
+/// canonical-form drift (this arm) and semantic-zero (the downstream
+/// gate) remains stable across every codec site.
+///
+/// Peer of [`find_ascii_whitespace_byte`] /
+/// [`find_non_ascii_whitespace_char`] /
+/// [`is_leading_zero_padded_magnitude`] on the same
+/// canonical-form-drift axis at the codec layer: those three
+/// predicates close the whitespace and leading-zero-padding drift
+/// classes (paste-from-shell-history / paste-from-typography /
+/// paste-from-fixed-width-alignment / paste-from-columnar-report),
+/// this one closes the leading-sign / fractional / decimal /
+/// exponent-shape drift class (paste-from-signed-report /
+/// paste-from-floating-point-source / paste-from-scientific-notation).
+/// Same "single lifted source of truth" discipline: drift between any
+/// two codec sites' digit-only rejection set becomes a single-edit
+/// fix at this predicate rather than five independent
+/// `!<var>.is_empty() && <var>.bytes().all(|b| b.is_ascii_digit())`
+/// scans diverging over time. Peer of [`is_dns_1123_label`] /
+/// [`is_gateway_api_http_path`] / [`is_git_repo_url`] — same
+/// "typed-slot's valid set matches its codec's accepted set,
+/// structurally" discipline carried at the codec layer.
+#[must_use]
+pub fn is_digit_only_magnitude(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())
+}
+
 /// K8s DNS-1123 label rule's max length, in bytes — the floor each
 /// apiserver-side schema enforces independently on every `metadata.name`
 /// / Service name / label value axis a validated identifier lands in.
@@ -13029,5 +13106,110 @@ mod tests {
         // are what refuse zero-magnitude authoring, not this codec-
         // layer predicate.
         assert!(!is_leading_zero_padded_magnitude("0"));
+    }
+
+    // ── shared predicate: is_digit_only_magnitude ───────────────────────
+    //
+    // Pins the accepted / rejected set of the lifted digit-only
+    // predicate every typed-magnitude codec in caixa-core calls
+    // (`parse_byte_size` / `parse_duration` / `parse_millicores` /
+    // shared `duration_codec` / `rate_limit_codec`). Same lifted-
+    // source-of-truth discipline the peer canonical-form predicates
+    // (`find_ascii_whitespace_byte` / `find_non_ascii_whitespace_char`
+    // / `is_leading_zero_padded_magnitude`) carry — drift between any
+    // two codec sites' rejection set becomes a single-edit fix at
+    // this predicate.
+
+    #[test]
+    fn is_digit_only_magnitude_accepts_canonical_forms() {
+        // Complement-side pin: every canonical form the typed-magnitude
+        // `render_*` canonicalizers emit — the single-byte `"0"` case
+        // and every non-zero non-leading-zero magnitude — returns
+        // `true`.
+        assert!(is_digit_only_magnitude("0"));
+        assert!(is_digit_only_magnitude("1"));
+        assert!(is_digit_only_magnitude("64"));
+        assert!(is_digit_only_magnitude("500"));
+        assert!(is_digit_only_magnitude("1024"));
+        assert!(is_digit_only_magnitude("999999"));
+    }
+
+    #[test]
+    fn is_digit_only_magnitude_flags_empty_magnitude() {
+        // Defense-in-depth: the empty string is non-digit-only per the
+        // predicate's contract, so a future codec reaching for this
+        // predicate before landing its own upstream empty-magnitude
+        // arm still routes empty input to the non-canonical branch
+        // rather than silently accepting it via the vacuous
+        // `bytes().all(_)` truth on the empty byte-slice.
+        assert!(!is_digit_only_magnitude(""));
+    }
+
+    #[test]
+    fn is_digit_only_magnitude_flags_leading_sign() {
+        // The paste-from-signed-report drift class every codec's
+        // `render_*` emits the unsigned form for. On current Rust
+        // `u64::from_str` / `u32::from_str` permissively accept a
+        // leading `+` (`"+500"` → 500), so `"+30"`, `"+500"`, `"+100"`
+        // survive the parser and round-trip through `render_*` to the
+        // sign-stripped form (`"30"`, `"500"`, `"100"`) — a *different*
+        // canonical string on the next emit, breaking the THEORY.md
+        // Part V render-determinism contract. The digit-only gate is
+        // what closes the leading-sign class at each codec site.
+        assert!(!is_digit_only_magnitude("+30"));
+        assert!(!is_digit_only_magnitude("+500"));
+        assert!(!is_digit_only_magnitude("+100"));
+        assert!(!is_digit_only_magnitude("-30"));
+        assert!(!is_digit_only_magnitude("-1"));
+    }
+
+    #[test]
+    fn is_digit_only_magnitude_flags_fractional_and_decimal() {
+        // The paste-from-floating-point-source drift class every
+        // codec's `render_*` emits the integer form for. On the peer
+        // duration codec the parser accepts `f64`-shaped magnitudes
+        // (`"1.5s"` → 1500ms → `"1500ms"`, `"1.0s"` → 1s → `"1s"`,
+        // `"0.5m"` → 30s → `"30s"`) — a *different* canonical string
+        // on the next emit, breaking the THEORY.md Part V render-
+        // determinism contract. The digit-only gate closes the
+        // decimal-point / fractional / exponent class at each codec
+        // site.
+        assert!(!is_digit_only_magnitude("1.5"));
+        assert!(!is_digit_only_magnitude("1.0"));
+        assert!(!is_digit_only_magnitude("0.5"));
+        assert!(!is_digit_only_magnitude("1e3"));
+        assert!(!is_digit_only_magnitude(".5"));
+        assert!(!is_digit_only_magnitude("5."));
+    }
+
+    #[test]
+    fn is_digit_only_magnitude_flags_alphabetic_and_symbol_bytes() {
+        // Complement-side pin on the "garbage" branch: alphabetic
+        // bytes / symbol bytes / whitespace bytes each land on the
+        // non-digit-only side. At the codec site the downstream
+        // "non-canonical-but-numeric vs garbage" partition surfaces
+        // these with the narrower `Bad*` diagnostic; here the
+        // predicate simply reports `false`.
+        assert!(!is_digit_only_magnitude("a"));
+        assert!(!is_digit_only_magnitude("64a"));
+        assert!(!is_digit_only_magnitude("6_4"));
+        assert!(!is_digit_only_magnitude("64 "));
+        assert!(!is_digit_only_magnitude(" 64"));
+    }
+
+    #[test]
+    fn is_digit_only_magnitude_pins_leading_zero_boundary() {
+        // The leading-zero-padded magnitude shape stays inside the
+        // digit-only accepted set at this predicate — every byte is
+        // an ASCII digit. The peer
+        // [`is_leading_zero_padded_magnitude`] predicate closes the
+        // leading-zero drift class on a separate, strictly-later arm
+        // at each codec site. Pinning this partition so a future
+        // widening that collapses the two arms surfaces as a test
+        // failure rather than a silent break of the two-predicate
+        // codec-layer discipline.
+        assert!(is_digit_only_magnitude("00"));
+        assert!(is_digit_only_magnitude("0064"));
+        assert!(is_digit_only_magnitude("0500"));
     }
 }

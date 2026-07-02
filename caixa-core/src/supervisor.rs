@@ -913,7 +913,12 @@ pub mod duration_codec {
         // non-canonical-but-numeric branch with the `-30` named
         // verbatim in the diagnostic rather than the prior
         // value-laundered "negative duration in \"-30s\"" wording.
-        let digit_only = !num_trim.is_empty() && num_trim.bytes().all(|b| b.is_ascii_digit());
+        //
+        // Routed through the lifted
+        // [`crate::render::is_digit_only_magnitude`] predicate — the
+        // same source of truth the four peer typed-magnitude codec
+        // sites share.
+        let digit_only = crate::render::is_digit_only_magnitude(num_trim);
         if !digit_only {
             let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
             if numeric {

@@ -1115,7 +1115,23 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // before this gate is consulted — that's the existing diagnostic
     // for the scientific-shape footgun, and this gate is additive to
     // it.)
-    let digit_only = !num_trim.is_empty() && num_trim.bytes().all(|b| b.is_ascii_digit());
+    //
+    // Routed through the lifted
+    // [`crate::render::is_digit_only_magnitude`] predicate — the
+    // single source of truth every typed-magnitude codec in
+    // caixa-core (`parse_byte_size` / `parse_duration` /
+    // `parse_millicores` / `supervisor::duration_codec` /
+    // `rate_limit_codec`) shares. Drift between any two codec sites'
+    // digit-only rejection set becomes a single-edit fix at the
+    // shared predicate rather than five independent
+    // `!<var>.is_empty() && <var>.bytes().all(|b| b.is_ascii_digit())`
+    // scans diverging over time — same "single lifted source of truth"
+    // discipline the peer canonical-form predicates
+    // ([`crate::render::find_ascii_whitespace_byte`] /
+    // [`crate::render::find_non_ascii_whitespace_char`] /
+    // [`crate::render::is_leading_zero_padded_magnitude`]) carry on
+    // the whitespace and leading-zero-padding drift-class axes.
+    let digit_only = crate::render::is_digit_only_magnitude(num_trim);
     if !digit_only {
         // Distinguish "non-canonical-but-numeric" (`"1.5"`, `"1.0"`,
         // `"+1024"`, `"-1"`) from "garbage" (`"abc"`, `"--1"`) so the
@@ -1343,7 +1359,11 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // diagnostic) from "garbage" (parses as neither — surfaced as the
     // existing `BadDurationMagnitude` so its narrower diagnostic
     // remains load-bearing).
-    let digit_only = !num_trim.is_empty() && num_trim.bytes().all(|b| b.is_ascii_digit());
+    //
+    // Routed through the lifted
+    // [`crate::render::is_digit_only_magnitude`] predicate — the same
+    // source of truth the four peer typed-magnitude codec sites share.
+    let digit_only = crate::render::is_digit_only_magnitude(num_trim);
     if !digit_only {
         let numeric = num_trim.parse::<f64>().is_ok() || num_trim.parse::<i64>().is_ok();
         if numeric {
@@ -1568,7 +1588,19 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // "garbage" (parses as neither — surfaced as the existing
     // `BadMillicores` so its narrower diagnostic shape remains
     // load-bearing for the not-a-numeric-input class).
-    let digit_only = magnitude.bytes().all(|b| b.is_ascii_digit());
+    //
+    // Routed through the lifted
+    // [`crate::render::is_digit_only_magnitude`] predicate — the same
+    // source of truth the four peer typed-magnitude codec sites share.
+    // The predicate carries a `!<var>.is_empty()` gate that is
+    // strictly no-op here (the `magnitude.is_empty()` arm above
+    // already surfaces an empty magnitude as
+    // [`LimitsError::BadMillicores`] before this line is reached), so
+    // the semantics are preserved verbatim: on every reachable input
+    // the predicate returns `magnitude.bytes().all(|b|
+    // b.is_ascii_digit())`, byte-for-byte what the removed inline
+    // expression computed.
+    let digit_only = crate::render::is_digit_only_magnitude(magnitude);
     if !digit_only {
         let numeric = magnitude.parse::<f64>().is_ok() || magnitude.parse::<i64>().is_ok();
         if numeric {
