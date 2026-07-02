@@ -596,6 +596,67 @@ pub use caixa_core::KUBE_KEY_LABELS;
 /// artifact.
 pub use caixa_core::KUBE_KEY_NAME;
 
+/// Canonical K8s `LabelSelector.matchLabels` nested-axis key. Re-export
+/// of the canonical [`caixa_core::KUBE_KEY_MATCH_LABELS`] so the per-CR
+/// selector-axis retrieval key lives in exactly one place across every
+/// caixa renderer — caixa-mesh's `cilium_policies_are_identity_based`
+/// (the `endpointSelector.matchLabels` presence pin + the
+/// `ingress[0].fromEndpoints[0].matchLabels` two-axis-selector pin
+/// that check the `pleme.pleme.io/program` + `pleme.pleme.io/aplicacao`
+/// identity keys the Cilium data plane matches on), the
+/// `cilium_endpoint_selector_is_program_only` destination-selector-axis
+/// pin (single-axis `LABEL_PROGRAM`-only selector — the
+/// destination-`endpointSelector.matchLabels` retrieval whose
+/// `selector.len() == 1` assertion pins the program-only semantic the
+/// canonical `pleme_program_selector` helper emits), and the
+/// `cilium_from_endpoints_carries_aplicacao_scoped_selector` source-
+/// selector-axis pin (two-axis `LABEL_PROGRAM` + `LABEL_APLICACAO`
+/// selector — the source-`fromEndpoints[0].matchLabels` retrieval
+/// whose `from.len() == 2` assertion pins the
+/// program-in-Aplicacao-scoped semantic the canonical
+/// `pleme_program_in_aplicacao_selector` helper emits, guarding the
+/// safety property that a same-named program in a different
+/// Aplicacao cannot satisfy the policy's ingress rule) now consult
+/// the same `&'static str` as the peer caixa-core-side
+/// `label_selector` production emitter (which already inserts
+/// [`KUBE_KEY_MATCH_LABELS`] under caixa-core/src/render.rs:7112 on
+/// every `{matchLabels: <mapping>}` envelope the typed selector
+/// helpers emit). The prior four inline `"matchLabels"` literals at
+/// every drift-detection / selector-axis test-side site in this
+/// crate would have let a typo on any one site (e.g. `"MatchLabels"`,
+/// `"match_labels"`, `"match-labels"`, the canonical camelCase-drift
+/// `"matchlabels"` — the K8s apiserver's OpenAPI v3 schema property
+/// name is strict camelCase `matchLabels`) silently miss the per-CR
+/// selector-mapping retrieval — the `.get("matchLabels")` chain
+/// would then return `None` under the presence pin so the true
+/// selector-axis drift never surfaces, or the surrounding
+/// `.expect("endpointSelector.matchLabels mapping")` /
+/// `.expect("fromEndpoints[0].matchLabels mapping")` panic-message
+/// tag would fire with the mapping-shape message rather than the
+/// true selector-key drift, or the `selector.len() == 1` /
+/// `from.len() == 2` axis-count assertion would compare against the
+/// wrong retrieval so the destination-program-only / source-program-
+/// in-Aplicacao selector-shape contract's true drift is masked. The
+/// lift routes every K8s-`LabelSelector.matchLabels`-axis retrieval
+/// through the same `&'static str` so drift between any two sites
+/// becomes a single-edit fix at the caixa-core const definition.
+/// Extends the per-K8s-CR top-level `(apiVersion, kind, metadata,
+/// spec)` axis re-export quartet + the load-bearing nested
+/// `metadata.{name, namespace, labels}` triplet onto the load-bearing
+/// nested `LabelSelector.matchLabels` axis — the equality-projection
+/// axis every rendered `CiliumNetworkPolicy` document carries at both
+/// `spec.endpointSelector.matchLabels` (the destination-identity
+/// selector the Cilium data plane matches pod-identity keys against)
+/// and `spec.ingress[*].fromEndpoints[*].matchLabels` (the source-
+/// identity selector the same data plane checks on the admitted-
+/// source side). Peer to the sibling load-bearing nested
+/// `LabelSelector.matchLabels` axis re-exports every downstream
+/// consumer of the rendered mesh bundle keys off (the Cilium
+/// operator's per-CNP `endpointSelector` and per-ingress-rule
+/// `fromEndpoints` navigate the same K8s-`LabelSelector`-schema
+/// projection).
+pub use caixa_core::KUBE_KEY_MATCH_LABELS;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1601,6 +1662,77 @@ mod tests {
     }
 
     #[test]
+    fn kube_key_match_labels_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_MATCH_LABELS` was lifted from four
+        // inline `"matchLabels"` literals at the test-side
+        // K8s-`LabelSelector.matchLabels` retrieval sites (the
+        // `cilium_policies_are_identity_based` destination-
+        // `endpointSelector.matchLabels` presence pin +
+        // source-`ingress[0].fromEndpoints[0].matchLabels` two-axis
+        // pin, the `cilium_endpoint_selector_is_program_only`
+        // destination-`endpointSelector.matchLabels` retrieval whose
+        // `selector.len() == 1` assertion pins the program-only
+        // semantic the canonical `pleme_program_selector` helper
+        // emits, and the
+        // `cilium_from_endpoints_carries_aplicacao_scoped_selector`
+        // source-`fromEndpoints[0].matchLabels` retrieval whose
+        // `from.len() == 2` assertion pins the program-in-Aplicacao-
+        // scoped semantic the canonical
+        // `pleme_program_in_aplicacao_selector` helper emits — the
+        // safety property that a same-named program in a different
+        // Aplicacao cannot satisfy the policy's ingress rule) to a
+        // re-export of [`caixa_core::KUBE_KEY_MATCH_LABELS`] so the
+        // canonical K8s-`LabelSelector.matchLabels`-axis string lives
+        // in exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_KEY_MATCH_LABELS:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom — the
+        // prior shape would have let a typo on any one sibling `pub
+        // const` declaration silently miss the per-CR selector-
+        // mapping retrieval so the destination-program-only /
+        // source-program-in-Aplicacao selector-shape contract's true
+        // drift is masked, or fire the trailing
+        // `.expect("endpointSelector.matchLabels mapping")` /
+        // `.expect("fromEndpoints[0].matchLabels mapping")` panic-
+        // message tag with the mapping-shape message rather than the
+        // true selector-key drift. Bridge-arm peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_name_re_export_points_at_caixa_core_canonical`]
+        // — extends the K8s-CR top-level `(apiVersion, kind,
+        // metadata, spec)` axis re-export quartet + the load-bearing
+        // nested `metadata.{name, namespace, labels}` triplet bridge-
+        // arm pin under a single canonical `caixa-core::KUBE_KEY_*`
+        // re-export shape in this crate onto the load-bearing nested
+        // `LabelSelector.matchLabels` axis every rendered
+        // `CiliumNetworkPolicy` document carries at both
+        // `spec.endpointSelector.matchLabels` (the destination-
+        // identity selector the Cilium data plane matches pod-
+        // identity keys against) and
+        // `spec.ingress[*].fromEndpoints[*].matchLabels` (the source-
+        // identity selector the same data plane checks on the
+        // admitted-source side).
+        assert_eq!(KUBE_KEY_MATCH_LABELS, caixa_core::KUBE_KEY_MATCH_LABELS);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_MATCH_LABELS.as_ptr(),
+                caixa_core::KUBE_KEY_MATCH_LABELS.as_ptr(),
+            ),
+            "KUBE_KEY_MATCH_LABELS must be a re-export of caixa_core::KUBE_KEY_MATCH_LABELS, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_kind_network_policy_re_export_points_at_caixa_core_canonical() {
         // The renderer's `CILIUM_KIND_NETWORK_POLICY` was lifted from
         // the inline `"CiliumNetworkPolicy"` literal at the
@@ -2256,7 +2388,7 @@ mod tests {
             let endpoint = p
                 .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("endpointSelector"))
-                .and_then(|e| e.get("matchLabels"))
+                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
                 .unwrap();
             assert!(endpoint.get(LABEL_PROGRAM).is_some());
             // Source endpoint must include both program + aplicacao labels
@@ -2268,7 +2400,7 @@ mod tests {
                 .and_then(|i| i.get("fromEndpoints"))
                 .and_then(|e| e.as_sequence())
                 .and_then(|s| s.first())
-                .and_then(|e| e.get("matchLabels"))
+                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
                 .unwrap();
             assert_eq!(
                 from.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
@@ -2350,7 +2482,7 @@ mod tests {
             let selector = p
                 .get(KUBE_KEY_SPEC)
                 .and_then(|s| s.get("endpointSelector"))
-                .and_then(|e| e.get("matchLabels"))
+                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
                 .and_then(|m| m.as_mapping())
                 .expect("endpointSelector.matchLabels mapping");
             assert_eq!(
@@ -2383,7 +2515,7 @@ mod tests {
                 .and_then(|i| i.get("fromEndpoints"))
                 .and_then(|e| e.as_sequence())
                 .and_then(|s| s.first())
-                .and_then(|e| e.get("matchLabels"))
+                .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
                 .and_then(|m| m.as_mapping())
                 .expect("fromEndpoints[0].matchLabels mapping");
             assert_eq!(
