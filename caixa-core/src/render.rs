@@ -5722,6 +5722,59 @@ pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 /// land where the typed slot said it should").
 pub const M3_KEY_PLACEMENT: &str = "placement";
 
+/// Canonical `lareira-fleet-programs` values-schema key naming the
+/// per-caixa entry sequence — the exact YAML key the fleet-programs
+/// library chart's `values.yaml` reads as `programs:` (a sequence of
+/// per-Servico entries the chart's `range` iterates over to emit one
+/// `ComputeUnit` CR per entry). Two production consumers in
+/// [`caixa_flux`] carry this key on the same fleet-programs schema
+/// axis:
+///
+/// 1. [`caixa_flux::upsert_into_helmrelease_programs`] — the writer-
+///    side upsert path on the aggregator-HelmRelease shape. Walks
+///    `HelmRelease.spec.values.programs[]` under this exact key to
+///    match by `metadata.name` and either replace-in-place or append.
+///
+/// 2. [`caixa_flux::upsert_into_programs_yaml`] — the writer-side
+///    upsert path on the bare-values.yaml shape. Walks the
+///    top-level `programs[]` sequence under the same key.
+///
+/// Until this lift landed both consumers carried the bare `"programs"`
+/// byte inline — `upsert_into_helmrelease_programs`'s
+/// `values_map.entry(Value::String("programs".into()))` at
+/// `caixa-flux/src/lib.rs:539` and `upsert_into_programs_yaml`'s
+/// `let programs_key = Value::String("programs".into());` at
+/// `caixa-flux/src/lib.rs:591`. A future fleet-programs schema-key
+/// rebrand (the library chart moving to plural `programas` for
+/// Brazilian-Portuguese uniformity with the rest of the substrate's
+/// surface, to a namespaced `pleme.pleme.io/programs` for multi-tenant
+/// aggregator-values isolation, or to per-kind `servicos` / `aplicacaos`
+/// splits once the schema grows past the flat sequence — the
+/// ABSORPTION-ROADMAP.md M4 trajectory) without a coordinated edit
+/// on both writer-side sites would silently emit an entry under one
+/// key (e.g. `programas:`) while the peer-side upsert still probes
+/// the prior key — the aggregator's `range .Values.programs` would
+/// then iterate an empty sequence and every `ComputeUnit` CR would
+/// silently vanish from the cluster's fleet, with the failure
+/// surfacing as "the newly-deployed Servico's pods never spin up" far
+/// from the rebrand commit's source. Lifting the literal to one
+/// `&'static str` closes the drift footgun structurally — both
+/// consumers read from the same memory, so any future rebrand reaches
+/// both writer sites by construction and a CI build that re-introduces
+/// a sibling inline `"programs"` literal trips the peer pinning tests
+/// at the build-time fail-before-deploy posture every prior
+/// load-bearing-string lift on this surface
+/// ([`M3_KEY_PLACEMENT`] under the same `programs.yaml` per-entry
+/// axis, [`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`]
+/// on the peer M2 overlay-key surfaces, [`DEFAULT_NAMESPACE`]
+/// / [`DEFAULT_LIBRARY_NAME`] / [`DEFAULT_SERVICO_PORT`] on the peer
+/// shared-string / port surfaces) establishes.
+///
+/// Peer of [`M3_KEY_PLACEMENT`] on the same fleet-programs values
+/// schema — that constant names the per-entry overlay key, this one
+/// names the top-level array key both writer verbs upsert into.
+pub const FLEET_PROGRAMS_KEY_PROGRAMS: &str = "programs";
+
 /// Canonical pleme-io label namespace prefix. Every cluster object
 /// emitted by any caixa-side renderer that needs to carry the
 /// pleme-io workload identity uses this prefix; runtime label
@@ -9038,6 +9091,31 @@ mod tests {
         assert_eq!(KUBE_KEY_MATCH_LABELS, "matchLabels");
         assert_eq!(KUBE_KEY_RULES, "rules");
         assert_eq!(KUBE_KEY_SPEC, "spec");
+    }
+
+    #[test]
+    fn fleet_programs_key_programs_pins_canonical_value() {
+        // Bridge-arm pin: [`FLEET_PROGRAMS_KEY_PROGRAMS`] resolves to
+        // the canonical `"programs"` byte today — the exact YAML key
+        // the `lareira-fleet-programs` library chart's `values.yaml`
+        // reads under `.Values.programs[]` to iterate one `ComputeUnit`
+        // CR per entry, and the exact key both writer-side upsert paths
+        // in [`caixa_flux`] (`upsert_into_helmrelease_programs` on the
+        // aggregator-HelmRelease shape, `upsert_into_programs_yaml` on
+        // the bare-values.yaml shape) navigate to walk the entry
+        // sequence. Pin the literal here (peer with the
+        // [`M3_KEY_PLACEMENT`] / [`M2_KEY_LIMITS`] /
+        // [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`] canonical-
+        // literal pins on the sibling fleet-programs / M2 overlay
+        // schema-key surfaces) so a future fleet-programs schema-key
+        // rebrand surfaces here as a coordinated edit-point: the
+        // sibling caixa-flux `fleet_programs_key_programs_re_export_
+        // points_at_caixa_core_canonical` pinning test already pins
+        // the equality at the re-export axis; this pin closes the
+        // second coordinate of the triangle by anchoring the lifted
+        // constant's current byte to the canonical fleet-programs
+        // library chart's documented shape.
+        assert_eq!(FLEET_PROGRAMS_KEY_PROGRAMS, "programs");
     }
 
     // ── label_selector — typed K8s LabelSelector wrapper ─────────────────

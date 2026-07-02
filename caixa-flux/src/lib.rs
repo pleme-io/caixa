@@ -430,6 +430,28 @@ pub use caixa_core::KUBE_KEY_API_VERSION;
 /// bundle document navigates.
 pub use caixa_core::KUBE_KEY_NAMESPACE;
 
+/// Local re-export of [`caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS`] —
+/// the canonical `lareira-fleet-programs` values-schema array key
+/// (`programs:` — the exact YAML key the fleet-programs library chart
+/// reads under `.Values.programs[]` to iterate one `ComputeUnit` CR per
+/// entry). This crate's two writer-side upsert paths
+/// ([`upsert_into_helmrelease_programs`] on the aggregator-HelmRelease
+/// shape, [`upsert_into_programs_yaml`] on the bare-values.yaml shape)
+/// both anchor on this key when walking the entry sequence to
+/// match-by-name-and-replace-or-append. Re-exported here so the two
+/// production sites' `values_map.entry(Value::String(<key>.into()))` /
+/// `programs_yaml.get(<key>)` navigation reads from the same
+/// `&'static str` as every peer consumer (and every future fleet-
+/// programs schema-key consumer — the M4 `app-operator` per-Aplicacao
+/// reconciler, the future `feira app deploy --apply` writer-side
+/// aggregator merge). Same re-export shape as the peer
+/// [`KUBE_KEY_NAMESPACE`] / [`KUBE_KEY_METADATA`] / [`KUBE_KEY_SPEC`]
+/// / [`KUBE_KEY_KIND`] / [`KUBE_KEY_API_VERSION`] surfaces on the
+/// sibling K8s-CR canonical-key axes — extends the discipline the
+/// K8s-CR key re-export quintet establishes onto the canonical
+/// fleet-programs schema top-level axis.
+pub use caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -536,7 +558,9 @@ pub fn upsert_into_helmrelease_programs(
         return Err(Error::MissingField("spec.values must be a mapping"));
     };
     let programs_val = values_map
-        .entry(serde_yaml::Value::String("programs".into()))
+        .entry(serde_yaml::Value::String(
+            FLEET_PROGRAMS_KEY_PROGRAMS.into(),
+        ))
         .or_insert(serde_yaml::Value::Sequence(Vec::new()));
     let arr = match programs_val {
         serde_yaml::Value::Sequence(seq) => seq,
@@ -588,7 +612,7 @@ pub fn upsert_into_programs_yaml(
         ));
     };
 
-    let programs_key = serde_yaml::Value::String("programs".into());
+    let programs_key = serde_yaml::Value::String(FLEET_PROGRAMS_KEY_PROGRAMS.into());
     let programs_val = root
         .entry(programs_key.clone())
         .or_insert(serde_yaml::Value::Sequence(Vec::new()));
@@ -1146,6 +1170,63 @@ spec:
     }
 
     #[test]
+    fn fleet_programs_key_programs_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLEET_PROGRAMS_KEY_PROGRAMS` was lifted from
+        // the two inline `"programs"` production-code call sites
+        // (`upsert_into_helmrelease_programs` at
+        // `values_map.entry(Value::String("programs".into()))` on the
+        // aggregator-HelmRelease shape, `upsert_into_programs_yaml` at
+        // `let programs_key = Value::String("programs".into())` on the
+        // bare-values.yaml shape) — the two writer-side upsert paths
+        // that walk `HelmRelease.spec.values.programs[]` /
+        // top-level `programs[]` to match-by-name-and-replace-or-append.
+        // Both now navigate through the same `&'static str` as every
+        // peer consumer, re-exported to a re-export of
+        // [`caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS`] so the canonical
+        // `lareira-fleet-programs` values-schema array key lives in
+        // exactly one place across every caixa renderer + consumer.
+        // Pin the equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const FLEET_PROGRAMS_KEY_PROGRAMS:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a typo on any one sibling `pub const`
+        // declaration silently emit an entry under one key while the
+        // peer-side upsert probed a different key, and the aggregator's
+        // `range .Values.programs` would then iterate an empty sequence
+        // (every `ComputeUnit` CR silently vanishing from the cluster's
+        // fleet). Peer to
+        // [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] /
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`kube_key_kind_re_export_points_at_caixa_core_canonical`] /
+        // [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level axis re-exports — extends
+        // the discipline the K8s-CR key re-export quintet establishes
+        // onto the canonical fleet-programs schema top-level axis
+        // (`programs:`) every rendered aggregator-HelmRelease /
+        // bare-values.yaml document navigates.
+        assert_eq!(
+            FLEET_PROGRAMS_KEY_PROGRAMS,
+            caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS
+        );
+        assert!(
+            std::ptr::eq(
+                FLEET_PROGRAMS_KEY_PROGRAMS.as_ptr(),
+                caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS.as_ptr(),
+            ),
+            "FLEET_PROGRAMS_KEY_PROGRAMS must be a re-export of \
+             caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS, not a sibling `pub const` that \
+             happens to carry the same string — drift between the two is the canonical \
+             footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn programs_yaml_entry_round_trips() {
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         assert_eq!(
@@ -1405,7 +1486,11 @@ programs: []
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let (modified, inserted) = upsert_into_programs_yaml(initial, entry).unwrap();
         assert!(inserted, "first time should be insert");
-        let arr = modified.get("programs").unwrap().as_sequence().unwrap();
+        let arr = modified
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .unwrap()
+            .as_sequence()
+            .unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(
             arr[0].get("name").and_then(|n| n.as_str()),
@@ -1433,7 +1518,11 @@ programs:
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         let (modified, inserted) = upsert_into_programs_yaml(initial, entry).unwrap();
         assert!(!inserted, "second time should be replace");
-        let arr = modified.get("programs").unwrap().as_sequence().unwrap();
+        let arr = modified
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .unwrap()
+            .as_sequence()
+            .unwrap();
         assert_eq!(arr.len(), 2, "no new entry added");
         let updated_module = arr[0]
             .get("module")
@@ -1477,7 +1566,7 @@ spec:
             .unwrap()
             .get("values")
             .unwrap()
-            .get("programs")
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
             .unwrap()
             .as_sequence()
             .unwrap();
@@ -1513,7 +1602,7 @@ spec:
             .unwrap()
             .get("values")
             .unwrap()
-            .get("programs")
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
             .unwrap()
             .as_sequence()
             .unwrap();
