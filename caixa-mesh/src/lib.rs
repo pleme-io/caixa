@@ -389,6 +389,42 @@ pub use caixa_core::KUBE_KEY_SPEC;
 /// the sibling K8s-CR top-level-spec-axis.
 pub use caixa_core::KUBE_KEY_METADATA;
 
+/// Canonical K8s CR top-level `kind` discriminator key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_KIND`] so the per-CR-kind-axis
+/// retrieval key lives in exactly one place across every caixa renderer
+/// — caixa-mesh's `cilium_network_policies` + `gateway_routes` +
+/// `render_all` test-side `(:kind, :apiVersion)` CRD-lookup-tuple
+/// traversal predicates (every `docs.iter().find(|d| d.get("kind")…)` +
+/// `for p in &policies { p.get("kind")… }` filter that separates the
+/// rendered `Gateway` / `HTTPRoute` / `CiliumNetworkPolicy` documents
+/// inside the multi-doc sequence the `gateway_routes` / `render_all`
+/// emitters return) now consult the same `&'static str` as the peer
+/// caixa-core-side `kube_resource_skeleton` production emitter (which
+/// already inserts [`KUBE_KEY_KIND`] under caixa-core/src/render.rs:7181
+/// on the [`caixa_core::KUBE_KEY_API_VERSION`] + [`KUBE_KEY_KIND`]
+/// axis pair every rendered CR carries). The prior inline `"kind"`
+/// literals at every drift-detection / policy-traversal / render-
+/// determinism test-side site in this crate would have let a typo on
+/// any one site (e.g. `"Kind"`, `"kinds"`, `"knid"`) silently miss the
+/// per-CR kind-axis retrieval — the equality assertion would then
+/// compare `None` against `Some("CiliumNetworkPolicy")` / `Some("Gateway")`
+/// / `Some("HTTPRoute")` rather than the expected kind discriminator,
+/// and the `docs.iter().find(|d| d.get(…) == Some(…))` predicate would
+/// silently miss the per-kind document inside the multi-doc sequence
+/// (the `.expect("Gateway present")` unwrap that names the offending
+/// axis would fire instead of the intended assertion, masking the true
+/// drift). The lift routes every K8s-CR-top-level-kind-axis retrieval
+/// through the same `&'static str` so drift between any two sites
+/// becomes a single-edit fix at the caixa-core const definition. Same
+/// shape as the [`KUBE_KEY_SPEC`] + [`KUBE_KEY_METADATA`] re-exports on
+/// the sibling K8s-CR top-level-spec / top-level-metadata axes —
+/// completes the per-K8s-CR top-level `(apiVersion, kind, metadata,
+/// spec)` axis re-export set on the `kind` half, which every downstream
+/// `docs.iter().find(|d| d.get(KUBE_KEY_KIND)…)` predicate the multi-doc
+/// `render_all` sequence-consumer needs to distinguish the emitted
+/// `Cilium` / `Gateway` / `HTTPRoute` documents by rests on.
+pub use caixa_core::KUBE_KEY_KIND;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1135,6 +1171,47 @@ mod tests {
     }
 
     #[test]
+    fn kube_key_kind_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_KIND` was lifted from sixteen inline
+        // `"kind"` literals at the test-side K8s-CR top-level-kind-axis
+        // retrieval calls that navigate the multi-doc sequence the
+        // `cilium_network_policies` / `gateway_routes` / `render_all`
+        // emitters return to isolate the per-`(Gateway, HTTPRoute,
+        // CiliumNetworkPolicy)` document (the `docs.iter().find(|d|
+        // d.get("kind")…)` filter predicate + `for p in &policies {
+        // p.get("kind")… }` iteration axes) to a re-export of
+        // [`caixa_core::KUBE_KEY_KIND`] so the canonical K8s-CR
+        // top-level kind-discriminator axis string lives in exactly one
+        // place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const KUBE_KEY_KIND: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // symptom — the prior shape would have let a typo on any one
+        // sibling `pub const` declaration silently miss the per-CR
+        // kind retrieval so the multi-doc `.find(|d|
+        // d.get(KUBE_KEY_KIND)…) == Some(…)` predicate the render-
+        // determinism / kind-axis pins rest on would compare against
+        // `None` and mask the true kind-axis drift under the trailing
+        // `.expect("Gateway present")` panic. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] +
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level-spec / top-level-metadata
+        // axis re-exports — completes the per-K8s-CR top-level axis
+        // re-export triple `(spec, metadata, kind)` the multi-doc
+        // consumer patterns across this crate's test suite rest on.
+        assert_eq!(KUBE_KEY_KIND, caixa_core::KUBE_KEY_KIND);
+        assert!(
+            std::ptr::eq(KUBE_KEY_KIND.as_ptr(), caixa_core::KUBE_KEY_KIND.as_ptr()),
+            "KUBE_KEY_KIND must be a re-export of caixa_core::KUBE_KEY_KIND, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_kind_network_policy_re_export_points_at_caixa_core_canonical() {
         // The renderer's `CILIUM_KIND_NETWORK_POLICY` was lifted from
         // the inline `"CiliumNetworkPolicy"` literal at the
@@ -1306,7 +1383,7 @@ mod tests {
         );
         for p in &policies {
             assert_eq!(
-                p.get("kind").and_then(|v| v.as_str()),
+                p.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
                 Some(CILIUM_KIND_NETWORK_POLICY),
                 "every rendered CiliumNetworkPolicy must declare the lifted \
                  [`CILIUM_KIND_NETWORK_POLICY`] constant on its top-level kind \
@@ -2008,7 +2085,12 @@ mod tests {
         assert_eq!(docs.len(), 2);
         let kinds: Vec<_> = docs
             .iter()
-            .map(|d| d.get("kind").and_then(|k| k.as_str()).unwrap().to_string())
+            .map(|d| {
+                d.get(KUBE_KEY_KIND)
+                    .and_then(|k| k.as_str())
+                    .unwrap()
+                    .to_string()
+            })
             .collect();
         assert!(kinds.contains(&GATEWAY_API_KIND_GATEWAY.to_string()));
         assert!(kinds.contains(&GATEWAY_API_KIND_HTTP_ROUTE.to_string()));
@@ -2019,7 +2101,9 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
             .unwrap();
         let listener = gateway
             .get(KUBE_KEY_SPEC)
@@ -2042,7 +2126,9 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
+            })
             .unwrap();
         let backend = route
             .get(KUBE_KEY_SPEC)
@@ -2080,7 +2166,7 @@ mod tests {
                 Some("cilium.io/v2")
             );
             assert_eq!(
-                p.get("kind").and_then(|v| v.as_str()),
+                p.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
                 Some("CiliumNetworkPolicy")
             );
             let metadata = p
@@ -2119,7 +2205,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("Gateway"))
+            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("Gateway"))
             .expect("Gateway present");
         assert_eq!(
             gateway.get("apiVersion").and_then(|v| v.as_str()),
@@ -2161,7 +2247,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("HTTPRoute"))
             .expect("HTTPRoute present");
         assert_eq!(
             route.get("apiVersion").and_then(|v| v.as_str()),
@@ -2210,7 +2296,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("Gateway"))
+            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("Gateway"))
             .expect("Gateway present");
         assert_eq!(
             gateway.get("apiVersion").and_then(|v| v.as_str()),
@@ -2250,10 +2336,12 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
             .expect("Gateway present");
         assert_eq!(
-            gateway.get("kind").and_then(|v| v.as_str()),
+            gateway.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
             Some(caixa_core::GATEWAY_API_KIND_GATEWAY),
             "Gateway's top-level kind must equal the lifted \
              caixa_core::GATEWAY_API_KIND_GATEWAY by value — drift here \
@@ -2293,10 +2381,12 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
+            })
             .expect("HTTPRoute present");
         assert_eq!(
-            route.get("kind").and_then(|v| v.as_str()),
+            route.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
             Some(caixa_core::GATEWAY_API_KIND_HTTP_ROUTE),
             "HTTPRoute's top-level kind must equal the lifted \
              caixa_core::GATEWAY_API_KIND_HTTP_ROUTE by value — drift here \
@@ -2323,7 +2413,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("HTTPRoute"))
             .expect("HTTPRoute present");
         assert_eq!(
             route.get("apiVersion").and_then(|v| v.as_str()),
@@ -2368,7 +2458,7 @@ mod tests {
         let kinds: Vec<_> = docs
             .iter()
             .filter_map(|d| {
-                d.get("kind")
+                d.get(KUBE_KEY_KIND)
                     .and_then(|k| k.as_str())
                     .map(|s| s.to_string())
             })
@@ -2383,7 +2473,9 @@ mod tests {
 
     fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
-            .find(|d| d.get("kind").and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
+            })
             .and_then(|d| d.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get("rules"))
             .and_then(|r| r.as_sequence())
@@ -2736,7 +2828,9 @@ mod tests {
 
     fn cnp_ingress_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
-            .filter(|d| d.get("kind").and_then(|k| k.as_str()) == Some(CILIUM_KIND_NETWORK_POLICY))
+            .filter(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(CILIUM_KIND_NETWORK_POLICY)
+            })
             .filter_map(|d| {
                 d.get(KUBE_KEY_SPEC)
                     .and_then(|s| s.get("ingress"))
