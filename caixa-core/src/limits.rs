@@ -1151,7 +1151,22 @@ fn parse_byte_size(s: &str) -> Result<u64, LimitsError> {
     // drift (this arm) and semantic-zero (the downstream gate) remains
     // stable. Same codec-layer / typed-validate-layer partition the
     // peer codecs preserve.
-    if num_trim.len() > 1 && num_trim.as_bytes()[0] == b'0' {
+    //
+    // Routed through the lifted
+    // [`crate::render::is_leading_zero_padded_magnitude`] predicate —
+    // the single source of truth every typed-magnitude codec in
+    // caixa-core (`parse_byte_size` / `parse_duration` /
+    // `parse_millicores` / `supervisor::duration_codec` /
+    // `rate_limit_codec`) shares. Drift between any two codec sites'
+    // leading-zero rejection set becomes a single-edit fix at the
+    // shared predicate rather than five independent
+    // `s.len() > 1 && s.as_bytes()[0] == b'0'` scans diverging over
+    // time — same "single lifted source of truth" discipline the
+    // peer whitespace predicates
+    // ([`crate::render::find_ascii_whitespace_byte`] /
+    // [`crate::render::find_non_ascii_whitespace_char`]) carry on
+    // their strictly-complementary axes.
+    if crate::render::is_leading_zero_padded_magnitude(num_trim) {
         return Err(LimitsError::LeadingZeroByteMagnitude {
             value: num_trim.into(),
         });
@@ -1358,7 +1373,12 @@ fn parse_duration(s: &str) -> Result<Duration, LimitsError> {
     // and semantic-zero (the downstream gate) remains stable. Same
     // codec-layer / typed-validate-layer partition the peer codecs
     // preserve.
-    if num_trim.len() > 1 && num_trim.as_bytes()[0] == b'0' {
+    //
+    // Routed through the lifted
+    // [`crate::render::is_leading_zero_padded_magnitude`] predicate —
+    // the same source of truth the four peer typed-magnitude codec
+    // sites share.
+    if crate::render::is_leading_zero_padded_magnitude(num_trim) {
         return Err(LimitsError::LeadingZeroDurationMagnitude {
             value: num_trim.into(),
         });
@@ -1581,7 +1601,12 @@ fn parse_millicores(s: &str) -> Result<u32, LimitsError> {
     // numeric-codec surface in caixa-core on the integer-magnitude
     // leading-zero axis — the trajectory the prior `parse_byte_size`
     // arm (cea9a78) explicitly named.
-    if magnitude.len() > 1 && magnitude.as_bytes()[0] == b'0' {
+    //
+    // Routed through the lifted
+    // [`crate::render::is_leading_zero_padded_magnitude`] predicate —
+    // the same source of truth the four peer typed-magnitude codec
+    // sites share.
+    if crate::render::is_leading_zero_padded_magnitude(magnitude) {
         return Err(LimitsError::LeadingZeroMillicoreMagnitude {
             value: magnitude.into(),
         });

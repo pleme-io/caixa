@@ -354,6 +354,70 @@ pub fn find_non_ascii_whitespace_char(s: &str) -> Option<char> {
     s.chars().find(|c| c.is_whitespace() && !c.is_ascii())
 }
 
+/// Predicate: `s` carries a leading-zero-padded magnitude — its length
+/// exceeds one byte and its first byte is ASCII `'0'`.
+///
+/// The canonical drift class this closes across every typed-magnitude
+/// codec in caixa-core (`limits::parse_byte_size` backing `:limits
+/// :memory` — cea9a78; `limits::parse_duration` backing `:limits
+/// :wall-clock` — 39762d7; `limits::parse_millicores` backing
+/// `:limits :cpu` — the sixth codec surface;
+/// `supervisor::duration_codec::parse` backing `:supervisor
+/// :restart-window` / `:politicas :timeout` / `:politicas
+/// :circuit-breaker :window` — 9178904; and
+/// `aplicacao::rate_limit_codec::parse` backing `:politicas
+/// :rate-limit` — 4f46830) is the leading-zero-padded magnitude
+/// shape: every downstream typed-magnitude codec's `render_*`
+/// canonicalizer emits the leading-zero-stripped form, so a
+/// leading-zero magnitude (`"030s"`, `"0100/s"`, `"0500m"`,
+/// `"0064MiB"`, `"01h"`) round-trips through `render_*` to a
+/// *different* canonical string on the next emit (`"30s"`, `"100/s"`,
+/// `"500m"`, `"64MiB"`, `"1h"`) — breaking the THEORY.md Part V
+/// render-determinism contract every typed slot carries the same way
+/// the leading-`+` shape did before the digit-only arm landed.
+///
+/// The predicate deliberately admits the single-byte magnitude `"0"`
+/// (returning `false`) — every codec's `render_*` canonicalizer emits
+/// `"0"` / `"0s"` / `"0m"` / `"0/s"` verbatim for the zero magnitude,
+/// so the single-byte form round-trips losslessly through the codec
+/// layer. The downstream semantic-zero gates
+/// ([`crate::LimitsError::MemoryZero`],
+/// [`crate::LimitsError::WallClockZero`],
+/// [`crate::LimitsError::CpuZero`],
+/// [`crate::SupervisorError::ZeroRestartWindow`],
+/// [`crate::AplicacaoError::PolicyTimeoutZero`],
+/// [`crate::AplicacaoError::PolicyCircuitBreakerWindowZero`],
+/// [`crate::AplicacaoError::PolicyRateLimitZero`]) refuse the
+/// semantic-zero authoring at the typed-validate layer above; the
+/// codec-layer / typed-validate-layer partition between
+/// canonical-form drift (this arm) and semantic-zero (the downstream
+/// gate) remains stable across every codec site.
+///
+/// Peer of [`find_ascii_whitespace_byte`] /
+/// [`find_non_ascii_whitespace_char`] on the same
+/// canonical-form-drift axis at the codec layer: those two predicates
+/// close the whitespace drift class (paste-from-shell-history /
+/// paste-from-typography), this one closes the leading-zero-padding
+/// drift class (paste-from-fixed-width-alignment /
+/// paste-from-columnar-report). Same "single lifted source of truth"
+/// discipline: drift between any two codec sites' leading-zero
+/// rejection set becomes a single-edit fix at this predicate rather
+/// than five independent `s.len() > 1 && s.as_bytes()[0] == b'0'`
+/// scans diverging over time. A future stricter classification
+/// closing at this shared site (a hypothetical `"00"` shape whose
+/// diagnostic distinguishes explicit-zero-padding from the accepted
+/// canonical `"0"`, or a future higher base like `"0x0100"` whose
+/// magnitude prefix would trip this arm before the digit-only gate
+/// catches the `x`) extends at one location rather than five. Peer of
+/// [`is_dns_1123_label`] / [`is_gateway_api_http_path`] /
+/// [`is_git_repo_url`] — same "typed-slot's valid set matches its
+/// codec's accepted set, structurally" discipline carried at the
+/// codec layer.
+#[must_use]
+pub fn is_leading_zero_padded_magnitude(s: &str) -> bool {
+    s.len() > 1 && s.as_bytes()[0] == b'0'
+}
+
 /// K8s DNS-1123 label rule's max length, in bytes — the floor each
 /// apiserver-side schema enforces independently on every `metadata.name`
 /// / Service name / label value axis a validated identifier lands in.
@@ -12877,5 +12941,93 @@ mod tests {
         // already closes.
         assert!(find_non_ascii_whitespace_char("\u{FEFF}64MiB").is_none());
         assert!(find_non_ascii_whitespace_char("\u{200B}30s").is_none());
+    }
+
+    // ── shared predicate: is_leading_zero_padded_magnitude ──────────────
+    //
+    // Pins the accepted / rejected set of the lifted leading-zero
+    // predicate every typed-magnitude codec in caixa-core calls
+    // (`parse_byte_size` / `parse_duration` / `parse_millicores` /
+    // shared `duration_codec` / `rate_limit_codec`). Same lifted-
+    // source-of-truth discipline the peer whitespace predicates
+    // (`find_ascii_whitespace_byte` / `find_non_ascii_whitespace_char`)
+    // carry — drift between any two codec sites' rejection set becomes
+    // a single-edit fix at this predicate.
+
+    #[test]
+    fn is_leading_zero_padded_magnitude_accepts_canonical_forms() {
+        // Complement-side pin: every canonical form the typed-magnitude
+        // `render_*` canonicalizers emit — the single-byte `"0"` case
+        // and every non-leading-zero magnitude — returns `false`.
+        assert!(!is_leading_zero_padded_magnitude("0"));
+        assert!(!is_leading_zero_padded_magnitude("1"));
+        assert!(!is_leading_zero_padded_magnitude("64"));
+        assert!(!is_leading_zero_padded_magnitude("500"));
+        assert!(!is_leading_zero_padded_magnitude("1024"));
+        assert!(!is_leading_zero_padded_magnitude("999999"));
+        // Empty magnitude is not a leading-zero shape either — the
+        // upstream `digit_only` gate at each codec site refuses empty
+        // magnitudes on its own arm before this predicate is consulted.
+        assert!(!is_leading_zero_padded_magnitude(""));
+        // Non-digit-only bodies are outside the predicate's scope — the
+        // upstream `digit_only` gate refuses them with its own
+        // `NonInteger*` / `Bad*` diagnostic; this predicate is invoked
+        // only after that gate accepts.
+        assert!(!is_leading_zero_padded_magnitude("a"));
+        assert!(!is_leading_zero_padded_magnitude("1.5"));
+    }
+
+    #[test]
+    fn is_leading_zero_padded_magnitude_flags_two_byte_leading_zero() {
+        // The minimal leading-zero drift shape: two-byte magnitude
+        // starting with `'0'` — `"00"` / `"01"` / `"09"`. Every one
+        // round-trips through the peer codecs' `render_*` to the
+        // leading-zero-stripped form (`"0"` / `"1"` / `"9"`).
+        assert!(is_leading_zero_padded_magnitude("00"));
+        assert!(is_leading_zero_padded_magnitude("01"));
+        assert!(is_leading_zero_padded_magnitude("09"));
+    }
+
+    #[test]
+    fn is_leading_zero_padded_magnitude_flags_multi_byte_leading_zero() {
+        // The canonical paste-from-fixed-width-alignment /
+        // paste-from-columnar-report drift class each codec's
+        // `render_*` emits the stripped form for: `"0064"` (byte-size
+        // magnitude), `"030"` (duration magnitude), `"0500"`
+        // (millicores magnitude), `"0100"` (rate-limit magnitude),
+        // `"01024"` (multi-digit byte-size magnitude).
+        assert!(is_leading_zero_padded_magnitude("0064"));
+        assert!(is_leading_zero_padded_magnitude("030"));
+        assert!(is_leading_zero_padded_magnitude("0500"));
+        assert!(is_leading_zero_padded_magnitude("0100"));
+        assert!(is_leading_zero_padded_magnitude("01024"));
+        // All-zeros multi-byte magnitude — `"000"` / `"0000"` — every
+        // one round-trips to `"0"`. The single-byte `"0"` case is the
+        // canonical zero and stays accepted; the multi-byte all-zero
+        // shape is leading-zero drift.
+        assert!(is_leading_zero_padded_magnitude("000"));
+        assert!(is_leading_zero_padded_magnitude("0000"));
+    }
+
+    #[test]
+    fn is_leading_zero_padded_magnitude_pins_single_zero_boundary() {
+        // The single-byte magnitude `"0"` is the canonical zero the
+        // peer codecs' `render_*` canonicalizers emit for the zero
+        // value verbatim (`render_byte_size(0)` = `"0"`,
+        // `render_duration(Duration::ZERO)` = `"0s"` with `"0"` as
+        // the magnitude, `render_millicores(0)` = `"0m"` with `"0"`
+        // as the magnitude, `RateLimit::render` for rate=0 = `"0/s"`
+        // with `"0"` as the magnitude). Pinning this boundary so a
+        // future widening that starts flagging the single-byte `"0"`
+        // here surfaces as a test failure rather than a silent break
+        // of the codec-layer / typed-validate-layer partition — the
+        // semantic-zero gates at the typed-validate layer above
+        // (`LimitsError::MemoryZero`, `LimitsError::WallClockZero`,
+        // `LimitsError::CpuZero`, `SupervisorError::ZeroRestartWindow`,
+        // `AplicacaoError::PolicyTimeoutZero` /
+        // `PolicyCircuitBreakerWindowZero` / `PolicyRateLimitZero`)
+        // are what refuse zero-magnitude authoring, not this codec-
+        // layer predicate.
+        assert!(!is_leading_zero_padded_magnitude("0"));
     }
 }

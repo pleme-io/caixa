@@ -55,9 +55,10 @@ pub use render::{
     ServicoCountMismatch, WASI_KV_SLOT_MAX_LEN, WIT_IDENT_MAX_LEN, find_ascii_whitespace_byte,
     find_non_ascii_whitespace_char, is_cargo_feature_name, is_computeunit_yaml_extension,
     is_dns_1123_label, is_gateway_api_http_path, is_git_oid, is_git_ref_name, is_git_repo_url,
-    is_lareira_chart_name_shape, is_lisp_extension, is_nats_subject, is_sandboxed_relative_path,
-    is_wasi_keyvalue_slot, is_wit_world_ref, kube_resource_skeleton, label_selector,
-    lareira_chart_name, pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind,
+    is_lareira_chart_name_shape, is_leading_zero_padded_magnitude, is_lisp_extension,
+    is_nats_subject, is_sandboxed_relative_path, is_wasi_keyvalue_slot, is_wit_world_ref,
+    kube_resource_skeleton, label_selector, lareira_chart_name,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, require_kind,
     require_single_servico, servico_m2_overlay, single_field_overlay, yaml_string_mapping,
 };
 pub use supervisor::{

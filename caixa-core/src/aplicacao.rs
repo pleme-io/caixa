@@ -1700,7 +1700,12 @@ mod rate_limit_codec {
         // discipline on the fourth typed-magnitude codec in
         // caixa-core first because the peer `"+100/s"` arm above is
         // the closest predecessor on the trajectory.
-        if rate_trim.len() > 1 && rate_trim.as_bytes()[0] == b'0' {
+        //
+        // Routed through the lifted
+        // [`crate::render::is_leading_zero_padded_magnitude`]
+        // predicate — the same source of truth the four peer
+        // typed-magnitude codec sites share.
+        if crate::render::is_leading_zero_padded_magnitude(rate_trim) {
             return Err(format!(
                 "rate-limit: rate {rate_trim:?} has a non-canonical leading zero — the \
                  canonical authoring form for `:politicas :rate-limit` is \
