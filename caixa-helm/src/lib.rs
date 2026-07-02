@@ -50,7 +50,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use caixa_core::{Caixa, CaixaKind, KUBE_KEY_SPEC, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

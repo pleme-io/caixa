@@ -46,10 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{
-    Caixa, CaixaKind, KUBE_KEY_API_VERSION, KUBE_KEY_METADATA, KUBE_KEY_NAMESPACE, KUBE_KEY_SPEC,
-    lareira_chart_name,
-};
+use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
