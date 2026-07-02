@@ -46,7 +46,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, KUBE_KEY_METADATA, KUBE_KEY_SPEC, lareira_chart_name};
+use caixa_core::{
+    Caixa, CaixaKind, KUBE_KEY_API_VERSION, KUBE_KEY_METADATA, KUBE_KEY_SPEC, lareira_chart_name,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -356,6 +358,42 @@ pub use caixa_core::KUBE_KEY_METADATA;
 /// `(spec, metadata, kind)` axis re-export triple every rendered Flux
 /// bundle document navigates.
 pub use caixa_core::KUBE_KEY_KIND;
+
+/// Canonical K8s CR top-level `apiVersion` key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_API_VERSION`] so the per-CR-
+/// group/version-axis discriminator key lives in exactly one place
+/// across every caixa renderer — caixa-flux's [`cluster_bundle`]
+/// drift-detection pins that traverse the rendered
+/// `gitrepository.yaml` / `helmrelease.yaml` / `kustomization.yaml`
+/// documents to assert the top-level `apiVersion` axis + the
+/// `kustomization.yaml`'s nested `spec.healthChecks[].apiVersion`
+/// axis bind to the lifted [`FLUX_GITREPOSITORY_API_VERSION`] /
+/// [`FLUX_HELMRELEASE_API_VERSION`] / [`FLUX_KUSTOMIZATION_API_VERSION`]
+/// controller-triplet CRD-group/versions now consult the same
+/// `&'static str` as the sibling [`KUBE_KEY_SPEC`] / [`KUBE_KEY_METADATA`]
+/// / [`KUBE_KEY_KIND`] re-exports on the peer K8s-CR top-level axes.
+/// The prior inline `"apiVersion"` literals at every drift-detection
+/// cross-axis-pin call site in this crate would have let a typo on
+/// any one site (e.g. `"ApiVersion"`, `"api_version"`, `"apiversion"`,
+/// `"apiVer"`) silently miss the per-CR apiVersion-axis retrieval —
+/// the equality assertion would then compare `None` against
+/// `Some("source.toolkit.fluxcd.io/v1")` /
+/// `Some("helm.toolkit.fluxcd.io/v2")` /
+/// `Some("kustomize.toolkit.fluxcd.io/v1")` rather than the expected
+/// controller-triplet CRD-group/version, masking the sibling
+/// `FLUX_*_API_VERSION` re-export drift the pin was meant to catch
+/// under a `.expect("… present")` panic on the missing `.and_then`
+/// chain. The lift routes every K8s-CR top-level-apiVersion-axis
+/// retrieval through the same `&'static str` so drift between any
+/// two sites becomes a single-edit fix at the caixa-core const
+/// definition, extending the discipline the sibling [`KUBE_KEY_SPEC`]
+/// / [`KUBE_KEY_METADATA`] / [`KUBE_KEY_KIND`] re-exports establish
+/// onto the last of the four K8s-CR top-level axes (`apiVersion`,
+/// `kind`, `metadata`, `spec`) every rendered Flux v2 bundle
+/// document declares — completes the per-K8s-CR top-level
+/// `(apiVersion, kind, metadata, spec)` axis re-export quartet
+/// across this crate.
+pub use caixa_core::KUBE_KEY_API_VERSION;
 
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
@@ -963,6 +1001,53 @@ spec:
         assert!(
             std::ptr::eq(KUBE_KEY_KIND.as_ptr(), caixa_core::KUBE_KEY_KIND.as_ptr()),
             "KUBE_KEY_KIND must be a re-export of caixa_core::KUBE_KEY_KIND, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_API_VERSION` was lifted from four
+        // inline `"apiVersion"` literals at the test-side K8s-CR
+        // top-level-apiVersion-axis retrieval calls that navigate the
+        // rendered `cluster_bundle` multi-file sequence to isolate each
+        // per-`(GitRepository, HelmRelease, Kustomization)` document's
+        // top-level-apiVersion axis plus the `kustomization.yaml`'s
+        // nested `spec.healthChecks[].apiVersion` drift-detection pin,
+        // to a re-export of [`caixa_core::KUBE_KEY_API_VERSION`] so the
+        // canonical K8s-CR top-level apiVersion-axis string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_KEY_API_VERSION:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a typo on any one sibling `pub const`
+        // declaration silently miss the per-CR apiVersion retrieval so
+        // the drift-detection `.get(KUBE_KEY_API_VERSION).and_then(|n|
+        // n.as_str()) == Some(…)` predicate the sibling
+        // `FLUX_*_API_VERSION` re-export pins rest on would compare
+        // against `None` under the trailing `.expect("… present")`
+        // panic and mask the true sibling `FLUX_*_API_VERSION` axis
+        // drift. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] +
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level-spec / top-level-metadata /
+        // top-level-kind axis re-exports — completes the per-K8s-CR
+        // top-level `(apiVersion, kind, metadata, spec)` axis
+        // re-export quartet every rendered Flux v2 bundle document
+        // navigates.
+        assert_eq!(KUBE_KEY_API_VERSION, caixa_core::KUBE_KEY_API_VERSION);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_API_VERSION.as_ptr(),
+                caixa_core::KUBE_KEY_API_VERSION.as_ptr(),
+            ),
+            "KUBE_KEY_API_VERSION must be a re-export of caixa_core::KUBE_KEY_API_VERSION, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -1714,7 +1799,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         assert_eq!(
-            parsed.get("apiVersion").and_then(|n| n.as_str()),
+            parsed.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
             Some(FLUX_HELMRELEASE_API_VERSION),
             "helmrelease.yaml apiVersion must spell the lifted \
              FLUX_HELMRELEASE_API_VERSION ({FLUX_HELMRELEASE_API_VERSION:?}); \
@@ -1757,7 +1842,7 @@ spec:
         );
         for (i, entry) in health_checks.iter().enumerate() {
             assert_eq!(
-                entry.get("apiVersion").and_then(|n| n.as_str()),
+                entry.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
                 Some(FLUX_HELMRELEASE_API_VERSION),
                 "kustomization.yaml spec.healthChecks[{i}].apiVersion must \
                  spell the lifted FLUX_HELMRELEASE_API_VERSION \
@@ -1941,7 +2026,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
         assert_eq!(
-            parsed.get("apiVersion").and_then(|n| n.as_str()),
+            parsed.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
             Some(FLUX_GITREPOSITORY_API_VERSION),
             "gitrepository.yaml apiVersion must spell the lifted \
              FLUX_GITREPOSITORY_API_VERSION ({FLUX_GITREPOSITORY_API_VERSION:?}); \
@@ -2045,7 +2130,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         assert_eq!(
-            parsed.get("apiVersion").and_then(|n| n.as_str()),
+            parsed.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
             Some(FLUX_KUSTOMIZATION_API_VERSION),
             "kustomization.yaml apiVersion must spell the lifted \
              FLUX_KUSTOMIZATION_API_VERSION ({FLUX_KUSTOMIZATION_API_VERSION:?}); \
