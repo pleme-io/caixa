@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, KUBE_KEY_SPEC, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, KUBE_KEY_METADATA, KUBE_KEY_SPEC, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -311,6 +311,24 @@ pub use caixa_core::DEFAULT_LIBRARY_NAME;
 /// canonical-Flux-load-bearing-string axes.
 pub use caixa_core::KUBE_KEY_SPEC;
 
+/// Canonical K8s CR top-level `metadata` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_METADATA`] so the per-kind metadata block key
+/// lives in exactly one place across every caixa renderer — caixa-flux's
+/// `programs_yaml_entry` (the upstream ComputeUnit YAML's `metadata.namespace`
+/// axis the rendered programs.yaml entry's `namespace` field reads from)
+/// now consults the same `&'static str` as the peer caixa-mesh renderer's
+/// `KUBE_KEY_METADATA` re-export. The prior inline `"metadata"` literals
+/// at the production-code + drift-detection call sites would have let a
+/// typo on one site (e.g. `"Metadata"`, `"meta-data"`, `"medadata"`)
+/// silently miss the ComputeUnit's `metadata.namespace` lookup and fall
+/// back to `DEFAULT_NAMESPACE` even when the ComputeUnit YAML pinned a
+/// distinct target namespace; the lift routes every K8s-CR-top-level-
+/// metadata-axis retrieval through the same `&'static str` so drift
+/// between any two sites becomes a single-edit fix at the caixa-core
+/// const definition. Same shape as the [`KUBE_KEY_SPEC`] re-export on
+/// the sibling K8s-CR top-level-spec-axis.
+pub use caixa_core::KUBE_KEY_METADATA;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -336,7 +354,7 @@ pub fn programs_yaml_entry(
         .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
 
     let namespace = computeunit_yaml
-        .get("metadata")
+        .get(KUBE_KEY_METADATA)
         .and_then(|m| m.get("namespace"))
         .and_then(|n| n.as_str())
         .unwrap_or(DEFAULT_NAMESPACE)
@@ -841,6 +859,39 @@ spec:
         assert!(
             std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
             "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_metadata_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_METADATA` was lifted from the
+        // production-code inline `"metadata"` literal at
+        // `programs_yaml_entry`'s `computeunit_yaml.get("metadata")`
+        // ComputeUnit-side metadata read + the drift-detection pin at
+        // `cluster_bundle_kustomization_carries_flux_system_namespace_axes`'s
+        // `parsed.get("metadata")` rendered-kustomization traversal, to a
+        // re-export of [`caixa_core::KUBE_KEY_METADATA`] so the canonical
+        // K8s-CR top-level metadata-axis string lives in exactly one
+        // place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const KUBE_KEY_METADATA: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a build-time
+        // test failure naming the offending drift. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] on
+        // the sibling K8s-CR top-level-spec-axis re-export +
+        // `caixa_mesh::tests::kube_key_metadata_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(KUBE_KEY_METADATA, caixa_core::KUBE_KEY_METADATA);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_METADATA.as_ptr(),
+                caixa_core::KUBE_KEY_METADATA.as_ptr(),
+            ),
+            "KUBE_KEY_METADATA must be a re-export of caixa_core::KUBE_KEY_METADATA, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -1508,7 +1559,7 @@ spec:
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
         assert_eq!(
             parsed
-                .get("metadata")
+                .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.get("namespace"))
                 .and_then(|n| n.as_str()),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
