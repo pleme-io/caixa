@@ -7149,19 +7149,30 @@ mod tests {
     }
 
     #[test]
-    fn validate_accepts_path_fonte_with_mid_path_dollar_caminho() {
-        // The leading-`$` is the canonical shell-variable-expansion
-        // footgun — a `$` mid-path (`"../foo$bar/caixa-teia"` — the
-        // canonical "I have a file with `$` in its name" idiom; `$`
-        // is a valid POSIX filename byte) is a legitimate path with
-        // no shell-expansion semantic at the non-leading position.
-        // Pinned so the gate doesn't widen to a full no-dollar-
-        // anywhere sweep that would break every legitimate-shape
-        // dollar-in-filename path.
+    fn validate_rejects_path_fonte_with_mid_path_dollar_caminho() {
+        // The `$` byte is the canonical shell-variable-expansion /
+        // command-substitution / arithmetic-expansion sentinel and
+        // is rejected at *every* position on the `:caminho` axis: the
+        // leading arm surfaces `FonteCaminhoVarExpansion`, the
+        // embedded arm surfaces `FonteCaminhoShellVariableExpansion`
+        // (6620f39). Pinned so a future arm doesn't narrow the gate
+        // back to the leading position and re-open the paste-from-
+        // shell-one-liner `"../foo$HOME/bar"` / paste-from-CI-
+        // manifest `"../foo${WORKSPACE}/bar"` / paste-from-shell-
+        // prompt `"../foo$(whoami)/bar"` cross-idiom-leak surface on
+        // the lacre content-address (`path:{caminho}`,
+        // caixa-resolver/src/resolve.rs:189).
         let d = dep_with_fonte(DepSource::Path {
             caminho: "../foo$bar/caixa-teia".into(),
         });
-        d.validate().unwrap();
+        let err = d.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::FonteCaminhoShellVariableExpansion { byte: b'$', .. },
+            ),
+            "got {err:?}",
+        );
     }
 
     #[test]
@@ -9657,18 +9668,20 @@ mod tests {
 
     #[test]
     fn validate_rejects_path_fonte_with_caminho_carrying_balanced_subshell_grouping_pair() {
-        // The canonical balanced-pair shape (`"../(cd foo && pwd)/\
-        // caixa-teia"` — the canonical "I copied a `(cd foo && pwd)`
-        // working-directory-probe subshell-grouping idiom every shell-
-        // history block carries" footgun). The arm fires on the first
-        // `(` encountered; pinned so a future arm that tries to
-        // distinguish the opening from the closing byte doesn't break
-        // the broader contract. Mirrors the peer
+        // The canonical balanced-pair shape (`"../(pwd)/caixa-teia"`
+        // — the canonical "I copied a `(pwd)` working-directory-probe
+        // subshell-grouping idiom every shell-history block carries"
+        // footgun). The value carries no other cascade-preceding
+        // shell metachar (`&` / `;` / `|` / `<` / `>` / backtick /
+        // `*` / `?`) so the arm fires on the first `(` encountered;
+        // pinned so a future arm that tries to distinguish the
+        // opening from the closing byte doesn't break the broader
+        // contract. Mirrors the peer
         // `validate_rejects_path_fonte_with_caminho_carrying_balanced_\
         // backtick_pair` shape on the upstream `FonteCaminhoShell\
         // CommandSubstitution` arm.
         let d = dep_with_fonte(DepSource::Path {
-            caminho: "../(cd foo && pwd)/caixa-teia".into(),
+            caminho: "../(pwd)/caixa-teia".into(),
         });
         let err = d.validate().unwrap_err();
         assert!(
