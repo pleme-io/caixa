@@ -657,6 +657,68 @@ pub use caixa_core::KUBE_KEY_NAME;
 /// projection).
 pub use caixa_core::KUBE_KEY_MATCH_LABELS;
 
+/// Canonical K8s CR `rules` collection-axis key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_RULES`] so the per-CR rule-list
+/// container key lives in exactly one place across every caixa
+/// renderer — this crate's two production-code emitters
+/// (`cilium_network_policies`'s per-`toPorts[]` `rules:` L7 rule-list
+/// mapping the Cilium data plane dispatches HTTP / Kafka / DNS L7
+/// rules under, `gateway_routes`'s `HTTPRoute` `spec.rules[]` sequence
+/// the gateway-class-controller dispatches per-rule `matches[]` +
+/// `backendRefs[]` + timeouts / retries overlay under) and this crate's
+/// five test-side rule-list traversal sites (the
+/// `httproute_carries_paths_from_http_endpoints` `.get("rules")` under
+/// `toPorts[]` L7-path-content pin, the `cilium_l7_rules_are_http_only`
+/// `.get("rules")` under `toPorts[]` L7-http-only-shape pin, the
+/// `cilium_pubsub_contracts_skip_l7_rules` `to_ports.get("rules").is_none()`
+/// pubsub-contracts-carry-no-L7-rules absence pin, the
+/// `gateway_emits_gateway_plus_httproute_pair` `.get("rules")` under
+/// `spec` HTTPRoute-backendRefs-shape pin, and the `httproute_rules`
+/// test-fixture helper `.get("rules")` under `spec` HTTPRoute-rule-
+/// sequence retrieval every downstream policy-timeout / retries /
+/// mtls / rate-limit determinism pin reaches through) now consult the
+/// same `&'static str` as the peer caixa-core-side const definition.
+///
+/// The prior inline `"rules"` literals at the two production emitter
+/// sites + five test-side retrieval sites in this crate would have let
+/// a typo on any one site (e.g. `"Rules"`, `"rule"`, `"ruleset"`, the
+/// canonical `HTTPRoute.spec.rules` vs Cilium `toPorts[].rules` cross-
+/// context transposition where a maintainer replaces one axis's key
+/// with the other's spelling mid-edit) silently miss the per-CR rule-
+/// list retrieval — the presence pin's `.expect("HTTPRoute spec.rules
+/// sequence")` panic-message tag would fire against the mapping-shape
+/// message rather than the true rule-list-key drift, or the
+/// `is_none()` absence pin (`cilium_pubsub_contracts_skip_l7_rules`)
+/// would fire on the drifted retrieval so the L7-rules-absent-on-
+/// pubsub-contracts contract's true drift is masked. On the production
+/// side, a drift to `"Rules"` at either emitter site would silently
+/// emit a CR whose rule-list container the apiserver-side CRD schema
+/// validator drops as unrecognized at apply time (the Cilium operator's
+/// per-CNP L7 dispatch pass would silently no-op every rule on the
+/// affected `toPorts[]`; the gateway-class-controller's per-HTTPRoute
+/// rule-dispatch pass would silently no-op every match/backend rule on
+/// the affected route) with no field naming the rule-list-key-drift
+/// root cause. The lift routes every K8s-CR-rules-axis retrieval +
+/// emission through the same `&'static str` so drift between any two
+/// sites becomes a single-edit fix at the caixa-core const definition.
+///
+/// Same shape as the [`KUBE_KEY_MATCH_LABELS`] re-export on the
+/// sibling nested-selector-projection axis — extends the per-K8s-CR
+/// top-level `(apiVersion, kind, metadata, spec)` axis re-export
+/// quartet + the load-bearing nested `metadata.{name, namespace,
+/// labels}` triplet + the load-bearing nested
+/// `LabelSelector.matchLabels` selector-projection axis onto the
+/// load-bearing nested `spec.rules[]` / `toPorts[].rules`
+/// rule-list-container axis every downstream L7-policy /
+/// HTTPRoute-rule-dispatch consumer of the rendered mesh bundle keys
+/// off. Peer to the sibling load-bearing K8s-CR-schema-axis re-exports
+/// every downstream apiserver-side CRD-schema-validator navigates the
+/// same rule-list container axis on (the Cilium operator's per-CNP
+/// L7 dispatch pass under `spec.ingress[].toPorts[].rules.http[]`, the
+/// gateway-class-controller's per-HTTPRoute rule-dispatch pass under
+/// `spec.rules[].matches[]` + `spec.rules[].backendRefs[]`).
+pub use caixa_core::KUBE_KEY_RULES;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -867,7 +929,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                     serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
                 );
                 to_port.insert(
-                    serde_yaml::Value::String("rules".into()),
+                    serde_yaml::Value::String(KUBE_KEY_RULES.into()),
                     serde_yaml::Value::Mapping(rules),
                 );
             }
@@ -1111,7 +1173,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(entrada.host.clone())]),
     );
     r_spec.insert(
-        serde_yaml::Value::String("rules".into()),
+        serde_yaml::Value::String(KUBE_KEY_RULES.into()),
         serde_yaml::Value::Sequence(rules),
     );
     route.insert(
@@ -1727,6 +1789,72 @@ mod tests {
                 caixa_core::KUBE_KEY_MATCH_LABELS.as_ptr(),
             ),
             "KUBE_KEY_MATCH_LABELS must be a re-export of caixa_core::KUBE_KEY_MATCH_LABELS, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_rules_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_RULES` was lifted from seven inline
+        // `"rules"` literals — two production emitter sites
+        // (`cilium_network_policies`'s per-`toPorts[]` L7 `rules:`
+        // mapping the Cilium data plane dispatches HTTP / Kafka / DNS
+        // L7 rules under, `gateway_routes`'s `HTTPRoute` `spec.rules[]`
+        // sequence the gateway-class-controller dispatches per-rule
+        // `matches[]` + `backendRefs[]` + timeouts / retries overlay
+        // under) and five test-side rule-list traversal sites (the
+        // `httproute_carries_paths_from_http_endpoints` /
+        // `cilium_l7_rules_are_http_only` L7-rule-content pins under
+        // `toPorts[]`, the `cilium_pubsub_contracts_skip_l7_rules`
+        // absence pin whose `.is_none()` guards the pubsub-contracts-
+        // carry-no-L7-rules contract, the
+        // `gateway_emits_gateway_plus_httproute_pair` HTTPRoute-
+        // backendRefs-shape pin under `spec`, and the `httproute_rules`
+        // test-fixture helper the downstream policy-timeout / retries
+        // / mtls / rate-limit determinism pins reach through) — to a
+        // re-export of [`caixa_core::KUBE_KEY_RULES`] so the canonical
+        // K8s-CR-`rules`-collection-axis string lives in exactly one
+        // place across every caixa renderer. Pin the equality + static-
+        // data identity here so any local re-introduction of a sibling
+        // `pub const KUBE_KEY_RULES: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom
+        // — the prior shape would have let a typo on any one sibling
+        // `pub const` declaration silently miss the per-CR rule-list
+        // retrieval so the L7-rules-absent-on-pubsub-contracts contract
+        // (`cilium_pubsub_contracts_skip_l7_rules`), the
+        // HTTPRoute-rule-sequence-under-spec contract (`httproute_rules`
+        // fixture + every determinism pin downstream), and the L7-rule-
+        // path-content contract
+        // (`httproute_carries_paths_from_http_endpoints` /
+        // `cilium_l7_rules_are_http_only`) true drift is masked, or
+        // fire the trailing `.expect("HTTPRoute spec.rules sequence")`
+        // panic-message tag with the sequence-shape message rather than
+        // the true rule-list-key drift. Bridge-arm peer to
+        // [`kube_key_match_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_name_re_export_points_at_caixa_core_canonical`]
+        // — extends the K8s-CR top-level `(apiVersion, kind, metadata,
+        // spec)` axis re-export quartet + the load-bearing nested
+        // `metadata.{name, namespace, labels}` triplet + the load-
+        // bearing nested `LabelSelector.matchLabels` selector-projection
+        // axis under a single canonical `caixa-core::KUBE_KEY_*`
+        // re-export shape in this crate onto the load-bearing nested
+        // `spec.rules[]` / `toPorts[].rules` rule-list-container axis
+        // every rendered `CiliumNetworkPolicy` L7 rule-list + every
+        // rendered `HTTPRoute` rule-list carries.
+        assert_eq!(KUBE_KEY_RULES, caixa_core::KUBE_KEY_RULES);
+        assert!(
+            std::ptr::eq(KUBE_KEY_RULES.as_ptr(), caixa_core::KUBE_KEY_RULES.as_ptr(),),
+            "KUBE_KEY_RULES must be a re-export of caixa_core::KUBE_KEY_RULES, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -2367,7 +2495,7 @@ mod tests {
         let paths: Vec<&str> = to_ports
             .iter()
             .filter_map(|tp| {
-                tp.get("rules")
+                tp.get(KUBE_KEY_RULES)
                     .and_then(|r| r.get("http"))
                     .and_then(|h| h.as_sequence())
                     .and_then(|s| s.first())
@@ -2554,7 +2682,7 @@ mod tests {
             .and_then(|i| i.get("toPorts"))
             .and_then(|p| p.as_sequence())
             .and_then(|s| s.first())
-            .and_then(|p| p.get("rules"))
+            .and_then(|p| p.get(KUBE_KEY_RULES))
             .and_then(|r| r.get("http"))
             .and_then(|h| h.as_sequence())
             .unwrap();
@@ -2597,7 +2725,7 @@ mod tests {
             .unwrap();
         // L4 ports yes; L7 rules no.
         assert!(to_ports.get("ports").is_some());
-        assert!(to_ports.get("rules").is_none());
+        assert!(to_ports.get(KUBE_KEY_RULES).is_none());
     }
 
     #[test]
@@ -2653,7 +2781,7 @@ mod tests {
             .unwrap();
         let backend = route
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("rules"))
+            .and_then(|s| s.get(KUBE_KEY_RULES))
             .and_then(|r| r.as_sequence())
             .and_then(|s| s.first())
             .and_then(|r| r.get("backendRefs"))
@@ -2998,7 +3126,7 @@ mod tests {
                 d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
             })
             .and_then(|d| d.get(KUBE_KEY_SPEC))
-            .and_then(|s| s.get("rules"))
+            .and_then(|s| s.get(KUBE_KEY_RULES))
             .and_then(|r| r.as_sequence())
             .cloned()
             .expect("HTTPRoute spec.rules sequence")
