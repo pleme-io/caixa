@@ -368,6 +368,27 @@ pub use caixa_core::GATEWAY_API_KIND_HTTP_ROUTE;
 /// the sibling canonical-K8s-API-axis surfaces.
 pub use caixa_core::KUBE_KEY_SPEC;
 
+/// Canonical K8s CR top-level `metadata` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_METADATA`] so the per-kind metadata block key
+/// lives in exactly one place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` `CiliumNetworkPolicy`
+/// emitter (the `metadata.{name, namespace, labels}` block every policy
+/// carries) and `gateway_routes` `Gateway` + `HTTPRoute` emitter (the
+/// `metadata.{name, namespace}` block each doc carries) now consult the
+/// same `&'static str` as the peer caixa-flux renderer's
+/// `KUBE_KEY_METADATA` re-export. The prior inline `"metadata"`
+/// literals at every drift-detection / policy-traversal test-side site
+/// in this crate would have let a typo on any one site (e.g. `"Metadata"`,
+/// `"meta-data"`, `"medadata"`) silently miss the per-CNP / per-Gateway
+/// / per-HTTPRoute metadata retrieval — the equality assertion would
+/// then compare `None` against `Some("checkout")` rather than the
+/// expected label value; the lift routes every K8s-CR-top-level-
+/// metadata-axis retrieval through the same `&'static str` so drift
+/// between any two sites becomes a single-edit fix at the caixa-core
+/// const definition. Same shape as the [`KUBE_KEY_SPEC`] re-export on
+/// the sibling K8s-CR top-level-spec-axis.
+pub use caixa_core::KUBE_KEY_METADATA;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1080,6 +1101,40 @@ mod tests {
     }
 
     #[test]
+    fn kube_key_metadata_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_METADATA` was lifted from eleven
+        // inline `"metadata"` literals at the test-side K8s-CR
+        // top-level-metadata-axis retrieval calls that navigate into
+        // the metadata block of each rendered `CiliumNetworkPolicy` /
+        // `Gateway` / `HTTPRoute` doc (per-policy name / namespace /
+        // labels / mapping-shape / alphabetical-iteration axes) to a
+        // re-export of [`caixa_core::KUBE_KEY_METADATA`] so the
+        // canonical K8s-CR top-level metadata-axis string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_KEY_METADATA:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the
+        // offending drift. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level-spec-axis re-export +
+        // `caixa_flux::tests::kube_key_metadata_re_export_points_at_caixa_core_canonical`
+        // on the sibling renderer crate.
+        assert_eq!(KUBE_KEY_METADATA, caixa_core::KUBE_KEY_METADATA);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_METADATA.as_ptr(),
+                caixa_core::KUBE_KEY_METADATA.as_ptr(),
+            ),
+            "KUBE_KEY_METADATA must be a re-export of caixa_core::KUBE_KEY_METADATA, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_kind_network_policy_re_export_points_at_caixa_core_canonical() {
         // The renderer's `CILIUM_KIND_NETWORK_POLICY` was lifted from
         // the inline `"CiliumNetworkPolicy"` literal at the
@@ -1649,7 +1704,7 @@ mod tests {
         let names: Vec<_> = policies
             .iter()
             .map(|p| {
-                p.get("metadata")
+                p.get(KUBE_KEY_METADATA)
                     .and_then(|m| m.get("name"))
                     .and_then(|n| n.as_str())
                     .unwrap()
@@ -1685,7 +1740,7 @@ mod tests {
         let cart_to_catalog: Vec<_> = policies
             .iter()
             .filter(|p| {
-                p.get("metadata")
+                p.get(KUBE_KEY_METADATA)
                     .and_then(|m| m.get("name"))
                     .and_then(|n| n.as_str())
                     == Some("checkout-cart-to-catalog")
@@ -1776,7 +1831,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             let labels = p
-                .get("metadata")
+                .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.get("labels"))
                 .and_then(|l| l.as_mapping())
                 .expect("policy metadata.labels mapping");
@@ -1887,7 +1942,7 @@ mod tests {
         let cart_to_catalog = policies
             .iter()
             .find(|p| {
-                p.get("metadata")
+                p.get(KUBE_KEY_METADATA)
                     .and_then(|m| m.get("name"))
                     .and_then(|n| n.as_str())
                     == Some("checkout-cart-to-catalog")
@@ -1927,7 +1982,7 @@ mod tests {
         let nats_policy = policies
             .iter()
             .find(|p| {
-                p.get("metadata")
+                p.get(KUBE_KEY_METADATA)
                     .and_then(|m| m.get("name"))
                     .and_then(|n| n.as_str())
                     == Some("checkout-payment-to-cart")
@@ -2029,7 +2084,7 @@ mod tests {
                 Some("CiliumNetworkPolicy")
             );
             let metadata = p
-                .get("metadata")
+                .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.as_mapping())
                 .expect("metadata mapping");
             // metadata carries name + namespace + labels (3 keys) — no
@@ -2071,7 +2126,7 @@ mod tests {
             Some("gateway.networking.k8s.io/v1")
         );
         let metadata = gateway
-            .get("metadata")
+            .get(KUBE_KEY_METADATA)
             .and_then(|m| m.as_mapping())
             .expect("metadata mapping");
         // Exactly 2 metadata keys (name + namespace) — labels absent.
@@ -2113,7 +2168,7 @@ mod tests {
             Some("gateway.networking.k8s.io/v1")
         );
         let metadata = route
-            .get("metadata")
+            .get(KUBE_KEY_METADATA)
             .and_then(|m| m.as_mapping())
             .expect("metadata mapping");
         assert_eq!(metadata.len(), 2);
@@ -2292,7 +2347,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             let metadata = p
-                .get("metadata")
+                .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.as_mapping())
                 .expect("metadata mapping");
             let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
@@ -2891,7 +2946,7 @@ mod tests {
         let nats_policy = policies
             .iter()
             .find(|p| {
-                p.get("metadata")
+                p.get(KUBE_KEY_METADATA)
                     .and_then(|m| m.get("name"))
                     .and_then(|n| n.as_str())
                     == Some("checkout-payment-to-cart")
@@ -2935,7 +2990,7 @@ mod tests {
         let cart_to_payment = policies
             .iter()
             .find(|p| {
-                p.get("metadata")
+                p.get(KUBE_KEY_METADATA)
                     .and_then(|m| m.get("name"))
                     .and_then(|n| n.as_str())
                     == Some("checkout-cart-to-payment")
