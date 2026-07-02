@@ -176,6 +176,30 @@ pub const DEFAULT_LIBRARY_VERSION: &str = "~0.1.0";
 /// canonical-K8s-axis-constant surface.
 pub use caixa_core::DEFAULT_LIBRARY_NAME;
 
+/// Canonical Helm 3 `Chart.yaml` `apiVersion` every rendered
+/// `lareira-<nome>` chart declares. Re-export of the lifted
+/// [`caixa_core::HELM_CHART_API_VERSION`] so the Helm-side
+/// chart-schema apiVersion — the discriminator the Helm binary's
+/// chart-schema parser (`helm dependency build`, `helm lint`,
+/// `helm template`) consults to select the schema that reads the
+/// rendered Chart.yaml — lives in exactly one place across every
+/// caixa renderer. The single production-code call site consuming
+/// it is [`build_chart_yaml`]'s `api_version` field assignment; a
+/// drifted local `pub const HELM_CHART_API_VERSION: &str = "…"` at
+/// this crate (or any sibling per-chart-schema renderer the
+/// absorption roadmap acknowledges — the future per-Aplicacao
+/// library chart, the future per-cluster snapshot chart) would
+/// silently reroute the rendered Chart.yaml through a stale
+/// chart-schema parser at `helm template` time far from the
+/// rebrand commit's source, so the equality + `&'static` static-data
+/// identity pin
+/// (`helm_chart_api_version_re_export_points_at_caixa_core_canonical`)
+/// closes the drift footgun at caixa-helm build time. Same shape as
+/// the [`DEFAULT_LIBRARY_NAME`] / [`KUBE_KEY_SPEC`] re-exports on the
+/// sibling canonical-Helm-load-bearing-string / canonical-K8s-CR-key
+/// axes.
+pub use caixa_core::HELM_CHART_API_VERSION;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-helm's
@@ -295,7 +319,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
         })
         .collect();
     ChartYaml {
-        api_version: "v2".into(),
+        api_version: HELM_CHART_API_VERSION.into(),
         name: chart_name.into(),
         description,
         chart_type: "application".into(),
@@ -969,6 +993,72 @@ spec:
             "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn helm_chart_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_CHART_API_VERSION` was lifted from the
+        // production-code inline `"v2".into()` literal at
+        // [`build_chart_yaml`]'s `api_version` field assignment (formerly
+        // `caixa-helm/src/lib.rs:298`) to a re-export of
+        // [`caixa_core::HELM_CHART_API_VERSION`] so the Helm 3
+        // chart-schema apiVersion the rendered Chart.yaml declares lives
+        // in exactly one place across every caixa renderer. Pin the
+        // equality + `&'static` static-data identity here so any local
+        // re-introduction of a sibling `pub const HELM_CHART_API_VERSION:
+        // &str = "…"` at this crate — the canonical drift footgun where
+        // a sibling local `pub const` could happen to carry the same
+        // string at the source while pointing at a different `&'static`
+        // allocation — is a build-time test failure naming the offending
+        // drift, not a silent chart-schema-parser reroute at
+        // `helm template` time far from the drift site. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] /
+        // [`default_library_name_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axes.
+        assert_eq!(HELM_CHART_API_VERSION, caixa_core::HELM_CHART_API_VERSION);
+        assert!(
+            std::ptr::eq(
+                HELM_CHART_API_VERSION.as_ptr(),
+                caixa_core::HELM_CHART_API_VERSION.as_ptr(),
+            ),
+            "HELM_CHART_API_VERSION must be a re-export of \
+             caixa_core::HELM_CHART_API_VERSION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn chart_yaml_uses_lifted_helm_chart_api_version() {
+        // Fail-before-pass-after pin on the production-code
+        // substitution: [`build_chart_yaml`]'s `api_version` field
+        // consults the lifted [`HELM_CHART_API_VERSION`] re-export at
+        // its assignment site, so the rendered Chart.yaml's top-level
+        // `apiVersion` axis is byte-identical to the canonical constant
+        // by construction. Before the lift the field carried an inline
+        // `"v2".into()` literal at [`build_chart_yaml`]; a future
+        // refactor that accidentally reverted the substitution — or
+        // any parallel per-renderer variant that inlined a stale
+        // Helm 2 `"v1"` literal — would silently reroute the rendered
+        // Chart.yaml through the wrong chart-schema parser at
+        // `helm dependency build` / `helm template` time, so this pin
+        // trips at caixa-helm build time. Peer to
+        // `values_yaml_wrap_key_matches_chart_dependency_name` on the
+        // sibling structural-cross-axis-invariant surface.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("Chart.yaml"))
+            .unwrap();
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        assert_eq!(
+            chart.api_version, HELM_CHART_API_VERSION,
+            "rendered Chart.yaml `apiVersion` must equal the lifted \
+             HELM_CHART_API_VERSION verbatim — a drifted value silently \
+             reroutes the rendered chart through the wrong Helm chart-schema \
+             parser at `helm template` time"
         );
     }
 
