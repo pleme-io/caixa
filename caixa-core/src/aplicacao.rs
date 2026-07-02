@@ -1412,10 +1412,44 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                 .to_string(),
         });
     }
-    if host.bytes().any(|b| b.is_ascii_whitespace()) {
+    // Routed through the lifted [`crate::render::find_ascii_whitespace_byte`]
+    // predicate — the same single source of truth every peer
+    // ASCII-whitespace scan in caixa-core flows through: the four
+    // typed-magnitude codec sites (`limits::parse_byte_size` backing
+    // `:limits :memory`, `limits::parse_duration` backing `:limits
+    // :wall-clock`, `limits::parse_millicores` backing `:limits :cpu`,
+    // `aplicacao::rate_limit_codec::parse` backing `:politicas
+    // :rate-limit`) and the shared duration codec
+    // (`supervisor::duration_codec::parse`) backing `:supervisor
+    // :restart-window` / `:politicas :timeout` / `:politicas
+    // :circuit-breaker :window`. This landing closes the last string-typed
+    // slot in caixa-core still calling `.bytes().any(|b|
+    // b.is_ascii_whitespace())` inline — every ASCII-whitespace scan
+    // across every typed slot now shares one predicate, so a future
+    // stricter classification (BOM `\u{FEFF}` / ZWSP `\u{200B}` / ZWJ
+    // `\u{200D}` — the "invisible but not `char::is_whitespace`" class
+    // deliberately excluded from the peer non-ASCII predicate) can
+    // extend at this shared site in one edit rather than seven
+    // independent scans diverging over time. Naming the offending byte
+    // in the diagnostic (`0x20` space / `0x09` tab / `0x0a` LF / `0x0c`
+    // FF / `0x0d` CR) matches the substrate-wide "the diagnostic carries
+    // the offending byte verbatim" discipline every peer codec site
+    // already carries (`limits.rs:722` / `limits.rs:784` / `limits.rs:845`
+    // / `supervisor.rs:823` / `aplicacao.rs:1640`).
+    if let Some(b) = crate::render::find_ascii_whitespace_byte(host) {
         return Err(AplicacaoError::EntradaHostInvalid {
             host: host.to_string(),
-            reason: "must not contain whitespace".to_string(),
+            reason: format!(
+                "contains ASCII whitespace byte 0x{b:02x} (Gateway API v1 \
+                 Hostname is a single-token DNS name — leading, trailing, \
+                 or embedded whitespace breaks the K8s apiserver's Hostname \
+                 regex at admission time; the paste-from-aligned-doc / \
+                 paste-from-shell-history / paste-from-CSV footgun silently \
+                 lands a multi-token blob in `:entrada :host`. Strip every \
+                 whitespace byte and author the bare hostname — space \
+                 `0x20`, tab `0x09`, LF `0x0a`, FF `0x0c`, CR `0x0d` all \
+                 refuse identically)"
+            ),
         });
     }
 
@@ -7407,6 +7441,86 @@ mod tests {
             matches!(err, AplicacaoError::EntradaHostInvalid { ref reason, .. }
                 if reason.contains("whitespace")),
             "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_space_names_offending_byte() {
+        // Embedded space in the `:entrada :host` axis surfaces the
+        // byte-naming diagnostic through the lifted
+        // `find_ascii_whitespace_byte` predicate. Peer with the
+        // sibling `parse_rejects_leading_whitespace` pins on
+        // `supervisor::duration_codec` (a7ae622) — same "the
+        // diagnostic carries the offending byte's `0x{b:02x}` shape"
+        // discipline extended from the shared duration codec to the
+        // Gateway API v1 Hostname axis.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout .quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaHostInvalid { reason, .. } = err else {
+            panic!("expected EntradaHostInvalid, got {err:?}");
+        };
+        assert!(
+            reason.contains("ASCII whitespace byte"),
+            "expected byte-naming diagnostic, got {reason:?}"
+        );
+        assert!(
+            reason.contains("0x20"),
+            "expected offending space byte 0x20, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_tab_names_offending_byte() {
+        // Embedded tab byte in the `:entrada :host` axis — the
+        // canonical paste-from-YAML-block-scalar / paste-from-
+        // indented-doc footgun. Pins that the lifted predicate covers
+        // the full ASCII-whitespace set (`u8::is_ascii_whitespace` —
+        // space `0x20`, tab `0x09`, LF `0x0a`, FF `0x0c`, CR `0x0d`),
+        // not just the leading-space case the pre-lift `.bytes().any`
+        // arm's opaque "must not contain whitespace" reason already
+        // covered. Peer with `parse_rejects_tab_byte` on
+        // `supervisor::duration_codec` (a7ae622).
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout.\tquero.cloud".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaHostInvalid { reason, .. } = err else {
+            panic!("expected EntradaHostInvalid, got {err:?}");
+        };
+        assert!(
+            reason.contains("ASCII whitespace byte"),
+            "expected byte-naming diagnostic, got {reason:?}"
+        );
+        assert!(
+            reason.contains("0x09"),
+            "expected offending tab byte 0x09, got {reason:?}"
+        );
+    }
+
+    #[test]
+    fn rejects_entrada_host_lf_names_offending_byte() {
+        // Embedded LF byte in the `:entrada :host` axis — the
+        // canonical paste-from-shell-heredoc / paste-from-multiline-
+        // doc footgun the caixa-mesh YAML emitter would silently
+        // reinterpret at the Gateway API v1 HTTPRoute admission
+        // layer (an embedded LF byte in a YAML plain scalar either
+        // truncates the value at the emitter or crashes the parser
+        // on the k8s-apiserver side). Pins the third representative
+        // of the full ASCII-whitespace set through the shared
+        // predicate.
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().host = "checkout\n.quero.cloud".into();
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::EntradaHostInvalid { reason, .. } = err else {
+            panic!("expected EntradaHostInvalid, got {err:?}");
+        };
+        assert!(
+            reason.contains("ASCII whitespace byte"),
+            "expected byte-naming diagnostic, got {reason:?}"
+        );
+        assert!(
+            reason.contains("0x0a"),
+            "expected offending LF byte 0x0a, got {reason:?}"
         );
     }
 
