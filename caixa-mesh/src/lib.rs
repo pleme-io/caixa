@@ -425,6 +425,47 @@ pub use caixa_core::KUBE_KEY_METADATA;
 /// `Cilium` / `Gateway` / `HTTPRoute` documents by rests on.
 pub use caixa_core::KUBE_KEY_KIND;
 
+/// Canonical K8s CR top-level `apiVersion` key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_API_VERSION`] so the per-CR-
+/// apiVersion-axis retrieval key lives in exactly one place across
+/// every caixa renderer — caixa-mesh's `cilium_network_policies` +
+/// `gateway_routes` test-side `(:kind, :apiVersion)` CRD-lookup-tuple
+/// pins (every `p.get("apiVersion")` / `gateway.get("apiVersion")` /
+/// `route.get("apiVersion")` retrieval that traverses the multi-doc
+/// sequence the `gateway_routes` / `cilium_network_policies` emitters
+/// return to assert the top-level `apiVersion` axis on each per-CNP /
+/// per-`Gateway` / per-`HTTPRoute` document binds to the lifted
+/// [`CILIUM_API_VERSION`] / [`GATEWAY_API_API_VERSION`] CRD-group/
+/// version) now consult the same `&'static str` as the peer
+/// caixa-core-side `kube_resource_skeleton` production emitter (which
+/// already inserts [`KUBE_KEY_API_VERSION`] under
+/// caixa-core/src/render.rs:7177 on the [`KUBE_KEY_API_VERSION`] +
+/// [`KUBE_KEY_KIND`] axis pair every rendered CR carries). The prior
+/// inline `"apiVersion"` literals at every drift-detection / CRD-
+/// group-version pin test-side site in this crate would have let a
+/// typo on any one site (e.g. `"ApiVersion"`, `"api-version"`,
+/// `"apiVerison"`) silently miss the per-CR apiVersion retrieval —
+/// the equality assertion would then compare `None` against
+/// `Some("cilium.io/v2")` / `Some("gateway.networking.k8s.io/v1")`
+/// rather than the expected CRD-group/version string, masking the
+/// true sibling [`CILIUM_API_VERSION`] / [`GATEWAY_API_API_VERSION`]
+/// axis drift. The lift routes every K8s-CR-top-level-apiVersion-
+/// axis retrieval through the same `&'static str` so drift between
+/// any two sites becomes a single-edit fix at the caixa-core const
+/// definition. Same shape as the [`KUBE_KEY_SPEC`] + [`KUBE_KEY_METADATA`]
+/// + [`KUBE_KEY_KIND`] re-exports on the sibling K8s-CR top-level-
+/// spec / top-level-metadata / top-level-kind axes — completes the
+/// per-K8s-CR top-level `(apiVersion, kind, metadata, spec)` axis
+/// re-export quartet on the `apiVersion` half, which every drift-
+/// detection pin on the sibling controller-triplet-CRD-group/
+/// version axis (`CILIUM_API_VERSION` for Cilium, `GATEWAY_API_API_VERSION`
+/// for Gateway API `Gateway` + `HTTPRoute`) rests on. Peer to
+/// `caixa_flux::KUBE_KEY_API_VERSION` (e0555d6) on the sibling
+/// renderer crate — extends the discipline from the Flux v2
+/// controller-triplet drift-detection pins onto the Cilium + Gateway
+/// API controller-pair drift-detection pins in this crate.
+pub use caixa_core::KUBE_KEY_API_VERSION;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1212,6 +1253,68 @@ mod tests {
     }
 
     #[test]
+    fn kube_key_api_version_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_API_VERSION` was lifted from six
+        // inline `"apiVersion"` literals at the test-side K8s-CR
+        // top-level-apiVersion-axis retrieval calls that navigate the
+        // rendered multi-doc sequence the `cilium_network_policies` /
+        // `gateway_routes` emitters return to isolate each per-`(CNP,
+        // Gateway, HTTPRoute)` document's top-level-apiVersion axis and
+        // pin it to the lifted [`CILIUM_API_VERSION`] /
+        // [`GATEWAY_API_API_VERSION`] controller-pair CRD-group/version
+        // constants (the two `cilium_network_policies_use_lifted_cilium_api_version`
+        // + `gateway_routes_gateway_uses_lifted_gateway_api_api_version`
+        // + `gateway_routes_httproute_uses_lifted_gateway_api_api_version`
+        // lifted-uses pins plus the three sibling
+        // `cilium_policy_carries_canonical_kube_skeleton` /
+        // `gateway_carries_canonical_kube_skeleton_without_labels` /
+        // `httproute_carries_canonical_kube_skeleton_without_labels`
+        // canonical-string bridge-arm pins), to a re-export of
+        // [`caixa_core::KUBE_KEY_API_VERSION`] so the canonical K8s-CR
+        // top-level apiVersion-axis string lives in exactly one place
+        // across every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling `pub
+        // const KUBE_KEY_API_VERSION: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a typo on any one sibling
+        // `pub const` declaration silently miss the per-CR apiVersion
+        // retrieval so the drift-detection
+        // `.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()) == Some(…)`
+        // predicate the sibling [`CILIUM_API_VERSION`] /
+        // [`GATEWAY_API_API_VERSION`] re-export pins rest on would
+        // compare against `None` under the trailing
+        // `.expect("Gateway present")` / `.expect("HTTPRoute present")`
+        // panic and mask the true sibling controller-pair
+        // CRD-group/version axis drift. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] +
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level-spec / top-level-metadata /
+        // top-level-kind axis re-exports — completes the per-K8s-CR
+        // top-level `(apiVersion, kind, metadata, spec)` axis re-export
+        // quartet every rendered multi-doc mesh bundle document
+        // navigates. Peer to
+        // `caixa_flux::tests::kube_key_api_version_re_export_points_at_caixa_core_canonical`
+        // (e0555d6) on the sibling renderer crate — extends the
+        // discipline from the Flux v2 controller-triplet drift-
+        // detection pins onto the Cilium + Gateway API controller-pair
+        // drift-detection pins in this crate.
+        assert_eq!(KUBE_KEY_API_VERSION, caixa_core::KUBE_KEY_API_VERSION);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_API_VERSION.as_ptr(),
+                caixa_core::KUBE_KEY_API_VERSION.as_ptr(),
+            ),
+            "KUBE_KEY_API_VERSION must be a re-export of caixa_core::KUBE_KEY_API_VERSION, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_kind_network_policy_re_export_points_at_caixa_core_canonical() {
         // The renderer's `CILIUM_KIND_NETWORK_POLICY` was lifted from
         // the inline `"CiliumNetworkPolicy"` literal at the
@@ -1419,7 +1522,7 @@ mod tests {
         );
         for p in &policies {
             assert_eq!(
-                p.get("apiVersion").and_then(|v| v.as_str()),
+                p.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
                 Some(CILIUM_API_VERSION),
                 "every rendered CiliumNetworkPolicy must declare the lifted \
                  [`CILIUM_API_VERSION`] constant on its top-level apiVersion \
@@ -2162,7 +2265,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             assert_eq!(
-                p.get("apiVersion").and_then(|v| v.as_str()),
+                p.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
                 Some("cilium.io/v2")
             );
             assert_eq!(
@@ -2208,7 +2311,7 @@ mod tests {
             .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("Gateway"))
             .expect("Gateway present");
         assert_eq!(
-            gateway.get("apiVersion").and_then(|v| v.as_str()),
+            gateway.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
             Some("gateway.networking.k8s.io/v1")
         );
         let metadata = gateway
@@ -2250,7 +2353,7 @@ mod tests {
             .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("HTTPRoute"))
             .expect("HTTPRoute present");
         assert_eq!(
-            route.get("apiVersion").and_then(|v| v.as_str()),
+            route.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
             Some("gateway.networking.k8s.io/v1")
         );
         let metadata = route
@@ -2299,7 +2402,7 @@ mod tests {
             .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("Gateway"))
             .expect("Gateway present");
         assert_eq!(
-            gateway.get("apiVersion").and_then(|v| v.as_str()),
+            gateway.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
             Some(caixa_core::GATEWAY_API_API_VERSION),
             "Gateway's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
@@ -2416,7 +2519,7 @@ mod tests {
             .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("HTTPRoute"))
             .expect("HTTPRoute present");
         assert_eq!(
-            route.get("apiVersion").and_then(|v| v.as_str()),
+            route.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
             Some(caixa_core::GATEWAY_API_API_VERSION),
             "HTTPRoute's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
