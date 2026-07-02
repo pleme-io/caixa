@@ -1657,7 +1657,12 @@ mod rate_limit_codec {
         // the existing narrower `"not a u32"` wording so its
         // diagnostic shape remains stable for the parser-shape footgun
         // case).
-        let digit_only = !rate_trim.is_empty() && rate_trim.bytes().all(|b| b.is_ascii_digit());
+        //
+        // Routed through the lifted
+        // [`crate::render::is_digit_only_magnitude`] predicate — the
+        // same source of truth the four peer typed-magnitude codec
+        // sites share.
+        let digit_only = crate::render::is_digit_only_magnitude(rate_trim);
         if !digit_only {
             let numeric = rate_trim.parse::<f64>().is_ok() || rate_trim.parse::<i64>().is_ok();
             if numeric {
