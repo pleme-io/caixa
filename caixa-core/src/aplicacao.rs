@@ -80,23 +80,93 @@ pub struct WitContract {
     pub slot: Option<String>,
 }
 
+/// Canonical lowercase byte-prefix set the substrate's WIT-shape
+/// dispatch routes `wasi:http/*` / `http:*` values through as the
+/// HTTP-shaped arm. The single source of truth every consumer that
+/// classifies a `:wit` value as HTTP-shaped consults —
+/// [`WitContract::is_http`] on the typed contract, the
+/// `AplicacaoSpec::validate` positive-sweep test's payload-dispatch
+/// helper, and every future renderer that routes an L7 emission off a
+/// bare `&str` (the M4 per-edge WIT registry resolver, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer). Spelled
+/// exactly as the [`is_wit_world_ref`][iwr] predicate documents the
+/// canonical lowercase prefixes ("`wasi:http/`, `nats:`,
+/// `wasi:keyvalue/`, `kafka:`, `kv:`, `http:`") so drift between the
+/// substrate's accept-set and this crate's dispatch-set is a
+/// build-time compile error (unused-import), not a per-renderer
+/// silent L7-→-L4 demotion at apply time.
+///
+/// [iwr]: crate::render::is_wit_world_ref
+pub const WIT_HTTP_SHAPE_PREFIXES: &[&str] = &["wasi:http/", "http:"];
+
+/// Canonical lowercase byte-prefix set the substrate's WIT-shape
+/// dispatch routes `nats:*` / `kafka:*` values through as the
+/// pub-sub-shaped arm. Peer of [`WIT_HTTP_SHAPE_PREFIXES`] /
+/// [`WIT_STORE_SHAPE_PREFIXES`] on the shape-dispatch axis; see the
+/// HTTP constant's docstring for the full lift rationale.
+pub const WIT_PUBSUB_SHAPE_PREFIXES: &[&str] = &["nats:", "kafka:"];
+
+/// Canonical lowercase byte-prefix set the substrate's WIT-shape
+/// dispatch routes `wasi:keyvalue/*` / `kv:*` values through as the
+/// key/value-store-shaped arm. Peer of [`WIT_HTTP_SHAPE_PREFIXES`] /
+/// [`WIT_PUBSUB_SHAPE_PREFIXES`] on the shape-dispatch axis; see the
+/// HTTP constant's docstring for the full lift rationale.
+pub const WIT_STORE_SHAPE_PREFIXES: &[&str] = &["wasi:keyvalue/", "kv:"];
+
+/// True when `wit` — a raw `:contratos :wit` value — targets an
+/// HTTP-shaped WIT world (starts with any prefix in
+/// [`WIT_HTTP_SHAPE_PREFIXES`]). The single dispatch predicate every
+/// consumer routes L7-HTTP emission through, whether they carry a
+/// full [`WitContract`] on hand ([`WitContract::is_http`] delegates
+/// here) or only the raw `wit` string (the positive-sweep test's
+/// payload-dispatch helper, future renderers that classify off a
+/// bare `&str`). Lifting to a free function makes the shape-dispatch
+/// arm reachable without materializing a scratch `WitContract` at
+/// every classification point, and pins the six-prefix accept-set at
+/// one place so future additions (e.g. an `"https:"` peer of
+/// `"http:"`) reach every consumer by construction.
+#[must_use]
+pub fn wit_shape_is_http(wit: &str) -> bool {
+    WIT_HTTP_SHAPE_PREFIXES.iter().any(|p| wit.starts_with(p))
+}
+
+/// True when `wit` — a raw `:contratos :wit` value — targets a
+/// pub-sub-shaped WIT world (starts with any prefix in
+/// [`WIT_PUBSUB_SHAPE_PREFIXES`]). Peer of [`wit_shape_is_http`] /
+/// [`wit_shape_is_store`] on the shape-dispatch axis; see
+/// [`wit_shape_is_http`] for the lift rationale.
+#[must_use]
+pub fn wit_shape_is_pubsub(wit: &str) -> bool {
+    WIT_PUBSUB_SHAPE_PREFIXES.iter().any(|p| wit.starts_with(p))
+}
+
+/// True when `wit` — a raw `:contratos :wit` value — targets a
+/// key/value-store-shaped WIT world (starts with any prefix in
+/// [`WIT_STORE_SHAPE_PREFIXES`]). Peer of [`wit_shape_is_http`] /
+/// [`wit_shape_is_pubsub`] on the shape-dispatch axis; see
+/// [`wit_shape_is_http`] for the lift rationale.
+#[must_use]
+pub fn wit_shape_is_store(wit: &str) -> bool {
+    WIT_STORE_SHAPE_PREFIXES.iter().any(|p| wit.starts_with(p))
+}
+
 impl WitContract {
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
-        self.wit.starts_with("wasi:http/") || self.wit.starts_with("http:")
+        wit_shape_is_http(&self.wit)
     }
 
     /// True when this contract targets a pub-sub-shaped WIT world.
     #[must_use]
     pub fn is_pubsub(&self) -> bool {
-        self.wit.starts_with("nats:") || self.wit.starts_with("kafka:")
+        wit_shape_is_pubsub(&self.wit)
     }
 
     /// True when this contract targets a key/value-shaped WIT world.
     #[must_use]
     pub fn is_store(&self) -> bool {
-        self.wit.starts_with("wasi:keyvalue/") || self.wit.starts_with("kv:")
+        wit_shape_is_store(&self.wit)
     }
 
     /// Typed view of the contract's payload target. Enforces that the
@@ -5458,17 +5528,30 @@ mod tests {
         ] {
             // Payload field paired to the dispatched WIT shape so the
             // shape-↔-target arm doesn't fire instead of the wit-shape
-            // arm we're exercising.
-            let (endpoint, subject, slot) =
-                if wit.starts_with("wasi:http/") || wit.starts_with("http:") {
-                    (Some("/x".into()), None, None)
-                } else if wit.starts_with("nats:") || wit.starts_with("kafka:") {
-                    (None, Some("topic.x".into()), None)
-                } else if wit.starts_with("wasi:keyvalue/") || wit.starts_with("kv:") {
-                    (None, None, Some("bucket/$key".into()))
-                } else {
-                    (None, None, None)
-                };
+            // arm we're exercising. Routes off the same
+            // `wit_shape_is_http` / `wit_shape_is_pubsub` /
+            // `wit_shape_is_store` free functions the production
+            // `WitContract::is_http` / `is_pubsub` / `is_store`
+            // methods delegate to (both consult the lifted
+            // `WIT_HTTP_SHAPE_PREFIXES` / `WIT_PUBSUB_SHAPE_PREFIXES`
+            // / `WIT_STORE_SHAPE_PREFIXES` prefix sets), so any
+            // future prefix addition to the routing accept-set
+            // reaches this test's payload-dispatch arm by
+            // construction — no per-test-site drift can hide a
+            // shape-→-target-slot mismatch that would silently
+            // demote a canonical `:wit` value to the
+            // `(None, None, None)` capability-only arm and let the
+            // `AplicacaoSpec::validate` positive sweep pass on a
+            // shape it should exercise as HTTP / pub-sub / store.
+            let (endpoint, subject, slot) = if wit_shape_is_http(wit) {
+                (Some("/x".into()), None, None)
+            } else if wit_shape_is_pubsub(wit) {
+                (None, Some("topic.x".into()), None)
+            } else if wit_shape_is_store(wit) {
+                (None, None, Some("bucket/$key".into()))
+            } else {
+                (None, None, None)
+            };
             let mut s = three_member_spec();
             s.contratos.push(WitContract {
                 de: "payment".into(),
@@ -5480,6 +5563,114 @@ mod tests {
             });
             s.validate()
                 .unwrap_or_else(|e| panic!("canonical WIT {wit:?} must validate, got {e:?}"));
+        }
+    }
+
+    #[test]
+    fn wit_shape_predicates_accept_canonical_prefix_set() {
+        // Positive-set sweep pinning every prefix in
+        // WIT_HTTP_SHAPE_PREFIXES / WIT_PUBSUB_SHAPE_PREFIXES /
+        // WIT_STORE_SHAPE_PREFIXES against the three free-function
+        // dispatch predicates. The six prefixes are the load-bearing
+        // routing keys the substrate's WIT-shape dispatch consults
+        // (L7-HTTP-vs-L4, pub-sub-cycle exclusion,
+        // key/value-store-slot admission); any drift between the
+        // free-function accept-set and this list surfaces here
+        // rather than at apply time as a silent
+        // shape-→-capability-only demotion.
+        assert!(wit_shape_is_http("wasi:http/proxy"));
+        assert!(wit_shape_is_http("wasi:http/proxy@0.2.0"));
+        assert!(wit_shape_is_http("http:incoming"));
+
+        assert!(wit_shape_is_pubsub("nats:pub-sub"));
+        assert!(wit_shape_is_pubsub("kafka:topic"));
+
+        assert!(wit_shape_is_store("wasi:keyvalue/store"));
+        assert!(wit_shape_is_store("kv:cache/session"));
+    }
+
+    #[test]
+    fn wit_shape_predicates_reject_uncanonical_forms() {
+        // Negative-set pin: the six canonical prefixes are
+        // lowercase-only (mirrors the `is_wit_world_ref` substrate
+        // predicate's lowercase invariant — see its docstring on the
+        // "I thought I had L7 HTTP routing, got L4-only" footgun).
+        // The empty string, an uppercase-prefixed form, a hyphen-
+        // instead-of-colon typo, and a bare kebab identifier all miss
+        // every shape arm — reachable-by-construction only via the
+        // `is_wit_world_ref` gate that admission-checks the `:wit`
+        // value first, but pinned here so any future
+        // free-function change (e.g. a case-insensitive
+        // `wit.to_ascii_lowercase().starts_with(p)` slip) surfaces at
+        // this unit level.
+        for wit in ["", "WASI:HTTP/proxy", "wasi-http/proxy", "custom-shape"] {
+            assert!(!wit_shape_is_http(wit), "{wit:?} must not be HTTP");
+            assert!(!wit_shape_is_pubsub(wit), "{wit:?} must not be pubsub");
+            assert!(!wit_shape_is_store(wit), "{wit:?} must not be store");
+        }
+    }
+
+    #[test]
+    fn wit_shape_predicates_partition_canonical_set() {
+        // Every canonical prefix routes to exactly one shape arm —
+        // the three prefix sets are pairwise disjoint. Pins the
+        // routing property [`WitContract::target`] relies on: an
+        // `is_http()` return of `true` guarantees `is_pubsub()` and
+        // `is_store()` return `false`, so the shape-→-target-slot
+        // dispatch (endpoint vs subject vs slot) is unambiguous.
+        // Drift (e.g. a future `"kv:"` moved into the HTTP set
+        // without removal from the store set) would silently route
+        // one prefix to two arms and the first-matching-arm order
+        // becomes load-bearing — this pin surfaces it as a build
+        // error instead.
+        for prefix in WIT_HTTP_SHAPE_PREFIXES {
+            let sample = format!("{prefix}x");
+            assert!(wit_shape_is_http(&sample));
+            assert!(!wit_shape_is_pubsub(&sample));
+            assert!(!wit_shape_is_store(&sample));
+        }
+        for prefix in WIT_PUBSUB_SHAPE_PREFIXES {
+            let sample = format!("{prefix}x");
+            assert!(!wit_shape_is_http(&sample));
+            assert!(wit_shape_is_pubsub(&sample));
+            assert!(!wit_shape_is_store(&sample));
+        }
+        for prefix in WIT_STORE_SHAPE_PREFIXES {
+            let sample = format!("{prefix}x");
+            assert!(!wit_shape_is_http(&sample));
+            assert!(!wit_shape_is_pubsub(&sample));
+            assert!(wit_shape_is_store(&sample));
+        }
+    }
+
+    #[test]
+    fn wit_contract_shape_methods_delegate_to_free_functions() {
+        // Equivalence pin: `WitContract::is_http` / `is_pubsub` /
+        // `is_store` are `&self` conveniences on top of the free
+        // functions — for every canonical prefix the method's return
+        // matches its free-function peer. Sweeps the union of the
+        // three prefix sets so a future method that grew its own
+        // inline prefix logic (rather than delegating) drifts loudly
+        // here on the first prefix the free function accepts and the
+        // method doesn't.
+        for shape_set in [
+            WIT_HTTP_SHAPE_PREFIXES,
+            WIT_PUBSUB_SHAPE_PREFIXES,
+            WIT_STORE_SHAPE_PREFIXES,
+        ] {
+            for prefix in shape_set {
+                let c = WitContract {
+                    de: "cart".into(),
+                    para: "catalog".into(),
+                    wit: format!("{prefix}x"),
+                    endpoint: None,
+                    subject: None,
+                    slot: None,
+                };
+                assert_eq!(c.is_http(), wit_shape_is_http(&c.wit));
+                assert_eq!(c.is_pubsub(), wit_shape_is_pubsub(&c.wit));
+                assert_eq!(c.is_store(), wit_shape_is_store(&c.wit));
+            }
         }
     }
 
