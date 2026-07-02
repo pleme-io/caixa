@@ -47,7 +47,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use caixa_core::{
-    Caixa, CaixaKind, KUBE_KEY_API_VERSION, KUBE_KEY_METADATA, KUBE_KEY_SPEC, lareira_chart_name,
+    Caixa, CaixaKind, KUBE_KEY_API_VERSION, KUBE_KEY_METADATA, KUBE_KEY_NAMESPACE, KUBE_KEY_SPEC,
+    lareira_chart_name,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -395,6 +396,43 @@ pub use caixa_core::KUBE_KEY_KIND;
 /// across this crate.
 pub use caixa_core::KUBE_KEY_API_VERSION;
 
+/// Canonical K8s CR `metadata.namespace` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_NAMESPACE`] so the per-CR namespace-axis key
+/// lives in exactly one place across every caixa renderer — caixa-flux's
+/// [`programs_yaml_entry`] threads the ComputeUnit YAML's
+/// `metadata.namespace` retrieval and the emitted `programs:[]` entry's
+/// isomorphic `namespace:` field (the `lareira-fleet-programs` chart's
+/// per-Servico namespace axis, populated verbatim from the ComputeUnit's
+/// `metadata.namespace` per the docstring on `programs_yaml_entry` above)
+/// through this key, and [`cluster_bundle`]'s rendered
+/// `kustomization.yaml` drift-detection pin traverses the emitted
+/// document's `metadata.namespace` axis to assert it binds to the lifted
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (the bootstrap kustomize-
+/// controller's watch window) through this same key.
+///
+/// The prior inline `"namespace"` literals at the production-code
+/// (`programs_yaml_entry` read + write) and drift-detection call sites
+/// would have let a typo on any one site (e.g. `"Namespace"`,
+/// `"name space"`, `"namesapce"`, the canonical transposition) silently
+/// miss the ComputeUnit's `metadata.namespace` lookup and fall back to
+/// [`DEFAULT_NAMESPACE`] even when the ComputeUnit YAML pinned a
+/// distinct target namespace, or write a `namesapce:` key that no
+/// `lareira-fleet-programs` schema validator recognizes, or mask a
+/// drifted [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] regression by returning
+/// `None` from the `.get("namesapce")` retrieval so the equality
+/// assertion never sees the true axis value under the `.expect(…)`
+/// panic on the missing `.and_then` chain. The lift routes every
+/// K8s-CR-`metadata.namespace`-axis retrieval / emission through the
+/// same `&'static str` so drift between any two sites becomes a
+/// single-edit fix at the caixa-core const definition. Same shape as
+/// the [`KUBE_KEY_METADATA`] / [`KUBE_KEY_SPEC`] / [`KUBE_KEY_KIND`] /
+/// [`KUBE_KEY_API_VERSION`] re-exports on the sibling K8s-CR top-level
+/// axes — extends the discipline the top-level `(apiVersion, kind,
+/// metadata, spec)` axis re-export quartet establishes onto the
+/// canonical `metadata.namespace` nested axis every rendered Flux v2
+/// bundle document navigates.
+pub use caixa_core::KUBE_KEY_NAMESPACE;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -421,7 +459,7 @@ pub fn programs_yaml_entry(
 
     let namespace = computeunit_yaml
         .get(KUBE_KEY_METADATA)
-        .and_then(|m| m.get("namespace"))
+        .and_then(|m| m.get(KUBE_KEY_NAMESPACE))
         .and_then(|n| n.as_str())
         .unwrap_or(DEFAULT_NAMESPACE)
         .to_string();
@@ -432,7 +470,7 @@ pub fn programs_yaml_entry(
         serde_yaml::Value::String(caixa.nome.clone()),
     );
     entry.insert(
-        serde_yaml::Value::String("namespace".into()),
+        serde_yaml::Value::String(KUBE_KEY_NAMESPACE.into()),
         serde_yaml::Value::String(namespace),
     );
 
@@ -1054,6 +1092,63 @@ spec:
     }
 
     #[test]
+    fn kube_key_namespace_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_NAMESPACE` was lifted from five inline
+        // `"namespace"` literals — the two production-code call sites in
+        // `programs_yaml_entry` (the ComputeUnit YAML's
+        // `metadata.namespace` retrieval that feeds the emitted
+        // `programs:[]` entry's isomorphic `namespace:` field, and the
+        // write-side entry-key emission the `lareira-fleet-programs`
+        // schema keys the per-Servico namespace off) plus the three
+        // test-side drift-detection call sites (the two
+        // `programs_yaml_entry` round-trip pins asserting the emitted
+        // entry's `namespace:` field spells `tatara-system` on the
+        // metadata-carried path and [`DEFAULT_NAMESPACE`] on the
+        // fallback path, and the `cluster_bundle_kustomization_carries_\
+        // flux_system_namespace_axes` pin asserting the rendered
+        // `kustomization.yaml` document's `metadata.namespace` axis
+        // binds to the lifted [`DEFAULT_FLUX_SYSTEM_NAMESPACE`]) — to
+        // a re-export of [`caixa_core::KUBE_KEY_NAMESPACE`] so the
+        // canonical K8s-CR `metadata.namespace` axis string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_KEY_NAMESPACE:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom — the prior
+        // shape would have let a typo on any one sibling `pub const`
+        // declaration silently miss the ComputeUnit's
+        // `metadata.namespace` lookup and fall back to
+        // [`DEFAULT_NAMESPACE`] even when the ComputeUnit YAML pinned
+        // a distinct target namespace, or mask the sibling
+        // [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] drift the
+        // `kustomization.yaml`-side pin was meant to catch under the
+        // `.expect("kustomization.yaml present")` panic on the missing
+        // `.and_then` chain. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] /
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // / [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // / [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level `(spec, metadata, kind,
+        // apiVersion)` axis re-exports — extends the discipline the
+        // top-level quartet establishes onto the canonical
+        // `metadata.namespace` nested axis every rendered Flux v2
+        // bundle document navigates.
+        assert_eq!(KUBE_KEY_NAMESPACE, caixa_core::KUBE_KEY_NAMESPACE);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_NAMESPACE.as_ptr(),
+                caixa_core::KUBE_KEY_NAMESPACE.as_ptr(),
+            ),
+            "KUBE_KEY_NAMESPACE must be a re-export of caixa_core::KUBE_KEY_NAMESPACE, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn programs_yaml_entry_round_trips() {
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         assert_eq!(
@@ -1061,7 +1156,7 @@ spec:
             Some("hello-rio")
         );
         assert_eq!(
-            entry.get("namespace").and_then(|n| n.as_str()),
+            entry.get(KUBE_KEY_NAMESPACE).and_then(|n| n.as_str()),
             Some("tatara-system")
         );
         assert!(entry.get("module").is_some());
@@ -1090,7 +1185,7 @@ spec:
         .unwrap();
         let entry = programs_yaml_entry(&sample_caixa(), &cu).unwrap();
         assert_eq!(
-            entry.get("namespace").and_then(|n| n.as_str()),
+            entry.get(KUBE_KEY_NAMESPACE).and_then(|n| n.as_str()),
             Some(DEFAULT_NAMESPACE)
         );
     }
@@ -1716,7 +1811,7 @@ spec:
         assert_eq!(
             parsed
                 .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.get("namespace"))
+                .and_then(|m| m.get(KUBE_KEY_NAMESPACE))
                 .and_then(|n| n.as_str()),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
             "kustomization.yaml metadata.namespace must spell the lifted \
