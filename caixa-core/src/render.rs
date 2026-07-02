@@ -5817,6 +5817,58 @@ pub const KUBE_KEY_SPEC: &str = "spec";
 /// [k8s-ls]: https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.31/#labelselector-v1-meta
 pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 
+/// Canonical K8s API key naming the per-CR **`rules` collection** axis —
+/// the container the apiserver-side OpenAPI schema for every rule-shaped
+/// CR (Cilium L7 `spec.ingress[].toPorts[].rules`, Gateway API
+/// `HTTPRoute.spec.rules[]`, RBAC `Role.rules[]` /
+/// `ClusterRole.rules[]`, and every future rule-list-shaped CR the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` materializer + the per-edge
+/// `CiliumClusterwideEnvoyConfig` emitter will land on) mounts the
+/// per-CR list of match/action rules under. Spelled exactly as the K8s
+/// apiserver expects (lowercase `rules`, not `Rules` / `rule` /
+/// `ruleset`) so the rendered YAML round-trips through every K8s schema
+/// parser without per-renderer string drift.
+///
+/// Two production-code call sites in this crate's downstream
+/// [`caixa-mesh`][cm] renderer carry this key on the same
+/// K8s-rule-list-axis surface (both landing sites lived at inline
+/// `"rules".into()` before this lift):
+///
+/// 1. `cilium_network_policies` — the per-`(:de, :para)`
+///    `CiliumNetworkPolicy` emitter's per-`toPorts[]` `rules:` mapping
+///    (the Cilium L7 rule-list container that carries the `http:` /
+///    `kafka:` / `dns:` per-protocol L7 rules the Cilium data plane
+///    dispatches on).
+/// 2. `gateway_routes` — the `HTTPRoute` emitter's top-level
+///    `spec.rules[]` sequence (the Gateway API rule-list container that
+///    carries the per-rule `matches[]` + `backendRefs[]` + timeouts /
+///    retries overlay the gateway-class-controller dispatches on).
+///
+/// Five test-side traversal sites in the same renderer navigate the
+/// rendered mesh bundle's per-CR `rules:` axis to pin per-CR L7-rule /
+/// Gateway-API-rule presence, absence, and content invariants (the
+/// `.get("rules")` retrievals under `toPorts[]` on the L7 policy pins
+/// and under `spec` on the HTTPRoute pins). All seven sites now route
+/// through this const so a future K8s CRD schema rebrand on the shared
+/// axis (or the canonical typo footgun `"Rules"` / `"rule"` /
+/// `"ruleset"`) surfaces at this one const rather than as an admission-
+/// time silent drop across two distinct CR emitters.
+///
+/// Lifted on the trajectory the peer [`KUBE_KEY_API_VERSION`] /
+/// [`KUBE_KEY_KIND`] / [`KUBE_KEY_METADATA`] / [`KUBE_KEY_NAME`] /
+/// [`KUBE_KEY_NAMESPACE`] / [`KUBE_KEY_LABELS`] / [`KUBE_KEY_SPEC`] /
+/// [`KUBE_KEY_MATCH_LABELS`] canonical-K8s-API-key constants establish
+/// — extends the K8s-CR top-level `(apiVersion, kind, metadata, spec)`
+/// axis quartet + the nested `metadata.{name, namespace, labels}`
+/// triplet + the `LabelSelector.matchLabels` selector-projection axis
+/// onto the load-bearing nested `spec.rules[]` / `toPorts[].rules`
+/// rule-list container axis every downstream L7-policy /
+/// HTTPRoute-rule-dispatch consumer of the rendered mesh bundle keys
+/// off.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const KUBE_KEY_RULES: &str = "rules";
+
 /// Default cluster-wide K8s namespace every caixa renderer emits
 /// objects into when the source caixa doesn't pin its own. The single
 /// source of truth both [`caixa-flux`][cf]'s programs.yaml /
@@ -8984,6 +9036,7 @@ mod tests {
         assert_eq!(KUBE_KEY_NAMESPACE, "namespace");
         assert_eq!(KUBE_KEY_LABELS, "labels");
         assert_eq!(KUBE_KEY_MATCH_LABELS, "matchLabels");
+        assert_eq!(KUBE_KEY_RULES, "rules");
         assert_eq!(KUBE_KEY_SPEC, "spec");
     }
 
