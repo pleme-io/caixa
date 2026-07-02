@@ -552,6 +552,50 @@ pub use caixa_core::KUBE_KEY_NAMESPACE;
 /// sequence must reach every rendered artifact.
 pub use caixa_core::KUBE_KEY_LABELS;
 
+/// Canonical K8s CR `metadata.name` nested-axis key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_NAME`] so the per-CR name-axis
+/// retrieval key lives in exactly one place across every caixa renderer
+/// — caixa-mesh's `cilium_policy_carries_canonical_kube_skeleton` +
+/// `gateway_carries_canonical_kube_skeleton_without_labels` +
+/// `httproute_carries_canonical_kube_skeleton_without_labels` per-CR
+/// metadata-block `.get("name")` retrievals (the presence + equality
+/// pins on `CiliumNetworkPolicy` / `Gateway` / `HTTPRoute`), and the
+/// `cilium_policy_metadata_block_iterates_alphabetically` render-
+/// determinism-contract fixture (the alphabetical-iteration
+/// `vec![KUBE_KEY_LABELS, "name", KUBE_KEY_NAMESPACE]` fixture whose
+/// middle entry the alphabetical-key-ordering `metadata:` block
+/// emission pins). The prior four inline `"name"` literals at every
+/// drift-detection / render-determinism test-side site in this crate
+/// would have let a typo on any one site (e.g. `"Name"`, `"nmae"`, the
+/// canonical transposition `"naem"`) silently miss the per-CR
+/// metadata.name retrieval — the `.get("name")` chain would then
+/// return `None` under the presence pin so the true metadata-name-axis
+/// drift never surfaces, or compare `Some(<other>)` against the
+/// expected caixa name/route name under the equality pins so the
+/// caixa-nome → metadata-name binding's true drift is masked, or trip
+/// the alphabetical-iteration determinism fixture against the drifted-
+/// fixture rather than the true render-determinism property. The lift
+/// routes every K8s-CR-metadata-name-axis retrieval + fixture through
+/// the same `&'static str` so drift between any two sites becomes a
+/// single-edit fix at the caixa-core const definition. Completes the
+/// K8s-CR metadata-block axis triplet `(name, namespace, labels)`
+/// under a single canonical `caixa-core::KUBE_KEY_*` re-export shape
+/// in this crate — the peer `KUBE_KEY_NAMESPACE` (ae34889) and
+/// `KUBE_KEY_LABELS` (aa2d105) sweeps established the discipline; this
+/// lift extends it onto the last remaining metadata-nested axis. The
+/// per-K8s-CR top-level `(apiVersion, kind, metadata, spec)` axis
+/// re-export quartet + the load-bearing nested `metadata.namespace` +
+/// `metadata.labels` axes now extend onto the load-bearing nested
+/// `metadata.name` axis — the axis every rendered `CiliumNetworkPolicy`
+/// / `Gateway` / `HTTPRoute` document binds to on the deploy path (the
+/// apiserver's CR admission-time schema keys the object identity off
+/// it; every `kubectl get`/GC/finalizer navigates the same key; the
+/// Cilium operator's per-CNP status-update path and the gateway-class-
+/// controller's per-`Gateway` listener-attach navigate the same axis)
+/// so exactly one canonical byte-sequence must reach every rendered
+/// artifact.
+pub use caixa_core::KUBE_KEY_NAME;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1508,6 +1552,49 @@ mod tests {
                 caixa_core::KUBE_KEY_LABELS.as_ptr(),
             ),
             "KUBE_KEY_LABELS must be a re-export of caixa_core::KUBE_KEY_LABELS, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_NAME` was lifted from four inline
+        // `"name"` literals at the test-side K8s-CR metadata.name-axis
+        // retrieval sites (the `cilium_policy_carries_canonical_kube_skeleton`
+        // + `gateway_carries_canonical_kube_skeleton_without_labels` +
+        // `httproute_carries_canonical_kube_skeleton_without_labels`
+        // per-CR metadata.name presence + equality pins, and the
+        // `cilium_policy_metadata_block_iterates_alphabetically`
+        // render-determinism-contract fixture) to a re-export of
+        // [`caixa_core::KUBE_KEY_NAME`] so the canonical K8s-CR
+        // metadata.name-axis string lives in exactly one place across
+        // every caixa renderer. Pin the equality + static-data identity
+        // here so any local re-introduction of a sibling
+        // `pub const KUBE_KEY_NAME: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom
+        // — the prior shape would have let a typo on any one sibling
+        // `pub const` declaration silently miss the per-CR
+        // metadata.name retrieval so the caixa-nome → metadata-name
+        // binding's true drift is masked, or trip the alphabetical-
+        // iteration determinism fixture against the drifted-fixture
+        // rather than the true render-determinism property. Bridge-arm
+        // peer to [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_labels_re_export_points_at_caixa_core_canonical`]
+        // — completes the K8s-CR metadata-block axis triplet `(name,
+        // namespace, labels)` bridge-arm pin under a single canonical
+        // `caixa-core::KUBE_KEY_*` re-export shape in this crate.
+        assert_eq!(KUBE_KEY_NAME, caixa_core::KUBE_KEY_NAME);
+        assert!(
+            std::ptr::eq(KUBE_KEY_NAME.as_ptr(), caixa_core::KUBE_KEY_NAME.as_ptr(),),
+            "KUBE_KEY_NAME must be a re-export of caixa_core::KUBE_KEY_NAME, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -2480,7 +2567,7 @@ mod tests {
             assert_eq!(metadata.len(), 3);
             assert!(
                 metadata
-                    .get(serde_yaml::Value::String("name".into()))
+                    .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
                     .and_then(|v| v.as_str())
                     .is_some()
             );
@@ -2521,7 +2608,7 @@ mod tests {
         assert_eq!(metadata.len(), 2);
         assert_eq!(
             metadata
-                .get(serde_yaml::Value::String("name".into()))
+                .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
                 .and_then(|v| v.as_str()),
             Some("checkout")
         );
@@ -2562,7 +2649,7 @@ mod tests {
         assert_eq!(metadata.len(), 2);
         assert_eq!(
             metadata
-                .get(serde_yaml::Value::String("name".into()))
+                .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
                 .and_then(|v| v.as_str()),
             Some("checkout-cart")
         );
@@ -2745,7 +2832,7 @@ mod tests {
             let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
             assert_eq!(
                 keys,
-                vec![KUBE_KEY_LABELS, "name", KUBE_KEY_NAMESPACE],
+                vec![KUBE_KEY_LABELS, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE],
                 "metadata block must iterate alphabetically (the kube \
                  skeleton's render-determinism contract)"
             );
