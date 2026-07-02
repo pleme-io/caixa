@@ -329,6 +329,34 @@ pub use caixa_core::KUBE_KEY_SPEC;
 /// the sibling K8s-CR top-level-spec-axis.
 pub use caixa_core::KUBE_KEY_METADATA;
 
+/// Canonical K8s CR top-level `kind` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_KIND`] so the per-CR-kind-axis discriminator
+/// key lives in exactly one place across every caixa renderer —
+/// caixa-flux's `cluster_bundle` drift-detection pins that traverse the
+/// rendered `gitrepository.yaml` / `helmrelease.yaml` / `kustomization.yaml`
+/// documents to assert the top-level `kind` + nested `sourceRef.kind`
+/// / `healthChecks[].kind` axes bind to the lifted
+/// [`FLUX_KIND_GIT_REPOSITORY`] / [`FLUX_KIND_HELM_RELEASE`] /
+/// [`FLUX_KIND_KUSTOMIZATION`] discriminators now consult the same
+/// `&'static str` as the peer caixa-mesh renderer's `KUBE_KEY_KIND`
+/// re-export (615a13d). The prior inline `"kind"` literals at every
+/// drift-detection cross-axis-pin call site in this crate would have let
+/// a typo on any one site (e.g. `"Kind"`, `"kinds"`, `"knid"`) silently
+/// miss the per-CR kind-axis retrieval — the equality assertion would
+/// then compare `None` against `Some("GitRepository")` /
+/// `Some("HelmRelease")` / `Some("Kustomization")` rather than the
+/// expected discriminator, masking the sibling `FLUX_KIND_*` re-export
+/// drift the pin was meant to catch under a `.expect("… present")` panic
+/// on the missing `.and_then` chain. The lift routes every K8s-CR-
+/// top-level-kind-axis retrieval through the same `&'static str` so
+/// drift between any two sites becomes a single-edit fix at the
+/// caixa-core const definition. Same shape as the [`KUBE_KEY_SPEC`] +
+/// [`KUBE_KEY_METADATA`] re-exports on the sibling K8s-CR top-level-spec
+/// / top-level-metadata axes — completes the per-K8s-CR top-level
+/// `(spec, metadata, kind)` axis re-export triple every rendered Flux
+/// bundle document navigates.
+pub use caixa_core::KUBE_KEY_KIND;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -892,6 +920,49 @@ spec:
                 caixa_core::KUBE_KEY_METADATA.as_ptr(),
             ),
             "KUBE_KEY_METADATA must be a re-export of caixa_core::KUBE_KEY_METADATA, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_kind_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_KIND` was lifted from eleven inline
+        // `"kind"` literals at the test-side K8s-CR top-level-kind-axis
+        // retrieval calls that navigate the rendered `cluster_bundle`
+        // multi-file sequence to isolate each per-`(GitRepository,
+        // HelmRelease, Kustomization)` document's top-level-kind
+        // discriminator plus its nested `spec.chart.spec.sourceRef.kind`
+        // (helmrelease) / `spec.sourceRef.kind` (kustomization) /
+        // `spec.healthChecks[].kind` (kustomization) drift-detection
+        // pins, to a re-export of [`caixa_core::KUBE_KEY_KIND`] so the
+        // canonical K8s-CR top-level kind-discriminator axis string
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_KEY_KIND: &str
+        // = "…"` (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation)
+        // is a build-time test failure naming the offending drift, not
+        // a silent apply-time symptom — the prior shape would have let
+        // a typo on any one sibling `pub const` declaration silently
+        // miss the per-CR kind retrieval so the drift-detection
+        // `.get(KUBE_KEY_KIND).and_then(|n| n.as_str()) == Some(…)`
+        // predicate the sibling `FLUX_KIND_*` re-export pins rest on
+        // would compare against `None` under the trailing
+        // `.expect("… present")` panic and mask the true sibling
+        // `FLUX_KIND_*` axis drift. Peer to
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] +
+        // [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // on the sibling K8s-CR top-level-spec / top-level-metadata
+        // axis re-exports + `caixa_mesh::tests::kube_key_kind_re_export_points_at_caixa_core_canonical`
+        // (615a13d) on the sibling renderer crate — completes the
+        // per-K8s-CR top-level `(spec, metadata, kind)` axis re-export
+        // triple every rendered Flux bundle document navigates.
+        assert_eq!(KUBE_KEY_KIND, caixa_core::KUBE_KEY_KIND);
+        assert!(
+            std::ptr::eq(KUBE_KEY_KIND.as_ptr(), caixa_core::KUBE_KEY_KIND.as_ptr()),
+            "KUBE_KEY_KIND must be a re-export of caixa_core::KUBE_KEY_KIND, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -2081,7 +2152,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
         assert_eq!(
-            parsed.get("kind").and_then(|n| n.as_str()),
+            parsed.get(KUBE_KEY_KIND).and_then(|n| n.as_str()),
             Some(FLUX_KIND_GIT_REPOSITORY),
             "gitrepository.yaml top-level kind must spell the lifted \
              FLUX_KIND_GIT_REPOSITORY ({FLUX_KIND_GIT_REPOSITORY:?}); a drifted \
@@ -2122,7 +2193,7 @@ spec:
             .and_then(|s| s.get("chart"))
             .and_then(|c| c.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get("sourceRef"))
-            .and_then(|r| r.get("kind"))
+            .and_then(|r| r.get(KUBE_KEY_KIND))
             .and_then(|k| k.as_str())
             .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
         assert_eq!(
@@ -2159,7 +2230,7 @@ spec:
         let source_ref_kind = parsed
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("sourceRef"))
-            .and_then(|r| r.get("kind"))
+            .and_then(|r| r.get(KUBE_KEY_KIND))
             .and_then(|k| k.as_str())
             .expect("kustomization.yaml spec.sourceRef.kind present");
         assert_eq!(
@@ -2199,7 +2270,7 @@ spec:
                 .contents,
         )
         .unwrap()
-        .get("kind")
+        .get(KUBE_KEY_KIND)
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap();
@@ -2216,7 +2287,7 @@ spec:
         .and_then(|s| s.get("chart"))
         .and_then(|c| c.get(KUBE_KEY_SPEC))
         .and_then(|s| s.get("sourceRef"))
-        .and_then(|r| r.get("kind"))
+        .and_then(|r| r.get(KUBE_KEY_KIND))
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap();
@@ -2231,7 +2302,7 @@ spec:
         .unwrap()
         .get(KUBE_KEY_SPEC)
         .and_then(|s| s.get("sourceRef"))
-        .and_then(|r| r.get("kind"))
+        .and_then(|r| r.get(KUBE_KEY_KIND))
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap();
@@ -2316,7 +2387,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         assert_eq!(
-            parsed.get("kind").and_then(|n| n.as_str()),
+            parsed.get(KUBE_KEY_KIND).and_then(|n| n.as_str()),
             Some(FLUX_KIND_HELM_RELEASE),
             "helmrelease.yaml top-level kind must spell the lifted \
              FLUX_KIND_HELM_RELEASE ({FLUX_KIND_HELM_RELEASE:?}); a drifted \
@@ -2371,7 +2442,7 @@ spec:
              Flux bundle invariant"
         );
         let health_kind = health_checks[0]
-            .get("kind")
+            .get(KUBE_KEY_KIND)
             .and_then(|k| k.as_str())
             .expect("kustomization.yaml spec.healthChecks[0].kind present");
         assert_eq!(
@@ -2411,7 +2482,7 @@ spec:
                 .contents,
         )
         .unwrap()
-        .get("kind")
+        .get(KUBE_KEY_KIND)
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap();
@@ -2428,7 +2499,7 @@ spec:
         .and_then(|s| s.get("healthChecks"))
         .and_then(|h| h.as_sequence())
         .and_then(|seq| seq.first())
-        .and_then(|e| e.get("kind"))
+        .and_then(|e| e.get(KUBE_KEY_KIND))
         .and_then(|v| v.as_str())
         .map(String::from)
         .unwrap();
@@ -2513,7 +2584,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         assert_eq!(
-            parsed.get("kind").and_then(|n| n.as_str()),
+            parsed.get(KUBE_KEY_KIND).and_then(|n| n.as_str()),
             Some(FLUX_KIND_KUSTOMIZATION),
             "kustomization.yaml top-level kind must spell the lifted \
              FLUX_KIND_KUSTOMIZATION ({FLUX_KIND_KUSTOMIZATION:?}); a drifted \
