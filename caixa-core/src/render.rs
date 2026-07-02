@@ -569,7 +569,20 @@ pub const DNS_1123_LABEL_MAX_LEN: usize = 63;
 /// [`crate::AplicacaoError::PlacementClusterEmpty`],
 /// [`crate::SupervisorError::EmptyChildName`]) before this predicate
 /// is consulted, mirroring `validate_entrada_host`'s empty-first
-/// cascade (c7d05ec).
+/// cascade (c7d05ec). The predicate body re-checks empty defensively
+/// so it can be called from any future call site without a shape-
+/// mismatch footgun — the same "defensive re-check" discipline every
+/// peer value-shape predicate ([`is_gateway_api_http_path`] line 730,
+/// [`is_wit_world_ref`] line 937, [`is_nats_subject`] line 1387,
+/// [`is_wasi_keyvalue_slot`] line 1612, [`is_git_ref_name`] line 1777)
+/// carries. Without the defensive re-check, calling
+/// `is_dns_1123_label("")` panics at `bytes[0]` on the empty-slice
+/// index below (`bytes[0].is_ascii_alphanumeric()` — the boundary
+/// arm's `s.as_bytes()[0]` access reads past the end of the empty
+/// slice), a `panic!` far from the source caixa.lisp on any future
+/// call site that misses the pre-check. The peer predicates all
+/// return `Err("must not be empty")` on this input; this arm brings
+/// `is_dns_1123_label` in line with the same defensive contract.
 ///
 /// Lifted from `caixa-core::aplicacao` (where it was first inlined for
 /// `:membros :caixa` in 3f9d7a0 and then reused for `:placement :clusters`
@@ -589,6 +602,9 @@ pub const DNS_1123_LABEL_MAX_LEN: usize = 63;
 /// error variant — every caller maps the same `String` into its own
 /// typed `*Invalid { <axis>, reason }` enum variant.
 pub fn is_dns_1123_label(s: &str) -> Result<(), String> {
+    if s.is_empty() {
+        return Err("must not be empty".to_string());
+    }
     if s.len() > DNS_1123_LABEL_MAX_LEN {
         return Err(format!(
             "exceeds DNS-1123 label max length of {DNS_1123_LABEL_MAX_LEN} bytes \
@@ -9491,6 +9507,28 @@ mod tests {
         let err = is_dns_1123_label(&too_long).unwrap_err();
         assert!(err.contains("63"), "got: {err:?}");
         assert!(err.contains("64"), "got: {err:?}");
+    }
+
+    #[test]
+    fn dns_1123_label_rejects_empty_defensively() {
+        // Defensive re-check pin — every peer value-shape predicate in
+        // this module (`is_gateway_api_http_path`, `is_wit_world_ref`,
+        // `is_nats_subject`, `is_wasi_keyvalue_slot`, `is_git_ref_name`)
+        // carries the same empty-first arm, so `is_dns_1123_label("")`
+        // returns a clean parser-shaped `must not be empty` reason
+        // instead of panicking at the boundary arm's `bytes[0]` access
+        // (`bytes[0].is_ascii_alphanumeric()` on an empty slice would
+        // index out of bounds). The per-axis narrower `*Empty` variant
+        // (`MembroCaixaEmpty`, `PlacementClusterEmpty`, `EmptyChildName`,
+        // `ModuleEmpty`) still fires at every current call site — this
+        // arm exists so any future call site missing the pre-check gets
+        // a self-locating diagnostic rather than a `panic!` far from the
+        // source caixa.lisp, matching the "usable from any future call
+        // site without a shape-mismatch footgun" discipline every peer
+        // predicate's doc-comment already promises.
+        let err = is_dns_1123_label("").unwrap_err();
+        assert!(err.contains("empty"), "got: {err:?}");
+        assert_eq!(err, "must not be empty");
     }
 
     // ── is_gateway_api_http_path — shared HTTP-path predicate ────────────
