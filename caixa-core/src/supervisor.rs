@@ -964,7 +964,12 @@ pub mod duration_codec {
         // first because the `rate_limit_codec` predecessor on the
         // same canonical-form-drift axis is the closest peer on the
         // trajectory.
-        if num_trim.len() > 1 && num_trim.as_bytes()[0] == b'0' {
+        //
+        // Routed through the lifted
+        // [`crate::render::is_leading_zero_padded_magnitude`]
+        // predicate — the same source of truth the four peer
+        // typed-magnitude codec sites share.
+        if crate::render::is_leading_zero_padded_magnitude(num_trim) {
             return Err(format!(
                 "duration: magnitude {num_trim:?} has a non-canonical leading zero — the \
                  canonical authoring form for the typed duration slots routed through \
