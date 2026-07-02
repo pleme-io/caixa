@@ -6828,6 +6828,52 @@ pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 /// [cf]: ../../caixa_flux/index.html
 pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 
+/// Canonical Helm 3 `Chart.yaml` `apiVersion` every `caixa-helm`-rendered
+/// `lareira-<nome>` chart declares at its top-level `apiVersion` axis. The
+/// Helm 3 chart-schema resolution contract keys off this exact `"v2"` value:
+/// `helm dependency build`, `helm lint`, and `helm template` all parse the
+/// chart under the Helm 3 v2 schema (which requires
+/// [`ChartYaml::description`][chart-yaml-desc] and permits
+/// `dependencies:` at the top level); drift to the legacy Helm 2 `"v1"`
+/// (the pre-Helm-3 chart schema every upstream Helm-3-migration doc names)
+/// silently reroutes the rendered `Chart.yaml` through the Helm 2 parser,
+/// where the top-level `dependencies:` block is unknown and the chart's
+/// dep on the `pleme-computeunit` library chart never resolves —
+/// `helm dependency build` reports "no requirements found" and every
+/// downstream `helm template` / `helm install` on the rendered chart
+/// emits an empty release (no ComputeUnit / Service / ScaledObject
+/// resources land) far from the source caixa.lisp / the renderer's
+/// `build_chart_yaml` call site.
+///
+/// The single source of truth the [`caixa-helm`][ch]'s `build_chart_yaml`
+/// `Chart.yaml` `apiVersion` axis reaches for (caixa-helm/src/lib.rs:298).
+/// Peer with the [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (dbbcf29) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`GATEWAY_API_API_VERSION`] (3c6cfc3) / [`CILIUM_API_VERSION`] (279d611)
+/// lifts on the sibling cluster-side-CRD-apiVersion surface — those pin
+/// the K8s apiserver-side `(apiVersion, kind)` `RESTMapper` contract,
+/// this one pins the Helm-side chart-schema-parser contract that gates
+/// every rendered `lareira-<nome>` chart's dependency resolution before
+/// any K8s resource lands. Both axes are load-bearing schema-version
+/// discriminators drift-prone by construction across renderer forks.
+///
+/// A future Helm 4 chart-schema promotion (the upstream Helm roadmap
+/// names a `"v3"` apiVersion once the Helm 3 LTS branch closes) is a
+/// coordinated migration alongside the upstream Helm chart-schema
+/// deprecation cycle, not an incidental edit — pinning it here means
+/// the migration lands as one edit at the const + a re-run of the
+/// pin tests rather than a per-renderer sweep with no single source
+/// of truth to consult. Same "the typed constant lives in one place"
+/// discipline the [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`LAREIRA_CHART_NAME_PREFIX`] / [`FLUX_HELMRELEASE_API_VERSION`]
+/// (55f0fd9) lifts apply on the peer canonical-Helm-load-bearing-string
+/// and cluster-side-CRD-apiVersion axes.
+///
+/// [chart-yaml-desc]: https://helm.sh/docs/topics/charts/#the-chartyaml-file
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_API_VERSION: &str = "v2";
+
 /// Canonical Helm chart-name prefix for every per-Servico chart the
 /// substrate emits — the `"lareira-"` segment of the well-known
 /// `lareira-<nome>` shape every caixa Servico renderer prepends to a
@@ -8459,6 +8505,105 @@ mod tests {
             "DEFAULT_NAMESPACE {DEFAULT_NAMESPACE:?} must be a valid \
              DNS-1123 label — every K8s apiserver-side schema enforces \
              this rule on `metadata.namespace`"
+        );
+    }
+
+    #[test]
+    fn helm_chart_api_version_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Helm 3 chart-schema apiVersion the rendered
+        // `lareira-<nome>` `Chart.yaml` document declares at its
+        // top-level `apiVersion` axis. The string is part of the
+        // Helm-side contract with the Helm 3 chart-schema parser:
+        // `helm dependency build` / `helm lint` / `helm template`
+        // all resolve the chart under the Helm 3 v2 schema (permitting
+        // top-level `dependencies:`); a drifted value to the legacy
+        // Helm 2 `"v1"` schema (the pre-Helm-3 chart schema every
+        // upstream Helm-3-migration doc names) silently reroutes the
+        // rendered Chart.yaml through the Helm 2 parser, where the
+        // top-level `dependencies:` block is unknown and the chart's
+        // dep on the `pleme-computeunit` library chart never resolves
+        // — `helm dependency build` reports "no requirements found"
+        // and every `helm template` / `helm install` emits an empty
+        // release (no ComputeUnit / Service / ScaledObject resources
+        // land) far from the source caixa.lisp / the renderer's
+        // `build_chart_yaml` call site. Changing it is a coordinated
+        // Helm 4 chart-schema migration alongside the upstream Helm
+        // chart-schema deprecation cycle, not an incidental edit.
+        // Peer to `flux_helmrelease_api_version_pins_canonical_value`
+        // / `flux_gitrepository_api_version_pins_canonical_value` /
+        // `flux_kustomization_api_version_pins_canonical_value` /
+        // `gateway_api_api_version_pins_canonical_value` /
+        // `cilium_api_version_pins_canonical_value` on the sibling
+        // cluster-side-CRD-apiVersion-pin set — those pin the K8s
+        // apiserver-side `(apiVersion, kind)` `RESTMapper` contract,
+        // this one pins the Helm-side chart-schema-parser contract
+        // that gates every rendered `lareira-<nome>` chart's
+        // dependency resolution before any K8s resource lands.
+        assert_eq!(HELM_CHART_API_VERSION, "v2");
+    }
+
+    #[test]
+    fn helm_chart_api_version_carries_helm_3_chart_schema_shape() {
+        // Cross-axis invariant: the Helm 3 chart-schema apiVersion is
+        // a bare `v<digit>` version label (unlike the K8s CRD
+        // apiVersion — `<group>/<version>` — the sibling
+        // FLUX_HELMRELEASE_API_VERSION / GATEWAY_API_API_VERSION /
+        // CILIUM_API_VERSION lifts pin). The Helm-side chart-schema
+        // grammar carries no group prefix at all — the value is
+        // parsed as a plain schema-version discriminator against the
+        // Helm binary's built-in schema table (Helm 2 recognizes
+        // `"v1"`, Helm 3 recognizes both `"v1"` for legacy compat
+        // and `"v2"` for its native schema). Pinning the shape here
+        // means a future rebrand on the canonical lift can't silently
+        // land a K8s-CRD-shaped `group/version` value (e.g. an
+        // accidental copy-paste from the sibling FLUX / GATEWAY /
+        // CILIUM constants) that the Helm chart-schema parser would
+        // fail to recognize at `helm dependency build` /
+        // `helm lint` / `helm template` time. The `v<digit>+`
+        // invariant is the load-bearing Helm-side chart-schema
+        // typed-discovery contract: a value the Helm binary's
+        // chart-schema resolver consults to select the schema
+        // parser that reads the rest of the document. Peer to
+        // `flux_kind_helm_release_carries_upper_camel_case_shape`
+        // (which pins the K8s `RESTMapper` kind-grammar shape) —
+        // both close the "the shape of the lifted schema-version
+        // discriminator is grammatical, not just a byte-equal string"
+        // discipline at the lift site.
+        let v = HELM_CHART_API_VERSION;
+        assert!(
+            !v.is_empty(),
+            "HELM_CHART_API_VERSION {v:?} must be non-empty per the Helm \
+             chart-schema apiVersion grammar"
+        );
+        assert!(
+            !v.contains('/'),
+            "HELM_CHART_API_VERSION {v:?} must not contain `/` — the Helm-side \
+             chart-schema apiVersion is a bare `v<digit>` label with no group \
+             prefix, unlike the K8s CRD `<group>/<version>` shape the sibling \
+             FLUX_HELMRELEASE_API_VERSION / GATEWAY_API_API_VERSION / \
+             CILIUM_API_VERSION lifts carry"
+        );
+        let bytes = v.as_bytes();
+        assert_eq!(
+            bytes[0], b'v',
+            "HELM_CHART_API_VERSION {v:?} must start with `v` per the Helm \
+             chart-schema apiVersion grammar (`v1` for the legacy schema, \
+             `v2` for the Helm 3 schema — every accepted value the Helm \
+             binary's chart-schema resolver knows carries the `v` prefix)"
+        );
+        assert!(
+            bytes.len() >= 2,
+            "HELM_CHART_API_VERSION {v:?} must be at least 2 bytes (`v` + \
+             at least one digit) per the Helm chart-schema apiVersion \
+             grammar"
+        );
+        assert!(
+            bytes[1..].iter().all(u8::is_ascii_digit),
+            "HELM_CHART_API_VERSION {v:?} bytes after the leading `v` must be \
+             ASCII digits per the Helm chart-schema apiVersion grammar — \
+             no dots, no hyphens, no whitespace, no non-digit bytes the \
+             Helm binary's chart-schema resolver would reject"
         );
     }
 
