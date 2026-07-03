@@ -8874,6 +8874,104 @@ pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 /// [cm]: ../../caixa_mesh/index.html
 pub const DEFAULT_GATEWAY_CLASS_NAME: &str = "cilium";
 
+/// Canonical K8s Gateway API `Gateway` per-Gateway controller-binding
+/// scalar-axis key every `gateway_routes`-emitted `Gateway` document
+/// mounts its per-Gateway `GatewayClass.metadata.name` reference under
+/// (`spec.gatewayClassName`). Pairs with the sibling
+/// [`DEFAULT_GATEWAY_CLASS_NAME`] (d9b0743) — the K8s Gateway API v1 CRD
+/// schema pins the per-Gateway controller-binding through the scalar
+/// `spec.gatewayClassName` axis (each `Gateway` names exactly one
+/// `GatewayClass.metadata.name`; the sibling `spec.listeners[]` +
+/// `spec.addresses[]` container axes carry the L7-listener fan-out +
+/// per-Gateway address hint under the same `spec` block), so drift on
+/// the per-Gateway controller-binding scalar-axis KEY is exactly as
+/// load-bearing as drift on the sibling `DEFAULT_GATEWAY_CLASS_NAME`
+/// VALUE the axis wraps (the K8s apiserver-side Gateway API CRD schema
+/// validator drops any `spec` block whose controller-binding scalar-
+/// axis carries an unrecognized key — a `"gatewayClass"` /
+/// `"className"` / `"gatewayClassRef"` typo silently emits a `Gateway`
+/// whose controller-binding the Gateway API implementation's per-
+/// Gateway reconcile loop no-ops entirely: no `GatewayClass` is
+/// resolved, no `controllerName` is looked up, and every external
+/// `:entrada` flow the Gateway was authored to accept drops at the
+/// gateway-class-controller's per-Gateway reconcile with no field
+/// naming the controller-binding-axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-Gateway controller-binding-axis-naming reaches
+/// for:
+///
+///   - the rendered `Gateway` document's `spec.gatewayClassName` axis
+///     (caixa-mesh/src/lib.rs:2016 — the `gateway_routes` per-Aplicacao
+///     `Gateway`'s `g_spec.insert("gatewayClassName", …)` call).
+///
+/// The per-Gateway controller-binding scalar axis names the same
+/// Gateway-API-implementation-side per-Gateway `GatewayClass`
+/// resolution axis as the sibling [`DEFAULT_GATEWAY_CLASS_NAME`] VALUE
+/// it wraps, and must move together on any future Gateway API rebrand
+/// (an upstream SIG-Network Gateway API v2 rename of the controller-
+/// binding scalar-axis from `gatewayClassName` to `className` /
+/// `gatewayClassRef` / `class`, coordinated with the Gateway API
+/// deprecation cycle). Until this lift landed the KEY axis carried an
+/// inline `gatewayClassName` literal at the one production-code
+/// occurrence in caixa-mesh/src/lib.rs:2016 (the `gateway_routes` per-
+/// Aplicacao Gateway's `g_spec.insert("gatewayClassName", …)` call)
+/// plus a matching test-fixture navigation inside the in-file
+/// `gateway_gateway_class_name_uses_lifted_default_gateway_class_name`
+/// pin's `.get("gatewayClassName")` traversal (caixa-mesh/src/lib.rs:5315)
+/// — two occurrences of the same load-bearing Gateway-API-CRD-
+/// `gatewayClassName`-axis-KEY convention, drift-prone by
+/// construction. A drift on the production site to `"gatewayClass"` /
+/// `"className"` / `"gatewayClassRef"` would have surfaced as a
+/// Gateway API implementation-side schema validator drop at apply
+/// time (the affected `Gateway`'s controller-binding scalar-axis the
+/// CRD schema validator recognizes as unknown), with every external
+/// `:entrada` flow the Gateway was authored to accept dropping at the
+/// gateway-class-controller's per-Gateway reconcile with no field
+/// naming the controller-binding-drift root cause. A drift on the
+/// test-fixture side silently masks the emission-side pin
+/// (`.get("gatewayClassName")` returns `None` under both the drifted-
+/// key emitter and the drifted-key probe — the downstream
+/// `.and_then(|c| c.as_str())` chain short-circuits vacuously because
+/// the outer per-Gateway controller-binding lookup is itself `None`).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) lifts established on the
+/// sibling canonical-Gateway-API-body-axis surfaces — completes the
+/// per-Gateway-body-axis canonical-string-pin set the sibling
+/// `spec.listeners[]` lift began, closing the (`gatewayClassName`,
+/// `listeners`) per-`Gateway`-spec-body-axis pair the M3 Aplicacao
+/// mesh renderer's external `:entrada` ingress contract rests on.
+/// Together with the peer [`DEFAULT_GATEWAY_CLASS_NAME`] VALUE lift
+/// (d9b0743) — the `(key, value)` pair-lift discipline the sibling
+/// `(KUBE_KEY_METADATA, {"name","namespace","labels"})` axis
+/// established — the per-Gateway controller-binding scalar axis now
+/// threads both halves of its `(key, value)` typed contract through
+/// one lifted `&'static str` apiece at the substrate boundary. The
+/// render-side consumer now threads the same `&'static str` through
+/// its `g_spec.insert(…)` call so a future Gateway API rebrand on
+/// the controller-binding scalar axis (or an upstream SIG-Network
+/// Gateway API v2 rename to a per-CRD sibling name) lands in one
+/// place; every future renderer that reaches for the canonical
+/// per-Gateway controller-binding scalar axis (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `Gateway` fan-out, a future per-cluster `GatewayClass` /
+/// `ReferenceGrant` renderer whose per-Gateway class-name enumeration
+/// binds against this same axis, a future per-`Gateway` typed-listener
+/// TLS terminator renderer whose per-Gateway `spec` block nests
+/// alongside this same axis) inherits the same value by construction
+/// with no opportunity for per-renderer drift.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_GATEWAY_CLASS_NAME: &str = "gatewayClassName";
+
 /// Canonical Helm 3 `Chart.yaml` `apiVersion` every `caixa-helm`-rendered
 /// `lareira-<nome>` chart declares at its top-level `apiVersion` axis. The
 /// Helm 3 chart-schema resolution contract keys off this exact `"v2"` value:
@@ -11246,6 +11344,84 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_MATCHES {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_gateway_class_name_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `Gateway` per-Gateway controller-
+        // binding scalar-axis key the rendered Gateway document
+        // mounts its per-Gateway `GatewayClass.metadata.name`
+        // reference under. The string is part of the cluster-side
+        // contract with every Gateway-API-conformant gateway
+        // implementation (Cilium, Istio, Envoy Gateway, NGINX) —
+        // the Gateway-API-implementation-side per-Gateway reconcile
+        // loop keys off this axis to source the `GatewayClass`
+        // reference the per-Gateway controller-name-lookup dispatch
+        // resolves; a drifted value (`"gatewayClass"` /
+        // `"className"` / `"gatewayClassRef"`) at the production
+        // emitter silently emits a `Gateway` whose controller-binding
+        // scalar-axis the Gateway API CRD schema validator drops as
+        // unknown — no `GatewayClass` is resolved, no `controllerName`
+        // is looked up, and every external `:entrada` flow the
+        // Gateway was authored to accept drops at the gateway-class-
+        // controller's per-Gateway reconcile with no field naming
+        // the controller-binding-drift root cause. Changing this
+        // value is a coordinated Gateway API promotion alongside
+        // the upstream SIG-Network Gateway API deprecation cycle,
+        // not an incidental edit. Peer to
+        // `gateway_api_key_listeners_pins_canonical_value` /
+        // `gateway_api_key_hostname_pins_canonical_value` on the
+        // sibling per-Gateway-body-axis canonical-string-pin
+        // surface — completes the per-Gateway-body-axis top-level-
+        // axis pin set (`gatewayClassName`, `listeners`) the M3
+        // Aplicacao mesh renderer's external `:entrada` ingress
+        // contract rests on. Sibling of the peer
+        // `default_gateway_class_name_pins_canonical_value` on the
+        // canonical-Gateway-API-`(key, value)`-pair-lift surface
+        // this lift closes the KEY half of.
+        assert_eq!(GATEWAY_API_KEY_GATEWAY_CLASS_NAME, "gatewayClassName");
+    }
+
+    #[test]
+    fn gateway_api_key_gateway_class_name_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_listeners_carries_lower_camel_case_shape`
+        // / `gateway_api_key_matches_carries_lower_camel_case_shape`
+        // on the sibling per-Gateway / per-HTTPRoute-body-axis
+        // grammar-pin surface — the lowerCamelCase K8s field-name
+        // grammar governs every nested schema-field axis (including
+        // this per-Gateway controller-binding scalar-axis key), same
+        // convention.
+        let v = GATEWAY_API_KEY_GATEWAY_CLASS_NAME;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_GATEWAY_CLASS_NAME {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_GATEWAY_CLASS_NAME {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_GATEWAY_CLASS_NAME {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
