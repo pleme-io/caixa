@@ -8385,6 +8385,111 @@ pub const GATEWAY_API_KEY_TIMEOUTS: &str = "timeouts";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_RETRY: &str = "retry";
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule retry-policy `attempts`
+/// leaf scalar-key every `gateway_routes`-emitted `HTTPRoute` document
+/// mounts its per-rule `:politicas :retries` typed `u32` attempt count
+/// under (`spec.rules[].retry.attempts`). Leaf peer to the container-axis
+/// parent [`GATEWAY_API_KEY_RETRY`] (231bbf5) — the sibling per-rule
+/// retry-policy body-axis lifted in the immediately-preceding commit;
+/// this closes the parent-leaf axis pair (`retry` container +
+/// `attempts` leaf) the Gateway API v1 `HTTPRouteRetry` sub-shape pins
+/// under `HTTPRoute.spec.rules[].retry.attempts`.
+///
+/// The Gateway API v1 CRD schema pins the per-rule retry attempt budget
+/// through the `HTTPRouteRetry.attempts` scalar (peer to future
+/// `HTTPRouteRetry.codes` retryable-status-code list and
+/// `HTTPRouteRetry.backoff` inter-attempt backoff-window scalars) the
+/// Gateway-API-implementation-side per-rule request-dispatch loop
+/// compares each failed backend attempt count against before giving up
+/// on the in-flight backend call. Drift on this leaf key is exactly as
+/// load-bearing as drift on the parent per-rule retry-policy container
+/// axis (`retry`): the K8s apiserver-side Gateway API CRD schema
+/// validator drops any per-rule `retry:` entry whose leaf attempt-count
+/// key carries an unrecognized name — a `"attempt"` (singular) /
+/// `"count"` / `"tries"` / `"maxAttempts"` typo silently emits an
+/// `HTTPRoute` whose per-rule retry-budget the Gateway-API-
+/// implementation-side per-rule request-dispatch loop no-ops entirely
+/// (the sub-shape is parsed as an empty `HTTPRouteRetry` with the
+/// typed `u32` attempt count silently discarded, the route accepts
+/// every inbound request with no per-rule retry budget — the "no
+/// infinite retrying without bound" guarantee MESH-COMPOSITION.md §V
+/// mandates for every rendered per-`:politicas` mesh-composition edge
+/// silently regresses to the pre-overlay unbounded-retry semantic,
+/// and every external `:entrada` flow the route was authored to cap
+/// by the typed `:politicas :retries` slot runs to whatever retry
+/// policy the resolved backend's downstream infrastructure — Envoy
+/// default retry policy, client SDK autoretry, node-local conntrack
+/// retries — picks with no field naming the per-rule-retry-attempts-
+/// leaf-key drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-`HTTPRoute` per-rule retry-attempts-leaf-key-
+/// naming reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-rule
+///     `retry.attempts:` leaf (caixa-mesh/src/lib.rs — the
+///     `gateway_routes` per-Aplicacao `HTTPRoute`'s per-rule
+///     `single_field_overlay(spec.politicas.retries, …)` call seeded
+///     from the Aplicacao's `:politicas :retries` overlay when the
+///     slot is set, emitting the typed `u32` attempt count under this
+///     leaf key inside the sibling [`GATEWAY_API_KEY_RETRY`] container
+///     axis).
+///
+/// The per-rule retry-attempts leaf key names the same Gateway-API-
+/// implementation-side per-rule request-dispatch retry-budget scalar
+/// as the sibling parent [`GATEWAY_API_KEY_RETRY`] container axis it
+/// sits nested inside under `spec.rules[].retry.attempts`, and must
+/// move together with the parent on any future Gateway API rebrand
+/// (an upstream SIG-Network Gateway API v2 rename of the per-rule
+/// retry-attempts leaf key from `attempts` to `attempt` / `count` /
+/// `tries` / `maxAttempts`, coordinated with the Gateway API
+/// deprecation cycle). Until this lift landed the leaf key carried
+/// an inline `attempts` literal at six physical code sites in
+/// caixa-mesh/src/lib.rs (one production emitter at the `gateway_routes`
+/// per-rule `single_field_overlay(spec.politicas.retries, "attempts", …)`
+/// call plus five test-side navigators pinning the overlay's leaf-
+/// count value, round-trip of the typed `u32` attempt count, YAML
+/// integer scalar-kind, per-rule fan-out under multi-`:entrada
+/// :paths`, and independent-axis coexistence with the sibling
+/// `timeouts` per-rule request-timeout-policy axis).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) lifts established on
+/// the sibling canonical-Gateway-API-CRD-body-axis surface — closes
+/// the parent-leaf axis pair (`retry` container +
+/// `attempts` leaf) the K8s Gateway API v1 `HTTPRouteRetry` sub-shape
+/// pins under `HTTPRoute.spec.rules[].retry.attempts`, both
+/// MESH-COMPOSITION.md §V "no infinite retrying" guarantees rest on.
+/// The render-side consumer now threads the same `&'static str`
+/// through its `single_field_overlay` call and every test-side
+/// navigator's `.get(…)` retrieval so a future Gateway API rebrand
+/// on the per-rule retry-attempts leaf lands in one place; every
+/// future renderer that reaches for the canonical per-rule retry-
+/// attempts leaf (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR materializer's per-Aplicacao per-rule retry-attempts fan-out)
+/// inherits the same value by construction with no opportunity for
+/// per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) lifts apply on the peer
+/// canonical-Gateway-API-HTTPRoute-per-rule-body-axis surface, now
+/// extended one nesting level deeper onto the retry-container-leaf
+/// scalar.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_ATTEMPTS: &str = "attempts";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -11121,6 +11226,98 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_RETRY {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_attempts_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` per-rule retry-policy
+        // `attempts` leaf scalar-key the rendered HTTPRoute document
+        // mounts each rule's per-rule `:politicas :retries` typed `u32`
+        // attempt count under. The string is part of the cluster-side
+        // contract with every Gateway-API-conformant gateway
+        // implementation (Cilium, Istio, Envoy Gateway, NGINX) — the
+        // Gateway-API-implementation-side per-rule request-dispatch
+        // loop keys off this leaf to source the per-rule retry attempt
+        // budget each failed backend attempt count is bounded against;
+        // a drifted value (`"attempt"` (singular) / `"count"` /
+        // `"tries"` / `"maxAttempts"`) at either the production
+        // emitter or a downstream renderer's per-rule retry-attempts
+        // upsert silently emits an `HTTPRoute` whose per-rule retry-
+        // attempts leaf the Gateway API CRD schema validator drops as
+        // unknown — the retry sub-shape parses as an empty
+        // `HTTPRouteRetry` with the typed `u32` attempt count silently
+        // discarded, the route accepts every inbound request with no
+        // per-rule retry budget (the "no infinite retrying without
+        // bound" guarantee MESH-COMPOSITION.md §V mandates for every
+        // rendered per-`:politicas` mesh-composition edge silently
+        // regresses to the pre-overlay unbounded-retry semantic), and
+        // every external `:entrada` flow the route was authored to cap
+        // by the typed `:politicas :retries` slot runs to whatever
+        // retry policy the resolved backend's downstream infrastructure
+        // picks with no field naming the per-rule-retry-attempts-leaf-
+        // key-drift root cause. Changing this value is a coordinated
+        // Gateway API promotion alongside the upstream SIG-Network
+        // Gateway API deprecation cycle, not an incidental edit. Peer
+        // to `gateway_api_key_retry_pins_canonical_value` /
+        // `gateway_api_key_timeouts_pins_canonical_value` /
+        // `gateway_api_key_hostnames_pins_canonical_value` /
+        // `gateway_api_key_hostname_pins_canonical_value` /
+        // `gateway_api_key_listeners_pins_canonical_value` /
+        // `gateway_api_key_parent_refs_pins_canonical_value` /
+        // `gateway_api_key_backend_refs_pins_canonical_value` on the
+        // sibling per-Gateway-API-CRD-body-axis canonical-string-pin
+        // surface — closes the parent-leaf axis pair (`retry`
+        // container + `attempts` leaf) both MESH-COMPOSITION.md §V
+        // "no infinite retrying" guarantees rest on, one nesting
+        // level deeper than the parent per-rule retry-policy
+        // container axis (`retry`).
+        assert_eq!(GATEWAY_API_KEY_ATTEMPTS, "attempts");
+    }
+
+    #[test]
+    fn gateway_api_key_attempts_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_retry_carries_lower_camel_case_shape`
+        // / `gateway_api_key_timeouts_carries_lower_camel_case_shape`
+        // / `gateway_api_key_hostnames_carries_lower_camel_case_shape`
+        // / `gateway_api_key_hostname_carries_lower_camel_case_shape`
+        // / `gateway_api_key_listeners_carries_lower_camel_case_shape`
+        // / `gateway_api_key_parent_refs_carries_lower_camel_case_shape`
+        // / `gateway_api_key_backend_refs_carries_lower_camel_case_shape`
+        // on the sibling per-Gateway-API-CRD-body-axis grammar-pin
+        // surface — the lowerCamelCase K8s field-name grammar governs
+        // every nested schema-field axis (including this per-rule
+        // retry-attempts-leaf-key), same convention.
+        let v = GATEWAY_API_KEY_ATTEMPTS;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_ATTEMPTS {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_ATTEMPTS {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_ATTEMPTS {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
