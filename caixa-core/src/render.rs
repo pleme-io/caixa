@@ -7579,6 +7579,117 @@ pub const GATEWAY_API_KEY_PARENT_REFS: &str = "parentRefs";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_BACKEND_REFS: &str = "backendRefs";
 
+/// Canonical K8s Gateway API `Gateway` per-listener-set container-axis
+/// key every `gateway_routes`-emitted `Gateway` document mounts its
+/// per-Gateway `[{name, port, protocol, hostname}]` L7-listener fan-out
+/// list under (`spec.listeners[]`). Pairs with the sibling
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) +
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) — the Gateway API v1 CRD
+/// schema pins the per-Gateway L7-listener fan-out through the
+/// `spec.listeners[]` container axis (each entry names one listener the
+/// Gateway accepts external traffic on; the sibling
+/// `spec.parentRefs[]` + `spec.rules[].backendRefs[]` container axes
+/// carry the per-HTTPRoute parent-Gateway attachment + per-rule
+/// backend-destination fan-out halves under the paired `HTTPRoute`
+/// `spec` block), so drift on the per-Gateway L7-listener-set axis is
+/// exactly as load-bearing as drift on the per-HTTPRoute parent-Gateway-
+/// binding + per-rule backend-destination axes it accompanies (the K8s
+/// apiserver-side Gateway API CRD schema validator drops any `spec`
+/// block whose L7-listener-set container axis carries an unrecognized
+/// key — a `"listener"` / `"listen"` / `"servers"` typo silently emits
+/// a `Gateway` whose L7-listener fan-out the Gateway API
+/// implementation's per-Gateway reconcile loop no-ops entirely: no
+/// listener is opened, and every external `:entrada` flow the Gateway
+/// was authored to accept drops at the gateway-class-controller's per-
+/// Gateway HTTP-listener fan-in with no field naming the L7-listener-
+/// set-axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-Gateway L7-listener-set-axis-naming reaches
+/// for:
+///
+///   - the rendered `Gateway` document's `spec.listeners[]` axis
+///     (caixa-mesh/src/lib.rs — the `gateway_routes` per-Aplicacao
+///     `Gateway`'s `g_spec.insert("listeners", …)` call).
+///
+/// The per-Gateway L7-listener-set container axis names the same
+/// Gateway-API-implementation-side per-Gateway inbound-traffic-
+/// acceptance-vector fan-out container as the sibling
+/// [`GATEWAY_API_KEY_PARENT_REFS`] per-HTTPRoute parent-Gateway-binding
+/// container axis + [`GATEWAY_API_KEY_BACKEND_REFS`] per-rule backend-
+/// destination container axis it accompanies, and must move together
+/// on any future Gateway API rebrand (an upstream SIG-Network Gateway
+/// API v2 rename of the L7-listener-set axis from `listeners` to
+/// `servers` / `endpoints` / `bindings`, coordinated with the Gateway
+/// API deprecation cycle). Until this lift landed the axis carried an
+/// inline `listeners` literal at the one production-code occurrence in
+/// caixa-mesh/src/lib.rs (the `gateway_routes` per-Aplicacao Gateway's
+/// `g_spec.insert("listeners", …)` call) plus a matching test-fixture
+/// navigation inside the in-file `gateway_listener_carries_aplicacao_host`
+/// pin's `.get("listeners")` traversal — two occurrences of the same
+/// load-bearing Gateway-API-CRD-`listeners`-axis-key convention, drift-
+/// prone by construction. A drift on the production site to
+/// `"listener"` / `"listen"` / `"servers"` would have surfaced as a
+/// Gateway API implementation-side schema validator drop at apply time
+/// (the affected `Gateway`'s L7-listener-set axis the CRD schema
+/// validator recognizes as unknown), with every external `:entrada`
+/// flow the Gateway was authored to accept dropping at the gateway-
+/// class-controller's per-Gateway reconcile with no field naming the
+/// L7-listener-set-drift root cause. A drift on the test-fixture side
+/// silently masks the emission-side pin (`.get("listeners")` returns
+/// `None` under both the drifted-key emitter and the drifted-key probe
+/// — the downstream `.and_then(|l| l.as_sequence())` /
+/// `.and_then(|s| s.first())` chain short-circuits vacuously because
+/// the outer per-Gateway L7-listener-set lookup is itself `None`).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts established on the sibling
+/// canonical-Gateway-API-HTTPRoute-body-axis /
+/// canonical-Cilium-CNP-body-axis surfaces — pivots the per-HTTPRoute-
+/// body-axis lift discipline onto the sibling per-Gateway-body-axis
+/// surface, extending the per-Gateway-API-CRD-body-axis canonical-
+/// string-pin set (`parentRefs`, `backendRefs`, `listeners`, future
+/// `hostnames`) the M3 Aplicacao mesh renderer's external `:entrada`
+/// ingress contract rests on across the Gateway API CRD-side body-
+/// shape. The render-side consumer now threads the same `&'static
+/// str` through its `g_spec.insert(…)` call so a future Gateway API
+/// rebrand on the L7-listener-set axis (or an upstream SIG-Network
+/// Gateway API v2 rename to a per-CRD sibling name) lands in one
+/// place; every future renderer that reaches for the canonical per-
+/// Gateway L7-listener-set axis (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `Gateway` fan-out, a future per-cluster `GatewayClass` /
+/// `ReferenceGrant` renderer whose per-Gateway listener-set enumeration
+/// binds against this same axis, a future per-listener TLS terminator
+/// renderer whose per-listener `tls.mode: Terminate` overlay nests
+/// under the same axis convention) inherits the same value by
+/// construction with no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts apply on the peer canonical-
+/// Gateway-API-Gateway-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_LISTENERS: &str = "listeners";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -9829,6 +9940,79 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_BACKEND_REFS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_listeners_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `Gateway` per-listener-set container-
+        // axis key the rendered Gateway document mounts its per-Gateway
+        // `[{name, port, protocol, hostname}]` L7-listener fan-out list
+        // under. The string is part of the cluster-side contract with
+        // every Gateway-API-conformant gateway implementation (Cilium,
+        // Istio, Envoy Gateway, NGINX) — the Gateway-API-implementation-
+        // side per-Gateway reconcile loop keys off this axis to source
+        // the per-Gateway L7-listener fan-out the external `:entrada`
+        // flow the Gateway was authored to accept lands on; a drifted
+        // value (`"listener"` / `"listen"` / `"servers"`) at either the
+        // production emitter or a downstream renderer's per-Gateway L7-
+        // listener-set upsert silently emits a `Gateway` whose L7-
+        // listener-set axis the Gateway API CRD schema validator drops
+        // as unknown — no listener is opened, and every external
+        // `:entrada` flow drops at the gateway-class-controller's per-
+        // Gateway reconcile with no field naming the L7-listener-set-
+        // drift root cause. Changing this value is a coordinated
+        // Gateway API promotion alongside the upstream SIG-Network
+        // Gateway API deprecation cycle, not an incidental edit. Peer
+        // to `gateway_api_key_parent_refs_pins_canonical_value` /
+        // `gateway_api_key_backend_refs_pins_canonical_value` on the
+        // sibling per-Gateway-API-CRD-body-axis canonical-string-pin
+        // surface — extends the per-Gateway-API-CRD-body-axis pin set
+        // (`parentRefs`, `backendRefs`, `listeners`, future
+        // `hostnames`) the M3 Aplicacao mesh renderer's external
+        // `:entrada` ingress contract rests on across the Gateway API
+        // CRD-side body-shape.
+        assert_eq!(GATEWAY_API_KEY_LISTENERS, "listeners");
+    }
+
+    #[test]
+    fn gateway_api_key_listeners_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_parent_refs_carries_lower_camel_case_shape`
+        // / `gateway_api_key_backend_refs_carries_lower_camel_case_shape`
+        // on the sibling per-Gateway-API-CRD-body-axis grammar-pin
+        // surface — the lowerCamelCase K8s field-name grammar governs
+        // every nested schema-field axis (including this per-Gateway
+        // L7-listener-set-container-axis key), same convention.
+        let v = GATEWAY_API_KEY_LISTENERS;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_LISTENERS {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_LISTENERS {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_LISTENERS {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
