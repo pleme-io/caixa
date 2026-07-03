@@ -7374,6 +7374,107 @@ pub const GATEWAY_API_KIND_GATEWAY: &str = "Gateway";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 
+/// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
+/// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
+/// per-route parent-Gateway `[{name}]` list under (`spec.parentRefs[]`).
+/// Pairs with the sibling [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) +
+/// [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) — the Gateway API v1 CRD schema
+/// pins the per-HTTPRoute parent-Gateway identity through the
+/// `spec.parentRefs[]` container axis (each entry names the parent
+/// Gateway the route attaches to; the sibling `hostnames` + `rules`
+/// container axes carry the per-route host-match + per-rule L7-dispatch
+/// halves under the same `spec` block), so drift on the parent-Gateway-
+/// binding axis is exactly as load-bearing as drift on the per-HTTPRoute
+/// `kind` discriminator axis it accompanies (the K8s apiserver-side
+/// Gateway API CRD schema validator drops any `spec` block whose parent-
+/// binding container axis carries an unrecognized key — a `"parentRef"`
+/// / `"parents"` / `"parentGateways"` typo silently emits an `HTTPRoute`
+/// whose parent-Gateway attachment the Gateway API implementation's
+/// per-HTTPRoute reconcile loop no-ops entirely: the route lands
+/// unattached to any Gateway, and every external `:entrada` flow the
+/// `HTTPRoute` was authored to accept drops at the Gateway API
+/// implementation's per-Gateway HTTP-listener fan-in with no field
+/// naming the parent-Gateway-binding-axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-HTTPRoute parent-Gateway-binding-axis-naming
+/// reaches for:
+///
+///   - the rendered `HTTPRoute` document's `spec.parentRefs[]` axis
+///     (caixa-mesh/src/lib.rs:1389 — the `gateway_routes` per-Aplicacao
+///     `HTTPRoute`'s `r_spec.insert("parentRefs", …)` call).
+///
+/// The parent-Gateway-binding axis names the same Gateway-API-
+/// implementation-side per-HTTPRoute route→Gateway attachment container
+/// as the sibling [`GATEWAY_API_KIND_HTTP_ROUTE`] +
+/// [`GATEWAY_API_KIND_GATEWAY`] CRD `kind` discriminators the pair
+/// declares together, and must move together on any future Gateway API
+/// rebrand (an upstream Gateway API v2 rename of the parent-binding
+/// axis from `parentRefs` to `parents` / `parentGateways` /
+/// `attachedTo`, coordinated with the upstream SIG-Network Gateway API
+/// deprecation cycle). Until this lift landed the axis carried an
+/// inline `parentRefs` literal at the one production-code occurrence in
+/// caixa-mesh/src/lib.rs:1389 (the `gateway_routes`
+/// `r_spec.insert("parentRefs", …)` call) — the single load-bearing
+/// Gateway-API-CRD-`parentRefs`-axis-key occurrence, drift-prone by
+/// construction. A drift on the production site to `"parentRef"` /
+/// `"parents"` / `"parentGateways"` would have surfaced as a Gateway-
+/// API-implementation-side schema validator drop at apply time (the
+/// affected `HTTPRoute`'s parent-Gateway-binding axis the CRD schema
+/// validator recognizes as unknown), with every external `:entrada`
+/// flow the `HTTPRoute` was authored to accept dropping at the Gateway
+/// API implementation's per-Gateway HTTP-listener fan-in with no field
+/// naming the parent-Gateway-binding-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) /
+/// [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) lifts established on the
+/// sibling canonical-Cilium-CNP-body-axis /
+/// canonical-Gateway-API-CRD-`kind`-discriminator surfaces — pivots the
+/// per-CNP-body-axis lift discipline onto the sibling per-HTTPRoute-
+/// body-axis surface, beginning the per-Gateway-API-HTTPRoute-body-axis
+/// canonical-string-pin set (`parentRefs`, `hostnames`) the M3
+/// Aplicacao mesh renderer's external `:entrada` ingress contract rests
+/// on across the Gateway API HTTPRoute-side per-route body-shape. The
+/// render-side consumer now threads the same `&'static str` through
+/// its `r_spec.insert(…)` call so a future Gateway API rebrand on the
+/// parent-Gateway-binding axis (or an upstream SIG-Network Gateway API
+/// v2 rename to a per-CRD sibling name) lands in one place; every
+/// future renderer that reaches for the canonical per-HTTPRoute parent-
+/// Gateway-binding axis (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `HTTPRoute` fan-out, a future per-edge `TCPRoute` / `TLSRoute` /
+/// `GRPCRoute` renderer for non-HTTP `:entrada` edges whose per-route
+/// parent-Gateway-binding nests under the same axis convention, a
+/// future per-Aplicacao `ReferenceGrant` renderer whose cross-namespace
+/// parent-Gateway attachment binds against this same axis) inherits the
+/// same value by construction with no opportunity for per-renderer
+/// drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) /
+/// [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) lifts apply on the peer
+/// canonical-Gateway-API-HTTPRoute-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_PARENT_REFS: &str = "parentRefs";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -9476,6 +9577,85 @@ mod tests {
              throughout per the K8s API kind discriminator grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              RESTMapper would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_parent_refs_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` parent-Gateway-binding
+        // container-axis key the rendered HTTPRoute document mounts its
+        // per-route `[{name}]` parent-Gateway attachment list under. The
+        // string is part of the cluster-side contract with every
+        // Gateway-API-conformant gateway implementation (Cilium, Istio,
+        // Envoy Gateway, NGINX) — the Gateway-API-implementation-side
+        // per-HTTPRoute reconcile loop keys off this axis to source the
+        // per-route parent-Gateway attachment list the route is bound
+        // to; a drifted value (`"parentRef"` / `"parents"` /
+        // `"parentGateways"`) at either the production emitter or a
+        // downstream renderer's per-HTTPRoute parent-Gateway-binding
+        // upsert silently emits an `HTTPRoute` whose parent-Gateway-
+        // binding axis the Gateway API CRD schema validator drops as
+        // unknown — the route lands unattached to any Gateway, and
+        // every external `:entrada` flow the HTTPRoute was authored to
+        // accept drops at the Gateway API implementation's per-Gateway
+        // HTTP-listener fan-in with no field naming the parent-Gateway-
+        // binding-drift root cause. Changing this value is a
+        // coordinated Gateway API promotion alongside the upstream
+        // SIG-Network Gateway API deprecation cycle, not an incidental
+        // edit. Peer to `cilium_key_ports_pins_canonical_value` /
+        // `cilium_key_from_endpoints_pins_canonical_value` /
+        // `cilium_key_endpoint_selector_pins_canonical_value` /
+        // `cilium_key_ingress_pins_canonical_value` /
+        // `cilium_key_to_ports_pins_canonical_value` on the sibling
+        // per-CNP-body-axis pin set — begins the per-Gateway-API-
+        // HTTPRoute-body-axis canonical-string-pin set (`parentRefs`,
+        // future `hostnames`) the M3 Aplicacao mesh renderer's external
+        // `:entrada` ingress contract rests on across the Gateway API
+        // HTTPRoute-side per-route body-shape.
+        assert_eq!(GATEWAY_API_KEY_PARENT_REFS, "parentRefs");
+    }
+
+    #[test]
+    fn gateway_api_key_parent_refs_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `cilium_key_ports_carries_lower_camel_case_shape` /
+        // `cilium_key_from_endpoints_carries_lower_camel_case_shape` /
+        // `cilium_key_endpoint_selector_carries_lower_camel_case_shape`
+        // / `cilium_key_ingress_carries_lower_camel_case_shape` /
+        // `cilium_key_to_ports_carries_lower_camel_case_shape` on the
+        // sibling per-CNP-body-axis grammar-pin set — the lowerCamelCase
+        // K8s field-name grammar governs every nested schema-field axis
+        // (including this per-HTTPRoute parent-Gateway-binding-
+        // container-axis key), same convention.
+        let v = GATEWAY_API_KEY_PARENT_REFS;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_PARENT_REFS {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_PARENT_REFS {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_PARENT_REFS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
         );
     }
 

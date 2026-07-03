@@ -568,6 +568,45 @@ pub use caixa_core::GATEWAY_API_KIND_GATEWAY;
 /// together.
 pub use caixa_core::GATEWAY_API_KIND_HTTP_ROUTE;
 
+/// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
+/// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts
+/// its per-route parent-Gateway `[{name}]` attachment list under
+/// (`spec.parentRefs[]`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_PARENT_REFS`] so the Gateway-API-
+/// implementation-side per-HTTPRoute parent-Gateway-binding-container-
+/// axis-key string lives in exactly one place across every caixa
+/// renderer — caixa-mesh's `gateway_routes` per-Aplicacao `HTTPRoute`
+/// emitter (the `r_spec.insert("parentRefs", …)` call the prior inline
+/// `"parentRefs"` literal sat at, caixa-mesh/src/lib.rs:1389) and every
+/// future per-Gateway-API-side renderer the M3.x absorption roadmap
+/// acknowledges now consult the same `&'static str`, so a future
+/// Gateway API rebrand on the parent-Gateway-binding axis (an upstream
+/// Gateway API v2 rename to `parents` / `parentGateways` / `attachedTo`,
+/// coordinated with the upstream SIG-Network Gateway API deprecation
+/// cycle) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_PARENT_REFS`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer +
+/// every future per-target renderer the substrate adds. The prior
+/// inline literal at the one production emitter site would have let a
+/// Gateway-API-CRD parent-Gateway-binding-axis rebrand or a per-
+/// emitter typo (`"parentRef"` / `"parents"` / `"parentGateways"`)
+/// silently emit an `HTTPRoute` whose parent-Gateway-binding axis the
+/// Gateway API CRD schema validator drops as unknown — the route lands
+/// unattached to any Gateway, and every external `:entrada` flow the
+/// HTTPRoute was authored to accept drops at the Gateway API
+/// implementation's per-Gateway HTTP-listener fan-in with no field
+/// naming the parent-Gateway-binding-drift root cause. Peer to the
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] + [`GATEWAY_API_KIND_GATEWAY`]
+/// re-exports on the sibling canonical-Gateway-API-CRD-`kind`-
+/// discriminator surface — pivots this crate's per-CNP-body-axis
+/// re-export discipline onto the sibling per-HTTPRoute-body-axis
+/// surface, beginning the per-Gateway-API-HTTPRoute-body-axis
+/// canonical-string re-export set (`parentRefs`, future `hostnames`)
+/// this crate's `gateway_routes` renderer's external `:entrada`
+/// ingress contract rests on across the Gateway API HTTPRoute-side
+/// per-route body-shape.
+pub use caixa_core::GATEWAY_API_KEY_PARENT_REFS;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -1386,7 +1425,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 
     let mut r_spec = serde_yaml::Mapping::new();
     r_spec.insert(
-        serde_yaml::Value::String("parentRefs".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_PARENT_REFS.into()),
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(parent_ref)]),
     );
     r_spec.insert(
@@ -2534,6 +2573,60 @@ mod tests {
             ),
             "GATEWAY_API_KIND_HTTP_ROUTE must be a re-export of \
              caixa_core::GATEWAY_API_KIND_HTTP_ROUTE, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_PARENT_REFS` was lifted from
+        // the inline `"parentRefs"` literal at the `gateway_routes`
+        // per-Aplicacao HTTPRoute's `r_spec.insert("parentRefs", …)`
+        // call site (caixa-mesh/src/lib.rs:1389 — the sole per-
+        // production-code parent-Gateway-binding-container-axis
+        // emitter) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_PARENT_REFS`] so the
+        // Gateway-API-CRD per-HTTPRoute parent-Gateway-binding-
+        // container-axis-key string lives in exactly one place across
+        // every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const GATEWAY_API_KEY_PARENT_REFS: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let a
+        // Gateway-API-CRD parent-Gateway-binding-axis rebrand on the
+        // caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-HTTPRoute parent-Gateway attachments at
+        // the drifted axis; the route lands unattached, and every
+        // external `:entrada` flow drops at the Gateway API
+        // implementation's per-Gateway HTTP-listener fan-in with no
+        // field naming the parent-Gateway-binding-drift root cause.
+        // Peer to
+        // [`cilium_key_ports_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_kind_http_route_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-K8s-CRD-body-axis re-export set —
+        // begins the per-Gateway-API-HTTPRoute-body-axis re-export
+        // identity-pin set (`parentRefs`, future `hostnames`) this
+        // crate's `gateway_routes` renderer's external `:entrada`
+        // ingress contract rests on across the Gateway API HTTPRoute-
+        // side per-route body-shape.
+        assert_eq!(
+            GATEWAY_API_KEY_PARENT_REFS,
+            caixa_core::GATEWAY_API_KEY_PARENT_REFS
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_PARENT_REFS.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_PARENT_REFS.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_PARENT_REFS must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_PARENT_REFS, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
         );
