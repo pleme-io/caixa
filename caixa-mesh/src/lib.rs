@@ -1534,6 +1534,78 @@ pub use caixa_core::GATEWAY_API_KEY_RETRY;
 /// `spec.rules[].retry.attempts`).
 pub use caixa_core::GATEWAY_API_KEY_ATTEMPTS;
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule request-timeout-policy
+/// `request` leaf scalar-key. Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_REQUEST`] so the per-rule request-
+/// deadline leaf key lives in exactly one place across every caixa
+/// renderer — this crate's one production emitter site
+/// (`gateway_routes`'s per-`HTTPRoute` per-rule
+/// `single_field_overlay(spec.politicas.timeout, …)` call that seeds
+/// the typed `Duration` request-deadline string into the sibling
+/// [`GATEWAY_API_KEY_TIMEOUTS`] container axis under
+/// `spec.rules[].timeouts.request`, the leaf the Gateway API v1 CRD
+/// schema pins as `HTTPRouteTimeouts.request` and whose scalar value
+/// the Gateway-API-implementation-side per-rule request-dispatch loop
+/// commits to as the per-request wall-clock deadline every inbound
+/// request is bounded against before the resolved backend even sees
+/// the call) and this crate's five test-side per-rule request-
+/// deadline traversal sites (the
+/// `httproute_carries_politicas_timeout_on_every_rule` typed-`&str`-
+/// value pin, the `httproute_timeout_renders_every_rule_independently`
+/// per-rule fan-out request-deadline pin under multi-`:entrada :paths`,
+/// the `httproute_timeout_uses_canonical_kube_duration_format` typed-
+/// `Duration`-round-trip pin, the
+/// `httproute_timeout_renders_minute_window_canonically` canonical-
+/// minute-form pin, and the timeout-only arm of
+/// `httproute_timeouts_and_retry_coexist_independently` pinning the
+/// leaf request-deadline survives when only the sibling `:timeout`
+/// slot is set) now consult the same `&'static str` as the peer
+/// caixa-core-side const definition.
+///
+/// The prior inline `"request"` literals at the one production emitter
+/// site + five test-side retrieval sites in this crate would have let a
+/// typo on any one site (e.g. `"deadline"` / `"requestTimeout"` /
+/// `"timeout"` / `"upstreamRequest"`) silently drop the per-rule
+/// request deadline or emit a malformed `HTTPRoute` whose per-rule
+/// request-deadline leaf the apiserver-side Gateway API CRD schema
+/// validator drops as unrecognized at apply time — the Gateway API
+/// implementation's per-rule request-dispatch loop would silently parse
+/// the timeouts sub-shape as an empty `HTTPRouteTimeouts` with the
+/// typed `Duration` request-deadline discarded (the "no infinite
+/// blocking" guarantee MESH-COMPOSITION.md §V mandates for every
+/// rendered per-`:politicas` mesh-composition edge silently regresses
+/// to the pre-overlay unbounded-blocking semantic, and every external
+/// `:entrada` flow the route was authored to cap by the typed
+/// `:politicas :timeout` slot runs to whatever request-deadline the
+/// resolved backend's downstream infrastructure picks with no field
+/// naming the per-rule-request-deadline-leaf-key-drift root cause),
+/// and the test-side navigators' `.and_then(|t| t.get("request"))`
+/// chains would silently unwrap to `None` under the drifted retrieval.
+/// The lift routes every per-rule request-deadline-leaf retrieval +
+/// emission through the same `&'static str` so drift between any two
+/// sites becomes a single-edit fix at the caixa-core const definition.
+///
+/// Same shape as the [`GATEWAY_API_KEY_ATTEMPTS`] /
+/// [`GATEWAY_API_KEY_RETRY`] / [`GATEWAY_API_KEY_TIMEOUTS`] /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] / [`GATEWAY_API_KEY_HOSTNAME`] /
+/// [`GATEWAY_API_KEY_LISTENERS`] / [`GATEWAY_API_KEY_PARENT_REFS`] /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] re-exports on the sibling per-
+/// Gateway-API-CRD-body-axis surface — closes the second parent-leaf
+/// axis pair (`timeouts` container + `request` leaf) the K8s Gateway
+/// API v1 `HTTPRouteTimeouts` sub-shape pins under
+/// `HTTPRoute.spec.rules[].timeouts.request`, sibling to the parent-
+/// leaf pair (`retry` container + `attempts` leaf) closed in the
+/// immediately-preceding [`GATEWAY_API_KEY_ATTEMPTS`] lift (e2e136b).
+/// Both MESH-COMPOSITION.md §V "no infinite blocking / no infinite
+/// retrying" guarantees now rest on typed lifts at both container-axis
+/// and leaf-scalar-axis nesting levels. Peer to the sibling load-
+/// bearing K8s-CR-schema-axis re-exports every downstream apiserver-
+/// side CRD-schema-validator navigates the same per-rule request-
+/// deadline leaf on (the gateway-class-controller's per-HTTPRoute
+/// per-rule request-dispatch pass under
+/// `spec.rules[].timeouts.request`).
+pub use caixa_core::GATEWAY_API_KEY_REQUEST;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1905,9 +1977,10 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // caixa_core::supervisor::duration_codec::render so a `30s`
     // typed-slot value renders to the same `"30s"` string K8s
     // tooling parses — no per-renderer ad-hoc duration formatting.
-    let timeout_overlay = single_field_overlay(spec.politicas.timeout, "request", |d| {
-        serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d))
-    });
+    let timeout_overlay =
+        single_field_overlay(spec.politicas.timeout, GATEWAY_API_KEY_REQUEST, |d| {
+            serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d))
+        });
     // `:politicas :retries` overlay — when the typed slot carries a
     // value it surfaces as a per-rule `retry: { attempts: <N> }` block
     // on every HTTPRoute rule, the canonical Gateway API v1.2+
@@ -3052,6 +3125,84 @@ mod tests {
                 caixa_core::GATEWAY_API_KEY_ATTEMPTS.as_ptr(),
             ),
             "GATEWAY_API_KEY_ATTEMPTS must be a re-export of caixa_core::GATEWAY_API_KEY_ATTEMPTS, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_request_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_REQUEST` was lifted from six
+        // inline `"request"` literals — one production emitter site
+        // (`gateway_routes`'s per-`HTTPRoute` per-rule
+        // `single_field_overlay(spec.politicas.timeout, …)` call that
+        // seeds the typed `Duration` request-deadline string into the
+        // sibling [`GATEWAY_API_KEY_TIMEOUTS`] container axis under
+        // `spec.rules[].timeouts.request`, the leaf the Gateway API v1
+        // CRD schema pins as `HTTPRouteTimeouts.request` and whose
+        // scalar value the Gateway-API-implementation-side per-rule
+        // request-dispatch loop commits to as the per-request wall-
+        // clock deadline every inbound request is bounded against
+        // before the resolved backend even sees the call) and five
+        // test-side per-rule request-deadline traversal sites (the
+        // `httproute_carries_politicas_timeout_on_every_rule` typed-
+        // `&str`-value pin, the
+        // `httproute_timeout_renders_every_rule_independently` per-rule
+        // fan-out request-deadline pin under multi-`:entrada :paths`,
+        // the `httproute_timeout_uses_canonical_kube_duration_format`
+        // typed-`Duration`-round-trip pin, the
+        // `httproute_timeout_renders_minute_window_canonically`
+        // canonical-minute-form pin, and the timeout-only arm of
+        // `httproute_timeouts_and_retry_coexist_independently` pinning
+        // the leaf request-deadline survives when only the sibling
+        // `:timeout` slot is set) — to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_REQUEST`] so the canonical K8s-
+        // Gateway-API-`HTTPRoute`-per-rule-request-timeout-policy-
+        // `request`-leaf-scalar-key string lives in exactly one place
+        // across every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling `pub
+        // const GATEWAY_API_KEY_REQUEST: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom
+        // — the prior shape would have let a typo on any one sibling
+        // `pub const` declaration silently miss the per-rule request-
+        // deadline retrieval (the round-trip pins' `Some("30s")` /
+        // `Some("90s")` / `Some("1m")` / `Some("15s")` equality tags
+        // would fire against the `None` retrieval, silently masking
+        // the true per-rule-request-deadline-leaf-key drift), or
+        // silently emit a malformed `HTTPRoute` whose per-rule
+        // timeouts sub-shape the apiserver-side Gateway API CRD schema
+        // validator drops the leaf request-deadline from as
+        // unrecognized at apply time (the Gateway API implementation's
+        // per-rule request-dispatch loop parses the timeouts sub-shape
+        // as an empty `HTTPRouteTimeouts`, the "no infinite blocking"
+        // guarantee MESH-COMPOSITION.md §V mandates for every rendered
+        // per-`:politicas` mesh-composition edge silently regresses to
+        // the pre-overlay unbounded-blocking semantic). Bridge-arm peer
+        // to
+        // [`gateway_api_key_attempts_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_retry_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_timeouts_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_hostnames_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_hostname_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // — closes the second parent-leaf axis pair (`timeouts`
+        // container + `request` leaf) both MESH-COMPOSITION.md §V "no
+        // infinite blocking / no infinite retrying" guarantees rest
+        // on, sibling to the parent-leaf pair (`retry` container +
+        // `attempts` leaf) closed in the immediately-preceding
+        // [`GATEWAY_API_KEY_ATTEMPTS`] bridge-arm.
+        assert_eq!(GATEWAY_API_KEY_REQUEST, caixa_core::GATEWAY_API_KEY_REQUEST);
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_REQUEST.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_REQUEST.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_REQUEST must be a re-export of caixa_core::GATEWAY_API_KEY_REQUEST, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -5068,7 +5219,7 @@ mod tests {
                 .expect("rule must carry timeouts mapping when :politicas :timeout is set");
             assert_eq!(
                 timeouts
-                    .get(serde_yaml::Value::String("request".into()))
+                    .get(serde_yaml::Value::String(GATEWAY_API_KEY_REQUEST.into()))
                     .and_then(|v| v.as_str()),
                 Some("30s")
             );
@@ -5119,7 +5270,7 @@ mod tests {
         for rule in &rules {
             let req = rule
                 .get(GATEWAY_API_KEY_TIMEOUTS)
-                .and_then(|t| t.get("request"))
+                .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
                 .and_then(|v| v.as_str())
                 .expect("each of the 3 rules carries timeouts.request");
             assert_eq!(req, "30s");
@@ -5144,7 +5295,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| t.get("request"))
+                    .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
                     .and_then(|v| v.as_str()),
                 Some("90s")
             );
@@ -5169,7 +5320,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| t.get("request"))
+                    .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
                     .and_then(|v| v.as_str()),
                 Some("1m")
             );
@@ -5357,7 +5508,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(GATEWAY_API_KEY_TIMEOUTS)
-                    .and_then(|t| t.get("request"))
+                    .and_then(|t| t.get(GATEWAY_API_KEY_REQUEST))
                     .and_then(|v| v.as_str()),
                 Some("15s")
             );

@@ -8490,6 +8490,121 @@ pub const GATEWAY_API_KEY_RETRY: &str = "retry";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_ATTEMPTS: &str = "attempts";
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule request-timeout-policy
+/// `request` leaf scalar-key every `gateway_routes`-emitted `HTTPRoute`
+/// document mounts its per-rule `:politicas :timeout` typed K8s-duration
+/// string under (`spec.rules[].timeouts.request`). Leaf peer to the
+/// container-axis parent [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) — the
+/// sibling per-rule request-timeout-policy body-axis — and to the peer
+/// retry-container leaf [`GATEWAY_API_KEY_ATTEMPTS`] (e2e136b) landed
+/// on the parallel `retry.attempts` nesting; this closes the parent-leaf
+/// axis pair (`timeouts` container + `request` leaf) the K8s Gateway API
+/// v1 `HTTPRouteTimeouts` sub-shape pins under
+/// `HTTPRoute.spec.rules[].timeouts.request`.
+///
+/// The Gateway API v1 CRD schema pins the per-rule request-deadline
+/// through the `HTTPRouteTimeouts.request` scalar (peer to
+/// `HTTPRouteTimeouts.backendRequest` per-attempt backend-call deadline
+/// scalar) the Gateway-API-implementation-side per-rule request-dispatch
+/// loop keys off before it commits to a per-request wall-clock deadline.
+/// Drift on this leaf key is exactly as load-bearing as drift on the
+/// parent per-rule request-timeout-policy container axis (`timeouts`):
+/// the K8s apiserver-side Gateway API CRD schema validator drops any
+/// per-rule `timeouts:` entry whose leaf request-deadline key carries an
+/// unrecognized name — a `"deadline"` / `"requestTimeout"` /
+/// `"timeout"` / `"upstreamRequest"` typo silently emits an `HTTPRoute`
+/// whose per-rule request-deadline the Gateway-API-implementation-side
+/// per-rule request-dispatch loop no-ops entirely (the sub-shape is
+/// parsed as an empty `HTTPRouteTimeouts` with the typed duration
+/// silently discarded, the route accepts every inbound request with no
+/// per-rule request wall-clock deadline — the "no infinite blocking"
+/// guarantee MESH-COMPOSITION.md §V mandates for every rendered
+/// per-`:politicas` mesh-composition edge silently regresses to the
+/// pre-overlay unbounded-blocking semantic, and every external
+/// `:entrada` flow the route was authored to cap by the typed
+/// `:politicas :timeout` slot runs to whatever request-deadline the
+/// resolved backend's downstream infrastructure — Envoy default
+/// route-timeout, client SDK deadline, node-local conntrack idle-close
+/// — picks with no field naming the per-rule-request-timeout-leaf-key
+/// drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-`HTTPRoute` per-rule request-deadline-leaf-key-
+/// naming reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-rule
+///     `timeouts.request:` leaf (caixa-mesh/src/lib.rs — the
+///     `gateway_routes` per-Aplicacao `HTTPRoute`'s per-rule
+///     `single_field_overlay(spec.politicas.timeout, …)` call seeded
+///     from the Aplicacao's `:politicas :timeout` overlay when the slot
+///     is set, emitting the typed K8s-duration string under this leaf
+///     key inside the sibling [`GATEWAY_API_KEY_TIMEOUTS`] container
+///     axis).
+///
+/// The per-rule request-deadline leaf key names the same
+/// Gateway-API-implementation-side per-rule request-dispatch wall-clock
+/// deadline scalar as the sibling parent [`GATEWAY_API_KEY_TIMEOUTS`]
+/// container axis it sits nested inside under
+/// `spec.rules[].timeouts.request`, and must move together with the
+/// parent on any future Gateway API rebrand (an upstream SIG-Network
+/// Gateway API v2 rename of the per-rule request-deadline leaf key from
+/// `request` to `deadline` / `requestTimeout` / `timeout` /
+/// `upstreamRequest`, coordinated with the Gateway API deprecation
+/// cycle). Until this lift landed the leaf key carried an inline
+/// `request` literal at six physical code sites in
+/// caixa-mesh/src/lib.rs (one production emitter at the
+/// `gateway_routes` per-rule
+/// `single_field_overlay(spec.politicas.timeout, "request", …)` call
+/// plus five test-side navigators pinning the overlay's leaf-value
+/// presence, the canonical `duration_codec::render` round-trip of a
+/// 30s / 90s / 1m typed duration, per-rule fan-out under
+/// multi-`:entrada :paths`, and independent-axis coexistence with the
+/// sibling `retry` per-rule retry-policy axis).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_ATTEMPTS`] (e2e136b) /
+/// [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) lifts established on the
+/// sibling canonical-Gateway-API-CRD-body-axis surface — closes the
+/// second parent-leaf axis pair (`timeouts` container + `request` leaf)
+/// the K8s Gateway API v1 `HTTPRouteTimeouts` sub-shape pins under
+/// `HTTPRoute.spec.rules[].timeouts.request`, sibling to the parent-
+/// leaf pair (`retry` container + `attempts` leaf) closed in the
+/// immediately-preceding [`GATEWAY_API_KEY_ATTEMPTS`] lift. Both
+/// MESH-COMPOSITION.md §V "no infinite blocking / no infinite retrying"
+/// guarantees now rest on typed lifts at both container-axis and leaf-
+/// scalar-axis nesting levels of the two per-`:politicas` overlays.
+/// The render-side consumer now threads the same `&'static str`
+/// through its `single_field_overlay` call and every test-side
+/// navigator's `.get(…)` retrieval so a future Gateway API rebrand on
+/// the per-rule request-deadline leaf lands in one place; every future
+/// renderer that reaches for the canonical per-rule request-deadline
+/// leaf (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao per-rule request-deadline fan-out, a
+/// future per-edge `backendRequest` per-attempt backend-call deadline
+/// emitter) inherits the same value by construction with no opportunity
+/// for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_ATTEMPTS`] (e2e136b) /
+/// [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) lifts apply on the peer
+/// canonical-Gateway-API-HTTPRoute-per-rule-body-axis surface, now
+/// extended to the second per-rule container-leaf scalar (parallel to
+/// the sibling `retry.attempts` container-leaf pair).
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_REQUEST: &str = "request";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -11318,6 +11433,102 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_ATTEMPTS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_request_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` per-rule request-timeout-
+        // policy `request` leaf scalar-key the rendered HTTPRoute
+        // document mounts each rule's per-rule `:politicas :timeout`
+        // typed K8s-duration string under. The string is part of the
+        // cluster-side contract with every Gateway-API-conformant
+        // gateway implementation (Cilium, Istio, Envoy Gateway, NGINX)
+        // — the Gateway-API-implementation-side per-rule request-
+        // dispatch loop keys off this leaf to source the per-rule
+        // request wall-clock deadline each inbound request is bounded
+        // against; a drifted value (`"deadline"` / `"requestTimeout"`
+        // / `"timeout"` / `"upstreamRequest"`) at either the production
+        // emitter or a downstream renderer's per-rule request-deadline
+        // upsert silently emits an `HTTPRoute` whose per-rule request-
+        // deadline leaf the Gateway API CRD schema validator drops as
+        // unknown — the timeouts sub-shape parses as an empty
+        // `HTTPRouteTimeouts` with the typed duration silently
+        // discarded, the route accepts every inbound request with no
+        // per-rule request deadline (the "no infinite blocking"
+        // guarantee MESH-COMPOSITION.md §V mandates for every rendered
+        // per-`:politicas` mesh-composition edge silently regresses to
+        // the pre-overlay unbounded-blocking semantic), and every
+        // external `:entrada` flow the route was authored to cap by
+        // the typed `:politicas :timeout` slot runs to whatever
+        // request-deadline the resolved backend's downstream
+        // infrastructure picks with no field naming the per-rule-
+        // request-deadline-leaf-key-drift root cause. Changing this
+        // value is a coordinated Gateway API promotion alongside the
+        // upstream SIG-Network Gateway API deprecation cycle, not an
+        // incidental edit. Peer to
+        // `gateway_api_key_attempts_pins_canonical_value` /
+        // `gateway_api_key_retry_pins_canonical_value` /
+        // `gateway_api_key_timeouts_pins_canonical_value` /
+        // `gateway_api_key_hostnames_pins_canonical_value` /
+        // `gateway_api_key_hostname_pins_canonical_value` /
+        // `gateway_api_key_listeners_pins_canonical_value` /
+        // `gateway_api_key_parent_refs_pins_canonical_value` /
+        // `gateway_api_key_backend_refs_pins_canonical_value` on the
+        // sibling per-Gateway-API-CRD-body-axis canonical-string-pin
+        // surface — closes the second parent-leaf axis pair
+        // (`timeouts` container + `request` leaf) both
+        // MESH-COMPOSITION.md §V "no infinite blocking / no infinite
+        // retrying" guarantees rest on, sibling to the parent-leaf
+        // pair (`retry` container + `attempts` leaf) closed in
+        // e2e136b.
+        assert_eq!(GATEWAY_API_KEY_REQUEST, "request");
+    }
+
+    #[test]
+    fn gateway_api_key_request_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_attempts_carries_lower_camel_case_shape`
+        // / `gateway_api_key_retry_carries_lower_camel_case_shape`
+        // / `gateway_api_key_timeouts_carries_lower_camel_case_shape`
+        // / `gateway_api_key_hostnames_carries_lower_camel_case_shape`
+        // / `gateway_api_key_hostname_carries_lower_camel_case_shape`
+        // / `gateway_api_key_listeners_carries_lower_camel_case_shape`
+        // / `gateway_api_key_parent_refs_carries_lower_camel_case_shape`
+        // / `gateway_api_key_backend_refs_carries_lower_camel_case_shape`
+        // on the sibling per-Gateway-API-CRD-body-axis grammar-pin
+        // surface — the lowerCamelCase K8s field-name grammar governs
+        // every nested schema-field axis (including this per-rule
+        // request-deadline-leaf-key), same convention.
+        let v = GATEWAY_API_KEY_REQUEST;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_REQUEST {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_REQUEST {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_REQUEST {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
