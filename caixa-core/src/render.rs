@@ -7805,6 +7805,119 @@ pub const GATEWAY_API_KEY_LISTENERS: &str = "listeners";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_HOSTNAME: &str = "hostname";
 
+/// Canonical K8s Gateway API `HTTPRoute` spec-level DNS-host-filter axis key
+/// every `gateway_routes`-emitted `HTTPRoute` document mounts the route's
+/// per-route virtual-host filter list under (`spec.hostnames[]`). The
+/// plural sibling of [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) — same
+/// Gateway-API-CRD DNS-host-discriminator convention nested one level up on
+/// the sibling `HTTPRoute` per-route body-axis surface, distinct spelling
+/// (`hostnames` — plural — is the `HTTPRoute` spec-level filter list; the
+/// singular `hostname` axis it pairs against is the per-`Gateway`-listener
+/// virtual-host discriminator).
+///
+/// The Gateway API v1 CRD schema pins the per-`HTTPRoute` DNS-host filter
+/// through the spec-level `hostnames[]` container axis (a list of DNS
+/// `PreciseHostname` strings, each one an additional virtual-host filter
+/// the Gateway-API-implementation-side per-route reconcile loop honors
+/// when routing external inbound traffic against SNI at the TLS handshake
+/// / `Host:` header at the HTTP request line and against the sibling
+/// [`GATEWAY_API_KEY_PARENT_REFS`]-declared parent Gateway's per-listener
+/// [`GATEWAY_API_KEY_HOSTNAME`] filter set). Drift on the per-route DNS-
+/// host filter axis is exactly as load-bearing as drift on the sibling
+/// per-listener DNS-host discriminator axis (`hostname`): the K8s
+/// apiserver-side Gateway API CRD schema validator drops any per-route
+/// entry whose DNS-host-filter axis carries an unrecognized key — a
+/// `"hosts"` / `"vhosts"` / `"serverNames"` typo silently emits an
+/// `HTTPRoute` whose per-route virtual-host filter list the Gateway API
+/// implementation's per-route SNI / `Host:` header dispatch loop no-ops
+/// entirely: the route accepts traffic on every host the parent Gateway's
+/// listener accepts rather than the typed `:entrada :host` the Aplicacao
+/// author declared, and every external `:entrada` flow the route was
+/// authored to accept lands on the wildcard virtual-host filter with no
+/// field naming the DNS-host-filter-axis-drift root cause.
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-`HTTPRoute` spec-level DNS-host-filter-axis-naming
+/// reaches for:
+///
+///   - the rendered `HTTPRoute` document's `spec.hostnames[]` axis
+///     (caixa-mesh/src/lib.rs — the `gateway_routes` per-Aplicacao
+///     `HTTPRoute`'s spec-level `r_spec.insert("hostnames", …)` call
+///     seeded from the Aplicacao's `:entrada :host` slot as a
+///     single-element sequence).
+///
+/// The per-route DNS-host filter axis names the same Gateway-API-
+/// implementation-side per-route virtual-host filter list container as the
+/// sibling [`GATEWAY_API_KEY_PARENT_REFS`] per-route parent-Gateway-
+/// binding container axis it sits beside under `spec.*`, and must move
+/// together on any future Gateway API rebrand (an upstream SIG-Network
+/// Gateway API v2 rename of the per-route DNS-host filter axis from
+/// `hostnames` to `hosts` / `vhosts` / `serverNames`, coordinated with
+/// the Gateway API deprecation cycle). Until this lift landed the axis
+/// carried an inline `hostnames` literal at the one production-code
+/// occurrence in caixa-mesh/src/lib.rs (the `gateway_routes` per-
+/// Aplicacao `HTTPRoute`'s spec-level `r_spec.insert("hostnames", …)`
+/// call) — one occurrence today, but the sibling per-Gateway-API-CRD-
+/// body-axis lifts ([`GATEWAY_API_KEY_LISTENERS`] / [`GATEWAY_API_KEY_HOSTNAME`]
+/// / [`GATEWAY_API_KEY_PARENT_REFS`] / [`GATEWAY_API_KEY_BACKEND_REFS`])
+/// each closed on the same one-production-emitter-plus-future-test-
+/// fixture shape before a future per-route DNS-host-filter navigator
+/// picked up the second occurrence, and the same lift-before-the-second-
+/// site discipline applies here.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts established on the sibling
+/// canonical-Gateway-API-CRD-body-axis /
+/// canonical-Cilium-CNP-body-axis surfaces — closes the per-Gateway-API-
+/// CRD `HTTPRoute` per-route body-axis lift pair across the singular /
+/// plural DNS-host discriminator surface (`hostname` at the parent-
+/// Gateway per-listener discriminator + `hostnames` at the child
+/// HTTPRoute per-route filter list), so both halves of the DNS-host
+/// discriminator convention across the `(Gateway, HTTPRoute)` pair the
+/// M3 Aplicacao mesh renderer's external `:entrada` ingress contract
+/// emits together now live as one lifted `&'static str` apiece. The
+/// render-side consumer now threads the same `&'static str` through its
+/// spec-level `r_spec.insert(…)` call so a future Gateway API rebrand on
+/// the per-route DNS-host filter axis (or an upstream SIG-Network
+/// Gateway API v2 rename to a per-CRD sibling name) lands in one place;
+/// every future renderer that reaches for the canonical per-route DNS-
+/// host filter axis (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HTTPRoute` fan-out, a future per-route
+/// wildcard-host `*.example.com` filter emitter, a future per-Aplicacao
+/// multi-`:entrada` `HTTPRoute` fan-out whose per-route DNS-host filter
+/// lists partition inbound traffic across the same parent Gateway's
+/// per-listener discriminator) inherits the same value by construction
+/// with no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts apply on the peer canonical-
+/// Gateway-API-HTTPRoute-per-route-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_HOSTNAMES: &str = "hostnames";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -10207,6 +10320,90 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_HOSTNAME {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_hostnames_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` spec-level DNS-host-filter
+        // axis key the rendered HTTPRoute document mounts each route's
+        // per-route virtual-host filter list under. The string is part
+        // of the cluster-side contract with every Gateway-API-conformant
+        // gateway implementation (Cilium, Istio, Envoy Gateway, NGINX) —
+        // the Gateway-API-implementation-side per-route SNI /
+        // `Host:`-header dispatch loop keys off this axis to source the
+        // per-route virtual-host filter list each route's inbound
+        // traffic is scoped against; a drifted value (`"hosts"` /
+        // `"vhosts"` / `"serverNames"`) at either the production emitter
+        // or a downstream renderer's per-route DNS-host-filter upsert
+        // silently emits an `HTTPRoute` whose per-route virtual-host
+        // filter axis the Gateway API CRD schema validator drops as
+        // unknown — the route accepts traffic on every host the parent
+        // Gateway's listener accepts rather than the typed `:entrada
+        // :host` the Aplicacao author declared, and every external
+        // `:entrada` flow the route was authored to accept lands on the
+        // wildcard virtual-host filter with no field naming the DNS-
+        // host-filter-drift root cause. Changing this value is a
+        // coordinated Gateway API promotion alongside the upstream
+        // SIG-Network Gateway API deprecation cycle, not an incidental
+        // edit. Peer to
+        // `gateway_api_key_hostname_pins_canonical_value` /
+        // `gateway_api_key_listeners_pins_canonical_value` /
+        // `gateway_api_key_parent_refs_pins_canonical_value` /
+        // `gateway_api_key_backend_refs_pins_canonical_value` on the
+        // sibling per-Gateway-API-CRD-body-axis canonical-string-pin
+        // surface — closes the per-Gateway-API-CRD `HTTPRoute` per-route
+        // body-axis pin pair across the singular / plural DNS-host
+        // discriminator surface (`hostname` at the parent-Gateway per-
+        // listener discriminator + `hostnames` at the child HTTPRoute
+        // per-route filter list), so both halves of the DNS-host-
+        // discriminator convention across the `(Gateway, HTTPRoute)`
+        // pair the M3 Aplicacao mesh renderer's external `:entrada`
+        // ingress contract emits together now carry one lifted
+        // canonical-string pin apiece.
+        assert_eq!(GATEWAY_API_KEY_HOSTNAMES, "hostnames");
+    }
+
+    #[test]
+    fn gateway_api_key_hostnames_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_hostname_carries_lower_camel_case_shape`
+        // / `gateway_api_key_listeners_carries_lower_camel_case_shape`
+        // / `gateway_api_key_parent_refs_carries_lower_camel_case_shape`
+        // / `gateway_api_key_backend_refs_carries_lower_camel_case_shape`
+        // on the sibling per-Gateway-API-CRD-body-axis grammar-pin
+        // surface — the lowerCamelCase K8s field-name grammar governs
+        // every nested schema-field axis (including this per-route DNS-
+        // host-filter-axis key), same convention.
+        let v = GATEWAY_API_KEY_HOSTNAMES;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_HOSTNAMES {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_HOSTNAMES {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_HOSTNAMES {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"

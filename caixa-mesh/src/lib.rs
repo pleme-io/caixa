@@ -739,6 +739,55 @@ pub use caixa_core::GATEWAY_API_KEY_LISTENERS;
 /// rests on across the Gateway API CRD-side body-shape.
 pub use caixa_core::GATEWAY_API_KEY_HOSTNAME;
 
+/// Canonical K8s Gateway API `HTTPRoute` spec-level DNS-host-filter axis
+/// key every `gateway_routes`-emitted `HTTPRoute` document mounts the
+/// route's per-route virtual-host filter list under (`spec.hostnames[]`).
+/// The plural sibling of [`GATEWAY_API_KEY_HOSTNAME`] — same
+/// Gateway-API-CRD DNS-host-discriminator convention nested one level up
+/// on the sibling `HTTPRoute` per-route body-axis surface, distinct
+/// spelling (`hostnames` — plural — is the `HTTPRoute` spec-level filter
+/// list; the singular `hostname` axis it pairs against is the per-
+/// `Gateway`-listener virtual-host discriminator). Re-export of the
+/// canonical [`caixa_core::GATEWAY_API_KEY_HOSTNAMES`] so the Gateway-
+/// API-implementation-side per-route DNS-host-filter-axis-key string
+/// lives in exactly one place across every caixa renderer — caixa-mesh's
+/// `gateway_routes` per-Aplicacao `HTTPRoute` emitter (the spec-level
+/// `r_spec.insert("hostnames", …)` call the prior inline `"hostnames"`
+/// literal sat at, seeded from the Aplicacao's `:entrada :host` slot as
+/// a single-element sequence) and every future per-Gateway-API-side
+/// renderer the M3.x absorption roadmap acknowledges now consult the
+/// same `&'static str`, so a future Gateway API rebrand on the per-route
+/// DNS-host filter axis (an upstream Gateway API v2 rename to `hosts` /
+/// `vhosts` / `serverNames`, coordinated with the upstream SIG-Network
+/// Gateway API deprecation cycle) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_HOSTNAMES`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer +
+/// every future per-target renderer the substrate adds. The prior inline
+/// literal at the one production emitter site would have let a Gateway-
+/// API-CRD per-route DNS-host-filter-axis rebrand or a per-emitter typo
+/// (`"hosts"` / `"vhosts"` / `"serverNames"`) silently emit an
+/// `HTTPRoute` whose per-route virtual-host filter axis the Gateway API
+/// CRD schema validator drops as unknown — the route accepts traffic on
+/// every host the parent Gateway's listener accepts rather than the
+/// typed `:entrada :host` the Aplicacao author declared, and every
+/// external `:entrada` flow the route was authored to accept lands on
+/// the wildcard virtual-host filter with no field naming the DNS-host-
+/// filter-drift root cause. Peer to the
+/// [`GATEWAY_API_KEY_HOSTNAME`] +
+/// [`GATEWAY_API_KEY_LISTENERS`] +
+/// [`GATEWAY_API_KEY_PARENT_REFS`] +
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] re-exports on the sibling
+/// canonical-Gateway-API-CRD-body-axis surface — closes the per-Gateway-
+/// API-CRD `HTTPRoute` per-route body-axis re-export pair across the
+/// singular / plural DNS-host discriminator surface (`hostname` at the
+/// parent-Gateway per-listener discriminator + `hostnames` at the child
+/// HTTPRoute per-route filter list), so both halves of the DNS-host-
+/// discriminator convention across the `(Gateway, HTTPRoute)` pair this
+/// crate's `gateway_routes` renderer's external `:entrada` ingress
+/// contract emits together now carry one lifted canonical `&'static str`
+/// re-export apiece.
+pub use caixa_core::GATEWAY_API_KEY_HOSTNAMES;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -1561,7 +1610,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(parent_ref)]),
     );
     r_spec.insert(
-        serde_yaml::Value::String("hostnames".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_HOSTNAMES.into()),
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(entrada.host.clone())]),
     );
     r_spec.insert(
@@ -2928,6 +2977,65 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_hostnames_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_HOSTNAMES` was lifted from the
+        // inline `"hostnames"` literal at the `gateway_routes` per-
+        // Aplicacao HTTPRoute's spec-level `r_spec.insert("hostnames",
+        // …)` call site (the sole production-code per-route DNS-host-
+        // filter-axis emitter) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_HOSTNAMES`] so the Gateway-API-
+        // CRD per-route DNS-host-filter-axis-key string lives in exactly
+        // one place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const GATEWAY_API_KEY_HOSTNAMES: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const` could
+        // happen to carry the same string at the source while pointing
+        // at a different `&'static` allocation) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // symptom — the prior shape would have let a Gateway-API-CRD
+        // per-route DNS-host-filter-axis rebrand on the caixa-mesh side
+        // without a coordinated caixa-core edit silently land per-route
+        // virtual-host filters at the drifted axis; the route accepts
+        // traffic on every host the parent Gateway's listener accepts
+        // rather than the typed `:entrada :host`, and every external
+        // `:entrada` flow drops at the gateway-class-controller's per-
+        // route dispatch with no field naming the DNS-host-filter-drift
+        // root cause. Peer to
+        // [`gateway_api_key_hostname_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-CRD-body-axis re-export
+        // identity-pin set — closes the per-Gateway-API-CRD `HTTPRoute`
+        // per-route body-axis re-export identity-pin pair across the
+        // singular / plural DNS-host discriminator surface (`hostname`
+        // at the parent-Gateway per-listener discriminator + `hostnames`
+        // at the child HTTPRoute per-route filter list), so both halves
+        // of the DNS-host-discriminator convention across the
+        // `(Gateway, HTTPRoute)` pair this crate's `gateway_routes`
+        // renderer's external `:entrada` ingress contract emits together
+        // now carry one lifted `&'static str` re-export identity-pin
+        // apiece.
+        assert_eq!(
+            GATEWAY_API_KEY_HOSTNAMES,
+            caixa_core::GATEWAY_API_KEY_HOSTNAMES
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_HOSTNAMES.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_HOSTNAMES.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_HOSTNAMES must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_HOSTNAMES, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_network_policies_use_lifted_cilium_kind_network_policy() {
         // Fail-before-pass-after pin parsing every rendered
         // `CiliumNetworkPolicy` document and asserting its top-level
@@ -3995,6 +4103,67 @@ mod tests {
             "HTTPRoute's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
              is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_routes_httproute_uses_lifted_gateway_api_key_hostnames() {
+        // Fail-before-pass-after pin parsing the rendered `HTTPRoute`
+        // document and asserting its `spec.hostnames[0]` axis is
+        // navigable through the lifted
+        // [`caixa_core::GATEWAY_API_KEY_HOSTNAMES`] constant by value
+        // (and carries the Aplicacao's `:entrada :host` slot as its
+        // single element, the same seed the sibling per-`Gateway`
+        // per-listener `hostname` axis threads through
+        // [`gateway_listener_carries_aplicacao_host`]). Peer to
+        // [`gateway_routes_gateway_uses_lifted_gateway_api_kind_gateway`]
+        // /
+        // [`gateway_routes_httproute_uses_lifted_gateway_api_kind_http_route`]
+        // on the sibling Gateway-API-CRD-kind-axis lift trajectory and
+        // to
+        // [`gateway_routes_gateway_uses_lifted_gateway_api_api_version`]
+        // /
+        // [`gateway_routes_httproute_uses_lifted_gateway_api_api_version`]
+        // on the sibling Gateway-API-CRD-apiVersion-axis lift
+        // trajectory — closes the per-Gateway-API-CRD `HTTPRoute` per-
+        // route body-axis lifted-uses pin pair across the singular /
+        // plural DNS-host discriminator surface (`hostname` at the
+        // parent-Gateway per-listener discriminator + `hostnames` at
+        // the child HTTPRoute per-route filter list), so both halves of
+        // the DNS-host-discriminator convention across the
+        // `(Gateway, HTTPRoute)` pair the M3 Aplicacao mesh renderer's
+        // external `:entrada` ingress contract emits together now carry
+        // one lifted-uses pin apiece. The
+        // [`gateway_api_key_hostnames_re_export_points_at_caixa_core_canonical`]
+        // pin trips on drift between this crate's re-export and the
+        // caixa-core canonical declaration — together the two arms
+        // (lifted-uses pin here, re-export-identity pin above) close
+        // the drift footgun the inline-literal-at-the-production-
+        // skeleton-call shape carried by construction.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let route = docs
+            .iter()
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
+            })
+            .expect("HTTPRoute present");
+        let hostnames = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(caixa_core::GATEWAY_API_KEY_HOSTNAMES))
+            .and_then(|h| h.as_sequence())
+            .expect("HTTPRoute spec.hostnames must be navigable through the lifted constant");
+        assert_eq!(
+            hostnames.len(),
+            1,
+            "HTTPRoute spec.hostnames must carry exactly one entry — the \
+             typed `:entrada :host` seed"
+        );
+        assert_eq!(
+            hostnames[0].as_str(),
+            Some("checkout.quero.cloud"),
+            "HTTPRoute spec.hostnames[0] must carry the Aplicacao's \
+             `:entrada :host` slot — the same seed the sibling per-`Gateway` \
+             per-listener `hostname` axis threads through"
         );
     }
 
