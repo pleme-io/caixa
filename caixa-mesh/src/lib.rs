@@ -450,6 +450,57 @@ pub use caixa_core::CILIUM_KEY_INGRESS;
 /// side per-CNP SPIFFE-identity-bound access-control contract.
 pub use caixa_core::CILIUM_KEY_FROM_ENDPOINTS;
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-`toPorts[]`-entry L4
+/// port-tuple-list-container axis key every `cilium_network_policies`-
+/// emitted CNP document mounts its per-port-set `[{port, protocol}]`
+/// list under (`spec.ingress[].toPorts[].ports[]`). Re-export of the
+/// canonical [`caixa_core::CILIUM_KEY_PORTS`] so the Cilium-operator-
+/// side per-`toPorts[]`-entry L4-port-tuple-list-container-axis-key
+/// string lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `cilium_network_policies` per-`(:de, :para)`
+/// `CiliumNetworkPolicy` emitter (the `to_port.insert("ports", …)` call
+/// the prior inline `"ports"` literal sat at) and every future per-
+/// Cilium-side renderer the M3.x absorption roadmap acknowledges now
+/// consult the same `&'static str`, so a future Cilium-CRD rebrand on
+/// the L4 port-tuple-list-container axis (unlikely on the CRD's stable
+/// `cilium.io/v2` slot, but the coordination point the prior
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] + [`CILIUM_KEY_ENDPOINT_SELECTOR`] +
+/// [`CILIUM_KEY_INGRESS`] + [`CILIUM_KEY_TO_PORTS`] +
+/// [`caixa_core::KUBE_KEY_RULES`] + [`CILIUM_KIND_NETWORK_POLICY`] +
+/// [`CILIUM_API_VERSION`] re-exports anchor on the sibling per-CNP-body
+/// axis surface) lands in one place. The prior inline literal split
+/// across the one production emitter and two test-fixture navigation
+/// sites (`cilium_pubsub_contracts_skip_l7_rules` — the
+/// `to_ports.get("ports").is_some()` presence pin the L4-yes-L7-no
+/// separation invariant hinges on;
+/// `cnp_l4_fallback_port_reflects_default_servico_port` — the
+/// `.and_then(|tp| tp.get("ports"))` navigation whose downstream
+/// `.and_then(|s| s.first()).and_then(|p| p.get("port"))` chain reads
+/// the per-port-set L4 port-tuple value the `DEFAULT_SERVICO_PORT`
+/// fallback pins) would have let a Cilium-CRD L4 port-tuple-list-
+/// container axis rebrand or a per-emitter typo (`"port"` /
+/// `"portList"` / `"L4Ports"`) at any one site silently emit a per-
+/// `toPorts[]` entry whose L4 port-tuple-list-container axis the Cilium
+/// CRD schema validator drops as unknown; the port-set admits no
+/// `(port, protocol)` tuple, and every intra-mesh `:contratos` flow the
+/// affected CNP was authored to allow drops at the eBPF data plane's
+/// default-deny gate with no field naming the L4-port-tuple-list-
+/// container-drift root cause, and on the test-fixture side the drift
+/// silently masks the emission-side pin (`.get("ports")` returns `None`
+/// under both the drifted emitter and the drifted probe — every
+/// downstream navigation short-circuits vacuously because the outer L4-
+/// port-tuple-list-container-lookup is itself `None`). Peer to the
+/// [`CILIUM_KEY_TO_PORTS`] re-export on the sibling canonical-per-CNP-
+/// dispatch-axis surface — nests the per-port-set L4 port-tuple-list-
+/// container axis structurally beneath the sibling
+/// [`CILIUM_KEY_TO_PORTS`] port-set-container axis, extending the per-
+/// CNP L3/L4/L7-triad
+/// `(endpointSelector, ingress → toPorts → ports / rules)` re-export
+/// with the L4-half's port-tuple-list-container axis this crate's
+/// `cilium_network_policies` renderer's eBPF data-plane L4-allow
+/// contract rests on.
+pub use caixa_core::CILIUM_KEY_PORTS;
+
 /// Canonical K8s Gateway API CRD `kind` discriminator every
 /// `gateway_routes`-emitted `Gateway` document declares at its top-level
 /// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
@@ -1078,7 +1129,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 serde_yaml::Value::String("TCP".into()),
             );
             to_port.insert(
-                serde_yaml::Value::String("ports".into()),
+                serde_yaml::Value::String(CILIUM_KEY_PORTS.into()),
                 serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(port_entry)]),
             );
 
@@ -2333,6 +2384,65 @@ mod tests {
     }
 
     #[test]
+    fn cilium_key_ports_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KEY_PORTS` was lifted from the inline
+        // `"ports"` literal at the `cilium_network_policies` per-
+        // `(:de, :para)` CNP `to_port.insert("ports", …)` call site
+        // (caixa-mesh/src/lib.rs:1081 — the per-`toPorts[]`-entry L4
+        // port-tuple-list emitter) plus two test-side navigations
+        // (`cilium_pubsub_contracts_skip_l7_rules` — the
+        // `to_ports.get("ports").is_some()` presence pin the L4-yes-L7-
+        // no separation invariant hinges on;
+        // `cnp_l4_fallback_port_reflects_default_servico_port` — the
+        // `.and_then(|tp| tp.get("ports"))` navigation whose downstream
+        // `.and_then(|s| s.first()).and_then(|p| p.get("port"))` chain
+        // reads the per-port-set L4 port-tuple value the
+        // `DEFAULT_SERVICO_PORT` fallback pins) to a re-export of
+        // [`caixa_core::CILIUM_KEY_PORTS`] so the Cilium-CRD per-
+        // `toPorts[]`-entry L4-port-tuple-list-container-axis-key
+        // string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so any
+        // local re-introduction of a sibling `pub const CILIUM_KEY_\
+        // PORTS: &str = "…"` (the canonical drift footgun where a
+        // sibling local `pub const` could happen to carry the same
+        // string at the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a Cilium-CRD schema rebrand on the L4 port-
+        // tuple-list-container axis without a coordinated caixa-core
+        // edit silently land per-`(:de, :para)` CiliumNetworkPolicy
+        // documents whose `spec.ingress[].toPorts[].ports[]` list the
+        // Cilium CRD schema validator drops as unrecognized at apply
+        // time, with the emitted per-port-set entry admitting no
+        // `(port, protocol)` tuple and every intra-mesh `:contratos`
+        // flow the affected CNP was authored to allow dropping at the
+        // eBPF data plane's default-deny gate because the per-CNP L4-
+        // allow eBPF-program-generation pass never sources through the
+        // axis-drifted L4-port-tuple-list-container key. Peer to
+        // [`cilium_key_to_ports_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-CNP-dispatch-axis re-export set — nests
+        // the per-port-set L4 port-tuple-list-container axis
+        // structurally beneath the sibling per-ingress-rule port-set-
+        // container axis it lives inside, extending the per-CNP
+        // L3/L4/L7-triad
+        // `(endpointSelector, ingress → toPorts → ports / rules)`
+        // re-export with the L4-half's port-tuple-list-container axis
+        // this crate's `cilium_network_policies` renderer's eBPF data-
+        // plane L4-allow contract rests on.
+        assert_eq!(CILIUM_KEY_PORTS, caixa_core::CILIUM_KEY_PORTS);
+        assert!(
+            std::ptr::eq(
+                CILIUM_KEY_PORTS.as_ptr(),
+                caixa_core::CILIUM_KEY_PORTS.as_ptr(),
+            ),
+            "CILIUM_KEY_PORTS must be a re-export of \
+             caixa_core::CILIUM_KEY_PORTS, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KIND_GATEWAY` was lifted from the
         // inline `"Gateway"` literal at the `gateway_routes`
@@ -3149,7 +3259,7 @@ mod tests {
             .and_then(|s| s.first())
             .unwrap();
         // L4 ports yes; L7 rules no.
-        assert!(to_ports.get("ports").is_some());
+        assert!(to_ports.get(CILIUM_KEY_PORTS).is_some());
         assert!(to_ports.get(KUBE_KEY_RULES).is_none());
     }
 
@@ -4172,7 +4282,7 @@ mod tests {
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
             .and_then(|t| t.as_sequence())
             .and_then(|s| s.first())
-            .and_then(|tp| tp.get("ports"))
+            .and_then(|tp| tp.get(CILIUM_KEY_PORTS))
             .and_then(|p| p.as_sequence())
             .and_then(|s| s.first())
             .and_then(|p| p.get("port"))
