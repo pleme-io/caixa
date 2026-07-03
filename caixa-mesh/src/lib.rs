@@ -861,6 +861,49 @@ pub use caixa_core::GATEWAY_API_KEY_HOSTNAMES;
 /// the sibling canonical-K8s-API-axis surfaces.
 pub use caixa_core::KUBE_KEY_SPEC;
 
+/// Canonical K8s Gateway API `GatewayClass` name every
+/// `gateway_routes`-emitted `Gateway` document declares at its
+/// `spec.gatewayClassName` axis. Re-export of the canonical
+/// [`caixa_core::DEFAULT_GATEWAY_CLASS_NAME`] so the substrate's chosen
+/// Gateway API controller-discriminator lives in exactly one place
+/// across every caixa renderer — caixa-mesh's `gateway_routes`
+/// per-`:entrada` `Gateway` emitter (the single production-code site
+/// the prior inline `"cilium".into()` literal sat at — the
+/// `spec.gatewayClassName` field of the emitted `Gateway`'s `spec`
+/// block) and every future per-Aplicacao materializer the M3.x + M4
+/// absorption roadmap acknowledges (the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's `Gateway`
+/// synthesis, a future per-cluster / per-edge `Gateway` renderer for
+/// non-HTTP `:entrada` shapes) now consult the same `&'static str`,
+/// so a future substrate-side Gateway API controller migration
+/// (Cilium → Envoy Gateway / Istio Gateway or any per-edition
+/// Gateway API v1.x GA controller variant the SIG-Network roadmap
+/// names) is a one-line edit on the canonical
+/// [`caixa_core::DEFAULT_GATEWAY_CLASS_NAME`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` call site
+/// + every future per-target renderer the substrate adds.
+///
+/// The prior inline literal would have let a substrate-side controller
+/// migration on the caixa-mesh side without a coordinated edit on the
+/// matching in-file `gateway_gateway_class_name_uses_lifted_default_gateway_class_name`
+/// test fixture pin silently emit a `Gateway` whose
+/// `spec.gatewayClassName` referenced a `GatewayClass` no controller
+/// reconciles — apply-side: the `Gateway` sits at `Programmed: False`
+/// with every attached `HTTPRoute` unbound, every external `:entrada`
+/// flow drops at the ingress with no field naming the controller-
+/// drift root cause. And splitting the controller across renderers
+/// would silently reintroduce the two-data-planes drift the mesh
+/// composition "one identity layer, one data plane" invariant
+/// (MESH-COMPOSITION.md §V) closes — the emitted `Gateway`'s
+/// controller and the sibling `CiliumNetworkPolicy`'s controller
+/// would land in distinct reconcilers, and the intra-mesh
+/// identity-aware policy stops matching the ingress-side traffic at
+/// the eBPF data plane. Peer to the [`DEFAULT_NAMESPACE`] re-export
+/// on the sibling canonical-substrate-default-resource-name axis —
+/// extends the discipline onto the canonical-Gateway-API-controller-
+/// choice axis surface.
+pub use caixa_core::DEFAULT_GATEWAY_CLASS_NAME;
+
 /// Canonical K8s CR top-level `metadata` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_METADATA`] so the per-kind metadata block key
 /// lives in exactly one place across every caixa renderer — caixa-mesh's
@@ -1913,10 +1956,23 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::String(entrada.host.clone()),
     );
     let mut g_spec = serde_yaml::Mapping::new();
-    // Cilium's gatewayClassName by convention; can be overridden later.
+    // `spec.gatewayClassName` binds the emitted `Gateway` to the
+    // substrate's chosen K8s Gateway API controller — the same Cilium
+    // eBPF-identity data plane the sibling `cilium_network_policies`
+    // renderer emits `CiliumNetworkPolicy` documents against, closing
+    // the mesh-composition "one identity layer, one data plane"
+    // invariant (MESH-COMPOSITION.md §V). The controller-choice value
+    // threads through the lifted [`DEFAULT_GATEWAY_CLASS_NAME`]
+    // re-export so a future substrate-side controller migration
+    // (Cilium → Envoy Gateway / Istio Gateway / any per-edition
+    // Gateway API v1.x GA controller variant) lands at the canonical
+    // [`caixa_core::DEFAULT_GATEWAY_CLASS_NAME`] declaration, not at
+    // this call site — same discipline the [`DEFAULT_NAMESPACE`] /
+    // [`GATEWAY_API_API_VERSION`] / [`GATEWAY_API_KIND_GATEWAY`]
+    // lifts apply on the peer canonical-K8s-Gateway-API-axis surfaces.
     g_spec.insert(
         serde_yaml::Value::String("gatewayClassName".into()),
-        serde_yaml::Value::String("cilium".into()),
+        serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
     );
     g_spec.insert(
         serde_yaml::Value::String(GATEWAY_API_KEY_LISTENERS.into()),
@@ -3728,6 +3784,58 @@ mod tests {
     }
 
     #[test]
+    fn default_gateway_class_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `DEFAULT_GATEWAY_CLASS_NAME` was lifted from the
+        // inline `"cilium".into()` literal at the `gateway_routes`
+        // per-`:entrada` `Gateway` `spec.gatewayClassName` field to a
+        // re-export of [`caixa_core::DEFAULT_GATEWAY_CLASS_NAME`] so the
+        // substrate's chosen K8s Gateway API controller-discriminator
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + static-data identity here so any local
+        // re-introduction of a sibling
+        // `pub const DEFAULT_GATEWAY_CLASS_NAME: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let a
+        // substrate-side Gateway API controller migration on the
+        // caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-`:entrada` `Gateway` objects at one
+        // `gatewayClassName` and every future per-Aplicacao
+        // materializer's emitted `Gateway` at the drifted other, with
+        // every external `:entrada` flow dropping at the
+        // gateway-class-controller's reconcile loop because the
+        // per-route attached-policy pipeline never binds across the
+        // controller-drifted `spec.gatewayClassName` pair. And
+        // splitting the Gateway controller across renderers would
+        // silently reintroduce the two-data-planes drift the mesh
+        // composition "one identity layer, one data plane" invariant
+        // (MESH-COMPOSITION.md §V) closes — the emitted `Gateway`'s
+        // controller and the sibling `CiliumNetworkPolicy`'s eBPF
+        // reconciler would land in distinct data planes, and the
+        // intra-mesh identity-aware policy would stop matching the
+        // ingress-side traffic at the eBPF data plane. Peer to
+        // [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-substrate-default-resource-name
+        // re-export axis.
+        assert_eq!(
+            DEFAULT_GATEWAY_CLASS_NAME,
+            caixa_core::DEFAULT_GATEWAY_CLASS_NAME
+        );
+        assert!(
+            std::ptr::eq(
+                DEFAULT_GATEWAY_CLASS_NAME.as_ptr(),
+                caixa_core::DEFAULT_GATEWAY_CLASS_NAME.as_ptr(),
+            ),
+            "DEFAULT_GATEWAY_CLASS_NAME must be a re-export of \
+             caixa_core::DEFAULT_GATEWAY_CLASS_NAME, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KEY_PARENT_REFS` was lifted from
         // the inline `"parentRefs"` literal at the `gateway_routes`
@@ -5073,6 +5181,51 @@ mod tests {
             Some(caixa_core::GATEWAY_API_API_VERSION),
             "HTTPRoute's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_gateway_class_name_uses_lifted_default_gateway_class_name() {
+        // Fail-before-pass-after pin parsing the rendered `Gateway`
+        // document and asserting its `spec.gatewayClassName` axis equals
+        // the lifted [`caixa_core::DEFAULT_GATEWAY_CLASS_NAME`] constant
+        // by value — the third arm of the three-arm drift footgun close
+        // pattern the prior lifts (`GATEWAY_API_KIND_GATEWAY`,
+        // `GATEWAY_API_API_VERSION`) established on the peer
+        // Gateway-API-CRD-discriminator axes. The three arms:
+        // this pin trips on drift between the renderer-side threading
+        // and the lifted const, the sibling
+        // `default_gateway_class_name_pins_canonical_value` in caixa-core
+        // trips on drift between the lifted const and the canonical
+        // literal value, and the
+        // [`default_gateway_class_name_re_export_points_at_caixa_core_canonical`]
+        // pin trips on drift between this crate's re-export and the
+        // caixa-core canonical declaration — together they close the
+        // three-arm drift footgun the inline-literal-across-the-
+        // production-spec-map-plus-implicit-test-fixture shape carried
+        // by construction. Peer to
+        // [`gateway_routes_gateway_uses_lifted_gateway_api_kind_gateway`]
+        // on the sibling parent-Gateway-`kind`-axis lifted-uses pin —
+        // extends the discipline from the CRD-discriminator half of the
+        // per-Gateway typed contract onto the controller-choice half.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
+            .expect("Gateway present");
+        let class_name = gateway
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get("gatewayClassName"))
+            .and_then(|c| c.as_str())
+            .expect("Gateway spec.gatewayClassName present");
+        assert_eq!(
+            class_name,
+            caixa_core::DEFAULT_GATEWAY_CLASS_NAME,
+            "Gateway's spec.gatewayClassName must equal the lifted \
+             caixa_core::DEFAULT_GATEWAY_CLASS_NAME by value — drift here \
              is the canonical footgun this lift closes"
         );
     }

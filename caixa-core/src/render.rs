@@ -8692,6 +8692,83 @@ pub const GATEWAY_API_KEY_REQUEST: &str = "request";
 /// [cf]: ../../caixa_flux/index.html
 pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 
+/// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
+/// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
+/// the controller-discriminator that binds the emitted `Gateway` to a
+/// specific `GatewayClass` resource, which in turn names the controller
+/// (`spec.controllerName`) that reconciles every `HTTPRoute` /
+/// `GRPCRoute` / `TLSRoute` / `TCPRoute` attached to `Gateway`s bound to
+/// that class.
+///
+/// The single source of truth [`caixa-mesh`][cm]'s `gateway_routes`
+/// per-`:entrada` `Gateway` emitter (the sole production-code site the
+/// prior inline `"cilium".into()` literal sat at — the `spec.gatewayClassName`
+/// field of the emitted `Gateway`'s `spec` block) and every future
+/// per-target renderer the M3.x + M4 absorption roadmap acknowledges
+/// (the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// `Gateway` synthesis, a future per-cluster / per-edge `Gateway`
+/// renderer for non-HTTP `:entrada` shapes) consult for the substrate's
+/// chosen Gateway API controller.
+///
+/// The value pins the substrate on the Cilium Gateway API implementation
+/// — the same eBPF-identity data plane that reconciles every
+/// [`CILIUM_KIND_NETWORK_POLICY`] the mesh renderer emits alongside the
+/// `Gateway`. Same-controller Gateway ingress + intra-mesh identity
+/// policy is the load-bearing "one identity layer, one data plane"
+/// mesh-composition invariant (MESH-COMPOSITION.md §V — "the `:entrada`
+/// external ingress and the intra-mesh `:contratos` identity checks
+/// share an eBPF data plane; a per-caixa split between the ingress
+/// controller and the identity controller reintroduces the
+/// two-data-planes drift the mesh composition invariant closes"), so
+/// splitting the controller across renderers would silently reintroduce
+/// the exact drift the substrate's mesh composition invariant closes.
+///
+/// Until this lift landed the substrate's Gateway API controller choice
+/// carried an inline `"cilium".into()` literal at the one production-code
+/// occurrence in caixa-mesh (the `gateway_routes` `Gateway`
+/// `spec.gatewayClassName` field). The PRIME DIRECTIVE duplication-budget
+/// rule (THEORY.md §I.3.5, "every recurring shape becomes a generator
+/// before it becomes a pattern; every pattern becomes a library before it
+/// becomes duplicated code. The duplication budget is zero.") promotes
+/// the constant to a typed substrate-side `&'static str` in advance of the
+/// second occurrence — the M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+/// materializer's per-Aplicacao `Gateway` synthesis, a future per-cluster
+/// per-edge `Gateway` renderer, or any per-edition variant the substrate
+/// forks — so the second consumer inherits the canonical controller
+/// choice by construction without opportunity for per-renderer drift.
+///
+/// A future substrate-side controller migration (the substrate forking
+/// from Cilium Gateway to Envoy Gateway, Istio Gateway, or any
+/// per-edition Gateway API v1.x GA controller variant the SIG-Network
+/// roadmap names) without a coordinated edit on every renderer's inline
+/// literal would have silently emitted a `Gateway` whose
+/// `spec.gatewayClassName` referenced a class no controller reconciles —
+/// apply-side: the `Gateway` sits at `Programmed: False` with no route
+/// reconciled, every external `:entrada` flow drops at the ingress with
+/// no field naming the controller-drift root cause. Lifting the value
+/// here makes the controller-choice axis discipline structural: the
+/// per-`:entrada` `Gateway` and every future per-Aplicacao materializer
+/// consult the same `&'static str`, and a future controller migration
+/// is a one-line edit on the canonical declaration.
+///
+/// The value is a valid DNS-1123 label (the K8s apiserver-side floor
+/// every cluster-scoped `GatewayClass.metadata.name` axis enforces):
+/// lowercase ASCII alphanumeric with `-` separators, no leading /
+/// trailing hyphen, length within the [`DNS_1123_LABEL_MAX_LEN`] (63-byte)
+/// cap. A future rebrand on this lift cannot silently land a value the
+/// apiserver refuses at the *first* `Gateway` apply against a cluster,
+/// far from the rebrand commit's source — the typed [`is_dns_1123_label`]
+/// floor rejects it at caixa-core build time on the canonical lift,
+/// before any renderer consumes the value. Same "the typed constant
+/// lives in one place" discipline the [`DEFAULT_NAMESPACE`] (a085b26) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) / [`DEFAULT_LIBRARY_NAME`]
+/// (41438dc) / [`DEFAULT_SERVICO_PORT`] (1e22add) lifts apply on the
+/// peer canonical-substrate-default-resource-name surface.
+///
+/// [gw]: https://gateway-api.sigs.k8s.io/api-types/gateway/
+/// [cm]: ../../caixa_mesh/index.html
+pub const DEFAULT_GATEWAY_CLASS_NAME: &str = "cilium";
+
 /// Canonical Helm 3 `Chart.yaml` `apiVersion` every `caixa-helm`-rendered
 /// `lareira-<nome>` chart declares at its top-level `apiVersion` axis. The
 /// Helm 3 chart-schema resolution contract keys off this exact `"v2"` value:
@@ -9482,6 +9559,61 @@ mod tests {
             "DEFAULT_FLUX_SYSTEM_NAMESPACE {DEFAULT_FLUX_SYSTEM_NAMESPACE:?} must be a valid \
              DNS-1123 label — every K8s apiserver-side schema enforces \
              this rule on `metadata.namespace`"
+        );
+    }
+
+    #[test]
+    fn default_gateway_class_name_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the substrate's chosen K8s Gateway API controller the
+        // rendered `Gateway`'s `spec.gatewayClassName` axis binds to.
+        // The string is part of the cluster-side contract with the Cilium
+        // Gateway API implementation (the Cilium operator watches
+        // `GatewayClass` objects whose `spec.controllerName` names the
+        // Cilium reconciler; a drifted `spec.gatewayClassName` on the
+        // emitted `Gateway` refers to a `GatewayClass` no controller
+        // reconciles, and the `Gateway` sits at `Programmed: False`
+        // with every attached `HTTPRoute` unbound), the same eBPF-identity
+        // data plane the sibling `CiliumNetworkPolicy` renderer emits
+        // policies against (the mesh-composition "one identity layer,
+        // one data plane" invariant, MESH-COMPOSITION.md §V), and the
+        // per-cluster GatewayClass fixture the operator-side install
+        // pipeline provisions. Changing it is a coordinated multi-repo
+        // migration (a substrate-side Gateway controller migration to
+        // Envoy Gateway / Istio Gateway or any per-edition variant),
+        // not an incidental edit. Peer to
+        // `default_namespace_pins_canonical_value` and
+        // `default_flux_system_namespace_pins_canonical_value` on the
+        // canonical-substrate-default-resource-name-value-pin axis.
+        assert_eq!(DEFAULT_GATEWAY_CLASS_NAME, "cilium");
+    }
+
+    #[test]
+    fn default_gateway_class_name_is_a_valid_dns_1123_label() {
+        // Cross-axis invariant: the Gateway API `GatewayClass` is a
+        // cluster-scoped K8s resource, and the K8s apiserver enforces
+        // the DNS-1123 label rule on every cluster-scoped resource's
+        // `metadata.name`. The emitted `Gateway`'s
+        // `spec.gatewayClassName` axis references the `GatewayClass`
+        // resource by that name — a drift to a value the apiserver
+        // would refuse as a `GatewayClass.metadata.name` couldn't
+        // resolve at reconcile time either, and the `Gateway`
+        // Programmed condition never flips true. Pinning this here
+        // means a future rebrand on the canonical lift can't silently
+        // land a value the apiserver refuses at the *first* `Gateway`
+        // apply against a cluster, far from the rebrand commit's
+        // source — the typed [`is_dns_1123_label`] floor rejects it at
+        // caixa-core build time on the canonical lift, before any
+        // renderer consumes the value. Same shape as
+        // `default_namespace_is_a_valid_dns_1123_label` and
+        // `default_flux_system_namespace_is_a_valid_dns_1123_label` on
+        // the peer canonical-DNS-1123-label-floor axes.
+        assert!(
+            is_dns_1123_label(DEFAULT_GATEWAY_CLASS_NAME).is_ok(),
+            "DEFAULT_GATEWAY_CLASS_NAME {DEFAULT_GATEWAY_CLASS_NAME:?} must be a \
+             valid DNS-1123 label — every K8s apiserver-side schema enforces \
+             this rule on cluster-scoped `metadata.name` axes, and the \
+             `Gateway.spec.gatewayClassName` axis resolves by that same rule"
         );
     }
 
