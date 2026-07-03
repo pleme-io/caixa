@@ -1403,6 +1403,71 @@ pub use caixa_core::KUBE_KEY_PROTOCOL;
 /// request-dispatch pass under `spec.rules[].timeouts.request`).
 pub use caixa_core::GATEWAY_API_KEY_TIMEOUTS;
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule retry-policy body-axis
+/// key. Re-export of the canonical [`caixa_core::GATEWAY_API_KEY_RETRY`]
+/// so the per-rule retry-policy field name lives in exactly one place
+/// across every caixa renderer — this crate's one production emitter
+/// site (`gateway_routes`'s per-`HTTPRoute` per-rule
+/// `spec.rules[].retry` insert the Aplicacao's typed `:politicas
+/// :retries` overlay lands under, the sub-shape the Gateway API v1 CRD
+/// schema pins as `HTTPRouteRetry` and whose `attempts` scalar the
+/// Gateway-API-implementation-side per-rule request-dispatch loop
+/// compares each failed attempt count against before giving up on the
+/// in-flight backend call) and this crate's eight test-side per-rule
+/// retry-policy traversal sites (the
+/// `httproute_rule_keys_pin_overlay_position` rule-level top-key-set
+/// pin, the `httproute_carries_politicas_retries_on_every_rule`
+/// presence pin, the `httproute_omits_retry_when_politicas_retries_unset`
+/// absence pin, the `httproute_retry_renders_every_rule_independently`
+/// per-rule fan-out pin under multi-`:entrada :paths`, the
+/// `httproute_retry_round_trips_typed_attempt_count` typed-`u32`-round-
+/// trip pin, the `httproute_retry_attempts_serialized_as_yaml_number`
+/// YAML integer-scalar-kind pin, and two
+/// `httproute_timeouts_and_retry_coexist_independently` presence-only +
+/// absence-only pins pinning independent-axis coexistence with the
+/// sibling `timeouts` per-rule request-timeout-policy axis) now consult
+/// the same `&'static str` as the peer caixa-core-side const definition.
+///
+/// The prior inline `"retry"` literals at the one production emitter
+/// site + eight test-side retrieval sites in this crate would have let a
+/// typo on any one site (e.g. `"retries"` (plural) / `"retryPolicy"` /
+/// `"budget"`) silently miss the per-rule retry policy or emit a
+/// malformed `HTTPRoute` whose per-rule retry-policy field the
+/// apiserver-side Gateway API CRD schema validator drops as unrecognized
+/// at apply time — the Gateway API implementation's per-rule request-
+/// dispatch loop would silently no-op the per-rule retry budget (the
+/// "no infinite retrying without bound" guarantee MESH-COMPOSITION.md §V
+/// mandates for every rendered per-`:politicas` mesh-composition edge
+/// silently regresses to the pre-overlay unbounded-retry semantic, and
+/// every external `:entrada` flow the route was authored to cap by the
+/// typed `:politicas :retries` slot runs to whatever retry policy the
+/// resolved backend's downstream infrastructure picks with no field
+/// naming the per-rule-retry-policy-drift root cause), and the test-
+/// side pins' `.expect("rule must carry retry mapping when :politicas
+/// :retries is set")` panic-message tags would fire against the
+/// presence-shape message rather than naming the true per-rule-retry-
+/// policy-key drift, the `.get("retry").and_then(|r| r.get("attempts"))`
+/// navigators would silently unwrap to `None` under the drifted
+/// retrieval. The lift routes every per-rule retry-policy-axis
+/// retrieval + emission through the same `&'static str` so drift
+/// between any two sites becomes a single-edit fix at the caixa-core
+/// const definition.
+///
+/// Same shape as the [`GATEWAY_API_KEY_TIMEOUTS`] /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] / [`GATEWAY_API_KEY_HOSTNAME`] /
+/// [`GATEWAY_API_KEY_LISTENERS`] / [`GATEWAY_API_KEY_PARENT_REFS`] /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] re-exports on the sibling per-
+/// Gateway-API-CRD-body-axis surface — closes the per-Gateway-API-
+/// `HTTPRoute`-per-rule `:politicas` overlay axis re-export pair
+/// (`timeouts` for `:politicas :timeout`, `retry` for `:politicas
+/// :retries`) both MESH-COMPOSITION.md §V "no infinite blocking / no
+/// infinite retrying" guarantees rest on. Peer to the sibling load-
+/// bearing K8s-CR-schema-axis re-exports every downstream apiserver-
+/// side CRD-schema-validator navigates the same per-rule retry-policy
+/// axis on (the gateway-class-controller's per-HTTPRoute per-rule
+/// request-dispatch pass under `spec.rules[].retry.attempts`).
+pub use caixa_core::GATEWAY_API_KEY_RETRY;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1845,7 +1910,10 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             );
         }
         if let Some(r) = &retry_overlay {
-            rule.insert(serde_yaml::Value::String("retry".into()), r.clone());
+            rule.insert(
+                serde_yaml::Value::String(GATEWAY_API_KEY_RETRY.into()),
+                r.clone(),
+            );
         }
         rules.push(serde_yaml::Value::Mapping(rule));
     }
@@ -2766,6 +2834,80 @@ mod tests {
                 caixa_core::GATEWAY_API_KEY_TIMEOUTS.as_ptr(),
             ),
             "GATEWAY_API_KEY_TIMEOUTS must be a re-export of caixa_core::GATEWAY_API_KEY_TIMEOUTS, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_retry_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_RETRY` was lifted from nine
+        // inline `"retry"` literals — one production emitter site
+        // (`gateway_routes`'s per-`HTTPRoute` per-rule
+        // `spec.rules[].retry` insert the Aplicacao's typed
+        // `:politicas :retries` overlay lands under, the sub-shape the
+        // Gateway API v1 CRD schema pins as `HTTPRouteRetry` and whose
+        // `attempts` scalar the Gateway-API-implementation-side per-
+        // rule request-dispatch loop compares each failed attempt count
+        // against before giving up on the in-flight backend call) and
+        // eight test-side per-rule retry-policy traversal sites (the
+        // `httproute_rule_keys_pin_overlay_position` rule-level top-key-
+        // set pin, the `httproute_carries_politicas_retries_on_every_rule`
+        // presence pin, the `httproute_omits_retry_when_politicas_retries_unset`
+        // absence pin, the `httproute_retry_renders_every_rule_independently`
+        // per-rule fan-out pin under multi-`:entrada :paths`, the
+        // `httproute_retry_round_trips_typed_attempt_count` typed-`u32`-
+        // round-trip pin, the `httproute_retry_attempts_serialized_as_yaml_number`
+        // YAML integer-scalar-kind pin, and two
+        // `httproute_timeouts_and_retry_coexist_independently` presence-
+        // only + absence-only pins pinning independent-axis coexistence
+        // with the sibling `timeouts` per-rule request-timeout-policy
+        // axis) — to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_RETRY`] so the canonical
+        // K8s-Gateway-API-`HTTPRoute`-per-rule-retry-policy-body-axis
+        // string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so any
+        // local re-introduction of a sibling `pub const
+        // GATEWAY_API_KEY_RETRY: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a typo on any one sibling
+        // `pub const` declaration silently miss the per-rule retry
+        // retrieval (the presence pin's `.expect("rule must carry retry
+        // mapping when :politicas :retries is set")` panic-message tag
+        // would fire against the presence-shape message rather than the
+        // true per-rule-retry-policy-key drift, the
+        // `.get("retry").and_then(|r| r.get("attempts"))` navigators
+        // would silently unwrap to `None` under the drifted retrieval),
+        // or silently emit a malformed `HTTPRoute` whose per-rule
+        // retry-policy field the apiserver-side Gateway API CRD schema
+        // validator drops as unrecognized at apply time (the Gateway
+        // API implementation's per-rule request-dispatch loop silently
+        // no-ops the per-rule retry budget, the "no infinite retrying
+        // without bound" guarantee MESH-COMPOSITION.md §V mandates for
+        // every rendered per-`:politicas` mesh-composition edge
+        // silently regresses to the pre-overlay unbounded-retry
+        // semantic). Bridge-arm peer to
+        // [`gateway_api_key_timeouts_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_hostnames_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_hostname_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // — closes the per-Gateway-API-`HTTPRoute`-per-rule `:politicas`
+        // overlay axis re-export pair (`timeouts` for `:politicas
+        // :timeout`, `retry` for `:politicas :retries`) both
+        // MESH-COMPOSITION.md §V "no infinite blocking / no infinite
+        // retrying" guarantees rest on.
+        assert_eq!(GATEWAY_API_KEY_RETRY, caixa_core::GATEWAY_API_KEY_RETRY);
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_RETRY.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_RETRY.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_RETRY must be a re-export of caixa_core::GATEWAY_API_KEY_RETRY, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -4911,7 +5053,7 @@ mod tests {
                 GATEWAY_API_KEY_BACKEND_REFS.into()
             )));
             assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_TIMEOUTS.into())));
-            assert!(m.contains_key(serde_yaml::Value::String("retry".into())));
+            assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_RETRY.into())));
         }
     }
 
@@ -4937,7 +5079,7 @@ mod tests {
         assert!(!rules.is_empty(), "HTTPRoute must carry at least one rule");
         for rule in &rules {
             let retry = rule
-                .get("retry")
+                .get(GATEWAY_API_KEY_RETRY)
                 .and_then(|r| r.as_mapping())
                 .expect("rule must carry retry mapping when :politicas :retries is set");
             assert_eq!(
@@ -4969,7 +5111,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             assert!(
-                rule.get("retry").is_none(),
+                rule.get(GATEWAY_API_KEY_RETRY).is_none(),
                 "rule must omit `retry:` when :politicas :retries is None"
             );
         }
@@ -4997,7 +5139,7 @@ mod tests {
         assert_eq!(rules.len(), 3);
         for rule in &rules {
             let attempts = rule
-                .get("retry")
+                .get(GATEWAY_API_KEY_RETRY)
                 .and_then(|r| r.get("attempts"))
                 .and_then(|v| v.as_u64())
                 .expect("each of the 3 rules carries retry.attempts");
@@ -5021,7 +5163,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get("retry")
+                rule.get(GATEWAY_API_KEY_RETRY)
                     .and_then(|r| r.get("attempts"))
                     .and_then(|v| v.as_u64()),
                 Some(5),
@@ -5043,7 +5185,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             let attempts = rule
-                .get("retry")
+                .get(GATEWAY_API_KEY_RETRY)
                 .and_then(|r| r.get("attempts"))
                 .expect("retry.attempts present");
             assert!(
@@ -5076,7 +5218,7 @@ mod tests {
                 Some("15s")
             );
             assert!(
-                rule.get("retry").is_none(),
+                rule.get(GATEWAY_API_KEY_RETRY).is_none(),
                 "retry: must be absent when only :timeout is set"
             );
         }
@@ -5095,7 +5237,7 @@ mod tests {
                 "timeouts: must be absent when only :retries is set"
             );
             assert_eq!(
-                rule.get("retry")
+                rule.get(GATEWAY_API_KEY_RETRY)
                     .and_then(|r| r.get("attempts"))
                     .and_then(|v| v.as_u64()),
                 Some(2)

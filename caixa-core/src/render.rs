@@ -8264,6 +8264,127 @@ pub const GATEWAY_API_KEY_HOSTNAMES: &str = "hostnames";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_TIMEOUTS: &str = "timeouts";
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule retry-policy body-axis
+/// key every `gateway_routes`-emitted `HTTPRoute` document mounts its
+/// per-rule `:politicas :retries` overlay under (`spec.rules[].retry`).
+/// Sibling per-rule-body-axis peer to [`GATEWAY_API_KEY_TIMEOUTS`]
+/// (db31108) — same Gateway-API-CRD-body-axis discipline nested onto the
+/// per-rule retry-budget slot the Gateway API v1 CRD schema pins under
+/// `HTTPRoute.spec.rules[]` beside the sibling per-rule request-timeout-
+/// policy container.
+///
+/// The Gateway API v1 CRD schema pins the per-rule retry policy through
+/// the `HTTPRouteRetry` sub-shape mounted at `spec.rules[].retry`, whose
+/// `attempts` scalar (peer to future `codes` retryable-status-code list
+/// and `backoff` inter-attempt backoff-window scalars) carries the per-
+/// rule retry-budget the Gateway-API-implementation-side per-rule
+/// request-dispatch loop compares each failed attempt count against
+/// before giving up on the in-flight backend call. Drift on the per-rule
+/// retry-policy body-axis is exactly as load-bearing as drift on the
+/// sibling per-rule request-timeout-policy axis (`timeouts`): the K8s
+/// apiserver-side Gateway API CRD schema validator drops any per-rule
+/// entry whose per-rule retry-policy axis carries an unrecognized key —
+/// a `"retries"` (plural) / `"retryPolicy"` / `"budget"` typo silently
+/// emits an `HTTPRoute` whose per-rule retry-budget the Gateway API
+/// implementation's per-rule request-dispatch loop no-ops entirely: the
+/// route accepts every inbound request with no per-rule retry budget
+/// (the "no infinite retrying without bound" guarantee
+/// MESH-COMPOSITION.md §V mandates for every rendered per-`:politicas`
+/// mesh-composition edge silently regresses to the pre-overlay
+/// unbounded-retry semantic, and every external `:entrada` flow the
+/// route was authored to cap by the typed `:politicas :retries` slot
+/// runs to whatever retry policy the resolved `ComputeUnit` /
+/// `Service` / `ExternalName` backend's downstream infrastructure —
+/// Envoy default retry policy, client SDK autoretry, node-local
+/// conntrack retries — with no field naming the per-rule-retry-policy-
+/// axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-`HTTPRoute` per-rule retry-policy-axis-naming
+/// reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-rule `retry:` axis
+///     (caixa-mesh/src/lib.rs — the `gateway_routes` per-Aplicacao
+///     `HTTPRoute`'s per-rule `rule.insert("retry", …)` call seeded
+///     from the Aplicacao's `:politicas :retries` overlay when the
+///     slot is set, elided from the emit sequence when the slot is
+///     unset).
+///
+/// The per-rule retry-policy axis names the same Gateway-API-
+/// implementation-side per-rule request-dispatch retry-budget container
+/// as the sibling [`GATEWAY_API_KEY_TIMEOUTS`] per-rule request-timeout-
+/// policy container axis it sits beside under `spec.rules[].*`, and must
+/// move together on any future Gateway API rebrand (an upstream
+/// SIG-Network Gateway API v2 rename of the per-rule retry-policy axis
+/// from `retry` to `retries` / `retryPolicy` / `budget`, coordinated
+/// with the Gateway API deprecation cycle). Until this lift landed the
+/// axis carried an inline `retry` literal at nine physical sites in
+/// caixa-mesh/src/lib.rs (one production emitter at the `gateway_routes`
+/// per-rule `rule.insert(…)` call plus eight test-side navigators
+/// pinning the overlay's rule-level top-key-set, presence, absence,
+/// per-rule fan-out under multi-`:entrada :paths`, round-trip of the
+/// typed `u32` attempt count, YAML integer scalar-kind, and independent-
+/// axis coexistence with the sibling `timeouts` per-rule request-
+/// timeout-policy axis in both directions), the highest per-axis
+/// occurrence count of any un-lifted Gateway-API-CRD-body-axis in the
+/// crate — same nine-site count the peer sibling
+/// [`GATEWAY_API_KEY_TIMEOUTS`] lift closed on the coexisting per-rule
+/// request-timeout-policy axis.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts established on the sibling
+/// canonical-Gateway-API-CRD-body-axis /
+/// canonical-Cilium-CNP-body-axis surfaces — closes the pair of per-
+/// Gateway-API-`HTTPRoute`-per-rule `:politicas` overlay axes
+/// (`timeouts` for `:politicas :timeout`, `retry` for `:politicas
+/// :retries`) both MESH-COMPOSITION.md §V "no infinite blocking / no
+/// infinite retrying" guarantees rest on. The render-side consumer now
+/// threads the same `&'static str` through its per-rule
+/// `rule.insert(…)` call and every test-side navigator's `.get(…)`
+/// retrieval so a future Gateway API rebrand on the per-rule retry-
+/// policy axis lands in one place; every future renderer that reaches
+/// for the canonical per-rule retry-policy axis (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// per-rule retry-policy fan-out, a future per-edge `codes`
+/// retryable-status-code emitter honoring an M4-roadmap `:politicas
+/// :retry-codes` slot, a future per-edge `backoff` inter-attempt
+/// backoff-window emitter honoring an M4-roadmap `:politicas
+/// :retry-backoff` slot) inherits the same value by construction with
+/// no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts apply on the peer canonical-
+/// Gateway-API-HTTPRoute-per-rule-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_RETRY: &str = "retry";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -10913,6 +11034,93 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_TIMEOUTS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_retry_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` per-rule retry-policy
+        // body-axis key the rendered HTTPRoute document mounts each
+        // rule's per-rule `:politicas :retries` overlay under. The
+        // string is part of the cluster-side contract with every
+        // Gateway-API-conformant gateway implementation (Cilium, Istio,
+        // Envoy Gateway, NGINX) — the Gateway-API-implementation-side
+        // per-rule request-dispatch loop keys off this axis to source
+        // the per-rule retry budget each failed backend attempt count
+        // is bounded against; a drifted value (`"retries"` (plural) /
+        // `"retryPolicy"` / `"budget"`) at either the production
+        // emitter or a downstream renderer's per-rule retry-policy
+        // upsert silently emits an `HTTPRoute` whose per-rule retry-
+        // budget axis the Gateway API CRD schema validator drops as
+        // unknown — the route accepts every inbound request with no
+        // per-rule retry budget (the "no infinite retrying without
+        // bound" guarantee MESH-COMPOSITION.md §V mandates for every
+        // rendered per-`:politicas` mesh-composition edge silently
+        // regresses to the pre-overlay unbounded-retry semantic), and
+        // every external `:entrada` flow the route was authored to cap
+        // by the typed `:politicas :retries` slot runs to whatever
+        // retry policy the resolved backend's downstream infrastructure
+        // picks with no field naming the per-rule-retry-policy-drift
+        // root cause. Changing this value is a coordinated Gateway API
+        // promotion alongside the upstream SIG-Network Gateway API
+        // deprecation cycle, not an incidental edit. Peer to
+        // `gateway_api_key_timeouts_pins_canonical_value` /
+        // `gateway_api_key_hostnames_pins_canonical_value` /
+        // `gateway_api_key_hostname_pins_canonical_value` /
+        // `gateway_api_key_listeners_pins_canonical_value` /
+        // `gateway_api_key_parent_refs_pins_canonical_value` /
+        // `gateway_api_key_backend_refs_pins_canonical_value` on the
+        // sibling per-Gateway-API-CRD-body-axis canonical-string-pin
+        // surface — closes the per-Gateway-API-`HTTPRoute`-per-rule
+        // `:politicas` overlay axis pair (`timeouts` for `:politicas
+        // :timeout`, `retry` for `:politicas :retries`) both
+        // MESH-COMPOSITION.md §V "no infinite blocking / no infinite
+        // retrying" guarantees rest on.
+        assert_eq!(GATEWAY_API_KEY_RETRY, "retry");
+    }
+
+    #[test]
+    fn gateway_api_key_retry_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_timeouts_carries_lower_camel_case_shape`
+        // / `gateway_api_key_hostnames_carries_lower_camel_case_shape`
+        // / `gateway_api_key_hostname_carries_lower_camel_case_shape`
+        // / `gateway_api_key_listeners_carries_lower_camel_case_shape`
+        // / `gateway_api_key_parent_refs_carries_lower_camel_case_shape`
+        // / `gateway_api_key_backend_refs_carries_lower_camel_case_shape`
+        // on the sibling per-Gateway-API-CRD-body-axis grammar-pin
+        // surface — the lowerCamelCase K8s field-name grammar governs
+        // every nested schema-field axis (including this per-rule
+        // retry-policy-axis key), same convention.
+        let v = GATEWAY_API_KEY_RETRY;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_RETRY {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_RETRY {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_RETRY {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
