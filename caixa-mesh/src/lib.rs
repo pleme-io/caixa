@@ -319,6 +319,48 @@ pub use caixa_core::CILIUM_KIND_NETWORK_POLICY;
 /// contract rests on.
 pub use caixa_core::CILIUM_KEY_TO_PORTS;
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-CNP-body destination-
+/// identity selector-axis key every `cilium_network_policies`-emitted
+/// CNP document mounts its L3-target `LabelSelector` under
+/// (`spec.endpointSelector`). Re-export of the canonical
+/// [`caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR`] so the Cilium-operator-
+/// side per-CNP destination-identity-axis string lives in exactly one
+/// place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` `CiliumNetworkPolicy`
+/// emitter (the `policy_spec.insert("endpointSelector", …)` call the
+/// prior inline `"endpointSelector"` literal sat at) and every future
+/// per-Cilium-side renderer the M3.x absorption roadmap acknowledges
+/// now consult the same `&'static str`, so a future Cilium-CRD rebrand
+/// on the destination-identity axis (unlikely on the CRD's stable
+/// `cilium.io/v2` slot, but the coordination point the prior
+/// [`CILIUM_KEY_TO_PORTS`] + [`caixa_core::KUBE_KEY_RULES`] +
+/// [`CILIUM_KIND_NETWORK_POLICY`] + [`CILIUM_API_VERSION`] re-exports
+/// anchor on the sibling per-CNP-body axis surface) lands in one place.
+/// The prior inline literal split across the one production emitter and
+/// two test-fixture navigation sites (destination-`endpointSelector`
+/// retrieval whose downstream navigation chains ride through the same
+/// axis-key) would have let a Cilium-CRD destination-identity axis
+/// rebrand or a per-emitter typo (`"endpointselector"` /
+/// `"endpointSelectors"` / `"endpoints"`) at any one site silently emit
+/// a CNP whose destination-identity axis the Cilium CRD schema
+/// validator drops as unknown; the policy binds against no destination
+/// pods and every intra-mesh `:contratos` flow the affected CNP was
+/// authored to allow drops at the eBPF data plane's default-deny gate
+/// with no field naming the destination-identity-drift root cause, and
+/// on the test-fixture side the drift silently masks the emission-side
+/// pin (`.get("endpointSelector")` returns `None` under both the
+/// drifted emitter and the drifted probe — the downstream
+/// `.and_then(|s| s.get("matchLabels"))` chain short-circuits vacuously
+/// because the outer selector-lookup is itself `None`). Peer to the
+/// [`CILIUM_KEY_TO_PORTS`] re-export on the sibling canonical-per-CNP-
+/// body-axis surface — extends the per-CNP-body re-export set from the
+/// per-ingress-rule port-set container axis (the L4 dispatch container
+/// half of the `(endpointSelector, ingress → toPorts → rules)` L3/L4/
+/// L7-triad) onto the destination-identity axis half, completing the
+/// per-CNP L3-target-selector re-export the M3 Aplicacao mesh
+/// renderer's eBPF data-plane contract rests on.
+pub use caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR;
+
 /// Canonical K8s Gateway API CRD `kind` discriminator every
 /// `gateway_routes`-emitted `Gateway` document declares at its top-level
 /// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
@@ -987,7 +1029,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert(
-            serde_yaml::Value::String("endpointSelector".into()),
+            serde_yaml::Value::String(CILIUM_KEY_ENDPOINT_SELECTOR.into()),
             endpoint_selector,
         );
         policy_spec.insert(
@@ -2005,6 +2047,67 @@ mod tests {
     }
 
     #[test]
+    fn cilium_key_endpoint_selector_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KEY_ENDPOINT_SELECTOR` was lifted from
+        // the inline `"endpointSelector"` literal at the
+        // `cilium_network_policies` per-`(:de, :para)` CNP
+        // `policy_spec.insert("endpointSelector", …)` call site plus
+        // two test-side navigations
+        // (`cilium_policies_are_identity_based`,
+        // `cnp_endpoint_selector_carries_program_only_single_axis_shape`
+        // — the pair of destination-`endpointSelector` retrievals whose
+        // downstream `.and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))`
+        // chains consult the same axis-key) to a re-export of
+        // [`caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR`] so the Cilium-CRD
+        // per-CNP-body destination-identity axis-key string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const CILIUM_KEY_ENDPOINT_\
+        // SELECTOR: &str = "…"` (the canonical drift footgun where a
+        // sibling local `pub const` could happen to carry the same
+        // string at the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a Cilium-CRD schema rebrand on the
+        // destination-identity axis without a coordinated caixa-core
+        // edit silently land per-`(:de, :para)` CiliumNetworkPolicy
+        // documents whose `spec.endpointSelector` axis the Cilium CRD
+        // schema validator drops as unrecognized at apply time, with
+        // the emitted policy binding against no destination pods and
+        // every intra-mesh `:contratos` flow the affected CNP was
+        // authored to allow dropping at the eBPF data plane's default-
+        // deny gate because the per-CNP L3-target-selector pass never
+        // resolves through the axis-drifted destination-identity key.
+        // Peer to
+        // [`cilium_key_to_ports_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-CNP-body-axis re-export set — completes the
+        // per-CNP L3/L4/L7-triad
+        // `(endpointSelector, ingress → toPorts → rules)` re-export
+        // this crate's `cilium_network_policies` renderer's eBPF data-
+        // plane contract rests on. Peer to
+        // [`cilium_kind_network_policy_re_export_points_at_caixa_core_canonical`]
+        // + [`cilium_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the outer `(apiVersion, kind)` shell of the same per-CNP
+        // CRD — extends the per-Cilium-CRD re-export set from the outer
+        // shell down through the load-bearing `spec.endpointSelector`
+        // L3-target-selector axis.
+        assert_eq!(
+            CILIUM_KEY_ENDPOINT_SELECTOR,
+            caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR
+        );
+        assert!(
+            std::ptr::eq(
+                CILIUM_KEY_ENDPOINT_SELECTOR.as_ptr(),
+                caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR.as_ptr(),
+            ),
+            "CILIUM_KEY_ENDPOINT_SELECTOR must be a re-export of \
+             caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KIND_GATEWAY` was lifted from the
         // inline `"Gateway"` literal at the `gateway_routes`
@@ -2612,7 +2715,7 @@ mod tests {
         for p in &policies {
             let endpoint = p
                 .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get("endpointSelector"))
+                .and_then(|s| s.get(CILIUM_KEY_ENDPOINT_SELECTOR))
                 .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
                 .unwrap();
             assert!(endpoint.get(LABEL_PROGRAM).is_some());
@@ -2706,7 +2809,7 @@ mod tests {
         for p in &policies {
             let selector = p
                 .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get("endpointSelector"))
+                .and_then(|s| s.get(CILIUM_KEY_ENDPOINT_SELECTOR))
                 .and_then(|e| e.get(KUBE_KEY_MATCH_LABELS))
                 .and_then(|m| m.as_mapping())
                 .expect("endpointSelector.matchLabels mapping");
