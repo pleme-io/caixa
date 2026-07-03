@@ -7475,6 +7475,110 @@ pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_PARENT_REFS: &str = "parentRefs";
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule backend-destination
+/// container-axis key every `gateway_routes`-emitted `HTTPRoute`
+/// document mounts its per-rule `[{name, port}]` backend list under
+/// (`spec.rules[].backendRefs[]`). Pairs with the sibling
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) — the Gateway API v1 CRD
+/// schema pins the per-HTTPRoute route→Gateway attachment through the
+/// `spec.parentRefs[]` container axis and the per-rule route→Servico
+/// backend fan-out through the `spec.rules[].backendRefs[]` axis
+/// beneath each rule entry, so drift on the per-rule backend-destination
+/// axis is exactly as load-bearing as drift on the per-HTTPRoute
+/// parent-Gateway-binding axis it accompanies (the K8s apiserver-side
+/// Gateway API CRD schema validator drops any per-rule block whose
+/// backend-destination container axis carries an unrecognized key — a
+/// `"backendRef"` / `"backends"` / `"forwardTo"` typo silently emits an
+/// `HTTPRoute` whose per-rule backend fan-out the Gateway API
+/// implementation's per-rule L7 dispatch loop no-ops entirely: no
+/// backend is picked, and every external `:entrada` request the rule
+/// was authored to route drops at the gateway-class-controller's
+/// per-rule reconcile with no field naming the backend-destination-
+/// axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-HTTPRoute per-rule backend-destination-axis-
+/// naming reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-rule
+///     `spec.rules[].backendRefs[]` axis (caixa-mesh/src/lib.rs:1414 —
+///     the `gateway_routes` per-Aplicacao HTTPRoute's per-rule
+///     `rule.insert("backendRefs", …)` call).
+///
+/// The per-rule backend-destination container axis names the same
+/// Gateway-API-implementation-side per-rule route→Servico backend fan-
+/// out container as the sibling [`GATEWAY_API_KEY_PARENT_REFS`] per-
+/// HTTPRoute parent-Gateway-binding container axis it accompanies, and
+/// must move together on any future Gateway API rebrand (an upstream
+/// SIG-Network Gateway API v2 rename of the backend-destination axis
+/// from `backendRefs` to `backends` / `forwardTo` / `to`, coordinated
+/// with the Gateway API deprecation cycle). Until this lift landed the
+/// axis carried an inline `backendRefs` literal at the one production-
+/// code occurrence in caixa-mesh/src/lib.rs:1414 (the `gateway_routes`
+/// per-rule `rule.insert("backendRefs", …)` call) plus a matching set
+/// inside the in-file `httproute_routes_to_entrada_para` /
+/// `httproute_rule_keys_pin_overlay_position` test-fixture navigations —
+/// three occurrences of the same load-bearing Gateway-API-CRD-
+/// `backendRefs`-axis-key convention, drift-prone by construction. A
+/// drift on any one production or test-fixture site to `"backendRef"` /
+/// `"backends"` / `"forwardTo"` would have surfaced as a Gateway API
+/// implementation-side schema validator drop at apply time (the
+/// affected per-rule backend-destination axis the CRD schema validator
+/// recognizes as unknown), with every external `:entrada` request the
+/// rule was authored to route dropping at the gateway-class-
+/// controller's per-rule reconcile with no field naming the backend-
+/// destination-drift root cause. A drift on the test-fixture side
+/// silently masks the emission-side pin (`.get("backendRefs")` returns
+/// `None` under both the drifted-key emitter and the drifted-key probe
+/// — the downstream `.and_then(|b| b.as_sequence())` /
+/// `.and_then(|s| s.first())` chain short-circuits vacuously because
+/// the outer per-rule backend-destination lookup is itself `None`).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts established on the sibling
+/// canonical-Gateway-API-HTTPRoute-body-axis /
+/// canonical-Cilium-CNP-body-axis surfaces — extends the per-Gateway-
+/// API-HTTPRoute-body-axis canonical-string-pin set the sibling
+/// `parentRefs` lift began (`parentRefs`, `backendRefs`, future
+/// `hostnames`) the M3 Aplicacao mesh renderer's external `:entrada`
+/// ingress contract rests on across the Gateway API HTTPRoute-side per-
+/// route body-shape. The render-side consumer now threads the same
+/// `&'static str` through its `rule.insert(…)` call so a future Gateway
+/// API rebrand on the per-rule backend-destination axis (or an upstream
+/// SIG-Network Gateway API v2 rename to a per-CRD sibling name) lands
+/// in one place; every future renderer that reaches for the canonical
+/// per-HTTPRoute per-rule backend-destination axis (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `HTTPRoute` fan-out, a future per-edge `TCPRoute` / `TLSRoute` /
+/// `GRPCRoute` renderer for non-HTTP `:entrada` edges whose per-rule
+/// backend-destination nests under the same axis convention, a future
+/// per-route mirroring / traffic-split renderer whose per-weight
+/// backend list binds against this same axis) inherits the same value
+/// by construction with no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) lifts apply on the peer canonical-
+/// Gateway-API-HTTPRoute-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_BACKEND_REFS: &str = "backendRefs";
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart depends
 /// on — the `pleme-computeunit` library chart in
 /// `pleme-io/helmworks/charts/pleme-computeunit` that owns the K8s
@@ -9653,6 +9757,78 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_PARENT_REFS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_backend_refs_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` per-rule backend-destination
+        // container-axis key the rendered HTTPRoute document mounts its
+        // per-rule `[{name, port}]` backend fan-out list under. The
+        // string is part of the cluster-side contract with every
+        // Gateway-API-conformant gateway implementation (Cilium, Istio,
+        // Envoy Gateway, NGINX) — the Gateway-API-implementation-side
+        // per-rule L7 dispatch loop keys off this axis to source the
+        // per-rule backend list the request is forwarded to; a drifted
+        // value (`"backendRef"` / `"backends"` / `"forwardTo"`) at
+        // either the production emitter or a downstream renderer's
+        // per-rule backend-destination upsert silently emits an
+        // `HTTPRoute` whose per-rule backend fan-out axis the Gateway
+        // API CRD schema validator drops as unknown — no backend is
+        // picked at the per-rule L7 dispatch, and every external
+        // `:entrada` request the rule was authored to route drops at
+        // the gateway-class-controller's per-rule reconcile with no
+        // field naming the backend-destination-drift root cause.
+        // Changing this value is a coordinated Gateway API promotion
+        // alongside the upstream SIG-Network Gateway API deprecation
+        // cycle, not an incidental edit. Peer to
+        // `gateway_api_key_parent_refs_pins_canonical_value` on the
+        // sibling per-HTTPRoute-body-axis canonical-string-pin surface
+        // — extends the per-Gateway-API-HTTPRoute-body-axis pin set
+        // (`parentRefs`, `backendRefs`, future `hostnames`) the M3
+        // Aplicacao mesh renderer's external `:entrada` ingress
+        // contract rests on across the Gateway API HTTPRoute-side per-
+        // route body-shape.
+        assert_eq!(GATEWAY_API_KEY_BACKEND_REFS, "backendRefs");
+    }
+
+    #[test]
+    fn gateway_api_key_backend_refs_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_parent_refs_carries_lower_camel_case_shape`
+        // on the sibling per-HTTPRoute-body-axis grammar-pin surface —
+        // the lowerCamelCase K8s field-name grammar governs every
+        // nested schema-field axis (including this per-rule backend-
+        // destination-container-axis key), same convention.
+        let v = GATEWAY_API_KEY_BACKEND_REFS;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_BACKEND_REFS {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_BACKEND_REFS {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_BACKEND_REFS {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
