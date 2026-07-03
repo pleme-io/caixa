@@ -704,6 +704,48 @@ pub use caixa_core::GATEWAY_API_KEY_PARENT_REFS;
 /// shape.
 pub use caixa_core::GATEWAY_API_KEY_BACKEND_REFS;
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule route-match container-
+/// axis key every `gateway_routes`-emitted `HTTPRoute` per-rule block
+/// mounts its per-rule `[{path: {type, value}}]` route-match fan-out
+/// list under (`spec.rules[].matches[]`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_MATCHES`] so the Gateway-API-
+/// implementation-side per-rule route-match-container-axis-key string
+/// lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `gateway_routes` per-Aplicacao `HTTPRoute` emitter
+/// (the `rule.insert("matches", …)` call the prior inline `"matches"`
+/// literal sat at, seeded from the Aplicacao's `:entrada :paths`
+/// slot) and every future per-Gateway-API-side renderer the M3.x
+/// absorption roadmap acknowledges now consult the same `&'static
+/// str`, so a future Gateway API rebrand on the per-rule route-match
+/// axis (an upstream Gateway API v2 rename to `match` /
+/// `routeMatches` / `predicates`, coordinated with the upstream SIG-
+/// Network Gateway API deprecation cycle) is a one-line edit on the
+/// canonical [`caixa_core::GATEWAY_API_KEY_MATCHES`] declaration, not
+/// a coordinated rewrite across this crate's `gateway_routes`
+/// renderer + every future per-target renderer the substrate adds.
+/// The prior inline literal at the one production emitter site + one
+/// test-side fixture pin (`httproute_rule_keys_pin_overlay_position`'s
+/// `contains_key("matches")` presence pin) would have let a Gateway-
+/// API-CRD per-rule route-match-axis rebrand or a per-emitter typo
+/// (`"match"` / `"routeMatches"` / `"predicates"`) silently emit an
+/// `HTTPRoute` whose per-rule request-selection axis the Gateway API
+/// CRD schema validator drops as unknown — the per-rule predicate
+/// degrades to the wildcard match at the gateway-class-controller's
+/// per-rule reconcile, the rule matches every request unconditionally,
+/// and every external `:entrada` path filter the rule was authored
+/// to enforce drops with no field naming the route-match-drift root
+/// cause. A drift on the test-fixture side silently masks the
+/// emission-side pin (`contains_key("matches")` returns `false` under
+/// both the drifted-key emitter and the drifted-key probe). Peer to
+/// the [`GATEWAY_API_KEY_BACKEND_REFS`] / [`GATEWAY_API_KEY_PARENT_REFS`]
+/// re-exports on the sibling canonical-Gateway-API-HTTPRoute-body-
+/// axis surface — completes the per-rule top-level-axis re-export
+/// set (`matches`, `backendRefs`, `timeouts`, `retry`) the
+/// `httproute_rule_keys_pin_overlay_position` pin binds against, so
+/// every one of the four per-rule top-level axes now threads a
+/// lifted `&'static str` apiece.
+pub use caixa_core::GATEWAY_API_KEY_MATCHES;
+
 /// Canonical K8s Gateway API `Gateway` per-listener-set container-axis
 /// key every `gateway_routes`-emitted `Gateway` document mounts its per-
 /// Gateway `[{name, port, protocol, hostname}]` L7-listener fan-out
@@ -2093,7 +2135,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         );
         let mut rule = serde_yaml::Mapping::new();
         rule.insert(
-            serde_yaml::Value::String("matches".into()),
+            serde_yaml::Value::String(GATEWAY_API_KEY_MATCHES.into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(match_entry)]),
         );
         rule.insert(
@@ -3942,6 +3984,58 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_matches_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_MATCHES` was lifted from the
+        // inline `"matches"` literal at the `gateway_routes` per-
+        // Aplicacao HTTPRoute's per-rule
+        // `rule.insert("matches", …)` call site (the sole per-
+        // production-code per-rule route-match-container-axis
+        // emitter) plus the matching test-side fixture site
+        // (`httproute_rule_keys_pin_overlay_position`'s
+        // `contains_key("matches")` presence pin) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_MATCHES`] so the Gateway-API-
+        // CRD per-HTTPRoute per-rule route-match-container-axis-key
+        // string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so
+        // any local re-introduction of a sibling
+        // `pub const GATEWAY_API_KEY_MATCHES: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let
+        // a Gateway-API-CRD per-rule route-match-axis rebrand on the
+        // caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-rule request-selection predicates at the
+        // drifted axis; the per-rule predicate degrades to the
+        // wildcard match, the rule matches every request
+        // unconditionally, and every external `:entrada` path filter
+        // drops with no field naming the route-match-drift root
+        // cause. Peer to
+        // [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-HTTPRoute-body-axis
+        // re-export identity-pin set — completes the per-rule top-
+        // level-axis re-export identity-pin set (`matches`,
+        // `backendRefs`, `timeouts`, `retry`) this crate's
+        // `gateway_routes` renderer's external `:entrada` ingress
+        // contract rests on across the Gateway API HTTPRoute per-
+        // rule body-shape.
+        assert_eq!(GATEWAY_API_KEY_MATCHES, caixa_core::GATEWAY_API_KEY_MATCHES);
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_MATCHES.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_MATCHES.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_MATCHES must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_MATCHES, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn gateway_api_key_listeners_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KEY_LISTENERS` was lifted from the
         // inline `"listeners"` literal at the `gateway_routes` per-
@@ -5292,6 +5386,52 @@ mod tests {
     }
 
     #[test]
+    fn gateway_routes_httproute_uses_lifted_gateway_api_key_matches() {
+        // Fail-before-pass-after pin parsing the rendered `HTTPRoute`
+        // document and asserting every per-rule route-match container-
+        // axis is navigable through the lifted
+        // [`caixa_core::GATEWAY_API_KEY_MATCHES`] constant by value
+        // (and carries a non-empty per-rule request-selection predicate
+        // sequence, one entry per typed `:entrada :paths` path). Peer
+        // to
+        // [`gateway_routes_httproute_uses_lifted_gateway_api_key_hostnames`]
+        // on the sibling Gateway-API-HTTPRoute-body-axis lift
+        // trajectory — completes the per-rule top-level-axis lifted-
+        // uses pin set (`matches`, `backendRefs`, `timeouts`,
+        // `retry`) the `httproute_rule_keys_pin_overlay_position` pin
+        // binds against, so every one of the four per-rule top-level
+        // axes now carries a lifted-uses pin apiece alongside its
+        // sibling re-export-identity pin. The
+        // [`gateway_api_key_matches_re_export_points_at_caixa_core_canonical`]
+        // pin trips on drift between this crate's re-export and the
+        // caixa-core canonical declaration — together the two arms
+        // (lifted-uses pin here, re-export-identity pin above) close
+        // the drift footgun the inline-literal-at-the-production-
+        // per-rule-emitter shape carried by construction.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let rules = httproute_rules(&docs);
+        assert!(
+            !rules.is_empty(),
+            "HTTPRoute must carry at least one rule the per-rule route-match \
+             axis nests under"
+        );
+        for rule in &rules {
+            let matches = rule
+                .get(caixa_core::GATEWAY_API_KEY_MATCHES)
+                .and_then(|m| m.as_sequence())
+                .expect(
+                    "HTTPRoute per-rule spec.rules[].matches must be navigable \
+                     through the lifted constant",
+                );
+            assert!(
+                !matches.is_empty(),
+                "per-rule matches sequence must carry at least one entry — the \
+                 typed `:entrada :paths` seed",
+            );
+        }
+    }
+
+    #[test]
     fn cilium_policy_metadata_block_iterates_alphabetically() {
         // The kube_resource_skeleton's render-determinism contract:
         // metadata: block keys appear in alphabetical order (labels,
@@ -5496,7 +5636,7 @@ mod tests {
             let m = rule.as_mapping().expect("rule mapping");
             // matches + backendRefs + timeouts + retry (4 top-level keys).
             assert_eq!(m.len(), 4);
-            assert!(m.contains_key(serde_yaml::Value::String("matches".into())));
+            assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_MATCHES.into())));
             assert!(m.contains_key(serde_yaml::Value::String(
                 GATEWAY_API_KEY_BACKEND_REFS.into()
             )));
