@@ -652,6 +652,48 @@ pub use caixa_core::GATEWAY_API_KEY_PARENT_REFS;
 /// shape.
 pub use caixa_core::GATEWAY_API_KEY_BACKEND_REFS;
 
+/// Canonical K8s Gateway API `Gateway` per-listener-set container-axis
+/// key every `gateway_routes`-emitted `Gateway` document mounts its per-
+/// Gateway `[{name, port, protocol, hostname}]` L7-listener fan-out
+/// list under (`spec.listeners[]`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_LISTENERS`] so the Gateway-API-
+/// implementation-side per-Gateway L7-listener-set-container-axis-key
+/// string lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `gateway_routes` per-Aplicacao `Gateway` emitter (the
+/// `g_spec.insert("listeners", …)` call the prior inline `"listeners"`
+/// literal sat at) and every future per-Gateway-API-side renderer the
+/// M3.x absorption roadmap acknowledges now consult the same
+/// `&'static str`, so a future Gateway API rebrand on the per-Gateway
+/// L7-listener-set axis (an upstream Gateway API v2 rename to
+/// `servers` / `endpoints` / `bindings`, coordinated with the upstream
+/// SIG-Network Gateway API deprecation cycle) is a one-line edit on
+/// the canonical [`caixa_core::GATEWAY_API_KEY_LISTENERS`] declaration,
+/// not a coordinated rewrite across this crate's `gateway_routes`
+/// renderer + every future per-target renderer the substrate adds. The
+/// prior inline literal at the one production emitter site + one test-
+/// side fixture pin (`gateway_listener_carries_aplicacao_host`'s
+/// `.get("listeners")` navigation) would have let a Gateway-API-CRD
+/// per-Gateway L7-listener-set-axis rebrand or a per-emitter typo
+/// (`"listener"` / `"listen"` / `"servers"`) silently emit a `Gateway`
+/// whose L7-listener-set axis the Gateway API CRD schema validator
+/// drops as unknown — no listener is opened, and every external
+/// `:entrada` flow the Gateway was authored to accept drops at the
+/// gateway-class-controller's per-Gateway reconcile with no field
+/// naming the L7-listener-set-drift root cause. A drift on the test-
+/// fixture side silently masks the emission-side pin (`.get("listeners")`
+/// returns `None` under both the drifted-key emitter and the drifted-
+/// key probe — the downstream `.and_then(|l| l.as_sequence())` /
+/// `.and_then(|s| s.first())` chain short-circuits vacuously because
+/// the outer per-Gateway L7-listener-set lookup is itself `None`).
+/// Peer to the [`GATEWAY_API_KEY_PARENT_REFS`] +
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] re-exports on the sibling
+/// canonical-Gateway-API-HTTPRoute-body-axis surface — extends the
+/// per-Gateway-API-CRD-body-axis canonical-string re-export set
+/// (`parentRefs`, `backendRefs`, `listeners`, future `hostnames`) this
+/// crate's `gateway_routes` renderer's external `:entrada` ingress
+/// contract rests on across the Gateway API CRD-side body-shape.
+pub use caixa_core::GATEWAY_API_KEY_LISTENERS;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -1337,7 +1379,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::String("cilium".into()),
     );
     g_spec.insert(
-        serde_yaml::Value::String("listeners".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_LISTENERS.into()),
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(listener)]),
     );
     gateway.insert(
@@ -2730,6 +2772,59 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_listeners_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_LISTENERS` was lifted from the
+        // inline `"listeners"` literal at the `gateway_routes` per-
+        // Aplicacao Gateway's `g_spec.insert("listeners", …)` call site
+        // (the sole per-production-code per-Gateway L7-listener-set-
+        // container-axis emitter) plus the matching test-side fixture
+        // site (`gateway_listener_carries_aplicacao_host`'s
+        // `.get("listeners")` navigation) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_LISTENERS`] so the Gateway-API-
+        // CRD per-Gateway L7-listener-set-container-axis-key string
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + static-data identity here so any local re-
+        // introduction of a sibling
+        // `pub const GATEWAY_API_KEY_LISTENERS: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a build-
+        // time test failure naming the offending drift, not a silent
+        // apply-time symptom — the prior shape would have let a
+        // Gateway-API-CRD per-Gateway L7-listener-set-axis rebrand on
+        // the caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-Gateway L7-listener fan-outs at the
+        // drifted axis; no listener is opened, and every external
+        // `:entrada` flow drops at the gateway-class-controller's per-
+        // Gateway reconcile with no field naming the L7-listener-set-
+        // drift root cause. Peer to
+        // [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-HTTPRoute-body-axis re-
+        // export identity-pin set — extends the per-Gateway-API-CRD-
+        // body-axis re-export identity-pin set (`parentRefs`,
+        // `backendRefs`, `listeners`, future `hostnames`) this crate's
+        // `gateway_routes` renderer's external `:entrada` ingress
+        // contract rests on across the Gateway API CRD-side body-
+        // shape.
+        assert_eq!(
+            GATEWAY_API_KEY_LISTENERS,
+            caixa_core::GATEWAY_API_KEY_LISTENERS
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_LISTENERS.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_LISTENERS.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_LISTENERS must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_LISTENERS, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_network_policies_use_lifted_cilium_kind_network_policy() {
         // Fail-before-pass-after pin parsing every rendered
         // `CiliumNetworkPolicy` document and asserting its top-level
@@ -3481,7 +3576,7 @@ mod tests {
             .unwrap();
         let listener = gateway
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("listeners"))
+            .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
             .and_then(|l| l.as_sequence())
             .and_then(|s| s.first())
             .unwrap();
