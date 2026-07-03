@@ -1284,6 +1284,73 @@ pub use caixa_core::KUBE_KEY_PORT;
 /// `spec.listeners[].protocol`).
 pub use caixa_core::KUBE_KEY_PROTOCOL;
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule request-timeout-policy
+/// body-axis key. Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_TIMEOUTS`] so the per-rule request-
+/// timeout-policy field name lives in exactly one place across every
+/// caixa renderer — this crate's one production emitter site
+/// (`gateway_routes`'s per-`HTTPRoute` per-rule
+/// `spec.rules[].timeouts` insert the Aplicacao's typed
+/// `:politicas :timeout` overlay lands under, the sub-shape the
+/// Gateway API v1 CRD schema pins as `HTTPRouteTimeouts` and whose
+/// `request` scalar the Gateway-API-implementation-side per-rule
+/// request-dispatch loop compares each accepted request's wall-clock
+/// elapsed time against before cancelling the in-flight backend call)
+/// and this crate's eight test-side per-rule timeout-policy traversal
+/// sites (the `httproute_carries_politicas_timeout_on_every_rule` /
+/// `httproute_omits_timeouts_when_politicas_timeout_unset` /
+/// `httproute_timeout_renders_every_rule_independently` /
+/// `httproute_timeout_uses_canonical_kube_duration_format` /
+/// `httproute_timeout_renders_minute_window_canonically` /
+/// `httproute_rule_keys_pin_overlay_position` /
+/// `httproute_timeouts_and_retry_coexist_independently`
+/// pins asserting the overlay's presence, absence, canonical-duration-
+/// format contract, per-rule fan-out under multi-`:entrada :paths`,
+/// and independent-axis coexistence with the sibling `retry` per-
+/// rule retry-policy axis) now consult the same `&'static str` as the
+/// peer caixa-core-side const definition.
+///
+/// The prior inline `"timeouts"` literals at the one production
+/// emitter site + eight test-side retrieval sites in this crate would
+/// have let a typo on any one site (e.g. `"timeout"` (singular) /
+/// `"timeoutPolicy"` / `"deadlines"`) silently miss the per-rule
+/// request-timeout policy or emit a malformed `HTTPRoute` whose per-
+/// rule request-timeout-policy field the apiserver-side Gateway API
+/// CRD schema validator drops as unrecognized at apply time — the
+/// Gateway API implementation's per-rule request-dispatch loop would
+/// silently no-op the per-rule wall-clock deadline (the "no infinite
+/// blocking" guarantee MESH-COMPOSITION.md §V mandates for every
+/// rendered per-`:politicas` mesh-composition edge silently regresses
+/// to the pre-overlay unbounded-request semantic, and every external
+/// `:entrada` flow the route was authored to bound by the typed
+/// `:politicas :timeout` slot runs to whatever backend deadline the
+/// resolved backend's downstream infrastructure picks with no field
+/// naming the per-rule-timeout-policy-drift root cause), and the test-
+/// side pins' `.expect("rule must carry timeouts mapping when
+/// :politicas :timeout is set")` panic-message tags would fire against
+/// the presence-shape message rather than naming the true per-rule-
+/// timeout-policy-key drift, the `.get("timeouts").and_then(|t|
+/// t.get("request"))` navigators would silently unwrap to `None`
+/// under the drifted retrieval. The lift routes every per-rule
+/// timeout-policy-axis retrieval + emission through the same
+/// `&'static str` so drift between any two sites becomes a single-
+/// edit fix at the caixa-core const definition.
+///
+/// Same shape as the [`GATEWAY_API_KEY_HOSTNAMES`] /
+/// [`GATEWAY_API_KEY_HOSTNAME`] / [`GATEWAY_API_KEY_LISTENERS`] /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] / [`GATEWAY_API_KEY_BACKEND_REFS`]
+/// re-exports on the sibling per-Gateway-API-CRD-body-axis surface —
+/// extends the per-Gateway-API-`HTTPRoute` per-rule body-axis re-export
+/// set (`backendRefs`) onto the load-bearing per-rule request-timeout-
+/// policy axis every downstream Gateway-API-implementation-side per-
+/// rule request-dispatch loop keys off before it can commit to a per-
+/// request wall-clock deadline. Peer to the sibling load-bearing K8s-
+/// CR-schema-axis re-exports every downstream apiserver-side CRD-
+/// schema-validator navigates the same per-rule request-timeout-policy
+/// axis on (the gateway-class-controller's per-HTTPRoute per-rule
+/// request-dispatch pass under `spec.rules[].timeouts.request`).
+pub use caixa_core::GATEWAY_API_KEY_TIMEOUTS;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1720,7 +1787,10 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_ref)]),
         );
         if let Some(t) = &timeout_overlay {
-            rule.insert(serde_yaml::Value::String("timeouts".into()), t.clone());
+            rule.insert(
+                serde_yaml::Value::String(GATEWAY_API_KEY_TIMEOUTS.into()),
+                t.clone(),
+            );
         }
         if let Some(r) = &retry_overlay {
             rule.insert(serde_yaml::Value::String("retry".into()), r.clone());
@@ -2564,6 +2634,86 @@ mod tests {
                 caixa_core::KUBE_KEY_PROTOCOL.as_ptr(),
             ),
             "KUBE_KEY_PROTOCOL must be a re-export of caixa_core::KUBE_KEY_PROTOCOL, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_timeouts_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_TIMEOUTS` was lifted from nine
+        // inline `"timeouts"` literals — one production emitter site
+        // (`gateway_routes`'s per-`HTTPRoute` per-rule
+        // `spec.rules[].timeouts` insert the Aplicacao's typed
+        // `:politicas :timeout` overlay lands under, the sub-shape the
+        // Gateway API v1 CRD schema pins as `HTTPRouteTimeouts` and
+        // whose `request` scalar the Gateway-API-implementation-side
+        // per-rule request-dispatch loop compares each accepted
+        // request's wall-clock elapsed time against before cancelling
+        // the in-flight backend call) and eight test-side per-rule
+        // timeout-policy traversal sites (the
+        // `httproute_carries_politicas_timeout_on_every_rule` presence
+        // pin, the `httproute_omits_timeouts_when_politicas_timeout_unset`
+        // absence pin, the `httproute_timeout_renders_every_rule_independently`
+        // per-rule fan-out pin under multi-`:entrada :paths`, the
+        // `httproute_timeout_uses_canonical_kube_duration_format`
+        // `Duration::from_secs(90)`-round-trip canonical-form pin, the
+        // `httproute_timeout_renders_minute_window_canonically`
+        // 1-minute canonical-form pin, the
+        // `httproute_rule_keys_pin_overlay_position` rule-level
+        // top-key-set pin, and two `httproute_timeouts_and_retry_coexist_independently`
+        // presence-only + absence-only pins pinning independent-axis
+        // coexistence with the sibling `retry` per-rule retry-policy
+        // axis) — to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_TIMEOUTS`] so the canonical
+        // K8s-Gateway-API-`HTTPRoute`-per-rule-request-timeout-policy-
+        // body-axis string lives in exactly one place across every
+        // caixa renderer. Pin the equality + static-data identity here
+        // so any local re-introduction of a sibling `pub const
+        // GATEWAY_API_KEY_TIMEOUTS: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a typo on any one sibling
+        // `pub const` declaration silently miss the per-rule request-
+        // timeout retrieval (the presence pin's `.expect("rule must
+        // carry timeouts mapping when :politicas :timeout is set")`
+        // panic-message tag would fire against the presence-shape
+        // message rather than the true per-rule-timeout-policy-key
+        // drift, the `.get("timeouts").and_then(|t| t.get("request"))`
+        // navigators would silently unwrap to `None` under the drifted
+        // retrieval), or silently emit a malformed `HTTPRoute` whose
+        // per-rule request-timeout-policy field the apiserver-side
+        // Gateway API CRD schema validator drops as unrecognized at
+        // apply time (the Gateway API implementation's per-rule
+        // request-dispatch loop silently no-ops the per-rule wall-
+        // clock deadline, the "no infinite blocking" guarantee
+        // MESH-COMPOSITION.md §V mandates for every rendered per-
+        // `:politicas` mesh-composition edge silently regresses to the
+        // pre-overlay unbounded-request semantic). Bridge-arm peer to
+        // [`kube_key_protocol_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_port_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_rules_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_hostnames_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_hostname_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // — extends the per-Gateway-API-CRD-body-axis re-export set
+        // onto the load-bearing per-rule request-timeout-policy axis
+        // the M3 Aplicacao mesh renderer's per-`:politicas :timeout`
+        // overlay lands under.
+        assert_eq!(
+            GATEWAY_API_KEY_TIMEOUTS,
+            caixa_core::GATEWAY_API_KEY_TIMEOUTS
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_TIMEOUTS.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_TIMEOUTS.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_TIMEOUTS must be a re-export of caixa_core::GATEWAY_API_KEY_TIMEOUTS, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -4514,7 +4664,7 @@ mod tests {
         assert!(!rules.is_empty(), "HTTPRoute must carry at least one rule");
         for rule in &rules {
             let timeouts = rule
-                .get("timeouts")
+                .get(GATEWAY_API_KEY_TIMEOUTS)
                 .and_then(|t| t.as_mapping())
                 .expect("rule must carry timeouts mapping when :politicas :timeout is set");
             assert_eq!(
@@ -4543,7 +4693,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             assert!(
-                rule.get("timeouts").is_none(),
+                rule.get(GATEWAY_API_KEY_TIMEOUTS).is_none(),
                 "rule must omit `timeouts:` when :politicas :timeout is None"
             );
         }
@@ -4569,7 +4719,7 @@ mod tests {
         assert_eq!(rules.len(), 3);
         for rule in &rules {
             let req = rule
-                .get("timeouts")
+                .get(GATEWAY_API_KEY_TIMEOUTS)
                 .and_then(|t| t.get("request"))
                 .and_then(|v| v.as_str())
                 .expect("each of the 3 rules carries timeouts.request");
@@ -4594,7 +4744,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get("timeouts")
+                rule.get(GATEWAY_API_KEY_TIMEOUTS)
                     .and_then(|t| t.get("request"))
                     .and_then(|v| v.as_str()),
                 Some("90s")
@@ -4619,7 +4769,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get("timeouts")
+                rule.get(GATEWAY_API_KEY_TIMEOUTS)
                     .and_then(|t| t.get("request"))
                     .and_then(|v| v.as_str()),
                 Some("1m")
@@ -4647,7 +4797,7 @@ mod tests {
             assert!(m.contains_key(serde_yaml::Value::String(
                 GATEWAY_API_KEY_BACKEND_REFS.into()
             )));
-            assert!(m.contains_key(serde_yaml::Value::String("timeouts".into())));
+            assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_TIMEOUTS.into())));
             assert!(m.contains_key(serde_yaml::Value::String("retry".into())));
         }
     }
@@ -4807,7 +4957,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert_eq!(
-                rule.get("timeouts")
+                rule.get(GATEWAY_API_KEY_TIMEOUTS)
                     .and_then(|t| t.get("request"))
                     .and_then(|v| v.as_str()),
                 Some("15s")
@@ -4828,7 +4978,7 @@ mod tests {
         let rules = httproute_rules(&docs);
         for rule in &rules {
             assert!(
-                rule.get("timeouts").is_none(),
+                rule.get(GATEWAY_API_KEY_TIMEOUTS).is_none(),
                 "timeouts: must be absent when only :retries is set"
             );
             assert_eq!(
