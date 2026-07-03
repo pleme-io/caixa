@@ -5922,6 +5922,70 @@ pub const KUBE_KEY_MATCH_LABELS: &str = "matchLabels";
 /// [cm]: ../../caixa_mesh/index.html
 pub const KUBE_KEY_RULES: &str = "rules";
 
+/// Canonical K8s API key naming the per-CR **L4 port** scalar axis —
+/// the field the apiserver-side OpenAPI schema for every port-carrying
+/// CR body-position (Cilium L7 `spec.ingress[].toPorts[].ports[].port`
+/// per-port-tuple L4 port number, Gateway API
+/// `Gateway.spec.listeners[].port` per-listener L4 port number,
+/// Gateway API `HTTPRoute.spec.rules[].backendRefs[].port` per-rule
+/// per-backend L4 port number, and every future port-shaped CR body-
+/// position the M4 `mesh.pleme.io/v1alpha1/Aplicacao` materializer +
+/// the per-edge `CiliumClusterwideEnvoyConfig` emitter will land on)
+/// mounts the L4 port value under. Spelled exactly as the K8s
+/// apiserver expects (lowercase `port`, not `Port` / `portNumber` /
+/// `portValue` / `targetPort` — the L4-port-number axis, distinct
+/// from the `targetPort` L4-forwarding-destination axis on the K8s
+/// Service CRD that lives on a sibling field name the port-value
+/// axis is not) so the rendered YAML round-trips through every K8s
+/// schema parser without per-renderer string drift.
+///
+/// Three production-code call sites in this crate's downstream
+/// [`caixa-mesh`][cm] renderer carry this key on the same
+/// K8s-L4-port-scalar-axis surface (all three landing sites lived at
+/// inline `"port".into()` before this lift):
+///
+/// 1. `cilium_network_policies` — the per-`(:de, :para)`
+///    `CiliumNetworkPolicy` emitter's per-`toPorts[].ports[]` port-
+///    tuple entry's `port:` scalar (the L4 port number the Cilium
+///    data plane's per-tuple bpf policy dispatch loop compares
+///    against the observed TCP/UDP L4 header port value).
+/// 2. `gateway_routes` — the `Gateway` emitter's per-listener
+///    `spec.listeners[].port` scalar (the L4 port number the
+///    gateway-class-controller's per-listener bind loop opens the
+///    listener socket on).
+/// 3. `gateway_routes` — the `HTTPRoute` emitter's per-rule
+///    `spec.rules[].backendRefs[].port` scalar (the L4 port number
+///    the gateway-class-controller's per-rule backend-dispatch loop
+///    forwards the matched request to on the resolved Service /
+///    ExternalName backend).
+///
+/// Two test-side traversal sites in the same renderer navigate the
+/// rendered mesh bundle's per-CR L4-port scalar axis to pin per-CR
+/// port-value content invariants (the `.get("port")` retrievals under
+/// `toPorts[].ports[]` on the L7 policy pin threading through
+/// [`DEFAULT_SERVICO_PORT`] and under `backendRefs[]` on the
+/// HTTPRoute-backend-port pin). All five sites now route through this
+/// const so a future K8s CRD schema rebrand on the shared axis (or
+/// the canonical typo footgun `"Port"` / `"portNumber"` /
+/// `"portValue"`) surfaces at this one const rather than as an
+/// admission-time silent drop across three distinct CR emitters.
+///
+/// Lifted on the trajectory the peer [`KUBE_KEY_API_VERSION`] /
+/// [`KUBE_KEY_KIND`] / [`KUBE_KEY_METADATA`] / [`KUBE_KEY_NAME`] /
+/// [`KUBE_KEY_NAMESPACE`] / [`KUBE_KEY_LABELS`] / [`KUBE_KEY_SPEC`] /
+/// [`KUBE_KEY_MATCH_LABELS`] / [`KUBE_KEY_RULES`] canonical-K8s-API-
+/// key constants establish — extends the K8s-CR top-level
+/// `(apiVersion, kind, metadata, spec)` axis quartet + the nested
+/// `metadata.{name, namespace, labels}` triplet + the
+/// `LabelSelector.matchLabels` selector-projection axis + the
+/// `spec.rules[]` / `toPorts[].rules` rule-list container axis onto
+/// the load-bearing nested L4-port-scalar axis every downstream
+/// bpf-policy-dispatch / gateway-listener-bind / gateway-backend-
+/// dispatch consumer of the rendered mesh bundle keys off.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const KUBE_KEY_PORT: &str = "port";
+
 /// Default cluster-wide K8s namespace every caixa renderer emits
 /// objects into when the source caixa doesn't pin its own. The single
 /// source of truth both [`caixa-flux`][cf]'s programs.yaml /
@@ -10913,6 +10977,7 @@ mod tests {
         assert_eq!(KUBE_KEY_NAMESPACE, "namespace");
         assert_eq!(KUBE_KEY_LABELS, "labels");
         assert_eq!(KUBE_KEY_MATCH_LABELS, "matchLabels");
+        assert_eq!(KUBE_KEY_PORT, "port");
         assert_eq!(KUBE_KEY_RULES, "rules");
         assert_eq!(KUBE_KEY_SPEC, "spec");
     }
