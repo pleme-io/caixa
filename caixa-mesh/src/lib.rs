@@ -1226,6 +1226,64 @@ pub use caixa_core::KUBE_KEY_RULES;
 /// `spec.rules[].backendRefs[].port`).
 pub use caixa_core::KUBE_KEY_PORT;
 
+/// Canonical K8s CR L4/L7 protocol scalar-discriminator-axis key.
+/// Re-export of the canonical [`caixa_core::KUBE_KEY_PROTOCOL`] so
+/// the per-CR protocol scalar-discriminator field name lives in
+/// exactly one place across every caixa renderer — this crate's two
+/// production-code emission sites (`cilium_network_policies`'s
+/// per-`toPorts[].ports[]` port-tuple `protocol:` scalar the Cilium
+/// data plane's per-tuple bpf policy dispatch loop compares against
+/// the observed L4 header protocol before applying the port match,
+/// `gateway_routes`'s per-`Gateway` per-listener
+/// `spec.listeners[].protocol` scalar the gateway-class-controller's
+/// per-listener bind loop selects the L7 parser + TLS termination
+/// strategy from) and this crate's one test-side protocol-scalar
+/// traversal site (the `gateway_emits_gateway_plus_httproute_pair`
+/// `.get("protocol")` retrieval on the emitted `Gateway`'s first
+/// listener pinning the canonical `HTTP` listener-protocol content)
+/// now consult the same `&'static str` as the peer caixa-core-side
+/// const definition.
+///
+/// The prior inline `"protocol"` literals at the two production
+/// emitter sites + one test-side retrieval site in this crate would
+/// have let a typo on any one site (e.g. `"Protocol"`, `"proto"`,
+/// `"transportProtocol"`) silently miss the per-CR protocol
+/// discrimination or emit a malformed CR whose protocol field the
+/// apiserver-side CRD schema validator drops as unrecognized at
+/// apply time — the Cilium data plane's per-tuple bpf policy
+/// dispatch loop would silently fall back to the CRD default
+/// protocol `ANY` (admitting UDP traffic through a TCP-only rule
+/// with no diagnostic), the gateway-class-controller's per-listener
+/// bind loop would silently fail listener validation on a required
+/// protocol field (rejecting the entire `Gateway` object at
+/// admission time, no L7 traffic admitted, with the error message
+/// naming the missing field rather than the drifted key that caused
+/// the omission), and the test-side pin's `assert_eq!(…, Some("HTTP"))`
+/// would silently unwrap to `None` under the drifted retrieval. The
+/// lift routes every K8s-CR-protocol-scalar-axis retrieval + emission
+/// through the same `&'static str` so drift between any two sites
+/// becomes a single-edit fix at the caixa-core const definition.
+///
+/// Same shape as the [`KUBE_KEY_PORT`] re-export on the sibling
+/// L4-port-scalar axis — extends the per-K8s-CR top-level
+/// `(apiVersion, kind, metadata, spec)` axis re-export quartet +
+/// the load-bearing nested `metadata.{name, namespace, labels}`
+/// triplet + the load-bearing nested `LabelSelector.matchLabels`
+/// selector-projection axis + the load-bearing nested `spec.rules[]`
+/// / `toPorts[].rules` rule-list-container axis + the load-bearing
+/// nested L4-port-scalar axis onto the load-bearing nested
+/// L4/L7-protocol-scalar-discriminator axis every downstream bpf-
+/// policy-dispatch / gateway-listener-bind consumer of the rendered
+/// mesh bundle keys off before it can commit to a port match or a
+/// listener parser. Peer to the sibling load-bearing K8s-CR-schema-
+/// axis re-exports every downstream apiserver-side CRD-schema-
+/// validator navigates the same protocol scalar axis on (the Cilium
+/// operator's per-CNP L4 dispatch pass under
+/// `spec.ingress[].toPorts[].ports[].protocol`, the gateway-class-
+/// controller's per-Gateway per-listener bind pass under
+/// `spec.listeners[].protocol`).
+pub use caixa_core::KUBE_KEY_PROTOCOL;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1411,7 +1469,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 serde_yaml::Value::String(port.to_string()),
             );
             port_entry.insert(
-                serde_yaml::Value::String("protocol".into()),
+                serde_yaml::Value::String(KUBE_KEY_PROTOCOL.into()),
                 serde_yaml::Value::String("TCP".into()),
             );
             to_port.insert(
@@ -1525,7 +1583,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Number(80.into()),
     );
     listener.insert(
-        serde_yaml::Value::String("protocol".into()),
+        serde_yaml::Value::String(KUBE_KEY_PROTOCOL.into()),
         serde_yaml::Value::String("HTTP".into()),
     );
     listener.insert(
@@ -2432,6 +2490,80 @@ mod tests {
         assert!(
             std::ptr::eq(KUBE_KEY_PORT.as_ptr(), caixa_core::KUBE_KEY_PORT.as_ptr(),),
             "KUBE_KEY_PORT must be a re-export of caixa_core::KUBE_KEY_PORT, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_protocol_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_PROTOCOL` was lifted from three
+        // inline `"protocol"` literals — two production emitter sites
+        // (`cilium_network_policies`'s per-`toPorts[].ports[]` port-
+        // tuple `protocol:` scalar the Cilium data plane's per-tuple
+        // bpf policy dispatch loop compares against the observed L4
+        // header protocol before applying the port match,
+        // `gateway_routes`'s per-`Gateway` per-listener
+        // `spec.listeners[].protocol` scalar the gateway-class-
+        // controller's per-listener bind loop selects the L7 parser
+        // + TLS termination strategy from) and one test-side
+        // protocol-scalar traversal site (the
+        // `gateway_emits_gateway_plus_httproute_pair` `.get("protocol")`
+        // retrieval on the emitted `Gateway`'s first listener pinning
+        // the canonical `HTTP` listener-protocol content) — to a
+        // re-export of [`caixa_core::KUBE_KEY_PROTOCOL`] so the
+        // canonical K8s-CR-`protocol`-scalar-discriminator-axis
+        // string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so
+        // any local re-introduction of a sibling `pub const
+        // KUBE_KEY_PROTOCOL: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // symptom — the prior shape would have let a typo on any one
+        // sibling `pub const` declaration silently miss the per-CR
+        // protocol retrieval (the listener-protocol-content pin's
+        // `assert_eq!(…, Some("HTTP"))` would silently mask the
+        // drift under the `None` unwrap-default), or silently emit a
+        // malformed CR whose protocol field the apiserver-side CRD
+        // schema validator drops as unrecognized at apply time (the
+        // Cilium data plane's per-tuple bpf policy dispatch loop
+        // silently fall back to the CRD default protocol `ANY`,
+        // admitting UDP traffic through a TCP-only rule; the
+        // gateway-class-controller's per-listener bind loop silently
+        // fail listener validation on a required protocol field,
+        // rejecting the entire `Gateway` object at admission time,
+        // no L7 traffic admitted). Bridge-arm peer to
+        // [`kube_key_port_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_rules_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_match_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_name_re_export_points_at_caixa_core_canonical`]
+        // — extends the K8s-CR top-level `(apiVersion, kind,
+        // metadata, spec)` axis re-export quartet + the load-bearing
+        // nested `metadata.{name, namespace, labels}` triplet + the
+        // load-bearing nested `LabelSelector.matchLabels` selector-
+        // projection axis + the load-bearing nested `spec.rules[]` /
+        // `toPorts[].rules` rule-list-container axis + the load-
+        // bearing nested L4-port-scalar axis under a single canonical
+        // `caixa-core::KUBE_KEY_*` re-export shape in this crate onto
+        // the load-bearing nested L4/L7-protocol-scalar-discriminator
+        // axis every rendered `CiliumNetworkPolicy` per-
+        // `toPorts[].ports[]` port-tuple + every rendered `Gateway`
+        // per-listener carries.
+        assert_eq!(KUBE_KEY_PROTOCOL, caixa_core::KUBE_KEY_PROTOCOL);
+        assert!(
+            std::ptr::eq(
+                KUBE_KEY_PROTOCOL.as_ptr(),
+                caixa_core::KUBE_KEY_PROTOCOL.as_ptr(),
+            ),
+            "KUBE_KEY_PROTOCOL must be a re-export of caixa_core::KUBE_KEY_PROTOCOL, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -3934,7 +4066,7 @@ mod tests {
             Some("checkout.quero.cloud")
         );
         assert_eq!(
-            listener.get("protocol").and_then(|p| p.as_str()),
+            listener.get(KUBE_KEY_PROTOCOL).and_then(|p| p.as_str()),
             Some("HTTP")
         );
     }
