@@ -5986,6 +5986,78 @@ pub const KUBE_KEY_RULES: &str = "rules";
 /// [cm]: ../../caixa_mesh/index.html
 pub const KUBE_KEY_PORT: &str = "port";
 
+/// Canonical K8s API key naming the per-CR **L4/L7 protocol**
+/// scalar-discriminator axis — the field the apiserver-side `OpenAPI`
+/// schema for every protocol-carrying CR body-position (Cilium L7
+/// `spec.ingress[].toPorts[].ports[].protocol` per-port-tuple L4
+/// transport protocol discriminator picking between `TCP` / `UDP` /
+/// `SCTP` / `ANY`, Gateway API `Gateway.spec.listeners[].protocol`
+/// per-listener L7 listener-protocol discriminator picking between
+/// `HTTP` / `HTTPS` / `TCP` / `TLS` / `UDP`, and every future
+/// protocol-shaped CR body-position the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` materializer + the per-edge
+/// `CiliumClusterwideEnvoyConfig` emitter will land on) mounts the
+/// protocol-value discriminator under. Spelled exactly as the K8s
+/// apiserver expects (lowercase `protocol`, not `Protocol` /
+/// `proto` / `transportProtocol` — the singular scalar-key
+/// convention K8s uses across every protocol-carrying CR family,
+/// distinct from the `protocols[]` plural-container axis used on a
+/// few application-layer-protocol CRDs which is not this axis) so
+/// the rendered YAML round-trips through every K8s schema parser
+/// without per-renderer string drift.
+///
+/// Two production-code call sites in this crate's downstream
+/// [`caixa-mesh`][cm] renderer carry this key on the same
+/// K8s-protocol-scalar-axis surface (both landing sites lived at
+/// inline `"protocol".into()` before this lift):
+///
+/// 1. `cilium_network_policies` — the per-`(:de, :para)`
+///    `CiliumNetworkPolicy` emitter's per-`toPorts[].ports[]` port-
+///    tuple entry's `protocol:` scalar (the L4 transport protocol
+///    discriminator the Cilium data plane's per-tuple bpf policy
+///    dispatch loop compares against the observed L4 header
+///    protocol before applying the port match — a drifted key here
+///    makes the per-tuple bpf policy fall back to the CRD default
+///    `ANY`, silently admitting UDP traffic through a TCP-only
+///    rule).
+/// 2. `gateway_routes` — the `Gateway` emitter's per-listener
+///    `spec.listeners[].protocol` scalar (the L7 listener protocol
+///    discriminator the gateway-class-controller's per-listener
+///    bind loop selects the L7 parser + TLS termination strategy
+///    from — a drifted key here silently fails the listener
+///    validation, the gateway-class-controller rejects the entire
+///    `Gateway` object at admission time, no L7 traffic admitted).
+///
+/// One test-side traversal site in the same renderer navigates the
+/// rendered mesh bundle's per-CR protocol scalar axis to pin per-CR
+/// listener-protocol content invariants (the
+/// `gateway_emits_gateway_plus_httproute_pair` `.get("protocol")`
+/// retrieval on the emitted `Gateway`'s first listener pinning the
+/// canonical `HTTP` listener-protocol value). All three sites now
+/// route through this const so a future K8s CRD schema rebrand on
+/// the shared axis (or the canonical typo footgun `"Protocol"` /
+/// `"proto"` / `"transportProtocol"`) surfaces at this one const
+/// rather than as an admission-time silent drop across two distinct
+/// CR emitters.
+///
+/// Lifted on the trajectory the peer [`KUBE_KEY_API_VERSION`] /
+/// [`KUBE_KEY_KIND`] / [`KUBE_KEY_METADATA`] / [`KUBE_KEY_NAME`] /
+/// [`KUBE_KEY_NAMESPACE`] / [`KUBE_KEY_LABELS`] / [`KUBE_KEY_SPEC`] /
+/// [`KUBE_KEY_MATCH_LABELS`] / [`KUBE_KEY_RULES`] /
+/// [`KUBE_KEY_PORT`] canonical-K8s-API-key constants establish —
+/// extends the K8s-CR top-level `(apiVersion, kind, metadata, spec)`
+/// axis quartet + the nested `metadata.{name, namespace, labels}`
+/// triplet + the `LabelSelector.matchLabels` selector-projection
+/// axis + the `spec.rules[]` / `toPorts[].rules` rule-list container
+/// axis + the L4-port-scalar axis onto the load-bearing nested
+/// L4/L7-protocol-scalar-discriminator axis every downstream bpf-
+/// policy-dispatch / gateway-listener-bind consumer of the rendered
+/// mesh bundle keys off before it can commit to a port match or a
+/// listener parser.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const KUBE_KEY_PROTOCOL: &str = "protocol";
+
 /// Default cluster-wide K8s namespace every caixa renderer emits
 /// objects into when the source caixa doesn't pin its own. The single
 /// source of truth both [`caixa-flux`][cf]'s programs.yaml /
@@ -10978,6 +11050,7 @@ mod tests {
         assert_eq!(KUBE_KEY_LABELS, "labels");
         assert_eq!(KUBE_KEY_MATCH_LABELS, "matchLabels");
         assert_eq!(KUBE_KEY_PORT, "port");
+        assert_eq!(KUBE_KEY_PROTOCOL, "protocol");
         assert_eq!(KUBE_KEY_RULES, "rules");
         assert_eq!(KUBE_KEY_SPEC, "spec");
     }
