@@ -6787,6 +6787,104 @@ pub const CILIUM_KIND_NETWORK_POLICY: &str = "CiliumNetworkPolicy";
 /// [cm]: ../../caixa_mesh/index.html
 pub const CILIUM_KEY_TO_PORTS: &str = "toPorts";
 
+/// Canonical Cilium `CiliumNetworkPolicy` destination-identity selector-
+/// axis key every `cilium_network_policies`-emitted CNP document mounts
+/// its L3-target `LabelSelector` under (`spec.endpointSelector`). Pairs
+/// with the sibling [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) — the Cilium CNP
+/// schema pins the destination workload through the `endpointSelector`
+/// axis and the admitted L4 port set through the `toPorts` axis, so
+/// drift on the destination-identity axis is exactly as load-bearing as
+/// drift on the port-set-container axis it accompanies (the Cilium-
+/// operator-side CRD schema validator drops any `spec` block whose
+/// destination-identity axis carries an unrecognized key — an
+/// `"endpointselector"` / `"endpointSelectors"` / `"endpoints"` typo
+/// silently emits a CNP whose L3-target selector the Cilium operator's
+/// per-CNP identity-resolution pass no-ops entirely: the policy binds
+/// against no destination pods and every intra-mesh `:contratos` flow
+/// the CNP was authored to allow drops at the eBPF data plane's
+/// default-deny gate with no field naming the destination-identity-
+/// axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Cilium-side mesh
+/// bundle's per-CNP destination-identity-axis-naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's
+///     `spec.endpointSelector` axis (caixa-mesh/src/lib.rs:990 —
+///     the `cilium_network_policies` per-`(:de, :para)` policy's
+///     `policy_spec.insert("endpointSelector", …)` call).
+///
+/// The destination-identity axis names the same Cilium-operator-side
+/// per-CNP L3-target selector as the sibling [`CILIUM_KEY_TO_PORTS`]
+/// per-ingress-rule port-set-container axis and must move together on
+/// any future Cilium CRD schema rebrand (an upstream `cilium.io/v3`
+/// rename of the destination-identity axis from `endpointSelector` to
+/// `endpoints` / `targetSelector` / `destinationSelector`, coordinated
+/// with the Cilium project's periodic CRD schema-migration passes).
+/// Until this lift landed the axis carried an inline `endpointSelector`
+/// literal at the one production-code occurrence in
+/// caixa-mesh/src/lib.rs:990 (the `cilium_network_policies`
+/// `policy_spec.insert("endpointSelector", …)` call) plus a matching
+/// set inside the in-file
+/// `cilium_policy_endpoint_selector_targets_destination_program` /
+/// `cnp_endpoint_selector_carries_program_only_single_axis_shape` test-
+/// fixture navigations — three occurrences of the same load-bearing
+/// Cilium-CRD-`endpointSelector`-axis-key convention, drift-prone by
+/// construction. A drift on any one production or test-fixture site
+/// to `"endpointselector"` / `"endpointSelectors"` / `"endpoints"` would
+/// have surfaced as a Cilium-operator-side schema validator drop at
+/// apply time (the affected `spec` block's destination-identity axis
+/// the CRD schema validator recognizes as unknown), with every intra-
+/// mesh `:contratos` flow the CNP was authored to allow dropping at the
+/// eBPF data plane's default-deny gate with no field naming the
+/// destination-identity-drift root cause. A drift on the test-fixture
+/// side silently masks the emission-side pin (`.get("endpointSelector")`
+/// returns `None` under both the drifted-key emitter and the drifted-key
+/// probe — the downstream `.and_then(|s| s.get("matchLabels"))` chain
+/// short-circuits vacuously because the outer selector-lookup is itself
+/// `None`).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`CILIUM_KIND_NETWORK_POLICY`] (eac85cb) /
+/// [`CILIUM_API_VERSION`] (279d611) lifts established on the sibling
+/// canonical-Cilium-CNP-dispatch-axis / canonical-Cilium-CRD-`kind` /
+/// canonical-Cilium-CRD-`apiVersion` surfaces — extends the discipline
+/// from the outer `(apiVersion, kind, spec)` shell of the Cilium CNP
+/// and the per-ingress-rule `toPorts.rules` L4/L7-dispatch axis onto
+/// the destination-identity half of the `(endpointSelector, ingress)`
+/// per-CNP-body key pair, completing the per-CNP L3/L4/L7-triad lift
+/// set the M3 Aplicacao mesh renderer's eBPF data-plane contract rests
+/// on. The render-side consumer now threads the same `&'static str`
+/// through its `policy_spec.insert(…)` call so a future Cilium-CRD
+/// rebrand on the destination-identity axis (or an upstream Cilium
+/// project rename to a per-CRD sibling name — unlikely but the same
+/// coordination point the prior lifts anchor for) lands in one place;
+/// every future renderer that reaches for the canonical per-CNP
+/// destination-identity-axis (the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `CiliumNetworkPolicy` fan-out, a future
+/// `CiliumClusterwideNetworkPolicy` renderer that emits cluster-scoped
+/// baseline-allow rules with the same `spec.endpointSelector` shape, a
+/// future `CiliumLocalRedirectPolicy` renderer whose per-Servico local-
+/// redirect selector nests under the same destination-identity axis
+/// convention) inherits the same value by construction with no
+/// opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`CILIUM_KIND_NETWORK_POLICY`] (eac85cb) /
+/// [`CILIUM_API_VERSION`] (279d611) lifts apply on the peer
+/// canonical-Cilium-CNP-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_KEY_ENDPOINT_SELECTOR: &str = "endpointSelector";
+
 /// Canonical K8s Gateway API CRD `kind` discriminator the rendered
 /// `Gateway` document declares at its top-level [`KUBE_KEY_KIND`] axis.
 /// Pairs with the sibling [`GATEWAY_API_API_VERSION`] (3c6cfc3) — the
@@ -8602,6 +8700,77 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "CILIUM_KEY_TO_PORTS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn cilium_key_endpoint_selector_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Cilium CNP `spec.endpointSelector` destination-
+        // identity-axis key the rendered CNP document mounts its
+        // L3-target `LabelSelector` under. The string is part of the
+        // cluster-side contract with the upstream Cilium operator —
+        // the Cilium-operator-side per-CNP identity-resolution pass
+        // keys off this axis to bind the emitted policy against its
+        // destination workload identity via the K8s LabelSelector
+        // schema; a drifted value (`"endpointselector"` /
+        // `"endpointSelectors"` / `"endpoints"`) at either the
+        // production emitter or a downstream renderer's per-CNP
+        // destination-identity upsert silently emits a CNP whose
+        // destination-identity axis the Cilium CRD schema validator
+        // drops as unknown, and the policy binds against no
+        // destination pods — every intra-mesh `:contratos` flow the
+        // affected CNP was authored to allow drops at the eBPF
+        // data-plane's default-deny gate. Changing this value is a
+        // coordinated Cilium-CRD promotion alongside the upstream
+        // Cilium project's CRD schema-migration cycle, not an
+        // incidental edit. Peer to `cilium_key_to_ports_pins_\
+        // canonical_value` (the per-ingress-rule port-set container
+        // axis-key pin the L3-target selector pairs with under the
+        // shared per-CNP-body schema) on the sibling per-CNP-body-axis
+        // pin set — completes the per-CNP L3/L4/L7-triad
+        // `(endpointSelector, ingress → toPorts → rules)` pin set the
+        // M3 Aplicacao mesh renderer's eBPF data-plane contract rests
+        // on.
+        assert_eq!(CILIUM_KEY_ENDPOINT_SELECTOR, "endpointSelector");
+    }
+
+    #[test]
+    fn cilium_key_endpoint_selector_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `cilium_key_to_ports_carries_lower_camel_case_shape`
+        // on the sibling per-CNP-body-axis grammar-pin set — the
+        // lowerCamelCase K8s field-name grammar governs every nested
+        // schema-field axis (including this per-CNP destination-
+        // identity-axis key), same convention.
+        let v = CILIUM_KEY_ENDPOINT_SELECTOR;
+        assert!(
+            !v.is_empty(),
+            "CILIUM_KEY_ENDPOINT_SELECTOR {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "CILIUM_KEY_ENDPOINT_SELECTOR {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "CILIUM_KEY_ENDPOINT_SELECTOR {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
