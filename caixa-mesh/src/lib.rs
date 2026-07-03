@@ -946,6 +946,50 @@ pub use caixa_core::KUBE_KEY_SPEC;
 /// choice axis surface.
 pub use caixa_core::DEFAULT_GATEWAY_CLASS_NAME;
 
+/// Canonical K8s Gateway API `Gateway` per-Gateway controller-binding
+/// scalar-axis key every `gateway_routes`-emitted `Gateway` document
+/// mounts its per-Gateway `GatewayClass.metadata.name` reference
+/// under (`spec.gatewayClassName`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] so the
+/// Gateway-API-implementation-side per-Gateway controller-binding
+/// scalar-axis-key string lives in exactly one place across every
+/// caixa renderer — caixa-mesh's `gateway_routes` per-Aplicacao
+/// `Gateway` emitter (the `g_spec.insert("gatewayClassName", …)` call
+/// the prior inline `"gatewayClassName"` literal sat at) and every
+/// future per-Gateway-API-side renderer the M3.x absorption roadmap
+/// acknowledges now consult the same `&'static str`, so a future
+/// Gateway API rebrand on the per-Gateway controller-binding scalar
+/// axis (an upstream Gateway API v2 rename to `className` /
+/// `gatewayClassRef`, coordinated with the upstream SIG-Network
+/// Gateway API deprecation cycle) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] declaration,
+/// not a coordinated rewrite across this crate's `gateway_routes`
+/// renderer + every future per-target renderer the substrate adds.
+/// The prior inline literal at the one production emitter site + one
+/// test-side fixture pin
+/// (`gateway_gateway_class_name_uses_lifted_default_gateway_class_name`'s
+/// `.get("gatewayClassName")` navigation) would have let a Gateway-
+/// API-CRD per-Gateway controller-binding-axis rebrand or a per-
+/// emitter typo (`"gatewayClass"` / `"className"` /
+/// `"gatewayClassRef"`) silently emit a `Gateway` whose controller-
+/// binding scalar-axis the Gateway API CRD schema validator drops as
+/// unknown — no `GatewayClass` is resolved, no `controllerName` is
+/// looked up, and every external `:entrada` flow the Gateway was
+/// authored to accept drops at the gateway-class-controller's per-
+/// Gateway reconcile with no field naming the controller-binding-
+/// drift root cause. A drift on the test-fixture side silently masks
+/// the emission-side pin (`.get("gatewayClassName")` returns `None`
+/// under both the drifted-key emitter and the drifted-key probe —
+/// the downstream `.and_then(|c| c.as_str())` chain short-circuits
+/// vacuously because the outer per-Gateway controller-binding lookup
+/// is itself `None`). Peer to the [`GATEWAY_API_KEY_LISTENERS`] +
+/// [`GATEWAY_API_KEY_HOSTNAME`] re-exports on the sibling canonical-
+/// Gateway-API-CRD-per-Gateway-body-axis surface. Sibling of the
+/// peer [`DEFAULT_GATEWAY_CLASS_NAME`] re-export on the canonical-
+/// Gateway-API-`(key, value)`-pair-lift surface this re-export
+/// closes the KEY half of.
+pub use caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME;
+
 /// Canonical K8s CR top-level `metadata` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_METADATA`] so the per-kind metadata block key
 /// lives in exactly one place across every caixa renderer — caixa-mesh's
@@ -2013,7 +2057,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // [`GATEWAY_API_API_VERSION`] / [`GATEWAY_API_KIND_GATEWAY`]
     // lifts apply on the peer canonical-K8s-Gateway-API-axis surfaces.
     g_spec.insert(
-        serde_yaml::Value::String("gatewayClassName".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_GATEWAY_CLASS_NAME.into()),
         serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
     );
     g_spec.insert(
@@ -3878,6 +3922,56 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_gateway_class_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_GATEWAY_CLASS_NAME` was
+        // lifted from the inline `"gatewayClassName"` literal at the
+        // `gateway_routes` per-Aplicacao Gateway's
+        // `g_spec.insert("gatewayClassName", …)` call site
+        // (caixa-mesh/src/lib.rs:2060 — the sole per-production-code
+        // controller-binding-scalar-axis-KEY emitter) to a re-export
+        // of [`caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] so
+        // the Gateway-API-CRD per-Gateway controller-binding-scalar-
+        // axis-key string lives in exactly one place across every
+        // caixa renderer. Pin the equality + static-data identity
+        // here so any local re-introduction of a sibling
+        // `pub const GATEWAY_API_KEY_GATEWAY_CLASS_NAME: &str = "…"`
+        // (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation)
+        // is a build-time test failure naming the offending drift,
+        // not a silent apply-time symptom — the prior shape would
+        // have let a Gateway-API-CRD controller-binding-axis rebrand
+        // on the caixa-mesh side without a coordinated caixa-core
+        // edit silently land per-Aplicacao Gateway objects at one
+        // controller-binding key and every future per-Aplicacao
+        // materializer's emitted `Gateway` at the drifted other,
+        // with every external `:entrada` flow dropping at the
+        // gateway-class-controller's reconcile loop because the
+        // per-Gateway `GatewayClass` lookup never binds across the
+        // KEY-drifted controller-binding-axis pair. Peer to
+        // [`default_gateway_class_name_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-`(key, value)`-pair-
+        // lift re-export axis this pin closes the KEY half of, and
+        // to
+        // [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-Gateway-body-axis re-export surface.
+        assert_eq!(
+            GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
+            caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_GATEWAY_CLASS_NAME.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_GATEWAY_CLASS_NAME must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KEY_PARENT_REFS` was lifted from
         // the inline `"parentRefs"` literal at the `gateway_routes`
@@ -5312,7 +5406,7 @@ mod tests {
             .expect("Gateway present");
         let class_name = gateway
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("gatewayClassName"))
+            .and_then(|s| s.get(GATEWAY_API_KEY_GATEWAY_CLASS_NAME))
             .and_then(|c| c.as_str())
             .expect("Gateway spec.gatewayClassName present");
         assert_eq!(
@@ -5320,6 +5414,49 @@ mod tests {
             caixa_core::DEFAULT_GATEWAY_CLASS_NAME,
             "Gateway's spec.gatewayClassName must equal the lifted \
              caixa_core::DEFAULT_GATEWAY_CLASS_NAME by value — drift here \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_routes_gateway_uses_lifted_gateway_api_key_gateway_class_name() {
+        // Fail-before-pass-after pin parsing the rendered `Gateway`
+        // document via the raw canonical `"gatewayClassName"` KEY
+        // literal (not the lifted const, to trip on drift between the
+        // renderer-side emitter and the lifted const), then asserting
+        // the emitted key IS byte-identical to
+        // [`caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME`]. The three
+        // arms: this pin trips on drift between the renderer-side
+        // emitter and the lifted const, the sibling
+        // `gateway_api_key_gateway_class_name_pins_canonical_value` in
+        // caixa-core trips on drift between the lifted const and the
+        // canonical literal, and the
+        // [`gateway_api_key_gateway_class_name_re_export_points_at_caixa_core_canonical`]
+        // pin trips on drift between this crate's re-export and the
+        // caixa-core canonical declaration — together they close the
+        // three-arm drift footgun the inline-literal-across-the-
+        // production-emit-plus-navigation shape carried by construction.
+        // Sibling of the peer
+        // `gateway_gateway_class_name_uses_lifted_default_gateway_class_name`
+        // on the canonical-Gateway-API-`(key, value)`-pair-lifted-uses
+        // pin surface this pin closes the KEY half of.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
+            .expect("Gateway present");
+        let spec = gateway
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.as_mapping())
+            .expect("Gateway spec is a mapping");
+        assert!(
+            spec.contains_key(serde_yaml::Value::String(
+                caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME.into(),
+            )),
+            "Gateway spec must carry a key byte-identical to the lifted \
+             caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME — drift here \
              is the canonical footgun this lift closes"
         );
     }
