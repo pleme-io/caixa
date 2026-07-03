@@ -607,6 +607,51 @@ pub use caixa_core::GATEWAY_API_KIND_HTTP_ROUTE;
 /// per-route body-shape.
 pub use caixa_core::GATEWAY_API_KEY_PARENT_REFS;
 
+/// Canonical K8s Gateway API `HTTPRoute` per-rule backend-destination
+/// container-axis key every `gateway_routes`-emitted `HTTPRoute` per-
+/// rule block mounts its `[{name, port}]` backend fan-out list under
+/// (`spec.rules[].backendRefs[]`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_BACKEND_REFS`] so the Gateway-API-
+/// implementation-side per-rule backend-destination-container-axis-key
+/// string lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `gateway_routes` per-Aplicacao `HTTPRoute` emitter
+/// (the `rule.insert("backendRefs", …)` call the prior inline
+/// `"backendRefs"` literal sat at, caixa-mesh/src/lib.rs:1414) and
+/// every future per-Gateway-API-side renderer the M3.x absorption
+/// roadmap acknowledges now consult the same `&'static str`, so a
+/// future Gateway API rebrand on the per-rule backend-destination axis
+/// (an upstream Gateway API v2 rename to `backends` / `forwardTo` /
+/// `to`, coordinated with the upstream SIG-Network Gateway API
+/// deprecation cycle) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_BACKEND_REFS`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer +
+/// every future per-target renderer the substrate adds. The prior
+/// inline literal at the one production emitter site + two test-side
+/// fixture pins (`httproute_routes_to_entrada_para`'s
+/// `.get("backendRefs")` navigation, `httproute_rule_keys_pin_overlay_position`'s
+/// `contains_key("backendRefs")` presence pin) would have let a
+/// Gateway-API-CRD per-rule backend-destination-axis rebrand or a per-
+/// emitter typo (`"backendRef"` / `"backends"` / `"forwardTo"`)
+/// silently emit an `HTTPRoute` whose per-rule backend-destination axis
+/// the Gateway API CRD schema validator drops as unknown — no backend
+/// is picked at the per-rule L7 dispatch, and every external `:entrada`
+/// request the rule was authored to route drops at the gateway-class-
+/// controller's per-rule reconcile with no field naming the backend-
+/// destination-drift root cause. A drift on the test-fixture side
+/// silently masks the emission-side pin (`.get("backendRefs")` returns
+/// `None` under both the drifted-key emitter and the drifted-key probe
+/// — the downstream `.and_then(|b| b.as_sequence())` /
+/// `.and_then(|s| s.first())` chain short-circuits vacuously because
+/// the outer per-rule backend-destination lookup is itself `None`).
+/// Peer to the [`GATEWAY_API_KEY_PARENT_REFS`] re-export on the
+/// sibling canonical-Gateway-API-HTTPRoute-body-axis surface — extends
+/// the per-Gateway-API-HTTPRoute-body-axis canonical-string re-export
+/// set (`parentRefs`, `backendRefs`, future `hostnames`) this crate's
+/// `gateway_routes` renderer's external `:entrada` ingress contract
+/// rests on across the Gateway API HTTPRoute-side per-route body-
+/// shape.
+pub use caixa_core::GATEWAY_API_KEY_BACKEND_REFS;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -1411,7 +1456,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(match_entry)]),
         );
         rule.insert(
-            serde_yaml::Value::String("backendRefs".into()),
+            serde_yaml::Value::String(GATEWAY_API_KEY_BACKEND_REFS.into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_ref)]),
         );
         if let Some(t) = &timeout_overlay {
@@ -2633,6 +2678,58 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_BACKEND_REFS` was lifted from
+        // the inline `"backendRefs"` literal at the `gateway_routes`
+        // per-Aplicacao HTTPRoute's per-rule
+        // `rule.insert("backendRefs", …)` call site (the sole per-
+        // production-code per-rule backend-destination-container-axis
+        // emitter) plus the matching test-side fixture sites
+        // (`httproute_routes_to_entrada_para`'s `.get("backendRefs")`
+        // navigation + `httproute_rule_keys_pin_overlay_position`'s
+        // `contains_key("backendRefs")` presence pin) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_BACKEND_REFS`] so the Gateway-
+        // API-CRD per-HTTPRoute per-rule backend-destination-container-
+        // axis-key string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so any
+        // local re-introduction of a sibling
+        // `pub const GATEWAY_API_KEY_BACKEND_REFS: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let a
+        // Gateway-API-CRD per-rule backend-destination-axis rebrand on
+        // the caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-rule backend fan-outs at the drifted axis;
+        // no backend is picked at the per-rule L7 dispatch, and every
+        // external `:entrada` request drops at the gateway-class-
+        // controller's per-rule reconcile with no field naming the
+        // backend-destination-drift root cause. Peer to
+        // [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-HTTPRoute-body-axis re-
+        // export set — extends the per-Gateway-API-HTTPRoute-body-axis
+        // re-export identity-pin set (`parentRefs`, `backendRefs`,
+        // future `hostnames`) this crate's `gateway_routes` renderer's
+        // external `:entrada` ingress contract rests on across the
+        // Gateway API HTTPRoute-side per-route body-shape.
+        assert_eq!(
+            GATEWAY_API_KEY_BACKEND_REFS,
+            caixa_core::GATEWAY_API_KEY_BACKEND_REFS
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_BACKEND_REFS.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_BACKEND_REFS.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_BACKEND_REFS must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_BACKEND_REFS, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_network_policies_use_lifted_cilium_kind_network_policy() {
         // Fail-before-pass-after pin parsing every rendered
         // `CiliumNetworkPolicy` document and asserting its top-level
@@ -3412,7 +3509,7 @@ mod tests {
             .and_then(|s| s.get(KUBE_KEY_RULES))
             .and_then(|r| r.as_sequence())
             .and_then(|s| s.first())
-            .and_then(|r| r.get("backendRefs"))
+            .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
             .and_then(|b| b.as_sequence())
             .and_then(|s| s.first())
             .unwrap();
@@ -3907,7 +4004,9 @@ mod tests {
             // matches + backendRefs + timeouts + retry (4 top-level keys).
             assert_eq!(m.len(), 4);
             assert!(m.contains_key(serde_yaml::Value::String("matches".into())));
-            assert!(m.contains_key(serde_yaml::Value::String("backendRefs".into())));
+            assert!(m.contains_key(serde_yaml::Value::String(
+                GATEWAY_API_KEY_BACKEND_REFS.into()
+            )));
             assert!(m.contains_key(serde_yaml::Value::String("timeouts".into())));
             assert!(m.contains_key(serde_yaml::Value::String("retry".into())));
         }
