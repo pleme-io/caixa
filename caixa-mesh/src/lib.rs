@@ -361,6 +361,52 @@ pub use caixa_core::CILIUM_KEY_TO_PORTS;
 /// renderer's eBPF data-plane contract rests on.
 pub use caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR;
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-CNP-body traffic-direction
+/// container-axis key every `cilium_network_policies`-emitted CNP
+/// document mounts its permitted-inbound-per-`(:de, :para)` ingress-rule
+/// list under (`spec.ingress[]`). Re-export of the canonical
+/// [`caixa_core::CILIUM_KEY_INGRESS`] so the Cilium-operator-side per-
+/// CNP inbound-traffic-dispatch container-key string lives in exactly
+/// one place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` `CiliumNetworkPolicy`
+/// emitter (the `policy_spec.insert("ingress", …)` call the prior
+/// inline `"ingress"` literal sat at) and every future per-Cilium-side
+/// renderer the M3.x absorption roadmap acknowledges now consult the
+/// same `&'static str`, so a future Cilium-CRD rebrand on the traffic-
+/// direction axis (unlikely on the CRD's stable `cilium.io/v2` slot,
+/// but the coordination point the prior [`CILIUM_KEY_ENDPOINT_SELECTOR`]
+/// + [`CILIUM_KEY_TO_PORTS`] + [`caixa_core::KUBE_KEY_RULES`] +
+/// [`CILIUM_KIND_NETWORK_POLICY`] + [`CILIUM_API_VERSION`] re-exports
+/// anchor on the sibling per-CNP-body axis surface) lands in one place.
+/// The prior inline literal split across the one production emitter and
+/// eight test-fixture navigation sites (whose downstream navigation
+/// chains — `fromEndpoints`, `toPorts`, `authentication` — ride through
+/// the same axis-key) would have let a Cilium-CRD traffic-direction
+/// axis rebrand or a per-emitter typo (`"Ingress"` / `"ingressRules"` /
+/// `"inbound"`) at any one site silently emit a CNP whose ingress-rule
+/// list the Cilium CRD schema validator drops as unknown; the policy
+/// binds against the destination workload but admits no ingress
+/// traffic, and every intra-mesh `:contratos` flow the affected CNP was
+/// authored to allow drops at the eBPF data plane's default-deny gate
+/// with no field naming the traffic-direction-drift root cause, and on
+/// the test-fixture side the drift silently masks the emission-side
+/// pin (`.get("ingress")` returns `None` under both the drifted emitter
+/// and the drifted probe — every downstream `.and_then(|i|
+/// i.as_sequence())` chain short-circuits vacuously because the outer
+/// traffic-direction-lookup is itself `None`, and every per-CNP
+/// downstream navigation — `fromEndpoints`, `toPorts`, `authentication`
+/// — rides through the same short-circuited outer axis-lookup with no
+/// field naming the drift root cause). Peer to the
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] + [`CILIUM_KEY_TO_PORTS`] re-exports
+/// on the sibling canonical-per-CNP-body-axis surface — completes the
+/// per-CNP L3/L4/L7-triad
+/// `(endpointSelector, ingress → toPorts → rules)` re-export this
+/// crate's `cilium_network_policies` renderer's eBPF data-plane
+/// contract rests on by lifting the traffic-direction axis that
+/// structurally separates the destination-identity axis from the port-
+/// set-container axis nested beneath it.
+pub use caixa_core::CILIUM_KEY_INGRESS;
+
 /// Canonical K8s Gateway API CRD `kind` discriminator every
 /// `gateway_routes`-emitted `Gateway` document declares at its top-level
 /// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
@@ -1033,7 +1079,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             endpoint_selector,
         );
         policy_spec.insert(
-            serde_yaml::Value::String("ingress".into()),
+            serde_yaml::Value::String(CILIUM_KEY_INGRESS.into()),
             serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_rule)]),
         );
         policy.insert(
@@ -2108,6 +2154,73 @@ mod tests {
     }
 
     #[test]
+    fn cilium_key_ingress_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KEY_INGRESS` was lifted from the inline
+        // `"ingress"` literal at the `cilium_network_policies`
+        // per-`(:de, :para)` CNP `policy_spec.insert("ingress", …)`
+        // call site plus eight test-side navigations
+        // (`cilium_http_contracts_emit_l7_rules`,
+        // `cilium_policies_are_identity_based`,
+        // `cnp_from_endpoints_carries_program_plus_aplicacao_labels_two_axis_shape`,
+        // `cilium_multiple_edges_same_pair_fold_into_one_policy`,
+        // `cilium_pubsub_contracts_skip_l7_rules`,
+        // `render_multi_doc_contains_expected_kinds`,
+        // `cnp_authentication_carries_mtls_overlay_at_ingress_rule_level`,
+        // `cnp_l4_fallback_port_routes_through_lifted_default_servico_port`
+        // — the per-CNP navigation each of these tests consults to
+        // reach the ingress-rule list before descending into the
+        // `fromEndpoints` / `toPorts` / `authentication` axes) to a
+        // re-export of [`caixa_core::CILIUM_KEY_INGRESS`] so the
+        // Cilium-CRD per-CNP-body traffic-direction axis-key string
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const CILIUM_KEY_INGRESS:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a Cilium-CRD schema rebrand on the traffic-
+        // direction axis without a coordinated caixa-core edit silently
+        // land per-`(:de, :para)` CiliumNetworkPolicy documents whose
+        // `spec.ingress[]` list the Cilium CRD schema validator drops
+        // as unrecognized at apply time, with the emitted policy
+        // binding against the destination workload but admitting no
+        // ingress traffic and every intra-mesh `:contratos` flow the
+        // affected CNP was authored to allow dropping at the eBPF data
+        // plane's default-deny gate because the per-CNP L4/L7-dispatch
+        // pass never resolves through the axis-drifted traffic-
+        // direction key. Peer to
+        // [`cilium_key_endpoint_selector_re_export_points_at_caixa_core_canonical`]
+        // + [`cilium_key_to_ports_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-CNP-body-axis re-export set — completes
+        // the per-CNP L3/L4/L7-triad
+        // `(endpointSelector, ingress → toPorts → rules)` re-export
+        // this crate's `cilium_network_policies` renderer's eBPF data-
+        // plane contract rests on by lifting the traffic-direction
+        // axis that structurally separates the destination-identity
+        // axis from the port-set-container axis nested beneath it.
+        // Peer to
+        // [`cilium_kind_network_policy_re_export_points_at_caixa_core_canonical`]
+        // + [`cilium_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the outer `(apiVersion, kind)` shell of the same per-CNP
+        // CRD — extends the per-Cilium-CRD re-export set from the outer
+        // shell down through the load-bearing `spec.ingress[]` traffic-
+        // direction axis.
+        assert_eq!(CILIUM_KEY_INGRESS, caixa_core::CILIUM_KEY_INGRESS);
+        assert!(
+            std::ptr::eq(
+                CILIUM_KEY_INGRESS.as_ptr(),
+                caixa_core::CILIUM_KEY_INGRESS.as_ptr(),
+            ),
+            "CILIUM_KEY_INGRESS must be a re-export of \
+             caixa_core::CILIUM_KEY_INGRESS, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KIND_GATEWAY` was lifted from the
         // inline `"Gateway"` literal at the `gateway_routes`
@@ -2681,7 +2794,7 @@ mod tests {
 
         let to_ports = cart_to_catalog[0]
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("ingress"))
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
@@ -2722,7 +2835,7 @@ mod tests {
             // Source endpoint must include both program + aplicacao labels
             let from = p
                 .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get("ingress"))
+                .and_then(|s| s.get(CILIUM_KEY_INGRESS))
                 .and_then(|i| i.as_sequence())
                 .and_then(|s| s.first())
                 .and_then(|i| i.get("fromEndpoints"))
@@ -2837,7 +2950,7 @@ mod tests {
         for p in &policies {
             let from = p
                 .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get("ingress"))
+                .and_then(|s| s.get(CILIUM_KEY_INGRESS))
                 .and_then(|i| i.as_sequence())
                 .and_then(|s| s.first())
                 .and_then(|i| i.get("fromEndpoints"))
@@ -2876,7 +2989,7 @@ mod tests {
             .unwrap();
         let http_rules = cart_to_catalog
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("ingress"))
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
@@ -2916,7 +3029,7 @@ mod tests {
             .unwrap();
         let to_ports = nats_policy
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("ingress"))
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
@@ -3682,7 +3795,7 @@ mod tests {
             })
             .filter_map(|d| {
                 d.get(KUBE_KEY_SPEC)
-                    .and_then(|s| s.get("ingress"))
+                    .and_then(|s| s.get(CILIUM_KEY_INGRESS))
                     .and_then(|i| i.as_sequence())
                     .and_then(|s| s.first())
                     .cloned()
@@ -3897,7 +4010,7 @@ mod tests {
             .expect("pubsub CNP present");
         let rule = nats_policy
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("ingress"))
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
             .expect("ingress[0]");
@@ -3941,7 +4054,7 @@ mod tests {
             .expect("cart→payment CNP present");
         let port_value = cart_to_payment
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("ingress"))
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
             .and_then(|i| i.as_sequence())
             .and_then(|s| s.first())
             .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
