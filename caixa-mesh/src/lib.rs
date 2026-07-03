@@ -501,6 +501,58 @@ pub use caixa_core::CILIUM_KEY_FROM_ENDPOINTS;
 /// contract rests on.
 pub use caixa_core::CILIUM_KEY_PORTS;
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-ingress-rule mutual-auth
+/// policy body-axis key every `cilium_network_policies`-emitted CNP
+/// document mounts its per-rule mTLS enforcement block under
+/// (`spec.ingress[].authentication`). Re-export of the canonical
+/// [`caixa_core::CILIUM_KEY_AUTHENTICATION`] so the Cilium-operator-
+/// side per-ingress-rule mutual-auth-axis-key string lives in exactly
+/// one place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` `CiliumNetworkPolicy`
+/// emitter (the `ingress_rule.insert("authentication", …)` call in
+/// the `:politicas :mtls-required` overlay emit gate the prior inline
+/// `"authentication"` literal sat at) and every future per-Cilium-
+/// side renderer the M3.x absorption roadmap acknowledges now consult
+/// the same `&'static str`, so a future Cilium-CRD rebrand on the
+/// per-ingress-rule mutual-auth axis (unlikely on the CRD's stable
+/// `cilium.io/v2` slot, but the coordination point the prior
+/// [`CILIUM_KEY_PORTS`] + [`CILIUM_KEY_FROM_ENDPOINTS`] +
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] + [`CILIUM_KEY_INGRESS`] +
+/// [`CILIUM_KEY_TO_PORTS`] + [`caixa_core::KUBE_KEY_RULES`] +
+/// [`CILIUM_KIND_NETWORK_POLICY`] + [`CILIUM_API_VERSION`] re-exports
+/// anchor on the sibling per-CNP-body axis surface) lands in one
+/// place. The prior inline literal split across the one production
+/// emitter and nine test-fixture navigation sites (the presence pin
+/// under the `:mtls-required t` overlay, the absence pin under the
+/// `:mtls-required` unset semantic, the explicit-`false`-emits-
+/// disabled-mode pin under the `Some(false)` arm, the fan-out pin
+/// across multiple contratos, the rule-level-not-nested position pin
+/// with two nested-under-`fromEndpoints[]` and nested-under-
+/// `toPorts[]` negative-navigation guards, the pubsub-carry-overlay-
+/// too shape pin, and the yaml-string-scalar `mode`-value pin) would
+/// have let a Cilium-CRD mutual-auth-axis rebrand or a per-emitter
+/// typo (`"auth"` / `"mutualAuth"` / `"mtls"` / `"authPolicy"`) at
+/// any one site silently emit a per-`ingress[]` entry whose mutual-
+/// auth-axis the Cilium CRD schema validator drops as unknown; the
+/// ingress rule falls back to the cluster-default authentication
+/// mode and every intra-mesh `:contratos` flow the CNP was authored
+/// to protect with per-edge SPIFFE-identity-bound mutual-auth
+/// silently bypasses the mTLS handshake at the Cilium data-plane's
+/// default-authentication mode with no field naming the mutual-
+/// auth-axis-drift root cause. On the test-fixture side the drift
+/// silently masks the emission-side pin
+/// (`.get("authentication")` returns `None` under both the drifted
+/// emitter and the drifted probe — every downstream
+/// `.and_then(|a| a.get("mode"))` chain short-circuits vacuously
+/// because the outer mutual-auth-body-lookup is itself `None`). Peer
+/// to the [`CILIUM_KEY_FROM_ENDPOINTS`] + [`CILIUM_KEY_TO_PORTS`]
+/// re-exports on the sibling per-ingress-rule-body-axis surfaces —
+/// completes the per-ingress-rule-body triple
+/// `(fromEndpoints, toPorts, authentication)` this crate's
+/// `cilium_network_policies` renderer's SPIFFE-identity-bound per-
+/// edge mTLS contract rests on.
+pub use caixa_core::CILIUM_KEY_AUTHENTICATION;
+
 /// Canonical K8s Gateway API CRD `kind` discriminator every
 /// `gateway_routes`-emitted `Gateway` document declares at its top-level
 /// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
@@ -1573,7 +1625,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         );
         if let Some(a) = &mtls_overlay {
             ingress_rule.insert(
-                serde_yaml::Value::String("authentication".into()),
+                serde_yaml::Value::String(CILIUM_KEY_AUTHENTICATION.into()),
                 a.clone(),
             );
         }
@@ -3075,6 +3127,67 @@ mod tests {
             ),
             "CILIUM_KEY_PORTS must be a re-export of \
              caixa_core::CILIUM_KEY_PORTS, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_key_authentication_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KEY_AUTHENTICATION` was lifted from
+        // the inline `"authentication"` literal at the
+        // `cilium_network_policies` per-`(:de, :para)` CNP
+        // `ingress_rule.insert("authentication", …)` call site (the
+        // per-ingress-rule mutual-auth emit gate the `:politicas
+        // :mtls-required` overlay lands under) plus nine test-side
+        // navigations: the presence pin under `:mtls-required t`, the
+        // absence pin under `:mtls-required` unset (default),
+        // the explicit-`Some(false)`-emits-`"disabled"`-mode pin, the
+        // per-policy-fan-out pin across multiple `:contratos`, the
+        // rule-level-position pin (with two nested-inside-negative
+        // guards under `fromEndpoints[]` and `toPorts[]`), the pubsub-
+        // contracts-carry-overlay-too shape pin, and the yaml-string-
+        // scalar `mode`-value pin — to a re-export of
+        // [`caixa_core::CILIUM_KEY_AUTHENTICATION`] so the Cilium-CRD
+        // per-ingress-rule mutual-auth-body-axis-key string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const CILIUM_KEY_\
+        // AUTHENTICATION: &str = "…"` (the canonical drift footgun
+        // where a sibling local `pub const` could happen to carry the
+        // same string at the source while pointing at a different
+        // `&'static` allocation) is a build-time test failure naming
+        // the offending drift, not a silent apply-time symptom — the
+        // prior shape would have let a Cilium-CRD schema rebrand on
+        // the per-ingress-rule mutual-auth axis without a coordinated
+        // caixa-core edit silently land per-`(:de, :para)`
+        // CiliumNetworkPolicy documents whose
+        // `spec.ingress[].authentication` block the Cilium CRD schema
+        // validator drops as unrecognized at apply time; the emitted
+        // per-ingress-rule mutual-auth block falls back to the
+        // cluster-default authentication mode and every intra-mesh
+        // `:contratos` flow the CNP was authored to protect with
+        // per-edge SPIFFE-identity-bound mutual-auth silently
+        // bypasses the mTLS handshake at the Cilium data-plane's
+        // default-authentication mode. Peer to
+        // [`cilium_key_from_endpoints_re_export_points_at_caixa_core_canonical`]
+        // + [`cilium_key_to_ports_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-ingress-rule-body-axis re-export set —
+        // completes the per-ingress-rule-body triple
+        // `(fromEndpoints, toPorts, authentication)` this crate's
+        // `cilium_network_policies` renderer's SPIFFE-identity-bound
+        // per-edge mTLS contract rests on.
+        assert_eq!(
+            CILIUM_KEY_AUTHENTICATION,
+            caixa_core::CILIUM_KEY_AUTHENTICATION
+        );
+        assert!(
+            std::ptr::eq(
+                CILIUM_KEY_AUTHENTICATION.as_ptr(),
+                caixa_core::CILIUM_KEY_AUTHENTICATION.as_ptr(),
+            ),
+            "CILIUM_KEY_AUTHENTICATION must be a re-export of \
+             caixa_core::CILIUM_KEY_AUTHENTICATION, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
         );
@@ -5031,7 +5144,7 @@ mod tests {
         );
         for rule in &rules {
             let auth = rule
-                .get("authentication")
+                .get(CILIUM_KEY_AUTHENTICATION)
                 .and_then(|a| a.as_mapping())
                 .expect("rule must carry authentication mapping when :mtls-required is set");
             assert_eq!(
@@ -5062,7 +5175,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             assert!(
-                rule.get("authentication").is_none(),
+                rule.get(CILIUM_KEY_AUTHENTICATION).is_none(),
                 "rule must omit `authentication:` when :mtls-required is None"
             );
         }
@@ -5091,7 +5204,7 @@ mod tests {
         assert!(!rules.is_empty());
         for rule in &rules {
             let auth = rule
-                .get("authentication")
+                .get(CILIUM_KEY_AUTHENTICATION)
                 .and_then(|a| a.as_mapping())
                 .expect("rule must carry authentication mapping for explicit :mtls-required nil");
             assert_eq!(
@@ -5127,7 +5240,7 @@ mod tests {
         assert_eq!(rules.len(), 3);
         for rule in &rules {
             assert_eq!(
-                rule.get("authentication")
+                rule.get(CILIUM_KEY_AUTHENTICATION)
                     .and_then(|a| a.get("mode"))
                     .and_then(|v| v.as_str()),
                 Some("required"),
@@ -5155,7 +5268,7 @@ mod tests {
             assert_eq!(m.len(), 3);
             assert!(m.contains_key(serde_yaml::Value::String(CILIUM_KEY_FROM_ENDPOINTS.into())));
             assert!(m.contains_key(serde_yaml::Value::String(CILIUM_KEY_TO_PORTS.into())));
-            assert!(m.contains_key(serde_yaml::Value::String("authentication".into())));
+            assert!(m.contains_key(serde_yaml::Value::String(CILIUM_KEY_AUTHENTICATION.into())));
             // The auth block must not leak inside fromEndpoints[] or
             // toPorts[] — guards the Cilium-side schema contract that
             // mutual-auth is an ingress-rule-level concern.
@@ -5165,7 +5278,7 @@ mod tests {
                 .expect("fromEndpoints sequence");
             for fe in from {
                 assert!(
-                    fe.get("authentication").is_none(),
+                    fe.get(CILIUM_KEY_AUTHENTICATION).is_none(),
                     "authentication must not nest inside fromEndpoints[]"
                 );
             }
@@ -5175,7 +5288,7 @@ mod tests {
                 .expect("toPorts sequence");
             for tp in to {
                 assert!(
-                    tp.get("authentication").is_none(),
+                    tp.get(CILIUM_KEY_AUTHENTICATION).is_none(),
                     "authentication must not nest inside toPorts[]"
                 );
             }
@@ -5219,7 +5332,7 @@ mod tests {
             .and_then(|s| s.first())
             .expect("ingress[0]");
         assert_eq!(
-            rule.get("authentication")
+            rule.get(CILIUM_KEY_AUTHENTICATION)
                 .and_then(|a| a.get("mode"))
                 .and_then(|v| v.as_str()),
             Some("required")
@@ -5294,7 +5407,7 @@ mod tests {
         let rules = cnp_ingress_rules(&policies);
         for rule in &rules {
             let mode = rule
-                .get("authentication")
+                .get(CILIUM_KEY_AUTHENTICATION)
                 .and_then(|a| a.get("mode"))
                 .expect("authentication.mode present");
             assert!(

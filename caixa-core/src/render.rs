@@ -7354,6 +7354,98 @@ pub const CILIUM_KEY_FROM_ENDPOINTS: &str = "fromEndpoints";
 /// [cm]: ../../caixa_mesh/index.html
 pub const CILIUM_KEY_PORTS: &str = "ports";
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-ingress-rule mutual-auth
+/// policy body-axis key every `cilium_network_policies`-emitted CNP
+/// document mounts its per-rule mTLS enforcement block under
+/// (`spec.ingress[].authentication`). Sibling to
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) +
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) at the per-ingress-rule body
+/// level — the Cilium CNP schema places the per-rule mutual-auth mode
+/// (`{mode: required | disabled}`) at the ingress-rule axis alongside
+/// the identity-source (`fromEndpoints`) and port-set (`toPorts`)
+/// axes, so drift on the authentication axis is exactly as
+/// load-bearing as drift on the sibling per-ingress-rule-body axes it
+/// pairs with (the Cilium-operator-side CRD schema validator drops
+/// any per-`ingress[]` entry whose mutual-auth axis carries an
+/// unrecognized key — a `"auth"` / `"mutualAuth"` / `"mtls"` typo
+/// silently emits a CNP whose per-`(:de, :para)` per-rule mTLS block
+/// the Cilium operator's per-CNP mutual-auth SPIFFE-handshake
+/// pipeline no-ops entirely: the ingress rule falls back to the
+/// cluster-default authentication mode (typically `"disabled"` — no
+/// mutual-auth enforcement), and every intra-mesh `:contratos` flow
+/// the CNP was authored to protect with per-edge mTLS silently
+/// bypasses the SPIFFE-identity-bound mutual-auth handshake with no
+/// field naming the mutual-auth-axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Cilium-side
+/// mesh bundle's per-ingress-rule mutual-auth-axis naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-`ingress[]`
+///     entry `authentication` axis (caixa-mesh/src/lib.rs — the
+///     `cilium_network_policies` per-`(:de, :para)` policy's
+///     `ingress_rule.insert("authentication", …)` call in the
+///     `:politicas :mtls-required` overlay emit gate).
+///
+/// The mutual-auth axis names the same Cilium-operator-side per-rule
+/// SPIFFE-identity-handshake enforcement policy as the sibling per-
+/// ingress-rule identity-source (`fromEndpoints`) and port-set
+/// (`toPorts`) axes it pairs with, and must move together on any
+/// future Cilium CRD schema rebrand (an upstream `cilium.io/v3`
+/// rename of the mutual-auth axis from `authentication` to
+/// `mutualAuth` / `mtls` / `authPolicy`, coordinated with the Cilium
+/// project's periodic CRD schema-migration passes). Until this lift
+/// landed the axis carried an inline `authentication` literal at the
+/// one production-code emitter site (the `cilium_network_policies`
+/// per-rule `ingress_rule.insert("authentication", …)` call in the
+/// `:mtls-required` overlay emit gate) plus a matching set inside
+/// the in-file `cnp_authentication_renders_every_policy_independently`
+/// / `cnp_authentication_position_is_rule_level_not_nested` /
+/// `cnp_authentication_pubsub_contracts_carry_overlay_too` /
+/// `cnp_authentication_mode_is_a_yaml_string_scalar` /
+/// `cnp_omits_authentication_when_mtls_required_unset` /
+/// `cnp_explicit_mtls_required_false_emits_disabled_mode` /
+/// `cnp_authentication_overlay_when_mtls_required_set` (name approximate)
+/// test-fixture navigations — ten occurrences of the same
+/// load-bearing Cilium-CRD-mutual-auth-axis-key convention, drift-
+/// prone by construction. A drift on any one production or test-
+/// fixture site to `"auth"` / `"mutualAuth"` / `"mtls"` would surface
+/// as a Cilium-operator-side schema-validator drop at apply time
+/// (the affected per-`ingress[]` entry's mutual-auth-axis key the
+/// CRD schema validator recognizes as unknown), with every intra-
+/// mesh `:contratos` flow the CNP was authored to protect with per-
+/// edge SPIFFE-identity-bound mutual-auth silently bypassing the
+/// mTLS handshake at the Cilium data-plane's default-authentication
+/// mode with no field naming the mutual-auth-axis-drift root cause.
+/// A drift on the test-fixture side silently masks the emission-
+/// side pin (`.get("authentication")` returns `None` under both the
+/// drifted-key emitter and the drifted-key probe — every downstream
+/// `.and_then(|a| a.get("mode"))` chain short-circuits vacuously
+/// because the outer mutual-auth-body-lookup is itself `None`).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`CILIUM_KIND_NETWORK_POLICY`] (eac85cb) /
+/// [`CILIUM_API_VERSION`] (279d611) lifts established on the
+/// sibling canonical-Cilium-CNP-body-axis surfaces — nests the
+/// per-ingress-rule mutual-auth axis structurally beside the sibling
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] identity-source and
+/// [`CILIUM_KEY_TO_PORTS`] port-set-container axes at the per-rule
+/// body triple `(fromEndpoints, toPorts, authentication)` the M3
+/// Aplicacao mesh renderer's SPIFFE-identity-bound per-edge mTLS
+/// contract rests on.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_KEY_AUTHENTICATION: &str = "authentication";
+
 /// Canonical K8s Gateway API CRD `kind` discriminator the rendered
 /// `Gateway` document declares at its top-level [`KUBE_KEY_KIND`] axis.
 /// Pairs with the sibling [`GATEWAY_API_API_VERSION`] (3c6cfc3) — the
@@ -10121,6 +10213,83 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "CILIUM_KEY_PORTS {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn cilium_key_authentication_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Cilium CNP `spec.ingress[].authentication`
+        // per-ingress-rule mutual-auth-policy body-axis key the
+        // rendered CNP document mounts its per-rule mTLS enforcement
+        // block under. The string is part of the cluster-side
+        // contract with the upstream Cilium operator — the Cilium-
+        // operator-side per-CNP mutual-auth SPIFFE-handshake pipeline
+        // keys off this axis to source the per-rule mTLS enforcement
+        // mode (`required` vs `disabled`); a drifted value (`"auth"`
+        // / `"mutualAuth"` / `"mtls"` / `"authPolicy"`) at either
+        // the production emitter or a downstream renderer's per-
+        // ingress-rule mutual-auth upsert silently emits a per-
+        // `ingress[]` entry whose mutual-auth-axis the Cilium CRD
+        // schema validator drops as unknown, and the ingress rule
+        // falls back to the cluster-default authentication mode
+        // (typically `"disabled"` — no mutual-auth enforcement)
+        // silently bypassing the SPIFFE-identity-bound mTLS handshake
+        // every intra-mesh `:contratos` flow the CNP was authored to
+        // protect. Changing this value is a coordinated Cilium-CRD
+        // promotion alongside the upstream Cilium project's CRD
+        // schema-migration cycle, not an incidental edit. Peer to
+        // `cilium_key_from_endpoints_pins_canonical_value` /
+        // `cilium_key_to_ports_pins_canonical_value` (the sibling
+        // per-ingress-rule-body-axis pins the mutual-auth axis pairs
+        // with at the per-rule triple
+        // `(fromEndpoints, toPorts, authentication)`) on the sibling
+        // per-CNP-dispatch-axis pin set — completes the per-CNP per-
+        // ingress-rule-body triple the M3 Aplicacao mesh renderer's
+        // SPIFFE-identity-bound per-edge mTLS contract rests on.
+        assert_eq!(CILIUM_KEY_AUTHENTICATION, "authentication");
+    }
+
+    #[test]
+    fn cilium_key_authentication_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `cilium_key_endpoint_selector_carries_lower_camel_\
+        // case_shape` / `cilium_key_ingress_carries_lower_camel_case_\
+        // shape` / `cilium_key_to_ports_carries_lower_camel_case_shape`
+        // / `cilium_key_from_endpoints_carries_lower_camel_case_shape`
+        // / `cilium_key_ports_carries_lower_camel_case_shape` on the
+        // sibling per-CNP-body-axis grammar-pin set — the
+        // lowerCamelCase K8s field-name grammar governs every nested
+        // schema-field axis (including this per-`ingress[]`-entry
+        // mutual-auth-policy body-axis key), same convention.
+        let v = CILIUM_KEY_AUTHENTICATION;
+        assert!(
+            !v.is_empty(),
+            "CILIUM_KEY_AUTHENTICATION {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "CILIUM_KEY_AUTHENTICATION {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "CILIUM_KEY_AUTHENTICATION {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
