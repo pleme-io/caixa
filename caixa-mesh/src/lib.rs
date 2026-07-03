@@ -694,6 +694,51 @@ pub use caixa_core::GATEWAY_API_KEY_BACKEND_REFS;
 /// contract rests on across the Gateway API CRD-side body-shape.
 pub use caixa_core::GATEWAY_API_KEY_LISTENERS;
 
+/// Canonical K8s Gateway API `Gateway` per-listener DNS-host-discriminator
+/// axis key every `gateway_routes`-emitted `Gateway` document mounts each
+/// listener's virtual-host filter under (`spec.listeners[].hostname`). Re-
+/// export of the canonical [`caixa_core::GATEWAY_API_KEY_HOSTNAME`] so the
+/// Gateway-API-implementation-side per-listener DNS-host-discriminator-
+/// axis-key string lives in exactly one place across every caixa renderer
+/// — caixa-mesh's `gateway_routes` per-Aplicacao `Gateway` emitter (the
+/// per-listener `listener.insert("hostname", …)` call the prior inline
+/// `"hostname"` literal sat at, seeded from the Aplicacao's `:entrada
+/// :host` slot) and every future per-Gateway-API-side renderer the M3.x
+/// absorption roadmap acknowledges now consult the same `&'static str`,
+/// so a future Gateway API rebrand on the per-listener DNS-host
+/// discriminator axis (an upstream Gateway API v2 rename to `host` /
+/// `vhost` / `serverName`, coordinated with the upstream SIG-Network
+/// Gateway API deprecation cycle) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_HOSTNAME`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer +
+/// every future per-target renderer the substrate adds. The prior inline
+/// literal at the one production emitter site + one test-side fixture
+/// pin (`gateway_listener_carries_aplicacao_host`'s `.get("hostname")`
+/// navigation) would have let a Gateway-API-CRD per-listener DNS-host-
+/// discriminator-axis rebrand or a per-emitter typo (`"host"` /
+/// `"vhost"` / `"serverName"`) silently emit a `Gateway` whose per-
+/// listener virtual-host filter axis the Gateway API CRD schema
+/// validator drops as unknown — the listener accepts traffic on the
+/// wildcard host rather than the typed `:entrada :host` the Aplicacao
+/// author declared, and every external `:entrada` flow the listener was
+/// authored to accept lands on the wrong virtual-host filter with no
+/// field naming the DNS-host-discriminator-drift root cause. A drift on
+/// the test-fixture side silently masks the emission-side pin
+/// (`.get("hostname")` returns `None` under both the drifted-key emitter
+/// and the drifted-key probe — the downstream `.and_then(|h| h.as_str())`
+/// chain short-circuits vacuously because the outer per-listener DNS-
+/// host discriminator lookup is itself `None`). Peer to the
+/// [`GATEWAY_API_KEY_LISTENERS`] +
+/// [`GATEWAY_API_KEY_PARENT_REFS`] +
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] re-exports on the sibling
+/// canonical-Gateway-API-CRD-body-axis surface — nests the per-Gateway-
+/// API-CRD-body-axis canonical-string re-export set one level deeper
+/// onto the per-listener body-axis surface (`parentRefs`, `backendRefs`,
+/// `listeners`, `hostname`, future `hostnames`) this crate's
+/// `gateway_routes` renderer's external `:entrada` ingress contract
+/// rests on across the Gateway API CRD-side body-shape.
+pub use caixa_core::GATEWAY_API_KEY_HOSTNAME;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-mesh's
@@ -1369,7 +1414,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::String("HTTP".into()),
     );
     listener.insert(
-        serde_yaml::Value::String("hostname".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_HOSTNAME.into()),
         serde_yaml::Value::String(entrada.host.clone()),
     );
     let mut g_spec = serde_yaml::Mapping::new();
@@ -2825,6 +2870,64 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_hostname_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_HOSTNAME` was lifted from the
+        // inline `"hostname"` literal at the `gateway_routes` per-
+        // Aplicacao Gateway's per-listener
+        // `listener.insert("hostname", …)` call site (the sole per-
+        // production-code per-listener DNS-host-discriminator-axis
+        // emitter) plus the matching test-side fixture site
+        // (`gateway_listener_carries_aplicacao_host`'s `.get("hostname")`
+        // navigation) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_HOSTNAME`] so the Gateway-API-
+        // CRD per-listener DNS-host-discriminator-axis-key string lives
+        // in exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local re-
+        // introduction of a sibling
+        // `pub const GATEWAY_API_KEY_HOSTNAME: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a build-
+        // time test failure naming the offending drift, not a silent
+        // apply-time symptom — the prior shape would have let a
+        // Gateway-API-CRD per-listener DNS-host-discriminator-axis
+        // rebrand on the caixa-mesh side without a coordinated caixa-
+        // core edit silently land per-listener virtual-host filters at
+        // the drifted axis; the listener accepts traffic on the
+        // wildcard host rather than the typed `:entrada :host`, and
+        // every external `:entrada` flow drops at the gateway-class-
+        // controller's per-listener dispatch with no field naming the
+        // DNS-host-discriminator-drift root cause. Peer to
+        // [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-CRD-body-axis re-
+        // export identity-pin set — nests the per-Gateway-API-CRD-
+        // body-axis re-export identity-pin set (`parentRefs`,
+        // `backendRefs`, `listeners`, `hostname`, future `hostnames`)
+        // one level deeper onto the per-listener body-axis surface this
+        // crate's `gateway_routes` renderer's external `:entrada`
+        // ingress contract rests on across the Gateway API CRD-side
+        // body-shape.
+        assert_eq!(
+            GATEWAY_API_KEY_HOSTNAME,
+            caixa_core::GATEWAY_API_KEY_HOSTNAME
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_HOSTNAME.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_HOSTNAME.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_HOSTNAME must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_HOSTNAME, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_network_policies_use_lifted_cilium_kind_network_policy() {
         // Fail-before-pass-after pin parsing every rendered
         // `CiliumNetworkPolicy` document and asserting its top-level
@@ -3581,7 +3684,9 @@ mod tests {
             .and_then(|s| s.first())
             .unwrap();
         assert_eq!(
-            listener.get("hostname").and_then(|h| h.as_str()),
+            listener
+                .get(GATEWAY_API_KEY_HOSTNAME)
+                .and_then(|h| h.as_str()),
             Some("checkout.quero.cloud")
         );
         assert_eq!(
