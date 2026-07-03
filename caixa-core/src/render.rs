@@ -8972,6 +8972,114 @@ pub const DEFAULT_GATEWAY_CLASS_NAME: &str = "cilium";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_GATEWAY_CLASS_NAME: &str = "gatewayClassName";
 
+/// Canonical K8s Gateway API `HTTPRoute` per-`HTTPRouteMatch` path-matcher
+/// container-axis key every `gateway_routes`-emitted `HTTPRoute` per-rule
+/// `matches[]` entry mounts its per-match `{type, value}` path-selection
+/// predicate under (`spec.rules[].matches[].path`). Nests one level
+/// beneath the sibling [`GATEWAY_API_KEY_MATCHES`] (b9ede1a) per-rule
+/// route-match container-axis it hangs off of — the Gateway API v1 CRD
+/// schema pins per-`HTTPRouteMatch` request-path selection through the
+/// `spec.rules[].matches[].path` container axis (each match entry names
+/// one path-selection predicate the request line's `:path` pseudo-header
+/// must satisfy under a `type` discriminator of
+/// `Exact | PathPrefix | RegularExpression`) alongside the sibling per-
+/// `HTTPRouteMatch` `headers[]` / `queryParams[]` / `method` axes it
+/// nests under, so drift on the per-match path-matcher container axis
+/// is exactly as load-bearing as drift on the per-rule route-match
+/// axis it nests inside of (the K8s apiserver-side Gateway API CRD
+/// schema validator drops any per-match block whose path-matcher
+/// container axis carries an unrecognized key — a `"pathMatch"` /
+/// `"prefix"` / `"url"` typo silently emits an `HTTPRoute` whose per-
+/// match path-selection axis the Gateway API implementation's per-rule
+/// L7 dispatch loop no-ops entirely: no path predicate is evaluated,
+/// the match degrades to the wildcard predicate at the gateway-class-
+/// controller's per-rule reconcile, the rule matches every request
+/// path unconditionally, and every external `:entrada` path filter the
+/// rule was authored to enforce drops with no field naming the path-
+/// matcher-axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-`HTTPRouteMatch` path-matcher-container-axis-
+/// naming reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-match
+///     `spec.rules[].matches[].path` axis (caixa-mesh/src/lib.rs — the
+///     `gateway_routes` per-Aplicacao `HTTPRoute`'s per-match
+///     `match_entry.insert("path", …)` call seeded from the Aplicacao's
+///     `:entrada :paths` slot).
+///
+/// The per-`HTTPRouteMatch` path-matcher container axis names the same
+/// Gateway-API-implementation-side per-match request-path-selection
+/// predicate container as the sibling
+/// [`GATEWAY_API_KEY_MATCHES`] per-rule route-match container axis it
+/// nests inside of, and must move together on any future Gateway API
+/// rebrand (an upstream SIG-Network Gateway API v2 rename of the path-
+/// matcher axis from `path` to `pathMatch` / `prefix` / `url`,
+/// coordinated with the Gateway API deprecation cycle). Until this lift
+/// landed the axis carried an inline `path` literal at the one
+/// production-code occurrence in caixa-mesh/src/lib.rs (the
+/// `gateway_routes` per-match `match_entry.insert("path", …)` call) —
+/// one occurrence of the same load-bearing Gateway-API-CRD-
+/// `path`-axis-key convention, drift-prone by construction. A drift on
+/// the production site to `"pathMatch"` / `"prefix"` / `"url"` would
+/// have surfaced as a Gateway API implementation-side schema validator
+/// drop at apply time (the affected per-match path-matcher axis the
+/// CRD schema validator recognizes as unknown), with the per-match
+/// path predicate degrading to the wildcard match at the gateway-
+/// class-controller's per-rule reconcile with no field naming the
+/// path-matcher-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_MATCHES`] (b9ede1a) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] (1bc727d) lifts established on
+/// the sibling canonical-Gateway-API-HTTPRoute-body-axis / per-Gateway-
+/// body-axis surfaces — nests the per-Gateway-API-HTTPRoute-per-rule-
+/// body-axis canonical-string-pin set (`matches`, `backendRefs`,
+/// `timeouts`, `retry`) one level deeper onto the per-`HTTPRouteMatch`
+/// body-axis surface, so the container-axis key beneath the sibling
+/// `matches[]` axis now threads a lifted `&'static str` alongside its
+/// parent-container-axis key. The render-side consumer now threads the
+/// same `&'static str` through its `match_entry.insert(…)` call so a
+/// future Gateway API rebrand on the per-`HTTPRouteMatch` path-matcher
+/// axis (or an upstream SIG-Network Gateway API v2 rename to a per-
+/// `HTTPRouteMatch` sibling name) lands in one place; every future
+/// renderer that reaches for the canonical per-`HTTPRouteMatch` path-
+/// matcher axis (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HTTPRoute` fan-out, a future per-edge
+/// `GRPCRoute` renderer whose per-match request-method / service /
+/// method predicate nests alongside the path predicate, a future
+/// per-match header-match / query-match renderer whose per-predicate
+/// list binds against sibling axes of this one under the same match
+/// entry) inherits the same value by construction with no opportunity
+/// for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_MATCHES`] (b9ede1a) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] (1bc727d) lifts apply on the
+/// peer canonical-Gateway-API-HTTPRoute-per-`HTTPRouteMatch`-body-axis
+/// surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_PATH: &str = "path";
+
 /// Canonical Helm 3 `Chart.yaml` `apiVersion` every `caixa-helm`-rendered
 /// `lareira-<nome>` chart declares at its top-level `apiVersion` axis. The
 /// Helm 3 chart-schema resolution contract keys off this exact `"v2"` value:
@@ -11422,6 +11530,83 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "GATEWAY_API_KEY_GATEWAY_CLASS_NAME {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_key_path_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API `HTTPRoute` per-`HTTPRouteMatch`
+        // path-matcher container-axis key the rendered HTTPRoute
+        // document mounts its per-match `{type, value}` path-selection
+        // predicate under. The string is part of the cluster-side
+        // contract with every Gateway-API-conformant gateway
+        // implementation (Cilium, Istio, Envoy Gateway, NGINX) — the
+        // Gateway-API-implementation-side per-rule L7 dispatch loop
+        // keys off this axis to source the per-match request-path-
+        // selection predicate the incoming request line's `:path`
+        // pseudo-header must satisfy under a `type` discriminator of
+        // `Exact | PathPrefix | RegularExpression`; a drifted value
+        // (`"pathMatch"` / `"prefix"` / `"url"`) at the production
+        // emitter silently emits an `HTTPRoute` whose per-match path-
+        // selection axis the Gateway API CRD schema validator drops
+        // as unknown — the per-match path predicate degrades to the
+        // wildcard match at the gateway-class-controller's per-rule
+        // reconcile, the rule matches every request path
+        // unconditionally, and every external `:entrada` path filter
+        // the rule was authored to enforce drops with no field
+        // naming the path-matcher-drift root cause. Changing this
+        // value is a coordinated Gateway API promotion alongside the
+        // upstream SIG-Network Gateway API deprecation cycle, not an
+        // incidental edit. Peer to
+        // `gateway_api_key_matches_pins_canonical_value` /
+        // `gateway_api_key_backend_refs_pins_canonical_value` on the
+        // sibling per-HTTPRoute-body-axis canonical-string-pin
+        // surface — nests the per-Gateway-API-HTTPRoute-per-rule-
+        // body-axis pin set (`matches`, `backendRefs`, `timeouts`,
+        // `retry`) one level deeper onto the per-`HTTPRouteMatch`
+        // body-axis surface the M3 Aplicacao mesh renderer's external
+        // `:entrada` ingress contract rests on.
+        assert_eq!(GATEWAY_API_KEY_PATH, "path");
+    }
+
+    #[test]
+    fn gateway_api_key_path_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `gateway_api_key_matches_carries_lower_camel_case_shape`
+        // / `gateway_api_key_backend_refs_carries_lower_camel_case_shape`
+        // on the sibling per-HTTPRoute-body-axis grammar-pin surface —
+        // the lowerCamelCase K8s field-name grammar governs every
+        // nested schema-field axis (including this per-`HTTPRouteMatch`
+        // path-matcher-container-axis key), same convention.
+        let v = GATEWAY_API_KEY_PATH;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_KEY_PATH {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "GATEWAY_API_KEY_PATH {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_KEY_PATH {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
