@@ -1160,6 +1160,72 @@ pub use caixa_core::KUBE_KEY_MATCH_LABELS;
 /// `spec.rules[].matches[]` + `spec.rules[].backendRefs[]`).
 pub use caixa_core::KUBE_KEY_RULES;
 
+/// Canonical K8s CR L4-port scalar-axis key. Re-export of the
+/// canonical [`caixa_core::KUBE_KEY_PORT`] so the per-CR L4-port
+/// scalar field name lives in exactly one place across every caixa
+/// renderer — this crate's three production-code emission sites
+/// (`cilium_network_policies`'s per-`toPorts[].ports[]` port-tuple
+/// `port:` scalar the Cilium data plane's per-tuple bpf policy
+/// dispatch loop compares against the observed TCP/UDP L4 header
+/// port value, `gateway_routes`'s per-`Gateway` per-listener
+/// `spec.listeners[].port` scalar the gateway-class-controller's
+/// per-listener bind loop opens the listener socket on,
+/// `gateway_routes`'s per-`HTTPRoute` per-rule
+/// `spec.rules[].backendRefs[].port` scalar the gateway-class-
+/// controller's per-rule backend-dispatch loop forwards the matched
+/// request to on the resolved Service / ExternalName backend) and
+/// this crate's two test-side L4-port traversal sites (the
+/// `cilium_l4_ports_default_to_servico_port` `.get("port")` under
+/// `toPorts[].ports[]` L7-fallback-port-content pin threading through
+/// [`DEFAULT_SERVICO_PORT`], the `gateway_emits_gateway_plus_httproute_pair`
+/// `.get("port")` under `backendRefs[]` HTTPRoute-backend-port-content
+/// pin) now consult the same `&'static str` as the peer caixa-core-side
+/// const definition.
+///
+/// The prior inline `"port"` literals at the three production
+/// emitter sites + two test-side retrieval sites in this crate would
+/// have let a typo on any one site (e.g. `"Port"`, `"portNumber"`,
+/// `"portValue"`, the canonical K8s port-value axis vs the K8s
+/// Service `targetPort` L4-forwarding-destination axis cross-context
+/// transposition where a maintainer replaces the port-value axis's
+/// key with the forwarding-destination axis's spelling mid-edit)
+/// silently miss the per-CR L4-port retrieval or emit a malformed CR
+/// whose port field the apiserver-side CRD schema validator drops as
+/// unrecognized at apply time — the Cilium operator's per-CNP L4
+/// per-tuple bpf policy dispatch loop would silently accept every
+/// L4 packet on the drifted `toPorts[].ports[]` entry regardless of
+/// port match (bpf policy no-op on unrecognized port field), the
+/// gateway-class-controller's per-listener bind loop would silently
+/// fall back to a null listener socket (no bind, no L7 traffic
+/// admitted), and the gateway-class-controller's per-rule backend-
+/// dispatch loop would silently fall back to the K8s Service's
+/// default target port (which may bind a different Servico's L4
+/// port, silently routing traffic to the wrong backend) with no
+/// field naming the L4-port-key-drift root cause. The lift routes
+/// every K8s-CR-L4-port-scalar-axis retrieval + emission through the
+/// same `&'static str` so drift between any two sites becomes a
+/// single-edit fix at the caixa-core const definition.
+///
+/// Same shape as the [`KUBE_KEY_RULES`] re-export on the sibling
+/// nested-rule-list-container axis — extends the per-K8s-CR top-
+/// level `(apiVersion, kind, metadata, spec)` axis re-export quartet
+/// + the load-bearing nested `metadata.{name, namespace, labels}`
+/// triplet + the load-bearing nested `LabelSelector.matchLabels`
+/// selector-projection axis + the load-bearing nested `spec.rules[]`
+/// / `toPorts[].rules` rule-list-container axis onto the load-
+/// bearing nested L4-port-scalar axis every downstream bpf-policy-
+/// dispatch / gateway-listener-bind / gateway-backend-dispatch
+/// consumer of the rendered mesh bundle keys off. Peer to the
+/// sibling load-bearing K8s-CR-schema-axis re-exports every
+/// downstream apiserver-side CRD-schema-validator navigates the same
+/// L4-port scalar axis on (the Cilium operator's per-CNP L4 dispatch
+/// pass under `spec.ingress[].toPorts[].ports[].port`, the gateway-
+/// class-controller's per-Gateway per-listener bind pass under
+/// `spec.listeners[].port`, the gateway-class-controller's per-
+/// HTTPRoute per-rule backend-dispatch pass under
+/// `spec.rules[].backendRefs[].port`).
+pub use caixa_core::KUBE_KEY_PORT;
+
 // ── Cilium NetworkPolicy emission ──────────────────────────────────────
 
 /// Render one [`CiliumNetworkPolicy`-shaped][cnp] YAML per distinct
@@ -1341,7 +1407,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 .map(|e| e.port)
                 .unwrap_or(DEFAULT_SERVICO_PORT);
             port_entry.insert(
-                serde_yaml::Value::String("port".into()),
+                serde_yaml::Value::String(KUBE_KEY_PORT.into()),
                 serde_yaml::Value::String(port.to_string()),
             );
             port_entry.insert(
@@ -1455,7 +1521,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::String("http".into()),
     );
     listener.insert(
-        serde_yaml::Value::String("port".into()),
+        serde_yaml::Value::String(KUBE_KEY_PORT.into()),
         serde_yaml::Value::Number(80.into()),
     );
     listener.insert(
@@ -1583,7 +1649,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::String(entrada.para.clone()),
         );
         backend_ref.insert(
-            serde_yaml::Value::String("port".into()),
+            serde_yaml::Value::String(KUBE_KEY_PORT.into()),
             serde_yaml::Value::Number(entrada.port.into()),
         );
         let mut rule = serde_yaml::Mapping::new();
@@ -2296,6 +2362,76 @@ mod tests {
         assert!(
             std::ptr::eq(KUBE_KEY_RULES.as_ptr(), caixa_core::KUBE_KEY_RULES.as_ptr(),),
             "KUBE_KEY_RULES must be a re-export of caixa_core::KUBE_KEY_RULES, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_key_port_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_PORT` was lifted from five inline
+        // `"port"` literals — three production emitter sites
+        // (`cilium_network_policies`'s per-`toPorts[].ports[]` port-tuple
+        // `port:` scalar the Cilium data plane's per-tuple bpf policy
+        // dispatch loop compares against the observed TCP/UDP L4 header
+        // port value, `gateway_routes`'s per-`Gateway` per-listener
+        // `spec.listeners[].port` scalar the gateway-class-controller's
+        // per-listener bind loop opens the listener socket on,
+        // `gateway_routes`'s per-`HTTPRoute` per-rule
+        // `spec.rules[].backendRefs[].port` scalar the gateway-class-
+        // controller's per-rule backend-dispatch loop forwards the
+        // matched request to on the resolved Service / ExternalName
+        // backend) and two test-side L4-port traversal sites (the
+        // `gateway_emits_gateway_plus_httproute_pair` `.get("port")`
+        // under `backendRefs[]` HTTPRoute-backend-port-content pin, the
+        // `cilium_l4_ports_default_to_servico_port` `.get("port")` under
+        // `toPorts[].ports[]` L7-fallback-port-content pin threading
+        // through [`DEFAULT_SERVICO_PORT`]) — to a re-export of
+        // [`caixa_core::KUBE_KEY_PORT`] so the canonical
+        // K8s-CR-`port`-L4-scalar-axis string lives in exactly one place
+        // across every caixa renderer. Pin the equality + static-data
+        // identity here so any local re-introduction of a sibling `pub
+        // const KUBE_KEY_PORT: &str = "…"` (the canonical drift footgun
+        // where a sibling local `pub const` could happen to carry the
+        // same string at the source while pointing at a different
+        // `&'static` allocation) is a build-time test failure naming
+        // the offending drift, not a silent apply-time symptom — the
+        // prior shape would have let a typo on any one sibling `pub
+        // const` declaration silently miss the per-CR L4-port
+        // retrieval (the L7-fallback-port-content pin's
+        // `.expect("toPorts[0].ports[0].port present")` panic-message
+        // tag would fire against the sequence-shape message rather than
+        // the true L4-port-key drift, the HTTPRoute-backend-port-content
+        // pin's `assert_eq!(…, Some(8080))` would silently mask the
+        // drift under the `None` unwrap-default), or silently emit a
+        // malformed CR whose port field the apiserver-side CRD schema
+        // validator drops as unrecognized at apply time. Bridge-arm
+        // peer to
+        // [`kube_key_rules_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_match_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_metadata_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_kind_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_api_version_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_namespace_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_labels_re_export_points_at_caixa_core_canonical`]
+        // + [`kube_key_name_re_export_points_at_caixa_core_canonical`]
+        // — extends the K8s-CR top-level `(apiVersion, kind, metadata,
+        // spec)` axis re-export quartet + the load-bearing nested
+        // `metadata.{name, namespace, labels}` triplet + the load-
+        // bearing nested `LabelSelector.matchLabels` selector-projection
+        // axis + the load-bearing nested `spec.rules[]` /
+        // `toPorts[].rules` rule-list-container axis under a single
+        // canonical `caixa-core::KUBE_KEY_*` re-export shape in this
+        // crate onto the load-bearing nested L4-port-scalar axis every
+        // rendered `CiliumNetworkPolicy` per-`toPorts[].ports[]` port-
+        // tuple + every rendered `Gateway` per-listener + every
+        // rendered `HTTPRoute` per-`backendRefs[]` per-rule per-backend
+        // carries.
+        assert_eq!(KUBE_KEY_PORT, caixa_core::KUBE_KEY_PORT);
+        assert!(
+            std::ptr::eq(KUBE_KEY_PORT.as_ptr(), caixa_core::KUBE_KEY_PORT.as_ptr(),),
+            "KUBE_KEY_PORT must be a re-export of caixa_core::KUBE_KEY_PORT, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
@@ -3822,7 +3958,10 @@ mod tests {
             .and_then(|s| s.first())
             .unwrap();
         assert_eq!(backend.get("name").and_then(|n| n.as_str()), Some("cart"));
-        assert_eq!(backend.get("port").and_then(|p| p.as_u64()), Some(8080));
+        assert_eq!(
+            backend.get(KUBE_KEY_PORT).and_then(|p| p.as_u64()),
+            Some(8080)
+        );
     }
 
     #[test]
@@ -4846,7 +4985,7 @@ mod tests {
             .and_then(|tp| tp.get(CILIUM_KEY_PORTS))
             .and_then(|p| p.as_sequence())
             .and_then(|s| s.first())
-            .and_then(|p| p.get("port"))
+            .and_then(|p| p.get(KUBE_KEY_PORT))
             .and_then(|v| v.as_str())
             .expect("toPorts[0].ports[0].port present");
         assert_eq!(
