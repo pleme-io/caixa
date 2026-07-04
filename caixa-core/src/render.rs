@@ -7939,6 +7939,96 @@ pub const GATEWAY_API_PROTOCOL_HTTP: &str = "HTTP";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX: &str = "PathPrefix";
 
+/// Canonical K8s core `Protocol` OpenAPI schema enum's `TCP` L4-transport-
+/// protocol scalar value every `cilium_network_policies`-emitted
+/// `CiliumNetworkPolicy` document's per-`spec.ingress[].toPorts[].ports[]`
+/// port-tuple declares under its per-tuple [`KUBE_KEY_PROTOCOL`] axis.
+/// Pairs with the sibling [`KUBE_KEY_PROTOCOL`] (0307950) per-CR L4/L7
+/// protocol-scalar-discriminator container-axis key the value nests
+/// directly under — the K8s core `Protocol` schema pins per-`ContainerPort`
+/// / `ServicePort` / `EndpointPort` / `NetworkPolicyPort` L4-transport
+/// selection through the `protocol` scalar (each port entry names one
+/// L4-transport-protocol discriminator the CNI / kube-proxy / eBPF-data-
+/// plane bpf policy dispatch loop keys off before applying the port match;
+/// the K8s core `Protocol` OpenAPI schema enum admits the closed set
+/// `{"TCP", "UDP", "SCTP"}` verbatim — see
+/// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1/#protocol-v1-core),
+/// so drift on the L4-transport-protocol value is exactly as load-bearing
+/// as drift on the sibling [`GATEWAY_API_PROTOCOL_HTTP`] (1b57473) per-
+/// listener L7-parser-selection scalar value the peer Gateway-API v1
+/// `ProtocolType` OpenAPI schema enum admits under the same
+/// [`KUBE_KEY_PROTOCOL`] container-axis key (a `"tcp"` / `"Tcp"` /
+/// `"TCP/IP"` / `"transport-tcp"` typo at the production-code call site
+/// lands outside the K8s core `Protocol` OpenAPI schema enum's admitted
+/// set, surfacing apply-side as a non-self-locating
+/// "spec.ingress[0].toPorts[0].ports[0].protocol: Unsupported value:
+/// \"tcp\": supported values: \"SCTP\", \"TCP\", \"UDP\"" apiserver
+/// admission-rejection far from the source `caixa.lisp` / the renderer's
+/// `port_entry.insert(…)` call site — the rendered per-`(:de, :para)`
+/// `CiliumNetworkPolicy` object never reconciles at the Cilium operator's
+/// per-CNP L4 dispatch pass and every intra-mesh `:contratos` L4-tuple-
+/// gated flow drops at the Cilium operator's admission gate with no field
+/// naming the L4-transport-protocol-drift root cause; worse — because the
+/// `protocol` scalar carries a schema-side default of `TCP` on the K8s
+/// core `Protocol` enum, a silently-elided drift on the emit lands a
+/// `CiliumNetworkPolicy` whose ingress rule falls back to the default L4-
+/// transport-protocol and every port-match on a non-default transport
+/// silently misses at the eBPF data plane's per-tuple dispatch).
+///
+/// The single source of truth the rendered Aplicacao Cilium-CNP-side
+/// intra-mesh L4-tuple-gating bundle's per-`toPorts[].ports[]` port-tuple
+/// L4-transport-protocol-discriminator-value-naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-tuple
+///     `spec.ingress[].toPorts[].ports[].protocol` axis (caixa-mesh/src/lib.rs —
+///     the `cilium_network_policies` per-`(:de, :para)`
+///     `port_entry.insert(KUBE_KEY_PROTOCOL, "TCP")` call the prior
+///     inline `"TCP".into()` literal sat at).
+///
+/// The L4-transport-protocol value names the same K8s-core-`Protocol`-
+/// enum-side per-port-tuple L4-transport-selection discriminator as the
+/// sibling [`KUBE_KEY_PROTOCOL`] key-axis discriminator carries the value
+/// under, and must move together with the sibling K8s core `Protocol`
+/// OpenAPI schema enum on any future K8s core `Protocol` rebrand (an
+/// upstream K8s core `Protocol` rename or extension — e.g. the
+/// `KEP-3675 QUIC transport` proposal's `"QUIC"` addition to the enum,
+/// coordinated with the upstream SIG-Network per-version deprecation
+/// cycle — would land at this one const rather than scattered across
+/// every per-emitter L4-port-block-insertion site).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_PROTOCOL_HTTP`] (1b57473) /
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] (530705d) /
+/// [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) /
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) /
+/// [`DEFAULT_GATEWAY_CLASS_NAME`] (d9b0743) lifts established on the
+/// sibling per-listener L7-parser-selection scalar-value + per-match
+/// path-selection-predicate discriminator-value + Gateway-API-CRD-
+/// `kind`-discriminator + Gateway-controller-binding scalar-value axes —
+/// extends the canonical-cluster-side-OpenAPI-schema-enum-value single-
+/// sourcing discipline the Gateway-API v1 `ProtocolType.HTTP` /
+/// `PathMatchType.PathPrefix` lifts established onto the sibling
+/// K8s-core `Protocol.TCP` per-port-tuple L4-transport-protocol-
+/// discriminator the `cilium_network_policies` intra-mesh L4-tuple-gating
+/// emitter carries under the shared `CiliumNetworkPolicy` body.
+///
+/// A future Cilium-CNP-side / K8s-core-`Protocol`-side renderer the M3.x
+/// absorption roadmap names — a sibling `KUBE_PROTOCOL_UDP` /
+/// `KUBE_PROTOCOL_SCTP` const value the same `Protocol` enum admits, the
+/// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` materializer's per-
+/// Aplicacao multi-transport fan-out over `{TCP, UDP, SCTP}` for
+/// `nats:pub-sub` / `wasi:sockets/udp` contratos, a future per-contrato
+/// `:transport <TCP|UDP|SCTP>` typed slot admitting a per-edge transport-
+/// protocol axis — inherits the canonical `TCP` L4-transport-protocol
+/// value by construction with no opportunity for per-renderer drift.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const KUBE_PROTOCOL_TCP: &str = "TCP";
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
 /// per-route parent-Gateway `[{name}]` list under (`spec.parentRefs[]`).
@@ -11814,6 +11904,86 @@ mod tests {
              OpenAPI schema enum UpperCamelCase convention — no snake_case, \
              kebab-case, or whitespace bytes the gateway-class-controller's \
              per-rule L7 dispatch loop would reject"
+        );
+    }
+
+    #[test]
+    fn kube_protocol_tcp_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the K8s core `Protocol` OpenAPI schema enum's
+        // canonical `TCP` L4-transport-protocol scalar value the
+        // rendered `CiliumNetworkPolicy.spec.ingress[].toPorts[].ports[]
+        // .protocol` scalar declares. The value is part of the cluster-
+        // side contract with every K8s-core-`Protocol`-conformant CNI
+        // + kube-proxy + eBPF-data-plane implementation (Cilium,
+        // Calico, kube-proxy iptables/ipvs) — the CNI's per-CNP L4
+        // dispatch pass keys off this exact byte-sequence to select
+        // the per-tuple L4-transport-protocol predicate; the K8s core
+        // `Protocol` OpenAPI schema enum admits the closed set
+        // `{"TCP", "UDP", "SCTP"}` verbatim (see
+        // https://kubernetes.io/docs/reference/generated/kubernetes-api/v1/#protocol-v1-core),
+        // so a drifted value (`"tcp"` / `"Tcp"` / `"TCP/IP"` /
+        // `"transport-tcp"`) lands the rendered `CiliumNetworkPolicy`
+        // outside the `Protocol` enum's admitted set and every intra-
+        // mesh `:contratos` L4-tuple-gated flow drops at the Cilium
+        // operator's admission gate. Changing this value is a
+        // coordinated K8s core `Protocol` promotion alongside the
+        // upstream SIG-Network deprecation cycle, not an incidental
+        // edit. Peer to
+        // `gateway_api_protocol_http_pins_canonical_value` /
+        // `gateway_api_path_match_type_path_prefix_pins_canonical_value`
+        // on the sibling Gateway-API-v1-OpenAPI-schema-enum-value pin
+        // set — extends the canonical-cluster-side-OpenAPI-schema-enum-
+        // value single-sourcing discipline the Gateway-API v1
+        // `ProtocolType.HTTP` / `PathMatchType.PathPrefix` pins
+        // established onto the sibling K8s-core `Protocol.TCP` per-port-
+        // tuple L4-transport-protocol-discriminator the
+        // `cilium_network_policies` intra-mesh L4-tuple-gating emitter
+        // carries under the shared `CiliumNetworkPolicy` body.
+        assert_eq!(KUBE_PROTOCOL_TCP, "TCP");
+    }
+
+    #[test]
+    fn kube_protocol_tcp_carries_upper_case_shape() {
+        // Cross-axis invariant: the K8s core `Protocol` OpenAPI schema
+        // enum admits the closed set `{"TCP", "UDP", "SCTP"}` — every
+        // admitted value is ASCII-uppercase throughout per the upstream
+        // SIG-Network convention (the admitted values are the L4-
+        // transport-protocol acronyms in their canonical uppercase form,
+        // matching the sibling Gateway-API v1 `ProtocolType` OpenAPI
+        // schema enum's `{"HTTP", "HTTPS", "TCP", "TLS", "UDP"}` all-
+        // ASCII-uppercase convention the
+        // `gateway_api_protocol_http_carries_upper_case_shape` pin
+        // carries on the peer per-listener L7-parser-selection scalar
+        // axis). Pinning the shape here means a future rebrand on the
+        // canonical lift can't silently land a malformed L4-transport-
+        // protocol scalar (lowercase `"tcp"`, mixed-case `"Tcp"`,
+        // dotted `"TCP/IP"`, empty) that the K8s core `Protocol`
+        // OpenAPI schema enum would reject at admission time far from
+        // the rebrand commit's source. The all-ASCII-uppercase
+        // invariant is the load-bearing K8s-core-`Protocol`-enum-side
+        // typed L4-transport-selection contract: a value the CNI's per-
+        // CNP L4 dispatch pass selects the per-tuple L4-transport-
+        // protocol predicate from. Peer to
+        // `gateway_api_protocol_http_carries_upper_case_shape` on the
+        // sibling Gateway-API v1 `ProtocolType` OpenAPI schema enum's
+        // all-ASCII-uppercase per-value convention pin set — the two
+        // peer canonical-cluster-side-OpenAPI-schema-enum-value
+        // uppercase conventions collapse on the shared `TCP` transport-
+        // protocol acronym both `Protocol` enums admit at the closed-
+        // set intersection.
+        let v = KUBE_PROTOCOL_TCP;
+        assert!(
+            !v.is_empty(),
+            "KUBE_PROTOCOL_TCP {v:?} must be non-empty per the K8s core \
+             `Protocol` OpenAPI schema enum grammar"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_uppercase()),
+            "KUBE_PROTOCOL_TCP {v:?} must be ASCII-uppercase throughout \
+             per the K8s core `Protocol` OpenAPI schema enum convention \
+             — no lowercase, mixed-case, dotted, or whitespace bytes the \
+             CNI's per-CNP L4 dispatch pass would reject"
         );
     }
 
