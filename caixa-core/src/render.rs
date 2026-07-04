@@ -7789,6 +7789,139 @@ pub const CILIUM_KEY_MODE: &str = "mode";
 /// [cm]: ../../caixa_mesh/index.html
 pub const CILIUM_KEY_HTTP: &str = "http";
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-`ingress[].toPorts[].rules.http[]`
+/// per-HTTP-rule URL-path-predicate leaf-scalar-axis key every
+/// `cilium_network_policies`-emitted CNP document mounts its per-HTTP-rule
+/// URL-path-prefix predicate scalar under
+/// (`spec.ingress[].toPorts[].rules.http[].path`). Nests exactly one level
+/// beneath the sibling [`CILIUM_KEY_HTTP`] (ccd81e8) per-`toPorts[]`
+/// L7-HTTP-rule-list-discriminator container-axis it sits inside: the Cilium
+/// CNP schema places the per-HTTP-rule URL-path predicate scalar (the exact
+/// URL-path regex the Cilium L7 dispatch pass matches the observed HTTP
+/// request line's path segment against) as the single load-bearing leaf-
+/// scalar axis of the per-`rules.http[]` entry — so drift on the per-HTTP-
+/// rule URL-path-predicate leaf axis is exactly as load-bearing as drift on
+/// the sibling [`CILIUM_KEY_HTTP`] per-`toPorts[]` L7-HTTP-rule-list-
+/// discriminator container-axis key it nests inside (the Cilium-operator-
+/// side CNP schema validator drops any per-`rules.http[]` entry whose per-
+/// HTTP-rule URL-path-predicate leaf key it recognizes as unknown — a
+/// `"Path"` / `"pathPrefix"` / `"regex"` / `"urlPath"` / `"pathMatch"` typo
+/// at either the emit-side `http_rule.insert(…)` call site or a downstream
+/// renderer's per-`rules.http[]` URL-path leaf upsert silently emits a per-
+/// `rules.http[]` entry whose URL-path-predicate leaf-axis key the Cilium
+/// CRD schema validator rejects as unknown; the per-`rules.http[]` entry
+/// falls back to a match-any-URL-path predicate — the per-`toPorts[]` L7
+/// rule admits every URL path on the destination port silently, bypassing
+/// the URL-path-prefix predicate the typed `:contratos` HTTP-shaped edge's
+/// `:endpoint` slot names at the L7 introspection axis, and the emit-
+/// side/probe-side split silently masks the per-`rules.http[]` URL-path
+/// pin (`.get("path")` returns `None` under both the drifted-key emitter
+/// and the drifted-key probe — every downstream `.and_then(|v| v.as_str())`
+/// chain short-circuits vacuously because the outer per-HTTP-rule URL-
+/// path-lookup is itself `None`).
+///
+/// The single source of truth the rendered Aplicacao Cilium-CNP-side
+/// intra-mesh per-`toPorts[]` L7-URL-path-predicate-gating bundle's per-
+/// `rules.http[]` URL-path-predicate-leaf-axis naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-`toPorts[]`
+///     `rules.http[]` entry's `path` URL-path-predicate leaf axis
+///     (caixa-mesh/src/lib.rs — the `cilium_network_policies` per-`(:de,
+///     :para)` policy's `http_rule.insert("path", …)` call in the
+///     `WitTarget::Http` L7 introspection emit branch, the exact per-
+///     `rules.http[]` leaf axis the per-HTTP-rule URL-path predicate scalar
+///     lands under, seeded from the typed HTTP-shaped `:contratos` edge's
+///     `:endpoint` slot).
+///
+/// The per-HTTP-rule URL-path-predicate-leaf-axis names the same Cilium-
+/// operator-side per-`rules.http[]` URL-path predicate selection as the
+/// sibling [`CILIUM_KEY_HTTP`] per-`toPorts[]` L7-HTTP-rule-list-
+/// discriminator container-axis key it nests inside, and must move together
+/// on any future Cilium CRD schema rebrand (an upstream `cilium.io/v3`
+/// rename of the per-HTTP-rule URL-path-predicate leaf from `path` to
+/// `urlPath` / `pathPrefix` / `pathMatch`, coordinated with the Cilium
+/// project's periodic CRD schema-migration passes). Until this lift landed
+/// the axis carried an inline `path` literal at the one production-code
+/// emitter site (the `cilium_network_policies` per-`(:de, :para)`
+/// `http_rule.insert("path", …)` call in the `WitTarget::Http` L7
+/// introspection emit branch) plus a matching set inside the in-file
+/// `cilium_http_contracts_emit_l7_rules` test-fixture per-HTTP-rule URL-
+/// path-predicate presence-and-value pin — two occurrences of the same
+/// load-bearing Cilium-CRD per-HTTP-rule URL-path-predicate-leaf-axis
+/// convention, drift-prone by construction. A drift on any one production
+/// or test-fixture site to `"Path"` / `"pathPrefix"` / `"regex"` /
+/// `"urlPath"` / `"pathMatch"` would surface as a Cilium-operator-side
+/// schema-validator drop at apply time (the affected per-`rules.http[]`
+/// entry's URL-path-predicate leaf-axis key the CRD schema validator
+/// recognizes as unknown), with every intra-mesh HTTP-shaped `:contratos`
+/// flow the CNP was authored to filter to a URL-path prefix silently
+/// bypassing the L7 URL-path predicate at the Cilium data-plane's match-
+/// any-URL-path fallback with no field naming the URL-path-predicate-
+/// leaf-axis-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`CILIUM_KEY_HTTP`] (ccd81e8) /
+/// [`CILIUM_KEY_MODE`] (4289dfb) /
+/// [`CILIUM_KEY_AUTHENTICATION`] (db31108) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`CILIUM_KIND_NETWORK_POLICY`] (eac85cb) /
+/// [`CILIUM_API_VERSION`] (279d611) lifts established on the
+/// sibling canonical-Cilium-CNP-body-axis surfaces — descends the per-
+/// `toPorts[]` L7-introspection `(rules → http → path)` container /
+/// protocol-discriminator / URL-path-predicate axis chain one leaf level
+/// beneath the parent [`CILIUM_KEY_HTTP`] per-`toPorts[]` L7-HTTP-rule-
+/// list-discriminator axis-key it nests inside, completing the per-
+/// `toPorts[]` L7-introspection `(rules → http → path)` container /
+/// protocol-discriminator / URL-path-predicate axis triple the M3
+/// Aplicacao mesh renderer's HTTP-shaped-`:contratos` URL-path-prefix-
+/// filtering L7-enforcement contract rests on.
+///
+/// Distinct from the sibling K8s-Gateway-API-side
+/// [`GATEWAY_API_KEY_PATH`] (9f45aa4) per-`HTTPRouteMatch` path-matcher
+/// container-axis key: both keys spell the same underlying `"path"`
+/// string but name distinct schema axes on distinct CRD groups — the
+/// Cilium-side axis is a per-HTTP-rule URL-path predicate leaf scalar
+/// on the Cilium `cilium.io/v2` `CiliumNetworkPolicy` CRD's per-
+/// `toPorts[].rules.http[]` entry, the Gateway-API-side axis is a per-
+/// `HTTPRouteMatch` path-matcher two-leaf container (`{type, value}`)
+/// on the K8s Gateway API v1 `HTTPRoute` CRD's `spec.rules[].matches[]`
+/// entry. Keeping them as sibling `pub const` declarations (rather than
+/// coalescing onto a single shared constant that happens to carry the
+/// same string) mirrors the deliberate axis-independence discipline the
+/// [`CILIUM_KIND_NETWORK_POLICY`] / [`GATEWAY_API_KIND_GATEWAY`] /
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] kind-discriminator lifts already
+/// codified on the sibling per-CRD-kind axes, so a future Cilium-side
+/// per-HTTP-rule URL-path-predicate rebrand (Cilium `cilium.io/v3` renames
+/// `path` → `urlPath`) can land independently of the Gateway-API-side
+/// per-`HTTPRouteMatch` path-matcher container-axis rebrand without any
+/// cross-CRD coordination footgun where a shared constant would force a
+/// coupled edit against schema evolutions the two CRD projects run on
+/// independent cadences. Note: Rust's `&'static str` interner coalesces
+/// identical byte-sequences onto one storage allocation at codegen time,
+/// so at runtime a `.as_ptr()` comparison between the two constants can't
+/// distinguish "sibling `pub const` declarations carrying identical
+/// bytes" from "coalesced canonical declaration" — the axis-independence
+/// discipline lives at the rustc symbol-name axis (the two `pub const
+/// CILIUM_KEY_PATH` / `pub const GATEWAY_API_KEY_PATH` symbols a future
+/// rebrand of one leaves the other structurally untouched under) rather
+/// than the runtime-address axis, and the per-axis re-export identity
+/// pins in the consuming renderer crates (each pinning the local re-
+/// export against its own canonical declaration on its own axis) remain
+/// the load-bearing "no sibling local `pub const` drift" gate for the
+/// pair.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_KEY_PATH: &str = "path";
+
 /// Canonical K8s Gateway API CRD `kind` discriminator the rendered
 /// `Gateway` document declares at its top-level [`KUBE_KEY_KIND`] axis.
 /// Pairs with the sibling [`GATEWAY_API_API_VERSION`] (3c6cfc3) — the
