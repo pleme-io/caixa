@@ -34,9 +34,10 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT,
-    WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
-    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
+    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_NAME, LABEL_APLICACAO,
+    LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec,
+    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
+    pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -129,7 +130,7 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
     for m in &spec.membros {
         let mut entry = serde_yaml::Mapping::new();
         entry.insert(
-            serde_yaml::Value::String("name".into()),
+            serde_yaml::Value::String(FLEET_PROGRAMS_KEY_NAME.into()),
             serde_yaml::Value::String(m.caixa.clone()),
         );
         entry.insert(
@@ -4471,7 +4472,12 @@ mod tests {
         assert_eq!(entries.len(), 3);
         let names: Vec<_> = entries
             .iter()
-            .map(|e| e.get("name").and_then(|n| n.as_str()).unwrap().to_string())
+            .map(|e| {
+                e.get(FLEET_PROGRAMS_KEY_NAME)
+                    .and_then(|n| n.as_str())
+                    .unwrap()
+                    .to_string()
+            })
             .collect();
         assert_eq!(names, vec!["catalog", "cart", "payment"]);
     }
