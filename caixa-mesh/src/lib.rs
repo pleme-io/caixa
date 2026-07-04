@@ -554,6 +554,50 @@ pub use caixa_core::CILIUM_KEY_PORTS;
 /// edge mTLS contract rests on.
 pub use caixa_core::CILIUM_KEY_AUTHENTICATION;
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-`ingress[].authentication`
+/// block mTLS-mode-discriminator leaf-scalar-axis key every
+/// `cilium_network_policies`-emitted CNP document mounts its per-rule
+/// mutual-auth mode leaf under (`spec.ingress[].authentication.mode`).
+/// Re-export of the canonical [`caixa_core::CILIUM_KEY_MODE`] so the
+/// Cilium-operator-side per-ingress-rule mutual-auth-mode-discriminator
+/// leaf-axis key string lives in exactly one place across every caixa
+/// renderer — caixa-mesh's `cilium_network_policies` per-`(:de, :para)`
+/// `CiliumNetworkPolicy` emitter (the single-field-overlay call in the
+/// `:politicas :mtls-required` overlay emit gate the prior inline
+/// `"mode"` literal sat at) and every future per-Cilium-side renderer
+/// the M3.x absorption roadmap acknowledges now consult the same
+/// `&'static str`, so a future Cilium-CRD rebrand on the per-
+/// authentication-block mode-discriminator leaf-axis (unlikely on the
+/// CRD's stable `cilium.io/v2` slot, but the coordination point the
+/// prior [`CILIUM_KEY_AUTHENTICATION`] re-export anchors on the parent
+/// per-ingress-rule mutual-auth-body-axis) lands in one place. The
+/// prior inline literal split across the one production emitter site
+/// and five test-fixture navigation sites (the presence pin under the
+/// `:mtls-required t` overlay, the explicit-`false`-emits-disabled-
+/// mode pin under the `Some(false)` arm, the fan-out pin across
+/// multiple contratos, the pubsub-carry-overlay-too shape pin, and the
+/// yaml-string-scalar `mode`-value pin) would have let a Cilium-CRD
+/// mutual-auth-mode-leaf rebrand or a per-emitter typo (`"policy"` /
+/// `"authMode"` / `"handshakeMode"`) at any one site silently emit a
+/// per-`ingress[]` entry whose mutual-auth-block mode-discriminator-
+/// leaf-axis the Cilium CRD schema validator drops as unknown; the
+/// ingress rule falls back to the cluster-default authentication mode
+/// and every intra-mesh `:contratos` flow the CNP was authored to
+/// protect with per-edge SPIFFE-identity-bound mutual-auth silently
+/// bypasses the mTLS handshake at the Cilium data-plane's default-
+/// authentication mode with no field naming the mutual-auth-mode-
+/// leaf-axis-drift root cause. On the test-fixture side the drift
+/// silently masks the emission-side pin (`.get("mode")` returns `None`
+/// under both the drifted-key emitter and the drifted-key probe —
+/// every downstream `.and_then(|v| v.as_str())` chain short-circuits
+/// vacuously because the outer mode-leaf-lookup is itself `None`).
+/// Peer to the [`CILIUM_KEY_AUTHENTICATION`] re-export on the parent
+/// per-ingress-rule mutual-auth-body-axis surface — completes the
+/// per-rule mutual-auth `(authentication → mode)` body/leaf axis
+/// re-export pair this crate's `cilium_network_policies` renderer's
+/// SPIFFE-identity-bound per-edge mTLS enforcement contract rests on.
+pub use caixa_core::CILIUM_KEY_MODE;
+
 /// Canonical K8s Gateway API CRD `kind` discriminator every
 /// `gateway_routes`-emitted `Gateway` document declares at its top-level
 /// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
@@ -1845,9 +1889,10 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     // each ingress rule. Same lifted-typed-primitive shape the
     // gateway_routes overlays (timeout, retry) consume — see
     // [`caixa_core::render::single_field_overlay`].
-    let mtls_overlay = single_field_overlay(spec.politicas.mtls_required, "mode", |required| {
-        serde_yaml::Value::String(if required { "required" } else { "disabled" }.into())
-    });
+    let mtls_overlay =
+        single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE, |required| {
+            serde_yaml::Value::String(if required { "required" } else { "disabled" }.into())
+        });
     // Fan typed edges into per-`(:de, :para)` groups — the policy
     // identity axis. A `BTreeMap` keyed by the pair gives deterministic
     // policy order independent of `:contratos` declaration order
@@ -3807,6 +3852,60 @@ mod tests {
             ),
             "CILIUM_KEY_AUTHENTICATION must be a re-export of \
              caixa_core::CILIUM_KEY_AUTHENTICATION, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_key_mode_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KEY_MODE` was lifted from the inline
+        // `"mode"` literal at the `cilium_network_policies` per-`(:de,
+        // :para)` CNP `single_field_overlay(spec.politicas.mtls_required,
+        // "mode", …)` call site (the per-rule mutual-auth-mode-leaf
+        // emit gate the `:politicas :mtls-required` overlay lands
+        // under, which the helper writes at the single leaf axis of
+        // the per-rule authentication block) plus five test-side
+        // navigations: the presence pin under `:mtls-required t`, the
+        // explicit-`Some(false)`-emits-`"disabled"`-mode pin, the
+        // per-policy-fan-out pin across multiple `:contratos`, the
+        // pubsub-contracts-carry-overlay-too shape pin, and the
+        // yaml-string-scalar `mode`-value pin — to a re-export of
+        // [`caixa_core::CILIUM_KEY_MODE`] so the Cilium-CRD per-
+        // authentication-block mode-discriminator leaf-axis key string
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const CILIUM_KEY_MODE:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom — the prior
+        // shape would have let a Cilium-CRD schema rebrand on the per-
+        // authentication-block mode-discriminator leaf axis without a
+        // coordinated caixa-core edit silently land per-`(:de, :para)`
+        // CiliumNetworkPolicy documents whose per-`ingress[]` entry
+        // mutual-auth block's mode-leaf-key the Cilium CRD schema
+        // validator drops as unrecognized at apply time; the ingress
+        // rule falls back to the cluster-default authentication mode
+        // and every intra-mesh `:contratos` flow the CNP was authored
+        // to protect with per-edge SPIFFE-identity-bound mutual-auth
+        // silently bypasses the mTLS handshake at the Cilium data-
+        // plane's default-authentication mode. Peer to
+        // [`cilium_key_authentication_re_export_points_at_caixa_core_canonical`]
+        // on the parent per-ingress-rule mutual-auth-body-axis re-
+        // export surface — completes the per-rule mutual-auth
+        // `(authentication → mode)` body/leaf axis re-export pair this
+        // crate's `cilium_network_policies` renderer's SPIFFE-identity-
+        // bound per-edge mTLS enforcement contract rests on.
+        assert_eq!(CILIUM_KEY_MODE, caixa_core::CILIUM_KEY_MODE);
+        assert!(
+            std::ptr::eq(
+                CILIUM_KEY_MODE.as_ptr(),
+                caixa_core::CILIUM_KEY_MODE.as_ptr(),
+            ),
+            "CILIUM_KEY_MODE must be a re-export of \
+             caixa_core::CILIUM_KEY_MODE, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
         );
@@ -6173,7 +6272,7 @@ mod tests {
                 .and_then(|a| a.as_mapping())
                 .expect("rule must carry authentication mapping when :mtls-required is set");
             assert_eq!(
-                auth.get(serde_yaml::Value::String("mode".into()))
+                auth.get(serde_yaml::Value::String(CILIUM_KEY_MODE.into()))
                     .and_then(|v| v.as_str()),
                 Some("required")
             );
@@ -6233,7 +6332,7 @@ mod tests {
                 .and_then(|a| a.as_mapping())
                 .expect("rule must carry authentication mapping for explicit :mtls-required nil");
             assert_eq!(
-                auth.get(serde_yaml::Value::String("mode".into()))
+                auth.get(serde_yaml::Value::String(CILIUM_KEY_MODE.into()))
                     .and_then(|v| v.as_str()),
                 Some("disabled")
             );
@@ -6266,7 +6365,7 @@ mod tests {
         for rule in &rules {
             assert_eq!(
                 rule.get(CILIUM_KEY_AUTHENTICATION)
-                    .and_then(|a| a.get("mode"))
+                    .and_then(|a| a.get(CILIUM_KEY_MODE))
                     .and_then(|v| v.as_str()),
                 Some("required"),
                 "every CNP's ingress rule must carry the authentication overlay"
@@ -6358,7 +6457,7 @@ mod tests {
             .expect("ingress[0]");
         assert_eq!(
             rule.get(CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| a.get("mode"))
+                .and_then(|a| a.get(CILIUM_KEY_MODE))
                 .and_then(|v| v.as_str()),
             Some("required")
         );
@@ -6433,7 +6532,7 @@ mod tests {
         for rule in &rules {
             let mode = rule
                 .get(CILIUM_KEY_AUTHENTICATION)
-                .and_then(|a| a.get("mode"))
+                .and_then(|a| a.get(CILIUM_KEY_MODE))
                 .expect("authentication.mode present");
             assert!(
                 mode.is_string(),
