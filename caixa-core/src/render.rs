@@ -5775,6 +5775,88 @@ pub const M3_KEY_PLACEMENT: &str = "placement";
 /// names the top-level array key both writer verbs upsert into.
 pub const FLEET_PROGRAMS_KEY_PROGRAMS: &str = "programs";
 
+/// Canonical `lareira-fleet-programs` values-schema key naming the
+/// per-entry name discriminator — the `name:` field the library
+/// chart's `range .Values.programs` step reads to key each rendered
+/// `ComputeUnit` CR's `metadata.name` off, and the exact key both
+/// writer-side upsert paths in [`caixa_flux`] match against to
+/// replace-in-place-vs-append. Peer of [`FLEET_PROGRAMS_KEY_PROGRAMS`]
+/// on the same fleet-programs values schema — that constant names
+/// the top-level array key, this one names the per-entry name-axis
+/// both writer verbs walk the array by.
+///
+/// Two production consumers write this key:
+///
+/// 1. [`caixa_flux::programs_yaml_entry`] — the emit-side per-Servico
+///    entry-builder writes the per-entry name-axis at this exact key
+///    (seeded from the Caixa's `nome`), at
+///    `caixa-flux/src/lib.rs`'s `entry.insert("name".into(), …)` call.
+/// 2. [`caixa_mesh::programs_for_aplicacao`] — the Aplicacao-side
+///    per-`:membros` entry-builder writes the peer per-entry name-axis
+///    at the same key (seeded from each `:membros` entry's `:caixa`
+///    binding), at `caixa-mesh/src/lib.rs`'s per-member
+///    `entry.insert("name".into(), …)` call.
+///
+/// Two production consumers read this key:
+///
+/// 3. [`caixa_flux::upsert_into_helmrelease_programs`] — the writer-
+///    side upsert path on the aggregator-HelmRelease shape reads the
+///    per-entry key twice (new-entry's `.get("name")` extract +
+///    per-slot `.get("name")` match-vs-new_name inside
+///    `HelmRelease.spec.values.programs[]`), plus a
+///    `Error::MissingField("name")` diagnostic naming the same axis.
+/// 4. [`caixa_flux::upsert_into_programs_yaml`] — the writer-side
+///    upsert path on the bare-values.yaml shape reads the same per-
+///    entry key over the top-level `programs[]` sequence via the
+///    same three-site (extract + match + `MissingField`) shape.
+///
+/// Until this lift landed both writers carried the bare `"name"`
+/// byte inline at every read + `Error::MissingField("name")`
+/// diagnostic site, and both emitters carried the same bare byte at
+/// their `entry.insert("name".into(), …)` call. A future fleet-
+/// programs schema-key rebrand on the per-entry name-discriminator
+/// axis (per the same trajectory [`FLEET_PROGRAMS_KEY_PROGRAMS`]'s
+/// doc-comment names — the `lareira-fleet-programs` library chart
+/// moving its per-entry name-axis to `nome:` for Brazilian-Portuguese
+/// uniformity with the rest of the substrate's surface, or to a
+/// namespaced `pleme.pleme.io/name` for multi-tenant aggregator
+/// values isolation, or to per-kind `servico-name` / `aplicacao-name`
+/// splits once the schema grows past the flat sequence — the
+/// ABSORPTION-ROADMAP.md M4 trajectory) without a coordinated edit
+/// across all four sites would silently split the schema: one
+/// emitter would write under `nome:` while the peer-side upsert
+/// still probed `name:` — the aggregator's `range .Values.programs`
+/// would then iterate entries whose per-entry name-axis the library
+/// chart's `metadata.name` templating reads as empty (or match
+/// against the wrong entry on upsert), and every rendered
+/// `ComputeUnit` CR would silently collide on empty
+/// `metadata.name` or vanish at the aggregator's per-entry name-
+/// keyed reduce step, with the failure surfacing as "the Servico's
+/// pods never spin up under the expected name" far from the rebrand
+/// commit's source. Lifting the literal to one `&'static str` closes
+/// the drift footgun structurally — every consumer reads the same
+/// memory, so any future rebrand reaches all four sites by
+/// construction and a CI build that re-introduces a sibling inline
+/// `"name"` literal trips the peer pinning tests at the build-time
+/// fail-before-deploy posture every prior load-bearing-string lift
+/// on this surface ([`FLEET_PROGRAMS_KEY_PROGRAMS`] on the sibling
+/// fleet-programs top-level array-key axis, [`M3_KEY_PLACEMENT`] /
+/// [`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`]
+/// on the peer per-entry overlay-key surfaces) establishes.
+///
+/// Byte-identical to [`KUBE_KEY_NAME`] today — both resolve to the
+/// same three-byte `"name"` literal — but semantically distinct:
+/// [`KUBE_KEY_NAME`] names the K8s CR canonical `metadata.name` axis
+/// (every rendered CR's identity discriminator, spelled per the K8s
+/// apiserver's OpenAPI v3 schema), while this constant names the
+/// `lareira-fleet-programs` library chart's per-entry name-axis
+/// (spelled per the chart's `values.schema.json` — a separate schema
+/// contract). Splitting the two lets each schema's future rebrand
+/// land independently at its canonical const definition without
+/// coupling the K8s CR canonical-key axis to the fleet-programs
+/// values-schema axis (or vice versa).
+pub const FLEET_PROGRAMS_KEY_NAME: &str = "name";
+
 /// Canonical pleme-io label namespace prefix. Every cluster object
 /// emitted by any caixa-side renderer that needs to carry the
 /// pleme-io workload identity uses this prefix; runtime label
@@ -12742,6 +12824,33 @@ mod tests {
         // constant's current byte to the canonical fleet-programs
         // library chart's documented shape.
         assert_eq!(FLEET_PROGRAMS_KEY_PROGRAMS, "programs");
+    }
+
+    #[test]
+    fn fleet_programs_key_name_pins_canonical_value() {
+        // Bridge-arm pin: [`FLEET_PROGRAMS_KEY_NAME`] resolves to the
+        // canonical `"name"` byte today — the exact YAML key the
+        // `lareira-fleet-programs` library chart's `range .Values.programs`
+        // step reads per-entry to key each rendered `ComputeUnit` CR's
+        // `metadata.name` off, and the exact key both writer-side upsert
+        // paths in [`caixa_flux`] (`upsert_into_helmrelease_programs` on
+        // the aggregator-HelmRelease shape, `upsert_into_programs_yaml`
+        // on the bare-values.yaml shape) navigate to
+        // match-by-name-and-replace-or-append, and the exact key both
+        // emit-side entry builders ([`caixa_flux::programs_yaml_entry`]
+        // per-Servico, [`caixa_mesh::programs_for_aplicacao`] per-
+        // `:membros`) write the per-entry name-axis at. Pin the literal
+        // here (peer with the [`fleet_programs_key_programs_pins_canonical_value`]
+        // top-level array-key canonical-literal pin on the sibling
+        // fleet-programs schema surface, and with the
+        // [`M3_KEY_PLACEMENT`] / [`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`]
+        // / [`M2_KEY_UPGRADE_FROM`] canonical-literal pins on the peer
+        // per-entry overlay-key surfaces) so a future fleet-programs
+        // schema-key rebrand on the per-entry name-discriminator axis
+        // surfaces here as a coordinated edit-point at the definition
+        // site rather than a silent apply-time split between the two
+        // emitters and the two upsert readers.
+        assert_eq!(FLEET_PROGRAMS_KEY_NAME, "name");
     }
 
     // ── label_selector — typed K8s LabelSelector wrapper ─────────────────
