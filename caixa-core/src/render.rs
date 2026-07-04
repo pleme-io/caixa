@@ -7779,6 +7779,83 @@ pub const GATEWAY_API_KIND_GATEWAY: &str = "Gateway";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 
+/// Canonical K8s Gateway API `Gateway.spec.listeners[].protocol` HTTP
+/// listener-protocol scalar value the rendered `Gateway` document's
+/// first (and V0-only) listener declares under its
+/// [`KUBE_KEY_PROTOCOL`] axis. Pairs with the sibling
+/// [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) +
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) — the K8s Gateway API v1
+/// CRD schema pins the per-listener L7 parser + TLS-termination
+/// strategy through the `spec.listeners[].protocol` scalar value (the
+/// gateway-class-controller's per-listener bind loop selects the L7
+/// parser + TLS termination strategy from this exact byte-sequence;
+/// the Gateway API v1 `ProtocolType` OpenAPI schema enum admits the
+/// closed set `{"HTTP", "HTTPS", "TCP", "TLS", "UDP"}` verbatim), so
+/// drift on the listener-protocol value is exactly as load-bearing as
+/// drift on the sibling [`GATEWAY_API_KIND_GATEWAY`] +
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] CRD `kind` discriminators the pair
+/// declares together (a `("Gateway", "http")` /
+/// `("Gateway", "Http")` / `("Gateway", "http/1.1")` typo at the
+/// production-code call site lands outside the Gateway API v1
+/// `ProtocolType` OpenAPI schema enum, surfacing apply-side as a
+/// non-self-locating "spec.listeners[0].protocol: Unsupported value:
+/// \"http\": supported values: \"HTTP\", \"HTTPS\", \"TCP\", \"TLS\",
+/// \"UDP\"" apiserver admission-rejection far from the source
+/// `caixa.lisp` / the renderer's `listener.insert(…)` call site — the
+/// rendered per-Aplicacao `Gateway` object never reconciles at the
+/// gateway-class-controller's per-listener bind loop and every
+/// external `:entrada` HTTP flow drops at the gateway-class-
+/// controller's admission gate with no field naming the
+/// listener-protocol-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-listener L7-parser-selection axis reaches for:
+///
+///   - the rendered `Gateway` document's `spec.listeners[0].protocol`
+///     axis (the `gateway_routes` per-`:entrada` `Gateway` emitter's
+///     `listener.insert(KUBE_KEY_PROTOCOL, "HTTP")` call — the sole
+///     production-code call site the prior inline `"HTTP".into()`
+///     literal sat at, caixa-mesh/src/lib.rs:2123).
+///
+/// The listener-protocol value names the same Gateway-API-
+/// implementation-side per-listener L7-parser-selection scalar as the
+/// sibling [`KUBE_KEY_PROTOCOL`] key-axis discriminator carries the
+/// value under, and must move together with the sibling K8s Gateway
+/// API `ProtocolType` OpenAPI schema enum on any future Gateway API
+/// rebrand (an upstream Gateway API v2 rename of the HTTP listener
+/// protocol from `HTTP` to `HTTP/1.1` / `HTTP/2` / `http`, coordinated
+/// with the upstream SIG-Network Gateway API `ProtocolType` enum
+/// deprecation cycle, would land at this one const rather than
+/// scattered across every per-emitter listener-block-insertion site).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) /
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) /
+/// [`DEFAULT_GATEWAY_CLASS_NAME`] (d9b0743) lifts established on the
+/// sibling Gateway-API-CRD-`kind`-discriminator + Gateway-controller-
+/// binding-scalar-value axes — extends the per-Gateway-API-CRD-`kind`-
+/// discriminator lift pair across the `(Gateway, HTTPRoute)` pair
+/// onto the sibling per-Gateway `spec.listeners[].protocol`
+/// listener-protocol-scalar-value axis the same `gateway_routes`
+/// external `:entrada` ingress emitter carries.
+///
+/// A future Gateway-API-side renderer the M3.x absorption roadmap
+/// names — an HTTPS listener with TLS termination (a sibling
+/// `GATEWAY_API_PROTOCOL_HTTPS` const value the same enum admits),
+/// the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` materializer's
+/// per-Aplicacao multi-listener fan-out over `{HTTP, HTTPS, TLS}`,
+/// a future per-listener route-attached-policy renderer that binds
+/// distinct policy chains per listener-protocol — inherits the
+/// canonical `HTTP` listener-protocol value by construction with no
+/// opportunity for per-renderer drift.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_PROTOCOL_HTTP: &str = "HTTP";
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
 /// per-route parent-Gateway `[{name}]` list under (`spec.parentRefs[]`).
@@ -11486,6 +11563,75 @@ mod tests {
              throughout per the K8s API kind discriminator grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              RESTMapper would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_protocol_http_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API v1 `ProtocolType` OpenAPI schema enum's
+        // canonical `HTTP` listener-protocol value the rendered
+        // `Gateway.spec.listeners[].protocol` scalar declares. The value
+        // is part of the cluster-side contract with every Gateway-API-
+        // conformant gateway implementation (Cilium, Istio, Envoy
+        // Gateway, NGINX) — the gateway-class-controller's per-listener
+        // bind loop keys off this exact byte-sequence to select the L7
+        // parser + TLS termination strategy; the Gateway API v1
+        // `ProtocolType` OpenAPI schema enum admits the closed set
+        // `{"HTTP", "HTTPS", "TCP", "TLS", "UDP"}` verbatim, so a
+        // drifted value (`"http"` / `"Http"` / `"HTTP/1.1"` / `"http/1.1"`)
+        // lands the rendered `Gateway` outside the `ProtocolType` enum's
+        // admitted set and every external `:entrada` HTTP flow drops at
+        // the gateway-class-controller's admission gate. Changing this
+        // value is a coordinated Gateway API `ProtocolType` promotion
+        // alongside the upstream SIG-Network deprecation cycle, not an
+        // incidental edit. Peer to
+        // `gateway_api_kind_gateway_pins_canonical_value` /
+        // `gateway_api_kind_http_route_pins_canonical_value` /
+        // `default_gateway_class_name_pins_canonical_value` on the
+        // sibling Gateway-API-CRD-`kind`-discriminator + Gateway-
+        // controller-binding-scalar-value pin set — extends the pair
+        // of `kind`-axis canonical-value pins across the
+        // `(Gateway, HTTPRoute)` pair onto the sibling per-Gateway
+        // `spec.listeners[].protocol` listener-protocol-scalar-value axis
+        // the same `gateway_routes` external `:entrada` ingress emitter
+        // carries.
+        assert_eq!(GATEWAY_API_PROTOCOL_HTTP, "HTTP");
+    }
+
+    #[test]
+    fn gateway_api_protocol_http_carries_upper_case_shape() {
+        // Cross-axis invariant: the Gateway API v1 `ProtocolType` OpenAPI
+        // schema enum admits the closed set
+        // `{"HTTP", "HTTPS", "TCP", "TLS", "UDP"}` — every admitted value
+        // is ASCII-uppercase throughout per the upstream SIG-Network
+        // Gateway API convention (see
+        // https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.ProtocolType
+        // — the admitted values are the transport / application-layer
+        // protocol acronyms in their canonical uppercase form). Pinning
+        // the shape here means a future rebrand on the canonical lift
+        // can't silently land a malformed listener-protocol scalar
+        // (lowercase `"http"`, mixed-case `"Http"`, dotted `"HTTP/1.1"`,
+        // empty) that the K8s Gateway API v1 `ProtocolType` OpenAPI
+        // schema enum would reject at admission time far from the
+        // rebrand commit's source. The all-ASCII-uppercase invariant is
+        // the load-bearing Gateway-API-implementation-side typed
+        // listener-parser-selection contract: a value the gateway-
+        // class-controller's per-listener bind loop selects the L7
+        // parser + TLS termination strategy from.
+        let v = GATEWAY_API_PROTOCOL_HTTP;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_PROTOCOL_HTTP {v:?} must be non-empty per the \
+             Gateway API v1 `ProtocolType` OpenAPI schema enum grammar"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_uppercase()),
+            "GATEWAY_API_PROTOCOL_HTTP {v:?} must be ASCII-uppercase \
+             throughout per the Gateway API v1 `ProtocolType` OpenAPI \
+             schema enum convention — no lowercase, mixed-case, dotted, \
+             or whitespace bytes the gateway-class-controller's per-\
+             listener bind loop would reject"
         );
     }
 

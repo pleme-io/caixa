@@ -665,6 +665,48 @@ pub use caixa_core::GATEWAY_API_KIND_GATEWAY;
 /// together.
 pub use caixa_core::GATEWAY_API_KIND_HTTP_ROUTE;
 
+/// Canonical K8s Gateway API v1 `ProtocolType` OpenAPI schema enum's
+/// `HTTP` listener-protocol scalar value every `gateway_routes`-emitted
+/// `Gateway` document's first (and V0-only) listener declares under its
+/// [`caixa_core::KUBE_KEY_PROTOCOL`] axis. Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_PROTOCOL_HTTP`] so the Gateway-API-
+/// implementation-side per-listener L7-parser-selection scalar value
+/// lives in exactly one place across every caixa renderer — caixa-mesh's
+/// `gateway_routes` per-`:entrada` `Gateway` emitter (the single
+/// production-code site the prior inline `"HTTP".into()` literal sat at,
+/// caixa-mesh/src/lib.rs:2123 — the per-listener `KUBE_KEY_PROTOCOL`
+/// scalar-value emit) and every future per-Gateway-API-side renderer the
+/// M3.x absorption roadmap acknowledges now consult the same
+/// `&'static str`, so a future Gateway API `ProtocolType` enum rebrand
+/// (e.g. an upstream rename to `HTTP/1.1` / `HTTP/2` per the SIG-Network
+/// per-version-scope proposal) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_PROTOCOL_HTTP`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer's
+/// per-listener `KUBE_KEY_PROTOCOL`-scalar-value emit + the matching
+/// in-file `gateway_listener_carries_aplicacao_host` test's
+/// `assert_eq!(…, Some("HTTP"))` listener-protocol-value pin + every
+/// future per-Gateway-API-side renderer the substrate adds. The prior
+/// inline literal would have let a Gateway-API `ProtocolType` rebrand
+/// on the caixa-mesh side without a coordinated edit on the matching
+/// in-file test pin silently emit a `Gateway` whose listener-protocol
+/// scalar drifts off the lifted-test-fixture pin — apply-side: the
+/// gateway-class-controller's per-listener bind loop rejects the
+/// `Gateway` at admission (the K8s Gateway API v1 `ProtocolType` OpenAPI
+/// schema enum admits the closed set `{"HTTP", "HTTPS", "TCP", "TLS",
+/// "UDP"}` verbatim), and every external `:entrada` HTTP flow drops at
+/// the gateway-class-controller's admission gate with no field naming
+/// the listener-protocol-drift root cause. Peer to the
+/// [`GATEWAY_API_KIND_GATEWAY`] + [`GATEWAY_API_KIND_HTTP_ROUTE`]
+/// re-exports on the sibling canonical-Gateway-API-CRD-`kind`-
+/// discriminator surface + the [`DEFAULT_GATEWAY_CLASS_NAME`] re-export
+/// on the sibling Gateway-controller-binding-scalar-value axis —
+/// extends the Gateway-API-CRD-`kind`-value + Gateway-controller-
+/// binding-value re-export set onto the sibling per-Gateway
+/// `spec.listeners[].protocol` listener-protocol-scalar-value axis the
+/// same `gateway_routes` renderer's external `:entrada` ingress contract
+/// carries under the shared `Gateway` body.
+pub use caixa_core::GATEWAY_API_PROTOCOL_HTTP;
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts
 /// its per-route parent-Gateway `[{name}]` attachment list under
@@ -2120,7 +2162,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     );
     listener.insert(
         serde_yaml::Value::String(KUBE_KEY_PROTOCOL.into()),
-        serde_yaml::Value::String("HTTP".into()),
+        serde_yaml::Value::String(GATEWAY_API_PROTOCOL_HTTP.into()),
     );
     listener.insert(
         serde_yaml::Value::String(GATEWAY_API_KEY_HOSTNAME.into()),
@@ -4009,6 +4051,60 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_protocol_http_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_PROTOCOL_HTTP` was lifted from the
+        // inline `"HTTP".into()` literal at the `gateway_routes`
+        // per-`:entrada` `Gateway`'s per-listener `KUBE_KEY_PROTOCOL`
+        // scalar-value emit (caixa-mesh/src/lib.rs:2165 — the sole
+        // production-code call site the prior literal sat at) to a
+        // re-export of [`caixa_core::GATEWAY_API_PROTOCOL_HTTP`] so the
+        // Gateway-API-v1-`ProtocolType`-conformant HTTP listener-protocol
+        // scalar value string lives in exactly one place across every
+        // caixa renderer. Pin the equality + static-data identity here
+        // so any local re-introduction of a sibling
+        // `pub const GATEWAY_API_PROTOCOL_HTTP: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let a
+        // Gateway-API `ProtocolType` rebrand on the caixa-mesh side
+        // without a coordinated caixa-core edit silently land per-
+        // `:entrada` `Gateway` objects at one listener-protocol scalar
+        // and every future per-Aplicacao multi-listener fan-out
+        // renderer's emitted `Gateway` at the drifted other, with every
+        // external `:entrada` HTTP flow dropping at the gateway-class-
+        // controller's admission gate because the K8s Gateway API v1
+        // `ProtocolType` OpenAPI schema enum only admits the closed set
+        // `{"HTTP", "HTTPS", "TCP", "TLS", "UDP"}` verbatim. Peer to
+        // [`gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical`]
+        // + [`gateway_api_kind_http_route_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-Gateway-API-CRD-`kind`-discriminator
+        // re-export pair + [`default_gateway_class_name_re_export_points_at_caixa_core_canonical`]
+        // on the sibling Gateway-controller-binding-scalar-value axis —
+        // extends the pair of `kind`-value + controller-binding-value
+        // re-export drift pins across the `(Gateway, HTTPRoute)` pair
+        // onto the sibling per-Gateway `spec.listeners[].protocol`
+        // listener-protocol-scalar-value axis this crate's
+        // `gateway_routes` renderer's external `:entrada` ingress
+        // contract rests on.
+        assert_eq!(
+            GATEWAY_API_PROTOCOL_HTTP,
+            caixa_core::GATEWAY_API_PROTOCOL_HTTP
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_PROTOCOL_HTTP.as_ptr(),
+                caixa_core::GATEWAY_API_PROTOCOL_HTTP.as_ptr(),
+            ),
+            "GATEWAY_API_PROTOCOL_HTTP must be a re-export of \
+             caixa_core::GATEWAY_API_PROTOCOL_HTTP, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn default_gateway_class_name_re_export_points_at_caixa_core_canonical() {
         // The renderer's `DEFAULT_GATEWAY_CLASS_NAME` was lifted from the
         // inline `"cilium".into()` literal at the `gateway_routes`
@@ -5260,7 +5356,7 @@ mod tests {
         );
         assert_eq!(
             listener.get(KUBE_KEY_PROTOCOL).and_then(|p| p.as_str()),
-            Some("HTTP")
+            Some(GATEWAY_API_PROTOCOL_HTTP)
         );
     }
 
