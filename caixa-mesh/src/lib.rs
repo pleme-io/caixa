@@ -1634,6 +1634,50 @@ pub use caixa_core::KUBE_KEY_PORT;
 /// `spec.listeners[].protocol`).
 pub use caixa_core::KUBE_KEY_PROTOCOL;
 
+/// Canonical K8s core `Protocol` OpenAPI schema enum's `TCP` L4-transport-
+/// protocol scalar value every `cilium_network_policies`-emitted
+/// `CiliumNetworkPolicy` document's per-`spec.ingress[].toPorts[].ports[]`
+/// port-tuple declares under its per-tuple [`caixa_core::KUBE_KEY_PROTOCOL`]
+/// axis. Re-export of the canonical [`caixa_core::KUBE_PROTOCOL_TCP`] so
+/// the K8s-core-`Protocol`-enum-side per-port-tuple L4-transport-selection
+/// scalar value lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `cilium_network_policies` per-`(:de, :para)` CNP emitter
+/// (the single production-code site the prior inline `"TCP".into()`
+/// literal sat at, caixa-mesh/src/lib.rs — the per-`toPorts[].ports[]`
+/// port-tuple `KUBE_KEY_PROTOCOL` scalar-value emit) and every future
+/// per-Cilium-CNP-side / K8s-core-`Protocol`-side renderer the M3.x
+/// absorption roadmap acknowledges now consult the same `&'static str`,
+/// so a future K8s core `Protocol` enum rebrand (e.g. the `KEP-3675 QUIC
+/// transport` proposal's `"QUIC"` addition to the enum, coordinated with
+/// the upstream SIG-Network per-version deprecation cycle) is a one-line
+/// edit on the canonical [`caixa_core::KUBE_PROTOCOL_TCP`] declaration,
+/// not a coordinated rewrite across this crate's `cilium_network_policies`
+/// renderer's per-port-tuple `KUBE_KEY_PROTOCOL`-scalar-value emit + every
+/// future per-Cilium-CNP-side renderer the substrate adds. The prior
+/// inline literal would have let a K8s core `Protocol` rebrand on the
+/// caixa-mesh side without a coordinated edit silently emit a
+/// `CiliumNetworkPolicy` whose per-`toPorts[].ports[]` port-tuple
+/// L4-transport-protocol scalar drifts off the K8s core `Protocol` enum's
+/// admitted closed set — apply-side: the Cilium operator's per-CNP L4
+/// dispatch pass rejects the object at admission (the K8s core `Protocol`
+/// OpenAPI schema enum admits the closed set `{"TCP", "UDP", "SCTP"}`
+/// verbatim), and every intra-mesh `:contratos` L4-tuple-gated flow drops
+/// at the Cilium operator's admission gate with no field naming the L4-
+/// transport-protocol-drift root cause; worse — because the `protocol`
+/// scalar carries a schema-side default of `TCP` on the K8s core
+/// `Protocol` enum, a silently-elided drift on the emit lands a
+/// `CiliumNetworkPolicy` whose ingress rule falls back to the default
+/// L4-transport-protocol and every port-match on a non-default transport
+/// silently misses at the eBPF data plane's per-tuple dispatch. Peer to
+/// the [`GATEWAY_API_PROTOCOL_HTTP`] +
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] re-exports on the sibling
+/// canonical-Gateway-API-v1-OpenAPI-schema-enum-value surface — extends
+/// the Gateway-API-v1-OpenAPI-schema-enum-value re-export pair onto the
+/// sibling K8s-core-`Protocol`-OpenAPI-schema-enum-value axis the same
+/// `cilium_network_policies` renderer's intra-mesh L4-tuple-gating
+/// contract carries under the shared `CiliumNetworkPolicy` body.
+pub use caixa_core::KUBE_PROTOCOL_TCP;
+
 /// Canonical K8s Gateway API `HTTPRoute` per-rule request-timeout-policy
 /// body-axis key. Re-export of the canonical
 /// [`caixa_core::GATEWAY_API_KEY_TIMEOUTS`] so the per-rule request-
@@ -2091,7 +2135,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             );
             port_entry.insert(
                 serde_yaml::Value::String(KUBE_KEY_PROTOCOL.into()),
-                serde_yaml::Value::String("TCP".into()),
+                serde_yaml::Value::String(KUBE_PROTOCOL_TCP.into()),
             );
             to_port.insert(
                 serde_yaml::Value::String(CILIUM_KEY_PORTS.into()),
@@ -3209,6 +3253,113 @@ mod tests {
             "KUBE_KEY_PROTOCOL must be a re-export of caixa_core::KUBE_KEY_PROTOCOL, \
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn kube_protocol_tcp_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_PROTOCOL_TCP` was lifted from the single
+        // inline `"TCP".into()` literal at the `cilium_network_policies`
+        // per-`(:de, :para)` CNP `port_entry.insert(KUBE_KEY_PROTOCOL,
+        // …)` call site (the per-`toPorts[].ports[]` port-tuple L4-
+        // transport-protocol scalar-value emit the Cilium data plane's
+        // per-tuple bpf policy dispatch loop compares against the
+        // observed L4 header protocol before applying the port match)
+        // to a re-export of [`caixa_core::KUBE_PROTOCOL_TCP`] so the
+        // canonical K8s-core-`Protocol`-enum-value string lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local
+        // re-introduction of a sibling `pub const KUBE_PROTOCOL_TCP:
+        // &str = "…"` (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry the same string at
+        // the source while pointing at a different `&'static`
+        // allocation) is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom — the prior shape
+        // would have let a K8s core `Protocol` rebrand on the caixa-
+        // mesh side without a coordinated caixa-core edit silently
+        // land per-`(:de, :para)` CiliumNetworkPolicy documents whose
+        // per-`toPorts[].ports[]` port-tuple L4-transport-protocol
+        // scalar the K8s core `Protocol` OpenAPI schema enum's
+        // `{"TCP", "UDP", "SCTP"}` closed set rejects at apply time
+        // (the Cilium operator's per-CNP L4 dispatch pass drops the
+        // CNP under a non-self-locating
+        // "spec.ingress[0].toPorts[0].ports[0].protocol: Unsupported
+        // value" apiserver admission rejection); worse — because the
+        // schema-side default is `TCP`, a silently-elided drift on
+        // the value lands a CNP whose ingress rule falls back to the
+        // default L4-transport-protocol and every port-match on a
+        // non-default transport silently misses at the eBPF data
+        // plane's per-tuple dispatch. Peer to
+        // [`gateway_api_protocol_http_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-v1-OpenAPI-schema-enum-
+        // value re-export surface — extends the Gateway-API-v1-
+        // OpenAPI-schema-enum-value single-sourcing discipline onto
+        // the sibling K8s-core `Protocol.TCP` per-port-tuple L4-
+        // transport-protocol-discriminator the `cilium_network_policies`
+        // intra-mesh L4-tuple-gating emitter carries under the shared
+        // `CiliumNetworkPolicy` body.
+        assert_eq!(KUBE_PROTOCOL_TCP, caixa_core::KUBE_PROTOCOL_TCP);
+        assert!(
+            std::ptr::eq(
+                KUBE_PROTOCOL_TCP.as_ptr(),
+                caixa_core::KUBE_PROTOCOL_TCP.as_ptr(),
+            ),
+            "KUBE_PROTOCOL_TCP must be a re-export of caixa_core::KUBE_PROTOCOL_TCP, \
+             not a sibling `pub const` that happens to carry the same string \
+             — drift between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_port_tuple_carries_lifted_kube_protocol_tcp() {
+        // Production-emit pin: traverse a rendered CNP's first
+        // `spec.ingress[0].toPorts[0].ports[0]` port-tuple and assert
+        // the `protocol:` scalar is the lifted `KUBE_PROTOCOL_TCP`
+        // (`"TCP"`) verbatim — the load-bearing per-tuple L4-transport-
+        // protocol discriminator the Cilium data plane's per-tuple
+        // bpf policy dispatch loop compares against the observed L4
+        // header protocol before applying the port match. Before the
+        // lift the emitter carried an inline `"TCP".into()` literal
+        // at the sole `port_entry.insert(KUBE_KEY_PROTOCOL, …)` call
+        // site; a typo there (`"tcp"` / `"Tcp"` / `"TCP/IP"`) would
+        // have silently landed the CNP outside the K8s core `Protocol`
+        // OpenAPI schema enum's `{"TCP", "UDP", "SCTP"}` admitted set,
+        // and worse — because the schema-side default is `TCP` — a
+        // silently-elided drift would have fallen back to the default
+        // L4-transport-protocol at admission, letting non-default-
+        // transport port-matches silently miss at the eBPF data plane
+        // with no field naming the drift root cause. Peer to
+        // `gateway_listener_carries_aplicacao_host`'s
+        // `assert_eq!(listener.get(KUBE_KEY_PROTOCOL)…, Some(GATEWAY_API_PROTOCOL_HTTP))`
+        // per-listener L7-parser-selection scalar pin on the sibling
+        // `Gateway.spec.listeners[].protocol` surface — extends the
+        // per-listener L7-parser-selection scalar pin discipline onto
+        // the sibling per-`toPorts[].ports[]` port-tuple L4-transport-
+        // protocol scalar pin surface every `cilium_network_policies`
+        // intra-mesh L4-tuple-gating emit carries under the shared
+        // `CiliumNetworkPolicy` body.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let port_tuple = policies
+            .first()
+            .and_then(|p| p.get(KUBE_KEY_SPEC))
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
+            .and_then(|i| i.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
+            .and_then(|p| p.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|tp| tp.get(CILIUM_KEY_PORTS))
+            .and_then(|p| p.as_sequence())
+            .and_then(|s| s.first())
+            .expect("spec.ingress[0].toPorts[0].ports[0] port-tuple");
+        assert_eq!(
+            port_tuple.get(KUBE_KEY_PROTOCOL).and_then(|v| v.as_str()),
+            Some(KUBE_PROTOCOL_TCP),
+            "per-`toPorts[].ports[]` port-tuple `protocol:` scalar must be \
+             the lifted `KUBE_PROTOCOL_TCP` (`\"TCP\"`) verbatim — the \
+             load-bearing K8s core `Protocol` OpenAPI schema enum value \
+             the Cilium data plane's per-tuple bpf policy dispatch loop \
+             compares against the observed L4 header protocol"
         );
     }
 
