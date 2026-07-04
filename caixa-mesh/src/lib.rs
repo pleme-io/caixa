@@ -1679,6 +1679,63 @@ pub use caixa_core::KUBE_KEY_PORT;
 /// `spec.listeners[].protocol`).
 pub use caixa_core::KUBE_KEY_PROTOCOL;
 
+/// Canonical K8s CR discriminated-union `type` scalar-discriminator-
+/// axis key. Re-export of the canonical [`caixa_core::KUBE_KEY_TYPE`]
+/// so the per-CR discriminated-union type scalar-discriminator field
+/// name lives in exactly one place across every caixa renderer — this
+/// crate's one production-code emission site (`gateway_routes`'s per-
+/// rule per-`HTTPRouteMatch` `spec.rules[].matches[].path.type` scalar
+/// the gateway-class-controller's per-rule L7 dispatch pass selects
+/// the path-match strategy from) and this crate's test-side traversal
+/// sites navigating the rendered `HTTPRoute`'s per-match path-selection-
+/// predicate discriminator now consult the same `&'static str` as the
+/// peer caixa-core-side const definition. Pairs with the sibling
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] re-export on the per-
+/// `HTTPRouteMatch` path-selection-predicate discriminator scalar-VALUE
+/// axis the discriminator scalar-KEY here holds under, closing the
+/// per-`HTTPRouteMatch` path-selection-predicate `(type key →
+/// PathPrefix value)` scalar-key/scalar-value discriminator axis pair
+/// this crate's `gateway_routes` renderer's external `:entrada` per-
+/// path L7-filtering ingress contract rests on — the same shape the
+/// sibling [`KUBE_KEY_PROTOCOL`] key + [`KUBE_PROTOCOL_TCP`] /
+/// [`GATEWAY_API_PROTOCOL_HTTP`] value pair already carries on the
+/// L4/L7-protocol scalar-discriminator surface.
+///
+/// The prior inline `"type"` literal at the one production emitter
+/// site (`path_match.insert("type", …)` in `gateway_routes`) would
+/// have let a typo (`"Type"` / `"kind"` / `"discriminator"` /
+/// `"predicate"`) silently emit an `HTTPRoute` whose per-match path-
+/// selection-predicate discriminator scalar-key the Gateway API v1
+/// `HTTPPathMatch` OpenAPI schema validator drops as unknown at
+/// apply time — the per-match entry falls back to the schema-side
+/// default path-match-strategy, silently admitting every URL-path
+/// prefix the ingress rule was authored to filter to the exact
+/// predicate the typed `:entrada :paths` slot names at the request-
+/// path-selection axis, and every external `:entrada` path-filtered
+/// flow drops at the gateway-class-controller's admission gate with
+/// no field naming the discriminator-scalar-key-drift root cause.
+/// The lift routes every K8s-CR-discriminated-union-type-scalar-key
+/// retrieval + emission through the same `&'static str` so drift
+/// between any two sites becomes a single-edit fix at the caixa-core
+/// const definition.
+///
+/// Same shape as the [`KUBE_KEY_PROTOCOL`] / [`KUBE_KEY_PORT`] re-
+/// exports on the sibling L4/L7-protocol + L4-port scalar-axis
+/// surfaces — extends the per-K8s-CR top-level
+/// `(apiVersion, kind, metadata, spec)` axis re-export quartet + the
+/// load-bearing nested `metadata.{name, namespace, labels}` triplet
+/// + the load-bearing nested `LabelSelector.matchLabels` selector-
+/// projection axis + the load-bearing nested `spec.rules[]` /
+/// `toPorts[].rules` rule-list-container axis + the load-bearing
+/// nested L4-port-scalar axis + the load-bearing nested L4/L7-
+/// protocol-scalar-discriminator axis onto the load-bearing nested
+/// K8s-discriminated-union-type-scalar-discriminator axis every
+/// downstream apiserver-side OpenAPI-schema-validator / gateway-
+/// class-controller consumer of the rendered mesh bundle keys off
+/// before it can commit to a per-match request-path-selection
+/// predicate.
+pub use caixa_core::KUBE_KEY_TYPE;
+
 /// Canonical K8s core `Protocol` OpenAPI schema enum's `TCP` L4-transport-
 /// protocol scalar value every `cilium_network_policies`-emitted
 /// `CiliumNetworkPolicy` document's per-`spec.ingress[].toPorts[].ports[]`
@@ -2415,7 +2472,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     for path in paths {
         let mut path_match = serde_yaml::Mapping::new();
         path_match.insert(
-            serde_yaml::Value::String("type".into()),
+            serde_yaml::Value::String(KUBE_KEY_TYPE.into()),
             serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
         );
         path_match.insert(
@@ -4309,6 +4366,122 @@ mod tests {
              pass reads to source the per-`toPorts[]` L7 URL-path-prefix \
              predicate list, got rules = {rules:?}"
         );
+    }
+
+    #[test]
+    fn kube_key_type_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `KUBE_KEY_TYPE` was lifted from the inline
+        // `"type"` literal at the `gateway_routes` per-`HTTPRouteMatch`
+        // `path_match.insert("type", …)` call site (the sole production-
+        // code site the prior literal sat at — the per-`HTTPRouteMatch`
+        // path-selection-predicate discriminator scalar-key the
+        // gateway-class-controller's per-rule L7 dispatch pass reads to
+        // source the path-match strategy from the closed
+        // `PathMatchType` OpenAPI schema enum's
+        // `{Exact, PathPrefix, RegularExpression}` set) to a re-export
+        // of [`caixa_core::KUBE_KEY_TYPE`] so the K8s-CR discriminated-
+        // union type scalar-discriminator key string lives in exactly
+        // one place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const KUBE_KEY_TYPE: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a K8s API conventions rebrand
+        // on the caixa-mesh side without a coordinated caixa-core edit
+        // silently land per-Aplicacao `HTTPRoute` documents whose per-
+        // `HTTPRouteMatch` path-selection-predicate discriminator
+        // scalar-key the Gateway API v1 `HTTPPathMatch` OpenAPI schema
+        // validator drops as unknown at apply time; the per-match entry
+        // falls back to the schema-side default path-match-strategy,
+        // silently admitting every URL-path prefix the ingress rule was
+        // authored to filter to the exact predicate the typed `:entrada
+        // :paths` slot names at the request-path-selection axis. Peer to
+        // [`gateway_api_path_match_type_path_prefix_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-`HTTPRouteMatch` path-selection-predicate
+        // discriminator scalar-VALUE axis re-export — closes the per-
+        // `HTTPRouteMatch` path-selection-predicate `(type key →
+        // PathPrefix value)` scalar-key/scalar-value discriminator axis
+        // pair this crate's `gateway_routes` renderer's external
+        // `:entrada` per-path L7-filtering ingress contract rests on.
+        assert_eq!(KUBE_KEY_TYPE, caixa_core::KUBE_KEY_TYPE);
+        assert!(
+            std::ptr::eq(KUBE_KEY_TYPE.as_ptr(), caixa_core::KUBE_KEY_TYPE.as_ptr()),
+            "KUBE_KEY_TYPE must be a re-export of \
+             caixa_core::KUBE_KEY_TYPE, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn httproute_path_match_carries_lifted_kube_key_type() {
+        // Production-emit pin: traverse a rendered `HTTPRoute`'s per-
+        // `HTTPRouteMatch` `spec.rules[].matches[].path` mapping and
+        // assert the path-selection-predicate discriminator entry is
+        // keyed by the lifted `KUBE_KEY_TYPE` (`"type"`) verbatim — the
+        // load-bearing per-`HTTPRouteMatch` path-selection-predicate
+        // discriminator scalar-key the gateway-class-controller's per-
+        // rule L7 dispatch pass reads to source the path-match strategy
+        // (the closed `PathMatchType` OpenAPI schema enum's `{Exact,
+        // PathPrefix, RegularExpression}` set) before applying the per-
+        // match request-path predicate against the observed HTTP request
+        // line's `:path` pseudo-header. Before the lift the emitter
+        // carried an inline `"type".into()` literal at the sole
+        // `path_match.insert(…)` call site in the `gateway_routes` per-
+        // path iteration; a typo there (`"Type"` / `"kind"` /
+        // `"discriminator"` / `"predicate"`) would have silently landed
+        // a per-match entry whose path-selection-predicate discriminator
+        // scalar-key the Gateway API v1 `HTTPPathMatch` OpenAPI schema
+        // validator drops as unknown at admission, and the per-match
+        // entry would have fallen back to the schema-side default path-
+        // match-strategy — silently admitting every URL-path prefix the
+        // ingress rule was authored to filter to the exact predicate the
+        // typed `:entrada :paths` slot names at the request-path-
+        // selection axis, with no field naming the discriminator-scalar-
+        // key-drift root cause. Peer to
+        // `cilium_l7_rule_list_carries_lifted_cilium_key_http`'s per-
+        // `toPorts[]` L7-HTTP-rule-list-discriminator container-axis
+        // pin on the sibling per-`toPorts[]` L7-rule-list-container
+        // surface — extends the per-CRD-body-axis lifted-uses pin
+        // discipline onto the sibling per-`HTTPRouteMatch` path-
+        // selection-predicate discriminator scalar-key axis every
+        // `gateway_routes` external `:entrada` per-path L7-filtering
+        // emit carries under the shared `HTTPRoute` body.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let rules = httproute_rules(&docs);
+        assert!(
+            !rules.is_empty(),
+            "HTTPRoute must carry at least one rule the per-match path-\
+             selection-predicate discriminator scalar-key nests under"
+        );
+        for rule in &rules {
+            let matches = rule
+                .get(caixa_core::GATEWAY_API_KEY_MATCHES)
+                .and_then(|m| m.as_sequence())
+                .expect("HTTPRoute per-rule spec.rules[].matches sequence");
+            for m in matches {
+                let path = m
+                    .get(caixa_core::GATEWAY_API_KEY_PATH)
+                    .and_then(|p| p.as_mapping())
+                    .expect(
+                        "HTTPRoute per-match spec.rules[].matches[].path must be \
+                         navigable through the lifted GATEWAY_API_KEY_PATH constant",
+                    );
+                assert!(
+                    path.get(KUBE_KEY_TYPE).is_some(),
+                    "per-`HTTPRouteMatch` `path` block must carry \
+                     the lifted `KUBE_KEY_TYPE` (`\"type\"`) path-\
+                     selection-predicate discriminator scalar-key \
+                     verbatim — the load-bearing Gateway API v1 \
+                     HTTPPathMatch canonical discriminator-key axis \
+                     the gateway-class-controller's per-rule L7 \
+                     dispatch pass reads to source the path-match \
+                     strategy, got path = {path:?}"
+                );
+            }
+        }
     }
 
     #[test]

@@ -6140,6 +6140,81 @@ pub const KUBE_KEY_PORT: &str = "port";
 /// [cm]: ../../caixa_mesh/index.html
 pub const KUBE_KEY_PROTOCOL: &str = "protocol";
 
+/// Canonical K8s API key naming the per-CR **discriminated-union type**
+/// scalar-discriminator axis — the field the apiserver-side OpenAPI schema
+/// for every discriminated-union CR body-position (Gateway API v1
+/// `HTTPRouteMatch.path.type` per-`HTTPRouteMatch` path-selection-predicate
+/// discriminator picking between `Exact` / `PathPrefix` /
+/// `RegularExpression`, K8s core `Condition.type` per-condition kind
+/// discriminator, K8s core `Volume.<projection>.type` per-projection
+/// content-source discriminator, and every future discriminated-union CR
+/// body-position the M4 `mesh.pleme.io/v1alpha1/Aplicacao` materializer
+/// + the per-edge `CiliumClusterwideEnvoyConfig` emitter's per-listener
+/// filter-chain type-discriminator + a future per-`:entrada :paths`
+/// typed slot admitting a per-path `(:predicate <Exact|Prefix|Regex>)`
+/// axis will land on) mounts the discriminated-union type-value under.
+/// Spelled exactly as the K8s apiserver expects (lowercase `type`, not
+/// `Type` / `kind` / `discriminator` — the singular scalar-key
+/// convention K8s uses across every discriminated-union CR family,
+/// distinct from the top-level [`KUBE_KEY_KIND`] CRD-registration
+/// discriminator on the K8s CR top-level which is the CRD-lookup half
+/// of the `(apiVersion, kind)` tuple the K8s apiserver's `RESTMapper`
+/// consults and is not this axis) so the rendered YAML round-trips
+/// through every K8s schema parser without per-renderer string drift.
+///
+/// One production-code call site in this crate's downstream
+/// [`caixa-mesh`][cm] renderer carries this key on the same
+/// K8s-discriminated-union-type-scalar-axis surface (the landing site
+/// lived at an inline `"type".into()` before this lift):
+///
+/// 1. `gateway_routes` — the `HTTPRoute` emitter's per-rule per-match
+///    `spec.rules[].matches[].path.type` scalar (the path-selection-
+///    predicate discriminator the gateway-class-controller's per-rule
+///    L7 dispatch pass selects the path-match strategy from — a drifted
+///    key here silently fails the per-match path-selection-predicate
+///    validation, the Gateway API v1 `PathMatchType` OpenAPI schema
+///    validator drops the entire `HTTPRoute` object at admission with
+///    no per-rule L7 URL-path filtering applied, and every external
+///    `:entrada` path-filtered flow the route was authored to accept
+///    drops at the gateway-class-controller's admission gate with no
+///    field naming the discriminator-drift root cause).
+///
+/// Pairs with the sibling [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`]
+/// (530705d) per-`HTTPRouteMatch` path-selection-predicate discriminator
+/// scalar-VALUE the discriminator scalar-KEY here holds under, closing
+/// the per-`HTTPRouteMatch` path-selection-predicate `(type key →
+/// PathPrefix value)` scalar-key/scalar-value discriminator axis pair
+/// the M3 Aplicacao mesh renderer's external `:entrada` per-path
+/// L7-filtering ingress contract rests on — the same shape the sibling
+/// [`KUBE_KEY_PROTOCOL`] (0307950) key + [`KUBE_PROTOCOL_TCP`] (2123047)
+/// / [`GATEWAY_API_PROTOCOL_HTTP`] (1b57473) value pair already carries
+/// on the L4/L7-protocol scalar-discriminator surface. A `"Type"` /
+/// `"kind"` / `"discriminator"` / `"predicate"` typo at the production-
+/// code call site lands outside the Gateway API v1 `HTTPPathMatch`
+/// OpenAPI schema's admitted property set, surfacing apply-side as a
+/// non-self-locating "spec.rules[0].matches[0].path: Unknown field
+/// \"Type\"" apiserver admission-rejection far from the source
+/// `caixa.lisp` / the renderer's `path_match.insert(…)` call site.
+///
+/// Lifted on the trajectory the peer [`KUBE_KEY_API_VERSION`] /
+/// [`KUBE_KEY_KIND`] / [`KUBE_KEY_METADATA`] / [`KUBE_KEY_NAME`] /
+/// [`KUBE_KEY_NAMESPACE`] / [`KUBE_KEY_LABELS`] / [`KUBE_KEY_SPEC`] /
+/// [`KUBE_KEY_MATCH_LABELS`] / [`KUBE_KEY_RULES`] / [`KUBE_KEY_PORT`] /
+/// [`KUBE_KEY_PROTOCOL`] canonical-K8s-API-key constants establish —
+/// extends the K8s-CR top-level `(apiVersion, kind, metadata, spec)`
+/// axis quartet + the nested `metadata.{name, namespace, labels}`
+/// triplet + the `LabelSelector.matchLabels` selector-projection axis
+/// + the `spec.rules[]` / `toPorts[].rules` rule-list container axis +
+/// the L4-port-scalar axis + the L4/L7-protocol-scalar-discriminator
+/// axis onto the load-bearing nested discriminated-union-type-scalar-
+/// discriminator axis every downstream gateway-class-controller /
+/// apiserver-side OpenAPI-schema-validator consumer of the rendered
+/// mesh bundle keys off before it can commit to a per-match path-
+/// selection predicate.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const KUBE_KEY_TYPE: &str = "type";
+
 /// Default cluster-wide K8s namespace every caixa renderer emits
 /// objects into when the source caixa doesn't pin its own. The single
 /// source of truth both [`caixa-flux`][cf]'s programs.yaml /
@@ -11759,6 +11834,86 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "CILIUM_KEY_HTTP {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn kube_key_type_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the K8s discriminated-union `type` scalar-discriminator
+        // container-axis key every rendered CR mounts its per-position
+        // discriminated-union type-value under. The string is part of the
+        // cluster-side contract with every K8s apiserver-side OpenAPI
+        // schema validator — the Gateway API v1 gateway-class-controller's
+        // per-`HTTPRouteMatch` path-selection-predicate dispatch pass
+        // reads this scalar-key to source the path-match-strategy
+        // discriminator (the closed `PathMatchType` OpenAPI schema enum's
+        // `{Exact, PathPrefix, RegularExpression}` set) the per-rule L7
+        // URL-path-filtering was authored to bind — a drifted key
+        // (`"Type"` / `"kind"` / `"discriminator"` / `"predicate"`) at
+        // either the production emitter or a downstream renderer's per-
+        // `HTTPRouteMatch` path-selection-predicate discriminator upsert
+        // silently emits a per-match entry whose discriminator scalar-key
+        // the Gateway API v1 `HTTPPathMatch` OpenAPI schema validator
+        // drops as unknown, and the per-match entry falls back to the
+        // schema-side default path-match-strategy — silently admitting
+        // every URL-path prefix the ingress rule was authored to filter
+        // to the exact predicate the typed `:entrada :paths` slot names
+        // at the request-path-selection axis. Changing this value is a
+        // coordinated K8s-API-conventions promotion alongside the
+        // upstream sig-architecture per-version deprecation cycle, not
+        // an incidental edit. Peer to
+        // `cilium_key_http_pins_canonical_value` /
+        // `cilium_key_mode_pins_canonical_value` /
+        // `cilium_key_authentication_pins_canonical_value` on the
+        // sibling per-CRD-body-axis pin set — extends the canonical-
+        // string-pin discipline from the per-CRD-body-axis surfaces
+        // onto the load-bearing nested K8s-discriminated-union-type-
+        // scalar-discriminator axis every downstream apiserver-side
+        // OpenAPI-schema-validator / gateway-class-controller consumer
+        // of the rendered mesh bundle keys off before it can commit to
+        // a per-match request-path-selection predicate.
+        assert_eq!(KUBE_KEY_TYPE, "type");
+    }
+
+    #[test]
+    fn kube_key_type_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `cilium_key_http_carries_lower_camel_case_shape` /
+        // `cilium_key_mode_carries_lower_camel_case_shape` /
+        // `cilium_key_authentication_carries_lower_camel_case_shape` on
+        // the sibling per-CRD-body-axis grammar-pin set — the
+        // lowerCamelCase K8s field-name grammar governs every nested
+        // schema-field axis (including this K8s-discriminated-union-
+        // type-scalar-discriminator axis), same convention.
+        let v = KUBE_KEY_TYPE;
+        assert!(
+            !v.is_empty(),
+            "KUBE_KEY_TYPE {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "KUBE_KEY_TYPE {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "KUBE_KEY_TYPE {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
