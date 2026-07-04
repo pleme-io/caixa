@@ -7623,6 +7623,97 @@ pub const CILIUM_KEY_AUTHENTICATION: &str = "authentication";
 /// [cm]: ../../caixa_mesh/index.html
 pub const CILIUM_KEY_MODE: &str = "mode";
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-`ingress[].toPorts[].rules`
+/// L7-HTTP-rule-list-discriminator container-axis key every
+/// `cilium_network_policies`-emitted CNP document mounts its per-`toPorts[]`
+/// entry L7 HTTP-rule list under (`spec.ingress[].toPorts[].rules.http`).
+/// Nests exactly one level beneath the sibling [`KUBE_KEY_RULES`] (a205eb3)
+/// per-`toPorts[]` rule-list-container axis it sits inside: the Cilium CNP
+/// schema places the L7-protocol-selection discriminator (`http` / future
+/// `kafka` / future `dns`) as the single per-protocol keyed axis of the
+/// per-`toPorts[]` rules block, so drift on the L7-HTTP-rule-list-
+/// discriminator axis is exactly as load-bearing as drift on the sibling
+/// [`KUBE_KEY_RULES`] per-`toPorts[]` rule-list-container axis-key it nests
+/// inside (the Cilium-operator-side CNP schema validator drops any per-
+/// `toPorts[]` entry whose per-protocol L7-rule-list-discriminator key it
+/// recognizes as unknown — a `"HTTP"` / `"Http"` / `"http/1.1"` /
+/// `"httpRules"` typo at either the emit-side `rules.insert(…)` call site
+/// or a downstream renderer's per-`toPorts[]` L7-rule-list upsert silently
+/// emits a per-`toPorts[]` entry whose L7-HTTP-rule-list-discriminator key
+/// the Cilium CRD schema validator rejects as unknown; the per-`toPorts[]`
+/// entry falls back to L4-only enforcement — no L7 URL-path predicate is
+/// applied — silently admitting every HTTP-method / URL-path combination
+/// the ingress rule was authored to filter to the exact path prefix set
+/// the typed `:contratos` graph names at the L7 introspection axis, and
+/// the emit-side/probe-side split silently masks the per-`toPorts[]` L7-
+/// rule-list pin (`.get("http")` returns `None` under both the drifted-
+/// key emitter and the drifted-key probe — every downstream
+/// `.and_then(|h| h.as_sequence())` chain short-circuits vacuously because
+/// the outer L7-HTTP-rule-list-lookup is itself `None`).
+///
+/// The single source of truth the rendered Aplicacao Cilium-CNP-side
+/// intra-mesh L7-tuple-gating bundle's per-`toPorts[]` L7-HTTP-rule-list-
+/// discriminator-axis naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-`toPorts[]` entry
+///     `rules.http` L7-HTTP-rule-list-discriminator axis (caixa-mesh/src/lib.rs —
+///     the `cilium_network_policies` per-`(:de, :para)` policy's
+///     `rules.insert("http", …)` call in the `WitTarget::Http` L7-
+///     introspection emit branch, the exact per-protocol keyed axis of
+///     the per-`toPorts[]` rules block the L7 URL-path predicate lands
+///     under).
+///
+/// The L7-HTTP-rule-list-discriminator axis names the same Cilium-operator-
+/// side per-`toPorts[]` L7 URL-path predicate selection as the sibling
+/// [`KUBE_KEY_RULES`] per-`toPorts[]` rule-list-container axis-key it nests
+/// inside, and must move together on any future Cilium CRD schema rebrand
+/// (an upstream `cilium.io/v3` rename of the L7-HTTP-rule-list-
+/// discriminator from `http` to `httpRules` / `l7Http` / `httpMatch`,
+/// coordinated with the Cilium project's periodic CRD schema-migration
+/// passes). Until this lift landed the axis carried an inline `http`
+/// literal at the one production-code emitter site (the
+/// `cilium_network_policies` per-`(:de, :para)` `rules.insert("http", …)`
+/// call in the `WitTarget::Http` L7 introspection emit branch) plus a
+/// matching set inside the in-file `cilium_l7_rules_fan_in_captures_every_
+/// http_edge` / `cilium_http_contracts_carry_l7_path` test-fixture
+/// navigations — three occurrences of the same load-bearing Cilium-CRD-
+/// L7-HTTP-rule-list-discriminator convention, drift-prone by
+/// construction. A drift on any one production or test-fixture site to
+/// `"HTTP"` / `"Http"` / `"httpRules"` would surface as a Cilium-operator-
+/// side schema-validator drop at apply time (the affected per-
+/// `toPorts[]` entry's L7-rule-list-discriminator key the CRD schema
+/// validator recognizes as unknown), with every intra-mesh HTTP-shaped
+/// `:contratos` flow the CNP was authored to filter to a URL-path prefix
+/// silently bypassing the L7 path predicate at the Cilium data-plane's
+/// L4-only fallback dispatch with no field naming the L7-HTTP-rule-list-
+/// discriminator-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`CILIUM_KEY_MODE`] (4289dfb) /
+/// [`CILIUM_KEY_AUTHENTICATION`] (db31108) /
+/// [`CILIUM_KEY_PORTS`] (1087693) /
+/// [`CILIUM_KEY_FROM_ENDPOINTS`] (ecfa557) /
+/// [`CILIUM_KEY_ENDPOINT_SELECTOR`] (7088789) /
+/// [`CILIUM_KEY_INGRESS`] (0400a9b) /
+/// [`CILIUM_KEY_TO_PORTS`] (c8d9cbf) /
+/// [`KUBE_KEY_RULES`] (a205eb3) /
+/// [`CILIUM_KIND_NETWORK_POLICY`] (eac85cb) /
+/// [`CILIUM_API_VERSION`] (279d611) lifts established on the
+/// sibling canonical-Cilium-CNP-body-axis surfaces — descends the per-
+/// `toPorts[]` L7-HTTP-rule-list-discriminator axis one level beneath the
+/// parent [`KUBE_KEY_RULES`] per-`toPorts[]` rule-list-container axis-key
+/// it nests inside, completing the per-`toPorts[]` L7-introspection
+/// `(rules → http)` container/protocol-discriminator axis pair the M3
+/// Aplicacao mesh renderer's HTTP-shaped-`:contratos` URL-path-prefix-
+/// filtering L7-enforcement contract rests on.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_KEY_HTTP: &str = "http";
+
 /// Canonical K8s Gateway API CRD `kind` discriminator the rendered
 /// `Gateway` document declares at its top-level [`KUBE_KEY_KIND`] axis.
 /// Pairs with the sibling [`GATEWAY_API_API_VERSION`] (3c6cfc3) — the
@@ -11583,6 +11674,91 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "CILIUM_KEY_MODE {v:?} must be ASCII-alphanumeric \
+             throughout per the K8s API field-name grammar — no \
+             snake_case, kebab-case, or whitespace bytes the apiserver-side \
+             OpenAPI schema validator would reject"
+        );
+    }
+
+    #[test]
+    fn cilium_key_http_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Cilium CNP `spec.ingress[].toPorts[].rules.http`
+        // per-`toPorts[]` L7-HTTP-rule-list-discriminator container-axis
+        // key the rendered CNP document mounts its per-`toPorts[]` L7
+        // URL-path-prefix predicate list under. The string is part of the
+        // cluster-side contract with the upstream Cilium operator — the
+        // Cilium-operator-side per-CNP L7 dispatch pipeline reads this
+        // container axis to source the per-`toPorts[]` L7 URL-path-prefix
+        // predicate list the ingress rule was authored to filter each
+        // HTTP-shaped `:contratos` flow through; a drifted key (`"HTTP"` /
+        // `"Http"` / `"httpRules"` / `"httpMatch"`) at either the
+        // production emitter or a downstream renderer's per-`toPorts[]`
+        // L7-rule-list-discriminator upsert silently emits a per-
+        // `toPorts[]` entry whose L7-HTTP-rule-list-discriminator key the
+        // Cilium CRD schema validator drops as unknown, and the per-
+        // `toPorts[]` entry falls back to L4-only enforcement — no L7
+        // URL-path predicate is applied — silently admitting every HTTP-
+        // method / URL-path combination the ingress rule was authored to
+        // filter to the exact path prefix set the typed `:contratos`
+        // graph names at the L7 introspection axis. Changing this value
+        // is a coordinated Cilium-CRD promotion alongside the upstream
+        // Cilium project's CRD schema-migration cycle, not an incidental
+        // edit. Peer to `cilium_key_mode_pins_canonical_value` /
+        // `cilium_key_authentication_pins_canonical_value` on the
+        // sibling per-ingress-rule mutual-auth body/leaf axis pin pair —
+        // completes the per-`toPorts[]` L7-introspection
+        // `(rules → http)` container/protocol-discriminator axis pin
+        // pair the M3 Aplicacao mesh renderer's HTTP-shaped-`:contratos`
+        // URL-path-prefix-filtering L7-enforcement contract rests on.
+        // Byte-identical to the sibling `Gateway.spec.listeners[].name`
+        // arbitrary-author-chosen listener-name today (`"http"` — the
+        // author-chosen name for the substrate's V0 HTTP listener), but
+        // semantically distinct: this const names the Cilium CRD's per-
+        // `toPorts[]` L7-HTTP-rule-list-discriminator container-axis key
+        // (spelled per the Cilium project's CRD schema), so a future
+        // rebrand on the Cilium CRD's L7-HTTP-rule-list-discriminator
+        // axis lands at its own canonical const without coupling the
+        // Cilium schema to any peer surface that happens to carry the
+        // same byte.
+        assert_eq!(CILIUM_KEY_HTTP, "http");
+    }
+
+    #[test]
+    fn cilium_key_http_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: a Kubernetes CRD schema field name is a
+        // lowerCamelCase identifier per the K8s API conventions
+        // (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#naming-conventions —
+        // "Field names should be lowercase camelCase") — first byte
+        // ASCII-lowercase, rest ASCII-alphanumeric, no snake_case or
+        // kebab-case or whitespace. Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed field-name discriminator (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the apiserver-side CRD schema
+        // validator would reject far from the rebrand commit's source.
+        // Peer to `cilium_key_mode_carries_lower_camel_case_shape` /
+        // `cilium_key_authentication_carries_lower_camel_case_shape` on
+        // the sibling per-ingress-rule mutual-auth-body/leaf-axis
+        // grammar-pin set — the lowerCamelCase K8s field-name grammar
+        // governs every nested schema-field axis (including this per-
+        // `toPorts[]` L7-HTTP-rule-list-discriminator container-axis
+        // key), same convention.
+        let v = CILIUM_KEY_HTTP;
+        assert!(
+            !v.is_empty(),
+            "CILIUM_KEY_HTTP {v:?} must be non-empty per the K8s API \
+             lowerCamelCase field-name grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_lowercase(),
+            "CILIUM_KEY_HTTP {v:?} first byte {first:?} must be \
+             ASCII-lowercase per the K8s API lowerCamelCase field-name \
+             grammar (field names are always lowerCamelCase)"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "CILIUM_KEY_HTTP {v:?} must be ASCII-alphanumeric \
              throughout per the K8s API field-name grammar — no \
              snake_case, kebab-case, or whitespace bytes the apiserver-side \
              OpenAPI schema validator would reject"
