@@ -598,6 +598,51 @@ pub use caixa_core::CILIUM_KEY_AUTHENTICATION;
 /// SPIFFE-identity-bound per-edge mTLS enforcement contract rests on.
 pub use caixa_core::CILIUM_KEY_MODE;
 
+/// Canonical Cilium `CiliumNetworkPolicy` per-`ingress[].toPorts[].rules`
+/// L7-HTTP-rule-list-discriminator container-axis key every
+/// `cilium_network_policies`-emitted CNP document mounts its per-
+/// `toPorts[]` entry L7 URL-path-prefix predicate list under
+/// (`spec.ingress[].toPorts[].rules.http`). Re-export of the canonical
+/// [`caixa_core::CILIUM_KEY_HTTP`] so the Cilium-CRD per-`toPorts[]` L7-
+/// HTTP-rule-list-discriminator container-axis key string lives in exactly
+/// one place across every caixa renderer — caixa-mesh's
+/// `cilium_network_policies` per-`(:de, :para)` `CiliumNetworkPolicy`
+/// emitter (the single production-code site the prior inline `"http"`
+/// literal sat at, the `rules.insert("http", …)` call in the
+/// `WitTarget::Http` L7 introspection emit branch) and every future
+/// per-Cilium-side renderer the M3.x absorption roadmap acknowledges now
+/// consult the same `&'static str`, so a future Cilium-CRD rebrand on the
+/// per-`toPorts[]` L7-HTTP-rule-list-discriminator axis (unlikely on the
+/// CRD's stable `cilium.io/v2` slot, but the coordination point the
+/// sibling [`CILIUM_KEY_AUTHENTICATION`] / [`CILIUM_KEY_MODE`] re-exports
+/// anchor on the parent per-ingress-rule mutual-auth body/leaf axis pair)
+/// lands in one place. The prior inline literal split across the one
+/// production emitter site and two test-fixture navigation sites (the L7
+/// fan-in path-capture pin across the multi-edge group, the per-HTTP-
+/// contract L7-path presence pin) would have let a Cilium-CRD L7-HTTP-
+/// rule-list-discriminator rebrand or a per-emitter typo (`"HTTP"` /
+/// `"Http"` / `"httpRules"` / `"httpMatch"`) at any one site silently
+/// emit a per-`toPorts[]` entry whose L7-HTTP-rule-list-discriminator
+/// key the Cilium CRD schema validator drops as unknown; the per-
+/// `toPorts[]` entry falls back to L4-only enforcement — no L7 URL-
+/// path predicate is applied — silently admitting every HTTP-method /
+/// URL-path combination the ingress rule was authored to filter to the
+/// exact path prefix set the typed `:contratos` graph names at the L7
+/// introspection axis, with no field naming the L7-HTTP-rule-list-
+/// discriminator-drift root cause. On the test-fixture side the drift
+/// silently masks the emission-side pin (`.get("http")` returns `None`
+/// under both the drifted-key emitter and the drifted-key probe —
+/// every downstream `.and_then(|h| h.as_sequence())` chain short-
+/// circuits vacuously because the outer L7-HTTP-rule-list-lookup is
+/// itself `None`). Peer to the [`CILIUM_KEY_MODE`] /
+/// [`CILIUM_KEY_AUTHENTICATION`] re-exports on the sibling per-
+/// ingress-rule mutual-auth body/leaf axis pair — completes the per-
+/// `toPorts[]` L7-introspection `(rules → http)` container/protocol-
+/// discriminator axis re-export pair this crate's
+/// `cilium_network_policies` renderer's HTTP-shaped-`:contratos` URL-
+/// path-prefix-filtering L7-enforcement contract rests on.
+pub use caixa_core::CILIUM_KEY_HTTP;
+
 /// Canonical K8s Gateway API CRD `kind` discriminator every
 /// `gateway_routes`-emitted `Gateway` document declares at its top-level
 /// [`caixa_core::KUBE_KEY_KIND`] axis. Re-export of the canonical
@@ -2155,7 +2200,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 );
                 let mut rules = serde_yaml::Mapping::new();
                 rules.insert(
-                    serde_yaml::Value::String("http".into()),
+                    serde_yaml::Value::String(CILIUM_KEY_HTTP.into()),
                     serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
                 );
                 to_port.insert(
@@ -4148,6 +4193,125 @@ mod tests {
     }
 
     #[test]
+    fn cilium_key_http_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_KEY_HTTP` was lifted from the inline
+        // `"http"` literal at the `cilium_network_policies` per-`(:de,
+        // :para)` CNP `rules.insert("http", …)` call site in the
+        // `WitTarget::Http` L7 introspection emit branch (the per-
+        // `toPorts[]` L7-HTTP-rule-list-discriminator container-axis
+        // emit the Cilium data plane's per-`toPorts[]` L7 dispatch pass
+        // reads to source the per-`toPorts[]` L7 URL-path-prefix
+        // predicate list the ingress rule was authored to filter each
+        // HTTP-shaped `:contratos` flow through) plus two test-side
+        // navigations: the L7-fan-in path-capture pin across the multi-
+        // edge group and the per-HTTP-contract L7-path presence pin —
+        // to a re-export of [`caixa_core::CILIUM_KEY_HTTP`] so the
+        // Cilium-CRD per-`toPorts[]` L7-HTTP-rule-list-discriminator
+        // container-axis key string lives in exactly one place across
+        // every caixa renderer. Pin the equality + static-data identity
+        // here so any local re-introduction of a sibling `pub const
+        // CILIUM_KEY_HTTP: &str = "…"` (the canonical drift footgun
+        // where a sibling local `pub const` could happen to carry the
+        // same string at the source while pointing at a different
+        // `&'static` allocation) is a build-time test failure naming
+        // the offending drift, not a silent apply-time symptom — the
+        // prior shape would have let a Cilium-CRD schema rebrand on
+        // the per-`toPorts[]` L7-HTTP-rule-list-discriminator axis
+        // without a coordinated caixa-core edit silently land per-
+        // `(:de, :para)` CiliumNetworkPolicy documents whose per-
+        // `toPorts[]` entry L7-HTTP-rule-list-discriminator container-
+        // axis key the Cilium CRD schema validator drops as
+        // unrecognized at apply time; the per-`toPorts[]` entry falls
+        // back to L4-only enforcement — no L7 URL-path predicate is
+        // applied — silently admitting every HTTP-method / URL-path
+        // combination the ingress rule was authored to filter to the
+        // exact path prefix set the typed `:contratos` graph names at
+        // the L7 introspection axis. Peer to
+        // [`cilium_key_mode_re_export_points_at_caixa_core_canonical`] /
+        // [`cilium_key_authentication_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-ingress-rule mutual-auth body/leaf axis
+        // re-export pair — completes the per-`toPorts[]` L7-
+        // introspection `(rules → http)` container/protocol-
+        // discriminator axis re-export pair this crate's
+        // `cilium_network_policies` renderer's HTTP-shaped-`:contratos`
+        // URL-path-prefix-filtering L7-enforcement contract rests on.
+        assert_eq!(CILIUM_KEY_HTTP, caixa_core::CILIUM_KEY_HTTP);
+        assert!(
+            std::ptr::eq(
+                CILIUM_KEY_HTTP.as_ptr(),
+                caixa_core::CILIUM_KEY_HTTP.as_ptr(),
+            ),
+            "CILIUM_KEY_HTTP must be a re-export of \
+             caixa_core::CILIUM_KEY_HTTP, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_l7_rule_list_carries_lifted_cilium_key_http() {
+        // Production-emit pin: traverse a rendered CNP's
+        // `spec.ingress[0].toPorts[0].rules` L7-rule-list-container
+        // block and assert the L7-HTTP-rule-list-discriminator entry
+        // is keyed by the lifted `CILIUM_KEY_HTTP` (`"http"`) verbatim
+        // — the load-bearing per-`toPorts[]` L7-HTTP-rule-list-
+        // discriminator container-axis key the Cilium data plane's
+        // per-`toPorts[]` L7 dispatch pass reads to source the per-
+        // `toPorts[]` L7 URL-path-prefix predicate list before applying
+        // the per-request URL-path predicate against the observed
+        // HTTP request line. Before the lift the emitter carried an
+        // inline `"http".into()` literal at the sole `rules.insert(…)`
+        // call site in the `WitTarget::Http` L7 introspection emit
+        // branch; a typo there (`"HTTP"` / `"Http"` / `"httpRules"`)
+        // would have silently landed a per-`toPorts[]` entry whose
+        // L7-HTTP-rule-list-discriminator key the Cilium CRD schema
+        // validator drops as unknown at admission, and the per-
+        // `toPorts[]` entry would have fallen back to L4-only
+        // enforcement — no L7 URL-path predicate applied — silently
+        // admitting every HTTP-method / URL-path combination the
+        // ingress rule was authored to filter to the exact path prefix
+        // set the typed `:contratos` graph names at the L7
+        // introspection axis, with no field naming the L7-HTTP-rule-
+        // list-discriminator-drift root cause. Peer to
+        // `cilium_port_tuple_carries_lifted_kube_protocol_tcp`'s per-
+        // `toPorts[].ports[]` L4-transport-protocol scalar pin on the
+        // sibling per-`toPorts[]` L4-tuple surface — extends the per-
+        // `toPorts[]` L4-tuple-scalar pin discipline onto the sibling
+        // per-`toPorts[]` L7-rule-list-container-axis pin surface
+        // every `cilium_network_policies` intra-mesh L7-URL-path-
+        // predicate-gating emit carries under the shared
+        // `CiliumNetworkPolicy` body.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let rules = policies
+            .iter()
+            .find_map(|p| {
+                p.get(KUBE_KEY_SPEC)
+                    .and_then(|s| s.get(CILIUM_KEY_INGRESS))
+                    .and_then(|i| i.as_sequence())
+                    .and_then(|s| s.first())
+                    .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
+                    .and_then(|p| p.as_sequence())
+                    .and_then(|s| s.iter().find(|tp| tp.get(KUBE_KEY_RULES).is_some()))
+                    .and_then(|tp| tp.get(KUBE_KEY_RULES))
+            })
+            .expect(
+                "at least one per-`toPorts[]` entry emits a `rules` \
+                 L7-rule-list-container block on the aplicacao fixture's \
+                 HTTP-shaped `:contratos` edges",
+            );
+        assert!(
+            rules.get(CILIUM_KEY_HTTP).is_some(),
+            "per-`toPorts[]` `rules` L7-rule-list-container must carry \
+             the lifted `CILIUM_KEY_HTTP` (`\"http\"`) L7-HTTP-rule-list-\
+             discriminator key verbatim — the load-bearing Cilium CRD \
+             per-`toPorts[]` L7-HTTP-rule-list-discriminator container-\
+             axis key the Cilium data plane's per-`toPorts[]` L7 dispatch \
+             pass reads to source the per-`toPorts[]` L7 URL-path-prefix \
+             predicate list, got rules = {rules:?}"
+        );
+    }
+
+    #[test]
     fn gateway_api_kind_gateway_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KIND_GATEWAY` was lifted from the
         // inline `"Gateway"` literal at the `gateway_routes`
@@ -5334,7 +5498,7 @@ mod tests {
             .iter()
             .filter_map(|tp| {
                 tp.get(KUBE_KEY_RULES)
-                    .and_then(|r| r.get("http"))
+                    .and_then(|r| r.get(CILIUM_KEY_HTTP))
                     .and_then(|h| h.as_sequence())
                     .and_then(|s| s.first())
                     .and_then(|rule| rule.get("path"))
@@ -5521,7 +5685,7 @@ mod tests {
             .and_then(|p| p.as_sequence())
             .and_then(|s| s.first())
             .and_then(|p| p.get(KUBE_KEY_RULES))
-            .and_then(|r| r.get("http"))
+            .and_then(|r| r.get(CILIUM_KEY_HTTP))
             .and_then(|h| h.as_sequence())
             .unwrap();
         assert_eq!(http_rules.len(), 1);
