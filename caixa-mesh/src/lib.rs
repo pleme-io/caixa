@@ -707,6 +707,49 @@ pub use caixa_core::GATEWAY_API_KIND_HTTP_ROUTE;
 /// carries under the shared `Gateway` body.
 pub use caixa_core::GATEWAY_API_PROTOCOL_HTTP;
 
+/// Canonical K8s Gateway API v1 `PathMatchType` OpenAPI schema enum's
+/// `PathPrefix` per-`HTTPRouteMatch` path-selection-predicate discriminator
+/// value every `gateway_routes`-emitted `HTTPRoute` per-rule `matches[]`
+/// entry declares under its per-match `spec.rules[].matches[].path.type`
+/// scalar axis. Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] so the Gateway-
+/// API-implementation-side per-`HTTPRouteMatch` request-path-selection-
+/// predicate discriminator scalar value lives in exactly one place across
+/// every caixa renderer — caixa-mesh's `gateway_routes` per-Aplicacao
+/// `HTTPRoute` emitter (the single production-code site the prior inline
+/// `"PathPrefix".into()` literal sat at, caixa-mesh/src/lib.rs — the
+/// per-match `path_match.insert("type", "PathPrefix")` scalar-value emit)
+/// and every future per-Gateway-API-side renderer the M3.x absorption
+/// roadmap acknowledges now consult the same `&'static str`, so a future
+/// Gateway API `PathMatchType` enum rebrand (e.g. an upstream rename to
+/// `Prefix` / `PathPrefixMatch` per the SIG-Network per-version-scope
+/// proposal) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] declaration,
+/// not a coordinated rewrite across this crate's `gateway_routes`
+/// renderer's per-match `path_match.insert` scalar-value emit + every
+/// future per-Gateway-API-side renderer the substrate adds. The prior
+/// inline literal at the one production emitter site would have let a
+/// Gateway-API `PathMatchType` rebrand on the caixa-mesh side without a
+/// coordinated caixa-core edit silently emit an `HTTPRoute` whose per-
+/// match path-selection-predicate scalar drifts off the canonical
+/// [`caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] value —
+/// apply-side: the K8s apiserver-side Gateway API v1 `PathMatchType`
+/// OpenAPI schema enum admits the closed set
+/// `{"Exact", "PathPrefix", "RegularExpression"}` verbatim, so any
+/// drifted value lands the emitted `HTTPRoute` outside the enum's
+/// admitted set and every external `:entrada` path-filtered flow drops
+/// at the gateway-class-controller's admission gate with no field naming
+/// the path-match-type-drift root cause. Peer to the
+/// [`GATEWAY_API_PROTOCOL_HTTP`] re-export on the sibling per-Gateway-
+/// listener L7-parser-selection scalar-value axis — extends the
+/// canonical-Gateway-API-v1-OpenAPI-schema-enum-value single-sourcing
+/// re-export discipline the `ProtocolType.HTTP` re-export established
+/// onto the sibling `PathMatchType.PathPrefix` per-`HTTPRouteMatch`
+/// path-selection-predicate discriminator the same `gateway_routes`
+/// external `:entrada` ingress emitter carries under the shared
+/// `HTTPRoute` body.
+pub use caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX;
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts
 /// its per-route parent-Gateway `[{name}]` attachment list under
@@ -2284,7 +2327,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         let mut path_match = serde_yaml::Mapping::new();
         path_match.insert(
             serde_yaml::Value::String("type".into()),
-            serde_yaml::Value::String("PathPrefix".into()),
+            serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
         );
         path_match.insert(
             serde_yaml::Value::String("value".into()),
@@ -4101,6 +4144,62 @@ mod tests {
              caixa_core::GATEWAY_API_PROTOCOL_HTTP, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn gateway_api_path_match_type_path_prefix_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX` was
+        // lifted from the inline `"PathPrefix".into()` literal at the
+        // `gateway_routes` per-match `path_match.insert("type", …)`
+        // per-`HTTPRouteMatch` path-selection-predicate scalar-value
+        // emit (the sole production-code call site the prior literal
+        // sat at) to a re-export of
+        // [`caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] so
+        // the Gateway-API-v1-`PathMatchType`-conformant per-match
+        // request-path-selection-predicate discriminator scalar value
+        // string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so any
+        // local re-introduction of a sibling
+        // `pub const GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX: &str =
+        // "…"` (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation)
+        // is a build-time test failure naming the offending drift, not
+        // a silent apply-time symptom — the prior shape would have let
+        // a Gateway-API `PathMatchType` rebrand on the caixa-mesh side
+        // without a coordinated caixa-core edit silently land per-
+        // `:entrada` `HTTPRoute` objects at one path-selection-
+        // predicate scalar and every future per-Aplicacao multi-
+        // predicate fan-out renderer's emitted `HTTPRoute` at the
+        // drifted other, with every external `:entrada` path-filtered
+        // flow dropping at the gateway-class-controller's admission
+        // gate because the K8s Gateway API v1 `PathMatchType` OpenAPI
+        // schema enum only admits the closed set
+        // `{"Exact", "PathPrefix", "RegularExpression"}` verbatim. Peer
+        // to
+        // [`gateway_api_protocol_http_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-Gateway-listener L7-parser-selection
+        // scalar-value re-export axis — extends the canonical-Gateway-
+        // API-v1-OpenAPI-schema-enum-value re-export drift pin the
+        // `ProtocolType.HTTP` re-export pin established onto the
+        // sibling `PathMatchType.PathPrefix` per-`HTTPRouteMatch`
+        // path-selection-predicate discriminator this crate's
+        // `gateway_routes` renderer's external `:entrada` ingress
+        // contract rests on under the shared `HTTPRoute` body.
+        assert_eq!(
+            GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX,
+            caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX
+        );
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.as_ptr(),
+                caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.as_ptr(),
+            ),
+            "GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX must be a re-export of \
+             caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX, not a sibling \
+             `pub const` that happens to carry the same string — drift between \
+             the two is the canonical footgun this lift closes"
         );
     }
 
