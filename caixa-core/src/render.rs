@@ -7856,6 +7856,89 @@ pub const GATEWAY_API_KIND_HTTP_ROUTE: &str = "HTTPRoute";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_PROTOCOL_HTTP: &str = "HTTP";
 
+/// Canonical K8s Gateway API v1 `PathMatchType` OpenAPI schema enum's
+/// `PathPrefix` per-`HTTPRouteMatch` path-selection-predicate discriminator
+/// value every `gateway_routes`-emitted `HTTPRoute` per-rule `matches[]`
+/// entry declares under its per-match `spec.rules[].matches[].path.type`
+/// scalar axis. Pairs with the sibling [`GATEWAY_API_KEY_PATH`] (9f45aa4)
+/// per-`HTTPRouteMatch` path-matcher container-axis key it nests one level
+/// beneath — the Gateway API v1 CRD schema pins per-`HTTPRouteMatch`
+/// request-path selection through the `spec.rules[].matches[].path`
+/// container axis (each match entry names one path-selection predicate the
+/// request line's `:path` pseudo-header must satisfy under a `type`
+/// discriminator scalar value; the Gateway API v1 `PathMatchType` OpenAPI
+/// schema enum admits the closed set `{"Exact", "PathPrefix",
+/// "RegularExpression"}` verbatim), so drift on the path-match-type value
+/// is exactly as load-bearing as drift on the sibling
+/// [`GATEWAY_API_PROTOCOL_HTTP`] (1b57473) per-listener L7-parser-selection
+/// scalar value the peer `spec.listeners[].protocol` axis carries (a
+/// `"pathPrefix"` / `"path_prefix"` / `"Prefix"` / `"path-prefix"` typo at
+/// the production-code call site lands outside the Gateway API v1
+/// `PathMatchType` OpenAPI schema enum's admitted set, surfacing apply-side
+/// as a non-self-locating "spec.rules[0].matches[0].path.type: Unsupported
+/// value: \"pathPrefix\": supported values: \"Exact\", \"PathPrefix\",
+/// \"RegularExpression\"" apiserver admission-rejection far from the
+/// source `caixa.lisp` / the renderer's `path_match.insert(…)` call site —
+/// the rendered per-Aplicacao `HTTPRoute` object never reconciles at the
+/// gateway-class-controller's per-rule L7 dispatch loop and every external
+/// `:entrada` path-filtered flow drops at the gateway-class-controller's
+/// admission gate with no field naming the path-match-type-drift root
+/// cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-`HTTPRouteMatch` path-selection-predicate-
+/// discriminator-value-naming reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-match
+///     `spec.rules[].matches[].path.type` axis (caixa-mesh/src/lib.rs —
+///     the `gateway_routes` per-match `path_match.insert("type",
+///     "PathPrefix")` call the prior inline `"PathPrefix".into()` literal
+///     sat at).
+///
+/// The path-match-type value names the same Gateway-API-implementation-
+/// side per-`HTTPRouteMatch` request-path-selection-predicate discriminator
+/// as the sibling [`GATEWAY_API_KEY_PATH`] path-matcher container-axis key
+/// carries the value under, and must move together with the sibling K8s
+/// Gateway API v1 `PathMatchType` OpenAPI schema enum on any future
+/// Gateway API rebrand (an upstream Gateway API v2 rename of the prefix-
+/// path-selection discriminator from `PathPrefix` to `Prefix` / `path-
+/// prefix` / `PathPrefixMatch`, coordinated with the upstream SIG-Network
+/// Gateway API `PathMatchType` enum deprecation cycle, would land at this
+/// one const rather than scattered across every per-emitter per-match
+/// path-block-insertion site).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_PROTOCOL_HTTP`] (1b57473) /
+/// [`GATEWAY_API_KIND_GATEWAY`] (fb4639c) /
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] (1adccc0) /
+/// [`DEFAULT_GATEWAY_CLASS_NAME`] (d9b0743) lifts established on the
+/// sibling per-listener L7-parser-selection scalar-value +
+/// Gateway-API-CRD-`kind`-discriminator + Gateway-controller-binding
+/// scalar-value axes — extends the canonical-Gateway-API-v1-OpenAPI-
+/// schema-enum-value single-sourcing discipline the `ProtocolType.HTTP`
+/// lift established onto the sibling `PathMatchType.PathPrefix`
+/// per-`HTTPRouteMatch` path-selection-predicate discriminator the same
+/// `gateway_routes` external `:entrada` ingress emitter carries under
+/// the shared `HTTPRoute` body.
+///
+/// A future Gateway-API-side renderer the M3.x absorption roadmap
+/// names — a sibling `GATEWAY_API_PATH_MATCH_TYPE_EXACT` /
+/// `GATEWAY_API_PATH_MATCH_TYPE_REGULAR_EXPRESSION` const value the same
+/// `PathMatchType` enum admits, the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` materializer's per-Aplicacao
+/// multi-predicate fan-out over `{Exact, PathPrefix, RegularExpression}`,
+/// a future per-match `:entrada :paths` typed slot admitting a per-path
+/// `(:predicate <Exact|Prefix|Regex>)` axis — inherits the canonical
+/// `PathPrefix` path-match-type value by construction with no opportunity
+/// for per-renderer drift.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX: &str = "PathPrefix";
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
 /// per-route parent-Gateway `[{name}]` list under (`spec.parentRefs[]`).
@@ -11632,6 +11715,105 @@ mod tests {
              schema enum convention — no lowercase, mixed-case, dotted, \
              or whitespace bytes the gateway-class-controller's per-\
              listener bind loop would reject"
+        );
+    }
+
+    #[test]
+    fn gateway_api_path_match_type_path_prefix_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Gateway API v1 `PathMatchType` OpenAPI schema
+        // enum's canonical `PathPrefix` per-`HTTPRouteMatch` path-
+        // selection-predicate discriminator value the rendered
+        // `HTTPRoute.spec.rules[].matches[].path.type` scalar declares.
+        // The value is part of the cluster-side contract with every
+        // Gateway-API-conformant gateway implementation (Cilium, Istio,
+        // Envoy Gateway, NGINX) — the gateway-class-controller's
+        // per-rule L7 dispatch loop keys off this exact byte-sequence
+        // to select the request-path-selection predicate; the Gateway
+        // API v1 `PathMatchType` OpenAPI schema enum admits the closed
+        // set `{"Exact", "PathPrefix", "RegularExpression"}` verbatim,
+        // so a drifted value (`"pathPrefix"` / `"path_prefix"` /
+        // `"Prefix"` / `"path-prefix"`) lands the rendered `HTTPRoute`
+        // outside the `PathMatchType` enum's admitted set and every
+        // external `:entrada` path-filtered flow drops at the gateway-
+        // class-controller's admission gate. Changing this value is a
+        // coordinated Gateway API `PathMatchType` promotion alongside
+        // the upstream SIG-Network deprecation cycle, not an incidental
+        // edit. Peer to
+        // `gateway_api_protocol_http_pins_canonical_value` /
+        // `gateway_api_kind_gateway_pins_canonical_value` /
+        // `gateway_api_kind_http_route_pins_canonical_value` /
+        // `default_gateway_class_name_pins_canonical_value` on the
+        // sibling Gateway-API-v1-OpenAPI-schema-enum-value +
+        // Gateway-API-CRD-`kind`-discriminator + Gateway-controller-
+        // binding-scalar-value pin set — extends the canonical-
+        // Gateway-API-v1-OpenAPI-schema-enum-value single-sourcing
+        // discipline the `ProtocolType.HTTP` pin established onto the
+        // sibling `PathMatchType.PathPrefix` per-`HTTPRouteMatch`
+        // path-selection-predicate discriminator the same
+        // `gateway_routes` external `:entrada` ingress emitter carries
+        // under the shared `HTTPRoute` body.
+        assert_eq!(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX, "PathPrefix");
+    }
+
+    #[test]
+    fn gateway_api_path_match_type_path_prefix_carries_upper_camel_case_shape() {
+        // Cross-axis invariant: the Gateway API v1 `PathMatchType`
+        // OpenAPI schema enum admits the closed set
+        // `{"Exact", "PathPrefix", "RegularExpression"}` — every
+        // admitted value is UpperCamelCase per the upstream SIG-Network
+        // Gateway API convention (see
+        // https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.PathMatchType
+        // — the admitted values are the request-path-selection
+        // predicate names in their canonical UpperCamelCase form,
+        // matching the K8s API `Kinds are always UpperCamelCase`
+        // convention the sibling `GATEWAY_API_KIND_*` discriminators
+        // carry on the CRD-`kind`-axis surface). Pinning the shape
+        // here means a future rebrand on the canonical lift can't
+        // silently land a malformed path-match-type scalar (lowercase
+        // `"pathprefix"`, snake_case `"path_prefix"`, kebab-case
+        // `"path-prefix"`, empty) that the K8s Gateway API v1
+        // `PathMatchType` OpenAPI schema enum would reject at
+        // admission time far from the rebrand commit's source. The
+        // first-byte uppercase / rest-ASCII-alphanumeric invariant is
+        // the load-bearing Gateway-API-implementation-side typed
+        // per-match request-path-selection-predicate-selection
+        // contract: a value the gateway-class-controller's per-rule
+        // L7 dispatch loop selects the request-path-predicate
+        // evaluator from. Peer to
+        // `gateway_api_kind_gateway_carries_upper_camel_case_shape` /
+        // `gateway_api_kind_http_route_carries_upper_camel_case_shape`
+        // on the sibling cluster-side-CRD-`kind`-discriminator
+        // UpperCamelCase pin set — extends the canonical-K8s-API-
+        // UpperCamelCase-typed-discriminator pin discipline the
+        // `Kind` axis carries onto the sibling Gateway API v1
+        // `PathMatchType` OpenAPI schema enum's per-value
+        // UpperCamelCase surface (distinct from the sibling
+        // Gateway API v1 `ProtocolType` OpenAPI schema enum's all-
+        // ASCII-uppercase per-value convention the
+        // `gateway_api_protocol_http_carries_upper_case_shape` pin
+        // carries — the two peer Gateway-API-v1 OpenAPI schema
+        // enum-value conventions do not collapse).
+        let v = GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX;
+        assert!(
+            !v.is_empty(),
+            "GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX {v:?} must be non-empty per \
+             the Gateway API v1 `PathMatchType` OpenAPI schema enum grammar"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_uppercase(),
+            "GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX {v:?} first byte {first:?} \
+             must be ASCII-uppercase per the Gateway API v1 `PathMatchType` \
+             OpenAPI schema enum UpperCamelCase convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX {v:?} must be ASCII-\
+             alphanumeric throughout per the Gateway API v1 `PathMatchType` \
+             OpenAPI schema enum UpperCamelCase convention — no snake_case, \
+             kebab-case, or whitespace bytes the gateway-class-controller's \
+             per-rule L7 dispatch loop would reject"
         );
     }
 
