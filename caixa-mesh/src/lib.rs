@@ -1514,26 +1514,45 @@ pub use caixa_core::KUBE_KEY_LABELS;
 /// `gateway_carries_canonical_kube_skeleton_without_labels` +
 /// `httproute_carries_canonical_kube_skeleton_without_labels` per-CR
 /// metadata-block `.get("name")` retrievals (the presence + equality
-/// pins on `CiliumNetworkPolicy` / `Gateway` / `HTTPRoute`), and the
-/// `cilium_policy_metadata_block_iterates_alphabetically` render-
-/// determinism-contract fixture (the alphabetical-iteration
+/// pins on `CiliumNetworkPolicy` / `Gateway` / `HTTPRoute`), the six
+/// per-CNP `metadata.name`-axis lookup navigations across the
+/// `cilium_policy_metadata_names_span_all_edges` /
+/// `cilium_fans_same_de_para_edges_into_one_policy` /
+/// `cilium_http_contracts_emit_l7_rules` /
+/// `cilium_pubsub_contracts_skip_l7_rules` /
+/// `cnp_l4_fallback_port_routes_through_lifted_default_servico_port` /
+/// `cilium_mtls_required_contract_emits_authentication_required`
+/// test-side `policies.iter().find(|p| p.get(KUBE_KEY_METADATA)
+/// .and_then(|m| m.get(KUBE_KEY_NAME)))` filters (the per-CNP
+/// `<aplicacao>-<de>-to-<para>` metadata.name binding that names every
+/// `CiliumNetworkPolicy` document the per-`(:de, :para)` fan-out emits),
+/// and the `cilium_policy_metadata_block_iterates_alphabetically`
+/// render-determinism-contract fixture (the alphabetical-iteration
 /// `vec![KUBE_KEY_LABELS, "name", KUBE_KEY_NAMESPACE]` fixture whose
 /// middle entry the alphabetical-key-ordering `metadata:` block
-/// emission pins). The prior four inline `"name"` literals at every
-/// drift-detection / render-determinism test-side site in this crate
-/// would have let a typo on any one site (e.g. `"Name"`, `"nmae"`, the
-/// canonical transposition `"naem"`) silently miss the per-CR
-/// metadata.name retrieval — the `.get("name")` chain would then
+/// emission pins). The prior ten inline `"name"` literals at every
+/// drift-detection / per-CNP-lookup / render-determinism test-side site
+/// in this crate would have let a typo on any one site (e.g. `"Name"`,
+/// `"nmae"`, the canonical transposition `"naem"`) silently miss the
+/// per-CR metadata.name retrieval — the `.get("name")` chain would then
 /// return `None` under the presence pin so the true metadata-name-axis
 /// drift never surfaces, or compare `Some(<other>)` against the
 /// expected caixa name/route name under the equality pins so the
-/// caixa-nome → metadata-name binding's true drift is masked, or trip
-/// the alphabetical-iteration determinism fixture against the drifted-
-/// fixture rather than the true render-determinism property. The lift
-/// routes every K8s-CR-metadata-name-axis retrieval + fixture through
-/// the same `&'static str` so drift between any two sites becomes a
-/// single-edit fix at the caixa-core const definition. Completes the
-/// K8s-CR metadata-block axis triplet `(name, namespace, labels)`
+/// caixa-nome → metadata-name binding's true drift is masked, or slip
+/// past the per-CNP metadata.name filter under the six per-`(:de, :para)`
+/// lookup navigations so the true policy-identity → edge-shape binding
+/// under fan-in / L7-emission / L4-fallback / mTLS-authentication drift
+/// never surfaces (each `.find(|p| p.get(KUBE_KEY_METADATA)
+/// .and_then(|m| m.get("name")))` chain would silently return
+/// `.unwrap()`-panicking `None` on the first per-CNP lookup or match
+/// the wrong policy under the equality-comparison filter, masking the
+/// true fan-in / L7-rule / L4-port / mTLS-authentication mode
+/// property), or trip the alphabetical-iteration determinism fixture
+/// against the drifted-fixture rather than the true render-determinism
+/// property. The lift routes every K8s-CR-metadata-name-axis retrieval
+/// + fixture through the same `&'static str` so drift between any two
+/// sites becomes a single-edit fix at the caixa-core const definition.
+/// Completes the K8s-CR metadata-block axis triplet `(name, namespace, labels)`
 /// under a single canonical `caixa-core::KUBE_KEY_*` re-export shape
 /// in this crate — the peer `KUBE_KEY_NAMESPACE` (ae34889) and
 /// `KUBE_KEY_LABELS` (aa2d105) sweeps established the discipline; this
@@ -6072,7 +6091,7 @@ mod tests {
             .iter()
             .map(|p| {
                 p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get("name"))
+                    .and_then(|m| m.get(KUBE_KEY_NAME))
                     .and_then(|n| n.as_str())
                     .unwrap()
                     .to_string()
@@ -6108,7 +6127,7 @@ mod tests {
             .iter()
             .filter(|p| {
                 p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get("name"))
+                    .and_then(|m| m.get(KUBE_KEY_NAME))
                     .and_then(|n| n.as_str())
                     == Some("checkout-cart-to-catalog")
             })
@@ -6310,7 +6329,7 @@ mod tests {
             .iter()
             .find(|p| {
                 p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get("name"))
+                    .and_then(|m| m.get(KUBE_KEY_NAME))
                     .and_then(|n| n.as_str())
                     == Some("checkout-cart-to-catalog")
             })
@@ -6350,7 +6369,7 @@ mod tests {
             .iter()
             .find(|p| {
                 p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get("name"))
+                    .and_then(|m| m.get(KUBE_KEY_NAME))
                     .and_then(|n| n.as_str())
                     == Some("checkout-payment-to-cart")
             })
@@ -7597,7 +7616,7 @@ mod tests {
             .iter()
             .find(|p| {
                 p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get("name"))
+                    .and_then(|m| m.get(KUBE_KEY_NAME))
                     .and_then(|n| n.as_str())
                     == Some("checkout-payment-to-cart")
             })
@@ -7641,7 +7660,7 @@ mod tests {
             .iter()
             .find(|p| {
                 p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get("name"))
+                    .and_then(|m| m.get(KUBE_KEY_NAME))
                     .and_then(|n| n.as_str())
                     == Some("checkout-cart-to-payment")
             })
