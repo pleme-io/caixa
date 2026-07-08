@@ -884,18 +884,22 @@ pub const POLICY_BREAKER_WINDOW_MAX: Duration = Duration::from_secs(3600);
 /// [`crate::render::NATS_SUBJECT_MAX_LEN`]).
 pub const POLICY_RATE_LIMIT_MAX: u32 = 1_000_000;
 
-/// K8s Gateway API v1 `Listener.hostname` / `HTTPRoute.spec.hostnames`
-/// max length, in bytes — same value the apiserver-side OpenAPI
-/// schema enforces (`maxLength: 253`, ultimately the RFC 1035 / RFC
-/// 1123 DNS-name limit). Lifted as a typed const so a future M4 axis
-/// reaching for the same bound (the `mesh.pleme.io/v1alpha1/Aplicacao`
-/// CR materializer's per-host validation) reads from one place.
-const ENTRADA_HOST_MAX_LEN: usize = 253;
-
-/// Per-label max length for a DNS-1123 host label — same value the
-/// Gateway API regex `[a-z0-9]([-a-z0-9]*[a-z0-9])?` bounds via the
-/// apiserver-side OpenAPI schema (RFC 1035 / RFC 1123 label limit).
-const ENTRADA_HOST_LABEL_MAX_LEN: usize = 63;
+// `:entrada :host` total-length and per-label cap axes route through
+// the lifted [`crate::render::GATEWAY_API_HOSTNAME_MAX_LEN`] (253) and
+// [`crate::render::DNS_1123_LABEL_MAX_LEN`] (63) canonical bounds. The
+// pair of aplicacao-private aliases the previous `validate_entrada_host`
+// arms consumed (`ENTRADA_HOST_MAX_LEN = 253`, `ENTRADA_HOST_LABEL_MAX_LEN
+// = 63`) were structurally the same K8s Gateway API v1 Hostname
+// admission-schema bounds — the total-length cap on the OpenAPI
+// `Hostname` type and the per-`.`-separated-label DNS-1123 cap on the
+// same regex — that the peer axes at the caixa-core::render level pin,
+// so hoisting both readers onto the shared lifted constants closes the
+// third-occurrence duplication threshold structurally: the M4
+// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-host / per-
+// label validator, the future per-`Certificate` SAN emitter, and every
+// other per-Gateway-API-Hostname landing site reach the same one place
+// as the `:entrada :host` gate does — no per-axis alias drift surface
+// between them, by construction.
 
 /// Max byte length for an Akka-cluster-sharding `:placement :shard-key`
 /// extractor expression — the upper bound `validate_placement_shard_key`
@@ -1363,13 +1367,14 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
     if host.is_empty() {
         return Err(AplicacaoError::EmptyEntradaHost);
     }
-    if host.len() > ENTRADA_HOST_MAX_LEN {
+    if host.len() > crate::render::GATEWAY_API_HOSTNAME_MAX_LEN {
         return Err(AplicacaoError::EntradaHostInvalid {
             host: host.to_string(),
             reason: format!(
-                "exceeds Gateway API v1 Hostname max length of {ENTRADA_HOST_MAX_LEN} bytes \
+                "exceeds Gateway API v1 Hostname max length of {cap} bytes \
                  (got {} bytes; the K8s apiserver rejects longer hostnames at admission time)",
-                host.len()
+                host.len(),
+                cap = crate::render::GATEWAY_API_HOSTNAME_MAX_LEN,
             ),
         });
     }
@@ -1591,13 +1596,14 @@ fn validate_entrada_host(host: &str) -> Result<(), AplicacaoError> {
                 reason: "has an empty label (consecutive `..` or a leading `.`)".to_string(),
             });
         }
-        if label.len() > ENTRADA_HOST_LABEL_MAX_LEN {
+        if label.len() > crate::render::DNS_1123_LABEL_MAX_LEN {
             return Err(AplicacaoError::EntradaHostInvalid {
                 host: host.to_string(),
                 reason: format!(
                     "label {label:?} exceeds DNS-1123 label max length of \
-                     {ENTRADA_HOST_LABEL_MAX_LEN} bytes (got {} bytes)",
-                    label.len()
+                     {cap} bytes (got {} bytes)",
+                    label.len(),
+                    cap = crate::render::DNS_1123_LABEL_MAX_LEN,
                 ),
             });
         }
@@ -7812,6 +7818,105 @@ mod tests {
         assert_eq!(host.len(), 253);
         s.entrada.as_mut().unwrap().host = host;
         s.validate().unwrap();
+    }
+
+    #[test]
+    fn entrada_host_total_length_cap_threads_lifted_render_const() {
+        // Cross-crate-side pin: the aplicacao-side `:entrada :host`
+        // total-length gate now reads the K8s Gateway API v1 Hostname
+        // `maxLength: 253` cap from the lifted
+        // [`crate::render::GATEWAY_API_HOSTNAME_MAX_LEN`] canonical source
+        // of truth — the same constant every future Gateway-API-Hostname
+        // landing site (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+        // materializer's per-host validator, the future per-`Certificate`
+        // SAN emitter for cert-manager, the multi-`:entrada`
+        // host-collision gate when M4 lands `:entrada` as a `Vec`) reads
+        // from. Before the lift, the aplicacao-side reader consumed a
+        // private const alias `ENTRADA_HOST_MAX_LEN` sitting at the same
+        // 253-byte value as the peer render-side canonical bounds
+        // ([`GATEWAY_API_HTTP_PATH_MAX_LEN`], [`DNS_1123_LABEL_MAX_LEN`],
+        // [`NATS_SUBJECT_MAX_LEN`], [`WASI_KV_SLOT_MAX_LEN`],
+        // [`WIT_IDENT_MAX_LEN`]) but structurally split from them at the
+        // module boundary — a future 253-byte drift on either side would
+        // silently split into two axes' worth of admission-schema mismatch
+        // without a build-time signal. Pin the cap through a fresh 254-
+        // byte host that hits the total-length arm, then read the reason
+        // for the exact byte count the shared constant carries: any future
+        // regression on the lift (a private alias reintroduced, a hard-
+        // coded literal at the arm, a mismatch between the aplicacao-side
+        // and render-side canonicals) surfaces as this pin's diagnostic
+        // failing to match, not as a per-cluster admission rejection far
+        // from the caixa.lisp source line.
+        let mut s = three_member_spec();
+        let over_cap = format!(
+            "{}.{}.{}.{}",
+            "a".repeat(63),
+            "b".repeat(63),
+            "c".repeat(63),
+            "d".repeat(crate::render::GATEWAY_API_HOSTNAME_MAX_LEN + 1 - 63 * 3 - 3)
+        );
+        assert_eq!(
+            over_cap.len(),
+            crate::render::GATEWAY_API_HOSTNAME_MAX_LEN + 1
+        );
+        s.entrada.as_mut().unwrap().host = over_cap;
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::EntradaHostInvalid { reason, .. } => {
+                let needle = format!(
+                    "max length of {} bytes",
+                    crate::render::GATEWAY_API_HOSTNAME_MAX_LEN,
+                );
+                assert!(
+                    reason.contains(&needle),
+                    "diagnostic must name the lifted \
+                     GATEWAY_API_HOSTNAME_MAX_LEN cap verbatim, got: {reason:?}",
+                );
+            }
+            other => panic!("expected EntradaHostInvalid, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn entrada_host_per_label_cap_threads_lifted_dns_1123_const() {
+        // Peer of [`entrada_host_total_length_cap_threads_lifted_render_const`]
+        // on the per-label-cap axis. Before the lift, the aplicacao-side
+        // per-label arm consumed a private const alias
+        // `ENTRADA_HOST_LABEL_MAX_LEN` sitting at the same 63-byte value
+        // as [`crate::render::DNS_1123_LABEL_MAX_LEN`] but structurally
+        // split from it at the module boundary — every `.`-separated
+        // label in a Gateway API v1 Hostname is a DNS-1123 label under
+        // the apiserver's OpenAPI regex `[a-z0-9]([-a-z0-9]*[a-z0-9])?`,
+        // so the private alias's 63 and the canonical const's 63 were
+        // pinning the same underlying rule twice. Pin the cap through a
+        // 64-byte label that hits the per-label arm, then read the reason
+        // for the exact byte count the shared constant carries: any
+        // future drift on either side (a private alias reintroduced, a
+        // hard-coded literal at the arm, a mismatch between the two
+        // 63-byte pins) surfaces at this pin's diagnostic rather than at
+        // a per-cluster admission rejection whose "field is invalid"
+        // opacity misframes the root cause.
+        let mut s = three_member_spec();
+        let over_cap_label = format!(
+            "{}.quero.cloud",
+            "x".repeat(crate::render::DNS_1123_LABEL_MAX_LEN + 1),
+        );
+        s.entrada.as_mut().unwrap().host = over_cap_label;
+        let err = s.validate().unwrap_err();
+        match err {
+            AplicacaoError::EntradaHostInvalid { reason, .. } => {
+                let needle = format!(
+                    "label max length of {} bytes",
+                    crate::render::DNS_1123_LABEL_MAX_LEN,
+                );
+                assert!(
+                    reason.contains(&needle),
+                    "diagnostic must name the lifted DNS_1123_LABEL_MAX_LEN \
+                     cap verbatim on the per-label arm, got: {reason:?}",
+                );
+            }
+            other => panic!("expected EntradaHostInvalid, got {other:?}"),
+        }
     }
 
     #[test]

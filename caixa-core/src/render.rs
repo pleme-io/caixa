@@ -665,6 +665,42 @@ pub fn is_dns_1123_label(s: &str) -> Result<(), String> {
 /// schema surfaces at this one const.
 pub const GATEWAY_API_HTTP_PATH_MAX_LEN: usize = 1024;
 
+/// K8s Gateway API v1 `Listener.hostname` and
+/// `HTTPRoute.spec.hostnames[]` max length, in bytes — the apiserver-side
+/// `OpenAPI` schema's `maxLength: 253` cap, ultimately the RFC 1035 / RFC
+/// 1123 DNS name limit (255 wire bytes minus the trailing-dot + one length
+/// prefix). Lifted to a typed const so a future axis reaching for the same
+/// bound (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-`:entrada :host` validator, the future per-`Certificate` SAN emitter
+/// keying off `:entrada :host` for cert-manager, the future
+/// multi-`:entrada` host-collision gate when M4 lands `:entrada` as a
+/// `Vec`) reads the limit from one place. The sole landed call site — the
+/// `:entrada :host` axis's total-length gate at
+/// [`crate::AplicacaoSpec::validate`] via `validate_entrada_host` — reads
+/// this constant verbatim; drift between the landing site and the K8s CRD
+/// schema surfaces at this one const rather than a per-renderer "this
+/// passed validate but failed admission" surprise.
+///
+/// Peer of [`GATEWAY_API_HTTP_PATH_MAX_LEN`] on the sibling per-route
+/// path-value cap axis — both are apiserver-side `maxLength:` bounds on
+/// Gateway API v1 landing sites the pleme-io substrate emits, both lift
+/// to `caixa-core::render` so the M4 CR materializer's per-axis
+/// validators (per-host, per-path) read from one place. Same "typed const
+/// so the bound has exactly one source of truth" discipline every peer
+/// upper bound in this crate carries
+/// ([`DNS_1123_LABEL_MAX_LEN`], [`NATS_SUBJECT_MAX_LEN`],
+/// [`WASI_KV_SLOT_MAX_LEN`], [`WIT_IDENT_MAX_LEN`],
+/// [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`crate::POLICY_TIMEOUT_MAX`], [`crate::POLICY_RETRIES_MAX`]).
+///
+/// The per-label max within the hostname is [`DNS_1123_LABEL_MAX_LEN`]
+/// (63): every `.`-separated label in a Gateway API v1 Hostname is a
+/// DNS-1123 label under the apiserver's OpenAPI regex
+/// `[a-z0-9]([-a-z0-9]*[a-z0-9])?`, so drift between the total-length
+/// cap here and the per-label cap on the peer constant is impossible by
+/// construction.
+pub const GATEWAY_API_HOSTNAME_MAX_LEN: usize = 253;
+
 /// Predicate: assert that `path` is a valid HTTP path under both the
 /// K8s Gateway API v1 `HTTPPathMatch.value` admission grammar AND the
 /// Cilium L7 `path:` rule grammar — the two landing sites every
@@ -20334,5 +20370,81 @@ mod tests {
                 other => panic!("expected Invalid for {bad:?}, got {other:?}"),
             }
         }
+    }
+
+    #[test]
+    fn gateway_api_hostname_max_len_pins_canonical_value() {
+        // Pin the actual byte count so a typo in this lift can't silently
+        // rebrand the K8s Gateway API v1 `Listener.hostname` /
+        // `HTTPRoute.spec.hostnames[]` admission-schema `maxLength:` cap
+        // the `AplicacaoSpec::validate` `:entrada :host` total-length arm
+        // reads. The value is part of the cluster-side contract with
+        // every Gateway API v1 CRD schema validator (apiserver-side +
+        // Cilium / Envoy Gateway / Istio / NGINX per-implementation
+        // webhooks) — the OpenAPI schema on the Hostname type binds
+        // `maxLength: 253` verbatim (RFC 1035 / RFC 1123 DNS name limit:
+        // 255 wire bytes minus the trailing-dot + one length prefix), so
+        // a drifted value at either the aplicacao-side validator or a
+        // downstream renderer's per-host validator silently emits a
+        // Gateway / HTTPRoute the apiserver rejects at admission time
+        // with an opaque `field is invalid` diagnostic far from the
+        // caixa.lisp source line. Changing this value is a coordinated
+        // Gateway API promotion alongside the upstream SIG-Network
+        // Hostname schema evolution, not an incidental edit. Peer to
+        // [`GATEWAY_API_HTTP_PATH_MAX_LEN`] (1024) on the sibling
+        // per-route path-value cap axis — both are apiserver-side
+        // `maxLength:` bounds on Gateway API v1 landing sites, both lift
+        // to `caixa-core::render` so the M4 CR materializer's per-axis
+        // validators (per-host, per-path) read from one place.
+        assert_eq!(GATEWAY_API_HOSTNAME_MAX_LEN, 253);
+    }
+
+    #[test]
+    fn gateway_api_hostname_max_len_exceeds_dns_1123_label_max_len() {
+        // Cross-axis structural invariant: every `.`-separated label in
+        // a Gateway API v1 Hostname is a DNS-1123 label, so the total
+        // Hostname cap must strictly exceed the per-label cap — otherwise
+        // even a single-label host `"foo"` couldn't reach the per-label
+        // ceiling before hitting the total-length ceiling, and the
+        // `AplicacaoSpec::validate` `:entrada :host` per-label arm at
+        // `validate_entrada_host` would be structurally unreachable via
+        // the total-length arm's own ordering. Pinning the ordering here
+        // means a future substrate-side tightening of either bound (a
+        // K8s SIG-Network Hostname promotion narrowing the total cap, a
+        // DNS-1123 label promotion widening the per-label cap) that
+        // inverted the two would fail this pin at build time rather than
+        // silently rendering the per-label arm unreachable.
+        assert!(
+            GATEWAY_API_HOSTNAME_MAX_LEN > DNS_1123_LABEL_MAX_LEN,
+            "GATEWAY_API_HOSTNAME_MAX_LEN ({GATEWAY_API_HOSTNAME_MAX_LEN}) must strictly \
+             exceed DNS_1123_LABEL_MAX_LEN ({DNS_1123_LABEL_MAX_LEN}) — every \
+             `.`-separated label in a Gateway API v1 Hostname is itself a DNS-1123 \
+             label under the apiserver's OpenAPI regex, so the total-length cap \
+             must be able to accommodate at least one per-label-max label",
+        );
+    }
+
+    #[test]
+    fn gateway_api_hostname_max_len_matches_rfc_1035_dns_name_limit() {
+        // Cross-axis structural invariant: the Gateway API v1 Hostname
+        // `maxLength: 253` cap is the RFC 1035 / RFC 1123 DNS name limit
+        // — 255 wire bytes minus one length prefix minus the implicit
+        // trailing dot — the same cap every DNS-compliant `HostName`
+        // primitive downstream substrate consumer (the future
+        // per-`Certificate` SAN emitter for cert-manager, the future
+        // multi-`:entrada` host-collision gate) will inherit by
+        // construction. Pinning the arithmetic here rather than the
+        // literal `253` makes the RFC derivation explicit at the const's
+        // test site so a future migration onto a different DNS-name
+        // ceiling (an eventual RFC-successor limit, a per-cluster
+        // override the operator pins) surfaces at this pin, not at every
+        // downstream renderer's admission-rejection loop.
+        assert_eq!(
+            GATEWAY_API_HOSTNAME_MAX_LEN,
+            255 - 1 - 1,
+            "GATEWAY_API_HOSTNAME_MAX_LEN must equal the RFC 1035 / RFC 1123 DNS \
+             name limit (255 wire bytes minus one length prefix minus the trailing \
+             dot)",
+        );
     }
 }
