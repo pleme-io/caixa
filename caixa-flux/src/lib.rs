@@ -276,6 +276,36 @@ pub use caixa_core::FLUX_KIND_HELM_RELEASE;
 /// source/helm/kustomize controller triplet.
 pub use caixa_core::FLUX_KIND_KUSTOMIZATION;
 
+/// Canonical Flux v2 per-`HelmRelease`/`Kustomization` source-reference
+/// container-axis key every `caixa-flux`-emitted bundle document mounts
+/// its per-CR source-of-truth `(kind, name, namespace)` reference triple
+/// under (`spec.chart.spec.sourceRef` on `HelmRelease`, `spec.sourceRef`
+/// on `Kustomization`). Re-export of the canonical
+/// [`caixa_core::FLUX_KEY_SOURCE_REF`] so the load-bearing Flux-v2-source-
+/// controller-side per-CR source-reference container-axis key lives in
+/// exactly one place across every caixa renderer — the sweep converts
+/// this crate's five test-fixture `.get("sourceRef")` navigation sites in
+/// `mod tests` (the `helmrelease.yaml` `spec.chart.spec.sourceRef.kind`
+/// pin, the `kustomization.yaml` `spec.sourceRef.name` +
+/// `spec.sourceRef.kind` pins under the paired
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] +
+/// [`FLUX_KIND_GIT_REPOSITORY`] canonical-string axes, and the two
+/// cross-axis triplet pins that traverse both bundle documents to
+/// pin the sibling `GitRepository`-kind axis triplet against one
+/// canonical string) onto the re-export. A future Flux v3 rebrand of
+/// the per-CR source-reference container-axis key (a hypothetical
+/// upstream fluxcd/flux2 rename from `sourceRef` to `source` /
+/// `sourceReference` / `sourceOf`, coordinated with the upstream
+/// project's per-version deprecation cycle) now lands at one const
+/// rather than scattered across the two per-CR format-string templates
+/// + five test-fixture probe sites. Same "the typed constant lives in
+/// one place" discipline the peer [`FLUX_KIND_GIT_REPOSITORY`] /
+/// [`FLUX_KIND_HELM_RELEASE`] / [`FLUX_KIND_KUSTOMIZATION`] +
+/// [`FLUX_HELMRELEASE_API_VERSION`] / [`FLUX_GITREPOSITORY_API_VERSION`]
+/// / [`FLUX_KUSTOMIZATION_API_VERSION`] re-exports enforce on the
+/// sibling canonical-Flux-v2-load-bearing-string surfaces.
+pub use caixa_core::FLUX_KEY_SOURCE_REF;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -2069,7 +2099,7 @@ spec:
         assert_eq!(
             parsed
                 .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get("sourceRef"))
+                .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
                 .and_then(|r| r.get("name"))
                 .and_then(|n| n.as_str()),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
@@ -2619,7 +2649,7 @@ spec:
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("chart"))
             .and_then(|c| c.get(KUBE_KEY_SPEC))
-            .and_then(|s| s.get("sourceRef"))
+            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
             .and_then(|r| r.get(KUBE_KEY_KIND))
             .and_then(|k| k.as_str())
             .expect("helmrelease.yaml spec.chart.spec.sourceRef.kind present");
@@ -2656,7 +2686,7 @@ spec:
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         let source_ref_kind = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("sourceRef"))
+            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
             .and_then(|r| r.get(KUBE_KEY_KIND))
             .and_then(|k| k.as_str())
             .expect("kustomization.yaml spec.sourceRef.kind present");
@@ -2713,7 +2743,7 @@ spec:
         .get(KUBE_KEY_SPEC)
         .and_then(|s| s.get("chart"))
         .and_then(|c| c.get(KUBE_KEY_SPEC))
-        .and_then(|s| s.get("sourceRef"))
+        .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
         .and_then(|r| r.get(KUBE_KEY_KIND))
         .and_then(|v| v.as_str())
         .map(String::from)
@@ -2728,7 +2758,7 @@ spec:
         )
         .unwrap()
         .get(KUBE_KEY_SPEC)
-        .and_then(|s| s.get("sourceRef"))
+        .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
         .and_then(|r| r.get(KUBE_KEY_KIND))
         .and_then(|v| v.as_str())
         .map(String::from)
@@ -2973,6 +3003,46 @@ spec:
              caixa_core::FLUX_KIND_KUSTOMIZATION, not a sibling `pub const` \
              that happens to carry the same string — drift between the two is \
              the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn flux_key_source_ref_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KEY_SOURCE_REF` is the
+        // single source of truth for the Flux v2 per-`HelmRelease` /
+        // `Kustomization` source-reference container-axis key the
+        // rendered bundle documents mount their per-CR `(kind, name,
+        // namespace)` reference triple under. Pin the equality (and the
+        // static-data identity, peer with the sibling
+        // [`flux_kind_git_repository_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_kind_helm_release_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_kind_kustomization_re_export_points_at_caixa_core_canonical`]
+        // pins on the sibling per-CRD kind-discriminator surface) so any
+        // local re-introduction of a sibling `pub const
+        // FLUX_KEY_SOURCE_REF: &str = "…"` (the canonical drift footgun
+        // where a sibling local `pub const` could happen to carry the
+        // same string at the source while pointing at a different
+        // `&'static` allocation) is a build-time test failure naming
+        // the offending drift, not a silent apply-time dangling-
+        // sourceRef reconciliation freeze (a rebrand on this axis
+        // without a coordinated caixa-core edit silently dangles both
+        // the `HelmRelease.spec.chart.spec.sourceRef` chart resolution
+        // + the parent `Kustomization.spec.sourceRef` source resolution
+        // at the Flux v2 source-controller's CRD registration; the
+        // dependent per-Servico `dependsOn` chain freezes at apply time
+        // with no field naming the container-axis-drift root cause).
+        // Closes the sibling re-export identity axis on the same
+        // trajectory the peer per-CRD-`kind`-discriminator pins carry.
+        assert_eq!(FLUX_KEY_SOURCE_REF, caixa_core::FLUX_KEY_SOURCE_REF);
+        assert!(
+            std::ptr::eq(
+                FLUX_KEY_SOURCE_REF.as_ptr(),
+                caixa_core::FLUX_KEY_SOURCE_REF.as_ptr(),
+            ),
+            "FLUX_KEY_SOURCE_REF must be a re-export of \
+             caixa_core::FLUX_KEY_SOURCE_REF, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
         );
     }
 
