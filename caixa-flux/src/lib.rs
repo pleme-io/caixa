@@ -395,6 +395,35 @@ pub use caixa_core::FLUX_KEY_VALUES;
 /// threads through its two format-string templates.
 pub use caixa_core::FLUX_KEY_HEALTH_CHECKS;
 
+/// Canonical Flux v2 per-CR reconcile-poll cadence scalar-axis key every
+/// `caixa-flux`-emitted Flux document (`GitRepository`, `HelmRelease`,
+/// `Kustomization`) declares its per-CR `spec.interval` reconcile cadence
+/// under. Re-export of the canonical [`caixa_core::FLUX_KEY_INTERVAL`] so
+/// the load-bearing Flux-v2-controller-triplet-side per-CR reconcile-poll
+/// cadence scalar-axis key lives in exactly one place across every caixa
+/// renderer — the sweep converts this crate's three production-code call
+/// sites (the [`cluster_bundle`] `gitrepository.yaml` + `helmrelease.yaml`
+/// + `kustomization.yaml` format-string templates' baked `interval:`
+/// scalar-axis keys, one per Flux v2 CRD kind, nested alongside the peer
+/// sibling lifted per-CR `apiVersion` + `kind` axis re-exports on this
+/// crate — [`FLUX_GITREPOSITORY_API_VERSION`] + [`FLUX_KIND_GIT_REPOSITORY`]
+/// on the source-controller CRD, [`FLUX_HELMRELEASE_API_VERSION`] +
+/// [`FLUX_KIND_HELM_RELEASE`] on the helm-controller CRD, and
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] + [`FLUX_KIND_KUSTOMIZATION`] on the
+/// kustomize-controller CRD) onto the re-export. A future Flux v3 rebrand
+/// of the per-CR reconcile-poll cadence scalar-axis key (a hypothetical
+/// upstream fluxcd/flux2 rename from `interval` to `Interval` / `period`
+/// / `cadence` / `pollInterval` / `reconcileInterval`, coordinated with
+/// the upstream project's per-version deprecation cycle) now lands at one
+/// const rather than scattered across three per-CR emit-side format-string
+/// template sites. Same "the typed constant lives in one place" discipline
+/// the peer [`FLUX_KEY_SOURCE_REF`] + [`FLUX_KEY_CHART`] + [`FLUX_KEY_VALUES`]
+/// + [`FLUX_KEY_HEALTH_CHECKS`] re-exports enforce on the sibling Flux v2
+/// per-CR body-key surfaces — extends the per-CR body-key lift trajectory
+/// onto the sibling *cross-CR-shared* reconcile-poll cadence scalar-axis
+/// every Flux v2 controller reads to bind its per-CR poll cycle.
+pub use caixa_core::FLUX_KEY_INTERVAL;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -928,7 +957,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            name: {name}\n  \
            namespace: {namespace}\n\
          spec:\n  \
-           interval: {interval}\n  \
+           {interval_key}: {interval}\n  \
            url: {url}\n  \
            ref:\n\
          {gitref_field}\n",
@@ -941,6 +970,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         },
         name = name,
         namespace = opts.namespace,
+        interval_key = FLUX_KEY_INTERVAL,
         interval = opts.interval,
         url = opts.git_url,
         gitref_field = gitref_field,
@@ -970,7 +1000,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            name: {name}\n  \
            namespace: {namespace}\n\
          spec:\n  \
-           interval: {interval}\n  \
+           {interval_key}: {interval}\n  \
            {chart_key}:\n    \
              spec:\n      \
                chart: {chart_path}\n      \
@@ -994,6 +1024,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         name = name,
         namespace = opts.namespace,
+        interval_key = FLUX_KEY_INTERVAL,
         interval = opts.interval,
         chart_key = FLUX_KEY_CHART,
         chart_path = opts.chart_path,
@@ -1012,7 +1043,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            name: {name}\n  \
            namespace: {flux_system}\n\
          spec:\n  \
-           interval: {interval}\n  \
+           {interval_key}: {interval}\n  \
            prune: true\n  \
            sourceRef:\n    \
              kind: {source_kind}\n    \
@@ -1031,6 +1062,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
+        interval_key = FLUX_KEY_INTERVAL,
         interval = opts.interval,
         cluster = opts.cluster,
         flux_system = DEFAULT_FLUX_SYSTEM_NAMESPACE,
@@ -3467,5 +3499,133 @@ spec:
              health-gate at kustomize-controller reconcile time and freezes \
              the parent Kustomization at `Reconciling`"
         );
+    }
+
+    #[test]
+    fn flux_key_interval_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KEY_INTERVAL` is the
+        // single source of truth for the Flux v2 per-CR reconcile-poll
+        // cadence scalar-axis key the three rendered Flux documents
+        // (`gitrepository.yaml`, `helmrelease.yaml`, `kustomization.yaml`)
+        // each carry as their `spec.interval` scalar. Pin the equality
+        // (and the static-data identity, peer with the sibling
+        // [`flux_key_source_ref_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_key_chart_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_key_values_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_key_health_checks_re_export_points_at_caixa_core_canonical`]
+        // pins on the sibling Flux v2 per-CR body-key surfaces) so any
+        // local re-introduction of a sibling `pub const FLUX_KEY_INTERVAL:
+        // &str = "…"` (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation) is
+        // a build-time test failure naming the offending drift, not a
+        // silent apply-time three-way reconcile freeze (a rebrand on
+        // this axis without a coordinated caixa-core edit silently drops
+        // the per-CR reconcile schedule from all three Flux v2
+        // controllers' per-CR watch registrations simultaneously — the
+        // referenced Git source never re-polls / the referenced chart
+        // never re-templates / the parent Kustomization never re-applies
+        // at upstream drift, freezing the whole cluster's per-`caixa`
+        // per-cluster bundle at the last-applied snapshot with no field
+        // naming the axis-drift root cause). Closes the re-export
+        // identity axis on the same trajectory the peer per-CR body-key
+        // pins carry — extends the discipline from the per-CR body-key
+        // quartet onto the sibling cross-CR-shared reconcile-poll cadence
+        // scalar-axis every Flux v2 controller reads.
+        assert_eq!(FLUX_KEY_INTERVAL, caixa_core::FLUX_KEY_INTERVAL);
+        assert!(
+            std::ptr::eq(
+                FLUX_KEY_INTERVAL.as_ptr(),
+                caixa_core::FLUX_KEY_INTERVAL.as_ptr(),
+            ),
+            "FLUX_KEY_INTERVAL must be a re-export of \
+             caixa_core::FLUX_KEY_INTERVAL, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_every_flux_cr_carries_lifted_flux_key_interval_scalar() {
+        // Fail-before-pass-after pin: every rendered Flux v2 document in
+        // the `cluster_bundle` triplet (`gitrepository.yaml`,
+        // `helmrelease.yaml`, `kustomization.yaml`) must resolve its
+        // `spec.interval` reconcile-poll cadence scalar under the lifted
+        // [`FLUX_KEY_INTERVAL`] verbatim. Before the lift each of the
+        // three sites carried an inline `interval:` literal in its
+        // per-CR format string; a future Flux v3 rebrand on this axis (a
+        // hypothetical upstream fluxcd/flux2 rename from `interval` to
+        // `Interval` / `period` / `cadence` / `pollInterval` /
+        // `reconcileInterval`, coordinated with the upstream project's
+        // per-version deprecation cycle) without a coordinated edit at
+        // any one of the three emit sites would have silently dropped
+        // the per-CR reconcile schedule from the affected Flux v2
+        // controller's per-CR watch registration — the referenced Git
+        // source never re-polls / the referenced chart never re-templates
+        // / the parent Kustomization never re-applies at upstream drift,
+        // freezing the whole cluster's per-`caixa` per-cluster bundle at
+        // the last-applied snapshot far from the rebrand commit's source.
+        //
+        // The pin is structural: parse each rendered YAML document in
+        // the triplet and assert the per-CR reconcile-poll cadence
+        // scalar-axis key resolves under the lifted constant with a
+        // non-empty string scalar under it. A regression that re-introduces
+        // an inline literal at any of the three emit sites surfaces as a
+        // `None` at the lifted-const-keyed lookup on that document. Peer
+        // to the sibling
+        // [`cluster_bundle_helmrelease_chart_block_uses_lifted_flux_key_chart`]
+        // /
+        // [`cluster_bundle_helmrelease_values_block_uses_lifted_flux_key_values`]
+        // /
+        // [`cluster_bundle_kustomization_health_checks_block_uses_lifted_flux_key_health_checks`]
+        // pins on the sibling per-CR body-key surfaces — extends the
+        // canonical-Flux-v2-body-key lifted-const-keyed pin discipline
+        // from the per-CR body-key quartet onto the sibling cross-CR-
+        // shared reconcile-poll cadence scalar-axis this test targets.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        for filename in [
+            "gitrepository.yaml",
+            "helmrelease.yaml",
+            "kustomization.yaml",
+        ] {
+            let doc = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename))
+                .unwrap_or_else(|| panic!("{filename} present"));
+            let parsed: serde_yaml::Value = serde_yaml::from_str(&doc.contents)
+                .unwrap_or_else(|_| panic!("{filename} parses as YAML"));
+            let interval = parsed
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(FLUX_KEY_INTERVAL))
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) \
+                         scalar present; drift on this axis silently drops the \
+                         per-CR reconcile schedule from the Flux v2 controller's \
+                         per-CR watch registration",
+                    )
+                });
+            assert!(
+                !interval.is_empty(),
+                "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) must \
+                 carry a non-empty duration scalar; the Flux v2 controller's \
+                 per-CR reconcile loop rejects an empty cadence at admission",
+            );
+            // The renderer threads opts.interval through every CR
+            // verbatim (the same [`ClusterBundleOpts::interval`] field
+            // for the whole per-cluster bundle); pin that the emitted
+            // scalar agrees with the opts-side input so a future
+            // refactor that per-CR-overrides the cadence surfaces here
+            // rather than as a silent per-CR reconcile-schedule split.
+            assert_eq!(
+                interval, opts.interval,
+                "{filename} spec.<FLUX_KEY_INTERVAL> ({FLUX_KEY_INTERVAL:?}) \
+                 must carry the same duration scalar the [`ClusterBundleOpts`] \
+                 seeded — drift here silently splits the per-CR reconcile \
+                 schedule across the three Flux v2 controllers",
+            );
+        }
     }
 }
