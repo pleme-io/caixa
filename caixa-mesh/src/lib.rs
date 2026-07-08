@@ -2708,8 +2708,8 @@ pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, Membro, MeshPolicy, Placement, PlacementStrategy,
-        WitContract,
+        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_ESTRATEGIA, Membro, MeshPolicy,
+        Placement, PlacementStrategy, WitContract,
     };
     use std::time::Duration;
 
@@ -5975,8 +5975,10 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(serde_yaml::Value::String("estrategia".into()))
-                    .and_then(|v| v.as_str()),
+                p.get(serde_yaml::Value::String(
+                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
+                ))
+                .and_then(|v| v.as_str()),
                 Some("Replicated"),
                 "placement.estrategia must round-trip the typed PlacementStrategy variant"
             );
@@ -6074,8 +6076,10 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(serde_yaml::Value::String("estrategia".into()))
-                    .and_then(|v| v.as_str()),
+                p.get(serde_yaml::Value::String(
+                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
+                ))
+                .and_then(|v| v.as_str()),
                 Some("Sharded")
             );
             assert_eq!(
@@ -6108,8 +6112,12 @@ mod tests {
         let first = placements[0];
         for p in &placements[1..] {
             assert_eq!(
-                p.get(serde_yaml::Value::String("estrategia".into())),
-                first.get(serde_yaml::Value::String("estrategia".into())),
+                p.get(serde_yaml::Value::String(
+                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
+                )),
+                first.get(serde_yaml::Value::String(
+                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
+                )),
                 "placement.estrategia must be identical across all members"
             );
             assert_eq!(
@@ -6141,6 +6149,77 @@ mod tests {
                 "entry must carry the M3_KEY_PLACEMENT key exactly"
             );
         }
+    }
+
+    #[test]
+    fn m3_placement_key_estrategia_pins_canonical_value() {
+        // Bridge-arm pin: [`M3_PLACEMENT_KEY_ESTRATEGIA`] resolves to
+        // the canonical `"estrategia"` byte today — the exact YAML
+        // sub-key the M3 [`caixa_core::aplicacao::Placement`] struct's
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `estrategia` field, and the exact scalar every downstream
+        // dispatch consults (the lareira-fleet-programs aggregator's
+        // per-entry `placement.estrategia` strategy branch, the future
+        // `app-operator` reconciler's per-Aplicacao takeover dispatch,
+        // the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+        // materializer's admission-time typed-enum bind, the M3
+        // Adaptive compression weighting per MESH-COMPOSITION.md §V).
+        // Peer with the [`programs_entry_placement_uses_lifted_canonical_key`]
+        // canonical-literal pin on the sibling per-entry overlay-key
+        // surface — that pin anchors the top-level `placement:` byte,
+        // this pin anchors the per-sub-block `estrategia:` byte both
+        // consumers dispatch on.
+        assert_eq!(M3_PLACEMENT_KEY_ESTRATEGIA, "estrategia");
+    }
+
+    #[test]
+    fn m3_placement_key_estrategia_matches_placement_serde_derive() {
+        // Structural pin: the lifted [`M3_PLACEMENT_KEY_ESTRATEGIA`]
+        // byte equals the exact key
+        // [`caixa_core::aplicacao::Placement`]'s
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `estrategia` field. A future refactor that (a) renames the
+        // Rust field to `strategy` / `distribution` for English-
+        // uniformity, or (b) retains the field name but adds a
+        // per-field `#[serde(rename = "…")]` override, or (c) drops
+        // the `rename_all = "camelCase"` attribute entirely, would
+        // silently emit a `placement:` block whose distribution-
+        // strategy discriminator lands under one key while every
+        // downstream consumer (the lareira-fleet-programs aggregator's
+        // dispatch, the future `app-operator` reconciler, the future
+        // CR materializer's admission bind) still probes another. The
+        // structural bind between the derive-time output and the
+        // consumer-side navigation const is what this pin enforces —
+        // any derive-side rebrand must be a coordinated edit at the
+        // lifted const's definition site + here, not a silent apply-
+        // time no-op at the aggregator's filter step. Peer with the
+        // [`FLEET_PROGRAMS_KEY_APLICACAO`] / [`FLEET_PROGRAMS_KEY_VERSAO`]
+        // / [`FLEET_PROGRAMS_KEY_NAME`] canonical-literal pins on the
+        // sibling per-entry fleet-programs schema-key surfaces on the
+        // same "one const, structurally bound to the derive-emitted
+        // shape, tested at both endpoints" discipline every prior
+        // canonical-schema-key lift on this surface established.
+        let placement = Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".to_string(), "mar".to_string()],
+            affinity: None,
+            shard_key: None,
+        };
+        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let mapping = value
+            .as_mapping()
+            .expect("Placement serializes to a mapping");
+        assert!(
+            mapping.contains_key(serde_yaml::Value::String(
+                M3_PLACEMENT_KEY_ESTRATEGIA.into()
+            )),
+            "Placement's serde derive must emit the estrategia axis under the exact key \
+             the lifted M3_PLACEMENT_KEY_ESTRATEGIA const carries; got mapping keys: {keys:?}",
+            keys = mapping
+                .keys()
+                .filter_map(|k| k.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
