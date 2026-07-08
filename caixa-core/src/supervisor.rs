@@ -517,9 +517,6 @@ impl SupervisorSpec {
         }
         let mut seen = std::collections::HashSet::new();
         for child in &self.children {
-            if child.caixa.is_empty() {
-                return Err(SupervisorError::EmptyChildName);
-            }
             // Every emitted cluster artifact's `metadata.name` for a
             // supervised child derives from this `:children :caixa` value
             // verbatim — the rendered `wasm.pleme.io/v1alpha1/ComputeUnit
@@ -540,18 +537,23 @@ impl SupervisorSpec {
             // shape trajectory (3f9d7a0) and the `:placement :clusters`
             // trajectory (6cbb900) onto the third DNS-1123-label-shaped
             // identifier axis — the supervisor tree's child names —
-            // through the lifted [`crate::render::is_dns_1123_label`]
-            // predicate (the "before its third occurrence" boundary the
-            // PRIME DIRECTIVE duplication-budget rule draws, THEORY.md
-            // §I.3.5).
+            // through the lifted
+            // [`crate::render::require_valid_dns_1123_label`] gate the
+            // seven peer name axes (`:membros :caixa`, `:placement
+            // :clusters`, `:placement :affinity`, `:contratos :de`/`:para`,
+            // `:entrada :para`, `:nome`, `:upgrade-from :module`) each
+            // route through, so drift between the eight axes' accepted
+            // DNS-1123-label sets is structurally impossible.
             //
             // [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
-            if let Err(reason) = crate::render::is_dns_1123_label(&child.caixa) {
-                return Err(SupervisorError::ChildCaixaInvalid {
+            crate::render::require_valid_dns_1123_label(
+                &child.caixa,
+                || SupervisorError::EmptyChildName,
+                |reason| SupervisorError::ChildCaixaInvalid {
                     caixa: child.caixa.clone(),
                     reason,
-                });
-            }
+                },
+            )?;
             // The author surface for `:children :versao` is the same
             // Cargo-shaped semver requirement string `:deps :versao` and
             // `:membros :versao` carry — and the lacre pipeline resolves

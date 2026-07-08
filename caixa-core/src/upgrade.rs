@@ -1276,14 +1276,21 @@ impl UpgradeInstruction {
 /// variant before this predicate is consulted, mirroring
 /// `validate_membro_caixa`'s empty-first cascade.
 fn validate_module(kind: &'static str, module: &str) -> Result<(), UpgradeError> {
-    if module.is_empty() {
-        return Err(UpgradeError::ModuleEmpty { kind });
-    }
-    crate::render::is_dns_1123_label(module).map_err(|reason| UpgradeError::ModuleInvalid {
-        kind,
-        module: module.to_string(),
-        reason,
-    })
+    // Routes through the shared
+    // [`crate::render::require_valid_dns_1123_label`] gate the peer
+    // name axes each land on. The `kind: &'static str` field flows
+    // through both error variants so the diagnostic names which
+    // per-instruction slot (`LoadModule` / `SoftPurge` / `Purge`) the
+    // offending value came from.
+    crate::render::require_valid_dns_1123_label(
+        module,
+        || UpgradeError::ModuleEmpty { kind },
+        |reason| UpgradeError::ModuleInvalid {
+            kind,
+            module: module.to_string(),
+            reason,
+        },
+    )
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
