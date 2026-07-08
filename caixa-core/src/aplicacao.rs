@@ -2411,36 +2411,31 @@ impl AplicacaoSpec {
             // emits a K8s name now matches the apiserver's accepted set
             // at validate time.
             validate_membro_caixa(&m.caixa)?;
-            if m.versao.is_empty() {
-                return Err(AplicacaoError::MembroVersaoEmpty {
-                    caixa: m.caixa.clone(),
-                });
-            }
             // The author surface for `:versao` is the same Cargo-shaped
             // semver requirement string (`"^0.1"`, `"~0.1.2"`, `"0.1.0"`,
             // `"*"`) every `:deps` entry carries — and the lacre pipeline
             // resolves both axes through the same
-            // [`crate::version::parse_requirement`] entry-point. Until
-            // this gate landed `validate_membros` only refused the empty
-            // string (`MembroVersaoEmpty`); a malformed-but-non-empty
-            // requirement (`"^bad-version"`, `"~~"`, `">= "`, the
-            // accidental Cargo-vs-npm `"^0.1.x"` typo) silently passed
-            // validate and the parse failure surfaced at lacre-resolve
-            // time — far from the source caixa.lisp, with a
-            // `semver::Error` not naming which `:membros` entry carried
-            // the typo. Mirroring the c4213a4 / b0c8389 / 808017c
-            // typed-shape gate trajectory: the typed slot's valid set
-            // matches its codec's accepted set, structurally — every
-            // `Membro::versao` past validate is round-trippable through
-            // [`crate::parse_requirement`] without re-checking at the
-            // resolver layer.
-            if let Err(e) = crate::parse_requirement(&m.versao) {
-                return Err(AplicacaoError::MembroVersaoInvalid {
+            // [`crate::version::parse_requirement`] entry-point. The
+            // shared [`crate::render::require_valid_versao_requirement`]
+            // helper brackets the empty-first + parse cascade both peer
+            // axes ([`crate::dep::Dep::validate`] on `:deps :versao`,
+            // [`crate::SupervisorSpec::validate`] on `:children :versao`)
+            // route through, so drift between the three axes' accepted
+            // requirement sets is structurally impossible and the parse-
+            // side no-op the empty-first arm closes (semver's empty
+            // parse yields an implicit `*`) lives in exactly one
+            // predicate.
+            crate::render::require_valid_versao_requirement(
+                &m.versao,
+                || AplicacaoError::MembroVersaoEmpty {
+                    caixa: m.caixa.clone(),
+                },
+                |reason| AplicacaoError::MembroVersaoInvalid {
                     caixa: m.caixa.clone(),
                     versao: m.versao.clone(),
-                    reason: e.to_string(),
-                });
-            }
+                    reason,
+                },
+            )?;
             if !seen.insert(m.caixa.as_str()) {
                 return Err(AplicacaoError::MembroDuplicate {
                     caixa: m.caixa.clone(),
