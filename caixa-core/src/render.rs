@@ -10947,6 +10947,74 @@ pub fn require_positive_bounded_u64<E>(
     Ok(())
 }
 
+/// Bracket a `:versao` requirement-string axis with the shared
+/// "empty-first, then [`crate::parse_requirement`]" gate pair every
+/// dep-shaped `:versao` slot carries. Returns `on_empty()` when
+/// `versao.is_empty()`, `on_invalid(reason)` when
+/// [`crate::parse_requirement`] rejects the non-empty input, `Ok(())`
+/// otherwise.
+///
+/// The empty-first arm strictly precedes the parse arm so a literal
+/// `""` value surfaces the self-locating empty diagnostic every
+/// per-axis error variant already documents an "omit the axis to
+/// express any-version" remediation for, rather than the misleading
+/// parse-side no-op — [`crate::parse_requirement("")`][crate::parse_requirement]
+/// hits `semver::VersionReq::parse("")` which returns
+/// `Ok(VersionReq { comparators: [] })` (semantically identical to
+/// [`semver::VersionReq::STAR`]), so without the empty-first arm an
+/// authored blank `:versao "" ` would silently round-trip as an
+/// implicit `"*"` — the same "silent widening" footgun the peer
+/// [`require_positive_bounded_u32`] closes on its zero-floor arm.
+///
+/// The three existing call sites — [`crate::dep::Dep::validate`] on
+/// [`crate::dep::Dep::versao`] (empty → [`crate::DepError::VersaoEmpty`],
+/// invalid → [`crate::DepError::VersaoInvalid`]),
+/// [`crate::AplicacaoSpec::validate_membros`] on
+/// [`crate::aplicacao::Membro::versao`] (empty →
+/// [`crate::AplicacaoError::MembroVersaoEmpty`], invalid →
+/// [`crate::AplicacaoError::MembroVersaoInvalid`]), and
+/// [`crate::SupervisorSpec::validate`] on
+/// [`crate::supervisor::ChildSpec::versao`] (empty →
+/// [`crate::SupervisorError::EmptyChildVersion`], invalid →
+/// [`crate::SupervisorError::ChildVersaoInvalid`]) — each formerly
+/// inlined this two-arm cascade verbatim. Lifting to one canonical
+/// entry-point closes the drift footgun structurally: a future
+/// widening of the accepted requirement-shape (a hypothetical
+/// git-tag-prefix leniency, a per-axis strictness override, or the
+/// M4 typed-resolver's `constraint:` axis on
+/// [`ABSORPTION-ROADMAP.md`]'s per-resolver-step trajectory) reaches
+/// every dep-shaped `:versao` consumer by one edit at this helper,
+/// not a coordinated rewrite across three modules.
+///
+/// Peer of [`require_positive_bounded_u32`] /
+/// [`require_positive_bounded_u64`] on the same closure-based
+/// caller-error-variant discipline — the caller owns the enum
+/// variant + its self-locating discriminator fields
+/// (`nome`/`caixa`, `versao`), this helper only sequences the two
+/// gate arms in canonical order and threads the parser's
+/// `semver`-shaped reason into the invalid arm's `reason:` field.
+///
+/// # Errors
+///
+/// Returns `on_empty()` for `versao.is_empty()`; returns
+/// `on_invalid(reason)` when [`crate::parse_requirement`] rejects
+/// the non-empty input (the parser's `to_string()` output threaded
+/// through as the invalid arm's `reason:`); returns `Ok(())`
+/// otherwise.
+pub fn require_valid_versao_requirement<E>(
+    versao: &str,
+    on_empty: impl FnOnce() -> E,
+    on_invalid: impl FnOnce(String) -> E,
+) -> Result<(), E> {
+    if versao.is_empty() {
+        return Err(on_empty());
+    }
+    if let Err(e) = crate::parse_requirement(versao) {
+        return Err(on_invalid(e.to_string()));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -19315,5 +19383,91 @@ mod tests {
             require_positive_bounded_u64::<TestErr>(u64::MAX, 10, || TestErr::Zero, TestErr::Cap),
             Err(TestErr::Cap(u64::MAX))
         );
+    }
+
+    // ── require_valid_versao_requirement ────────────────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum VersaoTestErr {
+        Empty,
+        Invalid(String),
+    }
+
+    #[test]
+    fn require_valid_versao_requirement_accepts_canonical_forms() {
+        // Every Cargo-shaped requirement string the substrate accepts on
+        // any `:versao` axis (`:deps`, `:membros`, `:children`) must pass
+        // the shared gate — pin the canonical set here so a future
+        // tightening surfaces as a test failure rather than a silent
+        // narrowing at one of the three consumer sites. Same accepted set
+        // as `accepts_canonical_membro_versao_forms` /
+        // `accepts_canonical_dep_versao_forms` on the sibling per-axis
+        // pins.
+        for form in [
+            "^0.1",      // caret — minor-range pin (the most common shape)
+            "~0.1.2",    // tilde — patch-range pin
+            "0.1.0",     // exact — single-version pin
+            "*",         // wildcard — explicitly any-version (VersionReq::STAR)
+            ">=0.1, <2", // multi-range — comma-separated comparators
+        ] {
+            assert_eq!(
+                require_valid_versao_requirement::<VersaoTestErr>(
+                    form,
+                    || VersaoTestErr::Empty,
+                    VersaoTestErr::Invalid,
+                ),
+                Ok(()),
+                "canonical form {form:?} must pass the gate",
+            );
+        }
+    }
+
+    #[test]
+    fn require_valid_versao_requirement_rejects_empty_before_parse() {
+        // The empty-first arm strictly precedes the parse arm. Without
+        // this arm the parser silently widens `""` to
+        // `VersionReq { comparators: [] }` (semantically `*`) — a
+        // "silent widening" footgun the three consumer sites each
+        // documented in their `MembroVersaoEmpty` / `EmptyChildVersion` /
+        // `VersaoEmpty` variants and now inherit by construction.
+        assert_eq!(
+            require_valid_versao_requirement::<VersaoTestErr>(
+                "",
+                || VersaoTestErr::Empty,
+                VersaoTestErr::Invalid,
+            ),
+            Err(VersaoTestErr::Empty),
+        );
+    }
+
+    #[test]
+    fn require_valid_versao_requirement_rejects_malformed_with_reason_threaded() {
+        // The canonical malformed-shape set the three consumer sites
+        // formerly each re-tested inline. The gate threads the
+        // parser's `to_string()` output through as the invalid arm's
+        // `reason:` verbatim — the field the three sibling error
+        // variants (`{Dep,Membro,Child}VersaoInvalid.reason`) each
+        // carry to the author's remediation prose.
+        for bad in [
+            "^^0.1", // doubled-caret typo
+            "v0.1",  // git-tag-shape leaking into requirement slot
+            "abc",   // gibberish
+            "~~",    // stacked-operator gibberish
+        ] {
+            let result = require_valid_versao_requirement::<VersaoTestErr>(
+                bad,
+                || VersaoTestErr::Empty,
+                VersaoTestErr::Invalid,
+            );
+            match result {
+                Err(VersaoTestErr::Invalid(reason)) => {
+                    assert!(
+                        !reason.is_empty(),
+                        "invalid arm must thread a non-empty reason for {bad:?}",
+                    );
+                }
+                other => panic!("expected Invalid for {bad:?}, got {other:?}"),
+            }
+        }
     }
 }

@@ -2454,18 +2454,26 @@ impl Dep {
                 reason,
             });
         }
-        if self.versao.is_empty() {
-            return Err(DepError::VersaoEmpty {
+        // Delegate the empty-first + `parse_requirement` cascade to the
+        // shared [`crate::render::require_valid_versao_requirement`]
+        // helper — same two-arm shape the peer
+        // [`crate::AplicacaoSpec::validate_membros`] on `:membros
+        // :versao` and [`crate::SupervisorSpec::validate`] on `:children
+        // :versao` route through, so drift between the three axes'
+        // accepted requirement sets is structurally impossible and the
+        // parse-side no-op the empty-first arm closes (semver's empty
+        // parse yields an implicit `*`) lives in exactly one predicate.
+        crate::render::require_valid_versao_requirement(
+            &self.versao,
+            || DepError::VersaoEmpty {
                 nome: self.nome.clone(),
-            });
-        }
-        if let Err(e) = crate::parse_requirement(&self.versao) {
-            return Err(DepError::VersaoInvalid {
+            },
+            |reason| DepError::VersaoInvalid {
                 nome: self.nome.clone(),
                 versao: self.versao.clone(),
-                reason: e.to_string(),
-            });
-        }
+                reason,
+            },
+        )?;
         if let Some(ref fonte) = self.fonte {
             fonte.validate(&self.nome)?;
         }

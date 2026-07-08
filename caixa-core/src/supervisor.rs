@@ -552,37 +552,35 @@ impl SupervisorSpec {
                     reason,
                 });
             }
-            if child.versao.is_empty() {
-                return Err(SupervisorError::EmptyChildVersion {
-                    caixa: child.caixa.clone(),
-                });
-            }
             // The author surface for `:children :versao` is the same
             // Cargo-shaped semver requirement string `:deps :versao` and
             // `:membros :versao` carry — and the lacre pipeline resolves
             // all three axes through the same
-            // [`crate::version::parse_requirement`] entry-point. Until
-            // this gate landed `validate` only refused the empty string
-            // (`EmptyChildVersion`); a malformed-but-non-empty
-            // requirement (`"^bad-version"`, `"^^0.1"`, the canonical
-            // git-tag-shape-leaking-into-:versao `"v0.1"` typo, `">="`,
-            // the accidental `"abc"`) silently passed validate and the
-            // `semver::Error` surfaced at lacre-resolve time, far from
-            // the source caixa.lisp, with no field naming which
-            // `:children` entry carried the typo. Mirroring 9888b13's
-            // `:membros :versao` lift onto the third `:versao` typed
-            // axis: every `ChildSpec::versao` past validate is
+            // [`crate::version::parse_requirement`] entry-point. The
+            // shared [`crate::render::require_valid_versao_requirement`]
+            // helper brackets the empty-first + parse cascade both peer
+            // axes ([`crate::dep::Dep::validate`] on `:deps :versao`,
+            // [`crate::AplicacaoSpec::validate_membros`] on `:membros
+            // :versao`) route through, so drift between the three axes'
+            // accepted requirement sets is structurally impossible and
+            // the parse-side no-op the empty-first arm closes (semver's
+            // empty parse yields an implicit `*`) lives in exactly one
+            // predicate. Every `ChildSpec::versao` past validate is
             // round-trippable through [`crate::parse_requirement`]
             // without re-checking at the resolver layer, and the three
             // `:versao` typed surfaces (`:deps`, `:membros`, `:children`)
-            // are now structurally equivalent.
-            if let Err(e) = crate::parse_requirement(&child.versao) {
-                return Err(SupervisorError::ChildVersaoInvalid {
+            // are now structurally equivalent by construction.
+            crate::render::require_valid_versao_requirement(
+                &child.versao,
+                || SupervisorError::EmptyChildVersion {
+                    caixa: child.caixa.clone(),
+                },
+                |reason| SupervisorError::ChildVersaoInvalid {
                     caixa: child.caixa.clone(),
                     versao: child.versao.clone(),
-                    reason: e.to_string(),
-                });
-            }
+                    reason,
+                },
+            )?;
             if !seen.insert(child.caixa.as_str()) {
                 return Err(SupervisorError::DuplicateChildCaixa {
                     caixa: child.caixa.clone(),
