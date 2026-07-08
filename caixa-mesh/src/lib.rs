@@ -35,8 +35,8 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
-    LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
-    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    FLEET_PROGRAMS_KEY_VERSAO, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract,
+    WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
     pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
@@ -133,8 +133,19 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
             serde_yaml::Value::String(FLEET_PROGRAMS_KEY_NAME.into()),
             serde_yaml::Value::String(m.caixa.clone()),
         );
+        // Per-`:membros` version-constraint annotation — flows the
+        // Membro's `:versao` (the M3 Aplicacao's per-member semver /
+        // range constraint) through the canonical
+        // [`caixa_core::FLEET_PROGRAMS_KEY_VERSAO`] axis-key the
+        // substrate operator's per-`:membros` resolver reads to fetch
+        // each member's caixa.lisp release. See the const's doc-comment
+        // for the fourth-of-four per-entry fleet-programs values-schema
+        // axis-key single-sourcing arc — with this lift landed every
+        // per-entry axis (name + versao + aplicacao + placement) lives
+        // in exactly one `&'static str` across the emitter here + every
+        // downstream aggregator/resolver call site.
         entry.insert(
-            serde_yaml::Value::String("versao".into()),
+            serde_yaml::Value::String(FLEET_PROGRAMS_KEY_VERSAO.into()),
             serde_yaml::Value::String(m.versao.clone()),
         );
         // Annotate with the parent Aplicacao's nome so the operator
@@ -5661,6 +5672,73 @@ mod tests {
              caixa_core::FLEET_PROGRAMS_KEY_APLICACAO static, not a sibling \
              `pub const` — the aggregator/emitter drift footgun the lift closes."
         );
+    }
+
+    #[test]
+    fn fleet_programs_key_versao_pins_canonical_value() {
+        // Bridge-arm pin on the emit-side coordinate — the
+        // [`caixa_core::FLEET_PROGRAMS_KEY_VERSAO`] constant this crate
+        // now consumes at the `entry.insert(…)` per-`:membros` version-
+        // constraint emit site must resolve to the canonical `"versao"`
+        // byte the substrate operator's per-`:membros` resolver reads
+        // to project each entry back onto its M3 Aplicacao's declared
+        // version-constraint. Peer of the in-file
+        // [`fleet_programs_key_versao_re_export_static_identity`]
+        // static-data identity pin below and of the sibling
+        // [`caixa_core::render::tests::fleet_programs_key_versao_pins_canonical_value`]
+        // canonical-value pin on the definition-site coordinate.
+        assert_eq!(FLEET_PROGRAMS_KEY_VERSAO, "versao");
+    }
+
+    #[test]
+    fn fleet_programs_key_versao_re_export_static_identity() {
+        // Second coordinate of the re-export pin triangle: the
+        // symbol this crate imports as `FLEET_PROGRAMS_KEY_VERSAO`
+        // must be *the same* `&'static str` as the canonical
+        // [`caixa_core::FLEET_PROGRAMS_KEY_VERSAO`] definition (a
+        // sibling `pub const` at this crate's use-site would trip the
+        // equality above without tripping this identity guard). Peer
+        // of the sibling
+        // [`fleet_programs_key_aplicacao_re_export_static_identity`]
+        // guard on the per-entry parent-graph-annotation axis surface.
+        // Pinned via `std::ptr::eq` on the two `.as_ptr()` addresses
+        // so a future refactor that re-inlines the const here instead
+        // of importing it from `caixa_core` fails at the fail-before-
+        // deploy posture.
+        assert!(
+            std::ptr::eq(
+                FLEET_PROGRAMS_KEY_VERSAO.as_ptr(),
+                caixa_core::FLEET_PROGRAMS_KEY_VERSAO.as_ptr(),
+            ),
+            "FLEET_PROGRAMS_KEY_VERSAO must resolve to the canonical \
+             caixa_core::FLEET_PROGRAMS_KEY_VERSAO static, not a sibling \
+             `pub const` — the resolver/emitter drift footgun the lift closes."
+        );
+    }
+
+    #[test]
+    fn programs_for_aplicacao_carries_lifted_fleet_programs_key_versao() {
+        // Production-emit pin: each `programs[]` entry the per-
+        // `:membros` fan-out writes must carry the source Membro's
+        // `:versao` constraint under the lifted
+        // [`caixa_core::FLEET_PROGRAMS_KEY_VERSAO`] axis-key, in
+        // declaration order. Peer of the sibling
+        // [`programs_for_aplicacao_annotates_with_parent_nome`]
+        // per-`:membros` parent-graph-annotation-axis emit pin;
+        // together the two pins pin every per-entry axis the
+        // caixa-mesh fan-out writes (name / versao / aplicacao) at the
+        // production-emit coordinate.
+        let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
+        let versoes: Vec<_> = entries
+            .iter()
+            .map(|e| {
+                e.get(FLEET_PROGRAMS_KEY_VERSAO)
+                    .and_then(|v| v.as_str())
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(versoes, vec!["^0.1", "^0.1", "^0.2"]);
     }
 
     #[test]

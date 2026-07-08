@@ -5946,6 +5946,76 @@ pub const FLEET_PROGRAMS_KEY_NAME: &str = "name";
 /// [`KUBE_KEY_NAME`] on the K8s CR canonical name-axis.
 pub const FLEET_PROGRAMS_KEY_APLICACAO: &str = "aplicacao";
 
+/// Canonical `lareira-fleet-programs` values-schema key naming the
+/// per-entry version-constraint discriminator — the `versao:` field
+/// each rendered `programs[]` entry carries so the substrate operator's
+/// per-`:membros` resolver can resolve each member's caixa.lisp against
+/// its Aplicacao-declared version-constraint. Every `:membros` row's
+/// `:versao` (the semver / range constraint the M3 Aplicacao names on
+/// its `:membros` list) flows through this exact key on the emitted
+/// per-entry programs.yaml row.
+///
+/// Peer of [`FLEET_PROGRAMS_KEY_NAME`], [`FLEET_PROGRAMS_KEY_APLICACAO`],
+/// and [`M3_KEY_PLACEMENT`] on the same fleet-programs values schema —
+/// `FLEET_PROGRAMS_KEY_NAME` carries the per-entry Servico-name
+/// discriminator (each `:membros` row's `:caixa` binding),
+/// `FLEET_PROGRAMS_KEY_APLICACAO` carries the per-entry parent-graph
+/// annotation, `M3_KEY_PLACEMENT` carries the M3 placement overlay
+/// cloned per entry, and this constant carries the per-entry version-
+/// constraint the operator's resolver reads to fetch the correct
+/// caixa.lisp release. Together the four per-entry keys (plus the
+/// top-level [`FLEET_PROGRAMS_KEY_PROGRAMS`] array key) name every axis
+/// one `programs[]` entry the caixa-mesh fan-out emits contributes to
+/// the substrate operator's read shape.
+///
+/// One production consumer writes this key:
+/// [`caixa_mesh::programs_for_aplicacao`] — the Aplicacao-side
+/// per-`:membros` entry-builder writes the per-entry version-
+/// constraint at this exact key (seeded from each `:membros` row's
+/// `:versao` binding), at `caixa-mesh/src/lib.rs`'s per-member
+/// `entry.insert("versao".into(), …)` call. Unlike the peer
+/// [`FLEET_PROGRAMS_KEY_NAME`] axis (written by both caixa-flux's
+/// per-Servico entry builder and caixa-mesh's per-`:membros` builder
+/// — a Servico rendered standalone through the caixa-flux path resolves
+/// its own `:versao` from its `caixa.lisp` root and hands it to the
+/// resolver via a distinct path), the per-`:membros` version-constraint
+/// annotation is emitted only by the caixa-mesh Aplicacao-side fan-out.
+///
+/// Until this lift landed the caixa-mesh emitter carried the bare
+/// `"versao"` byte inline at its `entry.insert("versao".into(), …)`
+/// call — a partial single-source where three of four per-entry
+/// fleet-programs axis keys were canonical
+/// ([`FLEET_PROGRAMS_KEY_NAME`] via 030a63f,
+/// [`FLEET_PROGRAMS_KEY_APLICACAO`] via cc69ac2, [`M3_KEY_PLACEMENT`])
+/// and the fourth was scattered. Lifting the fourth key completes the
+/// fleet-programs values-schema single-sourcing across every per-entry
+/// axis; every future per-graph aggregator, per-`:membros` resolver,
+/// per-entry version-constraint consumer inherits the same `&'static
+/// str` by construction. A future schema-key rebrand on the per-entry
+/// version-constraint axis (a namespaced `pleme.pleme.io/versao` for
+/// multi-tenant aggregator isolation, or `version:` for parity with
+/// upstream conventions, or typed `constraint:` on the ABSORPTION-
+/// ROADMAP.md M4 typed-resolver trajectory) lands at the one const
+/// rather than scattered across every future per-emitter/per-resolver
+/// site.
+///
+/// Byte-identical to the `Membro::versao` field name on the M3
+/// [`AplicacaoSpec`](aplicacao::AplicacaoSpec) today — both resolve to the same six-byte `"versao"`
+/// literal — but semantically distinct: `Membro::versao` names the
+/// author-side `:versao` slot on each `:membros` row (the typed
+/// version-constraint slot every `defcaixa` populates on its
+/// `:membros` list), while this constant names the
+/// `lareira-fleet-programs` library chart's per-entry version-
+/// constraint axis (spelled per the chart's `values.schema.json` — a
+/// separate schema contract, one whose future rebrand can land
+/// independently of the author-side slot-name axis). Splitting the two
+/// lets each schema's future rebrand land at its canonical const /
+/// field definition without coupling the author-side slot-name axis to
+/// the fleet-programs values-schema axis (or vice versa) — the same
+/// discipline the sibling [`FLEET_PROGRAMS_KEY_APLICACAO`] doc-comment
+/// establishes vs. the [`CaixaKind::Aplicacao`] enum-variant tag.
+pub const FLEET_PROGRAMS_KEY_VERSAO: &str = "versao";
+
 /// Canonical pleme-io label namespace prefix. Every cluster object
 /// emitted by any caixa-side renderer that needs to carry the
 /// pleme-io workload identity uses this prefix; runtime label
@@ -14362,6 +14432,33 @@ mod tests {
         // caixa-mesh Aplicacao-side emitter and the substrate
         // operator's per-graph aggregator reduce step.
         assert_eq!(FLEET_PROGRAMS_KEY_APLICACAO, "aplicacao");
+    }
+
+    #[test]
+    fn fleet_programs_key_versao_pins_canonical_value() {
+        // Bridge-arm pin: [`FLEET_PROGRAMS_KEY_VERSAO`] resolves to
+        // the canonical `"versao"` byte today — the exact YAML key
+        // the substrate operator's per-`:membros` resolver reads to
+        // fetch each `programs[]` entry's caixa.lisp release against
+        // the M3 Aplicacao's declared per-member semver / range
+        // constraint, and the exact key the
+        // [`caixa_mesh::programs_for_aplicacao`] per-`:membros`
+        // entry-builder writes the version-constraint at. Pin the
+        // literal here (peer with the sibling
+        // [`fleet_programs_key_name_pins_canonical_value`],
+        // [`fleet_programs_key_aplicacao_pins_canonical_value`], and
+        // [`fleet_programs_key_programs_pins_canonical_value`]
+        // canonical-literal pins on the peer fleet-programs schema
+        // key surfaces, and with the [`M3_KEY_PLACEMENT`] /
+        // [`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] /
+        // [`M2_KEY_UPGRADE_FROM`] pins on the per-entry overlay-key
+        // surfaces) so a future fleet-programs schema-key rebrand
+        // on the per-entry version-constraint axis surfaces here as
+        // a coordinated edit-point at the definition site rather
+        // than a silent apply-time split between the caixa-mesh
+        // Aplicacao-side emitter and the substrate operator's
+        // per-`:membros` resolver step.
+        assert_eq!(FLEET_PROGRAMS_KEY_VERSAO, "versao");
     }
 
     // ── label_selector — typed K8s LabelSelector wrapper ─────────────────
