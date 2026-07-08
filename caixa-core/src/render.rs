@@ -10638,6 +10638,107 @@ pub fn servico_m2_overlay(
     Ok(out)
 }
 
+/// Bracket a typed `u32` axis with the "zero-floor + upper-cap" gate
+/// pair every capped-`u32` `:politicas` / `:supervisor` / `:limits`
+/// axis carries. Returns `on_zero()` when `value == 0`,
+/// `on_cap_exceeded(value)` when `value > cap`, `Ok(())` otherwise.
+///
+/// The zero-floor arm strictly precedes the cap arm so a literal `0`
+/// value surfaces the self-locating zero diagnostic (which every
+/// per-axis error variant already documents an "omit the axis to
+/// express no-bound" remediation for) rather than the misleading
+/// `0 > cap` false-negative on the cap arm. Same ordering discipline
+/// every existing per-axis inline `if value == 0 { … } if value > CAP
+/// { … }` block already applies — this lift makes the ordering a
+/// property of the helper, not a per-call-site convention six sites
+/// re-derive.
+///
+/// Six identical-shape call sites collapse onto this helper:
+///
+///   * [`crate::AplicacaoSpec::validate_politicas`] on
+///     `MeshPolicy::retries` (zero →
+///     [`crate::AplicacaoError::PolicyRetriesZero`], cap →
+///     [`crate::AplicacaoError::PolicyRetriesExceedsCap`],
+///     cap = [`crate::POLICY_RETRIES_MAX`]),
+///     `CircuitBreaker::max_failures` (zero →
+///     [`crate::AplicacaoError::PolicyBreakerZeroFailures`], cap →
+///     [`crate::AplicacaoError::PolicyBreakerMaxFailuresExceedsCap`],
+///     cap = [`crate::POLICY_BREAKER_MAX_FAILURES_MAX`]), and
+///     `RateLimit::rate` (zero →
+///     [`crate::AplicacaoError::PolicyRateLimitZero`], cap →
+///     [`crate::AplicacaoError::PolicyRateLimitExceedsCap`],
+///     cap = [`crate::POLICY_RATE_LIMIT_MAX`]);
+///   * [`crate::SupervisorSpec::validate`] on `max_restarts`
+///     (zero → [`crate::SupervisorError::ZeroMaxRestarts`], cap →
+///     [`crate::SupervisorError::MaxRestartsExceedsCap`],
+///     cap = [`crate::SUPERVISOR_MAX_RESTARTS_MAX`]);
+///   * [`crate::LimitsSpec::validate`] on `cpu`
+///     (zero → [`crate::LimitsError::CpuZero`], cap →
+///     [`crate::LimitsError::CpuExceedsCap`],
+///     cap = [`crate::LIMITS_CPU_MILLICORES_MAX`]).
+///
+/// Peer to [`require_positive_bounded_u64`] on the `u64`-typed axes
+/// ([`crate::LimitsSpec::fuel`]). Generic over the caller's error enum
+/// so the same helper reaches every crate-level [`thiserror`] surface
+/// — the six per-axis error variants remain the source of truth for
+/// each axis's remediation prose; the helper only sequences the two
+/// gate arms in canonical order and threads the value into the cap
+/// arm's discriminator field.
+///
+/// # Errors
+///
+/// Returns `on_zero()` for `value == 0`; returns `on_cap_exceeded(value)`
+/// for `value > cap`; returns `Ok(())` otherwise.
+pub fn require_positive_bounded_u32<E>(
+    value: u32,
+    cap: u32,
+    on_zero: impl FnOnce() -> E,
+    on_cap_exceeded: impl FnOnce(u32) -> E,
+) -> Result<(), E> {
+    if value == 0 {
+        return Err(on_zero());
+    }
+    if value > cap {
+        return Err(on_cap_exceeded(value));
+    }
+    Ok(())
+}
+
+/// Peer of [`require_positive_bounded_u32`] on the `u64`-typed axes.
+/// Returns `on_zero()` when `value == 0`, `on_cap_exceeded(value)`
+/// when `value > cap`, `Ok(())` otherwise. See
+/// [`require_positive_bounded_u32`] for the ordering / lift rationale
+/// (same "zero-floor arm strictly precedes cap arm so `0` surfaces
+/// the self-locating diagnostic" discipline the peer helper documents).
+///
+/// The single existing call site is [`crate::LimitsSpec::validate`] on
+/// `fuel` (zero → [`crate::LimitsError::FuelZero`], cap →
+/// [`crate::LimitsError::FuelExceedsCap`], cap =
+/// [`crate::LIMITS_FUEL_MAX`]). Lifted alongside its `u32` peer so
+/// the two integer-typed axes on this discipline share one canonical
+/// entry-point — a future `u64`-typed axis (a hypothetical
+/// per-Aplicacao byte-budget cap, the M4 per-edge policy resolver's
+/// byte-throughput axis) reaches for the same helper by construction.
+///
+/// # Errors
+///
+/// Returns `on_zero()` for `value == 0`; returns `on_cap_exceeded(value)`
+/// for `value > cap`; returns `Ok(())` otherwise.
+pub fn require_positive_bounded_u64<E>(
+    value: u64,
+    cap: u64,
+    on_zero: impl FnOnce() -> E,
+    on_cap_exceeded: impl FnOnce(u64) -> E,
+) -> Result<(), E> {
+    if value == 0 {
+        return Err(on_zero());
+    }
+    if value > cap {
+        return Err(on_cap_exceeded(value));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -18886,5 +18987,125 @@ mod tests {
         assert!(is_digit_only_magnitude("00"));
         assert!(is_digit_only_magnitude("0064"));
         assert!(is_digit_only_magnitude("0500"));
+    }
+
+    // ── require_positive_bounded_{u32,u64} ──────────────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum TestErr {
+        Zero,
+        Cap(u64),
+    }
+
+    #[test]
+    fn require_positive_bounded_u32_accepts_in_range() {
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                1,
+                10,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                10,
+                10,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Ok(())
+        );
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                5,
+                10,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn require_positive_bounded_u32_rejects_zero_with_self_locating_diagnostic() {
+        // The zero-floor arm strictly precedes the cap arm — a value of
+        // 0 surfaces the `on_zero` callback's discriminator (which every
+        // per-axis error variant documents an omit-axis remediation for),
+        // never the `on_cap_exceeded` callback (which would misframe
+        // "0 > cap == false" as an above-cap value).
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                0,
+                10,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Err(TestErr::Zero)
+        );
+        // Pin the ordering under the degenerate cap == 0 boundary: even
+        // when the cap itself is 0 (never valid for a positive-bounded
+        // axis in production, but pins the ordering contract), 0 routes
+        // through the zero arm — not the cap arm.
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                0,
+                0,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Err(TestErr::Zero)
+        );
+    }
+
+    #[test]
+    fn require_positive_bounded_u32_rejects_above_cap_with_value_threaded() {
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                11,
+                10,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Err(TestErr::Cap(11))
+        );
+        assert_eq!(
+            require_positive_bounded_u32::<TestErr>(
+                u32::MAX,
+                10,
+                || TestErr::Zero,
+                |v| TestErr::Cap(u64::from(v))
+            ),
+            Err(TestErr::Cap(u64::from(u32::MAX)))
+        );
+    }
+
+    #[test]
+    fn require_positive_bounded_u64_accepts_in_range() {
+        assert_eq!(
+            require_positive_bounded_u64::<TestErr>(1, 10, || TestErr::Zero, TestErr::Cap),
+            Ok(())
+        );
+        assert_eq!(
+            require_positive_bounded_u64::<TestErr>(10, 10, || TestErr::Zero, TestErr::Cap),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn require_positive_bounded_u64_rejects_zero_and_above_cap() {
+        assert_eq!(
+            require_positive_bounded_u64::<TestErr>(0, 10, || TestErr::Zero, TestErr::Cap),
+            Err(TestErr::Zero)
+        );
+        assert_eq!(
+            require_positive_bounded_u64::<TestErr>(11, 10, || TestErr::Zero, TestErr::Cap),
+            Err(TestErr::Cap(11))
+        );
+        assert_eq!(
+            require_positive_bounded_u64::<TestErr>(u64::MAX, 10, || TestErr::Zero, TestErr::Cap),
+            Err(TestErr::Cap(u64::MAX))
+        );
     }
 }

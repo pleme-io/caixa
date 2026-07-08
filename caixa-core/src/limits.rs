@@ -516,18 +516,16 @@ impl LimitsSpec {
         {
             return Err(LimitsError::MemoryNotPageMultiple { bytes: m });
         }
-        if self.fuel == Some(0) {
-            return Err(LimitsError::FuelZero);
-        }
-        // Upper-bound gate on `:fuel`: every validated value must also
-        // fit within the typed `:fuel` ceiling ([`LIMITS_FUEL_MAX`] =
-        // 10¹² = 1 trillion wasm instructions). The zero-floor and this
-        // cap arm together bracket the typed `:fuel` axis structurally
-        // — every validated value lies in `1..=LIMITS_FUEL_MAX`. Until
-        // this gate landed the `Option<u64>` slot accepted any value
-        // past zero (the parser's only upper bound was `u64::MAX`), so
-        // `(:fuel 18446744073709551615)` round-tripped cleanly through
-        // serde and the per-process CSE invariant (no value the
+        // Zero-floor + upper-cap bracket on the typed `:fuel` axis. See
+        // [`crate::render::require_positive_bounded_u64`] for the
+        // ordering discipline (zero-floor arm strictly precedes cap arm
+        // so `Some(0)` surfaces the self-locating `FuelZero` diagnostic
+        // with its omit-axis remediation directly named, not the
+        // misleading `0 > LIMITS_FUEL_MAX == false` cap-arm miss).
+        // Until this bracket landed the `Option<u64>` slot accepted any
+        // value past zero (the parser's only upper bound was `u64::MAX`),
+        // so `(:fuel 18446744073709551615)` round-tripped cleanly
+        // through serde and the per-process CSE invariant (no value the
         // wasm-engine's fuel counter can't honor as a meaningful budget
         // before the sibling `:wall-clock` deadline fires) was a
         // runtime, not build-time, contract on every above-cap input
@@ -548,22 +546,14 @@ impl LimitsSpec {
         // `LIMITS_MEMORY_WASM32_PAGE_BYTES..=LIMITS_MEMORY_WASM32_MAX_BYTES`,
         // `:fuel` in `1..=LIMITS_FUEL_MAX`, `:wall-clock` in
         // `1ms..=LIMITS_WALL_CLOCK_MAX`, `:cpu` in
-        // `1..=LIMITS_CPU_MILLICORES_MAX`) — closing the open edge the
-        // 857dfcc cap commit body explicitly named as the next
-        // compounding step ("three of the four axes carry a top-and-
-        // bottom edge gate; only `:fuel` remains with a zero-floor-only
-        // shape"). The zero-floor arm strictly precedes this cap so
-        // `Some(0)` (a value the canonical arm would otherwise accept
-        // as `<= LIMITS_FUEL_MAX`) surfaces the more self-locating
-        // `FuelZero` diagnostic with its omit-axis remediation directly
-        // named, peer to every other zero-then-cap chain on this
-        // surface (`MemoryZero` → `MemoryExceedsWasm32Cap`,
-        // `WallClockZero` → `WallClockExceedsCap`, `CpuZero` →
-        // `CpuExceedsCap`).
-        if let Some(f) = self.fuel
-            && f > LIMITS_FUEL_MAX
-        {
-            return Err(LimitsError::FuelExceedsCap { fuel: f });
+        // `1..=LIMITS_CPU_MILLICORES_MAX`).
+        if let Some(f) = self.fuel {
+            crate::render::require_positive_bounded_u64(
+                f,
+                LIMITS_FUEL_MAX,
+                || LimitsError::FuelZero,
+                |fuel| LimitsError::FuelExceedsCap { fuel },
+            )?;
         }
         if matches!(self.wall_clock, Some(d) if d.is_zero()) {
             return Err(LimitsError::WallClockZero);
@@ -641,36 +631,29 @@ impl LimitsSpec {
         {
             return Err(LimitsError::WallClockExceedsCap { wall_clock: w });
         }
-        if self.cpu == Some(0) {
-            return Err(LimitsError::CpuZero);
-        }
-        // Upper-bound gate on `:cpu`: every validated value must also
-        // fit within the largest commercially-common non-metal cloud
-        // Kubernetes node vCPU count ([`LIMITS_CPU_MILLICORES_MAX`] =
-        // 128 cores = 128_000 millicores). The zero-floor arm
-        // immediately above closes the literal `Some(0)` shape; this
-        // cap arm closes the structurally-unschedulable class
-        // (`Some(128_001)`..`Some(u32::MAX)` — values that pass the
-        // numeric zero check but that the Kubernetes scheduler cannot
-        // bind to any node because no general-purpose managed-K8s
-        // SKU provides >128 vCPU per node). Until this gate landed
-        // the millicore codec accepted any `Option<u32>` past zero
-        // (the prior numeric-zero arm's only floor), so
-        // `(:cpu "1000000m")` (1000 cores) round-tripped cleanly
-        // through serde and the per-axis CSE invariant (no value the
-        // Kubernetes scheduler can't honor) was a runtime, not
-        // build-time, contract on every above-cap input: the
-        // `pleme-computeunit` chart's `resources.requests.cpu`
-        // landed verbatim, the pod sat `Pending` indefinitely with a
-        // `0/N nodes are available: N Insufficient cpu` event, and
-        // the typed `:cpu` slot became an unschedulable hint far from
-        // the source caixa.lisp. Closes the same gap the
-        // wasm32-wasip2 upper ceiling closes on the `:memory` axis —
-        // the typed `:cpu` axis is now operationally bracketed
-        // (`1..=LIMITS_CPU_MILLICORES_MAX`), not just numerically
-        // (`1..=u32::MAX`). Same top-and-bottom-edge discipline the
-        // prior trajectory applied to every sibling cap arm on this
-        // surface ([`LimitsError::MemoryExceedsWasm32Cap`],
+        // Zero-floor + upper-cap bracket on the typed `:cpu` axis. See
+        // [`crate::render::require_positive_bounded_u32`] for the
+        // ordering discipline (zero-floor arm strictly precedes cap arm
+        // so `Some(0)` surfaces the self-locating `CpuZero` diagnostic
+        // with its omit-axis remediation directly named, not the
+        // misleading `0 > LIMITS_CPU_MILLICORES_MAX == false` cap-arm
+        // miss). The bracket set is `1..=LIMITS_CPU_MILLICORES_MAX`
+        // (128 cores = 128_000 millicores — the largest commercially-
+        // common non-metal cloud Kubernetes node vCPU count). Until
+        // this bracket landed the millicore codec accepted any
+        // `Option<u32>` past zero (the prior numeric-zero arm's only
+        // floor), so `(:cpu "1000000m")` (1000 cores) round-tripped
+        // cleanly through serde and the per-axis CSE invariant (no
+        // value the Kubernetes scheduler can't honor) was a runtime,
+        // not build-time, contract on every above-cap input: the
+        // `pleme-computeunit` chart's `resources.requests.cpu` landed
+        // verbatim, the pod sat `Pending` indefinitely with a `0/N
+        // nodes are available: N Insufficient cpu` event, and the
+        // typed `:cpu` slot became an unschedulable hint far from the
+        // source caixa.lisp. Closes the same gap the wasm32-wasip2
+        // upper ceiling closes on the `:memory` axis — the typed `:cpu`
+        // axis is now operationally bracketed. Peer with every sibling
+        // cap arm on this surface ([`LimitsError::MemoryExceedsWasm32Cap`],
         // [`LimitsError::WallClockExceedsCap`],
         // [`crate::AplicacaoError::PolicyTimeoutExceedsCap`],
         // [`crate::AplicacaoError::PolicyRetriesExceedsCap`],
@@ -678,10 +661,13 @@ impl LimitsSpec {
         // [`crate::AplicacaoError::PolicyBreakerWindowExceedsCap`],
         // [`crate::AplicacaoError::PolicyRateLimitExceedsCap`],
         // [`crate::SupervisorError::MaxRestartsExceedsCap`]).
-        if let Some(m) = self.cpu
-            && m > LIMITS_CPU_MILLICORES_MAX
-        {
-            return Err(LimitsError::CpuExceedsCap { millicores: m });
+        if let Some(m) = self.cpu {
+            crate::render::require_positive_bounded_u32(
+                m,
+                LIMITS_CPU_MILLICORES_MAX,
+                || LimitsError::CpuZero,
+                |millicores| LimitsError::CpuExceedsCap { millicores },
+            )?;
         }
         Ok(())
     }

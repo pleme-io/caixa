@@ -70,8 +70,9 @@ pub use render::{
     is_leading_zero_padded_magnitude, is_lisp_extension, is_nats_subject,
     is_sandboxed_relative_path, is_wasi_keyvalue_slot, is_wit_world_ref, kube_resource_skeleton,
     label_selector, lareira_chart_name, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, require_kind, require_single_servico, servico_m2_overlay,
-    single_field_overlay, yaml_string_mapping,
+    pleme_program_selector, require_kind, require_positive_bounded_u32,
+    require_positive_bounded_u64, require_single_servico, servico_m2_overlay, single_field_overlay,
+    yaml_string_mapping,
 };
 pub use supervisor::{
     ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX,
