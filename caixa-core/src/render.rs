@@ -11015,6 +11015,70 @@ pub fn require_valid_versao_requirement<E>(
     Ok(())
 }
 
+/// Bracket a K8s DNS-1123-label-shaped axis with the shared
+/// "empty-first, then [`is_dns_1123_label`]" gate pair every Servico-
+/// name reference slot carries. Returns `on_empty()` when
+/// `value.is_empty()`, `on_invalid(reason)` when [`is_dns_1123_label`]
+/// rejects the non-empty input, `Ok(())` otherwise.
+///
+/// The empty-first arm strictly precedes the shape arm so a literal
+/// `""` value surfaces each per-axis error variant's narrower self-
+/// locating `_Empty` diagnostic (`MembroCaixaEmpty`, `PlacementClusterEmpty`,
+/// `EntradaParaEmpty`, `NomeEmpty`, `EmptyChildName`, `ModuleEmpty`, …)
+/// rather than the shared predicate's generic "must not be empty" prose
+/// — the same "misframed generic diagnostic" footgun the peer
+/// [`require_valid_versao_requirement`] closes on its empty arm. The
+/// invalid arm threads the predicate's parser-shaped reason verbatim
+/// into the caller's `*Invalid { reason }` field so the author's
+/// remediation prose (which specific violation — length / boundary /
+/// character-class) flows through unchanged.
+///
+/// The eight existing call sites — [`crate::AplicacaoSpec`]'s five
+/// name-shaped slots (`validate_membro_caixa` on `:membros :caixa`,
+/// `validate_placement_cluster` on `:placement :clusters`,
+/// `validate_placement_affinity` on `:placement :affinity`,
+/// `validate_contrato_caixa` on `:contratos :de`/`:para`,
+/// `validate_entrada_para` on `:entrada :para`),
+/// [`crate::SupervisorSpec::validate`] on `:children :caixa`,
+/// [`crate::manifest::Caixa::validate_nome`] on `:nome`, and
+/// [`crate::upgrade::validate_module`] on `:upgrade-from :module` —
+/// each formerly inlined this two-arm cascade verbatim. Lifting to one
+/// canonical entry-point closes the drift footgun structurally: a
+/// future widening of the accepted DNS-1123-label shape (a hypothetical
+/// IDN-Punycode-accepting variant, a per-axis strictness override for
+/// the M4 CR materializer's `spec.name` axes, or the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+/// webhook floor) reaches every name-shaped consumer by one edit at
+/// this helper, not a coordinated rewrite across three modules.
+///
+/// Peer of [`require_valid_versao_requirement`] on the same closure-
+/// based caller-error-variant discipline — the caller owns the enum
+/// variant + its self-locating discriminator fields (`caixa`, `cluster`,
+/// `affinity`, `nome`, `slot`, `kind`, `module`, …), this helper only
+/// sequences the two gate arms in canonical order and threads the
+/// predicate's shape-shaped reason into the invalid arm's `reason:`
+/// field.
+///
+/// # Errors
+///
+/// Returns `on_empty()` for `value.is_empty()`; returns
+/// `on_invalid(reason)` when [`is_dns_1123_label`] rejects the
+/// non-empty input (the predicate's parser-shaped reason threaded
+/// through as the invalid arm's `reason:`); returns `Ok(())` otherwise.
+pub fn require_valid_dns_1123_label<E>(
+    value: &str,
+    on_empty: impl FnOnce() -> E,
+    on_invalid: impl FnOnce(String) -> E,
+) -> Result<(), E> {
+    if value.is_empty() {
+        return Err(on_empty());
+    }
+    if let Err(reason) = is_dns_1123_label(value) {
+        return Err(on_invalid(reason));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -19461,6 +19525,100 @@ mod tests {
             );
             match result {
                 Err(VersaoTestErr::Invalid(reason)) => {
+                    assert!(
+                        !reason.is_empty(),
+                        "invalid arm must thread a non-empty reason for {bad:?}",
+                    );
+                }
+                other => panic!("expected Invalid for {bad:?}, got {other:?}"),
+            }
+        }
+    }
+
+    // ── require_valid_dns_1123_label ────────────────────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum LabelTestErr {
+        Empty,
+        Invalid(String),
+    }
+
+    #[test]
+    fn require_valid_dns_1123_label_accepts_canonical_forms() {
+        // Every DNS-1123-label-shaped Servico-name reference the substrate
+        // accepts on any name axis (`:membros :caixa`, `:placement :clusters`,
+        // `:placement :affinity`, `:contratos :de`/`:para`, `:entrada :para`,
+        // `:children :caixa`, `:nome`, `:upgrade-from :module`) must pass
+        // the shared gate — pin the canonical set here so a future
+        // tightening surfaces as a test failure rather than a silent
+        // narrowing at one of the eight consumer sites. Same accepted set
+        // as the sibling per-axis DNS-1123-label pins already carry.
+        for form in [
+            "hello-rio",                         // canonical dashed
+            "cart",                              // single-token
+            "rio-1",                             // trailing digit
+            "1-rio",                             // leading digit
+            "a",                                 // one byte
+            &"a".repeat(DNS_1123_LABEL_MAX_LEN), // max length exact
+        ] {
+            assert_eq!(
+                require_valid_dns_1123_label::<LabelTestErr>(
+                    form,
+                    || LabelTestErr::Empty,
+                    LabelTestErr::Invalid,
+                ),
+                Ok(()),
+                "canonical form {form:?} must pass the gate",
+            );
+        }
+    }
+
+    #[test]
+    fn require_valid_dns_1123_label_rejects_empty_before_shape() {
+        // The empty-first arm strictly precedes the shape arm so a
+        // literal `""` surfaces each per-axis error variant's narrower
+        // self-locating `_Empty` diagnostic rather than the shared
+        // predicate's generic "must not be empty" prose the shape arm
+        // would thread through — the same "misframed generic diagnostic"
+        // footgun the peer [`require_valid_versao_requirement`] closes
+        // on its empty arm. The eight consumer sites each documented
+        // this ordering in their `MembroCaixaEmpty` / `PlacementClusterEmpty`
+        // / `PlacementAffinityEmpty` / `ContratoCaixaEmpty` /
+        // `EntradaParaEmpty` / `NomeEmpty` / `EmptyChildName` /
+        // `ModuleEmpty` variants and now inherit it by construction.
+        assert_eq!(
+            require_valid_dns_1123_label::<LabelTestErr>(
+                "",
+                || LabelTestErr::Empty,
+                LabelTestErr::Invalid,
+            ),
+            Err(LabelTestErr::Empty),
+        );
+    }
+
+    #[test]
+    fn require_valid_dns_1123_label_rejects_malformed_with_reason_threaded() {
+        // The canonical malformed-shape set the eight consumer sites
+        // formerly each re-tested inline. The gate threads the
+        // predicate's shape-shaped reason through as the invalid arm's
+        // `reason:` verbatim — the field every sibling error variant
+        // (`{MembroCaixa,PlacementCluster,PlacementAffinity,ContratoCaixa,
+        // EntradaPara,Nome,ChildCaixa,Module}Invalid.reason`) each
+        // carry to the author's remediation prose.
+        for bad in [
+            "Rio",       // uppercase — the canonical TitleCase-from-an-ADR typo
+            "my_cart",   // underscore — the Python-module-name leak
+            "team.cart", // dot — the namespace-dot-on-a-label confusion
+            "-cart",     // leading hyphen — boundary violation
+            "cart-",     // trailing hyphen — boundary violation
+        ] {
+            let result = require_valid_dns_1123_label::<LabelTestErr>(
+                bad,
+                || LabelTestErr::Empty,
+                LabelTestErr::Invalid,
+            );
+            match result {
+                Err(LabelTestErr::Invalid(reason)) => {
                     assert!(
                         !reason.is_empty(),
                         "invalid arm must thread a non-empty reason for {bad:?}",

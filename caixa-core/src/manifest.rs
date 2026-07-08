@@ -11,8 +11,8 @@ use crate::{
     dep::DepError,
     limits::LimitsSpec,
     render::{
-        PathShapeViolation, is_computeunit_yaml_extension, is_dns_1123_label, is_git_repo_url,
-        is_lisp_extension, is_sandboxed_relative_path,
+        PathShapeViolation, is_computeunit_yaml_extension, is_git_repo_url, is_lisp_extension,
+        is_sandboxed_relative_path,
     },
     supervisor::SupervisorSpec,
     upgrade::UpgradeFromEntry,
@@ -558,13 +558,18 @@ impl Caixa {
     /// name gate already uses (e.g. `MembroCaixaEmpty` before
     /// `MembroCaixaInvalid`, `EmptyChildName` before `ChildCaixaInvalid`).
     pub fn validate_nome(&self) -> Result<(), ManifestError> {
-        if self.nome.is_empty() {
-            return Err(ManifestError::NomeEmpty);
-        }
-        is_dns_1123_label(&self.nome).map_err(|reason| ManifestError::NomeInvalid {
-            nome: self.nome.clone(),
-            reason,
-        })
+        // Routes through the shared
+        // [`crate::render::require_valid_dns_1123_label`] gate the peer
+        // name axes each land on so drift between the eight axes'
+        // accepted DNS-1123-label sets is structurally impossible.
+        crate::render::require_valid_dns_1123_label(
+            &self.nome,
+            || ManifestError::NomeEmpty,
+            |reason| ManifestError::NomeInvalid {
+                nome: self.nome.clone(),
+                reason,
+            },
+        )
     }
 
     /// Reject `:nome` values whose joint length with the canonical

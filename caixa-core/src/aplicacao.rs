@@ -922,14 +922,22 @@ fn validate_membro_caixa(caixa: &str) -> Result<(), AplicacaoError> {
     // Empty is already gated by `MembroCaixaEmpty` at the call site;
     // re-checking here keeps the predicate usable from any future
     // call site (the M4 CR materializer) without an empty-check
-    // footgun.
-    if caixa.is_empty() {
-        return Err(AplicacaoError::MembroCaixaEmpty);
-    }
-    crate::render::is_dns_1123_label(caixa).map_err(|reason| AplicacaoError::MembroCaixaInvalid {
-        caixa: caixa.to_string(),
-        reason,
-    })
+    // footgun. The shared
+    // [`crate::render::require_valid_dns_1123_label`] helper brackets
+    // the empty-first + shape cascade every peer name axis
+    // (`:placement :clusters`, `:placement :affinity`, `:contratos
+    // :de`/`:para`, `:entrada :para`, `:children :caixa`, `:nome`,
+    // `:upgrade-from :module`) routes through, so drift between the
+    // eight axes' accepted DNS-1123-label sets is structurally
+    // impossible.
+    crate::render::require_valid_dns_1123_label(
+        caixa,
+        || AplicacaoError::MembroCaixaEmpty,
+        |reason| AplicacaoError::MembroCaixaInvalid {
+            caixa: caixa.to_string(),
+            reason,
+        },
+    )
 }
 
 /// Reject `:placement :clusters` entries the K8s apiserver would refuse
@@ -963,16 +971,17 @@ fn validate_placement_cluster(cluster: &str) -> Result<(), AplicacaoError> {
     // Empty is already gated by `PlacementClusterEmpty` at the call
     // site; re-checking here keeps the predicate usable from any
     // future call site (the M4 CR materializer's per-cluster validator)
-    // without an empty-check footgun.
-    if cluster.is_empty() {
-        return Err(AplicacaoError::PlacementClusterEmpty);
-    }
-    crate::render::is_dns_1123_label(cluster).map_err(|reason| {
-        AplicacaoError::PlacementClusterInvalid {
+    // without an empty-check footgun. Routes through the shared
+    // [`crate::render::require_valid_dns_1123_label`] gate the peer
+    // name axes each land on.
+    crate::render::require_valid_dns_1123_label(
+        cluster,
+        || AplicacaoError::PlacementClusterEmpty,
+        |reason| AplicacaoError::PlacementClusterInvalid {
             cluster: cluster.to_string(),
             reason,
-        }
-    })
+        },
+    )
 }
 
 /// Reject `:placement :affinity` hints whose shape can never legitimately
@@ -1028,16 +1037,17 @@ fn validate_placement_affinity(affinity: &str) -> Result<(), AplicacaoError> {
     // Empty is gated separately at the call site for a self-locating
     // diagnostic; re-checking here keeps the predicate usable from any
     // future call site (the M4 CR materializer's per-affinity
-    // validator) without an empty-check footgun.
-    if affinity.is_empty() {
-        return Err(AplicacaoError::PlacementAffinityEmpty);
-    }
-    crate::render::is_dns_1123_label(affinity).map_err(|reason| {
-        AplicacaoError::PlacementAffinityInvalid {
+    // validator) without an empty-check footgun. Routes through the
+    // shared [`crate::render::require_valid_dns_1123_label`] gate the
+    // peer name axes each land on.
+    crate::render::require_valid_dns_1123_label(
+        affinity,
+        || AplicacaoError::PlacementAffinityEmpty,
+        |reason| AplicacaoError::PlacementAffinityInvalid {
             affinity: affinity.to_string(),
             reason,
-        }
-    })
+        },
+    )
 }
 
 /// Reject `:placement :shard-key` extractor expressions whose shape can
@@ -1241,14 +1251,20 @@ fn validate_placement_shard_key(key: &str) -> Result<(), AplicacaoError> {
 /// [`ManifestError::CodePathDuplicate`] (e113ace) / [`DepError::DepIsSelf`]
 /// (85f102c) cross-list-tag pattern.
 fn validate_contrato_caixa(slot: &'static str, caixa: &str) -> Result<(), AplicacaoError> {
-    if caixa.is_empty() {
-        return Err(AplicacaoError::ContratoCaixaEmpty { slot });
-    }
-    crate::render::is_dns_1123_label(caixa).map_err(|reason| AplicacaoError::ContratoCaixaInvalid {
-        slot,
-        caixa: caixa.to_string(),
-        reason,
-    })
+    // Routes through the shared
+    // [`crate::render::require_valid_dns_1123_label`] gate the peer
+    // name axes each land on. The `slot: &'static str` field flows
+    // through both error variants so the diagnostic names which
+    // per-edge axis (`:de` vs `:para`) the offending value came from.
+    crate::render::require_valid_dns_1123_label(
+        caixa,
+        || AplicacaoError::ContratoCaixaEmpty { slot },
+        |reason| AplicacaoError::ContratoCaixaInvalid {
+            slot,
+            caixa: caixa.to_string(),
+            reason,
+        },
+    )
 }
 
 /// Reject `:entrada :para` values whose shape can never legitimately
@@ -1293,14 +1309,17 @@ fn validate_entrada_para(para: &str) -> Result<(), AplicacaoError> {
     // Empty is gated separately at the call site for a self-locating
     // diagnostic; re-checking here keeps the predicate usable from any
     // future call site (the M4 CR materializer's per-`:entrada`
-    // validator) without an empty-check footgun.
-    if para.is_empty() {
-        return Err(AplicacaoError::EntradaParaEmpty);
-    }
-    crate::render::is_dns_1123_label(para).map_err(|reason| AplicacaoError::EntradaParaInvalid {
-        para: para.to_string(),
-        reason,
-    })
+    // validator) without an empty-check footgun. Routes through the
+    // shared [`crate::render::require_valid_dns_1123_label`] gate the
+    // peer name axes each land on.
+    crate::render::require_valid_dns_1123_label(
+        para,
+        || AplicacaoError::EntradaParaEmpty,
+        |reason| AplicacaoError::EntradaParaInvalid {
+            para: para.to_string(),
+            reason,
+        },
+    )
 }
 
 /// Reject `:entrada :host` values the K8s Gateway API v1 apiserver
