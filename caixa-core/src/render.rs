@@ -5921,6 +5921,97 @@ pub const M3_PLACEMENT_KEY_CLUSTERS: &str = "clusters";
 /// consumer reads off.
 pub const M3_PLACEMENT_KEY_AFFINITY: &str = "affinity";
 
+/// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
+/// struct's `shard_key` shard-selection-template axis — the per-`M3_KEY_PLACEMENT`-
+/// block optional field carrying the validated non-empty shard-key
+/// template (per [`crate::aplicacao::AplicacaoSpec::validate_placement`]'s
+/// `ShardedKeyEmpty` arm — the build rejects any `:placement Sharded`
+/// that omits the slot, and rejects any non-Sharded strategy that
+/// carries the slot as `ShardKeyOnNonSharded`) that every downstream
+/// shard-dispatch consumer materializes off:
+///
+/// - the `lareira-fleet-programs` aggregator's per-entry M3 shard-pool
+///   dispatch materializer keying off `placement.shardKey` to hash each
+///   incoming entity into the per-cluster shard pool the Akka-style
+///   cluster-sharding reconciler owns (per MESH-COMPOSITION.md §II.4);
+/// - the future `app-operator` reconciler's per-Aplicacao
+///   `ShardedResource` CR emitter binding the typed template to the
+///   K8s-primitive shard-assignment controller's `spec.hashKey`;
+/// - the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+///   admission-time `spec.placement.shardKey` typed-string bind, and
+/// - the M4 Orleans-style virtual-actor runtime's per-grain
+///   placement dispatch reading the same value as the grain-identity
+///   hash source (per RUNTIME-PATTERNS.md's virtual-actor pattern
+///   entry).
+///
+/// The scalar is derived by [`crate::aplicacao::Placement`]'s
+/// `#[serde(rename_all = "camelCase")]` from the Rust field name
+/// `shard_key`; unlike the peer `affinity` / `clusters` / `estrategia`
+/// axes (whose field names carry no `_`, so the serde transform is a
+/// no-op), the `shard_key` field's `snake_case` name is actively
+/// transformed by the derive to `shardKey` — the emitted key differs
+/// from the source-side field name and the drift-footgun surface is
+/// therefore correspondingly larger. Unlike the always-emitted
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] / [`M3_PLACEMENT_KEY_CLUSTERS`]
+/// axes, the `shard_key` field carries a
+/// `#[serde(skip_serializing_if = "Option::is_none")]` attribute so the
+/// key appears in the rendered `placement:` block iff the typed slot
+/// resolves to `Some(_)` — the omit-when-unset contract the peer typed
+/// slots ([`M3_PLACEMENT_KEY_AFFINITY`],
+/// [`crate::aplicacao::MeshPolicy::timeout`],
+/// [`crate::aplicacao::MeshPolicy::retries`],
+/// [`crate::aplicacao::MeshPolicy::mtls_required`]) each carry to keep
+/// an unset typed slot from bloating every rendered programs.yaml
+/// entry with a nominal-only `shardKey: null` value the downstream
+/// shard-dispatch passes would then need to unwrap defensively.
+///
+/// Lifting the byte to one `&'static str` closes the same drift footgun
+/// the peer [`M3_PLACEMENT_KEY_ESTRATEGIA`] / [`M3_PLACEMENT_KEY_CLUSTERS`]
+/// / [`M3_PLACEMENT_KEY_AFFINITY`] lifts closed on the sibling axes:
+/// a future refactor renaming the Rust field (`shard_key` →
+/// `partition_key` for Kafka-symmetric naming, `entity_key` for
+/// Akka/Orleans-symmetric naming, `hash_key` for schema-clarity, etc.)
+/// OR retaining the field name while adding a `#[serde(rename = "…")]`
+/// override OR dropping the struct-level `rename_all = "camelCase"`
+/// attribute would silently emit a `placement:` block whose shard-
+/// selection template lands under one key while every downstream shard-
+/// dispatch consumer still probes another — the M3 shard-pool
+/// dispatch materializer would then see a `None` shard-key on every
+/// entry and silently fall back to the per-entry random-placement
+/// baseline (the workload's typed `:shard-key "$tenantId"` template
+/// would be silently discarded, and per-tenant entities would scatter
+/// across every cluster in the pool instead of consistently landing on
+/// one — the failure surfaces as "the newly-deployed sharded Aplicacao
+/// mysteriously loses its per-tenant locality" far from the rebrand
+/// commit's source, and Cilium's per-entity trace surfaces the
+/// symptom only in hubble traces of the actual data-plane skew, not in
+/// `kubectl describe`). The identity pin + serde-derive round-trip
+/// pin the sweep introduces catch the drift at caixa-core / caixa-mesh
+/// build time rather than at the aggregator's shard-dispatch step or
+/// the operator's reconcile posture. The serde-derive pin is
+/// particularly load-bearing on this axis (relative to the peer
+/// `affinity` / `clusters` / `estrategia` pins) because the underlying
+/// derive transform is *not* a no-op — the emitted `shardKey` key
+/// differs from the source-side `shard_key` field by construction,
+/// so any rebrand that touches either endpoint of the transform (the
+/// field name OR the `rename_all` attribute OR a per-field `rename`
+/// override) reaches this pin's assertion by construction.
+///
+/// Peer of [`M3_KEY_PLACEMENT`] / [`M3_PLACEMENT_KEY_ESTRATEGIA`] /
+/// [`M3_PLACEMENT_KEY_CLUSTERS`] / [`M3_PLACEMENT_KEY_AFFINITY`] on the
+/// same programs.yaml per-entry axis — `M3_KEY_PLACEMENT` names the
+/// top-level overlay key each entry carries, `M3_PLACEMENT_KEY_ESTRATEGIA`
+/// names the per-sub-block distribution-strategy discriminator every
+/// dispatch consumer branches on, `M3_PLACEMENT_KEY_CLUSTERS` names the
+/// per-sub-block cluster-pool list every per-cluster fanout consumer
+/// scopes by, `M3_PLACEMENT_KEY_AFFINITY` names the per-sub-block
+/// optional placement-engine hint every weighting consumer reads off,
+/// this constant names the per-sub-block optional shard-selection
+/// template every shard-dispatch consumer materializes off. Completes
+/// the M3 `Placement` sub-key quartet's canonical-key lift alongside
+/// the sibling always-emitted axes.
+pub const M3_PLACEMENT_KEY_SHARD_KEY: &str = "shardKey";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of
