@@ -34,10 +34,10 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_NAME, LABEL_APLICACAO,
-    LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec,
-    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay,
+    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
+    LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
+    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -138,9 +138,13 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
             serde_yaml::Value::String(m.versao.clone()),
         );
         // Annotate with the parent Aplicacao's nome so the operator
-        // knows which graph this member belongs to.
+        // knows which graph this member belongs to. Consumes the
+        // lifted [`caixa_core::FLEET_PROGRAMS_KEY_APLICACAO`] axis-key
+        // — see its doc-comment for why the per-entry parent-graph-
+        // annotation-key axis lives in one canonical const across
+        // the emitter here + the readback probe below.
         entry.insert(
-            serde_yaml::Value::String("aplicacao".into()),
+            serde_yaml::Value::String(FLEET_PROGRAMS_KEY_APLICACAO.into()),
             serde_yaml::Value::String(caixa.nome.clone()),
         );
         // M3 `:placement` overlay — see the per-call rationale
@@ -5608,10 +5612,55 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for e in &entries {
             assert_eq!(
-                e.get("aplicacao").and_then(|v| v.as_str()),
+                e.get(FLEET_PROGRAMS_KEY_APLICACAO).and_then(|v| v.as_str()),
                 Some("checkout")
             );
         }
+    }
+
+    #[test]
+    fn fleet_programs_key_aplicacao_pins_canonical_value() {
+        // Bridge-arm pin on the emit-side/probe-side coordinate — the
+        // [`caixa_core::FLEET_PROGRAMS_KEY_APLICACAO`] constant this
+        // crate now consumes at the `entry.insert(…)` per-`:membros`
+        // parent-graph-annotation emit site + at the peer readback
+        // probe above must resolve to the canonical `"aplicacao"` byte
+        // the substrate operator's fleet-aggregator reads to group
+        // each `programs[]` entry back onto its parent Aplicacao. A
+        // future rebrand on the per-entry parent-graph-annotation
+        // axis surfaces here as a coordinated edit-point rather than
+        // as a silent apply-time split between the emitter's write
+        // and the aggregator's per-graph reduce step. Peer of the
+        // in-file [`fleet_programs_key_aplicacao_re_export_static_identity`]
+        // static-data identity pin below and of the sibling
+        // [`caixa_core::render::tests::fleet_programs_key_aplicacao_pins_canonical_value`]
+        // canonical-value pin on the definition-site coordinate.
+        assert_eq!(FLEET_PROGRAMS_KEY_APLICACAO, "aplicacao");
+    }
+
+    #[test]
+    fn fleet_programs_key_aplicacao_re_export_static_identity() {
+        // Second coordinate of the re-export pin triangle: the
+        // symbol this crate imports as `FLEET_PROGRAMS_KEY_APLICACAO`
+        // must be *the same* `&'static str` as the canonical
+        // [`caixa_core::FLEET_PROGRAMS_KEY_APLICACAO`] definition (a
+        // sibling `pub const` at this crate's use-site would trip the
+        // equality above without tripping this identity guard — the
+        // exact drift shape the peer `caixa_flux`
+        // [`fleet_programs_key_name_re_export_static_identity`] guard
+        // catches on the per-entry-name-axis surface). Pinned via
+        // `std::ptr::eq` on the two `.as_ptr()` addresses so a future
+        // refactor that re-inlines the const here instead of importing
+        // it from `caixa_core` fails at the fail-before-deploy posture.
+        assert!(
+            std::ptr::eq(
+                FLEET_PROGRAMS_KEY_APLICACAO.as_ptr(),
+                caixa_core::FLEET_PROGRAMS_KEY_APLICACAO.as_ptr(),
+            ),
+            "FLEET_PROGRAMS_KEY_APLICACAO must resolve to the canonical \
+             caixa_core::FLEET_PROGRAMS_KEY_APLICACAO static, not a sibling \
+             `pub const` — the aggregator/emitter drift footgun the lift closes."
+        );
     }
 
     #[test]
