@@ -6966,6 +6966,75 @@ pub const FLUX_KUSTOMIZATION_API_VERSION: &str = "kustomize.toolkit.fluxcd.io/v1
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KIND_KUSTOMIZATION: &str = "Kustomization";
 
+/// Canonical Flux v2 per-`HelmRelease`/`Kustomization` source-reference
+/// container-axis key every `caixa-flux`-emitted bundle document mounts its
+/// per-CR source-of-truth pointer under (`spec.chart.spec.sourceRef` on
+/// `HelmRelease`, `spec.sourceRef` on `Kustomization`) — the Flux v2 CRD
+/// schema places the `(kind, name, namespace)` reference triple under this
+/// single container key, so drift on the container axis is exactly as
+/// load-bearing as drift on the sibling [`FLUX_KIND_GIT_REPOSITORY`]
+/// (dbbcf29) kind-discriminator + [`DEFAULT_FLUX_SYSTEM_NAMESPACE`]
+/// (7197d38) namespace axes the block nests (a `"source_ref"` / `"source"`
+/// / `"sourceReference"` / `"gitSourceRef"` typo at either the emit-side
+/// format-string template or a downstream test-fixture probe silently
+/// dangles the `HelmRelease.spec.chart.spec.sourceRef` chart resolution +
+/// the `Kustomization.spec.sourceRef` source resolution at the Flux v2
+/// source-controller's CRD registration; the source-controller's per-CR
+/// reconcile loop keys off this exact container axis to source the
+/// `(kind, name, namespace)` reference triple, and a drift silently freezes
+/// the dependent per-Servico `dependsOn` chain at apply time with no
+/// field naming the sourceRef-container-drift root cause).
+///
+/// The single source of truth the rendered Flux bundle's per-CR
+/// source-reference-container-axis-naming reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's per-`HelmRelease`
+///     `spec.chart.spec.sourceRef` block (caixa-flux/src/lib.rs — the
+///     `cluster_bundle` `helmrelease` format-string template's baked
+///     `sourceRef:\n` key at line 858);
+///   - the rendered `kustomization.yaml` document's per-`Kustomization`
+///     `spec.sourceRef` block (caixa-flux/src/lib.rs — the sibling
+///     `cluster_bundle` `kustomization` format-string template's baked
+///     `sourceRef:\n` key at line 896);
+///   - five test-side navigation sites in `mod tests` that probe the
+///     rendered documents' `.get("sourceRef")` container axis to pin
+///     the emitted `(kind, name, namespace)` reference triple against
+///     the sibling lifted [`FLUX_KIND_GIT_REPOSITORY`] +
+///     [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] axes.
+///
+/// The container-axis key names the same Flux-v2-source-controller-side
+/// per-CR source-of-truth reference-triple container as the sibling
+/// per-CRD `kind` discriminator [`FLUX_KIND_GIT_REPOSITORY`] nests inside,
+/// and must move together on any future Flux v3 rebrand (a hypothetical
+/// upstream Flux v3 rename of the source-reference container axis from
+/// `sourceRef` to `source` / `sourceReference` / `sourceOf`, coordinated
+/// with the upstream fluxcd/flux2 project's per-version deprecation
+/// cycle, would land at this one const rather than scattered across the
+/// two per-CR format-string templates + five per-test-fixture probe
+/// sites).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_KIND_KUSTOMIZATION`] (2d61a6f) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) lifts established on the
+/// sibling canonical-Flux-v2-load-bearing-string surfaces — extends the
+/// per-CRD kind-discriminator + apiVersion + install-namespace lift
+/// trajectory onto the sibling per-CR source-reference container-axis
+/// key the `cluster_bundle` `HelmRelease` + `Kustomization` renderers
+/// both consume under their nested `(kind, name, namespace)` reference
+/// triple.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_KEY_SOURCE_REF: &str = "sourceRef";
+
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
 /// SIG-Network Gateway API conformance registers the `Gateway` /
@@ -11880,6 +11949,72 @@ mod tests {
         // the source-controller + helm-controller + kustomize-controller
         // triplet.
         assert_eq!(FLUX_KIND_KUSTOMIZATION, "Kustomization");
+    }
+
+    #[test]
+    fn flux_key_source_ref_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 per-`HelmRelease`/`Kustomization`
+        // source-reference container-axis key the rendered
+        // `helmrelease.yaml` (`spec.chart.spec.sourceRef`) +
+        // `kustomization.yaml` (`spec.sourceRef`) documents mount the
+        // per-CR `(kind, name, namespace)` reference triple under. The
+        // string is part of the cluster-side contract with every
+        // Flux-v2-conformant source-controller — the per-CR reconcile
+        // loop keys off this exact container axis to source the
+        // `(kind, name, namespace)` reference triple; a drifted value
+        // (`"source_ref"` / `"source"` / `"sourceReference"` /
+        // `"gitSourceRef"`) silently dangles both the HelmRelease's
+        // chart resolution + the parent Kustomization's source
+        // resolution at the Flux v2 source-controller's CRD
+        // registration. Changing this value is a coordinated Flux v3
+        // migration alongside the upstream `fluxcd/flux2` deprecation
+        // cycle, not an incidental edit. Peer to
+        // `flux_kind_git_repository_pins_canonical_value` /
+        // `flux_kind_helm_release_pins_canonical_value` /
+        // `flux_kind_kustomization_pins_canonical_value` on the sibling
+        // per-CRD `kind`-axis surface — extends the canonical-Flux-v2-
+        // load-bearing-string pin discipline from the per-CRD kind
+        // discriminators onto the sibling per-CR source-reference
+        // container-axis key both `cluster_bundle` renderers consume.
+        assert_eq!(FLUX_KEY_SOURCE_REF, "sourceRef");
+    }
+
+    #[test]
+    fn flux_key_source_ref_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: the Flux v2 CRD field-naming convention
+        // (inherited from the upstream K8s API conventions) admits
+        // lowerCamelCase per-field keys — the source-reference
+        // container-axis conforms to this on the leading-lowercase
+        // `sourceRef` shape. Pinning the shape here means a future
+        // rebrand on the canonical lift can't silently land a malformed
+        // container-axis key (snake_case, kebab-case, UpperCamelCase,
+        // empty) that the Flux v2 source-controller's per-CR reconcile
+        // loop would reject at apply parse time far from the rebrand
+        // commit's source. Peer to the sibling K8s-CR-lowerCamelCase-
+        // per-field pin trajectory the sibling `KUBE_KEY_MATCH_LABELS`
+        // / `GATEWAY_API_KEY_BACKEND_REFS` / `CILIUM_KEY_FROM_ENDPOINTS`
+        // / `CILIUM_KEY_TO_PORTS` pins established on the sibling per-
+        // K8s-CR-schema-field-name axes.
+        let v = FLUX_KEY_SOURCE_REF;
+        assert!(
+            !v.is_empty(),
+            "FLUX_KEY_SOURCE_REF {v:?} must be non-empty per the Flux v2 \
+             CRD field-naming grammar"
+        );
+        let mut chars = v.chars();
+        assert!(
+            chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+            "FLUX_KEY_SOURCE_REF {v:?} must lead with an ASCII-lowercase \
+             byte per the Flux v2 lowerCamelCase per-CR-field-key convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_KEY_SOURCE_REF {v:?} must be ASCII-alphanumeric throughout \
+             per the Flux v2 lowerCamelCase per-CR-field-key convention — \
+             no `_` / `-` / `.` / whitespace bytes the Flux v2 source-\
+             controller's per-CR reconcile loop would reject"
+        );
     }
 
     #[test]
