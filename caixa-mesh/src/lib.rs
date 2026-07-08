@@ -6500,7 +6500,9 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("Gateway"))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
             .expect("Gateway present");
         assert_eq!(
             gateway.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
@@ -6591,7 +6593,9 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("Gateway"))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
             .expect("Gateway present");
         assert_eq!(
             gateway.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
