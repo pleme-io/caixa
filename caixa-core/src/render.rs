@@ -6012,6 +6012,97 @@ pub const M3_PLACEMENT_KEY_AFFINITY: &str = "affinity";
 /// the sibling always-emitted axes.
 pub const M3_PLACEMENT_KEY_SHARD_KEY: &str = "shardKey";
 
+/// Canonical M3 [`crate::aplicacao::PlacementStrategy::SingleNode`]
+/// variant discriminator scalar-value — the exact byte-string the
+/// `Serialize` derive on the un-`rename`d enum emits under
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] whenever the typed slot's
+/// distribution strategy is the single-cluster-active-at-a-time arm
+/// (OTP distributed-application takeover, MESH-COMPOSITION.md §II.1).
+///
+/// The scalar every downstream cluster-side dispatcher probes verbatim
+/// to pick the takeover semantics:
+///
+/// - the `lareira-fleet-programs` aggregator's per-entry
+///   `placement.estrategia` strategy dispatch (`if $strat ==
+///   "SingleNode" { ... }`),
+/// - the future `app-operator` reconciler's per-Aplicacao
+///   strategy-branch (`match placement.estrategia { "SingleNode" =>
+///   … }`),
+/// - the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+///   admission-time enum-arm bind, and
+/// - the M3 Adaptive compression pass's per-strategy weighting per
+///   MESH-COMPOSITION.md §V.
+///
+/// The scalar is derived by `#[derive(Serialize)]` on the
+/// [`crate::aplicacao::PlacementStrategy`] enum with no
+/// `#[serde(rename_all = …)]` attribute, so the emitted string is
+/// byte-for-byte the source-side variant name. Lifting the byte to
+/// one `&'static str` closes the drift footgun structurally: a future
+/// refactor renaming the variant (`SingleNode` → `Singleton` for OTP-
+/// vocabulary parity, `Active` for shorter-form-clarity, etc.) OR
+/// adding a `#[serde(rename_all = "kebab-case")]` attribute would
+/// silently emit a `placement.estrategia:` scalar whose distribution
+/// strategy lands under one spelling while every downstream consumer
+/// still dispatches on another — the aggregator's strategy branch,
+/// the operator's reconcile posture, the CR materializer's
+/// admission-time enum-arm bind would each silently no-op onto the
+/// enum's `default()` (`Replicated`) and the workload would come up
+/// on every declared cluster active-active rather than the
+/// single-cluster-takeover the typed slot named. The serde
+/// round-trip pin the sweep introduces
+/// ([`crate::aplicacao::tests::placement_strategy_variants_serialize_to_lifted_scalar_values`])
+/// catches the drift at caixa-core build time rather than at the
+/// aggregator's dispatch step or the operator's reconcile posture.
+///
+/// Peer of [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_SHARDED`] on the same closed
+/// PlacementStrategy enum surface — together the three constants
+/// name every author-reachable arm of the M3 distribution-strategy
+/// discriminator, mirroring the closed-enum-scalar-value trajectory
+/// [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]
+/// (8ab119f) established on the sibling Cilium
+/// `MutualAuthenticationMode` OpenAPI schema enum.
+pub const M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE: &str = "SingleNode";
+
+/// Canonical M3 [`crate::aplicacao::PlacementStrategy::Replicated`]
+/// variant discriminator scalar-value — the exact byte-string the
+/// `Serialize` derive on the un-`rename`d enum emits under
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] whenever the typed slot's
+/// distribution strategy is the every-cluster-active-active arm (the
+/// enum's `default()` and the canonical happy-path per
+/// MESH-COMPOSITION.md §II.1).
+///
+/// Peer of the sibling [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_SHARDED`] scalars on the same closed
+/// enum surface — see the sibling doc for the full drift-mode
+/// analysis. This is the arm the un-`:placement` (`Placement::default()`)
+/// path serializes as, so drift here silently rebrands the substrate's
+/// default distribution posture across every Aplicacao that never
+/// declares the slot explicitly.
+pub const M3_PLACEMENT_ESTRATEGIA_REPLICATED: &str = "Replicated";
+
+/// Canonical M3 [`crate::aplicacao::PlacementStrategy::Sharded`]
+/// variant discriminator scalar-value — the exact byte-string the
+/// `Serialize` derive on the un-`rename`d enum emits under
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] whenever the typed slot's
+/// distribution strategy is the hash-keyed-across-clusters arm (Akka
+/// cluster sharding, MESH-COMPOSITION.md §II.4). The one arm on which
+/// the typed [`M3_PLACEMENT_KEY_SHARD_KEY`] sub-block is required —
+/// `AplicacaoSpec::validate_placement` gates `shard_key.is_some() ==
+/// matches!(estrategia, Sharded)` as a structural partition of every
+/// validated [`crate::aplicacao::Placement`].
+///
+/// Peer of the sibling [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] scalars on the same closed
+/// enum surface — see the [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] doc
+/// for the full drift-mode analysis. This is the arm the future Akka-
+/// style cluster-sharding reconciler dispatches on before hashing
+/// `placement.shardKey` across `placement.clusters`, so drift here
+/// silently collapses the hash-keyed distribution back onto the
+/// aggregator's default (Replicated) and every sharded workload's
+/// per-entity routing invariant vanishes at the data plane.
+pub const M3_PLACEMENT_ESTRATEGIA_SHARDED: &str = "Sharded";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of

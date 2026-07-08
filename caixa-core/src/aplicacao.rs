@@ -1982,6 +1982,28 @@ impl Default for PlacementStrategy {
     }
 }
 
+impl PlacementStrategy {
+    /// Canonical camelCase-schema discriminator scalar this variant
+    /// serializes as under [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`]. The
+    /// three arms return the paired [`crate::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
+    /// / [`crate::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+    /// [`crate::M3_PLACEMENT_ESTRATEGIA_SHARDED`] lifted constants so
+    /// every substrate consumer that dispatches on the strategy (the
+    /// `lareira-fleet-programs` aggregator, the future `app-operator`
+    /// reconciler, the M3 Adaptive compression pass) reads the same
+    /// byte-string the `Serialize` derive emits — the pin test in
+    /// [`tests::placement_strategy_variants_serialize_to_lifted_scalar_values`]
+    /// asserts the two paths agree.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::SingleNode => crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+            Self::Replicated => crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+            Self::Sharded => crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+        }
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -7955,6 +7977,61 @@ mod tests {
             let json = serde_json::to_string(&p).unwrap();
             let back: Placement = serde_json::from_str(&json).unwrap();
             assert_eq!(back, p);
+        }
+    }
+
+    #[test]
+    fn placement_strategy_variants_serialize_to_lifted_scalar_values() {
+        // The fail-before-pass-after pin: pre-lift there was no
+        // single-source binding between the [`PlacementStrategy`]
+        // variant name the `Serialize` derive emits and the byte-
+        // string every downstream cluster-side dispatcher (the
+        // `lareira-fleet-programs` aggregator's per-entry strategy
+        // branch, the future `app-operator` reconciler, the M3
+        // Adaptive compression pass's per-strategy weighting) probes
+        // verbatim under [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`]. A
+        // future `#[serde(rename_all = "kebab-case")]` attribute on
+        // the enum — or a variant rename in the source — would
+        // silently rebrand the emitted scalar under one spelling
+        // while every downstream dispatcher still probed the other,
+        // with the failure surfacing at the aggregator's dispatch
+        // step or the operator's reconcile posture (workloads coming
+        // up under the `default()` `Replicated` arm rather than the
+        // typed slot's declared strategy) far from the source
+        // rebrand commit and with no field naming the drift. Pinning
+        // the two paths (the `Serialize` derive's serialized string
+        // AND the [`PlacementStrategy::as_str`] helper) to the same
+        // three lifted [`crate::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
+        // / [`crate::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+        // [`crate::M3_PLACEMENT_ESTRATEGIA_SHARDED`] byte-strings
+        // makes any future drift on either endpoint fail here at
+        // caixa-core build time.
+        for (variant, expected) in [
+            (
+                PlacementStrategy::SingleNode,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+            ),
+            (
+                PlacementStrategy::Replicated,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+            ),
+            (
+                PlacementStrategy::Sharded,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+            ),
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(
+                json,
+                format!("\"{expected}\""),
+                "PlacementStrategy::{variant:?} must serialize to {expected:?}"
+            );
+            assert_eq!(
+                variant.as_str(),
+                expected,
+                "PlacementStrategy::{variant:?}.as_str() must return the lifted \
+                 M3_PLACEMENT_ESTRATEGIA_* constant"
+            );
         }
     }
 

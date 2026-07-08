@@ -654,6 +654,58 @@ pub use caixa_core::CILIUM_AUTH_MODE_REQUIRED;
 /// the same tristate.
 pub use caixa_core::CILIUM_AUTH_MODE_DISABLED;
 
+/// Canonical M3 [`caixa_core::aplicacao::PlacementStrategy::SingleNode`]
+/// variant discriminator scalar-value the `Serialize` derive on the
+/// un-`rename`d enum emits under [`caixa_core::M3_PLACEMENT_KEY_ESTRATEGIA`] on every
+/// `programs_for_aplicacao`-emitted programs.yaml entry authored with
+/// `:placement (:estrategia SingleNode …)`. Re-export of the canonical
+/// [`caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] so the OTP-style
+/// single-cluster-takeover distribution-strategy scalar lives in exactly
+/// one place across every caixa renderer and every caixa-mesh test-fixture
+/// probe that dispatches on the strategy string. Peer to the sibling
+/// [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] / [`M3_PLACEMENT_ESTRATEGIA_SHARDED`]
+/// re-exports on the other two arms of the same closed enum surface —
+/// together the three constants name every author-reachable arm of the
+/// M3 distribution-strategy discriminator.
+pub use caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE;
+
+/// Canonical M3 [`caixa_core::aplicacao::PlacementStrategy::Replicated`]
+/// variant discriminator scalar-value the `Serialize` derive on the
+/// un-`rename`d enum emits under [`caixa_core::M3_PLACEMENT_KEY_ESTRATEGIA`] on every
+/// `programs_for_aplicacao`-emitted programs.yaml entry authored with
+/// `:placement (:estrategia Replicated …)` (and — because the enum's
+/// `default()` is `Replicated` — every programs.yaml entry authored
+/// without an explicit `:estrategia` slot). Re-export of the canonical
+/// [`caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED`]. The
+/// `programs_entry_placement_carries_strategy` test-fixture probe pins
+/// the emitted value against this re-export so a future variant rename
+/// or `rename_all` attribute at the aplicacao module reaches the caixa-
+/// mesh probe by construction rather than silently rebranding the
+/// substrate's default distribution posture. Peer to the sibling
+/// [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] / [`M3_PLACEMENT_ESTRATEGIA_SHARDED`]
+/// re-exports on the other two arms of the same closed enum surface.
+pub use caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED;
+
+/// Canonical M3 [`caixa_core::aplicacao::PlacementStrategy::Sharded`]
+/// variant discriminator scalar-value the `Serialize` derive on the
+/// un-`rename`d enum emits under [`caixa_core::M3_PLACEMENT_KEY_ESTRATEGIA`] on every
+/// `programs_for_aplicacao`-emitted programs.yaml entry authored with
+/// `:placement (:estrategia Sharded :shard-key …)` — the one arm on
+/// which the sibling [`caixa_core::M3_PLACEMENT_KEY_SHARD_KEY`] sub-block is
+/// required (`AplicacaoSpec::validate_placement` gates
+/// `shard_key.is_some() == matches!(estrategia, Sharded)` as a
+/// structural partition of every validated Placement). Re-export of the
+/// canonical [`caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED`]. The
+/// `programs_entry_placement_carries_shard_key_when_sharded` test-fixture
+/// probe pins the emitted value against this re-export so a future
+/// variant rename or `rename_all` attribute at the aplicacao module
+/// reaches the caixa-mesh probe by construction rather than silently
+/// collapsing the hash-keyed distribution back onto the aggregator's
+/// default. Peer to the sibling [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] re-exports on the other two
+/// arms of the same closed enum surface.
+pub use caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED;
+
 /// Canonical Cilium `CiliumNetworkPolicy` per-`ingress[].toPorts[].rules`
 /// L7-HTTP-rule-list-discriminator container-axis key every
 /// `cilium_network_policies`-emitted CNP document mounts its per-
@@ -4606,6 +4658,104 @@ mod tests {
     }
 
     #[test]
+    fn m3_placement_estrategia_single_node_re_export_points_at_caixa_core_canonical() {
+        // The `M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE` re-export was lifted
+        // from the (author-facing but not yet emit-referenced by this
+        // crate) inline `"SingleNode"` scalar the
+        // [`caixa_core::aplicacao::PlacementStrategy::SingleNode`] variant
+        // serializes as under [`caixa_core::M3_PLACEMENT_KEY_ESTRATEGIA`].
+        // Pin the equality + static-data identity here so any local re-
+        // introduction of a sibling `pub const M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE:
+        // &str = "…"` is a build-time test failure naming the offending
+        // drift, not a silent apply-time symptom at the aggregator's
+        // per-entry strategy dispatch or the operator's reconcile posture
+        // — the prior shape would have let an aplicacao-side variant
+        // rename or `#[serde(rename_all = …)]` attribute silently rebrand
+        // the emitted scalar under one spelling while every caixa-mesh
+        // probe still checked another. Peer to
+        // [`m3_placement_estrategia_replicated_re_export_points_at_caixa_core_canonical`]
+        // and
+        // [`m3_placement_estrategia_sharded_re_export_points_at_caixa_core_canonical`]
+        // on the other two arms of the same closed
+        // [`caixa_core::aplicacao::PlacementStrategy`] enum surface — the
+        // three per-arm pins together complete the per-strategy
+        // discriminator scalar-value single-sourcing across the M3
+        // distribution-strategy dispatch axis.
+        assert_eq!(
+            M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+            caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE
+        );
+        assert!(
+            std::ptr::eq(
+                M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE.as_ptr(),
+                caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE.as_ptr(),
+            ),
+            "M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE must be a re-export of \
+             caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE, not a sibling \
+             `pub const` that happens to carry the same string — drift between \
+             the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn m3_placement_estrategia_replicated_re_export_points_at_caixa_core_canonical() {
+        // Peer of `m3_placement_estrategia_single_node_re_export_points_at_caixa_core_canonical`
+        // on the every-cluster-active-active arm of the same
+        // [`caixa_core::aplicacao::PlacementStrategy`] enum — the arm the
+        // enum's `default()` maps to, so drift here silently rebrands the
+        // substrate's default distribution posture across every Aplicacao
+        // that never declares the slot explicitly. This is the same
+        // constant the `programs_entry_placement_carries_strategy` probe
+        // dispatches on (the sweep lands here at the sole author-facing
+        // consumption site the M3.x roadmap has today).
+        assert_eq!(
+            M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+            caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED
+        );
+        assert!(
+            std::ptr::eq(
+                M3_PLACEMENT_ESTRATEGIA_REPLICATED.as_ptr(),
+                caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED.as_ptr(),
+            ),
+            "M3_PLACEMENT_ESTRATEGIA_REPLICATED must be a re-export of \
+             caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED, not a sibling \
+             `pub const` that happens to carry the same string — drift between \
+             the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn m3_placement_estrategia_sharded_re_export_points_at_caixa_core_canonical() {
+        // Peer of the SingleNode / Replicated pins on the hash-keyed-
+        // across-clusters arm of the same
+        // [`caixa_core::aplicacao::PlacementStrategy`] enum — the one arm
+        // on which the sibling [`caixa_core::M3_PLACEMENT_KEY_SHARD_KEY`]
+        // sub-block is required (`AplicacaoSpec::validate_placement`
+        // gates `shard_key.is_some() == matches!(estrategia, Sharded)` as
+        // a structural partition of every validated Placement). Drift
+        // here silently collapses the hash-keyed distribution back onto
+        // the aggregator's default (Replicated) and every sharded
+        // workload's per-entity routing invariant vanishes at the data
+        // plane. This is the same constant the
+        // `programs_entry_placement_carries_shard_key_when_sharded` probe
+        // dispatches on.
+        assert_eq!(
+            M3_PLACEMENT_ESTRATEGIA_SHARDED,
+            caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED
+        );
+        assert!(
+            std::ptr::eq(
+                M3_PLACEMENT_ESTRATEGIA_SHARDED.as_ptr(),
+                caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED.as_ptr(),
+            ),
+            "M3_PLACEMENT_ESTRATEGIA_SHARDED must be a re-export of \
+             caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED, not a sibling \
+             `pub const` that happens to carry the same string — drift between \
+             the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
     fn cilium_key_http_re_export_points_at_caixa_core_canonical() {
         // The renderer's `CILIUM_KEY_HTTP` was lifted from the inline
         // `"http"` literal at the `cilium_network_policies` per-`(:de,
@@ -6020,7 +6170,7 @@ mod tests {
                     M3_PLACEMENT_KEY_ESTRATEGIA.into()
                 ))
                 .and_then(|v| v.as_str()),
-                Some("Replicated"),
+                Some(M3_PLACEMENT_ESTRATEGIA_REPLICATED),
                 "placement.estrategia must round-trip the typed PlacementStrategy variant"
             );
         }
@@ -6121,7 +6271,7 @@ mod tests {
                     M3_PLACEMENT_KEY_ESTRATEGIA.into()
                 ))
                 .and_then(|v| v.as_str()),
-                Some("Sharded")
+                Some(M3_PLACEMENT_ESTRATEGIA_SHARDED)
             );
             assert_eq!(
                 p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into()))
