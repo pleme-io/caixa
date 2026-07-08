@@ -7575,6 +7575,84 @@ pub const FLUX_KEY_VALUES: &str = "values";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KEY_HEALTH_CHECKS: &str = "healthChecks";
 
+/// Canonical Flux v2 per-CR reconcile-poll cadence scalar-axis key every
+/// `caixa-flux`-emitted Flux document (`GitRepository`, `HelmRelease`,
+/// `Kustomization`) declares its per-CR `spec.interval` reconcile cadence
+/// under. Unlike the sibling per-CR body-key axes ([`FLUX_KEY_SOURCE_REF`],
+/// [`FLUX_KEY_CHART`], [`FLUX_KEY_VALUES`], [`FLUX_KEY_HEALTH_CHECKS`])
+/// which each land on exactly one of the three Flux v2 controller CRDs,
+/// the reconcile-poll cadence scalar-axis is the *shared* Flux v2 per-CR
+/// contract every controller (the `source-controller`, the
+/// `helm-controller`, the `kustomize-controller`) reads to schedule its
+/// per-CR reconcile loop off the sibling per-CR CRD registration. Drift on
+/// the scalar-axis key silently drops the per-CR reconcile schedule from
+/// the Flux v2 controllers' per-CR watch registrations — a `"Interval"` /
+/// `"period"` / `"cadence"` / `"pollInterval"` / `"reconcileInterval"`
+/// typo at any of the three emit-side format-string template sites
+/// silently drops the per-CR reconcile schedule from the affected Flux v2
+/// controller's per-CR watch registration; the referenced Git source
+/// never re-polls / the referenced chart never re-templates / the parent
+/// Kustomization never re-applies at upstream drift, freezing the whole
+/// cluster's per-`caixa` per-cluster bundle at the last-applied snapshot
+/// with no field naming the scalar-axis-drift root cause.
+///
+/// The single source of truth every Flux-v2-per-CR-reconcile-poll-cadence-
+/// scalar-axis-naming reaches for — the three per-CR emit sites the
+/// [`cluster_bundle`][cf] renderer threads through are all named through
+/// this one const:
+///
+///   - the rendered `gitrepository.yaml` document's per-`GitRepository`
+///     `spec.interval` scalar (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `gitrepo` format-string template's baked `interval:` scalar-axis
+///     key, nested alongside the sibling lifted
+///     [`FLUX_GITREPOSITORY_API_VERSION`] top-level `apiVersion` +
+///     [`FLUX_KIND_GIT_REPOSITORY`] top-level `kind` axes the source-
+///     controller reads to bind the per-CR poll cycle);
+///   - the rendered `helmrelease.yaml` document's per-`HelmRelease`
+///     `spec.interval` scalar (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `helmrelease` format-string template's baked `interval:` scalar-
+///     axis key, nested alongside the sibling lifted
+///     [`FLUX_HELMRELEASE_API_VERSION`] top-level `apiVersion` +
+///     [`FLUX_KIND_HELM_RELEASE`] top-level `kind` axes the helm-controller
+///     reads to bind the per-CR poll cycle);
+///   - the rendered `kustomization.yaml` document's per-`Kustomization`
+///     `spec.interval` scalar (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `kustomization` format-string template's baked `interval:` scalar-
+///     axis key, nested alongside the sibling lifted
+///     [`FLUX_KUSTOMIZATION_API_VERSION`] top-level `apiVersion` +
+///     [`FLUX_KIND_KUSTOMIZATION`] top-level `kind` axes the kustomize-
+///     controller reads to bind the per-CR poll cycle).
+///
+/// The three sites must move together on any future Flux v3 rebrand (a
+/// hypothetical upstream fluxcd/flux2 rename from `interval` to `Interval`
+/// / `period` / `cadence` / `pollInterval` / `reconcileInterval`,
+/// coordinated with the upstream project's per-version deprecation cycle,
+/// would land at this one const rather than scattered across the three
+/// per-CR emit-side format-string template sites). This is a distinct
+/// duplication shape from the sibling [`FLUX_KEY_SOURCE_REF`] /
+/// [`FLUX_KEY_CHART`] / [`FLUX_KEY_VALUES`] / [`FLUX_KEY_HEALTH_CHECKS`]
+/// lifts: those closed *one-CR-body-key* duplication trios (one emit-site
+/// per CR + several test-side probes); this one closes the sibling
+/// *three-CR-shared-body-key* triplet the Flux v2 reconcile-poll cadence
+/// contract shares across all three per-cluster-bundle CRDs.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KEY_SOURCE_REF`] (e985089) /
+/// [`FLUX_KEY_CHART`] (8467748) /
+/// [`FLUX_KEY_VALUES`] (b54dc87) /
+/// [`FLUX_KEY_HEALTH_CHECKS`] (6dbff58) lifts established on the sibling
+/// canonical-Flux-v2-per-CR-body-key surfaces — extends the per-CR
+/// body-key lift trajectory onto the sibling *cross-CR-shared* reconcile-
+/// poll cadence scalar-axis every Flux v2 controller reads to bind its
+/// per-CR poll cycle.
+///
+/// [cf]: ../../caixa_flux/fn.cluster_bundle.html
+pub const FLUX_KEY_INTERVAL: &str = "interval";
+
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
 /// SIG-Network Gateway API conformance registers the `Gateway` /
@@ -12848,6 +12926,75 @@ mod tests {
              throughout per the Flux v2 lowerCamelCase per-CR-field-key \
              convention — no `_` / `-` / `.` / whitespace bytes the Flux \
              v2 kustomize-controller's per-CR reconcile loop would reject"
+        );
+    }
+
+    #[test]
+    fn flux_key_interval_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 per-CR reconcile-poll cadence scalar-axis
+        // key the rendered Flux bundle's three `spec.interval` scalars
+        // declare — the shared axis-key the source-controller, helm-
+        // controller, and kustomize-controller each read to schedule
+        // their per-CR poll cycles off the sibling per-CR `apiVersion` +
+        // `kind` registration. A drifted value (`"Interval"` / `"period"`
+        // / `"cadence"` / `"pollInterval"` / `"reconcileInterval"`)
+        // silently drops the per-CR reconcile schedule from all three
+        // Flux controllers' per-CR watch registrations simultaneously —
+        // the referenced Git source never re-polls / the referenced
+        // chart never re-templates / the parent Kustomization never
+        // re-applies at upstream drift, freezing the whole cluster's
+        // per-`caixa` per-cluster bundle at the last-applied snapshot.
+        // Changing this value is a coordinated Flux v3 migration
+        // alongside the upstream `fluxcd/flux2` deprecation cycle, not
+        // an incidental edit. Peer to
+        // `flux_key_source_ref_pins_canonical_value` /
+        // `flux_key_chart_pins_canonical_value` /
+        // `flux_key_values_pins_canonical_value` /
+        // `flux_key_health_checks_pins_canonical_value` on the sibling
+        // Flux v2 per-CR body-key surfaces — extends the canonical-Flux-
+        // v2-load-bearing-string pin discipline from the per-CR body-key
+        // quartet onto the sibling cross-CR-shared reconcile-poll
+        // cadence scalar-axis every Flux v2 controller reads.
+        assert_eq!(FLUX_KEY_INTERVAL, "interval");
+    }
+
+    #[test]
+    fn flux_key_interval_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: the Flux v2 CRD field-naming convention
+        // (inherited from the upstream K8s API conventions) admits
+        // lowerCamelCase per-field keys — the per-CR reconcile-poll
+        // cadence scalar-axis conforms to this on the leading-lowercase
+        // `interval` shape. Pinning the shape here means a future rebrand
+        // on the canonical lift can't silently land a malformed scalar-
+        // axis key (snake_case, kebab-case, UpperCamelCase, empty) that
+        // any of the three Flux v2 controllers' per-CR reconcile loops
+        // would reject at apply parse time far from the rebrand commit's
+        // source. Peer to `flux_key_source_ref_carries_lower_camel_case_shape`
+        // / `flux_key_chart_carries_lower_camel_case_shape` /
+        // `flux_key_values_carries_lower_camel_case_shape` /
+        // `flux_key_health_checks_carries_lower_camel_case_shape` on the
+        // sibling Flux v2 per-CR body-key surfaces.
+        let v = FLUX_KEY_INTERVAL;
+        assert!(
+            !v.is_empty(),
+            "FLUX_KEY_INTERVAL {v:?} must be non-empty per the Flux \
+             v2 CRD field-naming grammar"
+        );
+        let mut chars = v.chars();
+        assert!(
+            chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+            "FLUX_KEY_INTERVAL {v:?} must lead with an ASCII-\
+             lowercase byte per the Flux v2 lowerCamelCase per-CR-field-\
+             key convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_KEY_INTERVAL {v:?} must be ASCII-alphanumeric \
+             throughout per the Flux v2 lowerCamelCase per-CR-field-key \
+             convention — no `_` / `-` / `.` / whitespace bytes any of \
+             the three Flux v2 controllers' per-CR reconcile loops would \
+             reject"
         );
     }
 
