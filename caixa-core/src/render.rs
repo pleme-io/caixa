@@ -5774,6 +5774,52 @@ pub const M3_KEY_PLACEMENT: &str = "placement";
 /// split established.
 pub const M3_PLACEMENT_KEY_ESTRATEGIA: &str = "estrategia";
 
+/// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
+/// struct's `clusters` cluster-pool axis — the per-`M3_KEY_PLACEMENT`-block
+/// field carrying the validated cluster-list (non-empty + duplicate-free
+/// per [`crate::aplicacao::AplicacaoSpec::validate_placement`]) that every
+/// downstream cross-cluster consumer filters off:
+///
+/// - the `lareira-fleet-programs` aggregator's per-cluster fanout filter
+///   (each cluster's aggregator scopes `.Values.programs` by
+///   `.placement.clusters | contains .Values.cluster`, so a workload's
+///   `clusters: [rio, mar]` list ends up landing on rio + mar and no other
+///   cluster per MESH-COMPOSITION.md §III.4),
+/// - the future `app-operator` reconciler's per-Aplicacao cluster-set
+///   dispatch,
+/// - the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+///   admission-time `spec.placement.clusters` typed-list bind, and
+/// - the M3 Adaptive compression pass's per-cluster weight lookup per
+///   MESH-COMPOSITION.md §V.
+///
+/// The scalar is derived by [`crate::aplicacao::Placement`]'s
+/// `#[serde(rename_all = "camelCase")]` from the Rust field name
+/// `clusters`; `clusters` has no `_`, so the serde transform is a no-op
+/// on this axis and the emitted key equals the source-side field name
+/// byte-for-byte. Lifting the byte to one `&'static str` closes the same
+/// drift footgun the peer [`M3_PLACEMENT_KEY_ESTRATEGIA`] lift closed on
+/// the sibling distribution-strategy discriminator: a future refactor
+/// renaming the Rust field (`clusters` → `clusterPool` for schema-clarity,
+/// `sites` for eventual multi-substrate reach, etc.) OR retaining the
+/// field name while adding a `#[serde(rename = "…")]` override would
+/// silently emit a `placement:` block whose cluster-list lands under one
+/// key while every downstream consumer still probes another — the
+/// aggregator's per-cluster fanout filter would then see an empty
+/// `clusters` list on every entry and silently drop every workload from
+/// every cluster (the failure surfacing as "the newly-deployed Aplicacao
+/// never spins up anywhere" far from the rebrand commit's source). The
+/// identity pin + serde-derive round-trip pin the sweep introduces catch
+/// the drift at caixa-core / caixa-mesh build time rather than at the
+/// aggregator's fanout step or the operator's reconcile posture.
+///
+/// Peer of [`M3_KEY_PLACEMENT`] / [`M3_PLACEMENT_KEY_ESTRATEGIA`] on the
+/// same programs.yaml per-entry axis — `M3_KEY_PLACEMENT` names the
+/// top-level overlay key each entry carries, `M3_PLACEMENT_KEY_ESTRATEGIA`
+/// names the per-sub-block distribution-strategy discriminator every
+/// dispatch consumer branches on, this constant names the per-sub-block
+/// cluster-pool list every per-cluster fanout consumer scopes by.
+pub const M3_PLACEMENT_KEY_CLUSTERS: &str = "clusters";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of

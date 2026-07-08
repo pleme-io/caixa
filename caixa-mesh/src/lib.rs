@@ -2708,8 +2708,8 @@ pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_ESTRATEGIA, Membro, MeshPolicy,
-        Placement, PlacementStrategy, WitContract,
+        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_CLUSTERS,
+        M3_PLACEMENT_KEY_ESTRATEGIA, Membro, MeshPolicy, Placement, PlacementStrategy, WitContract,
     };
     use std::time::Duration;
 
@@ -5997,7 +5997,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             let clusters = p
-                .get(serde_yaml::Value::String("clusters".into()))
+                .get(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into()))
                 .and_then(|c| c.as_sequence())
                 .expect("placement.clusters sequence");
             let names: Vec<&str> = clusters.iter().filter_map(|v| v.as_str()).collect();
@@ -6121,8 +6121,8 @@ mod tests {
                 "placement.estrategia must be identical across all members"
             );
             assert_eq!(
-                p.get(serde_yaml::Value::String("clusters".into())),
-                first.get(serde_yaml::Value::String("clusters".into())),
+                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
+                first.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
                 "placement.clusters must be identical across all members"
             );
         }
@@ -6215,6 +6215,76 @@ mod tests {
             )),
             "Placement's serde derive must emit the estrategia axis under the exact key \
              the lifted M3_PLACEMENT_KEY_ESTRATEGIA const carries; got mapping keys: {keys:?}",
+            keys = mapping
+                .keys()
+                .filter_map(|k| k.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn m3_placement_key_clusters_pins_canonical_value() {
+        // Bridge-arm pin: [`M3_PLACEMENT_KEY_CLUSTERS`] resolves to the
+        // canonical `"clusters"` byte today — the exact YAML sub-key the
+        // M3 [`caixa_core::aplicacao::Placement`] struct's
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `clusters` field, and the exact scalar every downstream
+        // per-cluster fanout consumer scopes off (the lareira-fleet-
+        // programs aggregator's per-cluster `.placement.clusters | contains
+        // .Values.cluster` filter, the future `app-operator` reconciler's
+        // per-Aplicacao cluster-set dispatch, the future
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-
+        // time typed-list bind, the M3 Adaptive per-cluster weighting per
+        // MESH-COMPOSITION.md §V). Peer with the
+        // [`m3_placement_key_estrategia_pins_canonical_value`] canonical-
+        // literal pin on the sibling per-sub-block strategy-discriminator
+        // surface — that pin anchors the per-`placement:` `estrategia:`
+        // byte every dispatch consumer branches on, this pin anchors the
+        // per-`placement:` `clusters:` byte every per-cluster fanout
+        // consumer filters by.
+        assert_eq!(M3_PLACEMENT_KEY_CLUSTERS, "clusters");
+    }
+
+    #[test]
+    fn m3_placement_key_clusters_matches_placement_serde_derive() {
+        // Structural pin: the lifted [`M3_PLACEMENT_KEY_CLUSTERS`] byte
+        // equals the exact key [`caixa_core::aplicacao::Placement`]'s
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `clusters` field. A future refactor that (a) renames the Rust
+        // field to `clusterPool` / `sites` for schema-clarity or eventual
+        // multi-substrate reach, or (b) retains the field name but adds a
+        // per-field `#[serde(rename = "…")]` override, or (c) drops the
+        // `rename_all = "camelCase"` attribute entirely, would silently
+        // emit a `placement:` block whose cluster-list lands under one
+        // key while every downstream per-cluster fanout consumer (the
+        // lareira-fleet-programs aggregator's filter, the future
+        // `app-operator` reconciler, the future CR materializer's
+        // admission bind) still probes another. The structural bind
+        // between the derive-time output and the consumer-side navigation
+        // const is what this pin enforces — any derive-side rebrand must
+        // be a coordinated edit at the lifted const's definition site +
+        // here, not a silent apply-time no-op at the aggregator's fanout
+        // step. Peer with the
+        // [`m3_placement_key_estrategia_matches_placement_serde_derive`]
+        // structural pin on the sibling per-sub-block strategy-
+        // discriminator axis on the same "one const, structurally bound
+        // to the derive-emitted shape, tested at both endpoints"
+        // discipline every prior canonical-schema-key lift on this
+        // surface established.
+        let placement = Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".to_string(), "mar".to_string()],
+            affinity: None,
+            shard_key: None,
+        };
+        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let mapping = value
+            .as_mapping()
+            .expect("Placement serializes to a mapping");
+        assert!(
+            mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
+            "Placement's serde derive must emit the clusters axis under the exact key \
+             the lifted M3_PLACEMENT_KEY_CLUSTERS const carries; got mapping keys: {keys:?}",
             keys = mapping
                 .keys()
                 .filter_map(|k| k.as_str().map(str::to_string))
