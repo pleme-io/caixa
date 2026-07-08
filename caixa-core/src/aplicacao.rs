@@ -2668,13 +2668,14 @@ impl AplicacaoSpec {
             }
         }
         if let Some(r) = p.retries {
-            if r == 0 {
-                return Err(AplicacaoError::PolicyRetriesZero);
-            }
-            // Upper-bound floor on the typed `:retries` axis. The
-            // typed slot is `Option<u32>` and the zero-floor arm
-            // immediately above already brackets the bottom edge;
-            // until this gate landed the top edge ran all the way to
+            // Zero-floor + upper-cap bracket on the typed `:retries`
+            // axis. See [`crate::render::require_positive_bounded_u32`]
+            // for the ordering discipline (zero-floor arm strictly
+            // precedes cap arm so `Some(0)` surfaces the self-locating
+            // `PolicyRetriesZero` diagnostic with its omit-axis
+            // remediation directly named, not the misleading
+            // `0 > POLICY_RETRIES_MAX == false` cap-arm miss). Until
+            // this bracket landed the top edge ran all the way to
             // `u32::MAX` and a struct-literal `MeshPolicy { retries:
             // Some(100_000), .. }` (or the equivalent author-surface
             // `(:retries 100000)` / `(:retries 4294967295)` typo
@@ -2690,33 +2691,31 @@ impl AplicacaoSpec {
             // synchronous-`:contratos` subgraph at the precise moment
             // the substrate is already failing (transient failure is
             // the trigger), exactly the failure mode AWS App Mesh's
-            // explicit `maxRetries ≤ 10` schema cap exists to
-            // prevent. Lifting the rejection to a build-time gate at
-            // `validate_politicas` brackets the typed `:retries` set
-            // structurally — every validated value lies in
-            // `1..=POLICY_RETRIES_MAX` — and matches the same
-            // top-and-bottom-edge discipline the
-            // [`crate::LIMITS_MEMORY_WASM32_MAX_BYTES`] cap applies
-            // on the sibling [`crate::LimitsSpec::memory`] axis
-            // (zero-floor `MemoryZero` + upper-floor
-            // `MemoryExceedsWasm32Cap`). The zero-floor gate
-            // strictly precedes this cap arm so `Some(0)` surfaces
-            // the more self-locating `PolicyRetriesZero` diagnostic
-            // (with its omit-axis remediation directly named) rather
-            // than the cap-shape diagnostic.
-            if r > POLICY_RETRIES_MAX {
-                return Err(AplicacaoError::PolicyRetriesExceedsCap { retries: r });
-            }
+            // explicit `maxRetries ≤ 10` schema cap exists to prevent.
+            // The bracket set is `1..=POLICY_RETRIES_MAX`. Peer with
+            // the sibling capped-`u32` `:politicas` axes
+            // (`max_failures`, `rate_limit.rate`) and the peer capped-
+            // `u32` axes in `:supervisor :max-restarts` +
+            // `:limits :cpu`; all five now route through the same
+            // canonical bracket helper.
+            crate::render::require_positive_bounded_u32(
+                r,
+                POLICY_RETRIES_MAX,
+                || AplicacaoError::PolicyRetriesZero,
+                |retries| AplicacaoError::PolicyRetriesExceedsCap { retries },
+            )?;
         }
         if let Some(cb) = &p.circuit_breaker {
-            if cb.max_failures == 0 {
-                return Err(AplicacaoError::PolicyBreakerZeroFailures);
-            }
-            // Upper-bound floor on the typed `:max-failures` axis.
-            // The typed slot is `u32` and the zero-floor arm
-            // immediately above already brackets the bottom edge;
-            // until this gate landed the top edge ran all the way
-            // to `u32::MAX` and a struct-literal
+            // Zero-floor + upper-cap bracket on the typed
+            // `:max-failures` axis. See
+            // [`crate::render::require_positive_bounded_u32`] for the
+            // ordering discipline (zero-floor arm strictly precedes
+            // cap arm so `max_failures == 0` surfaces the
+            // self-locating `PolicyBreakerZeroFailures` diagnostic
+            // with its omit-axis remediation directly named, not the
+            // misleading `0 > POLICY_BREAKER_MAX_FAILURES_MAX ==
+            // false` cap-arm miss). Until this bracket landed the top
+            // edge ran all the way to `u32::MAX` and a struct-literal
             // `CircuitBreaker { max_failures: 100_000, .. }` (or the
             // equivalent author-surface `(:max-failures 100000)` /
             // `(:max-failures 4294967295)` typo landing in the slot)
@@ -2730,26 +2729,16 @@ impl AplicacaoSpec {
             // failures-per-`:window` traffic shape can reach it, the
             // breaker never trips, and every typed-slot consumer
             // emits an Envoy / Cilium L7 overlay carrying a
-            // protection that is structurally never enforced.
-            // Lifting the rejection to a build-time gate at
-            // `validate_politicas` brackets the typed `:max-failures`
-            // set structurally — every validated value lies in
-            // `1..=POLICY_BREAKER_MAX_FAILURES_MAX` — and matches the
-            // same top-and-bottom-edge discipline the
-            // [`POLICY_RETRIES_MAX`] cap applies on the sibling
-            // `:politicas :retries` axis (zero-floor
-            // `PolicyRetriesZero` + upper-floor
-            // `PolicyRetriesExceedsCap`). The zero-floor gate
-            // strictly precedes this cap arm so `max_failures == 0`
-            // surfaces the more self-locating
-            // `PolicyBreakerZeroFailures` diagnostic (with its
-            // omit-axis remediation directly named) rather than the
-            // cap-shape diagnostic.
-            if cb.max_failures > POLICY_BREAKER_MAX_FAILURES_MAX {
-                return Err(AplicacaoError::PolicyBreakerMaxFailuresExceedsCap {
-                    max_failures: cb.max_failures,
-                });
-            }
+            // protection that is structurally never enforced. The
+            // bracket set is `1..=POLICY_BREAKER_MAX_FAILURES_MAX`;
+            // peer with `retries` and `rate_limit.rate` on the same
+            // helper.
+            crate::render::require_positive_bounded_u32(
+                cb.max_failures,
+                POLICY_BREAKER_MAX_FAILURES_MAX,
+                || AplicacaoError::PolicyBreakerZeroFailures,
+                |max_failures| AplicacaoError::PolicyBreakerMaxFailuresExceedsCap { max_failures },
+            )?;
             if cb.window.is_zero() {
                 return Err(AplicacaoError::PolicyBreakerZeroWindow);
             }
@@ -2804,18 +2793,21 @@ impl AplicacaoSpec {
             }
         }
         if let Some(rl) = &p.rate_limit {
-            if rl.rate == 0 {
-                return Err(AplicacaoError::PolicyRateLimitZero);
-            }
-            // Upper-bound floor on the typed `:rate-limit` rate axis.
-            // The typed field is `u32` and the zero-floor arm
-            // immediately above already brackets the bottom edge;
-            // until this gate landed the top edge ran all the way to
-            // `u32::MAX` and a struct-literal `RateLimit { rate: u32::MAX,
-            // .. }` (or the equivalent author-surface
-            // `(:rate-limit "4294967295/s")` / `(:rate-limit "100000000/m")`
-            // typo landing in the slot) silently passed validate. The
-            // runtime substrate consuming the value (Envoy's
+            // Zero-floor + upper-cap bracket on the typed
+            // `:rate-limit` rate axis. See
+            // [`crate::render::require_positive_bounded_u32`] for the
+            // ordering discipline (zero-floor arm strictly precedes
+            // cap arm so `rl.rate == 0` surfaces the self-locating
+            // `PolicyRateLimitZero` diagnostic with its omit-axis
+            // remediation directly named, not the misleading
+            // `0 > POLICY_RATE_LIMIT_MAX == false` cap-arm miss).
+            // Until this bracket landed the top edge ran all the way
+            // to `u32::MAX` and a struct-literal
+            // `RateLimit { rate: u32::MAX, .. }` (or the equivalent
+            // author-surface `(:rate-limit "4294967295/s")` /
+            // `(:rate-limit "100000000/m")` typo landing in the slot)
+            // silently passed validate. The runtime substrate
+            // consuming the value (Envoy's
             // `local_rate_limit.token_bucket.max_tokens`, the future
             // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
             // MESH-COMPOSITION §III.2 #3 names) then turned a typed
@@ -2826,28 +2818,20 @@ impl AplicacaoSpec {
             // declared" L7 overlay carrying enforcement that is
             // structurally never reached — the canonical
             // declared-but-inert footgun the sibling
-            // [`POLICY_BREAKER_MAX_FAILURES_MAX`] cap arm closes on the
-            // peer no-op-breaker shape. Lifting the rejection to a
-            // build-time gate at `validate_politicas` brackets the
-            // typed `:rate-limit` rate set structurally — every
-            // validated value lies in `1..=POLICY_RATE_LIMIT_MAX` — and
-            // matches the same top-and-bottom-edge discipline the
-            // [`POLICY_RETRIES_MAX`] / [`POLICY_BREAKER_MAX_FAILURES_MAX`]
-            // caps apply on the sibling capped `:politicas` axes
-            // (zero-floor + upper-cap; the cap arm strictly after the
-            // zero-floor arm so `Some(0)` surfaces the more
-            // self-locating `PolicyRateLimitZero` diagnostic with its
-            // omit-axis remediation directly named, peer to the
-            // `PolicyRetriesZero` → `PolicyRetriesExceedsCap` and
-            // `PolicyBreakerZeroFailures` → `PolicyBreakerMaxFailuresExceedsCap`
-            // cross-arm ordering on the sibling axes). The rate cap
+            // [`POLICY_BREAKER_MAX_FAILURES_MAX`] cap arm closes on
+            // the peer no-op-breaker shape. The bracket set is
+            // `1..=POLICY_RATE_LIMIT_MAX`; peer with `retries` and
+            // `max_failures` on the same helper. The rate bracket
             // strictly precedes the window-canonical gate so a
             // structurally absurd rate magnitude surfaces the more
             // fundamental amplification-shape diagnostic before the
             // narrower codec-round-trip-shape diagnostic on `:window`.
-            if rl.rate > POLICY_RATE_LIMIT_MAX {
-                return Err(AplicacaoError::PolicyRateLimitExceedsCap { rate: rl.rate });
-            }
+            crate::render::require_positive_bounded_u32(
+                rl.rate,
+                POLICY_RATE_LIMIT_MAX,
+                || AplicacaoError::PolicyRateLimitZero,
+                |rate| AplicacaoError::PolicyRateLimitExceedsCap { rate },
+            )?;
             // The `:rate-limit` author surface is the canonical
             // `"<n>/<s|m|h>"` form, and the [`rate_limit_codec`] parser
             // accepts exactly the three-unit set (1s/60s/3600s) the

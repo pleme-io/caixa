@@ -378,13 +378,14 @@ impl SupervisorSpec {
                 }
             }
         }
-        if self.max_restarts == 0 {
-            return Err(SupervisorError::ZeroMaxRestarts);
-        }
-        // Upper-bound ceiling on the typed `:max-restarts` axis. The
-        // typed slot is `u32` and the zero-floor arm immediately above
-        // already brackets the bottom edge; until this gate landed the
-        // top edge ran all the way to `u32::MAX` and a struct-literal
+        // Zero-floor + upper-cap bracket on the typed `:max-restarts`
+        // axis. See [`crate::render::require_positive_bounded_u32`] for
+        // the ordering discipline (zero-floor arm strictly precedes cap
+        // arm so `0` surfaces the self-locating `ZeroMaxRestarts`
+        // diagnostic with its counter-axis remediation directly named,
+        // not the misleading `0 > SUPERVISOR_MAX_RESTARTS_MAX == false`
+        // cap-arm miss). Until this bracket landed the top edge ran all
+        // the way to `u32::MAX` and a struct-literal
         // `SupervisorSpec { max_restarts: 100_000, .. }` (or the
         // equivalent author-surface `:max-restarts 100000` /
         // `:max-restarts 4294967295` typo landing in the slot) silently
@@ -400,33 +401,25 @@ impl SupervisorSpec {
         // child can loop inside the window indefinitely with the
         // parent supervisor structurally never receiving the "this
         // subtree has exceeded its restart budget" signal the typed
-        // slot is meant to express. Lifting the rejection to a
-        // build-time gate at `SupervisorSpec::validate` brackets the
-        // typed `:max-restarts` set structurally — every validated
-        // value lies in `1..=SUPERVISOR_MAX_RESTARTS_MAX` — and
-        // matches the same top-and-bottom-edge discipline the
-        // [`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`] cap
-        // applies on the peer `:politicas :circuit-breaker
-        // :max-failures` axis (zero-floor `PolicyBreakerZeroFailures`
-        // + upper-floor `PolicyBreakerMaxFailuresExceedsCap`): both
-        // axes are "trip the next-higher protection layer after N
+        // slot is meant to express. The bracket set is
+        // `1..=SUPERVISOR_MAX_RESTARTS_MAX`, peer with the
+        // [`crate::aplicacao::POLICY_BREAKER_MAX_FAILURES_MAX`] cap on
+        // the sibling `:politicas :circuit-breaker :max-failures` axis:
+        // both are "trip the next-higher protection layer after N
         // events in a rolling window" counters with identical
-        // degenerate-at-the-high-end shape. The zero-floor gate
-        // strictly precedes this cap arm so `0` surfaces the more
-        // self-locating `ZeroMaxRestarts` diagnostic (with its
-        // counter-axis remediation directly named) rather than the
-        // cap-shape diagnostic; the cap arm strictly precedes the
-        // sibling `:restart-window` zero-floor / canonical-millisecond
-        // arms so an over-cap `max_restarts` paired with a
-        // structurally invalid window surfaces the cap diagnostic
-        // first, mirroring the
+        // degenerate-at-the-high-end shape and now share one canonical
+        // bracket helper. The bracket precedes the sibling
+        // `:restart-window` zero-floor / canonical-millisecond arms so
+        // an over-cap `max_restarts` paired with a structurally invalid
+        // window surfaces the bracket diagnostic first, mirroring the
         // `PolicyBreakerMaxFailuresExceedsCap` / window-axis cross-arm
         // ordering on the peer `:politicas :circuit-breaker` slot.
-        if self.max_restarts > SUPERVISOR_MAX_RESTARTS_MAX {
-            return Err(SupervisorError::MaxRestartsExceedsCap {
-                max_restarts: self.max_restarts,
-            });
-        }
+        crate::render::require_positive_bounded_u32(
+            self.max_restarts,
+            SUPERVISOR_MAX_RESTARTS_MAX,
+            || SupervisorError::ZeroMaxRestarts,
+            |max_restarts| SupervisorError::MaxRestartsExceedsCap { max_restarts },
+        )?;
         if matches!(self.restart_window, Some(d) if d.is_zero()) {
             return Err(SupervisorError::RestartWindowZero);
         }
