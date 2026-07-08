@@ -364,6 +364,37 @@ pub use caixa_core::FLUX_KEY_SOURCE_REF;
 /// string surfaces.
 pub use caixa_core::FLUX_KEY_VALUES;
 
+/// Canonical Flux v2 per-`Kustomization` health-gate reference-list
+/// container-axis key every `caixa-flux`-emitted `kustomization.yaml`
+/// document mounts its per-sibling-`HelmRelease` health-probe list under
+/// (`spec.healthChecks` on `Kustomization`). Re-export of the canonical
+/// [`caixa_core::FLUX_KEY_HEALTH_CHECKS`] so the load-bearing Flux-v2-
+/// kustomize-controller-side per-`Kustomization` health-gate reference-
+/// list container-axis key lives in exactly one place across every caixa
+/// renderer — the sweep converts this crate's one production-code call
+/// site (the [`cluster_bundle`] `kustomization.yaml` format-string
+/// template's baked `healthChecks:\n` container-axis key nesting the
+/// per-entry `[]NamespacedObjectKindReference` list whose peer sibling
+/// lifted [`FLUX_HELMRELEASE_API_VERSION`] per-entry `apiVersion` axis +
+/// [`FLUX_KIND_HELM_RELEASE`] per-entry `kind` axis the health-gate
+/// references) plus the three test-fixture `.get("healthChecks")`
+/// navigation sites in `mod tests` that probe the emitted per-entry
+/// `apiVersion` + `kind` pin onto the re-export. A future Flux v3 rebrand
+/// of the per-`Kustomization` health-gate reference-list container-axis
+/// key (a hypothetical upstream fluxcd/flux2 rename from `healthChecks`
+/// to `HealthChecks` / `healthchecks` / `healthcheck` / `health_checks`
+/// / `probes`, coordinated with the upstream project's per-version
+/// deprecation cycle) now lands at one const rather than scattered across
+/// the one emit-side format-string template + three test-fixture probe
+/// sites. Same "the typed constant lives in one place" discipline the
+/// peer [`FLUX_KEY_SOURCE_REF`] + [`FLUX_KEY_CHART`] + [`FLUX_KEY_VALUES`]
+/// re-exports enforce on the sibling Flux v2 per-`HelmRelease` +
+/// per-`Kustomization` body-key surfaces — completes the quartet of Flux
+/// v2 `spec.*` body-key constants (`spec.chart` + `spec.chart.spec.sourceRef`
+/// + `spec.values` + `spec.healthChecks`) the `cluster_bundle` renderer
+/// threads through its two format-string templates.
+pub use caixa_core::FLUX_KEY_HEALTH_CHECKS;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -987,7 +1018,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              kind: {source_kind}\n    \
              name: {flux_system}\n  \
            path: ./clusters/{cluster}/services/{name}\n  \
-           healthChecks:\n    \
+           {health_checks_key}:\n    \
              - apiVersion: {api_version}\n      \
                kind: {health_kind}\n      \
                name: {name}\n      \
@@ -1003,6 +1034,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         interval = opts.interval,
         cluster = opts.cluster,
         flux_system = DEFAULT_FLUX_SYSTEM_NAMESPACE,
+        health_checks_key = FLUX_KEY_HEALTH_CHECKS,
     );
     // chart_name is reserved for a future kustomization.yaml `resources:`
     // entry pointing at the rendered Chart.yaml; not yet wired.
@@ -2263,7 +2295,7 @@ spec:
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
         let health_checks = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("healthChecks"))
+            .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
             .and_then(|h| h.as_sequence())
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
@@ -2949,7 +2981,7 @@ spec:
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         let health_checks = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("healthChecks"))
+            .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
             .and_then(|h| h.as_sequence())
             .expect("kustomization.yaml spec.healthChecks present");
         assert!(
@@ -3013,7 +3045,7 @@ spec:
         )
         .unwrap()
         .get(KUBE_KEY_SPEC)
-        .and_then(|s| s.get("healthChecks"))
+        .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
         .and_then(|h| h.as_sequence())
         .and_then(|seq| seq.first())
         .and_then(|e| e.get(KUBE_KEY_KIND))
@@ -3334,6 +3366,106 @@ spec:
              at least the nested `HelmChartTemplate.spec` sub-document; \
              drift on this container-axis key silently dangles the \
              whole chart-template block at helm-controller reconcile time"
+        );
+    }
+
+    #[test]
+    fn flux_key_health_checks_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KEY_HEALTH_CHECKS` is
+        // the single source of truth for the Flux v2 per-`Kustomization`
+        // health-gate reference-list container-axis key the rendered
+        // `kustomization.yaml` nests its per-entry
+        // `[]NamespacedObjectKindReference` list under. Pin the
+        // equality (and the static-data identity, peer with the sibling
+        // [`flux_key_source_ref_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_key_chart_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_key_values_re_export_points_at_caixa_core_canonical`]
+        // pins on the sibling Flux v2 body-key surfaces) so any local
+        // re-introduction of a sibling `pub const FLUX_KEY_HEALTH_CHECKS:
+        // &str = "…"` (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation) is
+        // a build-time test failure naming the offending drift, not a
+        // silent apply-time dangling-health-gate reconciliation freeze
+        // (a rebrand on this axis without a coordinated caixa-core edit
+        // silently dangles the `Kustomization.spec.healthChecks` health-
+        // gate at the Flux v2 kustomize-controller's per-CR reconcile
+        // loop; the parent Kustomization stays at `Reconciling` forever
+        // and the dependent per-cluster fleet-programs upsert chain
+        // never sees `Ready=True` at apply time with no field naming
+        // the container-axis-drift root cause). Closes the sibling re-
+        // export identity axis on the same trajectory the peer per-CR
+        // body-key pins carry — completes the quartet.
+        assert_eq!(FLUX_KEY_HEALTH_CHECKS, caixa_core::FLUX_KEY_HEALTH_CHECKS);
+        assert!(
+            std::ptr::eq(
+                FLUX_KEY_HEALTH_CHECKS.as_ptr(),
+                caixa_core::FLUX_KEY_HEALTH_CHECKS.as_ptr(),
+            ),
+            "FLUX_KEY_HEALTH_CHECKS must be a re-export of \
+             caixa_core::FLUX_KEY_HEALTH_CHECKS, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_health_checks_block_uses_lifted_flux_key_health_checks() {
+        // Fail-before-pass-after pin: the rendered `kustomization.yaml`'s
+        // top-level `spec.healthChecks` container-axis key — the scope
+        // under which the Flux v2 `[]NamespacedObjectKindReference` list
+        // lives (the per-entry `(apiVersion, kind, name, namespace)`
+        // triples the Flux v2 `kustomize-controller`'s per-CR reconcile
+        // loop reads to gate the parent Kustomization's `Ready=True`
+        // transition on the referenced sibling `HelmRelease` reaching its
+        // `HelmReleaseReady=True` condition) — must resolve to the
+        // lifted [`FLUX_KEY_HEALTH_CHECKS`] verbatim. Before the lift
+        // this site carried an inline `healthChecks:\n` literal in the
+        // `kustomization` format string; a future Flux v3 rebrand on
+        // this axis (a hypothetical upstream fluxcd/flux2 rename from
+        // `healthChecks` to `HealthChecks` / `healthchecks` /
+        // `healthcheck` / `health_checks` / `probes`, coordinated with
+        // the upstream project's per-version deprecation cycle) without
+        // a coordinated edit here would have silently dangled the whole
+        // health-gate reference-list at `kustomize-controller` reconcile
+        // time — the parent Kustomization stays at `Reconciling`
+        // forever, and the dependent per-cluster fleet-programs upsert
+        // chain never sees `Ready=True` far from the rebrand commit's
+        // source.
+        //
+        // The pin is structural: parse the rendered YAML and assert the
+        // per-`Kustomization` health-gate reference-list container-axis
+        // key resolves under the lifted constant with a non-empty
+        // sequence under it. A regression that re-introduces an inline
+        // literal in the format-string template surfaces as a `None` at
+        // the lifted-const-keyed lookup. Peer to the sibling
+        // [`cluster_bundle_helmrelease_chart_block_uses_lifted_flux_key_chart`]
+        // / [`cluster_bundle_helmrelease_values_block_uses_lifted_flux_key_values`]
+        // pins on the sibling per-`HelmRelease` body-key surfaces —
+        // extends the canonical-Flux-v2-body-key lifted-const-keyed pin
+        // discipline from the per-`HelmRelease` triplet onto the sibling
+        // per-`Kustomization` `spec.healthChecks` reference-list
+        // container-axis this test targets, completing the quartet.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let health_checks = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KEY_HEALTH_CHECKS))
+            .and_then(|v| v.as_sequence())
+            .expect("spec.<FLUX_KEY_HEALTH_CHECKS> sequence present");
+        assert!(
+            !health_checks.is_empty(),
+            "spec.<FLUX_KEY_HEALTH_CHECKS> ({FLUX_KEY_HEALTH_CHECKS:?}) must \
+             carry at least one `[]NamespacedObjectKindReference` entry; \
+             drift on this container-axis key silently dangles the whole \
+             health-gate at kustomize-controller reconcile time and freezes \
+             the parent Kustomization at `Reconciling`"
         );
     }
 }

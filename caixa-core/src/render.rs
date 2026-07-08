@@ -7257,6 +7257,77 @@ pub const FLUX_KEY_CHART: &str = "chart";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KEY_VALUES: &str = "values";
 
+/// Canonical Flux v2 per-`Kustomization` health-gate reference-list
+/// container-axis key every `caixa-flux`-emitted `kustomization.yaml`
+/// document mounts its per-sibling-`HelmRelease` health-probe list under
+/// (`spec.healthChecks` on `Kustomization`) — the Flux v2 CRD schema places
+/// the `[]NamespacedObjectKindReference` list under this single container
+/// key, so drift on the container axis silently dangles the whole per-
+/// Kustomization health-gate the Flux v2 `kustomize-controller`'s per-CR
+/// reconcile loop reads to gate `Ready=True` on the referenced sibling
+/// `HelmRelease` reaching its `HelmReleaseReady=True` condition (a
+/// `"HealthChecks"` / `"healthchecks"` / `"healthcheck"` /
+/// `"health_checks"` / `"probes"` typo at either the emit-side format-
+/// string template or a downstream test-fixture probe silently
+/// dangles the parent `Kustomization` at `Reconciling` forever at the Flux
+/// v2 kustomize-controller's health-gate evaluation; the dependent per-
+/// cluster fleet-programs upsert chain never sees `Ready=True` at apply
+/// time with no field naming the container-axis-drift root cause).
+///
+/// The single source of truth every Flux-v2-per-`Kustomization` health-
+/// gate-reference-list-container-axis-naming reaches for:
+///
+///   - the rendered `kustomization.yaml` document's per-`Kustomization`
+///     `spec.healthChecks` block (caixa-flux/src/lib.rs — the
+///     `cluster_bundle` `kustomization` format-string template's baked
+///     `healthChecks:\n` container-axis key at line 990, threaded together
+///     with the sibling lifted [`FLUX_HELMRELEASE_API_VERSION`] per-entry
+///     `apiVersion` axis + [`FLUX_KIND_HELM_RELEASE`] per-entry `kind`
+///     axis the health-gate references);
+///   - three test-side navigation sites in `mod tests` that probe the
+///     rendered `kustomization.yaml` document's
+///     `.get("healthChecks")` container axis to pin the emitted per-entry
+///     `apiVersion` + `kind` against the sibling lifted
+///     [`FLUX_HELMRELEASE_API_VERSION`] + [`FLUX_KIND_HELM_RELEASE`] axes
+///     (caixa-flux/src/lib.rs:2266, 2952, 3016).
+///
+/// The container-axis key names the same Flux-v2-kustomize-controller-side
+/// per-`Kustomization` health-gate-reference-list the sibling per-entry
+/// `apiVersion` [`FLUX_HELMRELEASE_API_VERSION`] + per-entry `kind`
+/// [`FLUX_KIND_HELM_RELEASE`] axes nest under, and must move together on
+/// any future Flux v3 rebrand (a hypothetical upstream Flux v3 rename of
+/// the per-`Kustomization` health-gate reference-list container axis from
+/// `healthChecks` to `HealthChecks` / `healthchecks` / `healthcheck` /
+/// `health_checks` / `probes`, coordinated with the upstream fluxcd/flux2
+/// project's per-version deprecation cycle, would land at this one const
+/// rather than scattered across the one emit-side format-string template +
+/// three per-test-fixture probe sites).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_KIND_KUSTOMIZATION`] (2d61a6f) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) /
+/// [`FLUX_KEY_SOURCE_REF`] (e985089) /
+/// [`FLUX_KEY_CHART`] (8467748) /
+/// [`FLUX_KEY_VALUES`] (b54dc87) lifts established on the sibling
+/// canonical-Flux-v2-load-bearing-string surfaces — extends the per-CRD
+/// kind-discriminator + apiVersion + install-namespace + source-
+/// reference-container + chart-template-container + values-override-block
+/// lift trajectory onto the sibling per-`Kustomization` health-gate-
+/// reference-list container-axis key the `cluster_bundle` renderer
+/// consumes under its `kustomization.yaml` format-string template.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_KEY_HEALTH_CHECKS: &str = "healthChecks";
+
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
 /// SIG-Network Gateway API conformance registers the `Gateway` /
@@ -12460,6 +12531,76 @@ mod tests {
              per the Flux v2 lowerCamelCase per-CR-field-key convention — \
              no `_` / `-` / `.` / whitespace bytes the Flux v2 helm-\
              controller's per-CR reconcile loop would reject"
+        );
+    }
+
+    #[test]
+    fn flux_key_health_checks_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 per-`Kustomization` health-gate reference-
+        // list container-axis key the rendered `kustomization.yaml`'s
+        // `spec.healthChecks` block declares. The string is part of the
+        // cluster-side contract with the Flux v2 `kustomize-controller`
+        // — the per-CR reconcile loop reads the nested
+        // `[]NamespacedObjectKindReference` list under this exact
+        // container axis to gate the parent `Kustomization`'s
+        // `Ready=True` transition on the referenced sibling
+        // `HelmRelease` reaching its `HelmReleaseReady=True` condition;
+        // a drifted value (`"HealthChecks"` / `"healthchecks"` /
+        // `"healthcheck"` / `"health_checks"` / `"probes"`) silently
+        // dangles the parent `Kustomization` at `Reconciling` forever
+        // at the kustomize-controller's health-gate evaluation, and the
+        // dependent per-cluster fleet-programs upsert chain never sees
+        // `Ready=True`. Changing this value is a coordinated Flux v3
+        // migration alongside the upstream `fluxcd/flux2` deprecation
+        // cycle, not an incidental edit. Peer to
+        // `flux_key_source_ref_pins_canonical_value` /
+        // `flux_key_chart_pins_canonical_value` /
+        // `flux_key_values_pins_canonical_value` on the sibling Flux v2
+        // body-key surfaces — extends the canonical-Flux-v2-load-bearing-
+        // string pin discipline from the per-`HelmRelease` triplet
+        // (`spec.chart` + `spec.chart.spec.sourceRef` + `spec.values`)
+        // onto the sibling per-`Kustomization` `spec.healthChecks`
+        // reference-list container-axis, completing the quartet of Flux
+        // v2 `spec.*` body-key pin tests.
+        assert_eq!(FLUX_KEY_HEALTH_CHECKS, "healthChecks");
+    }
+
+    #[test]
+    fn flux_key_health_checks_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: the Flux v2 CRD field-naming convention
+        // (inherited from the upstream K8s API conventions) admits
+        // lowerCamelCase per-field keys — the per-`Kustomization`
+        // health-gate reference-list container-axis conforms to this on
+        // the leading-lowercase `healthChecks` shape. Pinning the shape
+        // here means a future rebrand on the canonical lift can't
+        // silently land a malformed container-axis key (snake_case,
+        // kebab-case, UpperCamelCase, empty) that the Flux v2 kustomize-
+        // controller's per-CR reconcile loop would reject at apply
+        // parse time far from the rebrand commit's source. Peer to
+        // `flux_key_source_ref_carries_lower_camel_case_shape` /
+        // `flux_key_chart_carries_lower_camel_case_shape` /
+        // `flux_key_values_carries_lower_camel_case_shape` on the
+        // sibling Flux v2 body-key surfaces.
+        let v = FLUX_KEY_HEALTH_CHECKS;
+        assert!(
+            !v.is_empty(),
+            "FLUX_KEY_HEALTH_CHECKS {v:?} must be non-empty per the Flux \
+             v2 CRD field-naming grammar"
+        );
+        let mut chars = v.chars();
+        assert!(
+            chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+            "FLUX_KEY_HEALTH_CHECKS {v:?} must lead with an ASCII-\
+             lowercase byte per the Flux v2 lowerCamelCase per-CR-field-\
+             key convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_KEY_HEALTH_CHECKS {v:?} must be ASCII-alphanumeric \
+             throughout per the Flux v2 lowerCamelCase per-CR-field-key \
+             convention — no `_` / `-` / `.` / whitespace bytes the Flux \
+             v2 kustomize-controller's per-CR reconcile loop would reject"
         );
     }
 
