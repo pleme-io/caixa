@@ -5857,6 +5857,95 @@ pub const FLEET_PROGRAMS_KEY_PROGRAMS: &str = "programs";
 /// values-schema axis (or vice versa).
 pub const FLEET_PROGRAMS_KEY_NAME: &str = "name";
 
+/// Canonical `lareira-fleet-programs` values-schema key naming the
+/// per-entry parent-Aplicacao-graph discriminator — the `aplicacao:`
+/// annotation the substrate operator's fleet-aggregator reads to
+/// group each rendered `programs[]` entry back onto the parent
+/// Aplicacao its M3 `:membros` list contributed it, and the exact
+/// key downstream fleet consumers (per-graph observability filters,
+/// per-Aplicacao Cilium-policy reconciliation, per-graph Gateway/
+/// `HTTPRoute` attachment) walk to project the flat `programs[]`
+/// sequence back onto its typed Aplicacao graph.
+///
+/// Peer of [`FLEET_PROGRAMS_KEY_NAME`] and [`M3_KEY_PLACEMENT`] on
+/// the same fleet-programs values schema — `FLEET_PROGRAMS_KEY_NAME`
+/// carries the per-entry Servico-name discriminator (the `:membros`
+/// row's own `:caixa` binding), `M3_KEY_PLACEMENT` carries the M3
+/// placement overlay cloned per entry, and this constant carries the
+/// per-entry parent-Aplicacao-nome annotation the aggregator uses to
+/// group entries back into their Aplicacao graph. Together the three
+/// per-entry keys (plus the top-level [`FLEET_PROGRAMS_KEY_PROGRAMS`]
+/// array key) name every axis one `programs[]` entry the caixa-mesh
+/// fan-out emits contributes to the substrate operator's read shape.
+///
+/// One production consumer writes this key:
+/// [`caixa_mesh::programs_for_aplicacao`] — the Aplicacao-side
+/// per-`:membros` entry-builder writes the parent-Aplicacao-nome
+/// annotation at this exact key (seeded from the enclosing Caixa's
+/// `:nome`), at `caixa-mesh/src/lib.rs`'s per-member
+/// `entry.insert("aplicacao".into(), …)` call. Unlike the peer
+/// [`FLEET_PROGRAMS_KEY_NAME`] axis (written by both caixa-flux's
+/// per-Servico entry builder and caixa-mesh's per-`:membros` builder
+/// — a Servico rendered standalone has no parent-Aplicacao annotation
+/// to carry), the parent-Aplicacao-nome annotation is emitted only
+/// by the caixa-mesh Aplicacao-side fan-out — Servicos rendered
+/// standalone through the caixa-flux path leave the annotation
+/// absent, which is exactly the discriminator the operator's
+/// aggregator uses to distinguish Aplicacao-graph-scoped entries
+/// from stand-alone Servico entries.
+///
+/// Until this lift landed the caixa-mesh emitter carried the bare
+/// `"aplicacao"` byte inline at its `entry.insert("aplicacao".into(),
+/// …)` call, and the peer in-file test probe (the
+/// `programs_for_aplicacao_annotates_with_parent_nome` fixture's
+/// `e.get("aplicacao").and_then(|v| v.as_str())` navigation) carried
+/// the same bare byte at its readback site. A future fleet-programs
+/// schema-key rebrand on the per-entry parent-Aplicacao-annotation
+/// axis (per the same trajectory the sibling [`FLEET_PROGRAMS_KEY_NAME`]
+/// doc-comment names — the `lareira-fleet-programs` library chart
+/// moving its per-entry parent-graph-annotation to a namespaced
+/// `pleme.pleme.io/aplicacao` for multi-tenant aggregator isolation
+/// once the M4 flat-`programs[]`-per-cluster shape splits into
+/// per-graph sequences, or to `graph:` for parity with the M3
+/// `:contratos` graph nomenclature, or to typed `parent:` on the
+/// ABSORPTION-ROADMAP.md M4 hierarchical-fleet trajectory) without
+/// a coordinated edit across both sites would silently split the
+/// schema: the emitter would write under the drifted key while the
+/// aggregator's per-Aplicacao filter would still read `aplicacao:`
+/// — every fan-out entry would silently vanish from its parent
+/// graph's projected view at the aggregator's per-Aplicacao reduce
+/// step, with the failure surfacing as "the Aplicacao's Servicos
+/// never appear in per-graph observability filters" far from the
+/// rebrand commit's source. Lifting the literal to one `&'static
+/// str` closes the drift footgun structurally — every consumer
+/// reads the same memory, so any future rebrand reaches both sites
+/// by construction and a CI build that re-introduces a sibling
+/// inline `"aplicacao"` literal trips the peer pinning tests at the
+/// build-time fail-before-deploy posture every prior load-bearing-
+/// string lift on this surface ([`FLEET_PROGRAMS_KEY_PROGRAMS`] on
+/// the sibling fleet-programs top-level array-key axis,
+/// [`FLEET_PROGRAMS_KEY_NAME`] on the peer per-entry name-
+/// discriminator axis, [`M3_KEY_PLACEMENT`] / [`M2_KEY_LIMITS`] /
+/// [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`] on the peer per-
+/// entry overlay-key surfaces) establishes.
+///
+/// Byte-identical to the string form of the
+/// [`caixa_core::CaixaKind::Aplicacao`] enum variant today — both
+/// resolve to the same nine-byte `"aplicacao"` literal — but
+/// semantically distinct: `CaixaKind`'s `Aplicacao` variant names
+/// the `:kind` enum arm (the typed kind-tag every `defcaixa` selects
+/// among), while this constant names the `lareira-fleet-programs`
+/// library chart's per-entry parent-graph-annotation axis (spelled
+/// per the chart's `values.schema.json` — a separate schema
+/// contract, one whose future rebrand can land independently of the
+/// kind-tag axis). Splitting the two lets each schema's future
+/// rebrand land at its canonical const/variant definition without
+/// coupling the `:kind` enum-tag axis to the fleet-programs values-
+/// schema axis (or vice versa) — the same discipline the sibling
+/// [`FLEET_PROGRAMS_KEY_NAME`] doc-comment establishes vs.
+/// [`KUBE_KEY_NAME`] on the K8s CR canonical name-axis.
+pub const FLEET_PROGRAMS_KEY_APLICACAO: &str = "aplicacao";
+
 /// Canonical pleme-io label namespace prefix. Every cluster object
 /// emitted by any caixa-side renderer that needs to carry the
 /// pleme-io workload identity uses this prefix; runtime label
@@ -14248,6 +14337,31 @@ mod tests {
         // site rather than a silent apply-time split between the two
         // emitters and the two upsert readers.
         assert_eq!(FLEET_PROGRAMS_KEY_NAME, "name");
+    }
+
+    #[test]
+    fn fleet_programs_key_aplicacao_pins_canonical_value() {
+        // Bridge-arm pin: [`FLEET_PROGRAMS_KEY_APLICACAO`] resolves
+        // to the canonical `"aplicacao"` byte today — the exact YAML
+        // key the substrate operator's fleet-aggregator reads to
+        // group each rendered `programs[]` entry back onto its parent
+        // Aplicacao graph, and the exact key the
+        // [`caixa_mesh::programs_for_aplicacao`] per-`:membros`
+        // entry-builder writes the parent-Aplicacao-nome annotation
+        // at. Pin the literal here (peer with the sibling
+        // [`fleet_programs_key_name_pins_canonical_value`] and
+        // [`fleet_programs_key_programs_pins_canonical_value`]
+        // canonical-literal pins on the peer fleet-programs schema
+        // key surfaces, and with the [`M3_KEY_PLACEMENT`] /
+        // [`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] /
+        // [`M2_KEY_UPGRADE_FROM`] pins on the per-entry overlay-key
+        // surfaces) so a future fleet-programs schema-key rebrand
+        // on the per-entry parent-graph-annotation axis surfaces
+        // here as a coordinated edit-point at the definition site
+        // rather than a silent apply-time split between the
+        // caixa-mesh Aplicacao-side emitter and the substrate
+        // operator's per-graph aggregator reduce step.
+        assert_eq!(FLEET_PROGRAMS_KEY_APLICACAO, "aplicacao");
     }
 
     // ── label_selector — typed K8s LabelSelector wrapper ─────────────────
