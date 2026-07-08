@@ -7035,6 +7035,75 @@ pub const FLUX_KIND_KUSTOMIZATION: &str = "Kustomization";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KEY_SOURCE_REF: &str = "sourceRef";
 
+/// Canonical Flux v2 per-`HelmRelease` values-override block-body-axis key
+/// every `caixa-flux`-emitted `HelmRelease` document nests its per-cluster
+/// value overrides under (`spec.values` on `HelmRelease`) — the Flux v2
+/// CRD schema places the arbitrary per-cluster-override YAML body under
+/// this single key, so drift on the block-body-axis silently dangles the
+/// per-cluster override the `helm-controller`'s per-CR reconcile loop
+/// merges into the referenced chart's `values.yaml` at Helm-render time
+/// (a `"Values"` / `"vals"` / `"chartValues"` / `"overrides"` typo at
+/// either the emit-side format-string template, the `upsert_into_helmrelease_programs`
+/// upsert-path's `spec.values.programs[]` write, or a downstream
+/// test-fixture probe silently routes the per-cluster overrides nowhere;
+/// the workload silently comes up with the referenced chart's admission-
+/// time defaults, far from the source `caixa.lisp` / the renderer's
+/// format-string template).
+///
+/// The single source of truth every Flux-v2-per-`HelmRelease` values-
+/// override-block-axis navigation reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's per-`HelmRelease`
+///     `spec.values` block (caixa-flux/src/lib.rs:900 — the
+///     `cluster_bundle` `helmrelease` format-string template's baked
+///     `values:\n` key beside the peer sibling lifted
+///     [`DEFAULT_LIBRARY_NAME`] wrap key + [`HELM_VALUES_KEY_ENABLED`]
+///     enable-toggle);
+///   - the `upsert_into_helmrelease_programs` upsert path's
+///     `spec.values.programs[]` write-side navigation
+///     (caixa-flux/src/lib.rs:649 — the `lareira-fleet-programs`-
+///     targeted `HelmRelease` CR's per-Servico entry-list mount);
+///   - three test-side navigation sites in `mod tests` that probe the
+///     rendered documents' `.get("values")` block-body axis to pin the
+///     emitted per-cluster overrides against the sibling lifted
+///     [`DEFAULT_LIBRARY_NAME`] wrap key + [`HELM_VALUES_KEY_ENABLED`]
+///     enable-toggle + [`FLEET_PROGRAMS_KEY_PROGRAMS`] entry-list axis.
+///
+/// The block-body-axis key names the same Flux-v2-helm-controller-side
+/// per-`HelmRelease` per-cluster-override block-body every
+/// `caixa-flux`-emitted `HelmRelease` document threads its per-cluster
+/// overlays through, and must move together on any future Flux v3
+/// rebrand (a hypothetical upstream Flux v3 rename of the values-
+/// override block-body-axis from `values` to `Values` / `chartValues`
+/// / `overrides`, coordinated with the upstream fluxcd/flux2 project's
+/// per-version deprecation cycle, would land at this one const rather
+/// than scattered across the one emit-side format-string template + one
+/// upsert-side write-side navigation + three per-test-fixture probe
+/// sites).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KIND_GIT_REPOSITORY`] (dbbcf29) /
+/// [`FLUX_KIND_HELM_RELEASE`] (e24ea3c) /
+/// [`FLUX_KIND_KUSTOMIZATION`] (2d61a6f) /
+/// [`FLUX_HELMRELEASE_API_VERSION`] (55f0fd9) /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] (8a6c8a3) /
+/// [`FLUX_KUSTOMIZATION_API_VERSION`] (d2dd1b1) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) /
+/// [`FLUX_KEY_SOURCE_REF`] (e985089) lifts established on the sibling
+/// canonical-Flux-v2-load-bearing-string surfaces — extends the per-CRD
+/// kind-discriminator + apiVersion + install-namespace + source-
+/// reference-container lift trajectory onto the sibling per-CR values-
+/// override-block-body-axis key both `cluster_bundle` +
+/// `upsert_into_helmrelease_programs` renderers consume under the
+/// per-cluster override + per-Servico entry-list nesting.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_KEY_VALUES: &str = "values";
+
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
 /// SIG-Network Gateway API conformance registers the `Gateway` /
@@ -12013,6 +12082,65 @@ mod tests {
             "FLUX_KEY_SOURCE_REF {v:?} must be ASCII-alphanumeric throughout \
              per the Flux v2 lowerCamelCase per-CR-field-key convention — \
              no `_` / `-` / `.` / whitespace bytes the Flux v2 source-\
+             controller's per-CR reconcile loop would reject"
+        );
+    }
+
+    #[test]
+    fn flux_key_values_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 per-`HelmRelease` values-override block-
+        // body-axis key the rendered `helmrelease.yaml`'s `spec.values`
+        // block declares. The string is part of the cluster-side
+        // contract with the Flux v2 `helm-controller` — the per-CR
+        // reconcile loop merges the per-cluster override YAML nested
+        // under this exact block-body axis into the referenced chart's
+        // `values.yaml` at Helm-render time; a drifted value
+        // (`"Values"` / `"vals"` / `"chartValues"` / `"overrides"`)
+        // silently routes the per-cluster overrides nowhere at Helm
+        // render, and the workload comes up with the referenced
+        // chart's admission-time defaults. Changing this value is a
+        // coordinated Flux v3 migration alongside the upstream
+        // `fluxcd/flux2` deprecation cycle, not an incidental edit.
+        // Peer to `flux_key_source_ref_pins_canonical_value` on the
+        // sibling Flux v2 per-CR container-axis-key surface — extends
+        // the canonical-Flux-v2-load-bearing-string pin discipline from
+        // the per-CR source-reference container-axis onto the sibling
+        // per-`HelmRelease` values-override block-body-axis.
+        assert_eq!(FLUX_KEY_VALUES, "values");
+    }
+
+    #[test]
+    fn flux_key_values_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: the Flux v2 CRD field-naming convention
+        // (inherited from the upstream K8s API conventions) admits
+        // lowerCamelCase per-field keys — the values-override block-
+        // body axis conforms to this on the leading-lowercase `values`
+        // shape (a single-word lowerCamelCase reduces to all-lowercase).
+        // Pinning the shape here means a future rebrand on the
+        // canonical lift can't silently land a malformed block-body-
+        // axis key (snake_case, kebab-case, UpperCamelCase, empty) that
+        // the Flux v2 helm-controller's per-CR reconcile loop would
+        // reject at apply parse time far from the rebrand commit's
+        // source. Peer to `flux_key_source_ref_carries_lower_camel_case_shape`
+        // on the sibling Flux v2 per-CR container-axis-key surface.
+        let v = FLUX_KEY_VALUES;
+        assert!(
+            !v.is_empty(),
+            "FLUX_KEY_VALUES {v:?} must be non-empty per the Flux v2 \
+             CRD field-naming grammar"
+        );
+        let mut chars = v.chars();
+        assert!(
+            chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+            "FLUX_KEY_VALUES {v:?} must lead with an ASCII-lowercase \
+             byte per the Flux v2 lowerCamelCase per-CR-field-key convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_KEY_VALUES {v:?} must be ASCII-alphanumeric throughout \
+             per the Flux v2 lowerCamelCase per-CR-field-key convention — \
+             no `_` / `-` / `.` / whitespace bytes the Flux v2 helm-\
              controller's per-CR reconcile loop would reject"
         );
     }

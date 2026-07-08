@@ -306,6 +306,35 @@ pub use caixa_core::FLUX_KIND_KUSTOMIZATION;
 /// sibling canonical-Flux-v2-load-bearing-string surfaces.
 pub use caixa_core::FLUX_KEY_SOURCE_REF;
 
+/// Canonical Flux v2 per-`HelmRelease` values-override block-body-axis
+/// key every `caixa-flux`-emitted `HelmRelease` document nests its per-
+/// cluster value overrides under (`spec.values` on `HelmRelease`). Re-
+/// export of the canonical [`caixa_core::FLUX_KEY_VALUES`] so the load-
+/// bearing Flux-v2-helm-controller-side per-`HelmRelease` values-
+/// override block-body-axis key lives in exactly one place across every
+/// caixa renderer — the sweep converts this crate's one production-code
+/// call site (the [`cluster_bundle`] `helmrelease.yaml` format-string
+/// template's baked `values:\n` key beside the sibling lifted
+/// [`DEFAULT_LIBRARY_NAME`] wrap key + [`HELM_VALUES_KEY_ENABLED`]
+/// enable-toggle) plus the [`upsert_into_helmrelease_programs`]
+/// upsert-path's `spec.values.programs[]` write-side navigation onto the
+/// re-export, and threads three test-fixture `.get("values")` block-
+/// body-axis probe sites in `mod tests` through the same const. A
+/// future Flux v3 rebrand of the per-`HelmRelease` values-override
+/// block-body-axis key (a hypothetical upstream fluxcd/flux2 rename
+/// from `values` to `Values` / `chartValues` / `overrides`, coordinated
+/// with the upstream project's per-version deprecation cycle) now lands
+/// at one const rather than scattered across the one emit-side format-
+/// string template + one upsert-side write-side navigation + three
+/// test-fixture probe sites. Same "the typed constant lives in one
+/// place" discipline the peer [`FLUX_KEY_SOURCE_REF`] +
+/// [`FLUX_KIND_GIT_REPOSITORY`] / [`FLUX_KIND_HELM_RELEASE`] /
+/// [`FLUX_KIND_KUSTOMIZATION`] + [`FLUX_HELMRELEASE_API_VERSION`] /
+/// [`FLUX_GITREPOSITORY_API_VERSION`] / [`FLUX_KUSTOMIZATION_API_VERSION`]
+/// re-exports enforce on the sibling canonical-Flux-v2-load-bearing-
+/// string surfaces.
+pub use caixa_core::FLUX_KEY_VALUES;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -646,7 +675,7 @@ pub fn upsert_into_helmrelease_programs(
         return Err(Error::MissingField("spec must be a mapping"));
     };
     let values = spec_map
-        .entry(serde_yaml::Value::String("values".into()))
+        .entry(serde_yaml::Value::String(FLUX_KEY_VALUES.into()))
         .or_insert(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
     let serde_yaml::Value::Mapping(values_map) = values else {
         return Err(Error::MissingField("spec.values must be a mapping"));
@@ -897,7 +926,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              remediation:\n      \
                retries: 3\n      \
                remediateLastFailure: true\n  \
-           values:\n    \
+           {values_key}:\n    \
              {library_name}:\n      \
                {enabled_key}: true\n",
         api_version = FLUX_HELMRELEASE_API_VERSION,
@@ -907,6 +936,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         namespace = opts.namespace,
         interval = opts.interval,
         chart_path = opts.chart_path,
+        values_key = FLUX_KEY_VALUES,
         library_name = DEFAULT_LIBRARY_NAME,
         enabled_key = HELM_VALUES_KEY_ENABLED,
     );
@@ -1714,7 +1744,7 @@ spec:
         let arr = modified
             .get(KUBE_KEY_SPEC)
             .unwrap()
-            .get("values")
+            .get(FLUX_KEY_VALUES)
             .unwrap()
             .get(FLEET_PROGRAMS_KEY_PROGRAMS)
             .unwrap()
@@ -1750,7 +1780,7 @@ spec:
         let arr = modified
             .get(KUBE_KEY_SPEC)
             .unwrap()
-            .get("values")
+            .get(FLUX_KEY_VALUES)
             .unwrap()
             .get(FLEET_PROGRAMS_KEY_PROGRAMS)
             .unwrap()
@@ -1924,7 +1954,7 @@ spec:
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let values = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("values"))
+            .and_then(|s| s.get(FLUX_KEY_VALUES))
             .and_then(|v| v.as_mapping())
             .expect("spec.values mapping present");
         assert!(
@@ -3043,6 +3073,100 @@ spec:
              caixa_core::FLUX_KEY_SOURCE_REF, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn flux_key_values_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KEY_VALUES` is the
+        // single source of truth for the Flux v2 per-`HelmRelease`
+        // values-override block-body-axis key the rendered
+        // `helmrelease.yaml` nests its per-cluster override YAML under.
+        // Pin the equality (and the static-data identity, peer with the
+        // sibling
+        // [`flux_key_source_ref_re_export_points_at_caixa_core_canonical`]
+        // pin on the sibling Flux v2 per-CR container-axis-key surface)
+        // so any local re-introduction of a sibling `pub const
+        // FLUX_KEY_VALUES: &str = "…"` (the canonical drift footgun
+        // where a sibling local `pub const` could happen to carry the
+        // same string at the source while pointing at a different
+        // `&'static` allocation) is a build-time test failure naming
+        // the offending drift, not a silent apply-time per-cluster-
+        // override-routed-nowhere reconciliation (a rebrand on this
+        // axis without a coordinated caixa-core edit silently routes
+        // the per-cluster override YAML nowhere at Helm-render time;
+        // the workload silently comes up with the referenced chart's
+        // admission-time defaults, far from the source `caixa.lisp` /
+        // the renderer's format-string template). Closes the sibling
+        // re-export identity axis on the same trajectory the peer
+        // [`flux_key_source_ref_re_export_points_at_caixa_core_canonical`]
+        // pin carries.
+        assert_eq!(FLUX_KEY_VALUES, caixa_core::FLUX_KEY_VALUES);
+        assert!(
+            std::ptr::eq(
+                FLUX_KEY_VALUES.as_ptr(),
+                caixa_core::FLUX_KEY_VALUES.as_ptr(),
+            ),
+            "FLUX_KEY_VALUES must be a re-export of \
+             caixa_core::FLUX_KEY_VALUES, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_values_block_uses_lifted_flux_key_values() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`'s
+        // top-level `spec.values` block-body-axis key — the scope under
+        // which per-cluster overrides reach the referenced chart at
+        // Flux v2 `helm-controller` reconcile time — must resolve to the
+        // lifted [`FLUX_KEY_VALUES`] verbatim. Before the lift this
+        // site carried an inline `values:\n` literal in the format
+        // string; a future Flux v3 rebrand on this axis (a hypothetical
+        // upstream fluxcd/flux2 rename from `values` to `Values` /
+        // `chartValues` / `overrides`, coordinated with the upstream
+        // project's per-version deprecation cycle) without a
+        // coordinated edit here would have silently routed the per-
+        // cluster override YAML nowhere at `helm-controller` reconcile
+        // time — the workload's per-cluster overrides never reach the
+        // referenced chart, and the apply comes up with the chart's
+        // admission-time defaults far from the rebrand commit's source.
+        //
+        // The pin is structural: parse the rendered YAML and assert the
+        // per-`HelmRelease` values-override block-body-axis key resolves
+        // under the lifted constant (not `.get("values")` — that is the
+        // sibling literal-shape probe the peer test at line 1955 pins;
+        // this test asserts the lifted-const-keyed navigation carries a
+        // populated mapping under it). A regression that re-introduces
+        // an inline literal in the format-string template surfaces as a
+        // `None` at the lifted-const-keyed lookup (the inline literal
+        // would survive, but the lifted-const-keyed assertion would
+        // fail). Peer to the sibling
+        // [`cluster_bundle_helmrelease_values_wrap_key_uses_lifted_constant`]
+        // pin on the sibling per-`HelmRelease` inner-wrap-key surface
+        // — extends the canonical-Flux-v2-per-`HelmRelease`-values-
+        // navigation lift from the wrap-key axis onto the outer block-
+        // body-axis this test targets.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let values = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KEY_VALUES))
+            .and_then(|v| v.as_mapping())
+            .expect("spec.<FLUX_KEY_VALUES> mapping present");
+        assert!(
+            !values.is_empty(),
+            "spec.<FLUX_KEY_VALUES> ({FLUX_KEY_VALUES:?}) must carry \
+             at least the lifted-[`DEFAULT_LIBRARY_NAME`]-wrapped per-\
+             cluster override block; drift on this block-body-axis key \
+             silently routes overrides nowhere at helm-controller \
+             reconcile time"
         );
     }
 
