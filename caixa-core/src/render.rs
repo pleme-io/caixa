@@ -7035,6 +7035,77 @@ pub const FLUX_KIND_KUSTOMIZATION: &str = "Kustomization";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KEY_SOURCE_REF: &str = "sourceRef";
 
+/// Canonical Flux v2 per-`HelmRelease` inline-chart-template container-axis
+/// key every `caixa-flux`-emitted `HelmRelease` document nests its per-CR
+/// chart-template block under (`spec.chart` on `HelmRelease`) — the Flux v2
+/// CRD schema places the `HelmChartTemplate` sub-document (whose nested
+/// `spec.chart` string names the referenced chart, `spec.sourceRef` names
+/// the source-of-truth `(kind, name, namespace)` triple, and
+/// `spec.interval` names the per-CR reconcile cadence) under this single
+/// container key, so drift on the container axis silently dangles the
+/// whole chart-template block the Flux v2 `helm-controller`'s per-CR
+/// reconcile loop reads to source the referenced chart at Helm-render time
+/// (a `"Chart"` / `"chartTemplate"` / `"helmChart"` / `"chartRef"` typo at
+/// either the emit-side format-string template or a downstream test-
+/// fixture probe silently dangles the `HelmRelease.spec.chart` chart-
+/// template resolution at the Flux v2 helm-controller's CRD registration;
+/// the referenced chart never resolves, and the per-Servico workload
+/// freezes at apply time with no field naming the container-axis-drift
+/// root cause).
+///
+/// The single source of truth the rendered Flux bundle's per-CR
+/// chart-template-container-axis-naming reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's per-`HelmRelease`
+///     `spec.chart` block (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `helmrelease` format-string template's baked `chart:\n` container
+///     axis at line 914, sibling to the peer lifted [`FLUX_KEY_SOURCE_REF`]
+///     source-reference container axis nested inside the same block +
+///     [`FLUX_KEY_VALUES`] per-cluster-override block-body axis at the
+///     sibling `spec.values` position);
+///   - two test-side navigation sites in `mod tests` that probe the
+///     rendered `helmrelease.yaml` document's `.get("chart")` container
+///     axis to reach the nested `spec.chart.spec.sourceRef.kind` pin
+///     against the sibling lifted [`FLUX_KIND_GIT_REPOSITORY`] axis
+///     (caixa-flux/src/lib.rs:2680, 2774).
+///
+/// The container-axis key names the same Flux-v2-helm-controller-side
+/// per-`HelmRelease` chart-template container as the peer sibling per-CR
+/// source-reference container-axis [`FLUX_KEY_SOURCE_REF`] nests under,
+/// and must move together on any future Flux v3 rebrand (a hypothetical
+/// upstream Flux v3 rename of the per-`HelmRelease` chart-template
+/// container axis from `chart` to `Chart` / `chartTemplate` / `helmChart`
+/// / `chartRef`, coordinated with the upstream fluxcd/flux2 project's
+/// per-version deprecation cycle, would land at this one const rather
+/// than scattered across the one per-CR format-string template + two
+/// per-test-fixture probe sites).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KEY_SOURCE_REF`] (e985089) /
+/// [`FLUX_KEY_VALUES`] (b54dc87) lifts established on the sibling
+/// canonical-Flux-v2-per-`HelmRelease`-body-key surfaces — completes the
+/// triplet of Flux v2 per-`HelmRelease` `spec.*` body-key constants
+/// (`spec.chart` + `spec.chart.spec.sourceRef` + `spec.values`) the
+/// `cluster_bundle` renderer's `helmrelease.yaml` format-string template
+/// threads through its per-CR block-body layout.
+///
+/// The inner scalar-value axis `spec.chart.spec.chart` (the chart-name
+/// leaf the `HelmChartTemplate.spec` sub-document mounts under; the same
+/// spelling `"chart"` at a distinct schema position) is a schematically
+/// separate leaf-scalar-key axis (the chart-NAME field the helm-controller
+/// resolves through the sibling [`FLUX_KEY_SOURCE_REF`] triple's source),
+/// and is not covered by this lift — a rebrand of the container axis
+/// (`spec.chart` in this const) does not necessarily coincide with a
+/// rebrand of the leaf-scalar `spec.chart.spec.chart` chart-name field
+/// key, so the two axes stay decoupled at the substrate.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_KEY_CHART: &str = "chart";
+
 /// Canonical Flux v2 per-`HelmRelease` values-override block-body-axis key
 /// every `caixa-flux`-emitted `HelmRelease` document nests its per-cluster
 /// value overrides under (`spec.values` on `HelmRelease`) — the Flux v2
@@ -12139,6 +12210,72 @@ mod tests {
         assert!(
             v.chars().all(|c| c.is_ascii_alphanumeric()),
             "FLUX_KEY_VALUES {v:?} must be ASCII-alphanumeric throughout \
+             per the Flux v2 lowerCamelCase per-CR-field-key convention — \
+             no `_` / `-` / `.` / whitespace bytes the Flux v2 helm-\
+             controller's per-CR reconcile loop would reject"
+        );
+    }
+
+    #[test]
+    fn flux_key_chart_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 per-`HelmRelease` inline-chart-template
+        // container-axis key the rendered `helmrelease.yaml`'s
+        // `spec.chart` block declares. The string is part of the
+        // cluster-side contract with the Flux v2 `helm-controller` —
+        // the per-CR reconcile loop reads the nested
+        // `HelmChartTemplate` sub-document (chart-name string,
+        // source-of-truth reference triple, and reconcile cadence)
+        // under this exact container axis to source the referenced
+        // chart at Helm-render time; a drifted value (`"Chart"` /
+        // `"chartTemplate"` / `"helmChart"` / `"chartRef"`) silently
+        // dangles the whole chart-template resolution at the helm-
+        // controller's CRD registration and the referenced chart
+        // never resolves. Changing this value is a coordinated Flux
+        // v3 migration alongside the upstream `fluxcd/flux2`
+        // deprecation cycle, not an incidental edit. Peer to
+        // `flux_key_source_ref_pins_canonical_value` /
+        // `flux_key_values_pins_canonical_value` on the sibling Flux
+        // v2 per-`HelmRelease` body-key surfaces — extends the
+        // canonical-Flux-v2-load-bearing-string pin discipline from
+        // the source-reference container-axis + values-override
+        // block-body-axis onto the sibling chart-template container-
+        // axis, completing the triplet of Flux v2 per-`HelmRelease`
+        // `spec.*` body-key pin tests.
+        assert_eq!(FLUX_KEY_CHART, "chart");
+    }
+
+    #[test]
+    fn flux_key_chart_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: the Flux v2 CRD field-naming
+        // convention (inherited from the upstream K8s API
+        // conventions) admits lowerCamelCase per-field keys — the
+        // chart-template container-axis conforms to this on the
+        // leading-lowercase `chart` shape (a single-word
+        // lowerCamelCase reduces to all-lowercase). Pinning the shape
+        // here means a future rebrand on the canonical lift can't
+        // silently land a malformed container-axis key (snake_case,
+        // kebab-case, UpperCamelCase, empty) that the Flux v2 helm-
+        // controller's per-CR reconcile loop would reject at apply
+        // parse time far from the rebrand commit's source. Peer to
+        // `flux_key_source_ref_carries_lower_camel_case_shape` /
+        // `flux_key_values_carries_lower_camel_case_shape` on the
+        // sibling Flux v2 per-`HelmRelease` body-key surfaces.
+        let v = FLUX_KEY_CHART;
+        assert!(
+            !v.is_empty(),
+            "FLUX_KEY_CHART {v:?} must be non-empty per the Flux v2 \
+             CRD field-naming grammar"
+        );
+        let mut chars = v.chars();
+        assert!(
+            chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+            "FLUX_KEY_CHART {v:?} must lead with an ASCII-lowercase \
+             byte per the Flux v2 lowerCamelCase per-CR-field-key convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_KEY_CHART {v:?} must be ASCII-alphanumeric throughout \
              per the Flux v2 lowerCamelCase per-CR-field-key convention — \
              no `_` / `-` / `.` / whitespace bytes the Flux v2 helm-\
              controller's per-CR reconcile loop would reject"

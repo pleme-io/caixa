@@ -276,6 +276,35 @@ pub use caixa_core::FLUX_KIND_HELM_RELEASE;
 /// source/helm/kustomize controller triplet.
 pub use caixa_core::FLUX_KIND_KUSTOMIZATION;
 
+/// Canonical Flux v2 per-`HelmRelease` inline-chart-template container-
+/// axis key every `caixa-flux`-emitted `HelmRelease` document nests its
+/// per-CR chart-template block under (`spec.chart` on `HelmRelease`). Re-
+/// export of the canonical [`caixa_core::FLUX_KEY_CHART`] so the load-
+/// bearing Flux-v2-helm-controller-side per-`HelmRelease` chart-template
+/// container-axis key lives in exactly one place across every caixa
+/// renderer — the sweep converts this crate's one production-code call
+/// site (the [`cluster_bundle`] `helmrelease.yaml` format-string
+/// template's baked `chart:\n` container-axis key nesting the
+/// `HelmChartTemplate` sub-document whose peer sibling lifted
+/// [`FLUX_KEY_SOURCE_REF`] source-reference container-axis + inner
+/// chart-name-scalar reach through) plus the two test-fixture
+/// `.get("chart")` navigation sites in `mod tests` that probe the
+/// emitted `spec.chart.spec.sourceRef.kind` pin onto the re-export. A
+/// future Flux v3 rebrand of the per-`HelmRelease` chart-template
+/// container-axis key (a hypothetical upstream fluxcd/flux2 rename from
+/// `chart` to `Chart` / `chartTemplate` / `helmChart` / `chartRef`,
+/// coordinated with the upstream project's per-version deprecation
+/// cycle) now lands at one const rather than scattered across the one
+/// emit-side format-string template + two test-fixture probe sites.
+/// Same "the typed constant lives in one place" discipline the peer
+/// [`FLUX_KEY_SOURCE_REF`] + [`FLUX_KEY_VALUES`] re-exports enforce on
+/// the sibling Flux v2 per-`HelmRelease` body-key surfaces — completes
+/// the triplet of Flux v2 per-`HelmRelease` `spec.*` body-key constants
+/// (`spec.chart` + `spec.chart.spec.sourceRef` + `spec.values`) the
+/// `cluster_bundle` renderer threads through its `helmrelease.yaml`
+/// format-string template.
+pub use caixa_core::FLUX_KEY_CHART;
+
 /// Canonical Flux v2 per-`HelmRelease`/`Kustomization` source-reference
 /// container-axis key every `caixa-flux`-emitted bundle document mounts
 /// its per-CR source-of-truth `(kind, name, namespace)` reference triple
@@ -911,7 +940,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            namespace: {namespace}\n\
          spec:\n  \
            interval: {interval}\n  \
-           chart:\n    \
+           {chart_key}:\n    \
              spec:\n      \
                chart: {chart_path}\n      \
                sourceRef:\n        \
@@ -935,6 +964,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         name = name,
         namespace = opts.namespace,
         interval = opts.interval,
+        chart_key = FLUX_KEY_CHART,
         chart_path = opts.chart_path,
         values_key = FLUX_KEY_VALUES,
         library_name = DEFAULT_LIBRARY_NAME,
@@ -2677,7 +2707,7 @@ spec:
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let source_ref_kind = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("chart"))
+            .and_then(|s| s.get(FLUX_KEY_CHART))
             .and_then(|c| c.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
             .and_then(|r| r.get(KUBE_KEY_KIND))
@@ -2771,7 +2801,7 @@ spec:
         )
         .unwrap()
         .get(KUBE_KEY_SPEC)
-        .and_then(|s| s.get("chart"))
+        .and_then(|s| s.get(FLUX_KEY_CHART))
         .and_then(|c| c.get(KUBE_KEY_SPEC))
         .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
         .and_then(|r| r.get(KUBE_KEY_KIND))
@@ -3211,6 +3241,99 @@ spec:
              FLUX_KIND_KUSTOMIZATION ({FLUX_KIND_KUSTOMIZATION:?}); a drifted \
              literal here routes the Kustomization outside the Flux v2 \
              kustomize-controller's CRD registration",
+        );
+    }
+
+    #[test]
+    fn flux_key_chart_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_KEY_CHART` is the
+        // single source of truth for the Flux v2 per-`HelmRelease`
+        // chart-template container-axis key the rendered
+        // `helmrelease.yaml` nests its per-CR `HelmChartTemplate`
+        // sub-document under. Pin the equality (and the static-data
+        // identity, peer with the sibling
+        // [`flux_key_source_ref_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_key_values_re_export_points_at_caixa_core_canonical`]
+        // pins on the sibling Flux v2 per-`HelmRelease` body-key
+        // surfaces) so any local re-introduction of a sibling `pub
+        // const FLUX_KEY_CHART: &str = "…"` (the canonical drift
+        // footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift, not a silent apply-
+        // time dangling-chart-template reconciliation freeze (a
+        // rebrand on this axis without a coordinated caixa-core edit
+        // silently dangles the `HelmRelease.spec.chart` chart-
+        // template resolution at the Flux v2 helm-controller's CRD
+        // registration; the referenced chart never resolves and the
+        // per-Servico workload freezes at apply time with no field
+        // naming the container-axis-drift root cause). Closes the
+        // sibling re-export identity axis on the same trajectory the
+        // peer per-CR body-key pins carry.
+        assert_eq!(FLUX_KEY_CHART, caixa_core::FLUX_KEY_CHART);
+        assert!(
+            std::ptr::eq(FLUX_KEY_CHART.as_ptr(), caixa_core::FLUX_KEY_CHART.as_ptr(),),
+            "FLUX_KEY_CHART must be a re-export of \
+             caixa_core::FLUX_KEY_CHART, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_chart_block_uses_lifted_flux_key_chart() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`'s
+        // top-level `spec.chart` container-axis key — the scope under
+        // which the Flux v2 `HelmChartTemplate` sub-document lives (the
+        // `HelmChartTemplate.spec` block that carries the chart-name
+        // leaf, source-of-truth reference triple, and per-CR reconcile
+        // cadence the Flux v2 `helm-controller`'s per-CR reconcile loop
+        // reads to source the referenced chart at Helm-render time) —
+        // must resolve to the lifted [`FLUX_KEY_CHART`] verbatim.
+        // Before the lift this site carried an inline `chart:\n`
+        // literal in the format string; a future Flux v3 rebrand on
+        // this axis (a hypothetical upstream fluxcd/flux2 rename from
+        // `chart` to `Chart` / `chartTemplate` / `helmChart` /
+        // `chartRef`, coordinated with the upstream project's per-
+        // version deprecation cycle) without a coordinated edit here
+        // would have silently dangled the whole chart-template block
+        // at `helm-controller` reconcile time — the workload's
+        // referenced chart never resolves, and the apply freezes at
+        // the CRD-registration boundary far from the rebrand commit's
+        // source.
+        //
+        // The pin is structural: parse the rendered YAML and assert
+        // the per-`HelmRelease` chart-template container-axis key
+        // resolves under the lifted constant with a populated
+        // `HelmChartTemplate.spec` sub-mapping under it. A regression
+        // that re-introduces an inline literal in the format-string
+        // template surfaces as a `None` at the lifted-const-keyed
+        // lookup. Peer to the sibling
+        // [`cluster_bundle_helmrelease_values_block_uses_lifted_flux_key_values`]
+        // pin on the sibling per-`HelmRelease` values-override block-
+        // body-axis surface — extends the canonical-Flux-v2-per-
+        // `HelmRelease`-body-key lifted-const-keyed pin discipline
+        // from the values-override block-body-axis onto the sibling
+        // chart-template container-axis this test targets.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let chart = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KEY_CHART))
+            .and_then(|v| v.as_mapping())
+            .expect("spec.<FLUX_KEY_CHART> mapping present");
+        assert!(
+            !chart.is_empty(),
+            "spec.<FLUX_KEY_CHART> ({FLUX_KEY_CHART:?}) must carry \
+             at least the nested `HelmChartTemplate.spec` sub-document; \
+             drift on this container-axis key silently dangles the \
+             whole chart-template block at helm-controller reconcile time"
         );
     }
 }
