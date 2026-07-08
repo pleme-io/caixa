@@ -2749,8 +2749,8 @@ mod tests {
     use super::*;
     use caixa_core::{
         Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
-        M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, Membro, MeshPolicy, Placement,
-        PlacementStrategy, WitContract,
+        M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro,
+        MeshPolicy, Placement, PlacementStrategy, WitContract,
     };
     use std::time::Duration;
 
@@ -6091,7 +6091,7 @@ mod tests {
                 "placement.affinity must be absent when :affinity is None"
             );
             assert!(
-                p.get(serde_yaml::Value::String("shardKey".into()))
+                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into()))
                     .is_none(),
                 "placement.shardKey must be absent when :shard-key is None"
             );
@@ -6124,7 +6124,7 @@ mod tests {
                 Some("Sharded")
             );
             assert_eq!(
-                p.get(serde_yaml::Value::String("shardKey".into()))
+                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into()))
                     .and_then(|v| v.as_str()),
                 Some("$tenantId")
             );
@@ -6408,6 +6408,99 @@ mod tests {
             mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into())),
             "Placement's serde derive must emit the affinity axis under the exact key \
              the lifted M3_PLACEMENT_KEY_AFFINITY const carries when the typed slot \
+             resolves to `Some(_)`; got mapping keys: {keys:?}",
+            keys = mapping
+                .keys()
+                .filter_map(|k| k.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn m3_placement_key_shard_key_pins_canonical_value() {
+        // Bridge-arm pin: [`M3_PLACEMENT_KEY_SHARD_KEY`] resolves to the
+        // canonical `"shardKey"` byte today — the exact YAML sub-key the
+        // M3 [`caixa_core::aplicacao::Placement`] struct's
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `shard_key` field, and the exact scalar every downstream shard-
+        // dispatch consumer materializes off (the lareira-fleet-programs
+        // aggregator's per-entry M3 shard-pool dispatch materializer per
+        // MESH-COMPOSITION.md §II.4, the future `app-operator`
+        // reconciler's per-Aplicacao `ShardedResource` CR emitter, the
+        // future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // admission-time typed-string bind, the M4 Orleans-style virtual-
+        // actor runtime's per-grain placement dispatch per
+        // RUNTIME-PATTERNS.md). Peer with the
+        // [`m3_placement_key_estrategia_pins_canonical_value`] +
+        // [`m3_placement_key_clusters_pins_canonical_value`] +
+        // [`m3_placement_key_affinity_pins_canonical_value`] canonical-
+        // literal pins on the sibling per-sub-block strategy-discriminator
+        // / cluster-pool / placement-hint surfaces — those pins anchor
+        // the peer axes' bytes, this pin anchors the optional-emitted
+        // `shardKey:` byte every shard-dispatch consumer keys off when
+        // the typed slot resolves to `Some(_)` under the `Sharded`
+        // strategy.
+        assert_eq!(M3_PLACEMENT_KEY_SHARD_KEY, "shardKey");
+    }
+
+    #[test]
+    fn m3_placement_key_shard_key_matches_placement_serde_derive() {
+        // Structural pin: the lifted [`M3_PLACEMENT_KEY_SHARD_KEY`] byte
+        // equals the exact key [`caixa_core::aplicacao::Placement`]'s
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `shard_key` field when the typed slot resolves to `Some(_)`. A
+        // future refactor that (a) renames the Rust field to
+        // `partition_key` for Kafka-symmetric naming, `entity_key` for
+        // Akka/Orleans-symmetric naming, `hash_key` for schema-clarity,
+        // etc., or (b) retains the field name but adds a per-field
+        // `#[serde(rename = "…")]` override, or (c) drops the
+        // `rename_all = "camelCase"` attribute entirely, or (d) drops the
+        // `skip_serializing_if = "Option::is_none"` attribute (letting a
+        // `None` slot emit `shardKey: null` and thereby breaking the
+        // omit-when-unset contract every peer typed slot carries), would
+        // silently emit a `placement:` block whose shard-selection
+        // template lands under one key while every downstream shard-
+        // dispatch consumer (the M3 shard-pool dispatch materializer, the
+        // future `app-operator` reconciler's `ShardedResource` CR
+        // emitter, the future CR materializer's admission bind, the M4
+        // Orleans-style virtual-actor runtime's per-grain placement
+        // dispatch) still probes another. The structural bind between the
+        // derive-time output and the consumer-side navigation const is
+        // what this pin enforces — any derive-side rebrand must be a
+        // coordinated edit at the lifted const's definition site + here,
+        // not a silent apply-time no-op at the aggregator's shard-
+        // dispatch step. Peer with the sibling per-sub-block
+        // `matches_placement_serde_derive` pins on the same "one const,
+        // structurally bound to the derive-emitted shape, tested at both
+        // endpoints" discipline every prior canonical-schema-key lift on
+        // this surface established. Like the peer
+        // [`m3_placement_key_affinity_matches_placement_serde_derive`]
+        // pin (and unlike the always-emitted `estrategia` / `clusters`
+        // pins), this pin constructs a `Placement` with
+        // `shard_key: Some(_)` to force the `skip_serializing_if` gate
+        // open so the derive-emitted key actually appears in the
+        // serialized mapping. Uniquely on this axis (relative to every
+        // sibling `Placement` sub-key pin), the underlying serde
+        // transform is *not* a no-op — the source-side field name
+        // `shard_key` carries a `_` the `rename_all = "camelCase"`
+        // derive actively transforms to `shardKey`, so any rebrand that
+        // touches either endpoint of the transform (the field name OR
+        // the `rename_all` attribute OR a per-field `rename` override)
+        // reaches this assertion by construction.
+        let placement = Placement {
+            estrategia: PlacementStrategy::Sharded,
+            clusters: vec!["rio".to_string(), "mar".to_string()],
+            affinity: None,
+            shard_key: Some("$tenantId".to_string()),
+        };
+        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let mapping = value
+            .as_mapping()
+            .expect("Placement serializes to a mapping");
+        assert!(
+            mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into())),
+            "Placement's serde derive must emit the shard_key axis under the exact key \
+             the lifted M3_PLACEMENT_KEY_SHARD_KEY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
             keys = mapping
                 .keys()
