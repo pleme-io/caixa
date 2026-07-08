@@ -35,9 +35,10 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
-    FLEET_PROGRAMS_KEY_VERSAO, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract,
-    WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
-    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
+    FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
+    M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton,
+    label_selector, pleme_program_in_aplicacao_selector, pleme_program_selector,
+    single_field_overlay,
 };
 use thiserror::Error;
 
@@ -2487,7 +2488,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     );
     let mut listener = serde_yaml::Mapping::new();
     listener.insert(
-        serde_yaml::Value::String("name".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_NAME.into()),
         serde_yaml::Value::String("http".into()),
     );
     listener.insert(
@@ -2549,7 +2550,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 
     let mut parent_ref = serde_yaml::Mapping::new();
     parent_ref.insert(
-        serde_yaml::Value::String("name".into()),
+        serde_yaml::Value::String(GATEWAY_API_KEY_NAME.into()),
         serde_yaml::Value::String(caixa.nome.clone()),
     );
 
@@ -2631,7 +2632,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         );
         let mut backend_ref = serde_yaml::Mapping::new();
         backend_ref.insert(
-            serde_yaml::Value::String("name".into()),
+            serde_yaml::Value::String(GATEWAY_API_KEY_NAME.into()),
             serde_yaml::Value::String(entrada.para.clone()),
         );
         backend_ref.insert(
@@ -3220,6 +3221,74 @@ mod tests {
              not a sibling `pub const` that happens to carry the same string \
              — drift between the two is the canonical footgun this lift closes"
         );
+    }
+
+    #[test]
+    fn gateway_api_key_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_NAME` was lifted from four
+        // inline `"name"` literals at the Gateway API v1 per-child-
+        // object name-reference-axis emission + retrieval sites (the
+        // per-listener `listener.insert("name", …)`, the per-parentRef
+        // `parent_ref.insert("name", …)`, and the per-backendRef
+        // `backend_ref.insert("name", …)` calls in `gateway_routes`,
+        // plus the in-file `httproute_routes_to_entrada_para` fixture's
+        // per-backendRef `.get("name")` retrieval) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_NAME`] so the canonical
+        // Gateway-API-v1-per-child-object name-reference-axis string
+        // lives in exactly one place across every caixa renderer.
+        //
+        // Pin the equality + static-data identity here so any local
+        // re-introduction of a sibling
+        // `pub const GATEWAY_API_KEY_NAME: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test
+        // failure naming the offending drift, not a silent apply-time
+        // symptom — the prior shape would have let a typo on any one
+        // sibling `pub const` declaration silently miss the per-
+        // listener / per-parentRef / per-backendRef name-reference
+        // retrieval so the Aplicacao gateway bundle's true drift is
+        // masked (the Gateway API implementation's per-listener
+        // section identity resolves to nothing, the per-HTTPRoute
+        // parent-Gateway attachment reconciles as unbound, or the
+        // per-rule backend fan-out resolves no Service — all at
+        // apply time, far from the source caixa.lisp with no field
+        // naming the name-reference-axis drift).
+        //
+        // Byte-identical to [`KUBE_KEY_NAME`] today — both resolve to
+        // the same three-byte `"name"` literal — but semantically
+        // distinct: `KUBE_KEY_NAME` names the K8s CR canonical
+        // `metadata.name` outer-level identity axis (every rendered
+        // CR's own name), while `GATEWAY_API_KEY_NAME` names the
+        // Gateway API v1 CRD schema's per-child-object name-reference
+        // axis on `Listener` / `ParentReference` / `BackendObjectReference`
+        // sub-schemas. Splitting the two lets each schema's future
+        // rebrand land independently at its canonical const definition
+        // — a future Gateway API v2 rename of the name-reference axis
+        // to `target` / `ref` / `objectName` cannot coincidentally
+        // rebrand the K8s CR canonical `metadata.name` axis, and vice
+        // versa — the same discipline
+        // [`caixa_core::FLEET_PROGRAMS_KEY_NAME`] establishes vs.
+        // [`caixa_core::KUBE_KEY_NAME`] on the `lareira-fleet-programs`
+        // values-schema per-entry name-axis.
+        assert_eq!(GATEWAY_API_KEY_NAME, caixa_core::GATEWAY_API_KEY_NAME);
+        assert!(
+            std::ptr::eq(
+                GATEWAY_API_KEY_NAME.as_ptr(),
+                caixa_core::GATEWAY_API_KEY_NAME.as_ptr(),
+            ),
+            "GATEWAY_API_KEY_NAME must be a re-export of \
+             caixa_core::GATEWAY_API_KEY_NAME, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+        // The re-export is byte-identical to `KUBE_KEY_NAME` today; pin
+        // the value-equality so a future rebrand on either axis (the
+        // K8s CR canonical `metadata.name` axis moving to a namespaced
+        // key, or the Gateway API v1 per-child-object name-reference
+        // axis moving to `target` / `ref` / `objectName`) surfaces here
+        // as an explicit split rather than a silent coupling.
+        assert_eq!(GATEWAY_API_KEY_NAME, "name");
     }
 
     #[test]
@@ -6450,7 +6519,10 @@ mod tests {
             .and_then(|b| b.as_sequence())
             .and_then(|s| s.first())
             .unwrap();
-        assert_eq!(backend.get("name").and_then(|n| n.as_str()), Some("cart"));
+        assert_eq!(
+            backend.get(GATEWAY_API_KEY_NAME).and_then(|n| n.as_str()),
+            Some("cart")
+        );
         assert_eq!(
             backend.get(KUBE_KEY_PORT).and_then(|p| p.as_u64()),
             Some(8080)

@@ -10087,6 +10087,144 @@ pub const GATEWAY_API_KEY_GATEWAY_CLASS_NAME: &str = "gatewayClassName";
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_PATH: &str = "path";
 
+/// Canonical K8s Gateway API v1 per-child-object name-reference
+/// discriminator axis key every `gateway_routes`-emitted `Gateway`
+/// listener + `HTTPRoute` `parentRefs[]` / `backendRefs[]` entry
+/// mounts its named-object binding under. Three peer sub-schemas on
+/// the shared `spec.…[].name` axis:
+///
+///   - `Gateway.spec.listeners[].name` — Gateway API v1 `SectionName`,
+///     the listener's per-section identifier the sibling
+///     `HTTPRoute.spec.parentRefs[].sectionName` binds against;
+///   - `HTTPRoute.spec.parentRefs[].name` — Gateway API v1
+///     `ObjectName`, the per-`HTTPRoute` parent-Gateway reference the
+///     Gateway API implementation's per-HTTPRoute attach reconciler
+///     resolves against a `Gateway` object in the same namespace;
+///   - `HTTPRoute.spec.rules[].backendRefs[].name` — Gateway API v1
+///     `ObjectName`, the per-rule backend-Service reference the
+///     Gateway API implementation's per-rule L7 dispatch loop
+///     resolves against a `Service` object in the same namespace.
+///
+/// All three sub-schemas key their named-reference discriminator on
+/// the identical three-byte `"name"` axis at every level of the
+/// Gateway API v1 CRD schema (`Gateway.spec.listeners[].name`,
+/// `HTTPRoute.spec.parentRefs[].name`,
+/// `HTTPRoute.spec.rules[].backendRefs[].name`), so drift on any one
+/// of them silently splits the substrate's Aplicacao gateway bundle
+/// at whichever schema the drift hits (the K8s apiserver-side Gateway
+/// API CRD schema validator drops a per-listener / per-parentRef /
+/// per-backendRef block whose name-reference axis carries an
+/// unrecognized key — a `"Name"` / `"target"` / `"ref"` typo silently
+/// emits a `Gateway` whose listener carries no section identity, or
+/// an `HTTPRoute` whose parent-Gateway attachment reconciles as
+/// unbound, or an `HTTPRoute` whose per-rule backend fan-out resolves
+/// no Service, and every external `:entrada` flow the bundle was
+/// authored to accept drops at the gateway-class-controller's per-
+/// rule/per-listener/per-parentRef reconcile with no field naming the
+/// name-reference-axis-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-child-object name-reference-axis-naming
+/// reaches for:
+///
+///   - the rendered `Gateway` document's `spec.listeners[].name` axis
+///     (caixa-mesh/src/lib.rs — the `gateway_routes` per-Aplicacao
+///     `Gateway`'s per-listener `listener.insert("name", …)` call);
+///   - the rendered `HTTPRoute` document's `spec.parentRefs[].name`
+///     axis (caixa-mesh/src/lib.rs — the `gateway_routes` per-
+///     Aplicacao `HTTPRoute`'s per-parentRef
+///     `parent_ref.insert("name", …)` call);
+///   - the rendered `HTTPRoute` document's
+///     `spec.rules[].backendRefs[].name` axis (caixa-mesh/src/lib.rs
+///     — the `gateway_routes` per-rule per-backendRef
+///     `backend_ref.insert("name", …)` call).
+///
+/// The per-child-object name-reference discriminator axis names the
+/// same Gateway-API-implementation-side named-object binding container
+/// as the sibling [`GATEWAY_API_KEY_LISTENERS`] +
+/// [`GATEWAY_API_KEY_PARENT_REFS`] + [`GATEWAY_API_KEY_BACKEND_REFS`]
+/// per-container list axes it nests directly beneath, and must move
+/// together on any future Gateway API rebrand (an upstream SIG-Network
+/// Gateway API v2 rename of the name-reference axis from `name` to
+/// `target` / `ref` / `objectName`, coordinated with the Gateway API
+/// deprecation cycle). Until this lift landed the axis carried inline
+/// `"name"` literals at four occurrences across caixa-mesh — three
+/// production emitter sites (the per-listener `listener.insert("name",
+/// …)`, the per-parentRef `parent_ref.insert("name", …)`, and the per-
+/// backendRef `backend_ref.insert("name", …)` calls in
+/// `gateway_routes`) plus one in-file test-fixture navigation (the
+/// `httproute_routes_to_entrada_para` fixture's per-backendRef
+/// `.get("name")` retrieval) — four occurrences of the same load-
+/// bearing Gateway-API-CRD-`name`-axis-key convention, drift-prone by
+/// construction. A drift on any one production site to `"Name"` /
+/// `"target"` / `"ref"` would have surfaced as a Gateway API
+/// implementation-side schema validator drop at apply time (the
+/// affected per-listener / per-parentRef / per-backendRef name-
+/// reference axis the CRD schema validator recognizes as unknown),
+/// with the listener carrying no section identity or the `HTTPRoute`
+/// carrying an unbound parent-Gateway attachment or the per-rule
+/// backend fan-out resolving no Service at the gateway-class-
+/// controller's reconcile with no field naming the name-reference-
+/// drift root cause. A drift on the test-fixture side silently masks
+/// the emission-side pin (`.get("name")` returns `None` under both
+/// the drifted-key emitter and the drifted-key probe — the downstream
+/// `.and_then(|n| n.as_str())` chain short-circuits vacuously because
+/// the outer per-backendRef name-reference lookup is itself `None`).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_PATH`] (9f45aa4) /
+/// [`GATEWAY_API_KEY_MATCHES`] (b9ede1a) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_LISTENERS`] (29f2415) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (b77f744) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_TIMEOUTS`] (db31108) /
+/// [`GATEWAY_API_KEY_RETRY`] (231bbf5) /
+/// [`GATEWAY_API_KEY_GATEWAY_CLASS_NAME`] (1bc727d) lifts established
+/// on the sibling canonical-Gateway-API-CRD-body-axis surface —
+/// completes the four-way per-child-object axis-key set (`name` on
+/// listeners + parentRefs + backendRefs, alongside sibling
+/// `hostname`/`port`/`protocol` per-listener and `port` per-
+/// backendRef) the M3 Aplicacao mesh renderer's external `:entrada`
+/// ingress contract rests on. The render-side consumer now threads
+/// the same `&'static str` through every one of its `.insert(…)`
+/// calls so a future Gateway API rebrand on the name-reference axis
+/// (or an upstream SIG-Network Gateway API v2 rename to a per-CRD
+/// sibling name) lands in one place; every future renderer that
+/// reaches for the canonical per-child-object name-reference axis
+/// (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `Gateway` + `HTTPRoute` fan-out, a
+/// future per-edge `GRPCRoute` / `TCPRoute` / `TLSRoute` renderer
+/// whose per-rule backend-Service reference binds against this same
+/// axis, a future per-Aplicacao `ReferenceGrant` renderer whose per-
+/// cross-namespace parent-Gateway attachment resolves against this
+/// same axis) inherits the same value by construction with no
+/// opportunity for per-renderer drift.
+///
+/// Byte-identical to [`KUBE_KEY_NAME`] today — both resolve to the
+/// same three-byte `"name"` literal — but semantically distinct:
+/// [`KUBE_KEY_NAME`] names the K8s CR canonical `metadata.name` axis
+/// (every rendered CR's outer-level identity discriminator, spelled
+/// per the K8s apiserver's per-object `OpenAPI` v3 schema), while this
+/// constant names the Gateway API v1 CRD schema's per-child-object
+/// name-reference discriminator axis on `Listener` / `ParentReference`
+/// / `BackendObjectReference` sub-schemas (spelled per the Gateway API
+/// v1 CRD schema — a separate schema contract). Splitting the two
+/// lets each schema's future rebrand land independently at its
+/// canonical const definition without coupling the K8s CR canonical-
+/// key axis to the Gateway API v1 per-child-object name-reference
+/// axis (or vice versa) — the same discipline
+/// [`FLEET_PROGRAMS_KEY_NAME`] establishes vs. [`KUBE_KEY_NAME`] on
+/// the `lareira-fleet-programs` values-schema per-entry name-axis.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_NAME: &str = "name";
+
 /// Canonical Helm 3 `Chart.yaml` `apiVersion` every `caixa-helm`-rendered
 /// `lareira-<nome>` chart declares at its top-level `apiVersion` axis. The
 /// Helm 3 chart-schema resolution contract keys off this exact `"v2"` value:
