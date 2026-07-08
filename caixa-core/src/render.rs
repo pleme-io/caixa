@@ -5722,6 +5722,58 @@ pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 /// land where the typed slot said it should").
 pub const M3_KEY_PLACEMENT: &str = "placement";
 
+/// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
+/// struct's `estrategia` distribution-strategy discriminator — the
+/// per-`M3_KEY_PLACEMENT`-block field the M3 [`crate::aplicacao::PlacementStrategy`]
+/// enum's `Serialize` derive emits, and the exact scalar every downstream
+/// consumer dispatches on:
+///
+/// - the `lareira-fleet-programs` aggregator's per-entry strategy dispatch
+///   (each `programs[].placement.estrategia` reads `"SingleNode"` /
+///   `"Replicated"` / `"Sharded"` verbatim to select the takeover
+///   semantics per MESH-COMPOSITION.md §II.1),
+/// - the future `app-operator` reconciler's per-Aplicacao strategy branch,
+/// - the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+///   admission-time `spec.placement.estrategia` typed-enum bind,
+/// - and every M3 Adaptive weighting the compression pass reads off
+///   `placement.estrategia` per MESH-COMPOSITION.md §V.
+///
+/// The scalar is derived by [`crate::aplicacao::Placement`]'s
+/// `#[serde(rename_all = "camelCase")]` from the Rust field name
+/// `estrategia`; `estrategia` has no `_`, so the serde transform is a
+/// no-op on this axis and the emitted key equals the source-side field
+/// name byte-for-byte. Lifting the byte to one `&'static str` closes
+/// the drift footgun structurally: a future refactor renaming the Rust
+/// field (`estrategia` → `strategy` for English-uniformity, `distribution`
+/// for schema-clarity, etc.) OR retaining the field name while adding
+/// a `#[serde(rename = "…")]` override would silently emit a
+/// `placement:` block whose distribution-strategy discriminator lands
+/// under one key while every downstream consumer still probes another —
+/// the aggregator's dispatch, the operator's reconcile, the CR
+/// materializer's admission bind would each silently no-op, and the
+/// workload would silently come up under the strategy's serde-derived
+/// default rather than the per-Aplicacao override the typed slot set.
+/// The identity pin + serde round-trip pin the sweep introduces catch
+/// the drift at caixa-core / caixa-mesh build time rather than at the
+/// aggregator's filter step or the operator's reconcile posture, far
+/// from the rebrand commit's source.
+///
+/// Peer of [`M3_KEY_PLACEMENT`] on the same programs.yaml per-entry
+/// axis — that constant names the top-level overlay key the entry
+/// carries, this one names the per-`placement:` sub-block strategy
+/// discriminator every consumer dispatches on. Byte-identical to (but
+/// semantically distinct from) [`crate::supervisor::SupervisorSpec`]'s
+/// peer `estrategia` field on the M2 supervisor-strategy axis — that
+/// axis carries [`crate::supervisor::RestartStrategy`] (`OneForOne` /
+/// `OneForAll` / `RestForOne` / `SimpleOneForOne`, OTP supervisor
+/// semantics) while this axis carries [`crate::aplicacao::PlacementStrategy`]
+/// (`SingleNode` / `Replicated` / `Sharded`, cross-cluster distribution
+/// semantics); splitting the two lets each schema's future rebrand
+/// land independently on the same byte-identical-but-semantically-
+/// distinct discipline the [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAME`]
+/// split established.
+pub const M3_PLACEMENT_KEY_ESTRATEGIA: &str = "estrategia";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of
