@@ -2748,8 +2748,9 @@ pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_CLUSTERS,
-        M3_PLACEMENT_KEY_ESTRATEGIA, Membro, MeshPolicy, Placement, PlacementStrategy, WitContract,
+        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
+        M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, Membro, MeshPolicy, Placement,
+        PlacementStrategy, WitContract,
     };
     use std::time::Duration;
 
@@ -6056,7 +6057,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(serde_yaml::Value::String("affinity".into()))
+                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into()))
                     .and_then(|v| v.as_str()),
                 Some("data-locality")
             );
@@ -6085,7 +6086,7 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert!(
-                p.get(serde_yaml::Value::String("affinity".into()))
+                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into()))
                     .is_none(),
                 "placement.affinity must be absent when :affinity is None"
             );
@@ -6325,6 +6326,89 @@ mod tests {
             mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
             "Placement's serde derive must emit the clusters axis under the exact key \
              the lifted M3_PLACEMENT_KEY_CLUSTERS const carries; got mapping keys: {keys:?}",
+            keys = mapping
+                .keys()
+                .filter_map(|k| k.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn m3_placement_key_affinity_pins_canonical_value() {
+        // Bridge-arm pin: [`M3_PLACEMENT_KEY_AFFINITY`] resolves to the
+        // canonical `"affinity"` byte today — the exact YAML sub-key the
+        // M3 [`caixa_core::aplicacao::Placement`] struct's
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `affinity` field, and the exact scalar every downstream
+        // placement-hint consumer weights off (the lareira-fleet-programs
+        // aggregator's per-entry M3 Adaptive compression pass per
+        // MESH-COMPOSITION.md §V, the future `app-operator` reconciler's
+        // per-Aplicacao pod-affinity / node-affinity K8s-primitive
+        // materializer, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+        // materializer's admission-time typed-string bind, the M4 cross-
+        // cluster placement engine's per-hint takeover-priority dispatch).
+        // Peer with the [`m3_placement_key_estrategia_pins_canonical_value`]
+        // + [`m3_placement_key_clusters_pins_canonical_value`] canonical-
+        // literal pins on the sibling per-sub-block always-emitted
+        // strategy-discriminator / cluster-pool surfaces — those pins
+        // anchor the always-emitted `estrategia:` / `clusters:` bytes
+        // every dispatch / fanout consumer branches on, this pin anchors
+        // the optional-emitted `affinity:` byte every weighting consumer
+        // reads off when the typed slot resolves to `Some(_)`.
+        assert_eq!(M3_PLACEMENT_KEY_AFFINITY, "affinity");
+    }
+
+    #[test]
+    fn m3_placement_key_affinity_matches_placement_serde_derive() {
+        // Structural pin: the lifted [`M3_PLACEMENT_KEY_AFFINITY`] byte
+        // equals the exact key [`caixa_core::aplicacao::Placement`]'s
+        // `#[serde(rename_all = "camelCase")]` derive emits for its
+        // `affinity` field when the typed slot resolves to `Some(_)`. A
+        // future refactor that (a) renames the Rust field to
+        // `affinityHint` / `placementHint` for schema-clarity, or (b)
+        // retains the field name but adds a per-field
+        // `#[serde(rename = "…")]` override, or (c) drops the
+        // `rename_all = "camelCase"` attribute entirely, or (d) drops the
+        // `skip_serializing_if = "Option::is_none"` attribute (letting a
+        // `None` slot emit `affinity: null` and thereby breaking the
+        // omit-when-unset contract every peer typed slot carries), would
+        // silently emit a `placement:` block whose affinity hint lands
+        // under one key while every downstream weighting consumer (the M3
+        // Adaptive compression pass, the future `app-operator`
+        // reconciler's pod-affinity / node-affinity materializer, the
+        // future CR materializer's admission bind, the M4 cross-cluster
+        // placement engine's per-hint dispatch) still probes another. The
+        // structural bind between the derive-time output and the
+        // consumer-side navigation const is what this pin enforces — any
+        // derive-side rebrand must be a coordinated edit at the lifted
+        // const's definition site + here, not a silent apply-time no-op
+        // at the aggregator's weighting step. Peer with the
+        // [`m3_placement_key_estrategia_matches_placement_serde_derive`]
+        // + [`m3_placement_key_clusters_matches_placement_serde_derive`]
+        // structural pins on the sibling per-sub-block always-emitted
+        // axes on the same "one const, structurally bound to the derive-
+        // emitted shape, tested at both endpoints" discipline every prior
+        // canonical-schema-key lift on this surface established. Unlike
+        // the peer pins (which construct a `Placement` with the axis
+        // always present and simply probe for the key), this pin
+        // constructs a `Placement` with `affinity: Some(_)` to force the
+        // `skip_serializing_if` gate open so the derive-emitted key
+        // actually appears in the serialized mapping.
+        let placement = Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".to_string(), "mar".to_string()],
+            affinity: Some("data-locality".to_string()),
+            shard_key: None,
+        };
+        let value = serde_yaml::to_value(&placement).expect("serialize Placement");
+        let mapping = value
+            .as_mapping()
+            .expect("Placement serializes to a mapping");
+        assert!(
+            mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into())),
+            "Placement's serde derive must emit the affinity axis under the exact key \
+             the lifted M3_PLACEMENT_KEY_AFFINITY const carries when the typed slot \
+             resolves to `Some(_)`; got mapping keys: {keys:?}",
             keys = mapping
                 .keys()
                 .filter_map(|k| k.as_str().map(str::to_string))
