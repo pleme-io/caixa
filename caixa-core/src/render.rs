@@ -5856,6 +5856,71 @@ pub const M3_PLACEMENT_KEY_ESTRATEGIA: &str = "estrategia";
 /// cluster-pool list every per-cluster fanout consumer scopes by.
 pub const M3_PLACEMENT_KEY_CLUSTERS: &str = "clusters";
 
+/// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
+/// struct's `affinity` placement-engine-hint axis — the per-`M3_KEY_PLACEMENT`-
+/// block optional field carrying the validated non-empty affinity hint
+/// (per [`crate::aplicacao::AplicacaoSpec::validate_placement`]) that every
+/// downstream placement-hint consumer weights off:
+///
+/// - the `lareira-fleet-programs` aggregator's per-entry M3 Adaptive
+///   compression pass reading `placement.affinity` to weight the emitted
+///   `ComputeUnit`'s replica-distribution overlay per MESH-COMPOSITION.md §V,
+/// - the future `app-operator` reconciler's per-Aplicacao pod-affinity /
+///   node-affinity K8s-primitive materializer keying off the same value as
+///   an `app.pleme.io/affinity-hint=<value>` label selector,
+/// - the future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+///   admission-time `spec.placement.affinity` typed-string bind, and
+/// - the M4 cross-cluster placement engine's per-hint takeover-priority
+///   dispatch on the same value (`data-locality` / `low-latency` /
+///   `anti-affinity` per the [`crate::aplicacao::validate_placement_affinity`]
+///   value-shape gate's documented canonical hint set).
+///
+/// The scalar is derived by [`crate::aplicacao::Placement`]'s
+/// `#[serde(rename_all = "camelCase")]` from the Rust field name
+/// `affinity`; `affinity` has no `_`, so the serde transform is a no-op on
+/// this axis and the emitted key equals the source-side field name
+/// byte-for-byte. Unlike the always-emitted [`M3_PLACEMENT_KEY_ESTRATEGIA`]
+/// / [`M3_PLACEMENT_KEY_CLUSTERS`] axes, the `affinity` field carries a
+/// `#[serde(skip_serializing_if = "Option::is_none")]` attribute so the
+/// key appears in the rendered `placement:` block iff the typed slot
+/// resolves to `Some(_)` — the omit-when-unset contract the peer typed
+/// slots ([`crate::aplicacao::MeshPolicy::timeout`],
+/// [`crate::aplicacao::MeshPolicy::retries`],
+/// [`crate::aplicacao::MeshPolicy::mtls_required`]) each carry to keep an
+/// unset typed slot from bloating every rendered programs.yaml entry with
+/// a nominal-only `affinity: null` value the downstream weighting passes
+/// would then need to unwrap defensively.
+///
+/// Lifting the byte to one `&'static str` closes the same drift footgun
+/// the peer [`M3_PLACEMENT_KEY_ESTRATEGIA`] / [`M3_PLACEMENT_KEY_CLUSTERS`]
+/// lifts closed on the sibling always-emitted axes: a future refactor
+/// renaming the Rust field (`affinity` → `affinityHint` for schema-clarity,
+/// `placementHint` for symmetry with the future per-cluster affinity
+/// hierarchy, etc.) OR retaining the field name while adding a
+/// `#[serde(rename = "…")]` override would silently emit a `placement:`
+/// block whose affinity hint lands under one key while every downstream
+/// weighting consumer still probes another — the M3 Adaptive compression
+/// pass would then see a `None` affinity on every entry and silently fall
+/// back to the uniform-weight baseline (the workload's typed
+/// `:affinity "data-locality"` hint would be silently discarded, and the
+/// failure surfaces as "the newly-deployed Aplicacao's replicas don't
+/// cluster where the typed slot said they should" far from the rebrand
+/// commit's source). The identity pin + serde-derive round-trip pin the
+/// sweep introduces catch the drift at caixa-core / caixa-mesh build time
+/// rather than at the aggregator's weighting step or the operator's
+/// reconcile posture.
+///
+/// Peer of [`M3_KEY_PLACEMENT`] / [`M3_PLACEMENT_KEY_ESTRATEGIA`] /
+/// [`M3_PLACEMENT_KEY_CLUSTERS`] on the same programs.yaml per-entry
+/// axis — `M3_KEY_PLACEMENT` names the top-level overlay key each entry
+/// carries, `M3_PLACEMENT_KEY_ESTRATEGIA` names the per-sub-block
+/// distribution-strategy discriminator every dispatch consumer branches
+/// on, `M3_PLACEMENT_KEY_CLUSTERS` names the per-sub-block cluster-pool
+/// list every per-cluster fanout consumer scopes by, this constant names
+/// the per-sub-block optional placement-engine hint every weighting
+/// consumer reads off.
+pub const M3_PLACEMENT_KEY_AFFINITY: &str = "affinity";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of
