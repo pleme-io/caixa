@@ -8328,6 +8328,128 @@ pub const GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX: &str = "PathPrefix";
 /// [cm]: ../../caixa_mesh/index.html
 pub const KUBE_PROTOCOL_TCP: &str = "TCP";
 
+/// Canonical Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode` OpenAPI
+/// schema enum's `required` per-`ingress[].authentication.mode` mTLS-mandatory
+/// scalar-value every `cilium_network_policies`-emitted CNP document declares
+/// under its per-rule mutual-auth-mode-discriminator leaf axis when the typed
+/// `:politicas :mtls-required` tristate is `Some(true)`. Pairs with the sibling
+/// [`CILIUM_KEY_MODE`] (4289dfb) per-authn-block mode-discriminator leaf-axis
+/// key the value nests directly under, and the sibling
+/// [`CILIUM_AUTH_MODE_DISABLED`] scalar-value the `Some(false)` opt-out arm of
+/// the same tristate emits — the Cilium CNP `MutualAuthenticationMode` OpenAPI
+/// schema enum admits the closed set `{"required", "disabled", "test-always-
+/// fail"}` verbatim (the `test-always-fail` arm is an infrastructure-side
+/// debugging surface, not an author-reachable slot), so drift on the mTLS-
+/// mandatory scalar-value is exactly as load-bearing as drift on the sibling
+/// per-authn-block mode-discriminator leaf axis it nests under (a `"Required"`
+/// / `"REQUIRED"` / `"mandatory"` / `"mtls-required"` typo at either the
+/// production-code call site or a downstream probe lands outside the Cilium
+/// CNP `MutualAuthenticationMode` OpenAPI schema enum's admitted set,
+/// surfacing apply-side as a Cilium-agent per-rule mutual-auth-block schema-
+/// validator drop far from the source `caixa.lisp` / the renderer's
+/// `single_field_overlay(mtls_required, CILIUM_KEY_MODE, …)` call site — the
+/// rendered per-`(:de, :para)` `CiliumNetworkPolicy` object never enforces
+/// per-edge SPIFFE-identity-bound mutual-auth at the Cilium data-plane's per-
+/// rule handshake gate and every intra-mesh `:contratos` flow the CNP was
+/// authored to protect with per-edge mTLS silently bypasses the handshake at
+/// the Cilium data-plane's default-authentication mode with no field naming
+/// the mTLS-mandatory-scalar-value-drift root cause).
+///
+/// The single source of truth the rendered Aplicacao Cilium-CNP-side per-edge
+/// mutual-auth-mode-discriminator affirmative-value-naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-rule
+///     `spec.ingress[].authentication.mode` leaf value (caixa-mesh/src/lib.rs
+///     — the `cilium_network_policies` per-`(:de, :para)`
+///     `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
+///     |required| …)` closure's `if required { … }` arm the prior inline
+///     `"required".into()` literal sat at, plus every test-fixture navigation
+///     that pins the emitted value under the `:mtls-required t` presence,
+///     fan-out, and pubsub-carry-overlay-too shapes).
+///
+/// The mTLS-mandatory scalar-value names the same Cilium-agent-side per-rule
+/// SPIFFE-identity-handshake-mandatory enforcement policy as the sibling
+/// [`CILIUM_KEY_MODE`] leaf-axis key carries the value under, and must move
+/// together with the sibling Cilium CNP `MutualAuthenticationMode` OpenAPI
+/// schema enum on any future Cilium CRD schema rebrand (an upstream
+/// `cilium.io/v3` rename of the mTLS-mandatory scalar-value from `required`
+/// to `enforce` / `mandatory` / `strict`, coordinated with the Cilium
+/// project's periodic CRD schema-migration passes, would land at this one
+/// const rather than scattered across every per-emitter per-rule authn-block-
+/// insertion site).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the constant to a typed substrate-
+/// side `&'static str` on the same trajectory the
+/// [`GATEWAY_API_PROTOCOL_HTTP`] (1b57473) /
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] (530705d) /
+/// [`KUBE_PROTOCOL_TCP`] (2123047) scalar-value lifts established on the
+/// sibling canonical-cluster-side-OpenAPI-schema-enum-value surfaces —
+/// extends the canonical-cluster-side-OpenAPI-schema-enum-value single-
+/// sourcing discipline the Gateway-API v1 `ProtocolType.HTTP` /
+/// `PathMatchType.PathPrefix` / K8s-core `Protocol.TCP` lifts established
+/// onto the sibling Cilium-CNP-side `MutualAuthenticationMode.required`
+/// per-rule mTLS-mandatory scalar-value the `cilium_network_policies` per-
+/// edge SPIFFE-identity-bound mutual-auth emitter carries under the shared
+/// `CiliumNetworkPolicy` body.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_AUTH_MODE_REQUIRED: &str = "required";
+
+/// Canonical Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode` OpenAPI
+/// schema enum's `disabled` per-`ingress[].authentication.mode` mTLS-skipped
+/// scalar-value every `cilium_network_policies`-emitted CNP document declares
+/// under its per-rule mutual-auth-mode-discriminator leaf axis when the typed
+/// `:politicas :mtls-required` tristate is the explicit `Some(false)` opt-out
+/// arm (an author who *named* the axis and asked for the mTLS handshake to be
+/// skipped on this Aplicacao's edges — e.g. a debug or legacy-bridge
+/// Aplicacao that needs to talk to non-mesh peers, distinct from the `None`
+/// slot-absent arm the renderer maps to omit-the-block-entirely). Peer to
+/// the sibling [`CILIUM_AUTH_MODE_REQUIRED`] mTLS-mandatory scalar-value the
+/// `Some(true)` affirmative arm emits under the same tristate branch — the
+/// Cilium CNP `MutualAuthenticationMode` OpenAPI schema enum admits the two
+/// arms as a matched author-reachable pair.
+///
+/// The single source of truth the rendered Aplicacao Cilium-CNP-side per-edge
+/// mutual-auth-mode-discriminator negative-value-naming reaches for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-rule
+///     `spec.ingress[].authentication.mode` leaf value (caixa-mesh/src/lib.rs
+///     — the `cilium_network_policies` per-`(:de, :para)`
+///     `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
+///     |required| …)` closure's `else { … }` arm the prior inline
+///     `"disabled".into()` literal sat at, plus the
+///     `cnp_explicit_mtls_required_false_emits_disabled_mode` test-fixture
+///     probe that pins the explicit-opt-out arm's rendered value).
+///
+/// Same drift-mode risk as the sibling [`CILIUM_AUTH_MODE_REQUIRED`] pin: a
+/// `"Disabled"` / `"DISABLED"` / `"off"` / `"skip"` typo lands outside the
+/// Cilium CNP `MutualAuthenticationMode` OpenAPI schema enum's admitted set;
+/// the rendered per-`(:de, :para)` `CiliumNetworkPolicy` object never reaches
+/// the Cilium agent's per-rule mutual-auth-block schema validator's admitted
+/// set and the author's explicit-opt-out intent silently collapses onto the
+/// cluster-default authentication mode (typically also "disabled" today, but
+/// environment-divergent — take effect) with no field naming the mTLS-
+/// skipped-scalar-value-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the constant to a typed substrate-
+/// side `&'static str` on the same trajectory the sibling
+/// [`CILIUM_AUTH_MODE_REQUIRED`] mTLS-mandatory scalar-value lift establishes
+/// on the affirmative arm of the same `MutualAuthenticationMode` enum —
+/// completes the per-authn-block `(mode → {required, disabled})` leaf-axis /
+/// author-reachable-scalar-value-pair single-sourcing the M3 Aplicacao mesh
+/// renderer's SPIFFE-identity-bound per-edge mTLS enforcement + explicit-
+/// opt-out contract rests on across the two arms of the `:politicas
+/// :mtls-required` tristate.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const CILIUM_AUTH_MODE_DISABLED: &str = "disabled";
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
 /// per-route parent-Gateway `[{name}]` list under (`spec.parentRefs[]`).
@@ -12452,6 +12574,142 @@ mod tests {
     }
 
     #[test]
+    fn cilium_auth_mode_required_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode`
+        // OpenAPI schema enum's `required` mTLS-mandatory scalar-value the
+        // rendered CNP's `spec.ingress[].authentication.mode` leaf declares
+        // under the `:mtls-required t` affirmative arm of the typed
+        // `:politicas :mtls-required` tristate. The value is part of the
+        // cluster-side contract with the Cilium-agent-side per-rule mutual-
+        // auth-block schema validator — the agent's per-rule dispatch loop
+        // keys off this exact byte-sequence to select the SPIFFE-identity-
+        // handshake-mandatory enforcement policy; the Cilium CNP
+        // `MutualAuthenticationMode` OpenAPI schema enum admits the closed
+        // set `{"required", "disabled", "test-always-fail"}` verbatim (the
+        // `test-always-fail` arm is a Cilium-side debugging surface, not
+        // author-reachable), so a drifted value (`"Required"` /
+        // `"REQUIRED"` / `"mandatory"` / `"mtls-required"`) lands the
+        // rendered `CiliumNetworkPolicy` outside the
+        // `MutualAuthenticationMode` enum's admitted set and every intra-
+        // mesh `:contratos` flow the CNP was authored to protect with per-
+        // edge SPIFFE-identity-bound mutual-auth silently bypasses the
+        // handshake at the Cilium data-plane's default-authentication mode
+        // (typically also "disabled" today, but environment-divergent —
+        // take effect) with no field naming the mTLS-mandatory-scalar-value-
+        // drift root cause. Changing this value is a coordinated Cilium
+        // CNP `MutualAuthenticationMode` promotion alongside the Cilium
+        // project's periodic CRD schema-migration passes, not an
+        // incidental edit. Peer to
+        // `gateway_api_protocol_http_pins_canonical_value` /
+        // `gateway_api_path_match_type_path_prefix_pins_canonical_value` /
+        // `kube_protocol_tcp_pins_canonical_value` on the sibling
+        // canonical-cluster-side-OpenAPI-schema-enum-value pin set —
+        // extends the canonical-cluster-side-OpenAPI-schema-enum-value
+        // single-sourcing discipline the Gateway-API v1 `ProtocolType.HTTP`
+        // / `PathMatchType.PathPrefix` / K8s-core `Protocol.TCP` pins
+        // established onto the sibling Cilium-CNP-side
+        // `MutualAuthenticationMode.required` per-rule mTLS-mandatory
+        // scalar-value the `cilium_network_policies` per-edge SPIFFE-
+        // identity-bound mutual-auth emitter carries under the shared
+        // `CiliumNetworkPolicy` body.
+        assert_eq!(CILIUM_AUTH_MODE_REQUIRED, "required");
+    }
+
+    #[test]
+    fn cilium_auth_mode_disabled_pins_canonical_value() {
+        // Peer to `cilium_auth_mode_required_pins_canonical_value` on the
+        // `Some(false)` opt-out arm of the same
+        // `MutualAuthenticationMode` OpenAPI schema enum: pin the actual
+        // string so a typo can't silently rebrand the Cilium `disabled`
+        // mTLS-skipped scalar-value the rendered CNP's per-rule authn-
+        // block declares under the explicit `:mtls-required nil` opt-out
+        // (distinct from the `None` slot-absent arm the renderer maps to
+        // omit-the-block-entirely). A drifted value (`"Disabled"` /
+        // `"DISABLED"` / `"off"` / `"skip"`) lands outside the
+        // `MutualAuthenticationMode` OpenAPI schema enum's admitted set;
+        // the author's explicit-opt-out intent silently collapses onto the
+        // cluster-default authentication mode with no field naming the
+        // mTLS-skipped-scalar-value-drift root cause. Peer to
+        // `cilium_auth_mode_required_pins_canonical_value` on the
+        // affirmative arm of the same enum — completes the per-authn-block
+        // `(mode → {required, disabled})` author-reachable-scalar-value-
+        // pair single-sourcing the M3 Aplicacao mesh renderer's SPIFFE-
+        // identity-bound per-edge mTLS enforcement + explicit-opt-out
+        // contract rests on across the two arms of the `:politicas
+        // :mtls-required` tristate.
+        assert_eq!(CILIUM_AUTH_MODE_DISABLED, "disabled");
+    }
+
+    #[test]
+    fn cilium_auth_modes_carry_lower_case_shape() {
+        // Cross-axis invariant: the Cilium CNP `MutualAuthenticationMode`
+        // OpenAPI schema enum admits the closed set `{"required",
+        // "disabled", "test-always-fail"}` — every admitted value is
+        // ASCII-lowercase throughout per the Cilium-project convention
+        // (distinct from the sibling K8s-core `Protocol.TCP` /
+        // Gateway-API-v1 `ProtocolType.HTTP` all-ASCII-uppercase
+        // convention the `kube_protocol_tcp_carries_upper_case_shape` /
+        // `gateway_api_protocol_http_carries_upper_case_shape` pins carry
+        // on the sibling per-listener L7-parser-selection scalar axis, and
+        // distinct from the sibling Gateway-API-v1
+        // `PathMatchType.PathPrefix` UpperCamelCase convention the
+        // `gateway_api_path_match_type_path_prefix_carries_upper_camel_case_shape`
+        // pin carries on the sibling per-match request-path-selection
+        // scalar axis — the Cilium CNP `MutualAuthenticationMode` enum
+        // grammar does not collapse with either sibling cluster-side
+        // OpenAPI schema enum's per-value casing convention). Pinning the
+        // shape here means a future rebrand on either lifted value can't
+        // silently land a malformed mode-discriminator scalar (uppercase
+        // `"REQUIRED"` / `"DISABLED"`, UpperCamelCase `"Required"` /
+        // `"Disabled"`, mixed-case, whitespace) that the Cilium CNP
+        // `MutualAuthenticationMode` OpenAPI schema enum would reject at
+        // admission time far from the rebrand commit's source.
+        for v in [CILIUM_AUTH_MODE_REQUIRED, CILIUM_AUTH_MODE_DISABLED] {
+            assert!(
+                !v.is_empty(),
+                "{v:?} must be non-empty per the Cilium CNP \
+                 `MutualAuthenticationMode` OpenAPI schema enum grammar"
+            );
+            assert!(
+                v.chars().all(|c| c.is_ascii_lowercase()),
+                "{v:?} must be ASCII-lowercase throughout per the Cilium \
+                 CNP `MutualAuthenticationMode` OpenAPI schema enum \
+                 convention — no uppercase, UpperCamelCase, or whitespace \
+                 bytes the Cilium-agent-side per-rule mutual-auth-block \
+                 schema validator would reject"
+            );
+        }
+    }
+
+    #[test]
+    fn cilium_auth_modes_are_distinct() {
+        // Pin the `MutualAuthenticationMode` enum's per-arm distinctness
+        // at type-check time: the two author-reachable arms of the typed
+        // `:politicas :mtls-required` tristate must not collapse onto the
+        // same scalar-value byte-sequence. A future rebrand that landed
+        // both lifted constants on the same string (e.g. both `"required"`
+        // through a copy-paste typo, or both aliased through a shared
+        // helper) would silently erase the tristate's affirmative /
+        // explicit-opt-out distinction at the emit boundary — the
+        // renderer would emit the same scalar under both the `Some(true)`
+        // and `Some(false)` arms of the closure the
+        // `single_field_overlay(spec.politicas.mtls_required,
+        // CILIUM_KEY_MODE, |required| …)` call site carries, collapsing
+        // the two author intents onto a single Cilium-side enforcement
+        // policy with no field naming the collapse root cause. Peer to
+        // the two `cilium_auth_mode_{required,disabled}_pins_canonical_
+        // value` per-arm pins — completes the per-arm distinctness pin
+        // set on the closed author-reachable subset of the enum.
+        assert_ne!(
+            CILIUM_AUTH_MODE_REQUIRED, CILIUM_AUTH_MODE_DISABLED,
+            "the two author-reachable arms of the `:mtls-required` \
+             tristate must land distinct `MutualAuthenticationMode` \
+             scalar-values"
+        );
+    }
+
+    #[test]
     fn gateway_api_key_parent_refs_pins_canonical_value() {
         // Pin the actual string so a typo in this lift can't silently
         // rebrand the Gateway API `HTTPRoute` parent-Gateway-binding
@@ -14562,11 +14820,29 @@ mod tests {
         // not raw bools (the Cilium CRD's `mode: required|disabled`
         // shape — pinned end-to-end at every emit site by the
         // `cnp_authentication_mode_serialized_as_yaml_string` test).
-        let mode = single_field_overlay(Some(true), "mode", |b| {
-            serde_yaml::Value::String(if b { "required" } else { "disabled" }.into())
+        // Both scalar-values thread through the lifted canonical
+        // [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]
+        // constants — the same `&'static str`s the production
+        // `cilium_network_policies` per-`(:de, :para)` overlay closure
+        // reaches for, so a future Cilium CNP
+        // `MutualAuthenticationMode` OpenAPI schema enum rebrand lands
+        // at the two consts rather than duplicated across the
+        // production emitter site and this generic-helper pin.
+        let mode = single_field_overlay(Some(true), CILIUM_KEY_MODE, |b| {
+            serde_yaml::Value::String(
+                if b {
+                    CILIUM_AUTH_MODE_REQUIRED
+                } else {
+                    CILIUM_AUTH_MODE_DISABLED
+                }
+                .into(),
+            )
         })
         .unwrap();
-        assert_eq!(mode.get("mode").and_then(|v| v.as_str()), Some("required"));
+        assert_eq!(
+            mode.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
+            Some(CILIUM_AUTH_MODE_REQUIRED)
+        );
     }
 
     #[test]
