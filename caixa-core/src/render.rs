@@ -10133,6 +10133,76 @@ pub const GATEWAY_API_KEY_PATH: &str = "path";
 /// [ch]: ../../caixa_helm/index.html
 pub const HELM_CHART_API_VERSION: &str = "v2";
 
+/// Canonical `pleme-computeunit` library-chart values-block enable-toggle
+/// key — the `enabled: <bool>` axis every `lareira-<nome>` chart's values
+/// block carries under its [`DEFAULT_LIBRARY_NAME`] wrap key, and every
+/// [`caixa-flux`][cf]-rendered `HelmRelease` `spec.values.<library>.enabled`
+/// per-cluster override targets. The single source of truth all four
+/// downstream consumers reach for:
+///
+///   - [`caixa-helm`][ch]'s [`build_values_yaml`][bvy] inserts
+///     `enabled: <opts.enabled_default>` under the values wrap key
+///     (caixa-helm/src/lib.rs:389) — the rendered `values.yaml`'s
+///     default-off toggle a cluster operator flips on per environment;
+///   - [`caixa-flux`][cf]'s [`cluster_bundle`][cb] emits
+///     `<library>: { enabled: true }` under the `HelmRelease`
+///     `spec.values` block (caixa-flux/src/lib.rs:844) — the per-cluster
+///     override the bundle path threads through so a Servico deployed via
+///     the bundle path lands enabled at the target cluster;
+///   - the peer test-fixture navigators in both crates
+///     (`caixa-helm/src/lib.rs:566, 616` sweeping the default-off arm +
+///     `caixa-flux/src/lib.rs:1889` sweeping the bundle-path enabled-true
+///     override arm) resolve the same `&'static str` when parsing back the
+///     rendered `values.yaml` / `helmrelease.yaml` to pin the round-trip;
+///   - every future per-Servico renderer the absorption-roadmap
+///     acknowledges (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+///     materializer's per-member values fan-out, a future per-cluster
+///     values overlay emitter, a future per-edition `<lib>-computeunit`
+///     values-block schema fork) that reads or emits the same values-
+///     block-toggle key.
+///
+/// Until this lift landed the value `"enabled"` lived as two production-
+/// code call sites (caixa-helm's `build_values_yaml` insert +
+/// caixa-flux's `cluster_bundle` `helmrelease.yaml` format-string) plus
+/// three test-fixture-navigation sites (caixa-helm's default-off round-
+/// trip + caixa-flux's bundle-path round-trip). A future rebrand of the
+/// library-chart's per-values enable-toggle axis (the `pleme-computeunit`
+/// library chart moving to a `chart.enabled` / `spec.enabled` scoping to
+/// leave room for a sibling `component.enabled` sub-chart toggle, the
+/// substrate forking the library chart to `<edition>-computeunit` with a
+/// migrated toggle key, or Helm's own per-values-block convention drift)
+/// without a coordinated edit on both consumers would silently emit a
+/// chart whose default-off toggle lands in the values block under one key
+/// while the cluster-side override lands under another — Helm's per-values
+/// merge treats them as sibling scalars, the enable-toggle the library
+/// chart's own template consults never sees the flip, and the workload
+/// silently comes up with the library chart's admission-time defaults
+/// (disabled, or the sibling schema fork's own default) instead of the
+/// per-cluster override the operator set. The apply-time symptom (the
+/// workload is registered but not running, or is running without the
+/// per-cluster overlay) surfaces only as "the service isn't doing what we
+/// configured it to do" far from the rebrand commit, with no field
+/// naming the enable-toggle-drift root cause. Lifting the literal to
+/// a shared constant closes the drift footgun structurally — both
+/// production emit sites and every test-side round-trip navigator now
+/// consult the same `&'static str`, so any rebrand reaches every consumer
+/// by construction.
+///
+/// Same "the typed constant lives in one place" discipline the peer
+/// [`DEFAULT_LIBRARY_NAME`] (41438dc) / [`HELM_CHART_API_VERSION`]
+/// (7e4bdb8) / [`KUBE_KEY_SPEC`] lifts apply on the sibling canonical-
+/// Helm-load-bearing-string / canonical-Helm-chart-schema-axis /
+/// canonical-K8s-CR-body-axis surfaces — extends the discipline from
+/// the Chart.yaml schema axes and the K8s CR body axes onto the Helm
+/// values-block schema axis nested inside every `lareira-<nome>` chart
+/// under its [`DEFAULT_LIBRARY_NAME`] wrap key.
+///
+/// [ch]: ../../caixa_helm/index.html
+/// [cf]: ../../caixa_flux/index.html
+/// [bvy]: ../../caixa_helm/fn.build_values_yaml.html
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+pub const HELM_VALUES_KEY_ENABLED: &str = "enabled";
+
 /// Canonical Helm chart-name prefix for every per-Servico chart the
 /// substrate emits — the `"lareira-"` segment of the well-known
 /// `lareira-<nome>` shape every caixa Servico renderer prepends to a

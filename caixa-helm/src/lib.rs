@@ -219,6 +219,35 @@ pub use caixa_core::HELM_CHART_API_VERSION;
 /// sibling canonical-Helm-load-bearing-string axis.
 pub use caixa_core::KUBE_KEY_SPEC;
 
+/// Canonical `pleme-computeunit` library-chart values-block enable-toggle
+/// key — re-export of the lifted [`caixa_core::HELM_VALUES_KEY_ENABLED`]
+/// so the values-block toggle every rendered `lareira-<nome>` chart's
+/// values.yaml carries under its [`DEFAULT_LIBRARY_NAME`] wrap key lives
+/// in exactly one place across every caixa renderer. The single
+/// production-code call site consuming it is [`build_values_yaml`]'s
+/// `block.insert(HELM_VALUES_KEY_ENABLED.to_string(), …)` (formerly an
+/// inline `"enabled".to_string()` literal at `caixa-helm/src/lib.rs:389`);
+/// the peer test-fixture navigators pinning the default-off round-trip
+/// (`values_yaml_wraps_under_pleme_computeunit_key`,
+/// `values_yaml_wrap_key_follows_library_name_override`) also consult the
+/// re-export so a rebrand of the library-chart's per-values enable-toggle
+/// axis lands at one const and reaches every consumer by construction.
+/// A drifted local `pub const HELM_VALUES_KEY_ENABLED: &str = "…"` (or
+/// any sibling per-renderer variant that inlined a stale
+/// `"enabled"` / `"enable"` / `"disabled"` literal) would silently emit
+/// a values block whose per-values enable-toggle lands under one key
+/// while [`caixa_flux::cluster_bundle`]'s `HelmRelease`
+/// `spec.values.<library>.enabled` per-cluster override lands under
+/// another — Helm's per-values merge treats them as sibling scalars, the
+/// enable-toggle the library chart's own template consults never sees the
+/// flip, and the workload silently comes up with the library chart's
+/// admission-time defaults instead of the per-cluster override the
+/// operator set. Same shape as the [`DEFAULT_LIBRARY_NAME`] /
+/// [`KUBE_KEY_SPEC`] / [`HELM_CHART_API_VERSION`] re-exports on the
+/// sibling canonical-Helm-load-bearing-string / canonical-K8s-CR-body-
+/// key / canonical-Helm-chart-schema-apiVersion axes.
+pub use caixa_core::HELM_VALUES_KEY_ENABLED;
+
 /// Knobs that don't come from the Caixa manifest.
 #[derive(Debug, Clone)]
 pub struct RenderOpts {
@@ -386,7 +415,7 @@ fn build_values_yaml(
 
     let mut block = BTreeMap::new();
     block.insert(
-        "enabled".to_string(),
+        HELM_VALUES_KEY_ENABLED.to_string(),
         serde_yaml::Value::Bool(opts.enabled_default),
     );
     if let serde_yaml::Value::Mapping(map) = spec {
@@ -563,7 +592,7 @@ spec:
             .get("pleme-computeunit")
             .expect("must wrap under pleme-computeunit");
         assert_eq!(
-            cu_block.get("enabled"),
+            cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
         );
         assert!(cu_block.get("module").is_some());
@@ -613,7 +642,7 @@ spec:
         );
         let cu_block = parsed.get("acme-computeunit").unwrap();
         assert_eq!(
-            cu_block.get("enabled"),
+            cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
         );
         assert!(cu_block.get("module").is_some());
@@ -1077,5 +1106,90 @@ spec:
         let opts = RenderOpts::default();
         assert_eq!(opts.library_name, caixa_core::DEFAULT_LIBRARY_NAME);
         assert_eq!(opts.library_name, "pleme-computeunit");
+    }
+
+    #[test]
+    fn helm_values_key_enabled_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_VALUES_KEY_ENABLED` was lifted from the
+        // production-code inline `"enabled".to_string()` literal at
+        // [`build_values_yaml`]'s
+        // `block.insert("enabled".to_string(), Value::Bool(…))` values-
+        // block-toggle insert (formerly `caixa-helm/src/lib.rs:389`) plus
+        // its two test-side round-trip navigators
+        // (`values_yaml_wraps_under_pleme_computeunit_key`,
+        // `values_yaml_wrap_key_follows_library_name_override`) to a
+        // re-export of [`caixa_core::HELM_VALUES_KEY_ENABLED`] so the
+        // canonical `pleme-computeunit` library-chart values-block
+        // enable-toggle key lives in exactly one place across every
+        // caixa renderer. Pin the equality + `&'static` static-data
+        // identity here so any local re-introduction of a sibling
+        // `pub const HELM_VALUES_KEY_ENABLED: &str = "…"` at this crate
+        // — the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation —
+        // is a build-time test failure naming the offending drift, not
+        // a silent per-values enable-toggle reroute at `helm template` /
+        // `helm install` time far from the drift site (where the
+        // workload silently comes up with the library chart's
+        // admission-time defaults instead of the per-cluster override
+        // the operator set). Peer to
+        // [`helm_chart_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`kube_key_spec_re_export_points_at_caixa_core_canonical`] /
+        // [`default_library_name_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axes +
+        // `caixa_flux::tests::helm_values_key_enabled_re_export_points_at_caixa_core_canonical`
+        // on the peer bundle-path renderer crate.
+        assert_eq!(HELM_VALUES_KEY_ENABLED, caixa_core::HELM_VALUES_KEY_ENABLED);
+        assert!(
+            std::ptr::eq(
+                HELM_VALUES_KEY_ENABLED.as_ptr(),
+                caixa_core::HELM_VALUES_KEY_ENABLED.as_ptr(),
+            ),
+            "HELM_VALUES_KEY_ENABLED must be a re-export of \
+             caixa_core::HELM_VALUES_KEY_ENABLED, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn values_yaml_enable_toggle_key_pins_lifted_helm_values_key_enabled() {
+        // Fail-before-pass-after pin on the production-code substitution:
+        // [`build_values_yaml`]'s `block.insert(…, Value::Bool(…))`
+        // consults the lifted [`HELM_VALUES_KEY_ENABLED`] re-export at
+        // its insert site, so the rendered `values.yaml`'s per-values
+        // enable-toggle axis is byte-identical to the canonical constant
+        // by construction. Before the lift the field carried an inline
+        // `"enabled".to_string()` literal; a future refactor that
+        // accidentally reverted the substitution — or any parallel per-
+        // renderer variant that inlined a stale `"enable"` /
+        // `"disabled"` literal — would silently emit a values block
+        // whose per-values enable-toggle lands under one key while
+        // [`caixa_flux::cluster_bundle`]'s `HelmRelease`
+        // `spec.values.<library>.enabled` per-cluster override lands
+        // under another, so this pin trips at caixa-helm build time.
+        // Peer to `chart_yaml_uses_lifted_helm_chart_api_version` on the
+        // sibling structural-cross-axis-invariant surface — both close
+        // the drift between a rendered-value navigator's `.get(…)` /
+        // struct-field read on the constant and the production-code
+        // emit site that consumes the same constant.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let values = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .unwrap();
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
+        let cu_block = parsed
+            .get(DEFAULT_LIBRARY_NAME)
+            .expect("must wrap under DEFAULT_LIBRARY_NAME");
+        assert_eq!(
+            cu_block.get(HELM_VALUES_KEY_ENABLED),
+            Some(&serde_yaml::Value::Bool(false)),
+            "rendered values.yaml `{DEFAULT_LIBRARY_NAME}.{HELM_VALUES_KEY_ENABLED}` must \
+             equal the default-off toggle the lifted HELM_VALUES_KEY_ENABLED axis carries — \
+             a drifted enable-toggle key silently splits the per-values enable-flip across \
+             two sibling scalar names on the caixa-helm / caixa-flux consumer split"
+        );
     }
 }

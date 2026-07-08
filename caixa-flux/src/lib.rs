@@ -290,6 +290,34 @@ pub use caixa_core::FLUX_KIND_KUSTOMIZATION;
 /// the peer canonical-K8s-axis-constant surface.
 pub use caixa_core::DEFAULT_LIBRARY_NAME;
 
+/// Canonical `pleme-computeunit` library-chart values-block enable-toggle
+/// key — re-export of the lifted [`caixa_core::HELM_VALUES_KEY_ENABLED`]
+/// so the values-block enable-toggle every rendered `HelmRelease` /
+/// upstream `values.yaml` carries under its [`DEFAULT_LIBRARY_NAME`] wrap
+/// key lives in exactly one place across every caixa renderer. The single
+/// production-code call site consuming it is [`cluster_bundle`]'s
+/// `helmrelease.yaml` format-string template (formerly an inline
+/// `enabled: true\n` literal at `caixa-flux/src/lib.rs:844`); the peer
+/// test-side round-trip navigator
+/// (`cluster_bundle_helmrelease_wraps_library_values_under_lifted_default_library_name`)
+/// also consults the re-export so a rebrand of the library-chart's per-
+/// values enable-toggle axis lands at one const and reaches every
+/// consumer by construction. A drifted local
+/// `pub const HELM_VALUES_KEY_ENABLED: &str = "…"` (or any sibling per-
+/// renderer variant that inlined a stale `"enabled"` / `"enable"` /
+/// `"disabled"` literal) would silently emit a `HelmRelease` whose per-
+/// cluster override lands under one key while
+/// [`caixa_helm::build_values_yaml`]'s default-off toggle inside the
+/// rendered `values.yaml` lands under another — Helm's per-values merge
+/// treats them as sibling scalars, the enable-toggle the library chart's
+/// own template consults never sees the flip, and the workload silently
+/// comes up with the library chart's admission-time defaults instead of
+/// the per-cluster override the operator set. Same shape as the
+/// [`DEFAULT_LIBRARY_NAME`] / [`KUBE_KEY_SPEC`] / [`FLUX_HELMRELEASE_API_VERSION`]
+/// re-exports on the sibling canonical-Helm-load-bearing-string /
+/// canonical-K8s-CR-body-key / canonical-Flux-CRD-apiVersion axes.
+pub use caixa_core::HELM_VALUES_KEY_ENABLED;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-flux's
@@ -841,7 +869,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                remediateLastFailure: true\n  \
            values:\n    \
              {library_name}:\n      \
-               enabled: true\n",
+               {enabled_key}: true\n",
         api_version = FLUX_HELMRELEASE_API_VERSION,
         kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
@@ -850,6 +878,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         interval = opts.interval,
         chart_path = opts.chart_path,
         library_name = DEFAULT_LIBRARY_NAME,
+        enabled_key = HELM_VALUES_KEY_ENABLED,
     );
 
     let kustomization = format!(
@@ -1886,7 +1915,7 @@ spec:
             .expect("wrapped library mapping");
         assert_eq!(
             wrapped
-                .get(serde_yaml::Value::String("enabled".into()))
+                .get(serde_yaml::Value::String(HELM_VALUES_KEY_ENABLED.into()))
                 .and_then(|v| v.as_bool()),
             Some(true)
         );
@@ -1916,6 +1945,47 @@ spec:
             "helmrelease.yaml must spell the canonical library-chart wrap \
              key under spec.values (got: {contents:?})",
             contents = hr.contents
+        );
+    }
+
+    #[test]
+    fn helm_values_key_enabled_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_VALUES_KEY_ENABLED` was lifted from the
+        // production-code inline `enabled: true\n` fragment inside
+        // [`cluster_bundle`]'s `helmrelease.yaml` format-string template
+        // (formerly `caixa-flux/src/lib.rs:844`) plus its test-side
+        // round-trip navigator
+        // (`cluster_bundle_helmrelease_values_wrap_key_uses_lifted_constant`,
+        // where `.get(serde_yaml::Value::String("enabled".into()))`
+        // isolated the per-cluster override the bundle path threads
+        // through) to a re-export of
+        // [`caixa_core::HELM_VALUES_KEY_ENABLED`] so the canonical
+        // `pleme-computeunit` library-chart values-block enable-toggle
+        // key lives in exactly one place across every caixa renderer.
+        // Pin the equality + `&'static` static-data identity here so any
+        // local re-introduction of a sibling
+        // `pub const HELM_VALUES_KEY_ENABLED: &str = "…"` at this crate
+        // — the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation —
+        // is a build-time test failure naming the offending drift, not
+        // a silent per-values enable-toggle reroute at `helm template` /
+        // `helm install` time far from the drift site. Peer to
+        // [`default_library_name_re_export_points_at_caixa_core_canonical`]
+        // / [`kube_key_spec_re_export_points_at_caixa_core_canonical`] on
+        // the sibling re-export axes +
+        // `caixa_helm::tests::helm_values_key_enabled_re_export_points_at_caixa_core_canonical`
+        // on the peer per-Servico-chart renderer crate.
+        assert_eq!(HELM_VALUES_KEY_ENABLED, caixa_core::HELM_VALUES_KEY_ENABLED);
+        assert!(
+            std::ptr::eq(
+                HELM_VALUES_KEY_ENABLED.as_ptr(),
+                caixa_core::HELM_VALUES_KEY_ENABLED.as_ptr(),
+            ),
+            "HELM_VALUES_KEY_ENABLED must be a re-export of \
+             caixa_core::HELM_VALUES_KEY_ENABLED, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
         );
     }
 
