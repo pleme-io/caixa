@@ -598,6 +598,46 @@ pub use caixa_core::CILIUM_KEY_AUTHENTICATION;
 /// SPIFFE-identity-bound per-edge mTLS enforcement contract rests on.
 pub use caixa_core::CILIUM_KEY_MODE;
 
+/// Canonical Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode` OpenAPI
+/// schema enum's `required` mTLS-mandatory per-`ingress[].authentication.mode`
+/// scalar-value every `cilium_network_policies`-emitted CNP document declares
+/// under the `:mtls-required t` affirmative arm of the typed `:politicas
+/// :mtls-required` tristate. Re-export of the canonical
+/// [`caixa_core::CILIUM_AUTH_MODE_REQUIRED`] so the Cilium-agent-side per-rule
+/// mutual-auth-mandatory scalar-value string lives in exactly one place across
+/// every caixa renderer — caixa-mesh's `cilium_network_policies` per-`(:de,
+/// :para)` `CiliumNetworkPolicy` emitter (the single-field-overlay closure's
+/// `if required { … }` affirmative arm the prior inline `"required"` literal
+/// sat at, plus the presence / fan-out / pubsub-carry-overlay-too test-fixture
+/// probes that pin the emitted value under the `:mtls-required t` shape) and
+/// every future per-Cilium-side renderer the M3.x absorption roadmap
+/// acknowledges now consult the same `&'static str`. Peer to the sibling
+/// [`CILIUM_AUTH_MODE_DISABLED`] re-export on the explicit-opt-out arm of the
+/// same tristate — completes the per-authn-block `(mode → {required,
+/// disabled})` author-reachable-scalar-value-pair re-export pair this crate's
+/// `cilium_network_policies` renderer's SPIFFE-identity-bound per-edge mTLS
+/// enforcement + explicit-opt-out contract rests on.
+pub use caixa_core::CILIUM_AUTH_MODE_REQUIRED;
+
+/// Canonical Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode` OpenAPI
+/// schema enum's `disabled` mTLS-skipped per-`ingress[].authentication.mode`
+/// scalar-value every `cilium_network_policies`-emitted CNP document declares
+/// under the explicit `Some(false)` opt-out arm of the typed `:politicas
+/// :mtls-required` tristate (distinct from the `None` slot-absent arm the
+/// renderer maps to omit-the-block-entirely). Re-export of the canonical
+/// [`caixa_core::CILIUM_AUTH_MODE_DISABLED`] so the Cilium-agent-side per-rule
+/// mutual-auth-skipped scalar-value string lives in exactly one place across
+/// every caixa renderer — caixa-mesh's `cilium_network_policies` per-`(:de,
+/// :para)` `CiliumNetworkPolicy` emitter (the single-field-overlay closure's
+/// `else { … }` opt-out arm the prior inline `"disabled"` literal sat at,
+/// plus the `cnp_explicit_mtls_required_false_emits_disabled_mode` test-
+/// fixture probe that pins the emitted value under the explicit-opt-out
+/// shape) and every future per-Cilium-side renderer the M3.x absorption
+/// roadmap acknowledges now consult the same `&'static str`. Peer to the
+/// sibling [`CILIUM_AUTH_MODE_REQUIRED`] re-export on the affirmative arm of
+/// the same tristate.
+pub use caixa_core::CILIUM_AUTH_MODE_DISABLED;
+
 /// Canonical Cilium `CiliumNetworkPolicy` per-`ingress[].toPorts[].rules`
 /// L7-HTTP-rule-list-discriminator container-axis key every
 /// `cilium_network_policies`-emitted CNP document mounts its per-
@@ -2186,7 +2226,14 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     // [`caixa_core::render::single_field_overlay`].
     let mtls_overlay =
         single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE, |required| {
-            serde_yaml::Value::String(if required { "required" } else { "disabled" }.into())
+            serde_yaml::Value::String(
+                if required {
+                    CILIUM_AUTH_MODE_REQUIRED
+                } else {
+                    CILIUM_AUTH_MODE_DISABLED
+                }
+                .into(),
+            )
         });
     // Fan typed edges into per-`(:de, :para)` groups — the policy
     // identity axis. A `BTreeMap` keyed by the pair gives deterministic
@@ -4308,6 +4355,107 @@ mod tests {
             ),
             "CILIUM_KEY_MODE must be a re-export of \
              caixa_core::CILIUM_KEY_MODE, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_auth_mode_required_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CILIUM_AUTH_MODE_REQUIRED` was lifted from the
+        // inline `"required"` scalar-value at the `cilium_network_policies`
+        // per-`(:de, :para)` CNP `single_field_overlay(spec.politicas.
+        // mtls_required, CILIUM_KEY_MODE, |required| …)` closure's
+        // `if required { … }` affirmative arm (the per-rule mutual-auth-
+        // mode-discriminator leaf value the Cilium agent's per-rule
+        // dispatch loop keys off to select the SPIFFE-identity-handshake-
+        // mandatory enforcement policy) plus three test-side navigations —
+        // the presence pin under `:mtls-required t`, the per-policy fan-
+        // out pin across multiple `:contratos`, and the pubsub-carry-
+        // overlay-too shape pin — to a re-export of
+        // [`caixa_core::CILIUM_AUTH_MODE_REQUIRED`] so the Cilium-CRD per-
+        // rule mutual-auth-mandatory scalar-value string lives in exactly
+        // one place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const CILIUM_AUTH_MODE_REQUIRED: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const` could
+        // happen to carry the same string at the source while pointing at
+        // a different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let a Cilium CNP
+        // `MutualAuthenticationMode` OpenAPI schema enum rebrand on the
+        // mTLS-mandatory scalar value without a coordinated caixa-core
+        // edit silently land per-`(:de, :para)` CiliumNetworkPolicy
+        // documents whose per-`ingress[]` entry mutual-auth block's mode
+        // value the Cilium-agent-side schema validator drops as
+        // unrecognized at apply time; the author's mTLS-mandatory intent
+        // silently collapses onto the cluster-default authentication mode
+        // and every intra-mesh `:contratos` flow the CNP was authored to
+        // protect with per-edge SPIFFE-identity-bound mutual-auth silently
+        // bypasses the mTLS handshake at the Cilium data-plane's default-
+        // authentication mode. Peer to
+        // [`cilium_auth_mode_disabled_re_export_points_at_caixa_core_canonical`]
+        // on the explicit-opt-out arm of the same
+        // `MutualAuthenticationMode` enum + to
+        // [`cilium_key_mode_re_export_points_at_caixa_core_canonical`] on
+        // the parent per-authn-block mode-discriminator leaf-axis-key re-
+        // export surface — completes the per-authn-block `(mode →
+        // {required, disabled})` author-reachable-scalar-value-pair re-
+        // export pair this crate's `cilium_network_policies` renderer's
+        // SPIFFE-identity-bound per-edge mTLS enforcement contract rests
+        // on across the affirmative arm of the `:politicas :mtls-required`
+        // tristate.
+        assert_eq!(
+            CILIUM_AUTH_MODE_REQUIRED,
+            caixa_core::CILIUM_AUTH_MODE_REQUIRED
+        );
+        assert!(
+            std::ptr::eq(
+                CILIUM_AUTH_MODE_REQUIRED.as_ptr(),
+                caixa_core::CILIUM_AUTH_MODE_REQUIRED.as_ptr(),
+            ),
+            "CILIUM_AUTH_MODE_REQUIRED must be a re-export of \
+             caixa_core::CILIUM_AUTH_MODE_REQUIRED, not a sibling `pub const` \
+             that happens to carry the same string — drift between the two \
+             is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn cilium_auth_mode_disabled_re_export_points_at_caixa_core_canonical() {
+        // Peer to `cilium_auth_mode_required_re_export_points_at_caixa_
+        // core_canonical` on the `Some(false)` explicit-opt-out arm of
+        // the same `:politicas :mtls-required` tristate: the renderer's
+        // `CILIUM_AUTH_MODE_DISABLED` was lifted from the inline
+        // `"disabled"` scalar-value at the `cilium_network_policies` per-
+        // `(:de, :para)` CNP `single_field_overlay(...)` closure's `else
+        // { … }` opt-out arm plus one test-side navigation (the
+        // `cnp_explicit_mtls_required_false_emits_disabled_mode` explicit-
+        // opt-out probe) to a re-export of
+        // [`caixa_core::CILIUM_AUTH_MODE_DISABLED`] so the Cilium-CRD per-
+        // rule mutual-auth-skipped scalar-value string lives in exactly
+        // one place across every caixa renderer. Pin the equality +
+        // static-data identity here so any local re-introduction of a
+        // sibling `pub const CILIUM_AUTH_MODE_DISABLED: &str = "…"` is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior shape would have let a
+        // rebrand silently erase the author's explicit-opt-out intent at
+        // the emit boundary. Peer to
+        // [`cilium_auth_mode_required_re_export_points_at_caixa_core_canonical`]
+        // — the two per-arm re-export pins together complete the per-
+        // authn-block `(mode → {required, disabled})` author-reachable-
+        // scalar-value-pair single-sourcing.
+        assert_eq!(
+            CILIUM_AUTH_MODE_DISABLED,
+            caixa_core::CILIUM_AUTH_MODE_DISABLED
+        );
+        assert!(
+            std::ptr::eq(
+                CILIUM_AUTH_MODE_DISABLED.as_ptr(),
+                caixa_core::CILIUM_AUTH_MODE_DISABLED.as_ptr(),
+            ),
+            "CILIUM_AUTH_MODE_DISABLED must be a re-export of \
+             caixa_core::CILIUM_AUTH_MODE_DISABLED, not a sibling `pub const` \
              that happens to carry the same string — drift between the two \
              is the canonical footgun this lift closes"
         );
@@ -7148,7 +7296,7 @@ mod tests {
             assert_eq!(
                 auth.get(serde_yaml::Value::String(CILIUM_KEY_MODE.into()))
                     .and_then(|v| v.as_str()),
-                Some("required")
+                Some(CILIUM_AUTH_MODE_REQUIRED)
             );
         }
     }
@@ -7208,7 +7356,7 @@ mod tests {
             assert_eq!(
                 auth.get(serde_yaml::Value::String(CILIUM_KEY_MODE.into()))
                     .and_then(|v| v.as_str()),
-                Some("disabled")
+                Some(CILIUM_AUTH_MODE_DISABLED)
             );
         }
     }
@@ -7241,7 +7389,7 @@ mod tests {
                 rule.get(CILIUM_KEY_AUTHENTICATION)
                     .and_then(|a| a.get(CILIUM_KEY_MODE))
                     .and_then(|v| v.as_str()),
-                Some("required"),
+                Some(CILIUM_AUTH_MODE_REQUIRED),
                 "every CNP's ingress rule must carry the authentication overlay"
             );
         }
@@ -7333,7 +7481,7 @@ mod tests {
             rule.get(CILIUM_KEY_AUTHENTICATION)
                 .and_then(|a| a.get(CILIUM_KEY_MODE))
                 .and_then(|v| v.as_str()),
-            Some("required")
+            Some(CILIUM_AUTH_MODE_REQUIRED)
         );
     }
 
