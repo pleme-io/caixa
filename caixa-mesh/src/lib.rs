@@ -1080,6 +1080,46 @@ pub use caixa_core::GATEWAY_API_KEY_MATCHES;
 /// HTTPRoute-side per-match body-shape.
 pub use caixa_core::GATEWAY_API_KEY_PATH;
 
+/// Canonical K8s Gateway API v1 `HTTPPathMatch` scalar-payload axis key
+/// every `gateway_routes`-emitted `HTTPRoute` per-match `path` block
+/// mounts its per-match request-path-selection scalar payload under
+/// (`spec.rules[].matches[].path.value`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_VALUE`] so the Gateway-API-
+/// implementation-side per-`HTTPPathMatch` scalar-payload-axis-key
+/// string lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `gateway_routes` per-Aplicacao `HTTPRoute` emitter
+/// (the per-match `path_match.insert("value", …)` call the prior
+/// inline `"value"` literal sat at, seeded from the Aplicacao's
+/// `:entrada :paths` slot) and every future per-Gateway-API-side
+/// renderer the M3.x absorption roadmap acknowledges now consult the
+/// same `&'static str`, so a future Gateway API rebrand on the
+/// per-`HTTPPathMatch` scalar-payload axis (an upstream Gateway API
+/// v2 rename to `path` / `pattern` / `expression`, coordinated with
+/// the upstream SIG-Network Gateway API deprecation cycle) is a
+/// one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_VALUE`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer
+/// + every future per-target renderer the substrate adds. The prior
+/// inline literal at the one production emitter site would have let
+/// a Gateway-API-CRD per-`HTTPPathMatch`-`value`-axis rebrand or a
+/// per-emitter typo (`"path"` / `"pattern"` / `"expression"`)
+/// silently emit an `HTTPRoute` whose per-match request-path scalar
+/// the Gateway API CRD schema validator drops as unknown — the
+/// per-match path predicate degrades to the wildcard match at the
+/// gateway-class-controller's per-rule reconcile, the rule matches
+/// every request path unconditionally, and every external `:entrada`
+/// path filter the rule was authored to enforce drops with no field
+/// naming the `HTTPPathMatch`-scalar-payload-drift root cause. Peer
+/// to the [`GATEWAY_API_KEY_PATH`] re-export on the sibling
+/// canonical-Gateway-API-HTTPRoute-per-`HTTPRouteMatch`-body-axis
+/// surface — nests the per-Gateway-API-HTTPRoute-per-match-body-axis
+/// canonical-string re-export set (`path` container-axis, `value`
+/// scalar-payload key) one level deeper onto the per-`HTTPPathMatch`
+/// body-axis surface this crate's `gateway_routes` renderer's
+/// external `:entrada` ingress contract rests on across the Gateway
+/// API HTTPRoute-side per-match body-shape.
+pub use caixa_core::GATEWAY_API_KEY_VALUE;
+
 /// Canonical K8s Gateway API `Gateway` per-listener-set container-axis
 /// key every `gateway_routes`-emitted `Gateway` document mounts its per-
 /// Gateway `[{name, port, protocol, hostname}]` L7-listener fan-out
@@ -2622,7 +2662,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
         );
         path_match.insert(
-            serde_yaml::Value::String("value".into()),
+            serde_yaml::Value::String(GATEWAY_API_KEY_VALUE.into()),
             serde_yaml::Value::String(path.to_string()),
         );
         let mut match_entry = serde_yaml::Mapping::new();
