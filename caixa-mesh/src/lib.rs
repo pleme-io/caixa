@@ -39,7 +39,7 @@ use caixa_core::{
     GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
     M3_KEY_PLACEMENT, MappingExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
     kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay,
+    pleme_program_selector, single_field_overlay, singleton_mapping_sequence,
 };
 use thiserror::Error;
 
@@ -2472,10 +2472,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 KUBE_KEY_PROTOCOL,
                 serde_yaml::Value::String(KUBE_PROTOCOL_TCP.into()),
             );
-            to_port.insert_str_key(
-                CILIUM_KEY_PORTS,
-                serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(port_entry)]),
-            );
+            to_port.insert_str_key(CILIUM_KEY_PORTS, singleton_mapping_sequence(port_entry));
 
             // L7 introspection only fires for HTTP-shaped contracts; the
             // typed view (validated upstream by AplicacaoSpec::validate)
@@ -2489,10 +2486,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                     serde_yaml::Value::String(endpoint.to_string()),
                 );
                 let mut rules = serde_yaml::Mapping::new();
-                rules.insert_str_key(
-                    CILIUM_KEY_HTTP,
-                    serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(http_rule)]),
-                );
+                rules.insert_str_key(CILIUM_KEY_HTTP, singleton_mapping_sequence(http_rule));
                 to_port.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules));
             }
             to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
@@ -2507,10 +2501,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert_str_key(CILIUM_KEY_ENDPOINT_SELECTOR, endpoint_selector);
-        policy_spec.insert_str_key(
-            CILIUM_KEY_INGRESS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(ingress_rule)]),
-        );
+        policy_spec.insert_str_key(CILIUM_KEY_INGRESS, singleton_mapping_sequence(ingress_rule));
         policy.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(policy_spec));
 
         out.push(serde_yaml::Value::Mapping(policy));
@@ -2632,7 +2623,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     );
     g_spec.insert_str_key(
         GATEWAY_API_KEY_LISTENERS,
-        serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(listener)]),
+        singleton_mapping_sequence(listener),
     );
     gateway.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(g_spec));
 
@@ -2744,11 +2735,11 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         let mut rule = serde_yaml::Mapping::new();
         rule.insert_str_key(
             GATEWAY_API_KEY_MATCHES,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(match_entry)]),
+            singleton_mapping_sequence(match_entry),
         );
         rule.insert_str_key(
             GATEWAY_API_KEY_BACKEND_REFS,
-            serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(backend_ref)]),
+            singleton_mapping_sequence(backend_ref),
         );
         if let Some(t) = &timeout_overlay {
             rule.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, t.clone());
@@ -2762,7 +2753,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let mut r_spec = serde_yaml::Mapping::new();
     r_spec.insert_str_key(
         GATEWAY_API_KEY_PARENT_REFS,
-        serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(parent_ref)]),
+        singleton_mapping_sequence(parent_ref),
     );
     r_spec.insert_str_key(
         GATEWAY_API_KEY_HOSTNAMES,

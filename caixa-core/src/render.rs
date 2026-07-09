@@ -12258,6 +12258,80 @@ where
     })
 }
 
+/// Wrap a single [`serde_yaml::Mapping`] as the sole element of a
+/// [`serde_yaml::Value::Sequence`], returning the ready-to-drop
+/// singleton-mapping-sequence `Value`.
+///
+/// The canonical shape every K8s-CRD schema-list-shape-required field
+/// with exactly one entry to emit lands the same
+/// `Value::Sequence(vec![Value::Mapping(m)])` three-token block in
+/// front of. Seven identical-shape call sites across
+/// [`caixa-mesh`][mesh] collapse onto this helper:
+///
+///   * Cilium `CiliumNetworkPolicy.spec.ingress[].toPorts[].ports`
+///     (one `port_entry` per typed edge, wrapped in the CRD's
+///     required-list-shape `ports:` axis);
+///   * Cilium `CiliumNetworkPolicy.spec.ingress[].toPorts[].rules.http`
+///     (one `http_rule` per L7-introspection-capable
+///     [`crate::WitTarget::Http`] contract, wrapped in the CRD's
+///     required-list-shape `http:` axis);
+///   * Cilium `CiliumNetworkPolicy.spec.ingress` (one `ingress_rule`
+///     per policy — Cilium's CRD schema lists the per-policy ingress
+///     ruleset even though V0 emits exactly one entry);
+///   * Gateway API `Gateway.spec.listeners` (one `listener` per
+///     Gateway — V0 emits the single HTTP-listener shape the sibling
+///     [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] +
+///     [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] consts pin);
+///   * Gateway API `HTTPRoute.spec.rules[].matches` (one `match_entry`
+///     per rule — V0 emits a single per-path prefix-match);
+///   * Gateway API `HTTPRoute.spec.rules[].backendRefs` (one
+///     `backend_ref` per rule — V0 emits a single-backend fan-in on
+///     the `:entrada :para` destination Servico);
+///   * Gateway API `HTTPRoute.spec.parentRefs` (one `parent_ref` per
+///     route — every route attaches to exactly one Gateway).
+///
+/// Until this lift landed all seven call sites re-inlined the same
+/// three-token boilerplate — `serde_yaml::` path re-quote,
+/// `Value::Sequence(_)` promotion, `vec![serde_yaml::Value::Mapping(_)]`
+/// singleton-list wrapping — around a one-token semantic payload (the
+/// per-site `Mapping`). Lifting collapses the boilerplate into one
+/// function call the caller reads as intent (`singleton_mapping_sequence
+/// (<mapping>)` — "wrap this single mapping as the CRD-required list-
+/// shape") rather than three hand-spelled positional artifacts. The
+/// next renderer to land — the per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` emitter (MESH-COMPOSITION §III.2 #3,
+/// which drops singleton `resources:[]` / `listeners:[]` /
+/// `virtualHosts:[]` blocks under its per-policy CR spec), the
+/// `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer (§III.2 #5, whose `spec.selectors:[]` / `spec.gates:[]`
+/// blocks list-shape a single per-Aplicacao entry), the M4 cross-
+/// cluster fan-out's per-cluster `Service.spec.ports[]` /
+/// `HTTPRoute.spec.rules[].backendRefs[]` emission, the future
+/// `caixa-otel` OpenTelemetry-Collector `pipelines.traces.receivers[]`
+/// / `pipelines.traces.exporters[]` singleton-list-shape emission —
+/// gets the canonical CRD-list-shape-wrap for free with one function
+/// call, instead of re-inlining the same three-token block. Peer with
+/// the sibling render-side helpers on the [`serde_yaml::Value`]-
+/// construction surface ([`yaml_string_mapping`], [`label_selector`],
+/// [`kube_resource_skeleton`], [`single_field_overlay`], the sibling
+/// [`MappingExt::insert_str_key`] primitive) — each closes a distinct
+/// axis of the K8s-artifact-emit surface's "same shape, written N
+/// times" duplication.
+///
+/// The helper takes an owned [`serde_yaml::Mapping`] (moving into the
+/// wrapping `vec!` without a clone) because every call site has just
+/// finished building the mapping locally and passes it by value to the
+/// insert-under-outer-key step. A [`Value::Mapping`] wrapping of the
+/// same mapping is one step further along the emit trajectory — the
+/// helper closes the gap in one primitive.
+///
+/// [mesh]: https://docs.rs/caixa-mesh
+#[must_use]
+#[inline]
+pub fn singleton_mapping_sequence(m: serde_yaml::Mapping) -> serde_yaml::Value {
+    serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(m)])
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -22976,6 +23050,94 @@ spec:
             m.contains_key(serde_yaml::Value::String(KUBE_KEY_SPEC.into())),
             "absent-key contains_key via bare-&str must byte-equal \
              absent-key contains_key via Value::String"
+        );
+    }
+
+    #[test]
+    fn singleton_mapping_sequence_wraps_input_as_sole_element() {
+        // The helper wraps its input `Mapping` as the single element of
+        // a `Value::Sequence`. Pin the outer variant shape and the
+        // exactly-one-element length so a future refactor that reaches
+        // for a different container (e.g. `Value::Tagged`, a
+        // 0-or-1-element `Option`-shaped emission axis) is a
+        // compile-visible break, not a silent per-caller regression at
+        // every K8s-CRD-list-shape-required emit site.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("hello".into()));
+        let out = singleton_mapping_sequence(inner.clone());
+        match out {
+            serde_yaml::Value::Sequence(seq) => {
+                assert_eq!(
+                    seq.len(),
+                    1,
+                    "singleton_mapping_sequence emits exactly one element — \
+                     the K8s-CRD-list-shape-required singleton axis"
+                );
+                assert_eq!(
+                    seq[0],
+                    serde_yaml::Value::Mapping(inner),
+                    "the sole element must be the caller's Mapping wrapped \
+                     verbatim as Value::Mapping — no reshape, no clone-and-drop"
+                );
+            }
+            other => panic!(
+                "singleton_mapping_sequence must return Value::Sequence, got {other:?} — \
+                 an outer-variant drift breaks every K8s-CRD-list-shape consumer"
+            ),
+        }
+    }
+
+    #[test]
+    fn singleton_mapping_sequence_preserves_empty_inner_mapping() {
+        // An empty inner `Mapping` still round-trips through the helper
+        // as a `Value::Sequence(vec![Value::Mapping(<empty>)])` — the
+        // helper carries no "skip-empty" short-circuit (empty-vs-absent
+        // is the caller's decision; some K8s CRD schemas require an
+        // empty inner object to distinguish "explicitly-empty" from
+        // "absent"). Pin the shape so a future refactor that reaches
+        // for an is_empty()-guarded short-circuit is a test-visible
+        // break, not a silent behavior shift.
+        let out = singleton_mapping_sequence(serde_yaml::Mapping::new());
+        let seq = match out {
+            serde_yaml::Value::Sequence(s) => s,
+            other => panic!("expected Value::Sequence, got {other:?}"),
+        };
+        assert_eq!(seq.len(), 1, "empty inner still wraps as a 1-element seq");
+        assert_eq!(
+            seq[0],
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            "the sole element is an empty Value::Mapping, verbatim"
+        );
+    }
+
+    #[test]
+    fn singleton_mapping_sequence_byte_equals_hand_written_inline_shape() {
+        // Cross-check the helper against the hand-written
+        // `Value::Sequence(vec![Value::Mapping(m)])` three-token shape
+        // the seven lifted call sites previously carried. A drift
+        // between the helper's wrapping and the inline shape would
+        // silently emit a different YAML sequence (a differently-shaped
+        // outer variant, a differently-wrapped inner Mapping) at every
+        // routed consumer — pin the byte-equivalence so the helper
+        // remains a drop-in replacement.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            GATEWAY_API_KEY_NAME,
+            serde_yaml::Value::String("gw-listener".into()),
+        );
+        inner.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
+        );
+
+        let via_helper = singleton_mapping_sequence(inner.clone());
+        let via_inline = serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner)]);
+
+        assert_eq!(
+            via_helper, via_inline,
+            "singleton_mapping_sequence(m) must byte-equal \
+             Value::Sequence(vec![Value::Mapping(m)]) — otherwise the \
+             seven routed caixa-mesh call sites drift silently at emit time"
         );
     }
 }
