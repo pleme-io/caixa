@@ -230,6 +230,47 @@ pub use caixa_core::HELM_CHART_API_VERSION;
 /// chart declares at its top-level Chart.yaml body.
 pub use caixa_core::HELM_CHART_TYPE_APPLICATION;
 
+/// Canonical Helm 3 per-chart-directory metadata-file filename every
+/// rendered `lareira-<nome>` chart carries at its top-level directory —
+/// re-export of the lifted [`caixa_core::HELM_CHART_YAML_FILENAME`] so
+/// the fixed lookup name Helm's chart-schema parser (`helm dependency
+/// build`, `helm lint`, `helm template`, `helm install`) consults at
+/// chart-open time to locate the per-chart schema-body scalars
+/// ([`HELM_CHART_API_VERSION`], [`HELM_CHART_TYPE_APPLICATION`], the
+/// name/version/dependencies fields) lives in exactly one place across
+/// every caixa renderer. The single production-code call site
+/// consuming it is [`render_chart_for_servico`]'s `ChartDir` assembly
+/// where the metadata file's per-`ChartFile` `path` axis is set (the
+/// sole emitter site the prior inline `PathBuf::from("Chart.yaml")`
+/// literal sat at); every test-side round-trip navigator that reaches
+/// into the rendered `ChartDir` by the metadata filename (the
+/// per-chart-metadata-field sweep tests +
+/// [`ChartDir::write_to`] post-write existence pin) now consults the
+/// same `&'static str`, so a rebrand of the Helm 3 metadata-file axis
+/// (any per-fork `Chartfile.yaml` / Helm 4 metadata-file rename the
+/// upstream packaging spec might adopt) lands at one const and reaches
+/// every consumer by construction. A drifted local `pub const
+/// HELM_CHART_YAML_FILENAME: &str = "…"` at this crate — the canonical
+/// drift footgun where a sibling local `pub const` could happen to
+/// carry the same string at the source while pointing at a different
+/// `&'static` allocation — surfaces as one of two silent failure modes
+/// at chart-consumption time: Helm's chart-schema parser refuses to
+/// open the rendered chart-directory ("Error: Chart.yaml file is
+/// missing") far from the drift commit, or the sibling
+/// [`caixa_flux::cluster_bundle`]'s future per-chart-directory
+/// resolver — a per-cluster snapshot bundle that re-lists the
+/// chart-dir contents by filename — silently returns `None` at
+/// cluster-side `feira app deploy` time. The equality + `&'static`
+/// static-data identity pin
+/// (`helm_chart_yaml_filename_re_export_points_at_caixa_core_canonical`)
+/// closes the drift footgun at caixa-helm build time. Peer to the
+/// [`HELM_CHART_API_VERSION`] / [`HELM_CHART_TYPE_APPLICATION`]
+/// re-exports on the sibling canonical-Helm-chart-schema-body-axis
+/// surface — completes the per-`lareira-<nome>`-chart-directory
+/// `(filename, apiVersion, type)` canonical-scalar-axis re-export
+/// triple every rendered chart declares at its top-level metadata file.
+pub use caixa_core::HELM_CHART_YAML_FILENAME;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-helm's
@@ -334,7 +375,7 @@ pub fn render_chart_for_servico_with(
         name: chart_name,
         files: vec![
             ChartFile {
-                path: PathBuf::from("Chart.yaml"),
+                path: PathBuf::from(HELM_CHART_YAML_FILENAME),
                 contents: serde_yaml::to_string(&chart_yaml)?,
             },
             ChartFile {
@@ -584,7 +625,7 @@ spec:
             .iter()
             .map(|f| f.path.to_string_lossy().to_string())
             .collect();
-        assert!(names.contains(&"Chart.yaml".to_string()));
+        assert!(names.contains(&HELM_CHART_YAML_FILENAME.to_string()));
         assert!(names.contains(&"values.yaml".to_string()));
         assert!(names.contains(&"README.md".to_string()));
     }
@@ -595,7 +636,7 @@ spec:
         let chart_file = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("Chart.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
             .unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(chart.api_version, "v2");
@@ -698,7 +739,7 @@ spec:
             let chart_file = dir
                 .files
                 .iter()
-                .find(|f| f.path == PathBuf::from("Chart.yaml"))
+                .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
                 .unwrap();
             let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
             let dep_name = &chart.dependencies[0].name;
@@ -993,7 +1034,7 @@ spec:
         let tmp = tempfile::tempdir().unwrap();
         dir.write_to(tmp.path()).unwrap();
         let chart_root = tmp.path().join("lareira-hello-rio");
-        assert!(chart_root.join("Chart.yaml").exists());
+        assert!(chart_root.join(HELM_CHART_YAML_FILENAME).exists());
         assert!(chart_root.join("values.yaml").exists());
         assert!(chart_root.join("README.md").exists());
     }
@@ -1098,7 +1139,7 @@ spec:
         let chart_file = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("Chart.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
             .unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
@@ -1168,7 +1209,7 @@ spec:
         let chart_file = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("Chart.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
             .unwrap();
         let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
         assert_eq!(
@@ -1198,6 +1239,42 @@ spec:
         let opts = RenderOpts::default();
         assert_eq!(opts.library_name, caixa_core::DEFAULT_LIBRARY_NAME);
         assert_eq!(opts.library_name, "pleme-computeunit");
+    }
+
+    #[test]
+    fn helm_chart_yaml_filename_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_CHART_YAML_FILENAME` was lifted from the
+        // seven production + test-side inline `"Chart.yaml"` /
+        // `PathBuf::from("Chart.yaml")` / `chart_root.join("Chart.yaml")`
+        // literals across [`render_chart_for_servico`]'s `ChartDir`
+        // metadata-file `path` emit site + every test-side round-trip
+        // navigator that reaches into the rendered `ChartDir` by the
+        // metadata filename to a re-export of
+        // [`caixa_core::HELM_CHART_YAML_FILENAME`] so the Helm 3
+        // per-chart-directory metadata-file filename lives in exactly one
+        // place across every caixa renderer. Pin the equality +
+        // `&'static` static-data identity here so any local
+        // re-introduction of a sibling `pub const
+        // HELM_CHART_YAML_FILENAME: &str = "…"` at this crate — the
+        // canonical drift footgun where a sibling local `pub const` could
+        // happen to carry the same string at the source while pointing
+        // at a different `&'static` allocation — is a build-time test
+        // failure naming the offending drift, not a silent
+        // Helm-chart-schema-parser "Chart.yaml file is missing" reroute
+        // at `helm dependency build` / `helm lint` / `helm template` /
+        // `helm install` time far from the drift site. Peer to
+        // [`helm_chart_api_version_re_export_points_at_caixa_core_canonical`]
+        // / [`helm_chart_type_application_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Helm-chart-schema-body-axis re-export
+        // surfaces — completes the per-`lareira-<nome>`-chart-directory
+        // `(filename, apiVersion, type)` canonical-scalar-axis re-export
+        // triple every rendered chart declares at its top-level metadata
+        // file.
+        caixa_core::assert_str_reexport_identity(
+            "HELM_CHART_YAML_FILENAME",
+            HELM_CHART_YAML_FILENAME,
+            caixa_core::HELM_CHART_YAML_FILENAME,
+        );
     }
 
     #[test]
