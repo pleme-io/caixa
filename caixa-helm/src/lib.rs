@@ -271,6 +271,51 @@ pub use caixa_core::HELM_CHART_TYPE_APPLICATION;
 /// triple every rendered chart declares at its top-level metadata file.
 pub use caixa_core::HELM_CHART_YAML_FILENAME;
 
+/// Canonical Helm 3 per-chart-directory values-file filename every
+/// rendered `lareira-<nome>` chart carries at its top-level directory —
+/// re-export of the lifted [`caixa_core::HELM_VALUES_YAML_FILENAME`] so
+/// the fixed lookup name Helm's chart-schema parser (`helm dependency
+/// build`, `helm lint`, `helm template`, `helm install`) consults at
+/// chart-open time to locate the per-chart values block that
+/// [`HELM_VALUES_KEY_ENABLED`] toggles under its
+/// [`DEFAULT_LIBRARY_NAME`] wrap key lives in exactly one place across
+/// every caixa renderer. The single production-code call site
+/// consuming it is [`render_chart_for_servico`]'s `ChartDir` assembly
+/// where the values file's per-`ChartFile` `path` axis is set (the
+/// sole emitter site the prior inline `PathBuf::from("values.yaml")`
+/// literal sat at); every test-side round-trip navigator that reaches
+/// into the rendered `ChartDir` by the values filename (the
+/// per-chart-values-field sweep tests +
+/// [`ChartDir::write_to`] post-write existence pin) now consults the
+/// same `&'static str`, so a rebrand of the Helm 3 values-file axis
+/// (any per-fork `defaults.yaml` / Helm 4 values-file rename the
+/// upstream packaging spec might adopt) lands at one const and reaches
+/// every consumer by construction. A drifted local `pub const
+/// HELM_VALUES_YAML_FILENAME: &str = "…"` at this crate — the canonical
+/// drift footgun where a sibling local `pub const` could happen to
+/// carry the same string at the source while pointing at a different
+/// `&'static` allocation — surfaces as one of two silent failure modes
+/// at chart-consumption time: Helm's per-chart values-loader silently
+/// falls back to the empty values block (`helm template` emits the
+/// library chart under its admission-time defaults, the workload comes
+/// up disabled or without any per-Servico M2 overlay applied) far from
+/// the drift commit, or the sibling
+/// [`caixa_flux::cluster_bundle`]'s future per-chart-directory
+/// resolver — a per-cluster snapshot bundle that re-lists the
+/// chart-dir contents by filename to route per-cluster values overlays
+/// through the canonical values file — silently returns `None` at
+/// cluster-side `feira app deploy` time. The equality + `&'static`
+/// static-data identity pin
+/// (`helm_values_yaml_filename_re_export_points_at_caixa_core_canonical`)
+/// closes the drift footgun at caixa-helm build time. Peer to the
+/// [`HELM_CHART_YAML_FILENAME`] re-export on the sibling
+/// canonical-Helm-per-chart-directory-metadata-file-axis surface —
+/// completes the per-`lareira-<nome>`-chart-directory
+/// `(Chart.yaml, values.yaml)` canonical-per-chart-directory-filename-
+/// axis re-export pair every rendered chart declares as its two
+/// schema-load-bearing `ChartDir::files` entries.
+pub use caixa_core::HELM_VALUES_YAML_FILENAME;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-helm's
@@ -379,7 +424,7 @@ pub fn render_chart_for_servico_with(
                 contents: serde_yaml::to_string(&chart_yaml)?,
             },
             ChartFile {
-                path: PathBuf::from("values.yaml"),
+                path: PathBuf::from(HELM_VALUES_YAML_FILENAME),
                 contents: values_yaml,
             },
             ChartFile {
@@ -626,7 +671,7 @@ spec:
             .map(|f| f.path.to_string_lossy().to_string())
             .collect();
         assert!(names.contains(&HELM_CHART_YAML_FILENAME.to_string()));
-        assert!(names.contains(&"values.yaml".to_string()));
+        assert!(names.contains(&HELM_VALUES_YAML_FILENAME.to_string()));
         assert!(names.contains(&"README.md".to_string()));
     }
 
@@ -656,7 +701,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed
@@ -691,7 +736,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         assert!(
@@ -746,7 +791,7 @@ spec:
             let values = dir
                 .files
                 .iter()
-                .find(|f| f.path == PathBuf::from("values.yaml"))
+                .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
                 .unwrap();
             let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
             assert!(
@@ -775,7 +820,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         assert!(
             values.contents.contains("`acme-computeunit:`"),
@@ -946,7 +991,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
@@ -973,7 +1018,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
@@ -1004,7 +1049,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
@@ -1019,7 +1064,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
@@ -1035,7 +1080,7 @@ spec:
         dir.write_to(tmp.path()).unwrap();
         let chart_root = tmp.path().join("lareira-hello-rio");
         assert!(chart_root.join(HELM_CHART_YAML_FILENAME).exists());
-        assert!(chart_root.join("values.yaml").exists());
+        assert!(chart_root.join(HELM_VALUES_YAML_FILENAME).exists());
         assert!(chart_root.join("README.md").exists());
     }
 
@@ -1278,6 +1323,44 @@ spec:
     }
 
     #[test]
+    fn helm_values_yaml_filename_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_VALUES_YAML_FILENAME` was lifted from the
+        // twelve production + test-side inline `"values.yaml"` /
+        // `PathBuf::from("values.yaml")` / `chart_root.join("values.yaml")`
+        // literals across [`render_chart_for_servico`]'s `ChartDir`
+        // values-file `path` emit site + every test-side round-trip
+        // navigator that reaches into the rendered `ChartDir` by the
+        // values filename to a re-export of
+        // [`caixa_core::HELM_VALUES_YAML_FILENAME`] so the Helm 3
+        // per-chart-directory values-file filename lives in exactly one
+        // place across every caixa renderer. Pin the equality +
+        // `&'static` static-data identity here so any local
+        // re-introduction of a sibling `pub const
+        // HELM_VALUES_YAML_FILENAME: &str = "…"` at this crate — the
+        // canonical drift footgun where a sibling local `pub const` could
+        // happen to carry the same string at the source while pointing
+        // at a different `&'static` allocation — is a build-time test
+        // failure naming the offending drift, not a silent
+        // Helm-per-chart-values-loader fall-through to the empty values
+        // block at `helm template` / `helm install` time far from the
+        // drift site (where the workload silently comes up under the
+        // library chart's admission-time defaults with no per-Servico
+        // M2 overlay applied). Peer to
+        // [`helm_chart_yaml_filename_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Helm-per-chart-directory-metadata-file-
+        // axis re-export surface — completes the
+        // per-`lareira-<nome>`-chart-directory `(Chart.yaml, values.yaml)`
+        // canonical-per-chart-directory-filename-axis re-export pair
+        // every rendered chart declares as its two schema-load-bearing
+        // `ChartDir::files` entries.
+        caixa_core::assert_str_reexport_identity(
+            "HELM_VALUES_YAML_FILENAME",
+            HELM_VALUES_YAML_FILENAME,
+            caixa_core::HELM_VALUES_YAML_FILENAME,
+        );
+    }
+
+    #[test]
     fn helm_values_key_enabled_re_export_points_at_caixa_core_canonical() {
         // The renderer's `HELM_VALUES_KEY_ENABLED` was lifted from the
         // production-code inline `"enabled".to_string()` literal at
@@ -1340,7 +1423,7 @@ spec:
         let values = dir
             .files
             .iter()
-            .find(|f| f.path == PathBuf::from("values.yaml"))
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed
