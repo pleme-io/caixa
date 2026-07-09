@@ -701,6 +701,67 @@ pub const GATEWAY_API_HTTP_PATH_MAX_LEN: usize = 1024;
 /// construction.
 pub const GATEWAY_API_HOSTNAME_MAX_LEN: usize = 253;
 
+/// K8s Gateway API v1 `Gateway.spec.listeners[].port` — the substrate's
+/// canonical port scalar every Aplicacao-level
+/// [`caixa_mesh::gateway_routes`][cm] -emitted `Gateway`'s sole per-
+/// listener HTTP-listener-port axis reads from. IANA-registered as the
+/// well-known `http` service port (RFC 9110 §4.2.2 / RFC 3986 §3.2.3 —
+/// the port implied by an `http://<host>/…` URL when the authority
+/// carries no explicit `:<port>` selector), so the substrate's external
+/// `:entrada` HTTP flow surfaces at `http://<entrada.host>/` with no
+/// per-client port override.
+///
+/// Semantically distinct from [`crate::DEFAULT_SERVICO_PORT`] (8080)
+/// on the sibling per-Servico L4 axis — that constant is the port each
+/// in-cluster Servico's `pleme-computeunit`-emitted K8s `Service`
+/// listens on (the destination side of every mesh flow); this constant
+/// is the port the Aplicacao's own external Gateway listens on (the
+/// external ingress side, K8s-Gateway-API-CRD-controller-visible).
+/// Two axes, two lifts — a future rebrand on either axis (the
+/// substrate moving external HTTP to `:443` under mTLS-terminated
+/// listeners, the substrate moving in-cluster Servicos onto `:80`
+/// once the well-known port is freed) lands on its own canonical
+/// const without coupling either axis to the other's rebrand cycle.
+///
+/// Until this lift landed the value `80` lived at one production-code
+/// call site: the `listener.insert(KUBE_KEY_PORT, …)` call at
+/// `caixa-mesh/src/lib.rs:2588` inside
+/// [`caixa_mesh::gateway_routes`][cm]'s per-Aplicacao `Gateway`
+/// emitter. A future Gateway API v1 promotion moving the well-known
+/// external HTTP listener to a substrate-chosen alternative — the
+/// substrate moving to `:443` once cert-manager-issued
+/// per-`:entrada :host` certificates land and the external listener
+/// becomes HTTPS-by-default (matching the mTLS-by-default trajectory
+/// [`crate::DEFAULT_SERVICO_PORT`]'s docstring names), a per-cluster
+/// override the operator pins through a future `:entrada :port` slot
+/// promoted from Servico-side (`:entrada :port` today's typed slot
+/// names the destination Servico port, not the Gateway listener
+/// port) — without a coordinated edit would silently emit a
+/// `Gateway` whose per-listener HTTP-listener-port axis the K8s
+/// Gateway API v1 controller admits at the drifted port and the
+/// gateway-class-controller (Cilium's Envoy sidecar today) opens on
+/// the drifted port too, so every external `:entrada` HTTP flow
+/// drops at the first hop with no diagnostic naming the drift root
+/// cause. Lifting the literal to a shared typed `u16` const closes
+/// the drift footgun structurally — every consumer reads from the
+/// same lifted constant, so any rebrand reaches every site by
+/// construction.
+///
+/// Mirrors the [`crate::DEFAULT_SERVICO_PORT`] lift (a085b26) on the
+/// peer per-renderer canonical-K8s-port-axis typed `u16` const — both
+/// are IANA-registered service-port scalars the substrate's mesh
+/// renderer emits under a K8s CRD's `port:` axis, both lift to
+/// `caixa-core::render` so any future substrate-side port migration
+/// (external HTTP `:80 → :443`, in-cluster Servico `:8080 → :80`)
+/// lands at exactly one const per axis. Same "typed const so the
+/// scalar has exactly one source of truth" discipline every peer
+/// scalar in this crate carries ([`GATEWAY_API_HOSTNAME_MAX_LEN`],
+/// [`GATEWAY_API_HTTP_PATH_MAX_LEN`], [`DNS_1123_LABEL_MAX_LEN`],
+/// [`WIT_IDENT_MAX_LEN`]).
+///
+/// [cm]: ../../caixa_mesh/fn.gateway_routes.html
+pub const GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT: u16 = 80;
+
 /// Predicate: assert that `path` is a valid HTTP path under both the
 /// K8s Gateway API v1 `HTTPPathMatch.value` admission grammar AND the
 /// Cilium L7 `path:` rule grammar — the two landing sites every
@@ -20980,6 +21041,59 @@ mod tests {
             "GATEWAY_API_HOSTNAME_MAX_LEN must equal the RFC 1035 / RFC 1123 DNS \
              name limit (255 wire bytes minus one length prefix minus the trailing \
              dot)",
+        );
+    }
+
+    #[test]
+    fn gateway_api_default_http_listener_port_pins_canonical_80_literal() {
+        // The canonical-constant arm — pins
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] at the verbatim
+        // `80` literal the sole `caixa-mesh::gateway_routes` per-
+        // Aplicacao `Gateway` per-listener HTTP-listener-port axis
+        // reads from. Peer with the
+        // [`crate::DEFAULT_SERVICO_PORT`]-pins-`8080` discipline on the
+        // sibling per-renderer canonical-K8s-port-axis typed `u16`
+        // const: a future refactor that drifts the constant out from
+        // under either consumer surfaces here ahead of any per-renderer
+        // Gateway emission. The literal value is IANA's well-known
+        // `http` service port (RFC 9110 §4.2.2), so an
+        // `http://<entrada.host>/…` URL without a `:<port>` selector
+        // reaches the listener by construction.
+        assert_eq!(
+            GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, 80,
+            "canonical Gateway API v1 HTTP listener port literal must remain \
+             `80` verbatim — this is the value the caixa-mesh Gateway emitter \
+             reads from and the IANA-registered well-known `http` service port"
+        );
+    }
+
+    #[test]
+    fn gateway_api_default_http_listener_port_distinct_from_default_servico_port() {
+        // Cross-axis structural invariant: the Gateway listener's
+        // external HTTP port ([`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`],
+        // 80) and the per-Servico in-cluster L4 port
+        // ([`DEFAULT_SERVICO_PORT`], 8080) are two distinct axes — the
+        // external-ingress port the K8s Gateway API controller opens on
+        // the cluster boundary, and the internal-Servico port the
+        // `pleme-computeunit` chart emits per Servico `Service`.
+        // Collapsing the two would silently emit a Gateway whose
+        // listener port matched the Servico's own port, so a stray
+        // Servico exposing its Service directly to a cluster-external
+        // LoadBalancer would shadow the Aplicacao's Gateway path — the
+        // typed two-axis distinction guards against a rebrand on either
+        // axis silently converging on the other's value. Peer with the
+        // [`GATEWAY_API_HOSTNAME_MAX_LEN`]-strictly-exceeds-[`DNS_1123_LABEL_MAX_LEN`]
+        // discipline on the sibling per-axis structural-ordering pin
+        // set — both are cross-axis invariants between two lifted
+        // constants that share a downstream renderer.
+        assert_ne!(
+            GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT,
+            crate::DEFAULT_SERVICO_PORT,
+            "GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT ({GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT}) \
+             must remain distinct from DEFAULT_SERVICO_PORT ({}) — the two axes name \
+             different scalars (external-Gateway listener port vs in-cluster Servico port), \
+             collapsing them silently shadows the Aplicacao's Gateway path",
+            crate::DEFAULT_SERVICO_PORT,
         );
     }
 }
