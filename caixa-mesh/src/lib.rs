@@ -5839,10 +5839,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(serde_yaml::Value::String(
-                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
-                ))
-                .and_then(|v| v.as_str()),
+                p.get(M3_PLACEMENT_KEY_ESTRATEGIA).and_then(|v| v.as_str()),
                 Some(M3_PLACEMENT_ESTRATEGIA_REPLICATED),
                 "placement.estrategia must round-trip the typed PlacementStrategy variant"
             );
@@ -5861,7 +5858,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             let clusters = p
-                .get(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into()))
+                .get(M3_PLACEMENT_KEY_CLUSTERS)
                 .and_then(|c| c.as_sequence())
                 .expect("placement.clusters sequence");
             let names: Vec<&str> = clusters.iter().filter_map(|v| v.as_str()).collect();
@@ -5880,8 +5877,7 @@ mod tests {
         let entries = programs_for_aplicacao(&aplicacao_caixa()).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into()))
-                    .and_then(|v| v.as_str()),
+                p.get(M3_PLACEMENT_KEY_AFFINITY).and_then(|v| v.as_str()),
                 Some("data-locality")
             );
         }
@@ -5909,13 +5905,11 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert!(
-                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into()))
-                    .is_none(),
+                p.get(M3_PLACEMENT_KEY_AFFINITY).is_none(),
                 "placement.affinity must be absent when :affinity is None"
             );
             assert!(
-                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into()))
-                    .is_none(),
+                p.get(M3_PLACEMENT_KEY_SHARD_KEY).is_none(),
                 "placement.shardKey must be absent when :shard-key is None"
             );
             // Exactly 2 keys remain — estrategia + clusters.
@@ -5940,15 +5934,11 @@ mod tests {
         let entries = programs_for_aplicacao(&c).unwrap();
         for p in placement_blocks(&entries) {
             assert_eq!(
-                p.get(serde_yaml::Value::String(
-                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
-                ))
-                .and_then(|v| v.as_str()),
+                p.get(M3_PLACEMENT_KEY_ESTRATEGIA).and_then(|v| v.as_str()),
                 Some(M3_PLACEMENT_ESTRATEGIA_SHARDED)
             );
             assert_eq!(
-                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into()))
-                    .and_then(|v| v.as_str()),
+                p.get(M3_PLACEMENT_KEY_SHARD_KEY).and_then(|v| v.as_str()),
                 Some("$tenantId")
             );
         }
@@ -5976,17 +5966,13 @@ mod tests {
         let first = placements[0];
         for p in &placements[1..] {
             assert_eq!(
-                p.get(serde_yaml::Value::String(
-                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
-                )),
-                first.get(serde_yaml::Value::String(
-                    M3_PLACEMENT_KEY_ESTRATEGIA.into()
-                )),
+                p.get(M3_PLACEMENT_KEY_ESTRATEGIA),
+                first.get(M3_PLACEMENT_KEY_ESTRATEGIA),
                 "placement.estrategia must be identical across all members"
             );
             assert_eq!(
-                p.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
-                first.get(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
+                p.get(M3_PLACEMENT_KEY_CLUSTERS),
+                first.get(M3_PLACEMENT_KEY_CLUSTERS),
                 "placement.clusters must be identical across all members"
             );
         }
@@ -6009,7 +5995,7 @@ mod tests {
         for e in &entries {
             let m = e.as_mapping().expect("entry mapping");
             assert!(
-                m.contains_key(serde_yaml::Value::String(M3_KEY_PLACEMENT.into())),
+                m.contains_key(M3_KEY_PLACEMENT),
                 "entry must carry the M3_KEY_PLACEMENT key exactly"
             );
         }
@@ -6074,9 +6060,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(
-                M3_PLACEMENT_KEY_ESTRATEGIA.into()
-            )),
+            mapping.contains_key(M3_PLACEMENT_KEY_ESTRATEGIA),
             "Placement's serde derive must emit the estrategia axis under the exact key \
              the lifted M3_PLACEMENT_KEY_ESTRATEGIA const carries; got mapping keys: {keys:?}",
             keys = mapping
@@ -6146,7 +6130,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_CLUSTERS.into())),
+            mapping.contains_key(M3_PLACEMENT_KEY_CLUSTERS),
             "Placement's serde derive must emit the clusters axis under the exact key \
              the lifted M3_PLACEMENT_KEY_CLUSTERS const carries; got mapping keys: {keys:?}",
             keys = mapping
@@ -6228,7 +6212,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_AFFINITY.into())),
+            mapping.contains_key(M3_PLACEMENT_KEY_AFFINITY),
             "Placement's serde derive must emit the affinity axis under the exact key \
              the lifted M3_PLACEMENT_KEY_AFFINITY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
@@ -6321,7 +6305,7 @@ mod tests {
             .as_mapping()
             .expect("Placement serializes to a mapping");
         assert!(
-            mapping.contains_key(serde_yaml::Value::String(M3_PLACEMENT_KEY_SHARD_KEY.into())),
+            mapping.contains_key(M3_PLACEMENT_KEY_SHARD_KEY),
             "Placement's serde derive must emit the shard_key axis under the exact key \
              the lifted M3_PLACEMENT_KEY_SHARD_KEY const carries when the typed slot \
              resolves to `Some(_)`; got mapping keys: {keys:?}",
@@ -6480,15 +6464,13 @@ mod tests {
                 .and_then(|l| l.as_mapping())
                 .expect("policy metadata.labels mapping");
             assert_eq!(
-                labels
-                    .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
-                    .and_then(|v| v.as_str()),
+                labels.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
                 Some("checkout")
             );
             // The contrato label is `<de>-to-<para>`; both fixture
             // edges have :de = "cart".
             let contrato_val = labels
-                .get(serde_yaml::Value::String(LABEL_CONTRATO.into()))
+                .get(LABEL_CONTRATO)
                 .and_then(|v| v.as_str())
                 .expect("contrato label present");
             assert!(
@@ -6536,11 +6518,7 @@ mod tests {
                 1,
                 "destination endpointSelector must be the program-only selector"
             );
-            assert!(
-                selector
-                    .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
-                    .is_some()
-            );
+            assert!(selector.get(LABEL_PROGRAM).is_some());
         }
     }
 
@@ -6569,14 +6547,8 @@ mod tests {
                 2,
                 "source fromEndpoints must be the program-in-aplicacao selector (2 axes)"
             );
-            assert!(
-                from.get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
-                    .is_some()
-            );
-            assert!(
-                from.get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
-                    .is_some()
-            );
+            assert!(from.get(LABEL_PROGRAM).is_some());
+            assert!(from.get(LABEL_APLICACAO).is_some());
         }
     }
 
@@ -6846,21 +6818,15 @@ mod tests {
             assert_eq!(metadata.len(), 3);
             assert!(
                 metadata
-                    .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
+                    .get(KUBE_KEY_NAME)
                     .and_then(|v| v.as_str())
                     .is_some()
             );
             assert_eq!(
-                metadata
-                    .get(serde_yaml::Value::String(KUBE_KEY_NAMESPACE.into()))
-                    .and_then(|v| v.as_str()),
+                metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
                 Some(DEFAULT_NAMESPACE)
             );
-            assert!(
-                metadata
-                    .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
-                    .is_some()
-            );
+            assert!(metadata.get(KUBE_KEY_LABELS).is_some());
         }
     }
 
@@ -6888,21 +6854,15 @@ mod tests {
         // Exactly 2 metadata keys (name + namespace) — labels absent.
         assert_eq!(metadata.len(), 2);
         assert_eq!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
-                .and_then(|v| v.as_str()),
+            metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
             Some("checkout")
         );
         assert_eq!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_NAMESPACE.into()))
-                .and_then(|v| v.as_str()),
+            metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
             Some(DEFAULT_NAMESPACE)
         );
         assert!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
-                .is_none(),
+            metadata.get(KUBE_KEY_LABELS).is_none(),
             "Gateway must not carry metadata.labels (empty-labels-skip \
              contract from kube_resource_skeleton)"
         );
@@ -6931,16 +6891,10 @@ mod tests {
             .expect("metadata mapping");
         assert_eq!(metadata.len(), 2);
         assert_eq!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
-                .and_then(|v| v.as_str()),
+            metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
             Some("checkout-cart")
         );
-        assert!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
-                .is_none()
-        );
+        assert!(metadata.get(KUBE_KEY_LABELS).is_none());
     }
 
     #[test]
@@ -7179,9 +7133,7 @@ mod tests {
             .and_then(|s| s.as_mapping())
             .expect("Gateway spec is a mapping");
         assert!(
-            spec.contains_key(serde_yaml::Value::String(
-                caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME.into(),
-            )),
+            spec.contains_key(caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME),
             "Gateway spec must carry a key byte-identical to the lifted \
              caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME — drift here \
              is the canonical footgun this lift closes"
@@ -7436,7 +7388,7 @@ mod tests {
                 .expect("rule must carry timeouts mapping when :politicas :timeout is set");
             assert_eq!(
                 timeouts
-                    .get(serde_yaml::Value::String(GATEWAY_API_KEY_REQUEST.into()))
+                    .get(GATEWAY_API_KEY_REQUEST)
                     .and_then(|v| v.as_str()),
                 Some("30s")
             );
@@ -7560,12 +7512,10 @@ mod tests {
             let m = rule.as_mapping().expect("rule mapping");
             // matches + backendRefs + timeouts + retry (4 top-level keys).
             assert_eq!(m.len(), 4);
-            assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_MATCHES.into())));
-            assert!(m.contains_key(serde_yaml::Value::String(
-                GATEWAY_API_KEY_BACKEND_REFS.into()
-            )));
-            assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_TIMEOUTS.into())));
-            assert!(m.contains_key(serde_yaml::Value::String(GATEWAY_API_KEY_RETRY.into())));
+            assert!(m.contains_key(GATEWAY_API_KEY_MATCHES));
+            assert!(m.contains_key(GATEWAY_API_KEY_BACKEND_REFS));
+            assert!(m.contains_key(GATEWAY_API_KEY_TIMEOUTS));
+            assert!(m.contains_key(GATEWAY_API_KEY_RETRY));
         }
     }
 
@@ -7595,9 +7545,7 @@ mod tests {
                 .and_then(|r| r.as_mapping())
                 .expect("rule must carry retry mapping when :politicas :retries is set");
             assert_eq!(
-                retry
-                    .get(serde_yaml::Value::String(GATEWAY_API_KEY_ATTEMPTS.into()))
-                    .and_then(|v| v.as_u64()),
+                retry.get(GATEWAY_API_KEY_ATTEMPTS).and_then(|v| v.as_u64()),
                 Some(3),
                 "retry.attempts must round-trip the typed :retries value"
             );
@@ -7802,8 +7750,7 @@ mod tests {
                 .and_then(|a| a.as_mapping())
                 .expect("rule must carry authentication mapping when :mtls-required is set");
             assert_eq!(
-                auth.get(serde_yaml::Value::String(CILIUM_KEY_MODE.into()))
-                    .and_then(|v| v.as_str()),
+                auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
                 Some(CILIUM_AUTH_MODE_REQUIRED)
             );
         }
@@ -7862,8 +7809,7 @@ mod tests {
                 .and_then(|a| a.as_mapping())
                 .expect("rule must carry authentication mapping for explicit :mtls-required nil");
             assert_eq!(
-                auth.get(serde_yaml::Value::String(CILIUM_KEY_MODE.into()))
-                    .and_then(|v| v.as_str()),
+                auth.get(CILIUM_KEY_MODE).and_then(|v| v.as_str()),
                 Some(CILIUM_AUTH_MODE_DISABLED)
             );
         }
@@ -7920,14 +7866,14 @@ mod tests {
         for rule in &rules {
             let m = rule.as_mapping().expect("rule mapping");
             assert_eq!(m.len(), 3);
-            assert!(m.contains_key(serde_yaml::Value::String(CILIUM_KEY_FROM_ENDPOINTS.into())));
-            assert!(m.contains_key(serde_yaml::Value::String(CILIUM_KEY_TO_PORTS.into())));
-            assert!(m.contains_key(serde_yaml::Value::String(CILIUM_KEY_AUTHENTICATION.into())));
+            assert!(m.contains_key(CILIUM_KEY_FROM_ENDPOINTS));
+            assert!(m.contains_key(CILIUM_KEY_TO_PORTS));
+            assert!(m.contains_key(CILIUM_KEY_AUTHENTICATION));
             // The auth block must not leak inside fromEndpoints[] or
             // toPorts[] — guards the Cilium-side schema contract that
             // mutual-auth is an ingress-rule-level concern.
             let from = m
-                .get(serde_yaml::Value::String(CILIUM_KEY_FROM_ENDPOINTS.into()))
+                .get(CILIUM_KEY_FROM_ENDPOINTS)
                 .and_then(|f| f.as_sequence())
                 .expect("fromEndpoints sequence");
             for fe in from {
@@ -7937,7 +7883,7 @@ mod tests {
                 );
             }
             let to = m
-                .get(serde_yaml::Value::String(CILIUM_KEY_TO_PORTS.into()))
+                .get(CILIUM_KEY_TO_PORTS)
                 .and_then(|t| t.as_sequence())
                 .expect("toPorts sequence");
             for tp in to {

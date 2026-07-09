@@ -2200,9 +2200,7 @@ spec:
             .and_then(|v| v.as_mapping())
             .expect("spec.values mapping present");
         assert!(
-            values
-                .get(serde_yaml::Value::String(DEFAULT_LIBRARY_NAME.into()))
-                .is_some(),
+            values.get(DEFAULT_LIBRARY_NAME).is_some(),
             "spec.values must wrap under the lifted DEFAULT_LIBRARY_NAME \
              ({DEFAULT_LIBRARY_NAME:?}); a drifted literal here silently \
              routes per-cluster overrides nowhere at helm template time"
@@ -2212,12 +2210,12 @@ spec:
         // through. Pin the round-trip so a refactor that hoists the
         // overlay out of the wrap can't silently drop it.
         let wrapped = values
-            .get(serde_yaml::Value::String(DEFAULT_LIBRARY_NAME.into()))
+            .get(DEFAULT_LIBRARY_NAME)
             .and_then(|v| v.as_mapping())
             .expect("wrapped library mapping");
         assert_eq!(
             wrapped
-                .get(serde_yaml::Value::String(HELM_VALUES_KEY_ENABLED.into()))
+                .get(HELM_VALUES_KEY_ENABLED)
                 .and_then(|v| v.as_bool()),
             Some(true)
         );
@@ -2258,7 +2256,7 @@ spec:
         // (formerly `caixa-flux/src/lib.rs:844`) plus its test-side
         // round-trip navigator
         // (`cluster_bundle_helmrelease_values_wrap_key_uses_lifted_constant`,
-        // where `.get(serde_yaml::Value::String("enabled".into()))`
+        // where `.get("enabled")`
         // isolated the per-cluster override the bundle path threads
         // through) to a re-export of
         // [`caixa_core::HELM_VALUES_KEY_ENABLED`] so the canonical
