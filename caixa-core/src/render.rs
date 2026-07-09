@@ -6016,6 +6016,70 @@ pub const COMPUTEUNIT_SPEC_KEY_TRIGGER: &str = "trigger";
 /// rationale.
 pub const COMPUTEUNIT_SPEC_KEY_CAPABILITIES: &str = "capabilities";
 
+/// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD
+/// `spec.module.source` per-CR wasm-component-reference leaf-scalar
+/// sub-block key — the nested `spec.module.*` child every rendered
+/// `ComputeUnit` YAML carries to name the exact wasm-component
+/// artifact the M2.5 wasm-engine instantiator loads at Servico
+/// bring-up. Peer of the parent [`COMPUTEUNIT_SPEC_KEY_MODULE`] on the
+/// same ComputeUnit CRD per-`spec.module.*` sub-block surface —
+/// `COMPUTEUNIT_SPEC_KEY_MODULE` names the top-level per-CR module-
+/// reference block; this constant names the block's leaf reference-
+/// value axis. Every rendered `programs[]` entry the
+/// `lareira-fleet-programs` library chart consumes carries the
+/// `module.source: oci://ghcr.io/pleme-io/<caixa>:<versao>` (or
+/// `module.source: file://...` for locally-mounted wasm bundles;
+/// `module.source: github:<owner>/<repo>` for git-hosted sources) as
+/// its per-Servico wasm-artifact reference; every `spec.module.source`
+/// readback across the [`caixa_flux::programs_yaml_entry`] round-trip
+/// pins + the [`caixa_flux::upsert_into_programs_yaml`] /
+/// [`caixa_flux::upsert_into_helmrelease_programs`] cross-upsert
+/// navigators resolves the same `&'static str`.
+///
+/// Until this lift landed the byte `"source"` lived as three verbatim
+/// inline literals across [`caixa_flux`][cf]'s test-fixture navigators
+/// (`programs_yaml_entry_round_trips`'s
+/// `entry.get(COMPUTEUNIT_SPEC_KEY_MODULE).and_then(|m| m.get("source"))`
+/// per-`module.source` present-check +
+/// `upsert_into_programs_yaml`'s
+/// `arr[0].get(COMPUTEUNIT_SPEC_KEY_MODULE).get("source")` cross-
+/// upsert readback + `upsert_into_helmrelease_programs`'s peer
+/// navigator on the `HelmRelease`-wrapped `spec.values.programs[]`
+/// path). A future ComputeUnit-CRD schema rebrand on the per-`module`
+/// leaf-scalar axis (the substrate moving the reference-value axis to
+/// `ref:` for parity with the OCI Distribution Spec's per-manifest
+/// content-reference nomenclature, to `uri:` for parity with the WIT
+/// Component Model's per-import content-reference field, to
+/// `module.oci.ref` / `module.file.path` / `module.git.rev` sibling-
+/// discriminator split once the ComputeUnit CRD grows typed sub-block
+/// discriminators as the ABSORPTION-ROADMAP.md M4-M5 trajectory names)
+/// without a coordinated three-site edit would silently split the
+/// schema: the emitter would write under the drifted leaf-key while
+/// every downstream navigator would still probe `source:` — the
+/// `lareira-fleet-programs` library chart's per-entry module-source
+/// axis would silently receive an empty reference, the workload would
+/// silently come up with no wasm module bound (the M2.5 instantiator
+/// falls back to the library chart's admission-time hello-world stub,
+/// or fails the bring-up at wasm-engine parse time with a diagnostic
+/// far from the caixa.lisp source), and the failure would surface as
+/// "the Servico's pods are running but they aren't running our code"
+/// far from the rebrand commit's source. Lifting the literal to one
+/// `&'static str` closes the drift footgun structurally — every
+/// consumer reads the same memory, so any future rebrand reaches every
+/// consumer by construction.
+///
+/// Same "the typed constant lives in one place" discipline the peer
+/// [`COMPUTEUNIT_SPEC_KEY_MODULE`] / [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] /
+/// [`COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] lifts apply on the sibling
+/// substrate-side ComputeUnit-CRD per-`spec.*` sub-block axis —
+/// extends the discipline one level deeper from the top-level `spec.*`
+/// container-axis surface onto the nested `spec.module.*` leaf-scalar-
+/// axis every rendered ComputeUnit YAML declares under its per-CR
+/// module-reference block.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const COMPUTEUNIT_MODULE_KEY_SOURCE: &str = "source";
+
 /// Canonical YAML key for the M3 `:placement` slot's overlay on a
 /// rendered programs.yaml entry. The lareira-fleet-programs aggregator
 /// (and the future `app-operator` per-Aplicacao reconciler) both key
@@ -22414,6 +22478,77 @@ spec:
         assert!(
             spec.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some(),
             "spec.{COMPUTEUNIT_SPEC_KEY_CAPABILITIES} sub-block must be present"
+        );
+        // Nested `spec.module.source` leaf-scalar sub-block: every
+        // rendered ComputeUnit YAML declares the wasm-component
+        // reference under this leaf, and every downstream
+        // `programs[].module.source` readback the
+        // [`caixa_flux::programs_yaml_entry`] round-trip pins reaches
+        // for the same `&'static str`. Peer to the top-level
+        // `spec.{module,trigger,capabilities}` presence assertions
+        // above — extends the round-trip pin one level deeper onto
+        // the module-block's leaf reference-value axis.
+        let module = spec
+            .get(COMPUTEUNIT_SPEC_KEY_MODULE)
+            .expect("spec.module block present");
+        assert!(
+            module.get(COMPUTEUNIT_MODULE_KEY_SOURCE).is_some(),
+            "spec.{COMPUTEUNIT_SPEC_KEY_MODULE}.{COMPUTEUNIT_MODULE_KEY_SOURCE} \
+             leaf-scalar sub-block must be present"
+        );
+        assert_eq!(
+            module
+                .get(COMPUTEUNIT_MODULE_KEY_SOURCE)
+                .and_then(|s| s.as_str()),
+            Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0"),
+            "the ComputeUnit CRD per-`module.source` axis carries the wasm-\
+             component OCI/git reference verbatim"
+        );
+    }
+
+    #[test]
+    fn computeunit_module_key_source_pins_canonical_value() {
+        // Peer to `computeunit_spec_key_module_pins_canonical_value` on
+        // the nested `spec.module.*` sub-block axis — pins the per-CR
+        // wasm-component-reference leaf-scalar key every
+        // [`caixa_flux::programs_yaml_entry`] round-trip navigator and
+        // every [`caixa_flux::upsert_into_programs_yaml`] /
+        // [`caixa_flux::upsert_into_helmrelease_programs`] cross-
+        // upsert readback resolves under the parent
+        // `COMPUTEUNIT_SPEC_KEY_MODULE`. Changing this value is a
+        // coordinated ComputeUnit-CRD schema migration alongside the
+        // `pleme-computeunit` library chart's per-values module-source
+        // routing + the `caixa-operator` `ComputeUnit` CR admission
+        // webhook's per-CR module-reference resolver, not an
+        // incidental edit.
+        assert_eq!(COMPUTEUNIT_MODULE_KEY_SOURCE, "source");
+    }
+
+    #[test]
+    fn computeunit_module_key_source_carries_lowercase_shape() {
+        // Cross-axis invariant: the nested `spec.module.*` leaf-scalar
+        // sub-block key is all-ASCII-lowercase throughout — the
+        // ComputeUnit CRD's schema convention on the per-`spec.module.*`
+        // leaf axis, same as the top-level per-`spec.*` sub-block
+        // axis the sibling `COMPUTEUNIT_SPEC_KEY_*` peers gate.
+        // A drifted UpperCamelCase / hyphenated variant (`"Source"` /
+        // `"module-source"` / `"src"` — the OpenAPI-CRD-schema
+        // canonical-form footgun the peer `KUBE_KEY_*` axes share)
+        // would land the emit-side key outside the CRD's admitted
+        // per-`module.*` set and the `caixa-operator` admission
+        // webhook would silently drop the per-Servico wasm-module
+        // reference — the Servico pods would come up under the
+        // library-chart defaults (no module bound) instead of the
+        // caixa.lisp's declared per-`:servicos` axis. Same all-ASCII-
+        // lowercase shape gate as the peer `COMPUTEUNIT_SPEC_KEY_*`
+        // top-level axes.
+        assert!(
+            COMPUTEUNIT_MODULE_KEY_SOURCE
+                .bytes()
+                .all(|b| b.is_ascii_lowercase()),
+            "ComputeUnit CRD per-`spec.module.*` leaf-scalar sub-block key \
+             {COMPUTEUNIT_MODULE_KEY_SOURCE:?} must be all-ASCII-lowercase \
+             per the CRD schema convention"
         );
     }
 }
