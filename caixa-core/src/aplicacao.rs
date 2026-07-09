@@ -466,7 +466,7 @@ pub enum WitTarget<'a> {
     Capability,
 }
 
-impl WitTarget<'_> {
+impl<'a> WitTarget<'a> {
     /// Canonical author-facing `:contratos` payload field name for the
     /// HTTP-shaped arm — the `expected: &'static str` scalar the
     /// [`AplicacaoError::ContratoMissingTarget`] /
@@ -497,27 +497,87 @@ impl WitTarget<'_> {
     /// [`WitTarget::HTTP_FIELD_NAME`] for the full lift rationale.
     pub const STORE_FIELD_NAME: &'static str = "slot";
 
+    /// Canonical stable human-readable label the payload-less
+    /// [`WitTarget::Capability`] arm renders as under [`Self::label`] —
+    /// the byte-string every consumer that formats a payload-less
+    /// typed capability edge as text lands on (the
+    /// [`AplicacaoSpec::validate`] duplicate-`:contratos` diagnostic
+    /// naming which identical edge was declared twice, the future
+    /// `feira app graph` verb's per-arm prefix, the future M4 per-edge
+    /// policy resolver's audit view, the operator's mesh-graph audit).
+    /// Peer of the payload-arm [`Self::HTTP_FIELD_NAME`] /
+    /// [`Self::PUBSUB_FIELD_NAME`] / [`Self::STORE_FIELD_NAME`]
+    /// author-facing label-scalar consts — the same
+    /// "one canonical declaration per arm, next to the variant, so a
+    /// future rename lands in one place" discipline extended to the
+    /// payload-less arm. Until this lift landed the byte-string sat
+    /// twice — once inline in [`Self::label`]'s [`WitTarget::Capability`]
+    /// match arm, once in the pin test asserting the label's
+    /// [`WitTarget::Capability`] output — with no compile-time link
+    /// between the two: a rebrand on either side (an operator-facing
+    /// vocabulary shift, a per-consumer disambiguation like
+    /// `"(capability — no payload; typed edge only)"`) would silently
+    /// desynchronize until a downstream consumer surfaced the drift at
+    /// runtime.
+    pub const CAPABILITY_LABEL: &'static str = "(capability — no payload)";
+
+    /// The `(author-facing field name, payload)` pair this typed target
+    /// arm carries — `Some((HTTP_FIELD_NAME, endpoint))` for
+    /// [`Self::Http`], `Some((PUBSUB_FIELD_NAME, subject))` for
+    /// [`Self::PubSub`], `Some((STORE_FIELD_NAME, slot))` for
+    /// [`Self::Store`], `None` for the payload-less
+    /// [`Self::Capability`] arm.
+    ///
+    /// Lifted as the single 4-arm dispatch that both [`Self::label`]
+    /// (formats `":{field} {payload:?}"` on `Some`, falls to
+    /// [`Self::CAPABILITY_LABEL`] on `None`) and [`Self::field_name`]
+    /// (returns the first component) route through, so a future
+    /// [`WitTarget`] variant addition — the M4-and-later per-edge WIT
+    /// registry may split [`Self::Http`] into `Rest` / `Grpc` peers,
+    /// or extend [`Self::Store`] with a `Queue`-shaped peer — becomes
+    /// exactly one new match-arm here (a compile-time exhaustiveness
+    /// error otherwise), not a coordinated three-way rewrite of the
+    /// prior [`Self::label`] template + [`Self::field_name`] dispatch
+    /// + every downstream consumer that reaches for the pair.
+    ///
+    /// Until this lift landed the three payload arms sat in
+    /// [`Self::label`] as three near-identical `format!(":{} {…:?}", …)`
+    /// invocations (one per variant, each hand-quoting the paired
+    /// [`Self::HTTP_FIELD_NAME`] / [`Self::PUBSUB_FIELD_NAME`] /
+    /// [`Self::STORE_FIELD_NAME`] const) — the canonical
+    /// "same shape, written N times" duplication THEORY.md §I.3.5
+    /// ("Generation first, composition second, hand-authoring last;
+    /// the duplication budget is zero") promotes to a build-time
+    /// concern, with each per-arm site paired to its own const with no
+    /// compile-time link between the format template and the arm's
+    /// payload extraction.
+    #[must_use]
+    pub const fn payload_pair(&self) -> Option<(&'static str, &'a str)> {
+        match *self {
+            WitTarget::Http { endpoint } => Some((Self::HTTP_FIELD_NAME, endpoint)),
+            WitTarget::PubSub { subject } => Some((Self::PUBSUB_FIELD_NAME, subject)),
+            WitTarget::Store { slot } => Some((Self::STORE_FIELD_NAME, slot)),
+            WitTarget::Capability => None,
+        }
+    }
+
     /// The canonical author-facing `:contratos` payload field name
     /// this typed target arm carries (`Http` → `Some("endpoint")`,
     /// `PubSub` → `Some("subject")`, `Store` → `Some("slot")`), or
     /// `None` for the payload-less `Capability` arm.
     ///
-    /// Lifted as a method on the typed [`WitTarget`] enum so a future
-    /// variant addition — the M4-and-later per-edge WIT registry may
-    /// split `Http` into `Rest` / `Grpc` peers, or extend `Store`
-    /// with a `Queue`-shaped peer — becomes a compile-time
-    /// exhaustiveness error at this `match` rather than a silent
-    /// `None` fall-through at every downstream consumer that reaches
-    /// for the arm's author-facing field name (the per-edge policy
-    /// resolver in M4, the `feira app graph` view's per-arm prefix,
-    /// the operator's mesh-graph audit).
+    /// Routes through [`Self::payload_pair`] — the single 4-arm
+    /// dispatch [`Self::label`] also reads — so a future variant
+    /// addition is one match-arm edit at [`Self::payload_pair`], not a
+    /// per-consumer rewrite. Same "exhaustive-match at one canonical
+    /// dispatch, thin projections at each consumer" trajectory the
+    /// peer [`PlacementStrategy::as_str`] / [`std::fmt::Display`]
+    /// pair (0a2f653) landed on the sibling M3 typed-enum axis.
     #[must_use]
     pub const fn field_name(&self) -> Option<&'static str> {
-        match self {
-            WitTarget::Http { .. } => Some(Self::HTTP_FIELD_NAME),
-            WitTarget::PubSub { .. } => Some(Self::PUBSUB_FIELD_NAME),
-            WitTarget::Store { .. } => Some(Self::STORE_FIELD_NAME),
-            WitTarget::Capability => None,
+        match self.payload_pair() {
+            Some((f, _)) => Some(f),
+            None => None,
         }
     }
 
@@ -529,35 +589,31 @@ impl WitTarget<'_> {
     /// Used by the [`AplicacaoSpec::validate`] duplicate-`:contratos`
     /// gate so the diagnostic names *which* identical edge was
     /// declared twice (not just which `(de, para, wit)` triple).
-    /// Lifted as a method on the typed [`WitTarget`] enum (rather
-    /// than the prior free function that probed [`WitContract`]'s raw
-    /// `Option<String>` fields) so that adding a future `WitTarget`
-    /// variant — the M4-and-later per-edge WIT registry may split
-    /// `Http` into `Rest` / `Grpc`, or extend `Store` with a
-    /// `Queue`-shaped peer — becomes a compile-time exhaustiveness
-    /// error at this `match` rather than a silent fall-through to
-    /// `"(capability — no payload)"` at the duplicate-edge
-    /// diagnostic (and every future consumer that reaches for the
-    /// label shape: the per-edge policy resolver in M4, the
-    /// `feira app graph` view, the operator's mesh-graph audit).
-    /// The per-arm keyword prefix routes through
-    /// [`WitTarget::HTTP_FIELD_NAME`] / [`WitTarget::PUBSUB_FIELD_NAME`]
-    /// / [`WitTarget::STORE_FIELD_NAME`] so a rename of the
-    /// author-surface field lands in exactly one place, not both the
-    /// diagnostic's `expected:` scalar and the label template.
+    /// Routes through the single 4-arm [`Self::payload_pair`] dispatch
+    /// on the payload-carrying arms (`Some((field, payload)) →
+    /// format!(":{field} {payload:?}")`) and through the lifted
+    /// [`Self::CAPABILITY_LABEL`] const on the payload-less
+    /// [`Self::Capability`] arm — so a future variant addition (the
+    /// M4-and-later per-edge WIT registry may split [`Self::Http`]
+    /// into `Rest` / `Grpc`, or extend [`Self::Store`] with a
+    /// `Queue`-shaped peer) becomes a single new match-arm on
+    /// [`Self::payload_pair`] rather than a rewrite of this template
+    /// (and every downstream consumer that reaches for the label
+    /// shape: the per-edge policy resolver in M4, the `feira app
+    /// graph` view, the operator's mesh-graph audit). Until this
+    /// lift landed the three payload arms carried three near-identical
+    /// per-arm `format!(":{} {…:?}", …)` invocations, and the
+    /// [`Self::Capability`] arm carried the payload-less byte-string
+    /// twice (once inline here, once in the pin test) — closing the
+    /// duplication trajectory the peer [`Self::HTTP_FIELD_NAME`] /
+    /// [`Self::PUBSUB_FIELD_NAME`] / [`Self::STORE_FIELD_NAME`] (174e96a
+    /// / 4a1e490) peer-const lifts already established for the
+    /// payload-carrying arms.
     #[must_use]
     pub fn label(&self) -> String {
-        match self {
-            WitTarget::Http { endpoint } => {
-                format!(":{} {endpoint:?}", Self::HTTP_FIELD_NAME)
-            }
-            WitTarget::PubSub { subject } => {
-                format!(":{} {subject:?}", Self::PUBSUB_FIELD_NAME)
-            }
-            WitTarget::Store { slot } => {
-                format!(":{} {slot:?}", Self::STORE_FIELD_NAME)
-            }
-            WitTarget::Capability => "(capability — no payload)".to_string(),
+        match self.payload_pair() {
+            Some((field, payload)) => format!(":{field} {payload:?}"),
+            None => Self::CAPABILITY_LABEL.to_string(),
         }
     }
 }
@@ -6984,6 +7040,63 @@ mod tests {
 :slot \"checkout/$order\""
         );
         assert_eq!(WitTarget::Capability.label(), "(capability — no payload)");
+        // Capability-arm label routes through the lifted
+        // [`WitTarget::CAPABILITY_LABEL`] const so the "one canonical
+        // declaration per arm, next to the variant" discipline the
+        // peer payload-arm [`WitTarget::HTTP_FIELD_NAME`] /
+        // [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+        // consts already carry extends to the payload-less arm; the
+        // byte-string equality pin below plus this label-routes-
+        // through-the-const pin make a future rebrand on either the
+        // const declaration or the `label()` template a build error
+        // here rather than a downstream consumer surprise.
+        assert_eq!(WitTarget::Capability.label(), WitTarget::CAPABILITY_LABEL,);
+        assert_eq!(WitTarget::CAPABILITY_LABEL, "(capability — no payload)");
+    }
+
+    #[test]
+    fn wit_target_payload_pair_pins_per_variant() {
+        // Pin the per-arm `(field-name, payload)` pair single-sourced
+        // onto [`WitTarget::payload_pair`] — the single 4-arm dispatch
+        // both [`WitTarget::label`] (formats `":{field} {payload:?}"`
+        // on `Some`, falls to [`WitTarget::CAPABILITY_LABEL`] on `None`)
+        // and [`WitTarget::field_name`] (returns the first component)
+        // route through. Until this lift landed [`WitTarget::label`]
+        // dispatched on the same three arms with a per-arm
+        // `format!(":{} {…:?}", …)` invocation each, hand-quoting the
+        // paired [`WitTarget::HTTP_FIELD_NAME`] /
+        // [`WitTarget::PUBSUB_FIELD_NAME`] /
+        // [`WitTarget::STORE_FIELD_NAME`] const at every site — the
+        // canonical "same shape, written N times" duplication
+        // THEORY.md §I.3.5 promotes to a build-time concern. A future
+        // [`WitTarget`] variant addition (`Rest`/`Grpc` split of
+        // [`WitTarget::Http`], `Queue`-shaped peer of
+        // [`WitTarget::Store`]) is one match-arm edit at
+        // [`WitTarget::payload_pair`], visible here as a compile-time
+        // exhaustiveness error on both this pin and the label-format
+        // pin above.
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge"
+            }
+            .payload_pair(),
+            Some((WitTarget::HTTP_FIELD_NAME, "/charge")),
+        );
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.x",
+            }
+            .payload_pair(),
+            Some((WitTarget::PUBSUB_FIELD_NAME, "events.x")),
+        );
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .payload_pair(),
+            Some((WitTarget::STORE_FIELD_NAME, "checkout/$order")),
+        );
+        assert_eq!(WitTarget::Capability.payload_pair(), None);
     }
 
     #[test]
