@@ -485,7 +485,7 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use caixa_core::{Caixa, CaixaKind};
+    use caixa_core::{Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM};
 
     fn sample_caixa() -> Caixa {
         Caixa {
@@ -879,7 +879,7 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
-        let limits = cu_block.get("limits").expect("limits must propagate");
+        let limits = cu_block.get(M2_KEY_LIMITS).expect("limits must propagate");
         assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
         assert_eq!(limits.get("fuel").and_then(|m| m.as_u64()), Some(1_000_000));
         assert_eq!(
@@ -906,7 +906,9 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
-        let behavior = cu_block.get("behavior").expect("behavior must propagate");
+        let behavior = cu_block
+            .get(M2_KEY_BEHAVIOR)
+            .expect("behavior must propagate");
         assert_eq!(
             behavior.get("onInit").and_then(|v| v.as_str()),
             Some("lib/init.lisp")
@@ -935,7 +937,7 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
-        assert!(cu_block.get("upgradeFrom").is_some());
+        assert!(cu_block.get(M2_KEY_UPGRADE_FROM).is_some());
     }
 
     #[test]
@@ -950,9 +952,9 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get("pleme-computeunit").unwrap();
-        assert!(cu_block.get("limits").is_none());
-        assert!(cu_block.get("behavior").is_none());
-        assert!(cu_block.get("upgradeFrom").is_none());
+        assert!(cu_block.get(M2_KEY_LIMITS).is_none());
+        assert!(cu_block.get(M2_KEY_BEHAVIOR).is_none());
+        assert!(cu_block.get(M2_KEY_UPGRADE_FROM).is_none());
     }
 
     #[test]
