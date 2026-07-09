@@ -12221,6 +12221,86 @@ pub fn require_valid_dns_1123_label<E>(
     Ok(())
 }
 
+/// Bracket a per-list uniqueness gate with the shared "insert into
+/// `seen`; caller-shaped `Err` on the second occurrence" gate every
+/// declaration-order-preserving `Vec`-authored slot in caixa-core
+/// carries. Delegates to [`std::collections::HashSet::insert`] verbatim
+/// (which returns `true` on first insertion, `false` on repeat), then
+/// invokes the caller's `on_duplicate` closure only on the duplicate
+/// arm — keeping the hot path (the unique case) allocation-free.
+///
+/// The ten existing call sites — [`crate::AplicacaoSpec::validate`]'s
+/// four per-list uniqueness gates (`:membros :caixa` →
+/// [`crate::AplicacaoError::MembroDuplicate`], `:placement :clusters` →
+/// [`crate::AplicacaoError::PlacementClusterDuplicate`],
+/// `:entrada :paths` → [`crate::AplicacaoError::EntradaPathDuplicate`],
+/// `:contratos` on the six-tuple typed-edge identity key →
+/// [`crate::AplicacaoError::ContratoDuplicate`]),
+/// [`crate::SupervisorSpec::validate`] on `:children :caixa`
+/// ([`crate::SupervisorError::DuplicateChildCaixa`]),
+/// [`crate::manifest::Caixa`]'s four per-list uniqueness gates
+/// ([`crate::manifest::Caixa::validate_deps`] on `:deps` and `:deps-dev`
+/// → [`crate::DepError::DuplicateNome`],
+/// [`crate::manifest::Caixa::validate_code_paths`] on
+/// `:bibliotecas`/`:exe`/`:servicos` →
+/// [`crate::ManifestError::CodePathDuplicate`],
+/// [`crate::manifest::Caixa::validate_etiquetas`] on `:etiquetas` →
+/// [`crate::ManifestError::EtiquetaDuplicate`],
+/// [`crate::manifest::Caixa::validate_autores`] on `:autores` →
+/// [`crate::ManifestError::AutorDuplicate`]), and
+/// [`crate::dep::Dep`]'s [`crate::DepError::CaracteristicaDuplicate`]
+/// gate on `:caracteristicas` — each formerly inlined the same three-
+/// line
+/// ```ignore
+/// if !seen.insert(key) {
+///     return Err(<Variant> { … });
+/// }
+/// ```
+/// shape by hand, differing only in the seen-set key type and the
+/// caller's [`thiserror`] variant. Lifting to one canonical entry-point
+/// closes the drift footgun structurally: a future tightening of the
+/// per-list uniqueness discipline (a declaration-order pin on the
+/// reported entry index, an instrumentation hook for the operator's
+/// audit trail, the M4 CR materializer's admission-webhook per-list
+/// invariant) reaches every consumer by one edit at this helper, not
+/// a coordinated rewrite across every per-list gate in the crate. The
+/// per-axis error variants remain the source of truth for each axis's
+/// remediation prose — this helper only sequences the insert-and-check
+/// pair.
+///
+/// Same set-not-multiset discipline every peer `Duplicate*` variant
+/// documents. The typed key `K` is generic so both `&str`-shaped
+/// callers (nine sites) and the tuple-shaped
+/// [`crate::AplicacaoError::ContratoDuplicate`] typed-edge identity
+/// carrier route through one helper; the caller owns the enum variant
+/// + its self-locating discriminator fields, this helper only sequences
+/// the insert-and-check pair in canonical `insert → on_duplicate` order.
+/// Sibling to the peer `require_positive_bounded_*` /
+/// `require_positive_canonical_bounded_duration` /
+/// `require_valid_versao_requirement` / `require_valid_dns_1123_label`
+/// helpers on the same closure-based caller-error-variant discipline.
+///
+/// # Errors
+///
+/// Returns `on_duplicate()` when `key` was already in `seen` (the
+/// [`std::collections::HashSet::insert`] call returns `false`); returns
+/// `Ok(())` otherwise.
+pub fn insert_first_seen<K, E, S>(
+    seen: &mut std::collections::HashSet<K, S>,
+    key: K,
+    on_duplicate: impl FnOnce() -> E,
+) -> Result<(), E>
+where
+    K: std::hash::Hash + Eq,
+    S: std::hash::BuildHasher,
+{
+    if seen.insert(key) {
+        Ok(())
+    } else {
+        Err(on_duplicate())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -21622,6 +21702,87 @@ mod tests {
              must be a valid DNS-1123 label — K8s Gateway API v1 `Listener.name` is \
              `SectionName`-typed and the apiserver-side CRD schema validator refuses \
              any other shape"
+        );
+    }
+
+    // ── insert_first_seen ───────────────────────────────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum DupTestErr {
+        Dup(&'static str),
+    }
+
+    #[test]
+    fn insert_first_seen_accepts_distinct_keys_without_firing_closure() {
+        // The happy path — every distinct key returns `Ok(())` and the
+        // caller's `on_duplicate` closure is never invoked. Pins the
+        // `HashSet::insert`-returning-`true`-on-first-insertion contract
+        // the ten consumer sites (`:membros`, `:placement :clusters`,
+        // `:entrada :paths`, `:contratos`, `:children`, `:deps`,
+        // `:deps-dev`, `:etiquetas`, `:autores`, `:caracteristicas`,
+        // code-paths) each rely on — a future refactor that flips the
+        // sense of the delegated `insert` return would surface here
+        // ahead of every per-consumer duplicate arm silently mis-firing
+        // on distinct keys.
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for key in ["cart", "catalog", "payment"] {
+            assert_eq!(
+                insert_first_seen::<&str, DupTestErr, _>(&mut seen, key, || DupTestErr::Dup(
+                    "must not fire"
+                )),
+                Ok(()),
+                "first insertion of {key:?} must return Ok(())",
+            );
+        }
+        assert_eq!(seen.len(), 3, "every distinct key must land in the set");
+    }
+
+    #[test]
+    fn insert_first_seen_surfaces_caller_shaped_error_on_second_insertion() {
+        // The duplicate arm — the second occurrence of any key surfaces
+        // the caller's `on_duplicate` return verbatim. Pins the
+        // "declaration-order-preserving first-collision" discipline every
+        // peer `Duplicate*` variant documents: the first colliding entry
+        // reports, not the last. Same shape the ten consumer sites'
+        // `*_duplicate_diagnostic_names_second_collision` posture tests
+        // pin at the caller layer; this lift makes the sequencing a
+        // property of the helper, not a per-call-site convention.
+        let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        assert_eq!(
+            insert_first_seen::<&str, DupTestErr, _>(&mut seen, "cart", || DupTestErr::Dup("first")),
+            Ok(()),
+            "first insertion must Ok",
+        );
+        assert_eq!(
+            insert_first_seen::<&str, DupTestErr, _>(&mut seen, "cart", || DupTestErr::Dup("second")),
+            Err(DupTestErr::Dup("second")),
+            "second insertion must fire the caller's closure with its own tag",
+        );
+    }
+
+    #[test]
+    fn insert_first_seen_generic_over_tuple_key_used_by_contratos_gate() {
+        // The [`crate::AplicacaoSpec::validate`] `:contratos` gate carries
+        // a six-tuple typed-edge identity key
+        // (`(de, para, wit, endpoint, subject, slot)`) — the only non-
+        // `&str` key shape in the crate's per-list uniqueness set. Pin
+        // the generic-over-`K` contract here so a future refactor that
+        // narrows the helper to `&str`-only keys (a hypothetical
+        // `HashSet<&str>`-specialized rewrite) surfaces at this pin
+        // rather than as a compile error at the sole tuple-carrying
+        // consumer. The tuple set here mirrors the shape
+        // `ContratoIdentity` carries.
+        let mut seen: std::collections::HashSet<(&str, &str, &str, Option<&str>)> =
+            std::collections::HashSet::new();
+        let key = ("cart", "catalog", "wasi:http/proxy", Some("/products"));
+        assert_eq!(
+            insert_first_seen::<_, DupTestErr, _>(&mut seen, key, || DupTestErr::Dup("must not fire")),
+            Ok(()),
+        );
+        assert_eq!(
+            insert_first_seen::<_, DupTestErr, _>(&mut seen, key, || DupTestErr::Dup("collision")),
+            Err(DupTestErr::Dup("collision")),
+            "identical tuple key on second insertion must fire the duplicate arm",
         );
     }
 }

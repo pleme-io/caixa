@@ -513,11 +513,11 @@ impl SupervisorSpec {
                     reason,
                 },
             )?;
-            if !seen.insert(child.caixa.as_str()) {
-                return Err(SupervisorError::DuplicateChildCaixa {
+            crate::render::insert_first_seen(&mut seen, child.caixa.as_str(), || {
+                SupervisorError::DuplicateChildCaixa {
                     caixa: child.caixa.clone(),
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }

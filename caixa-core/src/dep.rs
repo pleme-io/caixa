@@ -2577,12 +2577,12 @@ impl Dep {
                     reason,
                 });
             }
-            if !seen.insert(c.as_str()) {
-                return Err(DepError::CaracteristicaDuplicate {
+            crate::render::insert_first_seen(&mut seen, c.as_str(), || {
+                DepError::CaracteristicaDuplicate {
                     nome: self.nome.clone(),
                     caracteristica: c.clone(),
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }
