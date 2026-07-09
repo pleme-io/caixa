@@ -740,7 +740,7 @@ spec:
         assert_eq!(chart.version, "0.1.0");
         assert_eq!(chart.app_version, "0.1.0");
         assert_eq!(chart.dependencies.len(), 1);
-        assert_eq!(chart.dependencies[0].name, "pleme-computeunit");
+        assert_eq!(chart.dependencies[0].name, DEFAULT_LIBRARY_NAME);
         assert!(chart.keywords.contains(&"caixa-servico".to_string()));
         assert!(chart.keywords.contains(&"hello-world".to_string()));
         assert_eq!(chart.maintainers[0].name, "pleme-io");
@@ -756,8 +756,8 @@ spec:
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed
-            .get("pleme-computeunit")
-            .expect("must wrap under pleme-computeunit");
+            .get(DEFAULT_LIBRARY_NAME)
+            .expect("must wrap under DEFAULT_LIBRARY_NAME");
         assert_eq!(
             cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
@@ -803,8 +803,8 @@ spec:
                 .unwrap_or_default()
         );
         assert!(
-            parsed.get("pleme-computeunit").is_none(),
-            "values wrap key must not retain the default `pleme-computeunit` literal \
+            parsed.get(DEFAULT_LIBRARY_NAME).is_none(),
+            "values wrap key must not retain the default `{DEFAULT_LIBRARY_NAME}` literal \
              when opts.library_name overrides it"
         );
         let cu_block = parsed.get("acme-computeunit").unwrap();
@@ -825,7 +825,7 @@ spec:
         // typed override on the same axis pins the alignment across the
         // accepted set of `RenderOpts::library_name` values rather than
         // at a single canonical literal.
-        for library_name in ["pleme-computeunit", "acme-computeunit", "fork-pleme-cu"] {
+        for library_name in [DEFAULT_LIBRARY_NAME, "acme-computeunit", "fork-pleme-cu"] {
             let opts = RenderOpts {
                 library_name: library_name.into(),
                 ..RenderOpts::default()
@@ -1045,7 +1045,7 @@ spec:
             .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
-        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let limits = cu_block.get(M2_KEY_LIMITS).expect("limits must propagate");
         assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
         assert_eq!(limits.get("fuel").and_then(|m| m.as_u64()), Some(1_000_000));
@@ -1072,7 +1072,7 @@ spec:
             .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
-        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let behavior = cu_block
             .get(M2_KEY_BEHAVIOR)
             .expect("behavior must propagate");
@@ -1103,7 +1103,7 @@ spec:
             .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
-        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         assert!(cu_block.get(M2_KEY_UPGRADE_FROM).is_some());
     }
 
@@ -1118,7 +1118,7 @@ spec:
             .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
             .unwrap();
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
-        let cu_block = parsed.get("pleme-computeunit").unwrap();
+        let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         assert!(cu_block.get(M2_KEY_LIMITS).is_none());
         assert!(cu_block.get(M2_KEY_BEHAVIOR).is_none());
         assert!(cu_block.get(M2_KEY_UPGRADE_FROM).is_none());
