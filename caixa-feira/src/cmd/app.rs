@@ -82,11 +82,21 @@ impl GraphArgs {
                 // Typed view: each WIT shape has exactly one payload
                 // field (validated upstream). The label tells the
                 // reader *what* field they're looking at, not just
-                // its value.
+                // its value. The per-arm field-name prefix routes
+                // through the peer `WitTarget::{HTTP,PUBSUB,STORE}_
+                // FIELD_NAME` consts so a rename of the author-
+                // surface field (`:endpoint` → `:path`, say) reaches
+                // this printer by construction, not by manual sync.
                 let label = match c.target().expect("validated by typed_view") {
-                    WitTarget::Http { endpoint } => format!("endpoint={endpoint}"),
-                    WitTarget::PubSub { subject } => format!("subject={subject}"),
-                    WitTarget::Store { slot } => format!("slot={slot}"),
+                    WitTarget::Http { endpoint } => {
+                        format!("{}={endpoint}", WitTarget::HTTP_FIELD_NAME)
+                    }
+                    WitTarget::PubSub { subject } => {
+                        format!("{}={subject}", WitTarget::PUBSUB_FIELD_NAME)
+                    }
+                    WitTarget::Store { slot } => {
+                        format!("{}={slot}", WitTarget::STORE_FIELD_NAME)
+                    }
                     WitTarget::Capability => "(capability-only)".to_string(),
                 };
                 println!("    - {} → {}  via {}  [{}]", c.de, c.para, c.wit, label);
