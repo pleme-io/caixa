@@ -7196,7 +7196,7 @@ mod tests {
             );
             assert_eq!(
                 p.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
-                Some("CiliumNetworkPolicy")
+                Some(CILIUM_KIND_NETWORK_POLICY)
             );
             let metadata = p
                 .get(KUBE_KEY_METADATA)
@@ -7278,7 +7278,9 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
+            })
             .expect("HTTPRoute present");
         assert_eq!(
             route.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
@@ -7446,7 +7448,9 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some("HTTPRoute"))
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
+            })
             .expect("HTTPRoute present");
         assert_eq!(
             route.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
