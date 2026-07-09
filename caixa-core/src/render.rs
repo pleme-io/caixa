@@ -12065,10 +12065,7 @@ where
 {
     let mut out = serde_yaml::Mapping::new();
     for (k, v) in m {
-        out.insert(
-            serde_yaml::Value::String(k.into()),
-            serde_yaml::Value::String(v.into()),
-        );
+        out.insert_str_key(&k.into(), serde_yaml::Value::String(v.into()));
     }
     serde_yaml::Value::Mapping(out)
 }
@@ -12124,10 +12121,7 @@ where
     V: Into<String>,
 {
     let mut out = serde_yaml::Mapping::new();
-    out.insert(
-        serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.to_string()),
-        yaml_string_mapping(labels),
-    );
+    out.insert_str_key(KUBE_KEY_MATCH_LABELS, yaml_string_mapping(labels));
     serde_yaml::Value::Mapping(out)
 }
 
@@ -12185,22 +12179,16 @@ pub fn kube_resource_skeleton(
 
     let mut metadata_map = serde_yaml::Mapping::new();
     for (k, v) in metadata {
-        metadata_map.insert(serde_yaml::Value::String(k.to_string()), v);
+        metadata_map.insert_str_key(k, v);
     }
 
     let mut out = serde_yaml::Mapping::new();
-    out.insert(
-        serde_yaml::Value::String(KUBE_KEY_API_VERSION.to_string()),
+    out.insert_str_key(
+        KUBE_KEY_API_VERSION,
         serde_yaml::Value::String(api_version.to_string()),
     );
-    out.insert(
-        serde_yaml::Value::String(KUBE_KEY_KIND.to_string()),
-        serde_yaml::Value::String(kind.to_string()),
-    );
-    out.insert(
-        serde_yaml::Value::String(KUBE_KEY_METADATA.to_string()),
-        serde_yaml::Value::Mapping(metadata_map),
-    );
+    out.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String(kind.to_string()));
+    out.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_map));
     out
 }
 
@@ -12265,7 +12253,7 @@ where
 {
     slot.map(|v| {
         let mut m = serde_yaml::Mapping::new();
-        m.insert(serde_yaml::Value::String(inner_key.into()), f(v));
+        m.insert_str_key(inner_key, f(v));
         serde_yaml::Value::Mapping(m)
     })
 }
@@ -12802,6 +12790,67 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
          not a sibling `pub const` that happens to carry the same string \
          — drift between the two is the canonical footgun this lift closes"
     );
+}
+
+/// Extension methods on [`serde_yaml::Mapping`] that lift the per-key
+/// scalar-promotion boilerplate every K8s-artifact-emitter across
+/// `caixa-mesh`, `caixa-flux`, `caixa-helm`, and `caixa-core::render`
+/// carries: the canonical `mapping.insert(Value::String(key.into()),
+/// value)` three-liner the schema-key axis of every emitted YAML
+/// document tunnels a `&'static str` key axis-name through.
+///
+/// The one method — [`Self::insert_str_key`] — is the typed primitive
+/// every caller with a `KUBE_KEY_*` / `CILIUM_KEY_*` / `FLUX_KEY_*` /
+/// `GATEWAY_API_KEY_*` / `HELM_*` / `FLEET_PROGRAMS_KEY_*` / `M3_KEY_*`
+/// key at the head and a fully-built [`serde_yaml::Value`] at the tail
+/// reaches for. See its docstring for the compounding rationale.
+pub trait MappingExt {
+    /// Insert `(key, value)` into `self` with `key` promoted to a
+    /// [`serde_yaml::Value::String`]. Returns the prior value at that
+    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    ///
+    /// The canonical shape ~48 call sites across the caixa-side
+    /// renderer surface (`caixa-mesh` per-`CiliumNetworkPolicy` /
+    /// `Gateway` / `HTTPRoute` construction, `caixa-flux` per-
+    /// `GitRepository` / `HelmRelease` / `Kustomization` construction,
+    /// `caixa-helm` per-`Chart.yaml` / `values.yaml` construction,
+    /// `caixa-core::render` per-skeleton construction) previously
+    /// carried inline as the three-line block
+    /// `mapping.insert(serde_yaml::Value::String(<KEY>.into()),
+    /// <VALUE>)` — three per-call boilerplate axes (`serde_yaml::` path
+    /// re-quote, `Value::String(_)` promotion, `.into()` `&str → String`
+    /// coercion) around a two-token semantic payload (`<KEY>`, `<VALUE>`).
+    ///
+    /// Lifting collapses the boilerplate into one method call the
+    /// caller reads as intent (`mapping.insert_str_key(<KEY>, <VALUE>)`
+    /// — "insert this schema key with this rendered value") rather
+    /// than five hand-spelled positional artifacts. The next renderer
+    /// to land — the per-`:politicas` `CiliumClusterwideEnvoyConfig`
+    /// emitter (MESH-COMPOSITION §III.2 #3), the `app-operator`'s
+    /// typed `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (§III.2
+    /// #5), the M4 cross-cluster fan-out's per-cluster `Service` /
+    /// `HTTPRoute backendRefs` emission, the future `caixa-otel`
+    /// OpenTelemetry-Collector pipeline emitter — gets the canonical
+    /// key-scalar-promotion for free with one method call, instead of
+    /// re-inlining the three-line block.
+    ///
+    /// Peer to the sibling render-side helpers on the
+    /// [`serde_yaml::Value`]-construction surface:
+    /// [`yaml_string_mapping`] (string→string mapping), [`label_selector`]
+    /// (K8s `LabelSelector` shape), [`kube_resource_skeleton`] (K8s
+    /// `apiVersion`+`kind`+`metadata` skeleton), [`single_field_overlay`]
+    /// (`Option<T>` → single-key overlay). Each closes a distinct axis
+    /// of the K8s-artifact-emit surface's "same shape, written N times"
+    /// duplication; this one closes the per-key insert primitive the
+    /// other four all compose on top of.
+    fn insert_str_key(&mut self, key: &str, value: serde_yaml::Value) -> Option<serde_yaml::Value>;
+}
+
+impl MappingExt for serde_yaml::Mapping {
+    #[inline]
+    fn insert_str_key(&mut self, key: &str, value: serde_yaml::Value) -> Option<serde_yaml::Value> {
+        self.insert(serde_yaml::Value::String(key.to_string()), value)
+    }
 }
 
 #[cfg(test)]
@@ -22549,6 +22598,87 @@ spec:
             "ComputeUnit CRD per-`spec.module.*` leaf-scalar sub-block key \
              {COMPUTEUNIT_MODULE_KEY_SOURCE:?} must be all-ASCII-lowercase \
              per the CRD schema convention"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_str_key_promotes_key_to_yaml_string() {
+        // The trait method promotes an arbitrary `&str` key to
+        // `Value::String(key.to_string())` — pin the promotion so a
+        // future refactor that reaches for a different `Value` variant
+        // for the key (e.g. `Value::Tagged`) is a compile-visible break,
+        // not a silent per-consumer regression at the K8s-artifact-emit
+        // surface.
+        let mut m = serde_yaml::Mapping::new();
+        let prior = m.insert_str_key("spec", serde_yaml::Value::Bool(true));
+        assert!(
+            prior.is_none(),
+            "insert_str_key returns None on first insertion, mirroring \
+             serde_yaml::Mapping::insert"
+        );
+        // Key is exactly the `Value::String` promotion of the input.
+        let got = m
+            .get(serde_yaml::Value::String("spec".to_string()))
+            .expect("inserted key is present under Value::String promotion");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Bool(true),
+            "insert_str_key routes value verbatim to the underlying \
+             serde_yaml::Mapping::insert"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_str_key_returns_prior_value_on_replace() {
+        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // return contract: the prior value at that key, or `None` if
+        // absent. Pin the replace-returns-prior semantic so a future
+        // refactor that swaps to a `HashMap::entry`-style flow doesn't
+        // silently drop the prior-value handoff downstream consumers may
+        // reach for (the M4 per-`:politicas` overlay merger, the future
+        // `feira app deploy` idempotent-write dry-run comparator).
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key("kind", serde_yaml::Value::String("Gateway".into()));
+        let prior = m.insert_str_key("kind", serde_yaml::Value::String("HTTPRoute".into()));
+        assert_eq!(
+            prior,
+            Some(serde_yaml::Value::String("Gateway".into())),
+            "insert_str_key returns the prior value when replacing an existing key"
+        );
+        let got = m
+            .get(serde_yaml::Value::String("kind".to_string()))
+            .expect("key is still present after replace");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::String("HTTPRoute".into()),
+            "replaced value is now the most-recently-inserted one"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_str_key_matches_hand_written_promotion() {
+        // Cross-check the trait method against the hand-written
+        // `mapping.insert(Value::String(key.into()), value)` shape the
+        // ~48 lifted call sites previously carried. A drift between the
+        // trait method's promotion and the inline promotion the prior
+        // call sites used would silently emit a different YAML mapping
+        // (a differently-quoted key, a different `Value` variant) at
+        // every routed consumer — pin the equivalence so the trait
+        // remains a drop-in replacement.
+        let mut via_trait = serde_yaml::Mapping::new();
+        via_trait.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+
+        let mut via_inline = serde_yaml::Mapping::new();
+        via_inline.insert(
+            serde_yaml::Value::String(KUBE_KEY_KIND.into()),
+            serde_yaml::Value::String("Gateway".into()),
+        );
+
+        assert_eq!(
+            via_trait, via_inline,
+            "insert_str_key(KEY, V) must byte-equal \
+             insert(Value::String(KEY.into()), V) — otherwise the \
+             ~48 routed consumer sites drift silently at emit time"
         );
     }
 }

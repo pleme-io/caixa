@@ -50,7 +50,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, MappingExt, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -605,10 +605,7 @@ fn build_values_yaml(
     }
 
     let mut wrapped = serde_yaml::Mapping::new();
-    wrapped.insert(
-        serde_yaml::Value::String(library_alias.into()),
-        serde_yaml::to_value(block)?,
-    );
+    wrapped.insert_str_key(library_alias, serde_yaml::to_value(block)?);
     let body = serde_yaml::to_string(&serde_yaml::Value::Mapping(wrapped))?;
     Ok(format!("{header}{body}"))
 }
