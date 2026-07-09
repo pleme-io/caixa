@@ -738,6 +738,29 @@ pub use caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER;
 /// the full lift rationale.
 pub use caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES;
 
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_MODULE_KEY_SOURCE`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD nested
+/// `spec.module.source` per-CR wasm-component-reference leaf-scalar
+/// sub-block key every rendered `programs[]` entry carries under the
+/// parent [`COMPUTEUNIT_SPEC_KEY_MODULE`] block to name the exact
+/// OCI / git / file wasm-component artifact the M2.5 wasm-engine
+/// instantiator loads at Servico bring-up. Three per-`module.source`
+/// drift-detection navigators in this crate's test module
+/// (`programs_yaml_entry_round_trips`'s per-entry
+/// `.get(COMPUTEUNIT_SPEC_KEY_MODULE).and_then(|m| m.get(…))`
+/// present-check + `upsert_into_programs_yaml`'s cross-upsert
+/// readback + `upsert_into_helmrelease_programs`'s peer
+/// `HelmRelease`-wrapped `spec.values.programs[]` cross-upsert
+/// readback) now consult the same `&'static str` — extends the
+/// discipline the peer [`COMPUTEUNIT_SPEC_KEY_MODULE`] /
+/// [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] / [`COMPUTEUNIT_SPEC_KEY_CAPABILITIES`]
+/// top-level-`spec.*` re-exports establish one level deeper onto the
+/// nested `spec.module.*` leaf-scalar-axis. See
+/// [`caixa_core::COMPUTEUNIT_MODULE_KEY_SOURCE`] for the full lift
+/// rationale.
+pub use caixa_core::COMPUTEUNIT_MODULE_KEY_SOURCE;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -1600,6 +1623,37 @@ spec:
     }
 
     #[test]
+    fn computeunit_module_key_source_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `COMPUTEUNIT_MODULE_KEY_SOURCE` was lifted
+        // from the three inline `"source"` test-side call sites in
+        // this crate — `programs_yaml_entry_round_trips`'s per-entry
+        // `.get(COMPUTEUNIT_SPEC_KEY_MODULE).and_then(|m| m.get("source"))`
+        // present-check + `upsert_replaces_existing_entry`'s per-
+        // `arr[0].get(COMPUTEUNIT_SPEC_KEY_MODULE).get("source")`
+        // cross-upsert readback + `upsert_helmrelease_inserts_under_spec_values_programs`'s
+        // peer `HelmRelease`-wrapped `spec.values.programs[]` cross-
+        // upsert readback. Every per-Servico ComputeUnit-CRD
+        // `spec.module.source` leaf-scalar readback across the three
+        // drift-detection navigators now navigates through the same
+        // `&'static str` re-exported to a re-export of
+        // [`caixa_core::COMPUTEUNIT_MODULE_KEY_SOURCE`]. Pin the
+        // equality + static-data identity here so any local re-
+        // introduction of a sibling `pub const COMPUTEUNIT_MODULE_KEY_SOURCE:
+        // &str = "…"` is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom. Peer to
+        // [`computeunit_spec_key_module_re_export_points_at_caixa_core_canonical`]
+        // on the same ComputeUnit-CRD family — extends the re-export-
+        // identity gate one level deeper from the top-level `spec.*`
+        // container-axis surface onto the nested `spec.module.*`
+        // leaf-scalar-axis.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_MODULE_KEY_SOURCE",
+            COMPUTEUNIT_MODULE_KEY_SOURCE,
+            caixa_core::COMPUTEUNIT_MODULE_KEY_SOURCE,
+        );
+    }
+
+    #[test]
     fn programs_yaml_entry_round_trips() {
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         assert_eq!(
@@ -1616,7 +1670,7 @@ spec:
         assert!(
             entry
                 .get(COMPUTEUNIT_SPEC_KEY_MODULE)
-                .and_then(|m| m.get("source"))
+                .and_then(|m| m.get(COMPUTEUNIT_MODULE_KEY_SOURCE))
                 .is_some(),
             "module.source must propagate verbatim"
         );
@@ -1903,7 +1957,7 @@ programs:
         let updated_module = arr[0]
             .get(COMPUTEUNIT_SPEC_KEY_MODULE)
             .unwrap()
-            .get("source")
+            .get(COMPUTEUNIT_MODULE_KEY_SOURCE)
             .and_then(|s| s.as_str());
         assert_eq!(
             updated_module,
@@ -1986,7 +2040,7 @@ spec:
         let updated = arr[0]
             .get(COMPUTEUNIT_SPEC_KEY_MODULE)
             .unwrap()
-            .get("source")
+            .get(COMPUTEUNIT_MODULE_KEY_SOURCE)
             .and_then(|s| s.as_str());
         assert_eq!(updated, Some("oci://ghcr.io/pleme-io/hello-rio:v0.1.0"));
     }
