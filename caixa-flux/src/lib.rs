@@ -840,12 +840,6 @@ pub fn upsert_into_helmrelease_programs(
     helmrelease: serde_yaml::Value,
     new_entry: serde_yaml::Value,
 ) -> Result<(serde_yaml::Value, bool), Error> {
-    let new_name = new_entry
-        .get(FLEET_PROGRAMS_KEY_NAME)
-        .and_then(|n| n.as_str())
-        .ok_or(Error::MissingField(FLEET_PROGRAMS_KEY_NAME))?
-        .to_string();
-
     let serde_yaml::Value::Mapping(mut root) = helmrelease else {
         return Err(Error::MissingField(
             "expected mapping at root of HelmRelease",
@@ -878,17 +872,9 @@ pub fn upsert_into_helmrelease_programs(
         }
     };
 
-    let mut inserted = true;
-    for slot in arr.iter_mut() {
-        if slot.get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()) == Some(&new_name) {
-            *slot = new_entry.clone();
-            inserted = false;
-            break;
-        }
-    }
-    if inserted {
-        arr.push(new_entry);
-    }
+    let inserted = caixa_core::upsert_named_entry(arr, new_entry, FLEET_PROGRAMS_KEY_NAME, || {
+        Error::MissingField(FLEET_PROGRAMS_KEY_NAME)
+    })?;
 
     Ok((serde_yaml::Value::Mapping(root), inserted))
 }
@@ -907,12 +893,6 @@ pub fn upsert_into_programs_yaml(
     programs_yaml: serde_yaml::Value,
     new_entry: serde_yaml::Value,
 ) -> Result<(serde_yaml::Value, bool), Error> {
-    let new_name = new_entry
-        .get(FLEET_PROGRAMS_KEY_NAME)
-        .and_then(|n| n.as_str())
-        .ok_or(Error::MissingField(FLEET_PROGRAMS_KEY_NAME))?
-        .to_string();
-
     let serde_yaml::Value::Mapping(mut root) = programs_yaml else {
         return Err(Error::MissingField(
             "expected mapping at root of values.yaml",
@@ -929,17 +909,9 @@ pub fn upsert_into_programs_yaml(
         _ => return Err(Error::MissingField("programs must be a sequence")),
     };
 
-    let mut inserted = true;
-    for slot in arr.iter_mut() {
-        if slot.get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()) == Some(&new_name) {
-            *slot = new_entry.clone();
-            inserted = false;
-            break;
-        }
-    }
-    if inserted {
-        arr.push(new_entry);
-    }
+    let inserted = caixa_core::upsert_named_entry(arr, new_entry, FLEET_PROGRAMS_KEY_NAME, || {
+        Error::MissingField(FLEET_PROGRAMS_KEY_NAME)
+    })?;
 
     Ok((serde_yaml::Value::Mapping(root), inserted))
 }

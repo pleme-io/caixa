@@ -12258,6 +12258,97 @@ where
     })
 }
 
+/// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
+/// entries by matching on `new_entry`'s `<name_key>` scalar — the
+/// idempotent "replace-in-place if present, else append" contract
+/// every writer-side aggregator overlay lands the same 11-line block
+/// in front of. Returns `Ok(true)` when the entry was appended new,
+/// `Ok(false)` when an existing entry with the same `<name_key>`
+/// value was replaced in place (preserving position); returns
+/// `on_missing_name()` when `new_entry` doesn't carry `<name_key>`
+/// as a string scalar (the caller's own typed
+/// [`crate::RenderError`]-shaped error surface, threaded through the
+/// closure so this helper stays crate-agnostic).
+///
+/// Two identical-shape call sites collapse onto this helper — the
+/// two [`caixa-flux`] writer-side upsert paths that both land a
+/// programs.yaml entry into a `programs:` sequence differing only
+/// on the outer navigation:
+///
+///   * [`caixa_flux::upsert_into_helmrelease_programs`][helm-up] —
+///     the aggregator-HelmRelease shape, upserting into
+///     `spec.values.programs[]` on a `HelmRelease` document;
+///   * [`caixa_flux::upsert_into_programs_yaml`][yaml-up] — the
+///     bare-values.yaml shape, upserting into `programs[]` at the
+///     values.yaml root.
+///
+/// Until this lift landed both call sites re-inlined the same
+/// verbatim 11-line block — extract-name-scalar-or-error, iterate
+/// the sequence, replace-in-place-on-match else fall through to
+/// push — with no compile-time link between the two: a rebrand on
+/// either side (a per-entry match key rename beyond the currently-
+/// lifted [`crate::FLEET_PROGRAMS_KEY_NAME`], the idempotency
+/// contract's semantic reshaping — e.g. matching on
+/// `(name, namespace)` for the M4 multi-namespace aggregator flow
+/// once the `lareira-fleet-programs` chart admits per-entry
+/// `namespace:` overrides, the return-value's `bool`-shape shift
+/// once "replace" grows a merge-semantics axis) would silently
+/// desynchronize the two writer-side paths — one path idempotently
+/// upserts under the new contract while the other silently keeps
+/// the old shape, and the failure surfaces at aggregator-apply
+/// time as a duplicated / missing / mis-merged entry far from the
+/// rebrand commit's source. Peer of the sibling render-side lifts
+/// ([`single_field_overlay`], [`servico_m2_overlay`],
+/// [`insert_first_seen`]) on the same "the same shape written
+/// verbatim ≥ 2 times becomes a typed helper" trajectory THEORY.md
+/// §I.3.5 promotes to a build-time concern.
+///
+/// The `name_key` axis stays parametric (rather than pinned to
+/// [`crate::FLEET_PROGRAMS_KEY_NAME`] inside the helper) so a
+/// future per-entry match on a different discriminator scalar (an
+/// M4 `id:` axis promoted alongside `name:`, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-entry
+/// `spec.selector` upsert path) reaches for the same helper with a
+/// different key rather than re-inlining the loop. The closure-
+/// shaped error surface (rather than a bare `Result<bool,
+/// &'static str>` or an added typed error variant in this crate)
+/// keeps every caller's own error enum authoritative — the
+/// diagnostic remediation for a missing-name-scalar in a programs-
+/// yaml entry rightly names the caller's aggregator schema
+/// (`spec.values.programs[].name` for the `HelmRelease` shape,
+/// `programs[].name` for the bare values.yaml shape), not this
+/// generic helper.
+///
+/// [helm-up]: ../../caixa_flux/fn.upsert_into_helmrelease_programs.html
+/// [yaml-up]: ../../caixa_flux/fn.upsert_into_programs_yaml.html
+///
+/// # Errors
+///
+/// Returns `on_missing_name()` when `new_entry.get(name_key)` is
+/// not a [`serde_yaml::Value::String`] — the closure surfaces the
+/// caller's own typed error variant naming the offending schema
+/// axis. On success returns `Ok(true)` for a newly-appended entry,
+/// `Ok(false)` for an in-place replacement.
+pub fn upsert_named_entry<E>(
+    arr: &mut Vec<serde_yaml::Value>,
+    new_entry: serde_yaml::Value,
+    name_key: &'static str,
+    on_missing_name: impl FnOnce() -> E,
+) -> Result<bool, E> {
+    let new_name = match new_entry.get(name_key).and_then(|n| n.as_str()) {
+        Some(s) => s.to_string(),
+        None => return Err(on_missing_name()),
+    };
+    for slot in arr.iter_mut() {
+        if slot.get(name_key).and_then(|n| n.as_str()) == Some(&new_name) {
+            *slot = new_entry;
+            return Ok(false);
+        }
+    }
+    arr.push(new_entry);
+    Ok(true)
+}
+
 /// Render the M2 typed-slot YAML overlay for a Caixa: the camelCase
 /// `(key, value)` fragments every per-Servico renderer
 /// ([`caixa-helm`]'s values block, [`caixa-flux`]'s programs.yaml
@@ -17792,6 +17883,201 @@ mod tests {
         .unwrap();
         let v_clone = v.clone();
         assert_eq!(v, v_clone);
+    }
+
+    // ── upsert_named_entry — typed sequence-upsert primitive ─────────────
+
+    #[test]
+    fn upsert_named_entry_appends_when_empty() {
+        // Empty-sequence-first arm: an initially-empty aggregator
+        // programs.yaml carries no matching entry, so the upsert falls
+        // through to the append-new tail and returns
+        // `Ok(true)` (newly inserted). Pins the append-new contract
+        // both writer-side [`caixa_flux`] upsert paths lean on when
+        // the aggregator's `programs:` sequence is empty
+        // (`upsert_inserts_new_entry` at the values.yaml layer,
+        // `upsert_helmrelease_inserts_under_spec_values_programs` at
+        // the HelmRelease layer) — the same shape at the typed-
+        // primitive layer as the two production sites.
+        let mut arr: Vec<serde_yaml::Value> = Vec::new();
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://x } }").unwrap();
+        let inserted =
+            upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
+        assert!(inserted, "empty sequence + new entry must append");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0].get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
+            Some("hello-rio")
+        );
+    }
+
+    #[test]
+    fn upsert_named_entry_appends_when_no_match() {
+        // Non-matching-name append arm: an aggregator sequence with a
+        // differently-named entry carries no matching name-key value,
+        // so the upsert falls through to the append-new tail (never
+        // replacing) and returns `Ok(true)`. Pins the append-only
+        // semantic that keeps every unrelated entry untouched.
+        let mut arr: Vec<serde_yaml::Value> = vec![
+            serde_yaml::from_str("{ name: other, module: { source: github:foo/bar } }").unwrap(),
+        ];
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://x } }").unwrap();
+        let inserted =
+            upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
+        assert!(inserted);
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr[0].get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
+            Some("other")
+        );
+        assert_eq!(
+            arr[1].get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()),
+            Some("hello-rio")
+        );
+    }
+
+    #[test]
+    fn upsert_named_entry_replaces_when_match() {
+        // Match-and-replace arm: an aggregator sequence carrying an
+        // entry whose `<name_key>` matches the new entry's name-scalar
+        // gets its slot rewritten in place and the helper returns
+        // `Ok(false)` (replaced-not-appended). Pins the idempotency
+        // contract every writer-side upsert path lands on — the same
+        // caixa.lisp deployed twice must upsert to the same
+        // aggregator entry, never grow a duplicated `programs[]`
+        // entry. Peer at the substrate layer with the two production
+        // `upsert_replaces_existing_entry` /
+        // `upsert_helmrelease_replaces_existing` tests
+        // ([`caixa_flux`]).
+        let mut arr: Vec<serde_yaml::Value> = vec![
+            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://old } }").unwrap(),
+        ];
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ name: hello-rio, module: { source: oci://new } }").unwrap();
+        let inserted =
+            upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
+        assert!(!inserted, "matching name must replace, not append");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0]
+                .get(COMPUTEUNIT_SPEC_KEY_MODULE)
+                .and_then(|m| m.get(COMPUTEUNIT_MODULE_KEY_SOURCE))
+                .and_then(|s| s.as_str()),
+            Some("oci://new")
+        );
+    }
+
+    #[test]
+    fn upsert_named_entry_preserves_position_on_replace() {
+        // Position-preserving-replace pin: when an interior entry
+        // matches, its slot is rewritten in place and the surrounding
+        // entries stay put (first / last / any middle position). The
+        // aggregator's fanout consumers filter `programs[]` in
+        // declaration order (the `lareira-fleet-programs` chart's
+        // `.Values.programs` iteration + the future
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // per-entry admission bind); a replace-then-move-to-tail shift
+        // (silently promoting the just-upserted entry to end-of-list)
+        // would silently reorder every downstream consumer's iteration
+        // window. Same declaration-order-preservation contract the
+        // aggregator side relies on.
+        let mut arr: Vec<serde_yaml::Value> = vec![
+            serde_yaml::from_str("{ name: alpha, module: { source: github:a/a } }").unwrap(),
+            serde_yaml::from_str("{ name: beta, module: { source: github:b/old } }").unwrap(),
+            serde_yaml::from_str("{ name: gamma, module: { source: github:g/g } }").unwrap(),
+        ];
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ name: beta, module: { source: github:b/new } }").unwrap();
+        let inserted =
+            upsert_named_entry::<()>(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || ()).unwrap();
+        assert!(!inserted);
+        assert_eq!(arr.len(), 3);
+        // Order pin: alpha stays at 0, beta stays at 1 (rewritten),
+        // gamma stays at 2 — replace must preserve position.
+        let names: Vec<&str> = arr
+            .iter()
+            .filter_map(|v| v.get(FLEET_PROGRAMS_KEY_NAME).and_then(|n| n.as_str()))
+            .collect();
+        assert_eq!(names, ["alpha", "beta", "gamma"]);
+        assert_eq!(
+            arr[1]
+                .get(COMPUTEUNIT_SPEC_KEY_MODULE)
+                .and_then(|m| m.get(COMPUTEUNIT_MODULE_KEY_SOURCE))
+                .and_then(|s| s.as_str()),
+            Some("github:b/new")
+        );
+    }
+
+    #[test]
+    fn upsert_named_entry_calls_error_closure_on_missing_name_key() {
+        // Missing-name-scalar arm: when the new entry doesn't carry
+        // `<name_key>` as a string scalar, the helper calls the
+        // caller's `on_missing_name` closure — the caller's own typed
+        // [`crate::RenderError`]-shaped error surface remains
+        // authoritative. Threaded through a closure so this crate
+        // stays agnostic to the caller's error enum shape (the two
+        // production sites in [`caixa_flux`] surface
+        // `Error::MissingField(FLEET_PROGRAMS_KEY_NAME)` verbatim,
+        // and any future upsert path — the M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // per-entry upsert, the `caixa-otel` per-scrape upsert —
+        // surfaces its own typed variant).
+        let mut arr: Vec<serde_yaml::Value> = Vec::new();
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ module: { source: oci://x } }").unwrap();
+        let err = upsert_named_entry(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || {
+            "missing-name".to_string()
+        })
+        .unwrap_err();
+        assert_eq!(err, "missing-name");
+        assert!(arr.is_empty(), "missing-name entry must not land in arr");
+    }
+
+    #[test]
+    fn upsert_named_entry_calls_error_closure_on_non_string_name_scalar() {
+        // Non-string-name-scalar arm: when the new entry's
+        // `<name_key>` is present but not a string (a number, a
+        // mapping, a sequence — the paste-from-binary footgun where
+        // an author or a schema-migration script accidentally lands a
+        // JSON-Number in the name slot), the helper takes the same
+        // path as the missing-name arm and calls the caller's
+        // `on_missing_name` closure. Peer arm to the
+        // upsert_named_entry_calls_error_closure_on_missing_name_key
+        // pin — both non-string-scalar paths route through the same
+        // caller-owned diagnostic.
+        let mut arr: Vec<serde_yaml::Value> = Vec::new();
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ name: 42, module: { source: oci://x } }").unwrap();
+        let err =
+            upsert_named_entry(&mut arr, entry, FLEET_PROGRAMS_KEY_NAME, || 7u32).unwrap_err();
+        assert_eq!(err, 7u32);
+        assert!(arr.is_empty());
+    }
+
+    #[test]
+    fn upsert_named_entry_uses_parametric_name_key() {
+        // Name-key-axis-parametric pin: the helper matches on the
+        // `name_key` parameter, not the pinned
+        // [`FLEET_PROGRAMS_KEY_NAME`] const — a future writer-side
+        // upsert path keying on a different discriminator scalar
+        // (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // per-entry `spec.selector` axis, an in-progress rebrand
+        // promoting `id:` alongside `name:`) reaches for the same
+        // helper with a different key rather than re-inlining the
+        // upsert loop.
+        let mut arr: Vec<serde_yaml::Value> =
+            vec![serde_yaml::from_str("{ id: alpha, payload: original }").unwrap()];
+        let entry: serde_yaml::Value =
+            serde_yaml::from_str("{ id: alpha, payload: replaced }").unwrap();
+        let inserted = upsert_named_entry::<()>(&mut arr, entry, "id", || ()).unwrap();
+        assert!(!inserted, "matching `id:` must replace, not append");
+        assert_eq!(arr.len(), 1);
+        assert_eq!(
+            arr[0].get("payload").and_then(|p| p.as_str()),
+            Some("replaced")
+        );
     }
 
     // ── is_dns_1123_label — shared DNS-1123 label predicate ──────────────

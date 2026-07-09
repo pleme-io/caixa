@@ -82,7 +82,7 @@ pub use render::{
     pleme_program_selector, require_kind, require_positive_bounded_u32,
     require_positive_bounded_u64, require_positive_canonical_bounded_duration,
     require_single_servico, require_valid_dns_1123_label, require_valid_versao_requirement,
-    servico_m2_overlay, single_field_overlay, yaml_string_mapping,
+    servico_m2_overlay, single_field_overlay, upsert_named_entry, yaml_string_mapping,
 };
 pub use supervisor::{
     ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX,
