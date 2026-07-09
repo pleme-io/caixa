@@ -12301,6 +12301,74 @@ where
     }
 }
 
+/// Test-side pin that asserts a renderer-crate `pub use caixa_core::X;`
+/// re-export shares both the byte value *and* the `&'static str`
+/// allocation of its canonical `caixa_core::X` declaration — the
+/// stronger predicate than a plain `assert_eq!` byte-equality check.
+///
+/// The canonical drift footgun this closes: a renderer crate silently
+/// carries a sibling `pub const X: &str = "…";` (or a copy-pasted
+/// `pub const X: &str = caixa_core::X;` shape whose right-hand side
+/// materializes a fresh promoted-static allocation with the same
+/// bytes) instead of `pub use caixa_core::X;`. A byte-only `assert_eq!`
+/// on the value would pass — the strings are equal — but the two
+/// declarations point at two different `&'static` allocations, so a
+/// future canonical-side rebrand (`caixa_core::X` migrates from
+/// `"foo"` to `"foo-v2"`) silently drifts the two apart, with the
+/// apply-time symptom (the cluster-side CRD schema drops the malformed
+/// axis, the operator's dispatch loop misses the renamed key, the
+/// Cilium data plane silently reroutes past the renamed L4/L7 rule)
+/// far from the drift commit's source. Byte-equality misses this
+/// class of drift; static-data identity via [`std::ptr::eq`] catches
+/// it structurally.
+///
+/// Lifted from the seventy-five per-`_re_export_points_at_caixa_core_
+/// canonical` test bodies formerly inlined verbatim across
+/// [`caixa-mesh`][mesh] (49 tests), [`caixa-flux`][flux] (21 tests),
+/// and [`caixa-helm`][helm] (5 tests) — each formerly carried the same
+/// two-arm `assert_eq!(<LOCAL>, caixa_core::<LOCAL>);` + `assert!(std
+/// ::ptr::eq(<LOCAL>.as_ptr(), caixa_core::<LOCAL>.as_ptr()), "…must
+/// be a re-export of caixa_core::…, not a sibling `pub const`…");`
+/// pair by hand, differing only in the local `<LOCAL>` identifier the
+/// diagnostic names. The lifted helper puts the canonical two-arm
+/// gate in exactly one place so the next per-renderer re-export pin
+/// (the future [`caixa-otel`] telemetry-pipeline renderer's per-CR
+/// axis re-exports, the M4 [`mesh.pleme.io/v1alpha1/Aplicacao`] CR
+/// materializer's per-spec-axis re-exports, the future per-Supervisor
+/// reconciler's per-`:children` axis re-exports) lands on this
+/// helper by construction rather than by copying the boilerplate.
+///
+/// Same trajectory as the sibling [`require_kind`] /
+/// [`require_single_servico`] cross-renderer-shared-gate lifts on the
+/// production-side axis; this closes the peer test-side re-export-
+/// identity-gate axis.
+///
+/// # Panics
+///
+/// Panics via [`assert_eq!`] when the two byte-strings differ; panics
+/// via [`assert!`] on the [`std::ptr::eq`] arm when the two share
+/// bytes but point at different `&'static str` allocations. The
+/// `name` argument names the local re-export for the failure message
+/// so the diagnostic reads `KUBE_KEY_SPEC must be a re-export of
+/// caixa_core::KUBE_KEY_SPEC, …` — pointing at the offending
+/// re-export site, not just at the assertion.
+///
+/// [mesh]: https://docs.rs/caixa-mesh
+/// [flux]: https://docs.rs/caixa-flux
+/// [helm]: https://docs.rs/caixa-helm
+pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: &'static str) {
+    assert_eq!(
+        local, canonical,
+        "{name} must byte-equal caixa_core::{name}"
+    );
+    assert!(
+        std::ptr::eq(local.as_ptr(), canonical.as_ptr()),
+        "{name} must be a re-export of caixa_core::{name}, \
+         not a sibling `pub const` that happens to carry the same string \
+         — drift between the two is the canonical footgun this lift closes"
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -21749,12 +21817,16 @@ mod tests {
         // property of the helper, not a per-call-site convention.
         let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
         assert_eq!(
-            insert_first_seen::<&str, DupTestErr, _>(&mut seen, "cart", || DupTestErr::Dup("first")),
+            insert_first_seen::<&str, DupTestErr, _>(&mut seen, "cart", || DupTestErr::Dup(
+                "first"
+            )),
             Ok(()),
             "first insertion must Ok",
         );
         assert_eq!(
-            insert_first_seen::<&str, DupTestErr, _>(&mut seen, "cart", || DupTestErr::Dup("second")),
+            insert_first_seen::<&str, DupTestErr, _>(&mut seen, "cart", || DupTestErr::Dup(
+                "second"
+            )),
             Err(DupTestErr::Dup("second")),
             "second insertion must fire the caller's closure with its own tag",
         );
@@ -21776,7 +21848,9 @@ mod tests {
             std::collections::HashSet::new();
         let key = ("cart", "catalog", "wasi:http/proxy", Some("/products"));
         assert_eq!(
-            insert_first_seen::<_, DupTestErr, _>(&mut seen, key, || DupTestErr::Dup("must not fire")),
+            insert_first_seen::<_, DupTestErr, _>(&mut seen, key, || DupTestErr::Dup(
+                "must not fire"
+            )),
             Ok(()),
         );
         assert_eq!(
@@ -21784,5 +21858,69 @@ mod tests {
             Err(DupTestErr::Dup("collision")),
             "identical tuple key on second insertion must fire the duplicate arm",
         );
+    }
+
+    // ── assert_str_reexport_identity ──────────────────────────────────
+
+    #[test]
+    fn assert_str_reexport_identity_accepts_same_static_allocation() {
+        // Positive path — passing the same `&'static str` twice (the
+        // shape a `pub use caixa_core::X;` re-export produces at every
+        // consumer site) must not panic. This is the ~75-caller-site
+        // happy path that the lifted test-side pin gate collapses onto.
+        // The compiler-interned literal `"KUBE_KEY_SPEC"` reaches this
+        // helper twice through the same `&'static` allocation, so
+        // `std::ptr::eq(a.as_ptr(), b.as_ptr())` returns true and the
+        // second `assert!` arm passes without firing.
+        const CANONICAL: &str = "canonical-value";
+        assert_str_reexport_identity("CANONICAL_UNDER_TEST", CANONICAL, CANONICAL);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "SIBLING_UNDER_TEST must be a re-export of caixa_core::SIBLING_UNDER_TEST"
+    )]
+    fn assert_str_reexport_identity_rejects_sibling_allocation_with_same_bytes() {
+        // Negative path — passing two byte-equal `&'static str`s whose
+        // underlying allocations differ (the shape a sibling `pub const
+        // X: &str = "…"` at a renderer crate produces, silently carrying
+        // the same bytes but its own `&'static` allocation) must panic
+        // on the [`std::ptr::eq`] arm, naming the offending re-export.
+        // Reproduces the canonical drift footgun the lift closes: byte-
+        // equality via [`assert_eq!`] alone silently admits the drift
+        // — the two strings are equal — but the allocation-identity
+        // arm catches it structurally. Uses [`String::leak`] to
+        // materialize a fresh `&'static str` allocation carrying the
+        // same bytes as the compiler-interned canonical literal, so
+        // the two share bytes but differ in allocation.
+        const CANONICAL: &str = "canonical-value";
+        let sibling: &'static str = String::from("canonical-value").leak();
+        // Sanity — the sibling and canonical share bytes …
+        assert_eq!(sibling, CANONICAL);
+        // … but must live at distinct `&'static` allocations for this
+        // negative path to fire on the identity arm rather than
+        // silently pass on the equality arm.
+        assert!(!std::ptr::eq(sibling.as_ptr(), CANONICAL.as_ptr()));
+        assert_str_reexport_identity("SIBLING_UNDER_TEST", sibling, CANONICAL);
+    }
+
+    #[test]
+    #[should_panic(expected = "DRIFTED_UNDER_TEST must byte-equal caixa_core::DRIFTED_UNDER_TEST")]
+    fn assert_str_reexport_identity_rejects_bytes_drift_before_identity_arm() {
+        // Ordering pin — when the two byte-strings differ, the
+        // [`assert_eq!`] arm must fire *before* the [`std::ptr::eq`]
+        // identity arm reaches for `.as_ptr()`. Pins the arm sequencing
+        // so a future refactor that flipped the two arms (identity
+        // first, byte-equality second) would surface here rather than
+        // report the wrong diagnostic against a drifted canonical
+        // (the byte-equality diagnostic self-locates the value drift;
+        // the identity diagnostic self-locates the allocation drift —
+        // reporting the identity arm on a value-drifted pair points
+        // the reader at the wrong failure class). Same discipline as
+        // the peer `require_positive_canonical_bounded_duration`
+        // three-arm-ordering pin above.
+        const CANONICAL: &str = "canonical-value";
+        const DRIFTED: &str = "drifted-value";
+        assert_str_reexport_identity("DRIFTED_UNDER_TEST", DRIFTED, CANONICAL);
     }
 }

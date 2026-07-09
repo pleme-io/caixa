@@ -1164,15 +1164,10 @@ spec:
         // contrato flow far from the source rebrand commit. Peer to
         // `caixa_mesh::tests::default_namespace_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(DEFAULT_NAMESPACE, caixa_core::DEFAULT_NAMESPACE);
-        assert!(
-            std::ptr::eq(
-                DEFAULT_NAMESPACE.as_ptr(),
-                caixa_core::DEFAULT_NAMESPACE.as_ptr(),
-            ),
-            "DEFAULT_NAMESPACE must be a re-export of caixa_core::DEFAULT_NAMESPACE, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_NAMESPACE",
+            DEFAULT_NAMESPACE,
+            caixa_core::DEFAULT_NAMESPACE,
         );
     }
 
@@ -1199,12 +1194,10 @@ spec:
         // on the sibling re-export axis +
         // `caixa_mesh::tests::kube_key_spec_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(KUBE_KEY_SPEC, caixa_core::KUBE_KEY_SPEC);
-        assert!(
-            std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
-            "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_SPEC",
+            KUBE_KEY_SPEC,
+            caixa_core::KUBE_KEY_SPEC,
         );
     }
 
@@ -1229,15 +1222,10 @@ spec:
         // the sibling K8s-CR top-level-spec-axis re-export +
         // `caixa_mesh::tests::kube_key_metadata_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(KUBE_KEY_METADATA, caixa_core::KUBE_KEY_METADATA);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_METADATA.as_ptr(),
-                caixa_core::KUBE_KEY_METADATA.as_ptr(),
-            ),
-            "KUBE_KEY_METADATA must be a re-export of caixa_core::KUBE_KEY_METADATA, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_METADATA",
+            KUBE_KEY_METADATA,
+            caixa_core::KUBE_KEY_METADATA,
         );
     }
 
@@ -1275,12 +1263,10 @@ spec:
         // (615a13d) on the sibling renderer crate — completes the
         // per-K8s-CR top-level `(spec, metadata, kind)` axis re-export
         // triple every rendered Flux bundle document navigates.
-        assert_eq!(KUBE_KEY_KIND, caixa_core::KUBE_KEY_KIND);
-        assert!(
-            std::ptr::eq(KUBE_KEY_KIND.as_ptr(), caixa_core::KUBE_KEY_KIND.as_ptr()),
-            "KUBE_KEY_KIND must be a re-export of caixa_core::KUBE_KEY_KIND, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_KIND",
+            KUBE_KEY_KIND,
+            caixa_core::KUBE_KEY_KIND,
         );
     }
 
@@ -1319,15 +1305,10 @@ spec:
         // top-level `(apiVersion, kind, metadata, spec)` axis
         // re-export quartet every rendered Flux v2 bundle document
         // navigates.
-        assert_eq!(KUBE_KEY_API_VERSION, caixa_core::KUBE_KEY_API_VERSION);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_API_VERSION.as_ptr(),
-                caixa_core::KUBE_KEY_API_VERSION.as_ptr(),
-            ),
-            "KUBE_KEY_API_VERSION must be a re-export of caixa_core::KUBE_KEY_API_VERSION, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_API_VERSION",
+            KUBE_KEY_API_VERSION,
+            caixa_core::KUBE_KEY_API_VERSION,
         );
     }
 
@@ -1376,15 +1357,10 @@ spec:
         // top-level quartet establishes onto the canonical
         // `metadata.namespace` nested axis every rendered Flux v2
         // bundle document navigates.
-        assert_eq!(KUBE_KEY_NAMESPACE, caixa_core::KUBE_KEY_NAMESPACE);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_NAMESPACE.as_ptr(),
-                caixa_core::KUBE_KEY_NAMESPACE.as_ptr(),
-            ),
-            "KUBE_KEY_NAMESPACE must be a re-export of caixa_core::KUBE_KEY_NAMESPACE, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_NAMESPACE",
+            KUBE_KEY_NAMESPACE,
+            caixa_core::KUBE_KEY_NAMESPACE,
         );
     }
 
@@ -1429,19 +1405,10 @@ spec:
         // onto the canonical fleet-programs schema top-level axis
         // (`programs:`) every rendered aggregator-HelmRelease /
         // bare-values.yaml document navigates.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "FLEET_PROGRAMS_KEY_PROGRAMS",
             FLEET_PROGRAMS_KEY_PROGRAMS,
-            caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS
-        );
-        assert!(
-            std::ptr::eq(
-                FLEET_PROGRAMS_KEY_PROGRAMS.as_ptr(),
-                caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS.as_ptr(),
-            ),
-            "FLEET_PROGRAMS_KEY_PROGRAMS must be a re-export of \
-             caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS, not a sibling `pub const` that \
-             happens to carry the same string — drift between the two is the canonical \
-             footgun this lift closes"
+            caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS,
         );
     }
 
@@ -1487,16 +1454,10 @@ spec:
         // the sibling fleet-programs top-level array-key re-export
         // establish onto the canonical fleet-programs schema per-entry
         // name-discriminator axis.
-        assert_eq!(FLEET_PROGRAMS_KEY_NAME, caixa_core::FLEET_PROGRAMS_KEY_NAME);
-        assert!(
-            std::ptr::eq(
-                FLEET_PROGRAMS_KEY_NAME.as_ptr(),
-                caixa_core::FLEET_PROGRAMS_KEY_NAME.as_ptr(),
-            ),
-            "FLEET_PROGRAMS_KEY_NAME must be a re-export of \
-             caixa_core::FLEET_PROGRAMS_KEY_NAME, not a sibling `pub const` that \
-             happens to carry the same string — drift between the two is the canonical \
-             footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLEET_PROGRAMS_KEY_NAME",
+            FLEET_PROGRAMS_KEY_NAME,
+            caixa_core::FLEET_PROGRAMS_KEY_NAME,
         );
     }
 
@@ -2001,15 +1962,10 @@ spec:
         // mismatch routing the per-cluster override nowhere. Peer to
         // `caixa_helm::tests::default_library_name_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(DEFAULT_LIBRARY_NAME, caixa_core::DEFAULT_LIBRARY_NAME);
-        assert!(
-            std::ptr::eq(
-                DEFAULT_LIBRARY_NAME.as_ptr(),
-                caixa_core::DEFAULT_LIBRARY_NAME.as_ptr(),
-            ),
-            "DEFAULT_LIBRARY_NAME must be a re-export of caixa_core::DEFAULT_LIBRARY_NAME, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_LIBRARY_NAME",
+            DEFAULT_LIBRARY_NAME,
+            caixa_core::DEFAULT_LIBRARY_NAME,
         );
     }
 
@@ -2130,16 +2086,10 @@ spec:
         // the sibling re-export axes +
         // `caixa_helm::tests::helm_values_key_enabled_re_export_points_at_caixa_core_canonical`
         // on the peer per-Servico-chart renderer crate.
-        assert_eq!(HELM_VALUES_KEY_ENABLED, caixa_core::HELM_VALUES_KEY_ENABLED);
-        assert!(
-            std::ptr::eq(
-                HELM_VALUES_KEY_ENABLED.as_ptr(),
-                caixa_core::HELM_VALUES_KEY_ENABLED.as_ptr(),
-            ),
-            "HELM_VALUES_KEY_ENABLED must be a re-export of \
-             caixa_core::HELM_VALUES_KEY_ENABLED, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "HELM_VALUES_KEY_ENABLED",
+            HELM_VALUES_KEY_ENABLED,
+            caixa_core::HELM_VALUES_KEY_ENABLED,
         );
     }
 
@@ -2162,19 +2112,10 @@ spec:
         // failure naming the offending drift, not a silent apply-time
         // `Kustomization`-outside-controller-watch-window / dangling-
         // `sourceRef` reconciliation freeze.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_FLUX_SYSTEM_NAMESPACE",
             DEFAULT_FLUX_SYSTEM_NAMESPACE,
-            caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE
-        );
-        assert!(
-            std::ptr::eq(
-                DEFAULT_FLUX_SYSTEM_NAMESPACE.as_ptr(),
-                caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE.as_ptr(),
-            ),
-            "DEFAULT_FLUX_SYSTEM_NAMESPACE must be a re-export of \
-             caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two is \
-             the canonical footgun this lift closes"
+            caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE,
         );
     }
 
@@ -2479,19 +2420,10 @@ spec:
         // caixa-core boundary) is a build-time test failure naming the
         // offending drift, not a silent apply-time `GitRepository`-
         // outside-controller-watch-window reconciliation freeze.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_API_VERSION",
             FLUX_GITREPOSITORY_API_VERSION,
-            caixa_core::FLUX_GITREPOSITORY_API_VERSION
-        );
-        assert!(
-            std::ptr::eq(
-                FLUX_GITREPOSITORY_API_VERSION.as_ptr(),
-                caixa_core::FLUX_GITREPOSITORY_API_VERSION.as_ptr(),
-            ),
-            "FLUX_GITREPOSITORY_API_VERSION must be a re-export of \
-             caixa_core::FLUX_GITREPOSITORY_API_VERSION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two is \
-             the canonical footgun this lift closes"
+            caixa_core::FLUX_GITREPOSITORY_API_VERSION,
         );
     }
 
@@ -2580,19 +2512,10 @@ spec:
         // caixa-core boundary) is a build-time test failure naming the
         // offending drift, not a silent apply-time `Kustomization`-
         // outside-controller-watch-window reconciliation freeze.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KUSTOMIZATION_API_VERSION",
             FLUX_KUSTOMIZATION_API_VERSION,
-            caixa_core::FLUX_KUSTOMIZATION_API_VERSION
-        );
-        assert!(
-            std::ptr::eq(
-                FLUX_KUSTOMIZATION_API_VERSION.as_ptr(),
-                caixa_core::FLUX_KUSTOMIZATION_API_VERSION.as_ptr(),
-            ),
-            "FLUX_KUSTOMIZATION_API_VERSION must be a re-export of \
-             caixa_core::FLUX_KUSTOMIZATION_API_VERSION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two is \
-             the canonical footgun this lift closes"
+            caixa_core::FLUX_KUSTOMIZATION_API_VERSION,
         );
     }
 
@@ -2689,19 +2612,10 @@ spec:
         // re-export at the caixa-core boundary) is a build-time test
         // failure naming the offending drift, not a silent apply-time
         // `helm-controller` chart-resolution dangle.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KIND_GIT_REPOSITORY",
             FLUX_KIND_GIT_REPOSITORY,
-            caixa_core::FLUX_KIND_GIT_REPOSITORY
-        );
-        assert!(
-            std::ptr::eq(
-                FLUX_KIND_GIT_REPOSITORY.as_ptr(),
-                caixa_core::FLUX_KIND_GIT_REPOSITORY.as_ptr(),
-            ),
-            "FLUX_KIND_GIT_REPOSITORY must be a re-export of \
-             caixa_core::FLUX_KIND_GIT_REPOSITORY, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two is \
-             the canonical footgun this lift closes"
+            caixa_core::FLUX_KIND_GIT_REPOSITORY,
         );
     }
 
@@ -2924,16 +2838,10 @@ spec:
         // test failure naming the offending drift, not a silent
         // apply-time `helm-controller` resolution dangle or a
         // perpetually-`Reconciling` parent Kustomization.
-        assert_eq!(FLUX_KIND_HELM_RELEASE, caixa_core::FLUX_KIND_HELM_RELEASE);
-        assert!(
-            std::ptr::eq(
-                FLUX_KIND_HELM_RELEASE.as_ptr(),
-                caixa_core::FLUX_KIND_HELM_RELEASE.as_ptr(),
-            ),
-            "FLUX_KIND_HELM_RELEASE must be a re-export of \
-             caixa_core::FLUX_KIND_HELM_RELEASE, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two is \
-             the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KIND_HELM_RELEASE",
+            FLUX_KIND_HELM_RELEASE,
+            caixa_core::FLUX_KIND_HELM_RELEASE,
         );
     }
 
@@ -3117,16 +3025,10 @@ spec:
         // `kustomize-controller` CRD-lookup miss that perpetually
         // freezes the rendered parent Kustomization and every
         // downstream per-Servico `dependsOn` chain.
-        assert_eq!(FLUX_KIND_KUSTOMIZATION, caixa_core::FLUX_KIND_KUSTOMIZATION);
-        assert!(
-            std::ptr::eq(
-                FLUX_KIND_KUSTOMIZATION.as_ptr(),
-                caixa_core::FLUX_KIND_KUSTOMIZATION.as_ptr(),
-            ),
-            "FLUX_KIND_KUSTOMIZATION must be a re-export of \
-             caixa_core::FLUX_KIND_KUSTOMIZATION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two is \
-             the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KIND_KUSTOMIZATION",
+            FLUX_KIND_KUSTOMIZATION,
+            caixa_core::FLUX_KIND_KUSTOMIZATION,
         );
     }
 
@@ -3157,16 +3059,10 @@ spec:
         // with no field naming the container-axis-drift root cause).
         // Closes the sibling re-export identity axis on the same
         // trajectory the peer per-CRD-`kind`-discriminator pins carry.
-        assert_eq!(FLUX_KEY_SOURCE_REF, caixa_core::FLUX_KEY_SOURCE_REF);
-        assert!(
-            std::ptr::eq(
-                FLUX_KEY_SOURCE_REF.as_ptr(),
-                caixa_core::FLUX_KEY_SOURCE_REF.as_ptr(),
-            ),
-            "FLUX_KEY_SOURCE_REF must be a re-export of \
-             caixa_core::FLUX_KEY_SOURCE_REF, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KEY_SOURCE_REF",
+            FLUX_KEY_SOURCE_REF,
+            caixa_core::FLUX_KEY_SOURCE_REF,
         );
     }
 
@@ -3195,16 +3091,10 @@ spec:
         // re-export identity axis on the same trajectory the peer
         // [`flux_key_source_ref_re_export_points_at_caixa_core_canonical`]
         // pin carries.
-        assert_eq!(FLUX_KEY_VALUES, caixa_core::FLUX_KEY_VALUES);
-        assert!(
-            std::ptr::eq(
-                FLUX_KEY_VALUES.as_ptr(),
-                caixa_core::FLUX_KEY_VALUES.as_ptr(),
-            ),
-            "FLUX_KEY_VALUES must be a re-export of \
-             caixa_core::FLUX_KEY_VALUES, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KEY_VALUES",
+            FLUX_KEY_VALUES,
+            caixa_core::FLUX_KEY_VALUES,
         );
     }
 
@@ -3334,13 +3224,10 @@ spec:
         // naming the container-axis-drift root cause). Closes the
         // sibling re-export identity axis on the same trajectory the
         // peer per-CR body-key pins carry.
-        assert_eq!(FLUX_KEY_CHART, caixa_core::FLUX_KEY_CHART);
-        assert!(
-            std::ptr::eq(FLUX_KEY_CHART.as_ptr(), caixa_core::FLUX_KEY_CHART.as_ptr(),),
-            "FLUX_KEY_CHART must be a re-export of \
-             caixa_core::FLUX_KEY_CHART, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KEY_CHART",
+            FLUX_KEY_CHART,
+            caixa_core::FLUX_KEY_CHART,
         );
     }
 
@@ -3428,16 +3315,10 @@ spec:
         // the container-axis-drift root cause). Closes the sibling re-
         // export identity axis on the same trajectory the peer per-CR
         // body-key pins carry — completes the quartet.
-        assert_eq!(FLUX_KEY_HEALTH_CHECKS, caixa_core::FLUX_KEY_HEALTH_CHECKS);
-        assert!(
-            std::ptr::eq(
-                FLUX_KEY_HEALTH_CHECKS.as_ptr(),
-                caixa_core::FLUX_KEY_HEALTH_CHECKS.as_ptr(),
-            ),
-            "FLUX_KEY_HEALTH_CHECKS must be a re-export of \
-             caixa_core::FLUX_KEY_HEALTH_CHECKS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KEY_HEALTH_CHECKS",
+            FLUX_KEY_HEALTH_CHECKS,
+            caixa_core::FLUX_KEY_HEALTH_CHECKS,
         );
     }
 
@@ -3532,16 +3413,10 @@ spec:
         // pins carry — extends the discipline from the per-CR body-key
         // quartet onto the sibling cross-CR-shared reconcile-poll cadence
         // scalar-axis every Flux v2 controller reads.
-        assert_eq!(FLUX_KEY_INTERVAL, caixa_core::FLUX_KEY_INTERVAL);
-        assert!(
-            std::ptr::eq(
-                FLUX_KEY_INTERVAL.as_ptr(),
-                caixa_core::FLUX_KEY_INTERVAL.as_ptr(),
-            ),
-            "FLUX_KEY_INTERVAL must be a re-export of \
-             caixa_core::FLUX_KEY_INTERVAL, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KEY_INTERVAL",
+            FLUX_KEY_INTERVAL,
+            caixa_core::FLUX_KEY_INTERVAL,
         );
     }
 
