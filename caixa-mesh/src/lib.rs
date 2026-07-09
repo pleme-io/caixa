@@ -35,10 +35,10 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
-    FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
-    M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton,
-    label_selector, pleme_program_in_aplicacao_selector, pleme_program_selector,
-    single_field_overlay,
+    FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME,
+    LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
+    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
+    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -2583,9 +2583,23 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::String(GATEWAY_API_KEY_NAME.into()),
         serde_yaml::Value::String("http".into()),
     );
+    // Per-listener HTTP-listener-port scalar — reads from the lifted
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] `u16` const so a future
+    // substrate-side external-Gateway port migration (`:80` → `:443`
+    // once cert-manager-issued per-`:entrada :host` certificates land
+    // and the external listener becomes HTTPS-by-default, matching the
+    // mTLS-by-default trajectory [`DEFAULT_SERVICO_PORT`]'s docstring
+    // names) lands at the canonical
+    // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] declaration,
+    // not at this call site. Peer with the sibling
+    // `DEFAULT_SERVICO_PORT` fallback in the `cilium_network_policies`
+    // per-`(:de, :para)` L4 port resolver — both consumers of a
+    // K8s-CRD-side `port:` axis now route through their own lifted
+    // typed `u16` const, so a future rebrand on either axis reaches
+    // its consumer by construction.
     listener.insert(
         serde_yaml::Value::String(KUBE_KEY_PORT.into()),
-        serde_yaml::Value::Number(80.into()),
+        serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
     );
     listener.insert(
         serde_yaml::Value::String(KUBE_KEY_PROTOCOL.into()),
@@ -7014,6 +7028,49 @@ mod tests {
         assert_eq!(
             listener.get(KUBE_KEY_PROTOCOL).and_then(|p| p.as_str()),
             Some(GATEWAY_API_PROTOCOL_HTTP)
+        );
+    }
+
+    #[test]
+    fn gateway_listener_port_routes_through_lifted_default_http_listener_port() {
+        // The per-Aplicacao `Gateway`'s sole per-listener HTTP-listener-
+        // port axis (the `listener.insert(KUBE_KEY_PORT, …)` call site
+        // in [`gateway_routes`]) must read from the lifted
+        // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] `u16`
+        // constant — not from an open-coded `80` literal that could
+        // drift if the substrate's canonical external-Gateway HTTP
+        // listener port ever moved (`:80 → :443` on the HTTPS-by-
+        // default trajectory, a per-cluster override the operator
+        // pins). A future rebrand of the constant must reach this
+        // consumer by construction. Peer with the sibling
+        // [`cnp_l4_fallback_port_routes_through_lifted_default_servico_port`]
+        // pin on the [`DEFAULT_SERVICO_PORT`] fallback in the
+        // `cilium_network_policies` per-`(:de, :para)` L4 port
+        // resolver — the two axes name distinct scalars (external
+        // Gateway listener port vs in-cluster Servico port), both now
+        // routed through their own lifted `u16` const, so a substrate-
+        // side port migration on either axis lands at exactly one
+        // consumer per axis without coupling the two rebrand cycles.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
+            .expect("Gateway present");
+        let listener = gateway
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
+            .and_then(|l| l.as_sequence())
+            .and_then(|s| s.first())
+            .expect("first listener present");
+        assert_eq!(
+            listener.get(KUBE_KEY_PORT).and_then(|p| p.as_u64()),
+            Some(u64::from(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT)),
+            "the Gateway per-listener HTTP-listener-port scalar must render \
+             the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT constant \
+             verbatim — drift here means the constant lift no longer reaches \
+             this consumer"
         );
     }
 
