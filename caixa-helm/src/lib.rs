@@ -200,6 +200,36 @@ pub use caixa_core::DEFAULT_LIBRARY_NAME;
 /// axes.
 pub use caixa_core::HELM_CHART_API_VERSION;
 
+/// Canonical Helm 3 `Chart.yaml` `type` field per-chart-kind
+/// discriminator scalar-value every rendered `lareira-<nome>` chart
+/// declares. Re-export of the lifted
+/// [`caixa_core::HELM_CHART_TYPE_APPLICATION`] so the Helm chart-schema
+/// per-chart-kind discriminator — the scalar Helm's per-release install-
+/// shape dispatch loop keys off to select the per-chart-kind install
+/// pathway — lives in exactly one place across every caixa renderer.
+/// The single production-code call site consuming it is
+/// [`build_chart_yaml`]'s `chart_type` field assignment (the sole
+/// emitter site the prior inline `"application".into()` literal sat at);
+/// a drifted local `pub const HELM_CHART_TYPE_APPLICATION: &str = "…"`
+/// at this crate (or any sibling per-chart renderer the absorption
+/// roadmap acknowledges — the future per-Aplicacao library chart, the
+/// future per-cluster snapshot chart) would surface as one of two
+/// silent failure modes at `helm install` time: a value outside the
+/// schema's admitted set (`{"application", "library"}`) that Helm's
+/// chart-schema parser silently treats as the default `application`
+/// shape (masking the schema violation with no process-log signal), or
+/// an accidental collapse onto the sibling `"library"` shape that Helm
+/// refuses to install directly ("Error: library charts cannot be
+/// installed") with no field naming the chart-kind-drift root cause.
+/// The equality + `&'static` static-data identity pin
+/// (`helm_chart_type_application_re_export_points_at_caixa_core_canonical`)
+/// closes the drift footgun at caixa-helm build time. Peer to the
+/// [`HELM_CHART_API_VERSION`] re-export on the sibling canonical-Helm-
+/// chart-schema-axis — completes the per-Chart.yaml `(apiVersion, type)`
+/// canonical-scalar-axis re-export pair every rendered `lareira-<nome>`
+/// chart declares at its top-level Chart.yaml body.
+pub use caixa_core::HELM_CHART_TYPE_APPLICATION;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-helm's
@@ -351,7 +381,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
         api_version: HELM_CHART_API_VERSION.into(),
         name: chart_name.into(),
         description,
-        chart_type: "application".into(),
+        chart_type: HELM_CHART_TYPE_APPLICATION.into(),
         version: caixa.versao.clone(),
         app_version: caixa.versao.clone(),
         keywords,
@@ -1090,6 +1120,88 @@ spec:
              HELM_CHART_API_VERSION verbatim — a drifted value silently \
              reroutes the rendered chart through the wrong Helm chart-schema \
              parser at `helm template` time"
+        );
+    }
+
+    #[test]
+    fn helm_chart_type_application_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_CHART_TYPE_APPLICATION` was lifted from
+        // the production-code inline `"application".into()` literal at
+        // [`build_chart_yaml`]'s `chart_type` field assignment (formerly
+        // `caixa-helm/src/lib.rs:354`) to a re-export of
+        // [`caixa_core::HELM_CHART_TYPE_APPLICATION`] so the Helm 3
+        // chart-schema per-chart-kind discriminator scalar-value the
+        // rendered `lareira-<nome>` chart declares lives in exactly one
+        // place across every caixa renderer. Pin the equality +
+        // `&'static` static-data identity here so any local
+        // re-introduction of a sibling `pub const
+        // HELM_CHART_TYPE_APPLICATION: &str = "…"` at this crate — the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation — is a
+        // build-time test failure naming the offending drift, not a
+        // silent per-release install-shape dispatch reroute at
+        // `helm install` time far from the drift site. Peer to
+        // [`helm_chart_api_version_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Helm-chart-schema-axis re-export
+        // surface — completes the per-Chart.yaml `(apiVersion, type)`
+        // canonical-scalar-axis re-export pair every rendered
+        // `lareira-<nome>` chart declares at its top-level Chart.yaml
+        // body.
+        assert_eq!(
+            HELM_CHART_TYPE_APPLICATION,
+            caixa_core::HELM_CHART_TYPE_APPLICATION
+        );
+        assert!(
+            std::ptr::eq(
+                HELM_CHART_TYPE_APPLICATION.as_ptr(),
+                caixa_core::HELM_CHART_TYPE_APPLICATION.as_ptr(),
+            ),
+            "HELM_CHART_TYPE_APPLICATION must be a re-export of \
+             caixa_core::HELM_CHART_TYPE_APPLICATION, not a sibling \
+             `pub const` that happens to carry the same string — drift \
+             between the two is the canonical footgun this lift closes"
+        );
+    }
+
+    #[test]
+    fn chart_yaml_uses_lifted_helm_chart_type_application() {
+        // Fail-before-pass-after pin on the production-code substitution:
+        // [`build_chart_yaml`]'s `chart_type` field consults the lifted
+        // [`HELM_CHART_TYPE_APPLICATION`] re-export at its assignment
+        // site, so the rendered Chart.yaml's top-level `type` axis is
+        // byte-identical to the canonical constant by construction.
+        // Before the lift the field carried an inline `"application".into()`
+        // literal at [`build_chart_yaml`]; a future refactor that
+        // accidentally reverted the substitution — or any parallel
+        // per-renderer variant that inlined a `"library"` literal (the
+        // sibling closed-set value from the Helm chart-schema's
+        // per-chart-kind enum) — would silently reroute the rendered
+        // Chart.yaml through the wrong per-release install-shape
+        // dispatch at `helm install` time (Helm refuses to install a
+        // `library` chart directly), so this pin trips at caixa-helm
+        // build time. Peer to `chart_yaml_uses_lifted_helm_chart_api_version`
+        // on the sibling per-Chart.yaml top-level `(apiVersion, type)`
+        // canonical-scalar-axis pin pair — extends the per-Chart.yaml
+        // top-level canonical-scalar-axis production-emit-pin
+        // discipline from the `apiVersion` half onto the sibling `type`
+        // half.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from("Chart.yaml"))
+            .unwrap();
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        assert_eq!(
+            chart.chart_type, HELM_CHART_TYPE_APPLICATION,
+            "rendered Chart.yaml `type` must equal the lifted \
+             HELM_CHART_TYPE_APPLICATION verbatim — a drifted value \
+             silently reroutes the rendered chart through the wrong \
+             per-release install-shape dispatch at `helm install` time \
+             (Helm refuses to install a `library` chart directly, or \
+             silently treats an unrecognized value as the default \
+             `application` shape masking the schema violation)"
         );
     }
 

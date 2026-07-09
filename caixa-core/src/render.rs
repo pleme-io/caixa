@@ -11247,6 +11247,82 @@ pub const GATEWAY_API_KEY_NAME: &str = "name";
 /// [ch]: ../../caixa_helm/index.html
 pub const HELM_CHART_API_VERSION: &str = "v2";
 
+/// Canonical Helm 3 `Chart.yaml` `type` field per-chart-kind discriminator
+/// scalar-value every rendered `lareira-<nome>` chart declares. The Helm
+/// chart-schema pins the per-chart-kind axis to the closed set
+/// `{"application", "library"}` (see [chart-type-doc]) — the
+/// `application` chart-kind is Helm's default install-shape (an
+/// application chart that installs into a namespace as a workload +
+/// rendered manifests), while the `library` chart-kind is Helm's
+/// dependency-only shape (a chart authored as a shared-template
+/// substrate that can only be consumed as a dependency, never installed
+/// directly). Each `lareira-<nome>` chart the caixa-helm renderer emits
+/// declares itself as an `application` chart because it is the per-
+/// Servico install shape a cluster operator's `helm install` /
+/// `helm upgrade` per-Servico release cycle materializes — the sibling
+/// [`DEFAULT_LIBRARY_NAME`] `pleme-computeunit` chart (the substrate-
+/// side library-chart the `lareira-<nome>` chart depends on for
+/// template-shape) carries the sibling `library` value verbatim in its
+/// authored Chart.yaml (out-of-tree at the `pleme-io/helmworks` repo,
+/// so not this crate's authority).
+///
+/// The single source of truth the rendered `lareira-<nome>` chart's
+/// Chart.yaml per-chart-kind discriminator axis naming reaches for:
+///
+///   - [`caixa-helm`][ch]'s `build_chart_yaml` `chart_type` field
+///     assignment (caixa-helm/src/lib.rs — the sole production emitter
+///     site the prior inline `"application".into()` literal sat at,
+///     writing the per-chart-kind discriminator scalar-value the
+///     `helm install` / `helm upgrade` per-release install-shape dispatch
+///     loop keys off to select the per-chart-kind install pathway).
+///
+/// Until this lift landed the axis carried an inline `"application"`
+/// literal at the one production-code site (`build_chart_yaml`'s
+/// `chart_type` field assignment). A drift on the value at the emitter
+/// (a `"Application"` / `"APPLICATION"` / `"app"` / `"workload"` typo,
+/// or an accidental collapse onto the sibling `"library"` shape) would
+/// have surfaced as one of two silent failure modes at `helm install`
+/// time:
+///
+///   - a value outside the schema's admitted set (`{"application",
+///     "library"}`) — Helm's chart-schema parser silently treats an
+///     unrecognized `type:` scalar as the default `application` shape,
+///     so a typo like `"Application"` still installs but with no
+///     drift-signal in the process log, silently masking the schema
+///     violation;
+///   - a schema-admitted-but-wrong-shape drift onto `"library"` —
+///     `helm install lareira-<nome>` refuses the release with an
+///     "Error: library charts cannot be installed" error, and the
+///     per-Servico release cycle drops with no field naming the
+///     chart-kind-drift root cause (the operator sees "the chart won't
+///     install" far from the drift site, and troubleshooting has no
+///     canonical anchor to compare the rendered value against).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`HELM_CHART_API_VERSION`] /
+/// [`DEFAULT_LIBRARY_NAME`] / [`LAREIRA_CHART_NAME_PREFIX`] lifts
+/// established on the sibling canonical-Helm-load-bearing-string axes —
+/// extends the canonical-Helm-chart-schema-axis single-sourcing
+/// discipline the `apiVersion` lift established onto the sibling
+/// per-chart-kind discriminator scalar-value axis every rendered
+/// `lareira-<nome>` chart declares in its Chart.yaml. Peer to the
+/// canonical-cluster-side-OpenAPI-schema-enum-value lifts
+/// ([`KUBE_PROTOCOL_TCP`] / [`GATEWAY_API_PROTOCOL_HTTP`] /
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] /
+/// [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]) on
+/// the sibling K8s-CR-side enum-value surfaces — pivots the discipline
+/// from the K8s-CR-side OpenAPI-schema-enum-value axis onto the
+/// Helm-chart-schema-enum-value axis every rendered Chart.yaml carries
+/// at its per-chart-kind discriminator field.
+///
+/// [chart-type-doc]: https://helm.sh/docs/topics/charts/#chart-types
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_TYPE_APPLICATION: &str = "application";
+
 /// Canonical `pleme-computeunit` library-chart values-block enable-toggle
 /// key — the `enabled: <bool>` axis every `lareira-<nome>` chart's values
 /// block carries under its [`DEFAULT_LIBRARY_NAME`] wrap key, and every
@@ -15828,6 +15904,89 @@ mod tests {
              ASCII digits per the Helm chart-schema apiVersion grammar — \
              no dots, no hyphens, no whitespace, no non-digit bytes the \
              Helm binary's chart-schema resolver would reject"
+        );
+    }
+
+    #[test]
+    fn helm_chart_type_application_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Helm 3 chart-schema `type` field's canonical
+        // `application` per-chart-kind discriminator scalar-value the
+        // rendered `lareira-<nome>` chart's Chart.yaml `type:` axis
+        // declares. The value is part of the cluster-side contract with
+        // Helm's per-release install-shape dispatch loop — the Helm
+        // chart-schema pins the per-chart-kind axis to the closed set
+        // `{"application", "library"}` (see
+        // https://helm.sh/docs/topics/charts/#chart-types), so a drifted
+        // value (`"Application"` / `"APPLICATION"` / `"app"` /
+        // `"workload"`) lands the rendered `lareira-<nome>` chart outside
+        // the schema's admitted set, and Helm's chart-schema parser
+        // silently treats the unrecognized value as the default
+        // `application` shape (masking the schema violation with no
+        // process-log drift-signal); worse, an accidental collapse onto
+        // the sibling `"library"` shape lands `lareira-<nome>` in the
+        // dependency-only install-shape Helm refuses to install directly
+        // ("Error: library charts cannot be installed"), dropping every
+        // per-Servico `helm install` / `helm upgrade` release cycle with
+        // no field naming the chart-kind-drift root cause. Changing this
+        // value is a coordinated Helm chart-schema promotion alongside
+        // the upstream Helm project's per-schema deprecation cycle, not
+        // an incidental edit. Peer to
+        // `helm_chart_api_version_pins_canonical_value` /
+        // `kube_protocol_tcp_pins_canonical_value` /
+        // `gateway_api_protocol_http_pins_canonical_value` /
+        // `cilium_auth_mode_required_pins_canonical_value` on the
+        // sibling canonical-Helm-chart-schema-axis + canonical-cluster-
+        // side-OpenAPI-schema-enum-value pin sets — pivots the
+        // canonical-enum-value single-sourcing discipline from the K8s-
+        // CR-side surfaces onto the Helm-chart-schema-enum-value axis
+        // every rendered Chart.yaml carries at its per-chart-kind
+        // discriminator field.
+        assert_eq!(HELM_CHART_TYPE_APPLICATION, "application");
+    }
+
+    #[test]
+    fn helm_chart_type_application_carries_lowercase_shape() {
+        // Cross-axis invariant: the Helm 3 chart-schema `type` field
+        // admits the closed set `{"application", "library"}` — every
+        // admitted value is all-ASCII-lowercase throughout per the
+        // upstream Helm project's per-enum-value naming convention
+        // (distinct from the sibling K8s-core `Protocol` OpenAPI schema
+        // enum's all-ASCII-uppercase per-value convention the
+        // `kube_protocol_tcp_carries_upper_case_shape` pin carries, and
+        // distinct from the sibling Gateway-API v1 `PathMatchType`
+        // OpenAPI schema enum's UpperCamelCase per-value convention the
+        // `gateway_api_path_match_type_path_prefix_carries_upper_camel_case_shape`
+        // pin carries — the three peer canonical-cluster-side-schema-
+        // enum-value conventions do not collapse). Same all-ASCII-
+        // lowercase shape as the sibling Cilium `MutualAuthenticationMode`
+        // enum-values the peer `cilium_auth_mode_required_carries_lowercase_shape`
+        // / `cilium_auth_mode_disabled_carries_lowercase_shape` pins
+        // enshrine — the two peer canonical-cluster-side-schema-enum-
+        // value all-lowercase conventions collapse on the shared byte-
+        // shape convention Helm and Cilium happen to share (independent
+        // upstream projects, coincidental convention agreement).
+        //
+        // Pinning the shape here means a future rebrand on the canonical
+        // lift can't silently land a malformed per-chart-kind scalar
+        // (uppercase `"APPLICATION"`, mixed-case `"Application"`, empty)
+        // that the Helm chart-schema parser would silently treat as the
+        // default `application` shape (masking the drift with no
+        // process-log signal).
+        let v = HELM_CHART_TYPE_APPLICATION;
+        assert!(
+            !v.is_empty(),
+            "HELM_CHART_TYPE_APPLICATION {v:?} must be non-empty per the \
+             Helm 3 chart-schema `type` field grammar"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_lowercase()),
+            "HELM_CHART_TYPE_APPLICATION {v:?} must be ASCII-lowercase \
+             throughout per the Helm 3 chart-schema per-chart-kind \
+             discriminator naming convention — no uppercase, mixed-case, \
+             or whitespace bytes the Helm chart-schema parser would \
+             silently treat as the default `application` shape (masking \
+             the drift with no process-log signal)"
         );
     }
 
