@@ -6744,7 +6744,7 @@ mod tests {
                     .and_then(|r| r.get(CILIUM_KEY_HTTP))
                     .and_then(|h| h.as_sequence())
                     .and_then(|s| s.first())
-                    .and_then(|rule| rule.get("path"))
+                    .and_then(|rule| rule.get(CILIUM_KEY_PATH))
                     .and_then(|v| v.as_str())
             })
             .collect();
