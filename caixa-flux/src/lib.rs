@@ -1091,7 +1091,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
 #[cfg(test)]
 mod tests {
     use super::*;
-    use caixa_core::{Caixa, CaixaKind};
+    use caixa_core::{Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM};
 
     fn sample_caixa() -> Caixa {
         Caixa {
@@ -1901,7 +1901,7 @@ spec:
             cpu: Some(500),
         });
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
-        let limits = entry.get("limits").expect("limits propagates");
+        let limits = entry.get(M2_KEY_LIMITS).expect("limits propagates");
         assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
         assert_eq!(limits.get("cpu").and_then(|m| m.as_str()), Some("500m"));
     }
@@ -1917,7 +1917,7 @@ spec:
             ..Default::default()
         });
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
-        let behavior = entry.get("behavior").expect("behavior propagates");
+        let behavior = entry.get(M2_KEY_BEHAVIOR).expect("behavior propagates");
         assert_eq!(
             behavior.get("onInit").and_then(|v| v.as_str()),
             Some("lib/init.lisp")
@@ -1936,7 +1936,7 @@ spec:
         }];
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
         let upgrade_from = entry
-            .get("upgradeFrom")
+            .get(M2_KEY_UPGRADE_FROM)
             .and_then(|u| u.as_sequence())
             .expect("upgradeFrom propagates as a sequence");
         assert_eq!(upgrade_from.len(), 1);
@@ -1952,9 +1952,9 @@ spec:
         // programs.yaml entry that's structurally identical to V0
         // (no extra keys).
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
-        assert!(entry.get("limits").is_none());
-        assert!(entry.get("behavior").is_none());
-        assert!(entry.get("upgradeFrom").is_none());
+        assert!(entry.get(M2_KEY_LIMITS).is_none());
+        assert!(entry.get(M2_KEY_BEHAVIOR).is_none());
+        assert!(entry.get(M2_KEY_UPGRADE_FROM).is_none());
     }
 
     #[test]
