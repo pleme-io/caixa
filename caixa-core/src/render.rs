@@ -7791,6 +7791,88 @@ pub const FLUX_KEY_HEALTH_CHECKS: &str = "healthChecks";
 /// [cf]: ../../caixa_flux/fn.cluster_bundle.html
 pub const FLUX_KEY_INTERVAL: &str = "interval";
 
+/// Canonical Flux v2 per-cluster-bundle `HelmRelease` document
+/// filename every [`caixa-flux`][cf]-rendered `cluster_bundle` carries
+/// at the per-Servico bundle's rendered file collection — the fixed
+/// filename the sibling `gitrepository.yaml` + `kustomization.yaml`
+/// bundle documents key against when the cluster-side `FluxCD`
+/// controllers reconcile the per-Servico release cycle, and the
+/// exact filename every downstream consumer that reaches into the
+/// rendered bundle by document name looks up.
+///
+/// Two production consumers reach for this filename:
+///
+///   - [`caixa-flux`][cf]'s [`cluster_bundle`][cb] `BundleFile`
+///     assembly's per-file `path` axis for the `HelmRelease`
+///     document — the sole caixa-flux production emit site the prior
+///     inline `PathBuf::from("helmrelease.yaml")` literal sat at,
+///     one of the three canonical per-Servico Flux bundle files the
+///     renderer emits alongside the sibling `gitrepository.yaml` +
+///     `kustomization.yaml` documents;
+///   - the peer test-fixture navigators in this crate reach into the
+///     rendered `BundleFile` collection by the same filename to
+///     round-trip-pin each emitted `HelmRelease` axis — a dozen
+///     `.find(|f| f.path == PathBuf::from("helmrelease.yaml"))` +
+///     `names.contains(&"helmrelease.yaml".to_string())` fixture
+///     navigators across every per-CR body-axis sweep, `apiVersion`
+///     round-trip, `spec.chart` / `spec.values` / `spec.sourceRef`
+///     nested block existence pin.
+///
+/// Until this lift landed the filename `"helmrelease.yaml"` lived as
+/// thirteen verbatim inline literals (one production
+/// `PathBuf::from("helmrelease.yaml")` at the `cluster_bundle`
+/// `BundleFile`-vec construction site + twelve test-side
+/// `PathBuf::from("helmrelease.yaml")` /
+/// `names.contains(&"helmrelease.yaml".to_string())` /
+/// `.expect("helmrelease.yaml present")` fixture navigators). A drift
+/// on the emit side (a `"HelmRelease.yaml"` / `"helm-release.yaml"` /
+/// `"helmrelease.yml"` / `"helm_release.yaml"` typo, or an accidental
+/// per-fork rebrand onto a stale filename any per-edition Flux
+/// substrate might introduce) at any one site would surface as one of
+/// two silent failure modes at cluster-side reconcile time:
+///
+///   - the `FluxCD` `kustomize-controller` refuses to apply the
+///     rendered bundle at all — the per-Servico
+///     `Kustomization.spec.path` opens the bundle directory and its
+///     `HelmRelease` navigator returns `None`, with the reconcile
+///     dropping at "no `HelmRelease` document found under this
+///     bundle" far from the emit-drift commit's source, and the
+///     per-Servico release cycle drops with no field naming the
+///     bundle-filename-drift root cause (the operator sees "the
+///     release never picks up its Helm chart" with no canonical
+///     anchor to compare the rendered filename against);
+///   - the sibling `Kustomization` document's per-CR
+///     `spec.healthChecks[]` references the drifted filename via
+///     `namespace/name` — the healthCheck stays perpetually `Unknown`
+///     because the referenced `HelmRelease` never materializes at the
+///     expected bundle path, and the peer `GitRepository` document's
+///     every-poll reconcile ticks the bundle-tree hash over the
+///     drifted filename with the per-Servico release cycle silently
+///     frozen at "waiting on healthCheck".
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// filename to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`HELM_CHART_YAML_FILENAME`] (c2c99b0) /
+/// [`HELM_VALUES_YAML_FILENAME`] (9a980ba) lifts established on the
+/// sibling Helm-chart-directory filename axes — pivots the
+/// canonical-filename single-sourcing discipline from the per-Helm-
+/// chart-directory metadata / values file surfaces onto the sibling
+/// per-Flux-v2-bundle `HelmRelease` document filename axis every
+/// rendered per-Servico bundle declares at its cluster-side reconcile
+/// tree. Peer of a future sibling lift on the other two per-Servico
+/// Flux bundle document filenames (`gitrepository.yaml` +
+/// `kustomization.yaml`) — this const anchors the first coordinate
+/// of the per-bundle
+/// `(gitrepository, helmrelease, kustomization)` filename axis triple
+/// every rendered cluster bundle carries.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+pub const FLUX_HELMRELEASE_YAML_FILENAME: &str = "helmrelease.yaml";
+
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side
 /// SIG-Network Gateway API conformance registers the `Gateway` /

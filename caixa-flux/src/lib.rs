@@ -424,6 +424,33 @@ pub use caixa_core::FLUX_KEY_HEALTH_CHECKS;
 /// every Flux v2 controller reads to bind its per-CR poll cycle.
 pub use caixa_core::FLUX_KEY_INTERVAL;
 
+/// Canonical Flux v2 per-cluster-bundle `HelmRelease` document filename
+/// every [`cluster_bundle`]-rendered `BundleFile` carries at its per-file
+/// `path` axis — re-export of the lifted
+/// [`caixa_core::FLUX_HELMRELEASE_YAML_FILENAME`] so the fixed filename
+/// the cluster-side FluxCD `kustomize-controller` looks up when it opens
+/// the per-Servico bundle directory lives in exactly one place across
+/// every caixa renderer. The single source of truth all thirteen
+/// consumers reach for — one production [`cluster_bundle`] `BundleFile`
+/// assembly's `HelmRelease` document `path` axis plus a dozen test-side
+/// round-trip navigators that reach into the rendered bundle by the
+/// same filename to pin per-CR body-axis emission — now consult the
+/// same `&'static str`. Pin the equality + `&'static` static-data
+/// identity so any local re-introduction of a sibling `pub const
+/// FLUX_HELMRELEASE_YAML_FILENAME: &str = "…"` at this crate is a
+/// build-time test failure naming the offending drift, not a silent
+/// FluxCD `kustomize-controller` "no `HelmRelease` document found under
+/// this bundle" reroute at cluster-side reconcile time far from the
+/// drift site. Peer to the [`HELM_CHART_YAML_FILENAME`]
+/// (`caixa_core::HELM_CHART_YAML_FILENAME`, c2c99b0) /
+/// [`HELM_VALUES_YAML_FILENAME`] (`caixa_core::HELM_VALUES_YAML_FILENAME`,
+/// 9a980ba) re-exports on the sibling Helm-chart-directory filename
+/// surfaces — pivots the canonical-filename single-sourcing discipline
+/// from the per-Helm-chart-directory metadata / values file axes onto
+/// the sibling per-Flux-v2-bundle `HelmRelease` document filename axis
+/// this crate's [`cluster_bundle`] renders.
+pub use caixa_core::FLUX_HELMRELEASE_YAML_FILENAME;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -1078,7 +1105,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
             contents: gitrepo,
         },
         BundleFile {
-            path: std::path::PathBuf::from("helmrelease.yaml"),
+            path: std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME),
             contents: helmrelease,
         },
         BundleFile {
@@ -1928,7 +1955,7 @@ spec:
             .map(|f| f.path.to_string_lossy().to_string())
             .collect();
         assert!(names.contains(&"gitrepository.yaml".to_string()));
-        assert!(names.contains(&"helmrelease.yaml".to_string()));
+        assert!(names.contains(&FLUX_HELMRELEASE_YAML_FILENAME.to_string()));
         assert!(names.contains(&"kustomization.yaml".to_string()));
 
         let kust = files
@@ -1998,7 +2025,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -2048,7 +2075,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .unwrap();
         assert!(
             hr.contents.contains("pleme-computeunit:"),
@@ -2231,7 +2258,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -2308,7 +2335,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .unwrap();
         assert!(
             hr.contents
@@ -2679,7 +2706,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -2773,7 +2800,7 @@ spec:
         let hr_source_kind = serde_yaml::from_str::<serde_yaml::Value>(
             &files
                 .iter()
-                .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+                .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
@@ -2871,7 +2898,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -2966,7 +2993,7 @@ spec:
         let hr_kind = serde_yaml::from_str::<serde_yaml::Value>(
             &files
                 .iter()
-                .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+                .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
@@ -3135,7 +3162,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -3270,7 +3297,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let hr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("helmrelease.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
@@ -3421,6 +3448,45 @@ spec:
     }
 
     #[test]
+    fn flux_helmrelease_yaml_filename_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLUX_HELMRELEASE_YAML_FILENAME` was lifted from
+        // the thirteen production + test-side inline `"helmrelease.yaml"`
+        // / `PathBuf::from("helmrelease.yaml")` /
+        // `names.contains(&"helmrelease.yaml".to_string())` literals
+        // across [`cluster_bundle`]'s per-`BundleFile` `HelmRelease`
+        // document `path` emit site + every test-side round-trip
+        // navigator that reaches into the rendered bundle by the
+        // `HelmRelease` document filename to a re-export of
+        // [`caixa_core::FLUX_HELMRELEASE_YAML_FILENAME`] so the Flux v2
+        // per-cluster-bundle `HelmRelease` document filename lives in
+        // exactly one place across every caixa renderer. Pin the equality
+        // + `&'static` static-data identity here so any local
+        // re-introduction of a sibling `pub const
+        // FLUX_HELMRELEASE_YAML_FILENAME: &str = "…"` at this crate — the
+        // canonical drift footgun where a sibling local `pub const` could
+        // happen to carry the same string at the source while pointing
+        // at a different `&'static` allocation — is a build-time test
+        // failure naming the offending drift, not a silent FluxCD
+        // `kustomize-controller` "no `HelmRelease` document found under
+        // this bundle" reroute at cluster-side reconcile time far from
+        // the drift site. Peer to
+        // [`flux_key_interval_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-CR body-key surface, and to the
+        // [`caixa_helm::HELM_CHART_YAML_FILENAME`] (c2c99b0) /
+        // [`caixa_helm::HELM_VALUES_YAML_FILENAME`] (9a980ba) re-exports
+        // on the sibling Helm-chart-directory filename surfaces — pivots
+        // the canonical-filename single-sourcing discipline from the
+        // per-Helm-chart-directory metadata / values file axes onto the
+        // sibling per-Flux-v2-bundle `HelmRelease` document filename
+        // axis this crate's [`cluster_bundle`] renders.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_HELMRELEASE_YAML_FILENAME",
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            caixa_core::FLUX_HELMRELEASE_YAML_FILENAME,
+        );
+    }
+
+    #[test]
     fn cluster_bundle_every_flux_cr_carries_lifted_flux_key_interval_scalar() {
         // Fail-before-pass-after pin: every rendered Flux v2 document in
         // the `cluster_bundle` triplet (`gitrepository.yaml`,
@@ -3461,7 +3527,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         for filename in [
             "gitrepository.yaml",
-            "helmrelease.yaml",
+            FLUX_HELMRELEASE_YAML_FILENAME,
             "kustomization.yaml",
         ] {
             let doc = files
