@@ -11323,6 +11323,79 @@ pub const HELM_CHART_API_VERSION: &str = "v2";
 /// [ch]: ../../caixa_helm/index.html
 pub const HELM_CHART_TYPE_APPLICATION: &str = "application";
 
+/// Canonical Helm 3 per-chart-directory metadata-file filename every
+/// rendered `lareira-<nome>` chart carries at its top-level directory —
+/// the fixed filename Helm's chart-schema parser (`helm dependency
+/// build`, `helm lint`, `helm template`, `helm install`) looks up by
+/// name at the chart-directory root to locate the per-chart
+/// [`HELM_CHART_API_VERSION`] + [`HELM_CHART_TYPE_APPLICATION`] +
+/// name/version/dependencies scalars each `lareira-<nome>` chart
+/// declares (see [chart-yaml-desc]). The single source of truth every
+/// consumer that names the metadata file — the sole caixa-helm
+/// production emit site the prior inline `"Chart.yaml"` literal sat at
+/// ([`caixa-helm`][ch]'s [`render_chart_for_servico`][rcs] `ChartDir`
+/// assembly's per-file `path` axis, one of the three canonical
+/// `lareira-<nome>` chart-directory files the renderer emits as a
+/// bundle) plus every test-side round-trip navigator that reaches into
+/// the rendered `ChartDir` by the metadata filename (six sites across
+/// [`caixa-helm`][ch]'s per-chart-metadata-field sweep tests +
+/// [`ChartDir::write_to`] post-write existence pin) — reaches for the
+/// same `&'static str` by construction.
+///
+/// Until this lift landed the filename `"Chart.yaml"` lived as seven
+/// verbatim inline literals (one production `PathBuf::from("Chart.yaml")`
+/// at the `ChartDir` files-vec construction site + six test-side
+/// `PathBuf::from("Chart.yaml")` / `chart_root.join("Chart.yaml")` /
+/// `names.contains(&"Chart.yaml".to_string())` fixture navigators).
+/// A drift on the emit side (a `"chart.yaml"` / `"chart.YAML"` /
+/// `"Chart.yml"` / `"chart.yaml.tmpl"` typo, or an accidental collapse
+/// onto Helm 2's sibling per-chart-metadata-filename axis, or a
+/// per-fork `Chartfile.yaml` rebrand any per-edition packaging
+/// substrate might introduce) at any one site would surface as one of
+/// two silent failure modes at chart-consumption time:
+///
+///   - Helm's chart-schema parser refuses to open the rendered chart-
+///     directory as a chart at all — `helm lint` / `helm dependency
+///     build` fails with "Error: Chart.yaml file is missing" far from
+///     the emit-drift commit's source, and the per-Servico release
+///     cycle drops with no field naming the metadata-filename-drift
+///     root cause (the operator sees "the chart isn't being recognized"
+///     with no canonical anchor to compare the rendered filename
+///     against);
+///   - the rendered chart's `ChartFile` collection lists a file at the
+///     emit-side drifted name (e.g. `"chart.yaml"`) while the sibling
+///     [`caixa-flux`][cf] `Kustomization` bundle-path emitter's per-
+///     chart reference (a future per-cluster snapshot bundle that
+///     re-lists the chart-dir contents by filename) continues to look
+///     under the canonical `"Chart.yaml"` — the two-crate pair silently
+///     goes out of sync, with the flux bundle's chart-directory
+///     resolver returning `None` for the metadata file at cluster-side
+///     `feira app deploy` time.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// filename to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`HELM_CHART_API_VERSION`] /
+/// [`HELM_CHART_TYPE_APPLICATION`] / [`DEFAULT_LIBRARY_NAME`] /
+/// [`LAREIRA_CHART_NAME_PREFIX`] lifts established on the sibling
+/// canonical-Helm-load-bearing-string axes — pivots the discipline
+/// from the per-Chart.yaml top-level *body* axes (`apiVersion`,
+/// `type`) onto the sibling per-chart-directory *filename* axis every
+/// rendered chart directory carries as the fixed lookup name Helm's
+/// chart-schema parser consults at chart-open time. Peer to the
+/// canonical-Helm-chart-schema-axis lifts on the sibling per-Chart.yaml
+/// body surfaces — completes the per-`lareira-<nome>`-chart-directory
+/// `(filename, apiVersion, type)` canonical-scalar-axis re-export triple
+/// every rendered chart declares at its top-level metadata file.
+///
+/// [chart-yaml-desc]: https://helm.sh/docs/topics/charts/#the-chartyaml-file
+/// [ch]: ../../caixa_helm/index.html
+/// [cf]: ../../caixa_flux/index.html
+/// [rcs]: ../../caixa_helm/fn.render_chart_for_servico.html
+pub const HELM_CHART_YAML_FILENAME: &str = "Chart.yaml";
+
 /// Canonical `pleme-computeunit` library-chart values-block enable-toggle
 /// key — the `enabled: <bool>` axis every `lareira-<nome>` chart's values
 /// block carries under its [`DEFAULT_LIBRARY_NAME`] wrap key, and every
