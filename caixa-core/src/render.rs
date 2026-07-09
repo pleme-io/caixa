@@ -11396,6 +11396,84 @@ pub const HELM_CHART_TYPE_APPLICATION: &str = "application";
 /// [rcs]: ../../caixa_helm/fn.render_chart_for_servico.html
 pub const HELM_CHART_YAML_FILENAME: &str = "Chart.yaml";
 
+/// Canonical Helm 3 per-chart-directory values-file filename every
+/// rendered `lareira-<nome>` chart carries at its top-level directory —
+/// the fixed filename Helm's chart-schema parser (`helm dependency
+/// build`, `helm lint`, `helm template`, `helm install`) looks up by
+/// name at the chart-directory root to locate the per-chart
+/// [`DEFAULT_LIBRARY_NAME`]-wrapped values block that
+/// [`HELM_VALUES_KEY_ENABLED`] toggles (see [values-yaml-desc]). The
+/// single source of truth every consumer that names the values file —
+/// the sole caixa-helm production emit site the prior inline
+/// `"values.yaml"` literal sat at ([`caixa-helm`][ch]'s
+/// [`render_chart_for_servico`][rcs] `ChartDir` assembly's per-file
+/// `path` axis, the second of the three canonical `lareira-<nome>`
+/// chart-directory files the renderer emits as a bundle, sibling to
+/// the metadata-file [`HELM_CHART_YAML_FILENAME`] axis) plus every
+/// test-side round-trip navigator that reaches into the rendered
+/// `ChartDir` by the values filename (eleven sites across
+/// [`caixa-helm`][ch]'s per-chart-values-field sweep tests +
+/// [`ChartDir::write_to`] post-write existence pin) — reaches for the
+/// same `&'static str` by construction.
+///
+/// Until this lift landed the filename `"values.yaml"` lived as twelve
+/// verbatim inline literals (one production `PathBuf::from("values.yaml")`
+/// at the `ChartDir` files-vec construction site + eleven test-side
+/// `PathBuf::from("values.yaml")` / `chart_root.join("values.yaml")` /
+/// `names.contains(&"values.yaml".to_string())` fixture navigators).
+/// A drift on the emit side (a `"Values.yaml"` / `"values.YAML"` /
+/// `"values.yml"` / `"values.yaml.tmpl"` typo, or an accidental collapse
+/// onto Helm 2's sibling per-chart-values-filename axis, or a per-fork
+/// `defaults.yaml` rebrand any per-edition packaging substrate might
+/// introduce) at any one site would surface as one of two silent
+/// failure modes at chart-consumption time:
+///
+///   - Helm's per-chart values-loader silently falls back to the empty
+///     values block — `helm template` / `helm install` emits the
+///     `pleme-computeunit` library chart under its admission-time
+///     defaults (`enabled: false`, no per-`:limits` / `:behavior` /
+///     `:upgrade-from` M2 overlay), the workload silently comes up
+///     disabled or without any per-Servico M2 overlay applied, and
+///     the per-Servico release cycle drops with no field naming the
+///     values-filename-drift root cause (the operator sees "the
+///     Servico isn't doing what we configured it to do" with no
+///     canonical anchor to compare the rendered filename against);
+///   - the rendered chart's `ChartFile` collection lists a file at the
+///     emit-side drifted name (e.g. `"Values.yaml"`) while the sibling
+///     [`caixa-flux`][cf] `Kustomization` bundle-path emitter's per-
+///     chart reference (a future per-cluster snapshot bundle that
+///     re-lists the chart-dir contents by filename to route per-cluster
+///     values overlays through the canonical values file) continues to
+///     look under the canonical `"values.yaml"` — the two-crate pair
+///     silently goes out of sync, with the flux bundle's chart-directory
+///     resolver returning `None` for the values file at cluster-side
+///     `feira app deploy` time, and every per-cluster overlay the
+///     bundle path threads through silently drops.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// filename to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`HELM_CHART_YAML_FILENAME`] (c2c99b0) /
+/// [`HELM_CHART_API_VERSION`] / [`HELM_CHART_TYPE_APPLICATION`] /
+/// [`HELM_VALUES_KEY_ENABLED`] / [`DEFAULT_LIBRARY_NAME`] /
+/// [`LAREIRA_CHART_NAME_PREFIX`] lifts established on the sibling
+/// canonical-Helm-load-bearing-string axes — pivots the discipline
+/// from the metadata-file half of the `(Chart.yaml, values.yaml)`
+/// canonical per-chart-directory filename pair onto the values-file
+/// half, completing the per-`lareira-<nome>`-chart-directory
+/// canonical-scalar-axis re-export triple every rendered chart declares
+/// as its `ChartDir::files` entries (`{Chart.yaml, values.yaml,
+/// README.md}` — the two schema-load-bearing filenames now share the
+/// same substrate-side single-source discipline).
+///
+/// [values-yaml-desc]: https://helm.sh/docs/chart_template_guide/values_files/
+/// [ch]: ../../caixa_helm/index.html
+/// [cf]: ../../caixa_flux/index.html
+/// [rcs]: ../../caixa_helm/fn.render_chart_for_servico.html
+pub const HELM_VALUES_YAML_FILENAME: &str = "values.yaml";
+
 /// Canonical `pleme-computeunit` library-chart values-block enable-toggle
 /// key — the `enabled: <bool>` axis every `lareira-<nome>` chart's values
 /// block carries under its [`DEFAULT_LIBRARY_NAME`] wrap key, and every
