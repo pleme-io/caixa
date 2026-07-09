@@ -691,6 +691,53 @@ pub use caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS;
 /// per-entry name-discriminator axis.
 pub use caixa_core::FLEET_PROGRAMS_KEY_NAME;
 
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR wasm-module-reference
+/// `spec.module` sub-block key every rendered `programs[]` entry
+/// splices verbatim from the upstream ComputeUnit YAML's `spec.module`
+/// (per the docstring on [`programs_yaml_entry`] above), so the
+/// `lareira-fleet-programs` library chart's per-Servico module-source
+/// axis binds to the exact source the caixa.lisp's `:servicos`
+/// fixture pins. Four per-entry drift-detection navigators in this
+/// crate's test module (the `programs_yaml_entry_round_trips` per-key
+/// pair + the `upsert_helmrelease_replaces_existing` /
+/// `upsert_into_programs_yaml` per-`module.source` navigators)
+/// now consult the same `&'static str` as the peer caixa-helm
+/// per-values navigators' module-source axis. Same re-export shape
+/// as the peer [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAMESPACE`]
+/// surfaces on the sibling canonical-fleet-programs-schema-key /
+/// canonical-K8s-CR-key axes — extends the discipline the M2-typed-
+/// slot / fleet-programs schema / K8s-CR key re-export families
+/// establish onto the substrate-side ComputeUnit-CRD per-`spec.*`
+/// sub-block axis. See [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`]
+/// for the full lift rationale.
+pub use caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE;
+
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR invocation-shape
+/// `spec.trigger` sub-block key every rendered `programs[]` entry
+/// splices verbatim from the upstream ComputeUnit YAML's
+/// `spec.trigger`. Peer of [`COMPUTEUNIT_SPEC_KEY_MODULE`] on the same
+/// ComputeUnit CRD per-`spec.*` sub-block axis. See
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER`] for the full lift
+/// rationale.
+pub use caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER;
+
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR WASI-capability-list
+/// `spec.capabilities` sub-block key every rendered `programs[]` entry
+/// splices verbatim from the upstream ComputeUnit YAML's
+/// `spec.capabilities`. Peer of [`COMPUTEUNIT_SPEC_KEY_MODULE`] and
+/// [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] on the same ComputeUnit CRD
+/// per-`spec.*` sub-block axis — completes the substrate-side
+/// ComputeUnit-CRD per-`spec.*` sub-block re-export triple in this
+/// crate. See [`caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] for
+/// the full lift rationale.
+pub use caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES;
+
 /// Render a single `programs:[]` array entry for the cluster's
 /// `lareira-fleet-programs` HelmRelease values.
 ///
@@ -702,7 +749,8 @@ pub use caixa_core::FLEET_PROGRAMS_KEY_NAME;
 /// Pulls:
 /// - `name` from `caixa.nome`
 /// - `namespace` from `computeunit.metadata.namespace` (or `DEFAULT_NAMESPACE`)
-/// - `module` / `trigger` / `capabilities` / `config` / `resources`
+/// - [`COMPUTEUNIT_SPEC_KEY_MODULE`] / [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] /
+///   [`COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] / `config` / `resources`
 ///   from `computeunit.spec.*` (verbatim — schemas already match)
 pub fn programs_yaml_entry(
     caixa: &Caixa,
@@ -1489,6 +1537,69 @@ spec:
     }
 
     #[test]
+    fn computeunit_spec_key_module_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `COMPUTEUNIT_SPEC_KEY_MODULE` was lifted from
+        // the four inline `"module"` test-side call sites in this
+        // crate (`programs_yaml_entry_round_trips`'s per-entry
+        // `entry.get("module")` present-check + its per-
+        // `module.source` nested navigator, plus
+        // `upsert_helmrelease_replaces_existing` /
+        // `upsert_into_programs_yaml`'s per-`module.source` cross-
+        // upsert readback navigators) — every per-Servico ComputeUnit
+        // CRD `spec.module` sub-block readback across the four
+        // drift-detection navigators now navigates through the same
+        // `&'static str` re-exported to a re-export of
+        // [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`]. Pin the
+        // equality + static-data identity here so any local re-
+        // introduction of a sibling `pub const COMPUTEUNIT_SPEC_KEY_MODULE:
+        // &str = "…"` is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom. Peer to
+        // [`fleet_programs_key_programs_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // on the sibling fleet-programs / K8s-CR-key re-export
+        // surfaces — extends the discipline the K8s-CR / fleet-
+        // programs key re-export families establish onto the
+        // substrate-side ComputeUnit-CRD per-`spec.*` sub-block axis.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_SPEC_KEY_MODULE",
+            COMPUTEUNIT_SPEC_KEY_MODULE,
+            caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE,
+        );
+    }
+
+    #[test]
+    fn computeunit_spec_key_trigger_re_export_points_at_caixa_core_canonical() {
+        // Peer to
+        // [`computeunit_spec_key_module_re_export_points_at_caixa_core_canonical`]
+        // on the same ComputeUnit-CRD per-`spec.*` sub-block re-export
+        // surface — pins the per-Servico invocation-shape sub-block
+        // key's identity on the same trajectory.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_SPEC_KEY_TRIGGER",
+            COMPUTEUNIT_SPEC_KEY_TRIGGER,
+            caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER,
+        );
+    }
+
+    #[test]
+    fn computeunit_spec_key_capabilities_re_export_points_at_caixa_core_canonical() {
+        // Peer to
+        // [`computeunit_spec_key_module_re_export_points_at_caixa_core_canonical`]
+        // and
+        // [`computeunit_spec_key_trigger_re_export_points_at_caixa_core_canonical`]
+        // on the same ComputeUnit-CRD per-`spec.*` sub-block re-export
+        // surface — completes the substrate-side ComputeUnit-CRD
+        // per-`spec.*` sub-block re-export triple in this crate on the
+        // WASI-capability-token-list axis.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_SPEC_KEY_CAPABILITIES",
+            COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+            caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+        );
+    }
+
+    #[test]
     fn programs_yaml_entry_round_trips() {
         let entry = programs_yaml_entry(&sample_caixa(), &sample_cu_yaml()).unwrap();
         assert_eq!(
@@ -1499,11 +1610,14 @@ spec:
             entry.get(KUBE_KEY_NAMESPACE).and_then(|n| n.as_str()),
             Some("tatara-system")
         );
-        assert!(entry.get("module").is_some());
-        assert!(entry.get("trigger").is_some());
-        assert!(entry.get("capabilities").is_some());
+        assert!(entry.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
+        assert!(entry.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
+        assert!(entry.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
         assert!(
-            entry.get("module").and_then(|m| m.get("source")).is_some(),
+            entry
+                .get(COMPUTEUNIT_SPEC_KEY_MODULE)
+                .and_then(|m| m.get("source"))
+                .is_some(),
             "module.source must propagate verbatim"
         );
     }
@@ -1787,7 +1901,7 @@ programs:
             .unwrap();
         assert_eq!(arr.len(), 2, "no new entry added");
         let updated_module = arr[0]
-            .get("module")
+            .get(COMPUTEUNIT_SPEC_KEY_MODULE)
             .unwrap()
             .get("source")
             .and_then(|s| s.as_str());
@@ -1870,7 +1984,7 @@ spec:
             .unwrap();
         assert_eq!(arr.len(), 2);
         let updated = arr[0]
-            .get("module")
+            .get(COMPUTEUNIT_SPEC_KEY_MODULE)
             .unwrap()
             .get("source")
             .and_then(|s| s.as_str());
