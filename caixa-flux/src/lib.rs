@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, MappingExt, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -794,14 +794,11 @@ pub fn programs_yaml_entry(
         .to_string();
 
     let mut entry = serde_yaml::Mapping::new();
-    entry.insert(
-        serde_yaml::Value::String(FLEET_PROGRAMS_KEY_NAME.into()),
+    entry.insert_str_key(
+        FLEET_PROGRAMS_KEY_NAME,
         serde_yaml::Value::String(caixa.nome.clone()),
     );
-    entry.insert(
-        serde_yaml::Value::String(KUBE_KEY_NAMESPACE.into()),
-        serde_yaml::Value::String(namespace),
-    );
+    entry.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::String(namespace));
 
     // Splice every spec.* field through (module, trigger, capabilities,
     // config, resources, serviceAccount). Operator + chart schemas are
@@ -809,7 +806,7 @@ pub fn programs_yaml_entry(
     if let serde_yaml::Value::Mapping(spec_map) = spec {
         for (k, v) in spec_map {
             if let Some(s) = k.as_str() {
-                entry.insert(serde_yaml::Value::String(s.to_string()), v.clone());
+                entry.insert_str_key(s, v.clone());
             }
         }
     }
