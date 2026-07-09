@@ -2078,6 +2078,59 @@ impl PlacementStrategy {
     }
 }
 
+/// [`std::fmt::Display`] routed through [`PlacementStrategy::as_str`], so
+/// the pretty-printed byte-string every consumer that formats the strategy
+/// as user-facing text lands on (the M3 [`AplicacaoError::PlacementWithoutClusters`]
+/// / [`AplicacaoError::ShardKeyOnNonSharded`] `#[error(":placement
+/// {estrategia} …")]` diagnostic templates, the future `feira app graph`
+/// per-Aplicacao strategy line, the future M4 CR materializer's per-
+/// admission-webhook rejection body) reaches for the same lifted
+/// [`crate::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`crate::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`crate::M3_PLACEMENT_ESTRATEGIA_SHARDED`] const the wire-format
+/// `Serialize` derive already emits under
+/// [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`] and the
+/// [`PlacementStrategy::as_str`] helper already returns.
+///
+/// Until this lift landed the sibling OTP-shape typed enums —
+/// [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`]
+/// (both derive `gen_platform::Discriminant` with `#[discriminant(also_display)]`
+/// so [`std::fmt::Display`] routes through the same discriminant string
+/// the wire format emits) — carried a stable [`std::fmt::Display`]
+/// surface but [`PlacementStrategy`] did not; every consumer reaching
+/// for a strategy byte-string past the wire format had to pick between
+/// three paths ([`PlacementStrategy::as_str`], the [`Serialize`] derive's
+/// serialized string, `format!("{variant:?}")` on the [`std::fmt::Debug`]
+/// derive), any two of which a future variant rename or
+/// `#[serde(rename_all = "kebab-case")]` attribute would silently
+/// desynchronize — with the failure surfacing as a downstream renderer /
+/// operator's per-strategy dispatch reading one spelling while the wire
+/// format emitted another, far from the source rebrand commit and with
+/// no field naming the drift. Routing `Display` through
+/// [`PlacementStrategy::as_str`] makes the three paths
+/// (`Debug` for structural inspection, `Display` for user-facing text,
+/// `Serialize` for the wire format) converge on the same lifted
+/// [`crate::M3_PLACEMENT_ESTRATEGIA_*`] const set: the wire byte-string,
+/// the diagnostic byte-string, and the pretty-printed byte-string move
+/// as a single unit through one canonical declaration each, by
+/// construction. Same trajectory as [`PlacementStrategy::as_str`]
+/// (cc8f749) on the sibling wire-vs-const single-source axis — this lift
+/// closes the third path.
+///
+/// Pin tests
+/// [`tests::placement_strategy_display_routes_through_as_str_helper`]
+/// and
+/// [`tests::placement_strategy_display_matches_serialized_wire_byte_string`]
+/// assert the three paths agree byte-for-byte on every variant, so a
+/// future variant rename or per-arm serde attribute drift is a build
+/// error visible at caixa-core test time, not a silent per-consumer
+/// dispatch miss at apply / reconcile time.
+impl std::fmt::Display for PlacementStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Where the Aplicacao runs.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -3282,7 +3335,7 @@ pub enum AplicacaoError {
     #[error(":entrada :paths entry {path:?} appears more than once")]
     EntradaPathDuplicate { path: String },
     #[error(
-        ":placement {estrategia:?} requires at least one :clusters entry \
+        ":placement {estrategia} requires at least one :clusters entry \
          (Replicated/SingleNode: hosting/takeover candidates; Sharded: shard pool)"
     )]
     PlacementWithoutClusters { estrategia: PlacementStrategy },
@@ -3332,7 +3385,7 @@ pub enum AplicacaoError {
     )]
     ShardKeyInvalid { shard_key: String, reason: String },
     #[error(
-        ":placement {estrategia:?} carries :shard-key {shard_key:?} — only :estrategia \
+        ":placement {estrategia} carries :shard-key {shard_key:?} — only :estrategia \
          Sharded consumes :shard-key (hash-keyed entity distribution, Akka cluster-sharding \
          convention); :estrategia Replicated runs every cluster active-active and \
          :estrategia SingleNode takes over a single cluster at a time (Erlang/OTP \
@@ -8316,6 +8369,174 @@ mod tests {
                 expected,
                 "PlacementStrategy::{variant:?}.as_str() must return the lifted \
                  M3_PLACEMENT_ESTRATEGIA_* constant"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_display_routes_through_as_str_helper() {
+        // The fail-before-pass-after pin: pre-lift the sibling
+        // OTP-shape typed enums [`crate::supervisor::RestartStrategy`]
+        // / [`crate::supervisor::RestartPolicy`] both carried a stable
+        // [`std::fmt::Display`] surface via their
+        // `#[discriminant(also_display)]` gen-platform derive, but
+        // [`PlacementStrategy`] did not — every consumer reaching for
+        // a strategy byte-string past the wire format had to pick
+        // between three paths ([`PlacementStrategy::as_str`], the
+        // `Serialize` derive's serialized string, or `format!("{v:?}")`
+        // on the `Debug` derive), any two of which a future variant
+        // rename or `#[serde(rename_all = "kebab-case")]` attribute
+        // would silently desynchronize. Wiring [`std::fmt::Display`]
+        // through [`PlacementStrategy::as_str`] closes the third path:
+        // every `format!("{v}")` call reaches the same lifted
+        // [`crate::M3_PLACEMENT_ESTRATEGIA_*`] const the wire format
+        // and the [`PlacementStrategy::as_str`] helper already route
+        // through, so a future variant rename lands at exactly one
+        // place. Pin the routing here so a future
+        // `impl std::fmt::Display for PlacementStrategy` reimplementation
+        // that hand-rolls the arms instead of delegating to
+        // [`PlacementStrategy::as_str`] fails at caixa-core build time.
+        for variant in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            assert_eq!(
+                variant.to_string(),
+                variant.as_str(),
+                "PlacementStrategy::{variant:?} Display must route through \
+                 PlacementStrategy::as_str (single source of truth: the lifted \
+                 M3_PLACEMENT_ESTRATEGIA_* const the wire format also emits)"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_display_matches_serialized_wire_byte_string() {
+        // The fail-before-pass-after pin on the second half of the
+        // three-path convergence: `Display` (user-facing text) agrees
+        // byte-for-byte with the `Serialize` derive's wire format
+        // (canonical camelCase-schema `M3_PLACEMENT_KEY_ESTRATEGIA`
+        // scalar) on every variant. Pre-lift the two paths were
+        // structurally independent — a future
+        // `#[serde(rename_all = "kebab-case")]` attribute on the enum
+        // would silently rebrand the emitted wire scalar
+        // (`single-node`, `replicated`, `sharded`) while every consumer
+        // that pretty-prints the strategy (the M3 diagnostic templates,
+        // the future `feira app graph` per-Aplicacao strategy line,
+        // the future M4 CR materializer's admission-webhook rejection
+        // body) would still emit the TitleCase form the `as_str` /
+        // `Display` route returns, with the mismatch surfacing at
+        // consumer parse time / operator dispatch time far from the
+        // source rebrand commit. Pin the two paths byte-for-byte here
+        // so any future serde-attribute or variant-rename drift is a
+        // caixa-core-build-time test failure at this call, not a
+        // silent per-consumer dispatch miss.
+        for variant in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            let wire = serde_json::to_string(&variant).unwrap();
+            // Strip the outer `"…"` the JSON string form carries — the
+            // wire scalar the K8s / YAML apiserver consumes is the
+            // enclosed byte-string, not the quote wrapper.
+            let unquoted = wire
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized PlacementStrategy is a JSON string");
+            assert_eq!(
+                variant.to_string(),
+                unquoted,
+                "PlacementStrategy::{variant:?} Display byte-string must match the \
+                 Serialize derive's wire byte-string (three-path convergence: \
+                 Display + as_str + Serialize all resolve to the same \
+                 M3_PLACEMENT_ESTRATEGIA_* const)"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_without_clusters_diagnostic_carries_strategy_display_byte_string() {
+        // Pin the M3 diagnostic template routes through the typed
+        // [`PlacementStrategy`] Display byte-string (rebound from the
+        // prior `{estrategia:?}` `Debug` route). Pre-lift the two
+        // routes emitted identical bytes (the `Debug` derive on a
+        // unit variant emits the variant name verbatim, exactly what
+        // `as_str` returns), but the two paths were structurally
+        // independent — a future `#[serde(rename_all = "…")]`
+        // attribute or variant rename would coordinate the wire /
+        // `Display` / `as_str` triple through the lifted const but
+        // leave the `Debug` route on the compiler-derived variant name,
+        // silently desynchronizing the diagnostic byte-string from the
+        // wire byte-string. Rebinding the template onto `Display`
+        // ties the diagnostic to the same lifted
+        // [`crate::M3_PLACEMENT_ESTRATEGIA_*`] const the wire format
+        // emits — drift becomes structurally impossible. Pin the
+        // byte-string here so a future edit that reverts the template
+        // to `{estrategia:?}` is caught at caixa-core test time, not
+        // at consumer dispatch time.
+        for (variant, expected_scalar) in [
+            (
+                PlacementStrategy::SingleNode,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+            ),
+            (
+                PlacementStrategy::Replicated,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+            ),
+            (
+                PlacementStrategy::Sharded,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+            ),
+        ] {
+            let err = AplicacaoError::PlacementWithoutClusters {
+                estrategia: variant,
+            };
+            let msg = err.to_string();
+            assert!(
+                msg.starts_with(&format!(":placement {expected_scalar} requires")),
+                "PlacementWithoutClusters diagnostic for {variant:?} must open \
+                 with the lifted `{expected_scalar}` scalar via Display; got {msg:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn shard_key_on_non_sharded_diagnostic_carries_strategy_display_byte_string() {
+        // Peer of
+        // [`placement_without_clusters_diagnostic_carries_strategy_display_byte_string`]
+        // on the second M3 diagnostic that carries the typed
+        // [`PlacementStrategy`] in its `#[error(…)]` template. Both
+        // diagnostics now route the strategy scalar through the same
+        // [`std::fmt::Display`] surface, tying the diagnostic
+        // byte-string to the lifted [`crate::M3_PLACEMENT_ESTRATEGIA_*`]
+        // const set the wire format also emits. The two non-Sharded
+        // arms are exercised here (the diagnostic exists to flag a
+        // `:shard-key` slot the current strategy will never consume);
+        // the peer `Sharded` arm never reaches this diagnostic (the
+        // `Sharded` strategy consumes `:shard-key` — the
+        // [`AplicacaoError::ShardedWithoutKey`] arm reports the missing
+        // slot instead).
+        for (variant, expected_scalar) in [
+            (
+                PlacementStrategy::SingleNode,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+            ),
+            (
+                PlacementStrategy::Replicated,
+                crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+            ),
+        ] {
+            let err = AplicacaoError::ShardKeyOnNonSharded {
+                estrategia: variant,
+                shard_key: "$tenantId".into(),
+            };
+            let msg = err.to_string();
+            assert!(
+                msg.starts_with(&format!(":placement {expected_scalar} carries")),
+                "ShardKeyOnNonSharded diagnostic for {variant:?} must open with \
+                 the lifted `{expected_scalar}` scalar via Display; got {msg:?}"
             );
         }
     }
