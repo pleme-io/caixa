@@ -490,22 +490,22 @@ impl Caixa {
         let mut seen = std::collections::HashSet::new();
         for dep in &self.deps {
             dep.validate()?;
-            if !seen.insert(dep.nome.as_str()) {
-                return Err(DepError::DuplicateNome {
+            crate::render::insert_first_seen(&mut seen, dep.nome.as_str(), || {
+                DepError::DuplicateNome {
                     nome: dep.nome.clone(),
                     list: ":deps",
-                });
-            }
+                }
+            })?;
         }
         let mut seen_dev = std::collections::HashSet::new();
         for dep in &self.deps_dev {
             dep.validate()?;
-            if !seen_dev.insert(dep.nome.as_str()) {
-                return Err(DepError::DuplicateNome {
+            crate::render::insert_first_seen(&mut seen_dev, dep.nome.as_str(), || {
+                DepError::DuplicateNome {
                     nome: dep.nome.clone(),
                     list: ":deps-dev",
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }
@@ -1067,12 +1067,12 @@ impl Caixa {
                         }
                     }
                 }
-                if !seen.insert(entry.as_str()) {
-                    return Err(ManifestError::CodePathDuplicate {
+                crate::render::insert_first_seen(&mut seen, entry.as_str(), || {
+                    ManifestError::CodePathDuplicate {
                         slot,
                         path: path.to_path_buf(),
-                    });
-                }
+                    }
+                })?;
             }
         }
         Ok(())
@@ -1169,11 +1169,11 @@ impl Caixa {
                     reason,
                 }
             })?;
-            if !seen.insert(etiqueta.as_str()) {
-                return Err(ManifestError::EtiquetaDuplicate {
+            crate::render::insert_first_seen(&mut seen, etiqueta.as_str(), || {
+                ManifestError::EtiquetaDuplicate {
                     etiqueta: etiqueta.clone(),
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }
@@ -1261,11 +1261,11 @@ impl Caixa {
                     reason,
                 }
             })?;
-            if !seen.insert(autor.as_str()) {
-                return Err(ManifestError::AutorDuplicate {
+            crate::render::insert_first_seen(&mut seen, autor.as_str(), || {
+                ManifestError::AutorDuplicate {
                     autor: autor.clone(),
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }

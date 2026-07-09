@@ -2406,14 +2406,14 @@ impl AplicacaoSpec {
                 c.subject.as_deref(),
                 c.slot.as_deref(),
             );
-            if !seen_contracts.insert(key) {
-                return Err(AplicacaoError::ContratoDuplicate {
+            crate::render::insert_first_seen(&mut seen_contracts, key, || {
+                AplicacaoError::ContratoDuplicate {
                     de: c.de.clone(),
                     para: c.para.clone(),
                     wit: c.wit.clone(),
                     target: target_view.label(),
-                });
-            }
+                }
+            })?;
         }
 
         // Cycles in the synchronous-edge subgraph are build errors
@@ -2505,9 +2505,9 @@ impl AplicacaoSpec {
                 // that emits a Gateway API field now matches the
                 // apiserver's accepted set at validate time.
                 validate_entrada_path(p)?;
-                if !seen.insert(p.as_str()) {
-                    return Err(AplicacaoError::EntradaPathDuplicate { path: p.clone() });
-                }
+                crate::render::insert_first_seen(&mut seen, p.as_str(), || {
+                    AplicacaoError::EntradaPathDuplicate { path: p.clone() }
+                })?;
             }
         }
 
@@ -2599,11 +2599,11 @@ impl AplicacaoSpec {
                     reason,
                 },
             )?;
-            if !seen.insert(m.caixa.as_str()) {
-                return Err(AplicacaoError::MembroDuplicate {
+            crate::render::insert_first_seen(&mut seen, m.caixa.as_str(), || {
+                AplicacaoError::MembroDuplicate {
                     caixa: m.caixa.clone(),
-                });
-            }
+                }
+            })?;
         }
         Ok(())
     }
@@ -2660,9 +2660,9 @@ impl AplicacaoSpec {
             // re-validation at any downstream renderer or admission
             // layer.
             validate_placement_cluster(c)?;
-            if !seen.insert(c.as_str()) {
-                return Err(AplicacaoError::PlacementClusterDuplicate { cluster: c.clone() });
-            }
+            crate::render::insert_first_seen(&mut seen, c.as_str(), || {
+                AplicacaoError::PlacementClusterDuplicate { cluster: c.clone() }
+            })?;
         }
         if let Some(a) = &self.placement.affinity {
             // Per-hint value-shape gate: the `:affinity` value lands
