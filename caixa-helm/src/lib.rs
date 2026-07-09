@@ -364,6 +364,57 @@ pub use caixa_core::KUBE_KEY_SPEC;
 /// key / canonical-Helm-chart-schema-apiVersion axes.
 pub use caixa_core::HELM_VALUES_KEY_ENABLED;
 
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR wasm-module-reference
+/// `spec.module` sub-block key every rendered `values.yaml`'s
+/// [`DEFAULT_LIBRARY_NAME`]-wrapped block carries so the
+/// `pleme-computeunit` library chart's per-Servico module-source axis
+/// binds to the exact source the caixa.lisp's `:servicos` fixture
+/// pins. Two per-values drift-detection navigators in this crate's
+/// test module (the canonical-wrap-key round-trip + the
+/// `library-name`-override wrap-key round-trip) now consult the same
+/// `&'static str` as the peer caixa-flux writer's per-Servico
+/// `programs[]`-entry module-source navigators. Same re-export shape
+/// as the peer [`HELM_VALUES_KEY_ENABLED`] / [`KUBE_KEY_SPEC`]
+/// surfaces on the sibling canonical-Helm-load-bearing-string /
+/// canonical-K8s-CR-body-key axes — extends the discipline the
+/// M2-typed-slot / K8s-CR key re-export families establish onto the
+/// substrate-side ComputeUnit-CRD per-`spec.*` sub-block axis. See
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`] for the full lift
+/// rationale.
+pub use caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE;
+
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR invocation-shape
+/// `spec.trigger` sub-block key every rendered `values.yaml`'s
+/// [`DEFAULT_LIBRARY_NAME`]-wrapped block carries so the
+/// `pleme-computeunit` library chart's per-Servico
+/// `trigger.service.{port, paths, breathability}` routing binds to
+/// the exact axis the caixa.lisp's `:servicos` fixture pins. Peer of
+/// [`COMPUTEUNIT_SPEC_KEY_MODULE`] on the same ComputeUnit CRD
+/// per-`spec.*` sub-block axis — see
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER`] for the full lift
+/// rationale.
+pub use caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER;
+
+/// Local re-export of the canonical
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] — the
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR WASI-capability-list
+/// `spec.capabilities` sub-block key every rendered `values.yaml`'s
+/// [`DEFAULT_LIBRARY_NAME`]-wrapped block carries so the
+/// `pleme-computeunit` library chart's per-Servico WASI-preview-2
+/// capability-token binding fires exactly against the axis the
+/// caixa.lisp's `:servicos` fixture pins. Peer of
+/// [`COMPUTEUNIT_SPEC_KEY_MODULE`] and [`COMPUTEUNIT_SPEC_KEY_TRIGGER`]
+/// on the same ComputeUnit CRD per-`spec.*` sub-block axis — completes
+/// the substrate-side ComputeUnit-CRD per-`spec.*` sub-block re-export
+/// triple in this crate. See
+/// [`caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] for the full lift
+/// rationale.
+pub use caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES;
+
 /// Knobs that don't come from the Caixa manifest.
 #[derive(Debug, Clone)]
 pub struct RenderOpts {
@@ -711,9 +762,9 @@ spec:
             cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
         );
-        assert!(cu_block.get("module").is_some());
-        assert!(cu_block.get("trigger").is_some());
-        assert!(cu_block.get("capabilities").is_some());
+        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
+        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
+        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
     }
 
     #[test]
@@ -761,9 +812,9 @@ spec:
             cu_block.get(HELM_VALUES_KEY_ENABLED),
             Some(&serde_yaml::Value::Bool(false))
         );
-        assert!(cu_block.get("module").is_some());
-        assert!(cu_block.get("trigger").is_some());
-        assert!(cu_block.get("capabilities").is_some());
+        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
+        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());
+        assert!(cu_block.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some());
     }
 
     #[test]
@@ -1436,6 +1487,70 @@ spec:
              equal the default-off toggle the lifted HELM_VALUES_KEY_ENABLED axis carries — \
              a drifted enable-toggle key silently splits the per-values enable-flip across \
              two sibling scalar names on the caixa-helm / caixa-flux consumer split"
+        );
+    }
+
+    #[test]
+    fn computeunit_spec_key_module_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `COMPUTEUNIT_SPEC_KEY_MODULE` was lifted from
+        // the two inline `"module"` test-side call sites in this crate
+        // (`values_yaml_wraps_under_pleme_computeunit_key`'s per-values
+        // module-block present-check + the peer navigator on the
+        // `library_name`-override wrap-key axis
+        // `values_yaml_wrap_key_follows_library_name_override`) — every
+        // per-Servico ComputeUnit CRD `spec.module` sub-block readback
+        // in this crate now navigates through the same `&'static str`
+        // re-exported to a re-export of
+        // [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`] so the canonical
+        // ComputeUnit-CRD per-`spec.*` wasm-module-reference axis lives
+        // in exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local re-
+        // introduction of a sibling `pub const COMPUTEUNIT_SPEC_KEY_MODULE:
+        // &str = "…"` at this crate is a build-time test failure naming
+        // the offending drift, not a silent per-Servico wasm-runtime-
+        // binding drop at cluster-apply time. Peer to
+        // [`helm_values_key_enabled_re_export_points_at_caixa_core_canonical`]
+        // /
+        // [`kube_key_spec_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Helm-load-bearing-string /
+        // canonical-K8s-CR-body-key re-export axes +
+        // `caixa_flux::tests::computeunit_spec_key_module_re_export_points_at_caixa_core_canonical`
+        // on the peer per-Servico renderer crate.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_SPEC_KEY_MODULE",
+            COMPUTEUNIT_SPEC_KEY_MODULE,
+            caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE,
+        );
+    }
+
+    #[test]
+    fn computeunit_spec_key_trigger_re_export_points_at_caixa_core_canonical() {
+        // Peer to
+        // [`computeunit_spec_key_module_re_export_points_at_caixa_core_canonical`]
+        // on the same ComputeUnit-CRD per-`spec.*` sub-block re-export
+        // surface — pins the per-Servico invocation-shape sub-block
+        // key's identity on the same trajectory.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_SPEC_KEY_TRIGGER",
+            COMPUTEUNIT_SPEC_KEY_TRIGGER,
+            caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER,
+        );
+    }
+
+    #[test]
+    fn computeunit_spec_key_capabilities_re_export_points_at_caixa_core_canonical() {
+        // Peer to
+        // [`computeunit_spec_key_module_re_export_points_at_caixa_core_canonical`]
+        // and
+        // [`computeunit_spec_key_trigger_re_export_points_at_caixa_core_canonical`]
+        // on the same ComputeUnit-CRD per-`spec.*` sub-block re-export
+        // surface — completes the substrate-side ComputeUnit-CRD
+        // per-`spec.*` sub-block re-export triple in this crate on the
+        // WASI-capability-token-list axis.
+        caixa_core::assert_str_reexport_identity(
+            "COMPUTEUNIT_SPEC_KEY_CAPABILITIES",
+            COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+            caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
         );
     }
 }

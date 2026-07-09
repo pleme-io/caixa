@@ -5878,6 +5878,144 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
+/// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
+/// child every rendered `ComputeUnit` YAML carries to name the wasm
+/// component (`module.source: oci://...` for OCI-hosted binaries,
+/// `module.source: file://...` for locally-mounted wasm bundles) the
+/// M2.5 wasm-engine instantiator loads at Servico bring-up. The single
+/// source of truth every downstream consumer that reads or emits the
+/// per-CR module sub-block reaches for:
+///
+///   - [`caixa_flux::programs_yaml_entry`] splices the ComputeUnit
+///     YAML's `spec.module` verbatim through into the emitted
+///     `programs[]` entry (the `lareira-fleet-programs` library chart's
+///     per-entry module-source axis, populated from the ComputeUnit's
+///     `spec.module` per the docstring on `programs_yaml_entry` above);
+///   - [`caixa_helm::build_values_yaml`] threads the same
+///     `spec.module` sub-block into the rendered `values.yaml`'s
+///     [`DEFAULT_LIBRARY_NAME`]-wrapped block so the `pleme-computeunit`
+///     library chart's per-Servico module axis binds to the exact
+///     source the caixa.lisp's `:servicos` fixture pins;
+///   - every test-fixture navigator in both crates that reaches into
+///     the rendered `programs[]` entry / `values.yaml` block by the
+///     module sub-block key to pin the per-Servico module-source axis
+///     round-trip (six sites across [`caixa_flux`][cf]'s per-entry
+///     module + module.source drift-detection sweep + [`caixa_helm`][ch]'s
+///     per-values module drift-detection sweep) resolves the same
+///     `&'static str` when parsing back the rendered document;
+///   - every future per-Servico renderer the absorption-roadmap
+///     acknowledges (the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+///     materializer's per-`:membros` module-source resolver, a future
+///     per-cluster ComputeUnit-CR admission webhook keying off the same
+///     accepted sub-block set, the future caixa-otel collector-pipeline
+///     emitter's per-Servico module-scrape reference).
+///
+/// Until this lift landed the byte `"module"` lived as six verbatim
+/// inline literals across [`caixa_flux`][cf] and [`caixa_helm`][ch]'s
+/// test-fixture navigators (four sites in caixa-flux —
+/// `programs_yaml_entry_round_trips`'s `entry.get("module")` pair +
+/// `upsert_helmrelease_replaces_existing`'s `.get("module")` +
+/// `upsert_into_programs_yaml`'s `.get("module")` — and two sites in
+/// caixa-helm — `values_yaml_wraps_under_pleme_computeunit_key`'s
+/// `cu_block.get("module")` + `values_yaml_wrap_key_follows_library_name_override`'s
+/// peer navigator on the library-name-override axis). A future
+/// ComputeUnit CRD schema-key rebrand on the per-CR module-reference
+/// axis (the substrate moving the wasm-component reference to
+/// `binary:` for parity with OCI OpenContainer Image nomenclature, to
+/// `component:` for parity with WIT Component Model wire terminology,
+/// to `spec.wasm.source` for schema-clarity once the ComputeUnit
+/// CRD grows sibling `spec.native.*` / `spec.container.*` runtime-
+/// discriminators as the ABSORPTION-ROADMAP.md M4-M5 trajectory names)
+/// without a coordinated edit across all six sites would silently
+/// split the schema: the emitter would write under the drifted key
+/// while every downstream test would still probe `module:` — the
+/// `lareira-fleet-programs` library chart's per-entry module-source
+/// axis would silently receive an empty reference, the workload would
+/// silently come up with no wasm module bound (the M2.5 instantiator
+/// falls back to the library chart's admission-time default of a
+/// hello-world stub, or fails the bring-up at wasm-engine parse time
+/// with a diagnostic far from the caixa.lisp source), and the failure
+/// would surface as "the Servico's pods are running but they aren't
+/// running our code" far from the rebrand commit's source. Lifting
+/// the literal to one `&'static str` closes the drift footgun
+/// structurally — every consumer reads the same memory, so any
+/// future rebrand reaches every consumer by construction.
+///
+/// Same "the typed constant lives in one place" discipline the peer
+/// [`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`]
+/// lifts apply on the sibling caixa.lisp M2 typed-slot canonical-
+/// camelCase-key surfaces — extends the discipline from the caixa-
+/// source-side M2 typed-slot overlay-key triple onto the substrate-
+/// side `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-`spec.*`
+/// sub-block axis every rendered ComputeUnit YAML declares as its
+/// top-level `(module, trigger, capabilities)` triple (the peer
+/// [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] +
+/// [`COMPUTEUNIT_SPEC_KEY_CAPABILITIES`] siblings complete the
+/// substrate-side ComputeUnit-CRD per-`spec.*` sub-block re-export
+/// triple).
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [ch]: ../../caixa_helm/index.html
+pub const COMPUTEUNIT_SPEC_KEY_MODULE: &str = "module";
+
+/// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.trigger`
+/// per-CR invocation-trigger sub-block key — the top-level `spec.*`
+/// child every rendered `ComputeUnit` YAML carries to name how the
+/// wasm component is invoked (`trigger.service.{port, paths}` for
+/// HTTP-triggered Servicos, `trigger.subscription.{subject}` for the
+/// future NATS-triggered Servicos the M4 `:contratos` typed-mesh
+/// pubsub axis will emit). Peer of [`COMPUTEUNIT_SPEC_KEY_MODULE`] on
+/// the same ComputeUnit CRD per-`spec.*` sub-block surface —
+/// `COMPUTEUNIT_SPEC_KEY_MODULE` names the per-CR wasm-binary
+/// reference axis, this constant names the per-CR invocation-shape
+/// axis every downstream trigger consumer (the `pleme-computeunit`
+/// library chart's per-Servico `trigger.service.port` /
+/// `trigger.service.paths` / `trigger.service.breathability` values-
+/// block routing, the future M4 pubsub-subscription binding, the
+/// `caixa-mesh` `CiliumNetworkPolicy` L4-port fallback that reads the
+/// destination Servico's per-`trigger.service.port` axis via a future
+/// resolver round-trip) reaches for. Same lift trajectory as the
+/// sibling [`COMPUTEUNIT_SPEC_KEY_MODULE`] axis — three verbatim
+/// inline test-side literals (one caixa-flux drift-detection navigator
+/// + two caixa-helm per-values drift-detection navigators, one under
+/// the canonical wrap-key + one under the library-name-override wrap-
+/// key) collapsed onto the same `&'static str` so any future rebrand
+/// (the substrate moving the invocation-shape axis to `invoke:`,
+/// `entry:`, or splitting into `trigger.http.*` / `trigger.pubsub.*`
+/// runtime-discriminators as the M4 `:contratos` axis grows) reaches
+/// every consumer by construction. See [`COMPUTEUNIT_SPEC_KEY_MODULE`]
+/// for the full lift rationale.
+pub const COMPUTEUNIT_SPEC_KEY_TRIGGER: &str = "trigger";
+
+/// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD
+/// `spec.capabilities` per-CR WASI-capability-list sub-block key — the
+/// top-level `spec.*` child every rendered `ComputeUnit` YAML carries
+/// to declare the wasm-component-capability tokens the M2.5 wasm-engine
+/// instantiator binds at Servico bring-up (`http-in:0.0.0.0:8080` for
+/// the HTTP incoming-handler, `env` for read-only environment access,
+/// `sock-*` for TCP outbound, and the sibling WASI-preview-2 preview-
+/// interfaces per the WIT Component Model). Peer of
+/// [`COMPUTEUNIT_SPEC_KEY_MODULE`] and [`COMPUTEUNIT_SPEC_KEY_TRIGGER`]
+/// on the same ComputeUnit CRD per-`spec.*` sub-block surface —
+/// completes the substrate-side ComputeUnit-CRD per-`spec.*` sub-block
+/// re-export triple every rendered ComputeUnit YAML declares as its
+/// top-level `(module, trigger, capabilities)` axis. Same lift
+/// trajectory as the sibling [`COMPUTEUNIT_SPEC_KEY_MODULE`] axis —
+/// three verbatim inline test-side literals (one caixa-flux drift-
+/// detection navigator + two caixa-helm per-values drift-detection
+/// navigators, one under the canonical wrap-key + one under the
+/// library-name-override wrap-key) collapsed onto the same
+/// `&'static str` so any future rebrand (the substrate moving the
+/// capability-list axis to `caps:` for terse-schema parity with the
+/// WASI-preview-2 upstream naming, splitting into
+/// `capabilities.wasi.*` / `capabilities.pleme.*` runtime-vs-substrate
+/// discriminators, or the M4 WIT Component Model materializer moving
+/// to a typed `imports:` / `exports:` split) reaches every consumer by
+/// construction. See [`COMPUTEUNIT_SPEC_KEY_MODULE`] for the full lift
+/// rationale.
+pub const COMPUTEUNIT_SPEC_KEY_CAPABILITIES: &str = "capabilities";
+
 /// Canonical YAML key for the M3 `:placement` slot's overlay on a
 /// rendered programs.yaml entry. The lareira-fleet-programs aggregator
 /// (and the future `app-operator` per-Aplicacao reconciler) both key
@@ -22155,5 +22293,127 @@ mod tests {
         const CANONICAL: &str = "canonical-value";
         const DRIFTED: &str = "drifted-value";
         assert_str_reexport_identity("DRIFTED_UNDER_TEST", DRIFTED, CANONICAL);
+    }
+
+    #[test]
+    fn computeunit_spec_key_module_pins_canonical_value() {
+        // Pin the actual byte-string so a typo in this lift can't silently
+        // rebrand the `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR
+        // `spec.module` sub-block key both caixa-flux and caixa-helm
+        // navigate to reach the per-Servico wasm-component reference the
+        // M2.5 wasm-engine instantiator loads at Servico bring-up. The
+        // value is part of the cluster-side contract with the
+        // `pleme-computeunit` library chart's per-values module-source
+        // routing + the `caixa-operator` `ComputeUnit` CR admission
+        // webhook's per-CR module-reference resolver; changing it is a
+        // coordinated ComputeUnit-CRD schema migration alongside the
+        // upstream substrate release, not an incidental edit. Peer to
+        // `default_namespace_pins_canonical_value` /
+        // `helm_values_yaml_filename_pins_canonical_value` /
+        // `helm_chart_yaml_filename_pins_canonical_value` on the sibling
+        // canonical-substrate-schema-key axes.
+        assert_eq!(COMPUTEUNIT_SPEC_KEY_MODULE, "module");
+    }
+
+    #[test]
+    fn computeunit_spec_key_trigger_pins_canonical_value() {
+        // Peer to `computeunit_spec_key_module_pins_canonical_value` on
+        // the same ComputeUnit-CRD per-`spec.*` sub-block axis — pins
+        // the per-CR invocation-shape sub-block key every
+        // `pleme-computeunit`-library-chart-driven per-Servico
+        // `trigger.service.port` / `trigger.service.paths` /
+        // `trigger.service.breathability` values-block route reads back.
+        assert_eq!(COMPUTEUNIT_SPEC_KEY_TRIGGER, "trigger");
+    }
+
+    #[test]
+    fn computeunit_spec_key_capabilities_pins_canonical_value() {
+        // Peer to `computeunit_spec_key_module_pins_canonical_value` and
+        // `computeunit_spec_key_trigger_pins_canonical_value` on the same
+        // ComputeUnit-CRD per-`spec.*` sub-block axis — pins the per-CR
+        // WASI-capability-token-list sub-block key the M2.5 wasm-engine
+        // instantiator reads to bind the per-component capability set
+        // (WASI-preview-2 preview-interfaces per the WIT Component Model)
+        // at Servico bring-up.
+        assert_eq!(COMPUTEUNIT_SPEC_KEY_CAPABILITIES, "capabilities");
+    }
+
+    #[test]
+    fn computeunit_spec_keys_carry_lowercase_shape() {
+        // Cross-axis invariant: every `wasm.pleme.io/v1alpha1/ComputeUnit`
+        // CRD per-`spec.*` sub-block key is all-ASCII-lowercase
+        // throughout — the ComputeUnit CRD's schema convention on the
+        // per-`spec.*` sub-block axis. A drifted UpperCamelCase /
+        // hyphenated variant (`"Module"` / `"module-source"` /
+        // `"Trigger"` / `"Capabilities"` — the OpenAPI-CRD-schema
+        // canonical-form footgun the peer `KUBE_KEY_*` axes share) would
+        // land the emit-side key outside the CRD's admitted per-sub-
+        // block set and the `caixa-operator` admission webhook would
+        // silently drop the per-Servico wasm-runtime binding — the
+        // Servico pods would come up under the library-chart defaults
+        // (no module bound, no trigger bound, no capability set)
+        // instead of the caixa.lisp's declared per-`:servicos` axis.
+        // Same all-ASCII-lowercase shape gate as the peer M2 typed-slot
+        // camelCase-key axes ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] —
+        // the compound-word slot [`M2_KEY_UPGRADE_FROM`] adds a
+        // camelHump per its `#[serde(rename_all = "camelCase")]`-derived
+        // shape, but the leading-word gate is the same).
+        for k in [
+            COMPUTEUNIT_SPEC_KEY_MODULE,
+            COMPUTEUNIT_SPEC_KEY_TRIGGER,
+            COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+        ] {
+            assert!(
+                k.bytes().all(|b| b.is_ascii_lowercase()),
+                "ComputeUnit CRD per-`spec.*` sub-block key {k:?} must be \
+                 all-ASCII-lowercase per the CRD schema convention"
+            );
+        }
+    }
+
+    #[test]
+    fn computeunit_spec_keys_appear_verbatim_in_sample_computeunit_yaml() {
+        // Round-trip pin: the exact byte-strings the three lifted
+        // constants carry appear verbatim as the top-level `spec.*`
+        // sub-block keys of a canonical in-tree `ComputeUnit` YAML —
+        // the same shape [`caixa_flux::programs_yaml_entry`] and
+        // [`caixa_helm::build_values_yaml`] consume via
+        // `serde_yaml::from_str`. Pins the const-to-schema round-trip
+        // so a future ComputeUnit-CRD schema rebrand (a `binary:` /
+        // `component:` / `invoke:` / `caps:` / `spec.wasm.*` axis
+        // rename the ABSORPTION-ROADMAP.md M4-M5 trajectory names)
+        // surfaces here as a build error rather than as a silent
+        // per-Servico wasm-runtime-binding drop at cluster-apply time.
+        let cu: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+apiVersion: wasm.pleme.io/v1alpha1
+kind: ComputeUnit
+metadata:
+  name: hello-rio
+spec:
+  module:
+    source: oci://ghcr.io/pleme-io/hello-rio:v0.1.0
+  trigger:
+    service:
+      port: 8080
+      paths: ["/"]
+  capabilities:
+    - env
+"#,
+        )
+        .unwrap();
+        let spec = cu.get(KUBE_KEY_SPEC).expect("spec key present");
+        assert!(
+            spec.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some(),
+            "spec.{COMPUTEUNIT_SPEC_KEY_MODULE} sub-block must be present"
+        );
+        assert!(
+            spec.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some(),
+            "spec.{COMPUTEUNIT_SPEC_KEY_TRIGGER} sub-block must be present"
+        );
+        assert!(
+            spec.get(COMPUTEUNIT_SPEC_KEY_CAPABILITIES).is_some(),
+            "spec.{COMPUTEUNIT_SPEC_KEY_CAPABILITIES} sub-block must be present"
+        );
     }
 }
