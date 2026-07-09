@@ -555,81 +555,29 @@ impl LimitsSpec {
                 |fuel| LimitsError::FuelExceedsCap { fuel },
             )?;
         }
-        if matches!(self.wall_clock, Some(d) if d.is_zero()) {
-            return Err(LimitsError::WallClockZero);
-        }
-        // Sub-millisecond residue gate on the typed `:wall-clock` axis.
-        // The peer typed-`Duration` axes already routed through the
-        // shared `supervisor::duration_codec` (`:politicas :timeout`
-        // a4ae535, `:circuit-breaker :window` a4ae535) gate on
-        // `is_integer_millisecond_duration` because the codec's `render`
-        // truncates to `as_millis()` and parses with integer-ms
-        // granularity; the in-module `render_duration` / `parse_duration`
-        // pair in this crate carries the same `as_millis()`-truncation
-        // shape, so the same sub-millisecond-residue footgun lived on
-        // this axis until this gate landed. A programmatic struct
-        // literal (`LimitsSpec { wall_clock: Some(Duration::from_micros(1500)), .. }`,
-        // or any wasm-engine / M2.5 caller propagating a `Duration`
-        // from a non-`<integer><unit>`-string source) would either
-        // truncate-to-`ms` on first serialize (`from_micros(1500)` =
-        // 1_500_000 ns → renders `"1ms"` → parses back to
-        // `Duration::from_millis(1)` = 1_000_000 ns ≠ original) or —
-        // for sub-millisecond magnitudes — render as the literal `"0s"`
-        // (`from_micros(500)` → `as_millis() == 0` → renders `"0s"`)
-        // the zero-floor arm immediately above rejects on re-validate,
-        // either way breaking the THEORY.md §V.2.7 render-determinism
-        // contract every typed slot carries. The shared predicate
-        // [`crate::supervisor::duration_codec::is_integer_millisecond_duration`]
-        // lives next to the codec — single source of truth, drift
-        // between the codec's accepted granularity and any typed
-        // `Duration` slot's accepted set is a single-edit fix at the
-        // predicate rather than a silent round-trip break the next
-        // consumer (the wasm-engine `wall_clock` deadline cancellation
-        // MESH-COMPOSITION §V names, the future caixa-helm
-        // `pleme-computeunit` chart's `:limits` value mapping) discovers
-        // at apply time. The zero-floor arm strictly precedes this
-        // canonical gate so `Duration::ZERO` (`subsec_nanos() == 0` — a
-        // value the canonical arm would otherwise accept) surfaces the
-        // more self-locating `WallClockZero` diagnostic with its
-        // omit-axis remediation directly named, peer to the
-        // `PolicyTimeoutZero` → `PolicyTimeoutNotCanonical` and
-        // `PolicyBreakerZeroWindow` → `PolicyBreakerWindowNotCanonical`
-        // cross-arm ordering on `:politicas`.
-        if let Some(w) = self.wall_clock
-            && !crate::supervisor::duration_codec::is_integer_millisecond_duration(w)
-        {
-            return Err(LimitsError::WallClockNotCanonical { wall_clock: w });
-        }
-        // Upper-bound gate on `:wall-clock`: every validated value must
-        // also fit within the typed-`Duration` ceiling
-        // ([`LIMITS_WALL_CLOCK_MAX`] = 1h = 3600s). The zero-floor,
-        // canonical-form, and this cap arm together bracket the typed
-        // `:wall-clock` axis structurally — every validated value lies
-        // in `1ms..=LIMITS_WALL_CLOCK_MAX`, integer-millisecond
-        // granularity. Until this gate landed the duration codec
-        // accepted any `Duration` past zero with integer-ms residue
-        // (the parser's only upper bound was `Duration::MAX`), so
-        // `(:wall-clock "24h")` round-tripped cleanly through serde and
-        // the per-process CSE invariant (no value the wasm-engine's
-        // epoch-deadline cancellation can't honor as a meaningful
-        // bound) was a runtime, not build-time, contract. Same
-        // trajectory as the sibling typed-`Duration` cap lifts on
-        // [`crate::POLICY_TIMEOUT_MAX`] (per-edge mesh-policy deadline)
-        // and [`crate::POLICY_BREAKER_WINDOW_MAX`] (per-breaker
-        // rolling-window) — the three typed-`Duration` axes now share
-        // a single uniform top edge at the codec's largest emitted
-        // unit. The canonical-form arm strictly precedes this cap so a
-        // `Duration` that is *both* sub-millisecond and above-cap
-        // surfaces the more fundamental round-trip-shape diagnostic
-        // first (the cap's `1ms..=1h` remediation would be misleading
-        // when no integer-ms form of the offending value exists). Same
-        // posture every peer zero-then-shape-then-cap chain uses on
-        // this surface (`MemoryZero` → `MemoryBelowWasm32Page` →
-        // `MemoryExceedsWasm32Cap`).
-        if let Some(w) = self.wall_clock
-            && w > LIMITS_WALL_CLOCK_MAX
-        {
-            return Err(LimitsError::WallClockExceedsCap { wall_clock: w });
+        if let Some(w) = self.wall_clock {
+            // Zero-floor + integer-millisecond canonical-form +
+            // upper-cap bracket on the typed `:wall-clock` axis. See
+            // [`crate::render::require_positive_canonical_bounded_duration`]
+            // for the full three-arm ordering discipline (zero-floor
+            // strictly precedes canonical-form so `Duration::ZERO`
+            // surfaces the self-locating `WallClockZero` diagnostic;
+            // canonical-form strictly precedes the cap arm so a
+            // sub-millisecond above-cap value surfaces the more
+            // fundamental round-trip-shape diagnostic first) and the
+            // three peer typed-`Duration` sites that share this
+            // canonical bracket ([`crate::MeshPolicy::timeout`],
+            // [`crate::CircuitBreaker::window`],
+            // [`crate::SupervisorSpec::restart_window`]). Every
+            // validated value lies in `1ms..=LIMITS_WALL_CLOCK_MAX`
+            // (1ms..=1h), integer-millisecond granularity.
+            crate::render::require_positive_canonical_bounded_duration(
+                w,
+                LIMITS_WALL_CLOCK_MAX,
+                || LimitsError::WallClockZero,
+                |wall_clock| LimitsError::WallClockNotCanonical { wall_clock },
+                |wall_clock| LimitsError::WallClockExceedsCap { wall_clock },
+            )?;
         }
         // Zero-floor + upper-cap bracket on the typed `:cpu` axis. See
         // [`crate::render::require_positive_bounded_u32`] for the

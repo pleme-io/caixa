@@ -11999,6 +11999,96 @@ pub fn require_positive_bounded_u64<E>(
     Ok(())
 }
 
+/// Bracket a typed `Duration` axis with the "zero-floor +
+/// canonical-form + upper-cap" three-arm gate every typed-`Duration`
+/// slot in the crate carries. Returns `on_zero()` when `value` is
+/// `Duration::ZERO`, `on_not_canonical(value)` when `value` carries
+/// sub-millisecond residue the shared
+/// [`crate::supervisor::duration_codec`] cannot round-trip losslessly,
+/// `on_cap_exceeded(value)` when `value > cap`, `Ok(())` otherwise.
+///
+/// The three arms fire in canonical `zero → not-canonical → cap` order,
+/// matching the discipline every existing per-axis inline block already
+/// applied by hand: the zero-floor arm precedes the canonical-form arm
+/// so `Duration::ZERO` (whose `subsec_nanos() == 0` makes it accepted
+/// by the canonical-form predicate) surfaces the self-locating zero
+/// diagnostic — every per-axis zero variant already documents an
+/// "omit the axis to express no-bound" remediation — rather than the
+/// misleading no-op the canonical arm would return; the canonical-form
+/// arm then precedes the cap arm so a `Duration` that is *both*
+/// sub-millisecond and above-cap surfaces the more fundamental
+/// round-trip-shape diagnostic first (the cap's `1ms..=<cap>`
+/// remediation would be misleading when no integer-ms form of the
+/// offending value exists). Same ordering discipline the peer
+/// [`require_positive_bounded_u32`] applies on its two arms — this
+/// lift makes the three-arm ordering a property of the helper, not a
+/// per-call-site convention four sites re-derived by hand.
+///
+/// Four identical-shape call sites collapse onto this helper — one for
+/// each typed-`Duration` slot in the crate:
+///
+///   * [`crate::AplicacaoSpec::validate`] on
+///     [`crate::MeshPolicy::timeout`] (zero →
+///     [`crate::AplicacaoError::PolicyTimeoutZero`], not-canonical →
+///     [`crate::AplicacaoError::PolicyTimeoutNotCanonical`], cap →
+///     [`crate::AplicacaoError::PolicyTimeoutExceedsCap`],
+///     cap = [`crate::POLICY_TIMEOUT_MAX`]) and
+///     [`crate::CircuitBreaker::window`] (zero →
+///     [`crate::AplicacaoError::PolicyBreakerZeroWindow`],
+///     not-canonical →
+///     [`crate::AplicacaoError::PolicyBreakerWindowNotCanonical`],
+///     cap → [`crate::AplicacaoError::PolicyBreakerWindowExceedsCap`],
+///     cap = [`crate::POLICY_BREAKER_WINDOW_MAX`]);
+///   * [`crate::LimitsSpec::validate`] on
+///     [`crate::LimitsSpec::wall_clock`] (zero →
+///     [`crate::LimitsError::WallClockZero`], not-canonical →
+///     [`crate::LimitsError::WallClockNotCanonical`], cap →
+///     [`crate::LimitsError::WallClockExceedsCap`],
+///     cap = [`crate::LIMITS_WALL_CLOCK_MAX`]);
+///   * [`crate::SupervisorSpec::validate`] on
+///     [`crate::SupervisorSpec::restart_window`] (zero →
+///     [`crate::SupervisorError::RestartWindowZero`], not-canonical →
+///     [`crate::SupervisorError::RestartWindowNotCanonical`], cap →
+///     [`crate::SupervisorError::RestartWindowExceedsCap`],
+///     cap = [`crate::SUPERVISOR_RESTART_WINDOW_MAX`]).
+///
+/// Peer to [`require_positive_bounded_u32`] /
+/// [`require_positive_bounded_u64`] on the integer-typed capped axes;
+/// the four typed-`Duration` axes and the four typed-integer axes now
+/// route through one helper each, so a future axis reaching for the
+/// same discipline lands in exactly one place. Generic over the
+/// caller's error enum so the same helper reaches every crate-level
+/// [`thiserror`] surface — the ten per-axis error variants remain the
+/// source of truth for each axis's remediation prose; the helper only
+/// sequences the three gate arms in canonical order and threads the
+/// value into the not-canonical / cap arms' discriminator fields.
+///
+/// # Errors
+///
+/// Returns `on_zero()` for `value.is_zero()`; returns
+/// `on_not_canonical(value)` when `value` carries sub-millisecond
+/// residue (`value.subsec_nanos() % 1_000_000 != 0`); returns
+/// `on_cap_exceeded(value)` for `value > cap`; returns `Ok(())`
+/// otherwise.
+pub fn require_positive_canonical_bounded_duration<E>(
+    value: std::time::Duration,
+    cap: std::time::Duration,
+    on_zero: impl FnOnce() -> E,
+    on_not_canonical: impl FnOnce(std::time::Duration) -> E,
+    on_cap_exceeded: impl FnOnce(std::time::Duration) -> E,
+) -> Result<(), E> {
+    if value.is_zero() {
+        return Err(on_zero());
+    }
+    if !crate::supervisor::duration_codec::is_integer_millisecond_duration(value) {
+        return Err(on_not_canonical(value));
+    }
+    if value > cap {
+        return Err(on_cap_exceeded(value));
+    }
+    Ok(())
+}
+
 /// Bracket a `:versao` requirement-string axis with the shared
 /// "empty-first, then [`crate::parse_requirement`]" gate pair every
 /// dep-shaped `:versao` slot carries. Returns `on_empty()` when
@@ -21022,6 +21112,147 @@ mod tests {
             require_positive_bounded_u64::<TestErr>(u64::MAX, 10, || TestErr::Zero, TestErr::Cap),
             Err(TestErr::Cap(u64::MAX))
         );
+    }
+
+    // ── require_positive_canonical_bounded_duration ─────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum DurationTestErr {
+        Zero,
+        NotCanonical(Duration),
+        Cap(Duration),
+    }
+
+    #[test]
+    fn require_positive_canonical_bounded_duration_accepts_in_range_canonical_values() {
+        // Every canonical integer-millisecond `Duration` in
+        // `1ms..=cap` — the shared accepted set every typed-`Duration`
+        // consumer inherits — must pass the gate. Pin the canonical
+        // set here so a future tightening surfaces as a test failure
+        // rather than a silent narrowing at one of the four consumer
+        // sites (`:politicas :timeout`, `:circuit-breaker :window`,
+        // `:limits :wall-clock`, `:supervisor :restart-window`).
+        let cap = Duration::from_secs(3600); // matches the 1h peer caps
+        for value in [
+            Duration::from_millis(1),
+            Duration::from_millis(500),
+            Duration::from_millis(1500),
+            Duration::from_secs(30),
+            Duration::from_secs(60),
+            cap,
+        ] {
+            assert_eq!(
+                require_positive_canonical_bounded_duration::<DurationTestErr>(
+                    value,
+                    cap,
+                    || DurationTestErr::Zero,
+                    DurationTestErr::NotCanonical,
+                    DurationTestErr::Cap,
+                ),
+                Ok(()),
+                "canonical in-range value {value:?} must pass the gate",
+            );
+        }
+    }
+
+    #[test]
+    fn require_positive_canonical_bounded_duration_rejects_zero_before_canonical_and_cap() {
+        // The zero-floor arm strictly precedes the canonical-form and
+        // cap arms — `Duration::ZERO` (which has `subsec_nanos() == 0`
+        // and would pass the canonical-form predicate; and would pass
+        // the cap arm since 0 ≤ cap) routes through the zero arm so
+        // the caller's self-locating `on_zero` diagnostic (every
+        // per-axis error variant documents an omit-axis remediation
+        // for) is surfaced, not the misleading no-op the two later
+        // arms would return.
+        let cap = Duration::from_secs(3600);
+        assert_eq!(
+            require_positive_canonical_bounded_duration::<DurationTestErr>(
+                Duration::ZERO,
+                cap,
+                || DurationTestErr::Zero,
+                DurationTestErr::NotCanonical,
+                DurationTestErr::Cap,
+            ),
+            Err(DurationTestErr::Zero),
+        );
+        // The degenerate `cap == Duration::ZERO` boundary: `Duration::ZERO`
+        // still routes through the zero arm — the ordering contract holds
+        // even when the cap itself is zero (never a valid production cap
+        // for a positive-bounded axis, but pins the arm ordering).
+        assert_eq!(
+            require_positive_canonical_bounded_duration::<DurationTestErr>(
+                Duration::ZERO,
+                Duration::ZERO,
+                || DurationTestErr::Zero,
+                DurationTestErr::NotCanonical,
+                DurationTestErr::Cap,
+            ),
+            Err(DurationTestErr::Zero),
+        );
+    }
+
+    #[test]
+    fn require_positive_canonical_bounded_duration_rejects_sub_millisecond_before_cap() {
+        // The canonical-form arm strictly precedes the cap arm — a
+        // `Duration` that is *both* sub-millisecond and above-cap must
+        // surface the more fundamental round-trip-shape diagnostic
+        // first (the cap arm's `1ms..=<cap>` remediation prose would
+        // be misleading when no integer-ms form of the offending
+        // value exists). Pin the ordering across the value grid.
+        let cap = Duration::from_secs(1);
+        for value in [
+            Duration::from_micros(1),
+            Duration::from_micros(500),
+            Duration::from_micros(1500),
+            Duration::from_nanos(1),
+            Duration::from_nanos(999_999),
+            Duration::from_nanos(1_000_001),
+            // Sub-millisecond *and* above-cap: canonical-form arm wins.
+            cap + Duration::from_nanos(1),
+        ] {
+            let result = require_positive_canonical_bounded_duration::<DurationTestErr>(
+                value,
+                cap,
+                || DurationTestErr::Zero,
+                DurationTestErr::NotCanonical,
+                DurationTestErr::Cap,
+            );
+            assert_eq!(
+                result,
+                Err(DurationTestErr::NotCanonical(value)),
+                "sub-millisecond {value:?} must surface NotCanonical before Cap",
+            );
+        }
+    }
+
+    #[test]
+    fn require_positive_canonical_bounded_duration_rejects_above_cap_with_value_threaded() {
+        // The cap arm surfaces the offending value verbatim so the
+        // caller's `on_cap_exceeded` variant threads it into its
+        // discriminator field (`timeout` / `window` / `wall_clock`).
+        // The value grid covers the canonical `<n>ms` / `<n>s`
+        // integer-millisecond shape past the 1h cap so the arm ordering
+        // (canonical-form first) doesn't intercept these values.
+        let cap = Duration::from_secs(3600);
+        for value in [
+            cap + Duration::from_millis(1),
+            cap + Duration::from_secs(1),
+            Duration::from_secs(24 * 3600), // 24h — canonical string
+            Duration::from_secs(7 * 24 * 3600), // 7d
+        ] {
+            assert_eq!(
+                require_positive_canonical_bounded_duration::<DurationTestErr>(
+                    value,
+                    cap,
+                    || DurationTestErr::Zero,
+                    DurationTestErr::NotCanonical,
+                    DurationTestErr::Cap,
+                ),
+                Err(DurationTestErr::Cap(value)),
+                "above-cap canonical value {value:?} must thread through the cap arm",
+            );
+        }
     }
 
     // ── require_valid_versao_requirement ────────────────────────────────
