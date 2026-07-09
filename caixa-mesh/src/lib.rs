@@ -2936,15 +2936,10 @@ mod tests {
         // namespace. Peer to
         // `caixa_flux::tests::default_namespace_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(DEFAULT_NAMESPACE, caixa_core::DEFAULT_NAMESPACE);
-        assert!(
-            std::ptr::eq(
-                DEFAULT_NAMESPACE.as_ptr(),
-                caixa_core::DEFAULT_NAMESPACE.as_ptr(),
-            ),
-            "DEFAULT_NAMESPACE must be a re-export of caixa_core::DEFAULT_NAMESPACE, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_NAMESPACE",
+            DEFAULT_NAMESPACE,
+            caixa_core::DEFAULT_NAMESPACE,
         );
     }
 
@@ -2974,16 +2969,10 @@ mod tests {
         // across the version-drifted CRD-group/version pair. Peer to
         // [`default_namespace_re_export_points_at_caixa_core_canonical`]
         // on the sibling re-export axis.
-        assert_eq!(GATEWAY_API_API_VERSION, caixa_core::GATEWAY_API_API_VERSION);
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_API_VERSION.as_ptr(),
-                caixa_core::GATEWAY_API_API_VERSION.as_ptr(),
-            ),
-            "GATEWAY_API_API_VERSION must be a re-export of \
-             caixa_core::GATEWAY_API_API_VERSION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_API_VERSION",
+            GATEWAY_API_API_VERSION,
+            caixa_core::GATEWAY_API_API_VERSION,
         );
     }
 
@@ -3014,16 +3003,10 @@ mod tests {
         // [`gateway_api_api_version_re_export_points_at_caixa_core_canonical`]
         // / [`default_namespace_re_export_points_at_caixa_core_canonical`]
         // on the sibling re-export axes.
-        assert_eq!(CILIUM_API_VERSION, caixa_core::CILIUM_API_VERSION);
-        assert!(
-            std::ptr::eq(
-                CILIUM_API_VERSION.as_ptr(),
-                caixa_core::CILIUM_API_VERSION.as_ptr(),
-            ),
-            "CILIUM_API_VERSION must be a re-export of \
-             caixa_core::CILIUM_API_VERSION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_API_VERSION",
+            CILIUM_API_VERSION,
+            caixa_core::CILIUM_API_VERSION,
         );
     }
 
@@ -3048,12 +3031,10 @@ mod tests {
         // / [`cilium_api_version_re_export_points_at_caixa_core_canonical`]
         // / [`default_namespace_re_export_points_at_caixa_core_canonical`]
         // on the sibling re-export axes.
-        assert_eq!(KUBE_KEY_SPEC, caixa_core::KUBE_KEY_SPEC);
-        assert!(
-            std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
-            "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_SPEC",
+            KUBE_KEY_SPEC,
+            caixa_core::KUBE_KEY_SPEC,
         );
     }
 
@@ -3079,15 +3060,10 @@ mod tests {
         // on the sibling K8s-CR top-level-spec-axis re-export +
         // `caixa_flux::tests::kube_key_metadata_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(KUBE_KEY_METADATA, caixa_core::KUBE_KEY_METADATA);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_METADATA.as_ptr(),
-                caixa_core::KUBE_KEY_METADATA.as_ptr(),
-            ),
-            "KUBE_KEY_METADATA must be a re-export of caixa_core::KUBE_KEY_METADATA, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_METADATA",
+            KUBE_KEY_METADATA,
+            caixa_core::KUBE_KEY_METADATA,
         );
     }
 
@@ -3123,12 +3099,10 @@ mod tests {
         // axis re-exports — completes the per-K8s-CR top-level axis
         // re-export triple `(spec, metadata, kind)` the multi-doc
         // consumer patterns across this crate's test suite rest on.
-        assert_eq!(KUBE_KEY_KIND, caixa_core::KUBE_KEY_KIND);
-        assert!(
-            std::ptr::eq(KUBE_KEY_KIND.as_ptr(), caixa_core::KUBE_KEY_KIND.as_ptr()),
-            "KUBE_KEY_KIND must be a re-export of caixa_core::KUBE_KEY_KIND, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_KIND",
+            KUBE_KEY_KIND,
+            caixa_core::KUBE_KEY_KIND,
         );
     }
 
@@ -3182,15 +3156,10 @@ mod tests {
         // discipline from the Flux v2 controller-triplet drift-
         // detection pins onto the Cilium + Gateway API controller-pair
         // drift-detection pins in this crate.
-        assert_eq!(KUBE_KEY_API_VERSION, caixa_core::KUBE_KEY_API_VERSION);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_API_VERSION.as_ptr(),
-                caixa_core::KUBE_KEY_API_VERSION.as_ptr(),
-            ),
-            "KUBE_KEY_API_VERSION must be a re-export of caixa_core::KUBE_KEY_API_VERSION, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_API_VERSION",
+            KUBE_KEY_API_VERSION,
+            caixa_core::KUBE_KEY_API_VERSION,
         );
     }
 
@@ -3237,15 +3206,10 @@ mod tests {
         // side metadata.namespace drift-detection pins onto the
         // Cilium + Gateway API controller-pair metadata.namespace
         // drift-detection pins in this crate.
-        assert_eq!(KUBE_KEY_NAMESPACE, caixa_core::KUBE_KEY_NAMESPACE);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_NAMESPACE.as_ptr(),
-                caixa_core::KUBE_KEY_NAMESPACE.as_ptr(),
-            ),
-            "KUBE_KEY_NAMESPACE must be a re-export of caixa_core::KUBE_KEY_NAMESPACE, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_NAMESPACE",
+            KUBE_KEY_NAMESPACE,
+            caixa_core::KUBE_KEY_NAMESPACE,
         );
     }
 
@@ -3295,15 +3259,10 @@ mod tests {
         // axis every rendered `CiliumNetworkPolicy` document carries
         // at the `pleme.pleme.io/aplicacao` + `pleme.pleme.io/contrato`
         // grouping key.
-        assert_eq!(KUBE_KEY_LABELS, caixa_core::KUBE_KEY_LABELS);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_LABELS.as_ptr(),
-                caixa_core::KUBE_KEY_LABELS.as_ptr(),
-            ),
-            "KUBE_KEY_LABELS must be a re-export of caixa_core::KUBE_KEY_LABELS, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_LABELS",
+            KUBE_KEY_LABELS,
+            caixa_core::KUBE_KEY_LABELS,
         );
     }
 
@@ -3341,12 +3300,10 @@ mod tests {
         // — completes the K8s-CR metadata-block axis triplet `(name,
         // namespace, labels)` bridge-arm pin under a single canonical
         // `caixa-core::KUBE_KEY_*` re-export shape in this crate.
-        assert_eq!(KUBE_KEY_NAME, caixa_core::KUBE_KEY_NAME);
-        assert!(
-            std::ptr::eq(KUBE_KEY_NAME.as_ptr(), caixa_core::KUBE_KEY_NAME.as_ptr(),),
-            "KUBE_KEY_NAME must be a re-export of caixa_core::KUBE_KEY_NAME, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_NAME",
+            KUBE_KEY_NAME,
+            caixa_core::KUBE_KEY_NAME,
         );
     }
 
@@ -3398,16 +3355,10 @@ mod tests {
         // [`caixa_core::FLEET_PROGRAMS_KEY_NAME`] establishes vs.
         // [`caixa_core::KUBE_KEY_NAME`] on the `lareira-fleet-programs`
         // values-schema per-entry name-axis.
-        assert_eq!(GATEWAY_API_KEY_NAME, caixa_core::GATEWAY_API_KEY_NAME);
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_NAME.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_NAME.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_NAME must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_NAME, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_NAME",
+            GATEWAY_API_KEY_NAME,
+            caixa_core::GATEWAY_API_KEY_NAME,
         );
         // The re-export is byte-identical to `KUBE_KEY_NAME` today; pin
         // the value-equality so a future rebrand on either axis (the
@@ -3477,15 +3428,10 @@ mod tests {
         // `spec.ingress[*].fromEndpoints[*].matchLabels` (the source-
         // identity selector the same data plane checks on the
         // admitted-source side).
-        assert_eq!(KUBE_KEY_MATCH_LABELS, caixa_core::KUBE_KEY_MATCH_LABELS);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_MATCH_LABELS.as_ptr(),
-                caixa_core::KUBE_KEY_MATCH_LABELS.as_ptr(),
-            ),
-            "KUBE_KEY_MATCH_LABELS must be a re-export of caixa_core::KUBE_KEY_MATCH_LABELS, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_MATCH_LABELS",
+            KUBE_KEY_MATCH_LABELS,
+            caixa_core::KUBE_KEY_MATCH_LABELS,
         );
     }
 
@@ -3546,12 +3492,10 @@ mod tests {
         // `spec.rules[]` / `toPorts[].rules` rule-list-container axis
         // every rendered `CiliumNetworkPolicy` L7 rule-list + every
         // rendered `HTTPRoute` rule-list carries.
-        assert_eq!(KUBE_KEY_RULES, caixa_core::KUBE_KEY_RULES);
-        assert!(
-            std::ptr::eq(KUBE_KEY_RULES.as_ptr(), caixa_core::KUBE_KEY_RULES.as_ptr(),),
-            "KUBE_KEY_RULES must be a re-export of caixa_core::KUBE_KEY_RULES, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_RULES",
+            KUBE_KEY_RULES,
+            caixa_core::KUBE_KEY_RULES,
         );
     }
 
@@ -3616,12 +3560,10 @@ mod tests {
         // tuple + every rendered `Gateway` per-listener + every
         // rendered `HTTPRoute` per-`backendRefs[]` per-rule per-backend
         // carries.
-        assert_eq!(KUBE_KEY_PORT, caixa_core::KUBE_KEY_PORT);
-        assert!(
-            std::ptr::eq(KUBE_KEY_PORT.as_ptr(), caixa_core::KUBE_KEY_PORT.as_ptr(),),
-            "KUBE_KEY_PORT must be a re-export of caixa_core::KUBE_KEY_PORT, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_PORT",
+            KUBE_KEY_PORT,
+            caixa_core::KUBE_KEY_PORT,
         );
     }
 
@@ -3687,15 +3629,10 @@ mod tests {
         // axis every rendered `CiliumNetworkPolicy` per-
         // `toPorts[].ports[]` port-tuple + every rendered `Gateway`
         // per-listener carries.
-        assert_eq!(KUBE_KEY_PROTOCOL, caixa_core::KUBE_KEY_PROTOCOL);
-        assert!(
-            std::ptr::eq(
-                KUBE_KEY_PROTOCOL.as_ptr(),
-                caixa_core::KUBE_KEY_PROTOCOL.as_ptr(),
-            ),
-            "KUBE_KEY_PROTOCOL must be a re-export of caixa_core::KUBE_KEY_PROTOCOL, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_PROTOCOL",
+            KUBE_KEY_PROTOCOL,
+            caixa_core::KUBE_KEY_PROTOCOL,
         );
     }
 
@@ -3741,15 +3678,10 @@ mod tests {
         // transport-protocol-discriminator the `cilium_network_policies`
         // intra-mesh L4-tuple-gating emitter carries under the shared
         // `CiliumNetworkPolicy` body.
-        assert_eq!(KUBE_PROTOCOL_TCP, caixa_core::KUBE_PROTOCOL_TCP);
-        assert!(
-            std::ptr::eq(
-                KUBE_PROTOCOL_TCP.as_ptr(),
-                caixa_core::KUBE_PROTOCOL_TCP.as_ptr(),
-            ),
-            "KUBE_PROTOCOL_TCP must be a re-export of caixa_core::KUBE_PROTOCOL_TCP, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_PROTOCOL_TCP",
+            KUBE_PROTOCOL_TCP,
+            caixa_core::KUBE_PROTOCOL_TCP,
         );
     }
 
@@ -3871,18 +3803,10 @@ mod tests {
         // onto the load-bearing per-rule request-timeout-policy axis
         // the M3 Aplicacao mesh renderer's per-`:politicas :timeout`
         // overlay lands under.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_TIMEOUTS",
             GATEWAY_API_KEY_TIMEOUTS,
-            caixa_core::GATEWAY_API_KEY_TIMEOUTS
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_TIMEOUTS.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_TIMEOUTS.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_TIMEOUTS must be a re-export of caixa_core::GATEWAY_API_KEY_TIMEOUTS, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_TIMEOUTS,
         );
     }
 
@@ -3948,15 +3872,10 @@ mod tests {
         // :timeout`, `retry` for `:politicas :retries`) both
         // MESH-COMPOSITION.md §V "no infinite blocking / no infinite
         // retrying" guarantees rest on.
-        assert_eq!(GATEWAY_API_KEY_RETRY, caixa_core::GATEWAY_API_KEY_RETRY);
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_RETRY.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_RETRY.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_RETRY must be a re-export of caixa_core::GATEWAY_API_KEY_RETRY, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_RETRY",
+            GATEWAY_API_KEY_RETRY,
+            caixa_core::GATEWAY_API_KEY_RETRY,
         );
     }
 
@@ -4021,18 +3940,10 @@ mod tests {
         // `attempts` leaf) both MESH-COMPOSITION.md §V "no infinite
         // retrying" guarantees rest on, one nesting level deeper than
         // the parent per-rule retry-policy container axis (`retry`).
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_ATTEMPTS",
             GATEWAY_API_KEY_ATTEMPTS,
-            caixa_core::GATEWAY_API_KEY_ATTEMPTS
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_ATTEMPTS.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_ATTEMPTS.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_ATTEMPTS must be a re-export of caixa_core::GATEWAY_API_KEY_ATTEMPTS, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_ATTEMPTS,
         );
     }
 
@@ -4102,15 +4013,10 @@ mod tests {
         // on, sibling to the parent-leaf pair (`retry` container +
         // `attempts` leaf) closed in the immediately-preceding
         // [`GATEWAY_API_KEY_ATTEMPTS`] bridge-arm.
-        assert_eq!(GATEWAY_API_KEY_REQUEST, caixa_core::GATEWAY_API_KEY_REQUEST);
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_REQUEST.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_REQUEST.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_REQUEST must be a re-export of caixa_core::GATEWAY_API_KEY_REQUEST, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_REQUEST",
+            GATEWAY_API_KEY_REQUEST,
+            caixa_core::GATEWAY_API_KEY_REQUEST,
         );
     }
 
@@ -4145,19 +4051,10 @@ mod tests {
         // completes the per-Cilium-CRD kind+apiVersion re-export pair
         // this crate's `cilium_network_policies` renderer's eBPF
         // data-plane contract rests on.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KIND_NETWORK_POLICY",
             CILIUM_KIND_NETWORK_POLICY,
-            caixa_core::CILIUM_KIND_NETWORK_POLICY
-        );
-        assert!(
-            std::ptr::eq(
-                CILIUM_KIND_NETWORK_POLICY.as_ptr(),
-                caixa_core::CILIUM_KIND_NETWORK_POLICY.as_ptr(),
-            ),
-            "CILIUM_KIND_NETWORK_POLICY must be a re-export of \
-             caixa_core::CILIUM_KIND_NETWORK_POLICY, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::CILIUM_KIND_NETWORK_POLICY,
         );
     }
 
@@ -4206,16 +4103,10 @@ mod tests {
         // CRD — extends the per-Cilium-CRD re-export set from the outer
         // shell down through the load-bearing
         // `spec.ingress[].toPorts[].rules` L4/L7-dispatch axis.
-        assert_eq!(CILIUM_KEY_TO_PORTS, caixa_core::CILIUM_KEY_TO_PORTS);
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_TO_PORTS.as_ptr(),
-                caixa_core::CILIUM_KEY_TO_PORTS.as_ptr(),
-            ),
-            "CILIUM_KEY_TO_PORTS must be a re-export of \
-             caixa_core::CILIUM_KEY_TO_PORTS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_TO_PORTS",
+            CILIUM_KEY_TO_PORTS,
+            caixa_core::CILIUM_KEY_TO_PORTS,
         );
     }
 
@@ -4264,19 +4155,10 @@ mod tests {
         // CRD — extends the per-Cilium-CRD re-export set from the outer
         // shell down through the load-bearing `spec.endpointSelector`
         // L3-target-selector axis.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_ENDPOINT_SELECTOR",
             CILIUM_KEY_ENDPOINT_SELECTOR,
-            caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR
-        );
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_ENDPOINT_SELECTOR.as_ptr(),
-                caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR.as_ptr(),
-            ),
-            "CILIUM_KEY_ENDPOINT_SELECTOR must be a re-export of \
-             caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::CILIUM_KEY_ENDPOINT_SELECTOR,
         );
     }
 
@@ -4334,16 +4216,10 @@ mod tests {
         // CRD — extends the per-Cilium-CRD re-export set from the outer
         // shell down through the load-bearing `spec.ingress[]` traffic-
         // direction axis.
-        assert_eq!(CILIUM_KEY_INGRESS, caixa_core::CILIUM_KEY_INGRESS);
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_INGRESS.as_ptr(),
-                caixa_core::CILIUM_KEY_INGRESS.as_ptr(),
-            ),
-            "CILIUM_KEY_INGRESS must be a re-export of \
-             caixa_core::CILIUM_KEY_INGRESS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_INGRESS",
+            CILIUM_KEY_INGRESS,
+            caixa_core::CILIUM_KEY_INGRESS,
         );
     }
 
@@ -4400,19 +4276,10 @@ mod tests {
         // CRD — extends the per-Cilium-CRD re-export set from the outer
         // shell down through the load-bearing
         // `spec.ingress[].fromEndpoints[]` identity-source axis.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_FROM_ENDPOINTS",
             CILIUM_KEY_FROM_ENDPOINTS,
-            caixa_core::CILIUM_KEY_FROM_ENDPOINTS
-        );
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_FROM_ENDPOINTS.as_ptr(),
-                caixa_core::CILIUM_KEY_FROM_ENDPOINTS.as_ptr(),
-            ),
-            "CILIUM_KEY_FROM_ENDPOINTS must be a re-export of \
-             caixa_core::CILIUM_KEY_FROM_ENDPOINTS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::CILIUM_KEY_FROM_ENDPOINTS,
         );
     }
 
@@ -4462,16 +4329,10 @@ mod tests {
         // re-export with the L4-half's port-tuple-list-container axis
         // this crate's `cilium_network_policies` renderer's eBPF data-
         // plane L4-allow contract rests on.
-        assert_eq!(CILIUM_KEY_PORTS, caixa_core::CILIUM_KEY_PORTS);
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_PORTS.as_ptr(),
-                caixa_core::CILIUM_KEY_PORTS.as_ptr(),
-            ),
-            "CILIUM_KEY_PORTS must be a re-export of \
-             caixa_core::CILIUM_KEY_PORTS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_PORTS",
+            CILIUM_KEY_PORTS,
+            caixa_core::CILIUM_KEY_PORTS,
         );
     }
 
@@ -4520,19 +4381,10 @@ mod tests {
         // `(fromEndpoints, toPorts, authentication)` this crate's
         // `cilium_network_policies` renderer's SPIFFE-identity-bound
         // per-edge mTLS contract rests on.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_AUTHENTICATION",
             CILIUM_KEY_AUTHENTICATION,
-            caixa_core::CILIUM_KEY_AUTHENTICATION
-        );
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_AUTHENTICATION.as_ptr(),
-                caixa_core::CILIUM_KEY_AUTHENTICATION.as_ptr(),
-            ),
-            "CILIUM_KEY_AUTHENTICATION must be a re-export of \
-             caixa_core::CILIUM_KEY_AUTHENTICATION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::CILIUM_KEY_AUTHENTICATION,
         );
     }
 
@@ -4577,16 +4429,10 @@ mod tests {
         // `(authentication → mode)` body/leaf axis re-export pair this
         // crate's `cilium_network_policies` renderer's SPIFFE-identity-
         // bound per-edge mTLS enforcement contract rests on.
-        assert_eq!(CILIUM_KEY_MODE, caixa_core::CILIUM_KEY_MODE);
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_MODE.as_ptr(),
-                caixa_core::CILIUM_KEY_MODE.as_ptr(),
-            ),
-            "CILIUM_KEY_MODE must be a re-export of \
-             caixa_core::CILIUM_KEY_MODE, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_MODE",
+            CILIUM_KEY_MODE,
+            caixa_core::CILIUM_KEY_MODE,
         );
     }
 
@@ -4635,19 +4481,10 @@ mod tests {
         // SPIFFE-identity-bound per-edge mTLS enforcement contract rests
         // on across the affirmative arm of the `:politicas :mtls-required`
         // tristate.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_AUTH_MODE_REQUIRED",
             CILIUM_AUTH_MODE_REQUIRED,
-            caixa_core::CILIUM_AUTH_MODE_REQUIRED
-        );
-        assert!(
-            std::ptr::eq(
-                CILIUM_AUTH_MODE_REQUIRED.as_ptr(),
-                caixa_core::CILIUM_AUTH_MODE_REQUIRED.as_ptr(),
-            ),
-            "CILIUM_AUTH_MODE_REQUIRED must be a re-export of \
-             caixa_core::CILIUM_AUTH_MODE_REQUIRED, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::CILIUM_AUTH_MODE_REQUIRED,
         );
     }
 
@@ -4675,19 +4512,10 @@ mod tests {
         // — the two per-arm re-export pins together complete the per-
         // authn-block `(mode → {required, disabled})` author-reachable-
         // scalar-value-pair single-sourcing.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_AUTH_MODE_DISABLED",
             CILIUM_AUTH_MODE_DISABLED,
-            caixa_core::CILIUM_AUTH_MODE_DISABLED
-        );
-        assert!(
-            std::ptr::eq(
-                CILIUM_AUTH_MODE_DISABLED.as_ptr(),
-                caixa_core::CILIUM_AUTH_MODE_DISABLED.as_ptr(),
-            ),
-            "CILIUM_AUTH_MODE_DISABLED must be a re-export of \
-             caixa_core::CILIUM_AUTH_MODE_DISABLED, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::CILIUM_AUTH_MODE_DISABLED,
         );
     }
 
@@ -4715,19 +4543,10 @@ mod tests {
         // three per-arm pins together complete the per-strategy
         // discriminator scalar-value single-sourcing across the M3
         // distribution-strategy dispatch axis.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE",
             M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
-            caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE
-        );
-        assert!(
-            std::ptr::eq(
-                M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE.as_ptr(),
-                caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE.as_ptr(),
-            ),
-            "M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE must be a re-export of \
-             caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE, not a sibling \
-             `pub const` that happens to carry the same string — drift between \
-             the two is the canonical footgun this lift closes"
+            caixa_core::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
         );
     }
 
@@ -4742,19 +4561,10 @@ mod tests {
         // constant the `programs_entry_placement_carries_strategy` probe
         // dispatches on (the sweep lands here at the sole author-facing
         // consumption site the M3.x roadmap has today).
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "M3_PLACEMENT_ESTRATEGIA_REPLICATED",
             M3_PLACEMENT_ESTRATEGIA_REPLICATED,
-            caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED
-        );
-        assert!(
-            std::ptr::eq(
-                M3_PLACEMENT_ESTRATEGIA_REPLICATED.as_ptr(),
-                caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED.as_ptr(),
-            ),
-            "M3_PLACEMENT_ESTRATEGIA_REPLICATED must be a re-export of \
-             caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED, not a sibling \
-             `pub const` that happens to carry the same string — drift between \
-             the two is the canonical footgun this lift closes"
+            caixa_core::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
         );
     }
 
@@ -4773,19 +4583,10 @@ mod tests {
         // plane. This is the same constant the
         // `programs_entry_placement_carries_shard_key_when_sharded` probe
         // dispatches on.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "M3_PLACEMENT_ESTRATEGIA_SHARDED",
             M3_PLACEMENT_ESTRATEGIA_SHARDED,
-            caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED
-        );
-        assert!(
-            std::ptr::eq(
-                M3_PLACEMENT_ESTRATEGIA_SHARDED.as_ptr(),
-                caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED.as_ptr(),
-            ),
-            "M3_PLACEMENT_ESTRATEGIA_SHARDED must be a re-export of \
-             caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED, not a sibling \
-             `pub const` that happens to carry the same string — drift between \
-             the two is the canonical footgun this lift closes"
+            caixa_core::M3_PLACEMENT_ESTRATEGIA_SHARDED,
         );
     }
 
@@ -4832,16 +4633,10 @@ mod tests {
         // discriminator axis re-export pair this crate's
         // `cilium_network_policies` renderer's HTTP-shaped-`:contratos`
         // URL-path-prefix-filtering L7-enforcement contract rests on.
-        assert_eq!(CILIUM_KEY_HTTP, caixa_core::CILIUM_KEY_HTTP);
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_HTTP.as_ptr(),
-                caixa_core::CILIUM_KEY_HTTP.as_ptr(),
-            ),
-            "CILIUM_KEY_HTTP must be a re-export of \
-             caixa_core::CILIUM_KEY_HTTP, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_HTTP",
+            CILIUM_KEY_HTTP,
+            caixa_core::CILIUM_KEY_HTTP,
         );
     }
 
@@ -4908,16 +4703,10 @@ mod tests {
         // axis-independence discipline the two sibling re-exports rest
         // on against a future coalescing edit that would erase the
         // per-CRD-group distinction.
-        assert_eq!(CILIUM_KEY_PATH, caixa_core::CILIUM_KEY_PATH);
-        assert!(
-            std::ptr::eq(
-                CILIUM_KEY_PATH.as_ptr(),
-                caixa_core::CILIUM_KEY_PATH.as_ptr(),
-            ),
-            "CILIUM_KEY_PATH must be a re-export of \
-             caixa_core::CILIUM_KEY_PATH, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "CILIUM_KEY_PATH",
+            CILIUM_KEY_PATH,
+            caixa_core::CILIUM_KEY_PATH,
         );
     }
 
@@ -5072,13 +4861,10 @@ mod tests {
         // PathPrefix value)` scalar-key/scalar-value discriminator axis
         // pair this crate's `gateway_routes` renderer's external
         // `:entrada` per-path L7-filtering ingress contract rests on.
-        assert_eq!(KUBE_KEY_TYPE, caixa_core::KUBE_KEY_TYPE);
-        assert!(
-            std::ptr::eq(KUBE_KEY_TYPE.as_ptr(), caixa_core::KUBE_KEY_TYPE.as_ptr()),
-            "KUBE_KEY_TYPE must be a re-export of \
-             caixa_core::KUBE_KEY_TYPE, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_TYPE",
+            KUBE_KEY_TYPE,
+            caixa_core::KUBE_KEY_TYPE,
         );
     }
 
@@ -5183,19 +4969,10 @@ mod tests {
         // ingress contract rests on. Peer to
         // [`cilium_kind_network_policy_re_export_points_at_caixa_core_canonical`]
         // on the sibling Cilium-CRD-kind-discriminator re-export axis.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KIND_GATEWAY",
             GATEWAY_API_KIND_GATEWAY,
-            caixa_core::GATEWAY_API_KIND_GATEWAY
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KIND_GATEWAY.as_ptr(),
-                caixa_core::GATEWAY_API_KIND_GATEWAY.as_ptr(),
-            ),
-            "GATEWAY_API_KIND_GATEWAY must be a re-export of \
-             caixa_core::GATEWAY_API_KIND_GATEWAY, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KIND_GATEWAY,
         );
     }
 
@@ -5232,19 +5009,10 @@ mod tests {
         // re-export pair this crate's `gateway_routes` renderer's
         // external `:entrada` ingress contract rests on across the
         // `(Gateway, HTTPRoute)` pair the renderer emits together.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KIND_HTTP_ROUTE",
             GATEWAY_API_KIND_HTTP_ROUTE,
-            caixa_core::GATEWAY_API_KIND_HTTP_ROUTE
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KIND_HTTP_ROUTE.as_ptr(),
-                caixa_core::GATEWAY_API_KIND_HTTP_ROUTE.as_ptr(),
-            ),
-            "GATEWAY_API_KIND_HTTP_ROUTE must be a re-export of \
-             caixa_core::GATEWAY_API_KIND_HTTP_ROUTE, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KIND_HTTP_ROUTE,
         );
     }
 
@@ -5286,19 +5054,10 @@ mod tests {
         // listener-protocol-scalar-value axis this crate's
         // `gateway_routes` renderer's external `:entrada` ingress
         // contract rests on.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_PROTOCOL_HTTP",
             GATEWAY_API_PROTOCOL_HTTP,
-            caixa_core::GATEWAY_API_PROTOCOL_HTTP
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_PROTOCOL_HTTP.as_ptr(),
-                caixa_core::GATEWAY_API_PROTOCOL_HTTP.as_ptr(),
-            ),
-            "GATEWAY_API_PROTOCOL_HTTP must be a re-export of \
-             caixa_core::GATEWAY_API_PROTOCOL_HTTP, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_PROTOCOL_HTTP,
         );
     }
 
@@ -5342,19 +5101,10 @@ mod tests {
         // path-selection-predicate discriminator this crate's
         // `gateway_routes` renderer's external `:entrada` ingress
         // contract rests on under the shared `HTTPRoute` body.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX",
             GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX,
-            caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.as_ptr(),
-                caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.as_ptr(),
-            ),
-            "GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX must be a re-export of \
-             caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX, not a sibling \
-             `pub const` that happens to carry the same string — drift between \
-             the two is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX,
         );
     }
 
@@ -5394,19 +5144,10 @@ mod tests {
         // [`default_namespace_re_export_points_at_caixa_core_canonical`]
         // on the sibling canonical-substrate-default-resource-name
         // re-export axis.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_GATEWAY_CLASS_NAME",
             DEFAULT_GATEWAY_CLASS_NAME,
-            caixa_core::DEFAULT_GATEWAY_CLASS_NAME
-        );
-        assert!(
-            std::ptr::eq(
-                DEFAULT_GATEWAY_CLASS_NAME.as_ptr(),
-                caixa_core::DEFAULT_GATEWAY_CLASS_NAME.as_ptr(),
-            ),
-            "DEFAULT_GATEWAY_CLASS_NAME must be a re-export of \
-             caixa_core::DEFAULT_GATEWAY_CLASS_NAME, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::DEFAULT_GATEWAY_CLASS_NAME,
         );
     }
 
@@ -5444,19 +5185,10 @@ mod tests {
         // to
         // [`gateway_api_key_listeners_re_export_points_at_caixa_core_canonical`]
         // on the sibling per-Gateway-body-axis re-export surface.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_GATEWAY_CLASS_NAME",
             GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
-            caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_GATEWAY_CLASS_NAME.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_GATEWAY_CLASS_NAME must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
         );
     }
 
@@ -5498,19 +5230,10 @@ mod tests {
         // crate's `gateway_routes` renderer's external `:entrada`
         // ingress contract rests on across the Gateway API HTTPRoute-
         // side per-route body-shape.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_PARENT_REFS",
             GATEWAY_API_KEY_PARENT_REFS,
-            caixa_core::GATEWAY_API_KEY_PARENT_REFS
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_PARENT_REFS.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_PARENT_REFS.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_PARENT_REFS must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_PARENT_REFS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_PARENT_REFS,
         );
     }
 
@@ -5550,19 +5273,10 @@ mod tests {
         // future `hostnames`) this crate's `gateway_routes` renderer's
         // external `:entrada` ingress contract rests on across the
         // Gateway API HTTPRoute-side per-route body-shape.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_BACKEND_REFS",
             GATEWAY_API_KEY_BACKEND_REFS,
-            caixa_core::GATEWAY_API_KEY_BACKEND_REFS
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_BACKEND_REFS.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_BACKEND_REFS.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_BACKEND_REFS must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_BACKEND_REFS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_BACKEND_REFS,
         );
     }
 
@@ -5605,16 +5319,10 @@ mod tests {
         // `gateway_routes` renderer's external `:entrada` ingress
         // contract rests on across the Gateway API HTTPRoute per-
         // rule body-shape.
-        assert_eq!(GATEWAY_API_KEY_MATCHES, caixa_core::GATEWAY_API_KEY_MATCHES);
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_MATCHES.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_MATCHES.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_MATCHES must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_MATCHES, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_MATCHES",
+            GATEWAY_API_KEY_MATCHES,
+            caixa_core::GATEWAY_API_KEY_MATCHES,
         );
     }
 
@@ -5658,16 +5366,10 @@ mod tests {
         // crate's `gateway_routes` renderer's external `:entrada`
         // ingress contract rests on across the Gateway API HTTPRoute
         // per-match body-shape.
-        assert_eq!(GATEWAY_API_KEY_PATH, caixa_core::GATEWAY_API_KEY_PATH);
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_PATH.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_PATH.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_PATH must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_PATH, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_PATH",
+            GATEWAY_API_KEY_PATH,
+            caixa_core::GATEWAY_API_KEY_PATH,
         );
     }
 
@@ -5708,19 +5410,10 @@ mod tests {
         // `gateway_routes` renderer's external `:entrada` ingress
         // contract rests on across the Gateway API CRD-side body-
         // shape.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_LISTENERS",
             GATEWAY_API_KEY_LISTENERS,
-            caixa_core::GATEWAY_API_KEY_LISTENERS
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_LISTENERS.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_LISTENERS.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_LISTENERS must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_LISTENERS, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_LISTENERS,
         );
     }
 
@@ -5766,19 +5459,10 @@ mod tests {
         // crate's `gateway_routes` renderer's external `:entrada`
         // ingress contract rests on across the Gateway API CRD-side
         // body-shape.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_HOSTNAME",
             GATEWAY_API_KEY_HOSTNAME,
-            caixa_core::GATEWAY_API_KEY_HOSTNAME
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_HOSTNAME.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_HOSTNAME.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_HOSTNAME must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_HOSTNAME, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_HOSTNAME,
         );
     }
 
@@ -5825,19 +5509,10 @@ mod tests {
         // renderer's external `:entrada` ingress contract emits together
         // now carry one lifted `&'static str` re-export identity-pin
         // apiece.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_HOSTNAMES",
             GATEWAY_API_KEY_HOSTNAMES,
-            caixa_core::GATEWAY_API_KEY_HOSTNAMES
-        );
-        assert!(
-            std::ptr::eq(
-                GATEWAY_API_KEY_HOSTNAMES.as_ptr(),
-                caixa_core::GATEWAY_API_KEY_HOSTNAMES.as_ptr(),
-            ),
-            "GATEWAY_API_KEY_HOSTNAMES must be a re-export of \
-             caixa_core::GATEWAY_API_KEY_HOSTNAMES, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+            caixa_core::GATEWAY_API_KEY_HOSTNAMES,
         );
     }
 

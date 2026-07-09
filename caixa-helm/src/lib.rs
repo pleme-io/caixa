@@ -1016,15 +1016,10 @@ spec:
         // `helm install`. Peer to
         // `caixa_flux::tests::default_library_name_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crate.
-        assert_eq!(DEFAULT_LIBRARY_NAME, caixa_core::DEFAULT_LIBRARY_NAME);
-        assert!(
-            std::ptr::eq(
-                DEFAULT_LIBRARY_NAME.as_ptr(),
-                caixa_core::DEFAULT_LIBRARY_NAME.as_ptr(),
-            ),
-            "DEFAULT_LIBRARY_NAME must be a re-export of caixa_core::DEFAULT_LIBRARY_NAME, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_LIBRARY_NAME",
+            DEFAULT_LIBRARY_NAME,
+            caixa_core::DEFAULT_LIBRARY_NAME,
         );
     }
 
@@ -1048,12 +1043,10 @@ spec:
         // `caixa_flux::tests::kube_key_spec_re_export_points_at_caixa_core_canonical`
         // / `caixa_mesh::tests::kube_key_spec_re_export_points_at_caixa_core_canonical`
         // on the sibling renderer crates.
-        assert_eq!(KUBE_KEY_SPEC, caixa_core::KUBE_KEY_SPEC);
-        assert!(
-            std::ptr::eq(KUBE_KEY_SPEC.as_ptr(), caixa_core::KUBE_KEY_SPEC.as_ptr()),
-            "KUBE_KEY_SPEC must be a re-export of caixa_core::KUBE_KEY_SPEC, \
-             not a sibling `pub const` that happens to carry the same string \
-             — drift between the two is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "KUBE_KEY_SPEC",
+            KUBE_KEY_SPEC,
+            caixa_core::KUBE_KEY_SPEC,
         );
     }
 
@@ -1077,16 +1070,10 @@ spec:
         // [`kube_key_spec_re_export_points_at_caixa_core_canonical`] /
         // [`default_library_name_re_export_points_at_caixa_core_canonical`]
         // on the sibling re-export axes.
-        assert_eq!(HELM_CHART_API_VERSION, caixa_core::HELM_CHART_API_VERSION);
-        assert!(
-            std::ptr::eq(
-                HELM_CHART_API_VERSION.as_ptr(),
-                caixa_core::HELM_CHART_API_VERSION.as_ptr(),
-            ),
-            "HELM_CHART_API_VERSION must be a re-export of \
-             caixa_core::HELM_CHART_API_VERSION, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "HELM_CHART_API_VERSION",
+            HELM_CHART_API_VERSION,
+            caixa_core::HELM_CHART_API_VERSION,
         );
     }
 
@@ -1148,19 +1135,10 @@ spec:
         // canonical-scalar-axis re-export pair every rendered
         // `lareira-<nome>` chart declares at its top-level Chart.yaml
         // body.
-        assert_eq!(
+        caixa_core::assert_str_reexport_identity(
+            "HELM_CHART_TYPE_APPLICATION",
             HELM_CHART_TYPE_APPLICATION,
-            caixa_core::HELM_CHART_TYPE_APPLICATION
-        );
-        assert!(
-            std::ptr::eq(
-                HELM_CHART_TYPE_APPLICATION.as_ptr(),
-                caixa_core::HELM_CHART_TYPE_APPLICATION.as_ptr(),
-            ),
-            "HELM_CHART_TYPE_APPLICATION must be a re-export of \
-             caixa_core::HELM_CHART_TYPE_APPLICATION, not a sibling \
-             `pub const` that happens to carry the same string — drift \
-             between the two is the canonical footgun this lift closes"
+            caixa_core::HELM_CHART_TYPE_APPLICATION,
         );
     }
 
@@ -1253,16 +1231,10 @@ spec:
         // on the sibling re-export axes +
         // `caixa_flux::tests::helm_values_key_enabled_re_export_points_at_caixa_core_canonical`
         // on the peer bundle-path renderer crate.
-        assert_eq!(HELM_VALUES_KEY_ENABLED, caixa_core::HELM_VALUES_KEY_ENABLED);
-        assert!(
-            std::ptr::eq(
-                HELM_VALUES_KEY_ENABLED.as_ptr(),
-                caixa_core::HELM_VALUES_KEY_ENABLED.as_ptr(),
-            ),
-            "HELM_VALUES_KEY_ENABLED must be a re-export of \
-             caixa_core::HELM_VALUES_KEY_ENABLED, not a sibling `pub const` \
-             that happens to carry the same string — drift between the two \
-             is the canonical footgun this lift closes"
+        caixa_core::assert_str_reexport_identity(
+            "HELM_VALUES_KEY_ENABLED",
+            HELM_VALUES_KEY_ENABLED,
+            caixa_core::HELM_VALUES_KEY_ENABLED,
         );
     }
 
