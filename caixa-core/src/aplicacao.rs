@@ -444,30 +444,6 @@ type ContratoIdentity<'a> = (
     Option<&'a str>,
 );
 
-/// Render the target payload field of a [`WitContract`] as a stable
-/// human-readable label (`:endpoint "/charge"`, `:subject "events.x"`,
-/// `:slot "checkout/$order"`, or `(capability — no payload)` when the
-/// WIT world is a pure capability edge).
-///
-/// Used by the [`AplicacaoSpec::validate`] duplicate-`:contratos` gate
-/// so the diagnostic names *which* identical edge was declared twice
-/// (not just which `(de, para, wit)` triple). Lifted to a typed
-/// helper so the format is the single source of truth — every future
-/// duplicate-edge diagnostic (per-edge policy resolver in M4, the
-/// `feira app graph` view) reaches for the same label shape rather
-/// than rolling its own.
-fn contrato_target_label(c: &WitContract) -> String {
-    if let Some(e) = &c.endpoint {
-        format!(":endpoint {e:?}")
-    } else if let Some(s) = &c.subject {
-        format!(":subject {s:?}")
-    } else if let Some(s) = &c.slot {
-        format!(":slot {s:?}")
-    } else {
-        "(capability — no payload)".to_string()
-    }
-}
-
 /// Typed view of a [`WitContract`]'s payload target. Each variant
 /// carries the field its WIT shape requires; constructing a `Http`
 /// view without an endpoint is impossible by the type system.
@@ -488,6 +464,37 @@ pub enum WitTarget<'a> {
     /// world stands on its own (rare; reserved for plain capability
     /// imports or M4-and-later WIT worlds we haven't shaped yet).
     Capability,
+}
+
+impl WitTarget<'_> {
+    /// Render this typed target as a stable human-readable label
+    /// (`:endpoint "/charge"`, `:subject "events.x"`,
+    /// `:slot "checkout/$order"`, or `(capability — no payload)` when
+    /// the WIT world is a pure capability edge).
+    ///
+    /// Used by the [`AplicacaoSpec::validate`] duplicate-`:contratos`
+    /// gate so the diagnostic names *which* identical edge was
+    /// declared twice (not just which `(de, para, wit)` triple).
+    /// Lifted as a method on the typed [`WitTarget`] enum (rather
+    /// than the prior free function that probed [`WitContract`]'s raw
+    /// `Option<String>` fields) so that adding a future `WitTarget`
+    /// variant — the M4-and-later per-edge WIT registry may split
+    /// `Http` into `Rest` / `Grpc`, or extend `Store` with a
+    /// `Queue`-shaped peer — becomes a compile-time exhaustiveness
+    /// error at this `match` rather than a silent fall-through to
+    /// `"(capability — no payload)"` at the duplicate-edge
+    /// diagnostic (and every future consumer that reaches for the
+    /// label shape: the per-edge policy resolver in M4, the
+    /// `feira app graph` view, the operator's mesh-graph audit).
+    #[must_use]
+    pub fn label(&self) -> String {
+        match self {
+            WitTarget::Http { endpoint } => format!(":endpoint {endpoint:?}"),
+            WitTarget::PubSub { subject } => format!(":subject {subject:?}"),
+            WitTarget::Store { slot } => format!(":slot {slot:?}"),
+            WitTarget::Capability => "(capability — no payload)".to_string(),
+        }
+    }
 }
 
 // ── one Aplicacao member ─────────────────────────────────────────────
@@ -1353,7 +1360,9 @@ fn validate_entrada_para(para: &str) -> Result<(), AplicacaoError> {
 /// host-collision gate when M4 lands `:entrada` as a `Vec`) reaches
 /// for the same predicate, not its own. Same compounding shape as
 /// `is_canonical_rate_limit_window` (808017c) and
-/// `contrato_target_label` (5dbcfaf).
+/// [`WitTarget::label`] (previously the free `contrato_target_label`
+/// helper, 5dbcfaf; lifted onto the typed [`WitTarget`] enum so the
+/// per-variant label match is compiler-checked-exhaustive).
 ///
 /// The diagnostic carries the offending `host:` verbatim plus a
 /// parser-shaped `reason:` naming the specific violation, so the
@@ -2274,8 +2283,13 @@ impl AplicacaoSpec {
             }
             // Shape ↔ target consistency — surfaces "HTTP wit without
             // :endpoint", "NATS wit with :endpoint set", etc. as named
-            // build errors instead of silent renderer drops.
-            c.target()?;
+            // build errors instead of silent renderer drops. Threaded
+            // through the duplicate-edge diagnostic below (via
+            // [`WitTarget::label`]) so the "which typed target arm did
+            // the duplicate carry" question is answered by the typed
+            // enum's variant discriminator, not by re-probing the raw
+            // `Option<String>` payload fields.
+            let target_view = c.target()?;
             // Contract identity: (de, para, wit, endpoint, subject, slot).
             // Two contracts that match on all six are the same typed edge
             // declared twice — author error, not a legitimate variant of
@@ -2295,7 +2309,7 @@ impl AplicacaoSpec {
                     de: c.de.clone(),
                     para: c.para.clone(),
                     wit: c.wit.clone(),
-                    target: contrato_target_label(c),
+                    target: target_view.label(),
                 });
             }
         }
@@ -6902,6 +6916,112 @@ mod tests {
         assert!(
             matches!(err, AplicacaoError::ContratoEndpointEmpty { .. }),
             "endpoint-empty must fire before duplicate-edge (got {err:?})"
+        );
+    }
+
+    #[test]
+    fn wit_target_label_pins_per_variant_format() {
+        // Label format is the single source of truth every duplicate-
+        // `:contratos` diagnostic + every future `feira app graph`
+        // consumer routes through. Pin the shape per variant so a
+        // future edit to `WitTarget::label` (e.g. a JSON emitter that
+        // strips the leading `:`, or a rename from `endpoint` →
+        // `path`) surfaces as a red-red test rather than as a silent
+        // downstream diagnostic drift. Together with the exhaustive
+        // `match` on `WitTarget` inside `label()`, adding a future
+        // variant (M4 `Rest` / `Grpc` split, `Queue`-shaped `Store`
+        // peer, per-edge WIT registry variants) is a compile error at
+        // the label site — not a fall-through into the `Capability`
+        // "no payload" default the prior raw-field-probe helper
+        // silently landed on.
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge",
+            }
+            .label(),
+            "\
+:endpoint \"/charge\""
+        );
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            }
+            .label(),
+            "\
+:subject \"events.checkout.paid\""
+        );
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .label(),
+            "\
+:slot \"checkout/$order\""
+        );
+        assert_eq!(WitTarget::Capability.label(), "(capability — no payload)");
+    }
+
+    #[test]
+    fn duplicate_pubsub_diagnostic_names_offending_subject() {
+        // Peer of `rejects_duplicate_contrato_diagnostic_names_offending_target`
+        // on the pub-sub target axis: the duplicate-edge diagnostic
+        // must name the `:subject` payload verbatim (not just the
+        // `(de, para, wit)` triple). Prior to lifting the label onto
+        // [`WitTarget::label`] the diagnostic derived the label from
+        // raw [`WitContract`] `Option<String>` probes — a future
+        // `WitTarget` variant addition (M4 per-edge WIT registry)
+        // would silently fall through to the `Capability` "no
+        // payload" default without a compiler warning. Pinning the
+        // pub-sub arm's format closes the second of three
+        // payload-carrying `WitTarget` arms this diagnostic threads
+        // through.
+        let mut s = three_member_spec();
+        let pubsub = WitContract {
+            de: "payment".into(),
+            para: "cart".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("events.checkout.paid".into()),
+            slot: None,
+        };
+        s.contratos.push(pubsub.clone());
+        s.contratos.push(pubsub);
+        let err = s.validate().unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains(":subject \"events.checkout.paid\""),
+            "duplicate-pubsub diagnostic must name the offending \
+             :subject payload (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn duplicate_store_diagnostic_names_offending_slot() {
+        // Peer of the HTTP + pub-sub duplicate-diagnostic pins on the
+        // key-value target axis: the diagnostic must name the `:slot`
+        // payload verbatim. Third of three payload-carrying
+        // `WitTarget` arms this diagnostic threads through, closing
+        // the per-arm label pin trilogy (`Http` — 6841,
+        // `PubSub` + `Store` — this test + peer above).
+        let mut s = three_member_spec();
+        let store = WitContract {
+            de: "cart".into(),
+            para: "payment".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("checkout/$orderId".into()),
+        };
+        s.contratos
+            .retain(|c| !(c.de == "cart" && c.para == "payment"));
+        s.contratos.push(store.clone());
+        s.contratos.push(store);
+        let err = s.validate().unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains(":slot \"checkout/$orderId\""),
+            "duplicate-store diagnostic must name the offending :slot \
+             payload (got: {msg:?})"
         );
     }
 
