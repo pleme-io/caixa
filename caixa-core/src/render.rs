@@ -17025,16 +17025,8 @@ mod tests {
         let v = yaml_string_mapping(input);
         let m = v.as_mapping().expect("mapping shape");
         assert_eq!(m.len(), 2);
-        assert_eq!(
-            m.get(serde_yaml::Value::String("foo".into()))
-                .and_then(|x| x.as_str()),
-            Some("1")
-        );
-        assert_eq!(
-            m.get(serde_yaml::Value::String("bar".into()))
-                .and_then(|x| x.as_str()),
-            Some("2")
-        );
+        assert_eq!(m.get("foo").and_then(|x| x.as_str()), Some("1"));
+        assert_eq!(m.get("bar").and_then(|x| x.as_str()), Some("2"));
     }
 
     #[test]
@@ -17063,14 +17055,9 @@ mod tests {
         let v = yaml_string_mapping(pleme_program_in_aplicacao_selector("cart", "checkout"));
         let m = v.as_mapping().expect("mapping shape");
         assert_eq!(m.len(), 2);
+        assert_eq!(m.get(LABEL_PROGRAM).and_then(|x| x.as_str()), Some("cart"));
         assert_eq!(
-            m.get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
-                .and_then(|x| x.as_str()),
-            Some("cart")
-        );
-        assert_eq!(
-            m.get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
-                .and_then(|x| x.as_str()),
+            m.get(LABEL_APLICACAO).and_then(|x| x.as_str()),
             Some("checkout")
         );
     }
@@ -17218,20 +17205,16 @@ mod tests {
         let m = sel.as_mapping().expect("mapping shape");
         assert_eq!(m.len(), 1);
         let inner = m
-            .get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into()))
+            .get(KUBE_KEY_MATCH_LABELS)
             .and_then(|v| v.as_mapping())
             .expect("matchLabels inner mapping");
         assert_eq!(inner.len(), 2);
         assert_eq!(
-            inner
-                .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
-                .and_then(|x| x.as_str()),
+            inner.get(LABEL_APLICACAO).and_then(|x| x.as_str()),
             Some("checkout")
         );
         assert_eq!(
-            inner
-                .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
-                .and_then(|x| x.as_str()),
+            inner.get(LABEL_PROGRAM).and_then(|x| x.as_str()),
             Some("cart")
         );
     }
@@ -17249,7 +17232,7 @@ mod tests {
         let m = v.as_mapping().expect("mapping shape");
         assert_eq!(m.len(), 1);
         let inner = m
-            .get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into()))
+            .get(KUBE_KEY_MATCH_LABELS)
             .and_then(|v| v.as_mapping())
             .expect("matchLabels inner mapping");
         assert!(inner.is_empty());
@@ -17266,20 +17249,16 @@ mod tests {
         let v = label_selector(pleme_program_in_aplicacao_selector("cart", "checkout"));
         let inner = v
             .as_mapping()
-            .and_then(|m| m.get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into())))
+            .and_then(|m| m.get(KUBE_KEY_MATCH_LABELS))
             .and_then(|v| v.as_mapping())
             .expect("matchLabels inner mapping");
         assert_eq!(inner.len(), 2);
         assert_eq!(
-            inner
-                .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
-                .and_then(|x| x.as_str()),
+            inner.get(LABEL_PROGRAM).and_then(|x| x.as_str()),
             Some("cart")
         );
         assert_eq!(
-            inner
-                .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
-                .and_then(|x| x.as_str()),
+            inner.get(LABEL_APLICACAO).and_then(|x| x.as_str()),
             Some("checkout")
         );
 
@@ -17287,14 +17266,12 @@ mod tests {
         let v = label_selector(pleme_program_selector("cart"));
         let inner = v
             .as_mapping()
-            .and_then(|m| m.get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into())))
+            .and_then(|m| m.get(KUBE_KEY_MATCH_LABELS))
             .and_then(|v| v.as_mapping())
             .unwrap();
         assert_eq!(inner.len(), 1);
         assert_eq!(
-            inner
-                .get(serde_yaml::Value::String(LABEL_PROGRAM.into()))
-                .and_then(|x| x.as_str()),
+            inner.get(LABEL_PROGRAM).and_then(|x| x.as_str()),
             Some("cart")
         );
     }
@@ -17313,7 +17290,7 @@ mod tests {
         let v = label_selector(input);
         let inner = v
             .as_mapping()
-            .and_then(|m| m.get(serde_yaml::Value::String(KUBE_KEY_MATCH_LABELS.into())))
+            .and_then(|m| m.get(KUBE_KEY_MATCH_LABELS))
             .and_then(|v| v.as_mapping())
             .unwrap();
         let keys: Vec<&str> = inner.iter().filter_map(|(k, _)| k.as_str()).collect();
@@ -17331,8 +17308,7 @@ mod tests {
         let v = label_selector(pleme_program_selector("cart"));
         let m = v.as_mapping().unwrap();
         assert!(
-            m.get(serde_yaml::Value::String("matchExpressions".into()))
-                .is_none(),
+            m.get("matchExpressions").is_none(),
             "label_selector must not pre-insert a matchExpressions key (V0 is matchLabels-only)"
         );
     }
@@ -17353,19 +17329,14 @@ mod tests {
         );
         assert_eq!(skel.len(), 3);
         assert_eq!(
-            skel.get(serde_yaml::Value::String(KUBE_KEY_API_VERSION.into()))
-                .and_then(|v| v.as_str()),
+            skel.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
             Some("cilium.io/v2")
         );
         assert_eq!(
-            skel.get(serde_yaml::Value::String(KUBE_KEY_KIND.into()))
-                .and_then(|v| v.as_str()),
+            skel.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
             Some("CiliumNetworkPolicy")
         );
-        assert!(
-            skel.get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
-                .is_some()
-        );
+        assert!(skel.get(KUBE_KEY_METADATA).is_some());
     }
 
     #[test]
@@ -17378,19 +17349,15 @@ mod tests {
             BTreeMap::new(),
         );
         let metadata = skel
-            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .get(KUBE_KEY_METADATA)
             .and_then(|v| v.as_mapping())
             .expect("metadata mapping");
         assert_eq!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_NAME.into()))
-                .and_then(|v| v.as_str()),
+            metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
             Some("checkout")
         );
         assert_eq!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_NAMESPACE.into()))
-                .and_then(|v| v.as_str()),
+            metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
             Some("tatara-system")
         );
     }
@@ -17410,13 +17377,11 @@ mod tests {
             BTreeMap::new(),
         );
         let metadata = skel
-            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .get(KUBE_KEY_METADATA)
             .and_then(|v| v.as_mapping())
             .unwrap();
         assert!(
-            metadata
-                .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
-                .is_none(),
+            metadata.get(KUBE_KEY_LABELS).is_none(),
             "metadata.labels must be absent when no labels passed"
         );
         // metadata then has exactly 2 keys: name, namespace.
@@ -17436,23 +17401,19 @@ mod tests {
             labels,
         );
         let metadata = skel
-            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .get(KUBE_KEY_METADATA)
             .and_then(|v| v.as_mapping())
             .unwrap();
         let labels_block = metadata
-            .get(serde_yaml::Value::String(KUBE_KEY_LABELS.into()))
+            .get(KUBE_KEY_LABELS)
             .and_then(|v| v.as_mapping())
             .expect("metadata.labels mapping present");
         assert_eq!(
-            labels_block
-                .get(serde_yaml::Value::String(LABEL_APLICACAO.into()))
-                .and_then(|v| v.as_str()),
+            labels_block.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
             Some("checkout")
         );
         assert_eq!(
-            labels_block
-                .get(serde_yaml::Value::String(LABEL_CONTRATO.into()))
-                .and_then(|v| v.as_str()),
+            labels_block.get(LABEL_CONTRATO).and_then(|v| v.as_str()),
             Some("cart-to-catalog")
         );
     }
@@ -17472,7 +17433,7 @@ mod tests {
             labels,
         );
         let metadata = skel
-            .get(serde_yaml::Value::String(KUBE_KEY_METADATA.into()))
+            .get(KUBE_KEY_METADATA)
             .and_then(|v| v.as_mapping())
             .unwrap();
         let keys: Vec<&str> = metadata.iter().filter_map(|(k, _)| k.as_str()).collect();
@@ -17518,7 +17479,7 @@ mod tests {
             BTreeMap::new(),
         );
         assert!(
-            skel.get(serde_yaml::Value::String("spec".into())).is_none(),
+            skel.get("spec").is_none(),
             "skeleton must not pre-insert a spec key"
         );
     }
@@ -17737,11 +17698,7 @@ mod tests {
         .expect("Some arm yields Some(...)");
         let m = v.as_mapping().expect("mapping shape");
         assert_eq!(m.len(), 1);
-        assert_eq!(
-            m.get(serde_yaml::Value::String("attempts".into()))
-                .and_then(|x| x.as_u64()),
-            Some(30)
-        );
+        assert_eq!(m.get("attempts").and_then(|x| x.as_u64()), Some(30));
     }
 
     #[test]
@@ -17813,7 +17770,7 @@ mod tests {
         // `authentication:` wrapper at this layer.
         for k in ["timeouts", "retry", "authentication"] {
             assert!(
-                m.get(serde_yaml::Value::String(k.into())).is_none(),
+                m.get(k).is_none(),
                 "single_field_overlay must not pre-insert the outer key {k:?} \
                  (the caller's per-rule insert is the canonical insertion site)"
             );
@@ -22679,6 +22636,60 @@ spec:
             "insert_str_key(KEY, V) must byte-equal \
              insert(Value::String(KEY.into()), V) — otherwise the \
              ~48 routed consumer sites drift silently at emit time"
+        );
+    }
+
+    #[test]
+    fn mapping_get_bare_str_key_byte_equals_value_string_wrapped_form() {
+        // The read-side twin of the `insert_str_key`-vs-hand-written pin.
+        // `serde_yaml::Mapping::get<I: Index>` accepts any `I: Index`;
+        // the crate ships `impl Index for str` (routing through a
+        // no-allocation `HashLikeValue(&str)` bucket lookup) and
+        // `impl Index for Value` (matching the `Value::String(_)`
+        // key verbatim). The ~78 test-side probes across `caixa-mesh`,
+        // `caixa-flux`, and `caixa-core::render` that previously spelled
+        // out `.get(serde_yaml::Value::String(<KEY>.into()))` were
+        // swept onto the shorter `.get(<KEY>)` form because the two
+        // must resolve to the same bucket for the sweep to be a
+        // drop-in. Pin the equivalence — the `HashLikeValue(&str)`
+        // hash must byte-equal the `Value::String(String)` hash so
+        // the two paths agree on `get`, `contains_key`, and the
+        // absence path (`None` when the key is missing) — otherwise
+        // a future `serde_yaml` upgrade could silently divert every
+        // swept probe past the value the emitter inserted.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+        // Present-key path: both forms find the same value.
+        assert_eq!(
+            m.get(KUBE_KEY_KIND),
+            m.get(serde_yaml::Value::String(KUBE_KEY_KIND.into())),
+            "mapping.get(<KEY>) must byte-equal \
+             mapping.get(Value::String(<KEY>.into())) — otherwise the \
+             ~78 swept test-side probes drift silently past the value \
+             the emitter inserted under the promoted Value::String key"
+        );
+        // Absent-key path: both forms return None.
+        assert_eq!(
+            m.get(KUBE_KEY_SPEC),
+            m.get(serde_yaml::Value::String(KUBE_KEY_SPEC.into())),
+            "absent-key lookup via bare-&str must byte-equal absent-key \
+             lookup via Value::String — both must return None so the \
+             swept `assert!(_.get(K).is_none())` shape stays load-bearing"
+        );
+        // contains_key parity: both forms agree on present + absent.
+        assert_eq!(
+            m.contains_key(KUBE_KEY_KIND),
+            m.contains_key(serde_yaml::Value::String(KUBE_KEY_KIND.into())),
+            "mapping.contains_key(<KEY>) must byte-equal \
+             mapping.contains_key(Value::String(<KEY>.into())) — \
+             otherwise the swept `assert!(_.contains_key(K))` shape \
+             disagrees with the emitter's `insert_str_key` promotion"
+        );
+        assert_eq!(
+            m.contains_key(KUBE_KEY_SPEC),
+            m.contains_key(serde_yaml::Value::String(KUBE_KEY_SPEC.into())),
+            "absent-key contains_key via bare-&str must byte-equal \
+             absent-key contains_key via Value::String"
         );
     }
 }
