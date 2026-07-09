@@ -243,7 +243,7 @@ impl WitContract {
                     de,
                     para,
                     wit,
-                    expected: "endpoint",
+                    expected: WitTarget::HTTP_FIELD_NAME,
                 });
             }
             let ep = endpoint.ok_or_else(|| {
@@ -252,7 +252,7 @@ impl WitContract {
                     de,
                     para,
                     wit,
-                    expected: "endpoint",
+                    expected: WitTarget::HTTP_FIELD_NAME,
                 }
             })?;
             if ep.is_empty() {
@@ -301,7 +301,7 @@ impl WitContract {
                     de,
                     para,
                     wit,
-                    expected: "subject",
+                    expected: WitTarget::PUBSUB_FIELD_NAME,
                 });
             }
             let s = subject.ok_or_else(|| {
@@ -310,7 +310,7 @@ impl WitContract {
                     de,
                     para,
                     wit,
-                    expected: "subject",
+                    expected: WitTarget::PUBSUB_FIELD_NAME,
                 }
             })?;
             if s.is_empty() {
@@ -355,7 +355,7 @@ impl WitContract {
                     de,
                     para,
                     wit,
-                    expected: "slot",
+                    expected: WitTarget::STORE_FIELD_NAME,
                 });
             }
             let sl = slot.ok_or_else(|| {
@@ -364,7 +364,7 @@ impl WitContract {
                     de,
                     para,
                     wit,
-                    expected: "slot",
+                    expected: WitTarget::STORE_FIELD_NAME,
                 }
             })?;
             if sl.is_empty() {
@@ -467,6 +467,60 @@ pub enum WitTarget<'a> {
 }
 
 impl WitTarget<'_> {
+    /// Canonical author-facing `:contratos` payload field name for the
+    /// HTTP-shaped arm — the `expected: &'static str` scalar the
+    /// [`AplicacaoError::ContratoMissingTarget`] /
+    /// [`AplicacaoError::ContratoWrongTarget`] diagnostic threads
+    /// through, the `:endpoint "…"` keyword the [`WitTarget::label`]
+    /// duplicate-edge diagnostic emits, and the `endpoint=…` prefix
+    /// the `feira app graph` verb prints. Peer of
+    /// [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+    /// on the payload-field-name axis; declared as a peer const next
+    /// to the [`WitTarget::Http`] variant so a future rename on the
+    /// author-surface `(defcaixa … :contratos ((:de … :para … :wit …
+    /// :endpoint …)))` field lands in exactly one place, not scattered
+    /// across the [`WitContract::target`] gate's six `expected:`
+    /// literals, the label template, and every downstream consumer
+    /// that prints a per-arm prefix. Same trajectory as the peer
+    /// [`WitTarget::label`] lift (174e96a): a single source of truth
+    /// for the arm's shape, next to the variant declaration.
+    pub const HTTP_FIELD_NAME: &'static str = "endpoint";
+    /// Canonical author-facing `:contratos` payload field name for the
+    /// pub-sub-shaped arm. Peer of [`WitTarget::HTTP_FIELD_NAME`] /
+    /// [`WitTarget::STORE_FIELD_NAME`] on the payload-field-name axis;
+    /// see [`WitTarget::HTTP_FIELD_NAME`] for the full lift rationale.
+    pub const PUBSUB_FIELD_NAME: &'static str = "subject";
+    /// Canonical author-facing `:contratos` payload field name for the
+    /// key/value-store-shaped arm. Peer of
+    /// [`WitTarget::HTTP_FIELD_NAME`] / [`WitTarget::PUBSUB_FIELD_NAME`]
+    /// on the payload-field-name axis; see
+    /// [`WitTarget::HTTP_FIELD_NAME`] for the full lift rationale.
+    pub const STORE_FIELD_NAME: &'static str = "slot";
+
+    /// The canonical author-facing `:contratos` payload field name
+    /// this typed target arm carries (`Http` → `Some("endpoint")`,
+    /// `PubSub` → `Some("subject")`, `Store` → `Some("slot")`), or
+    /// `None` for the payload-less `Capability` arm.
+    ///
+    /// Lifted as a method on the typed [`WitTarget`] enum so a future
+    /// variant addition — the M4-and-later per-edge WIT registry may
+    /// split `Http` into `Rest` / `Grpc` peers, or extend `Store`
+    /// with a `Queue`-shaped peer — becomes a compile-time
+    /// exhaustiveness error at this `match` rather than a silent
+    /// `None` fall-through at every downstream consumer that reaches
+    /// for the arm's author-facing field name (the per-edge policy
+    /// resolver in M4, the `feira app graph` view's per-arm prefix,
+    /// the operator's mesh-graph audit).
+    #[must_use]
+    pub const fn field_name(&self) -> Option<&'static str> {
+        match self {
+            WitTarget::Http { .. } => Some(Self::HTTP_FIELD_NAME),
+            WitTarget::PubSub { .. } => Some(Self::PUBSUB_FIELD_NAME),
+            WitTarget::Store { .. } => Some(Self::STORE_FIELD_NAME),
+            WitTarget::Capability => None,
+        }
+    }
+
     /// Render this typed target as a stable human-readable label
     /// (`:endpoint "/charge"`, `:subject "events.x"`,
     /// `:slot "checkout/$order"`, or `(capability — no payload)` when
@@ -486,12 +540,23 @@ impl WitTarget<'_> {
     /// diagnostic (and every future consumer that reaches for the
     /// label shape: the per-edge policy resolver in M4, the
     /// `feira app graph` view, the operator's mesh-graph audit).
+    /// The per-arm keyword prefix routes through
+    /// [`WitTarget::HTTP_FIELD_NAME`] / [`WitTarget::PUBSUB_FIELD_NAME`]
+    /// / [`WitTarget::STORE_FIELD_NAME`] so a rename of the
+    /// author-surface field lands in exactly one place, not both the
+    /// diagnostic's `expected:` scalar and the label template.
     #[must_use]
     pub fn label(&self) -> String {
         match self {
-            WitTarget::Http { endpoint } => format!(":endpoint {endpoint:?}"),
-            WitTarget::PubSub { subject } => format!(":subject {subject:?}"),
-            WitTarget::Store { slot } => format!(":slot {slot:?}"),
+            WitTarget::Http { endpoint } => {
+                format!(":{} {endpoint:?}", Self::HTTP_FIELD_NAME)
+            }
+            WitTarget::PubSub { subject } => {
+                format!(":{} {subject:?}", Self::PUBSUB_FIELD_NAME)
+            }
+            WitTarget::Store { slot } => {
+                format!(":{} {slot:?}", Self::STORE_FIELD_NAME)
+            }
             WitTarget::Capability => "(capability — no payload)".to_string(),
         }
     }
@@ -4840,7 +4905,7 @@ mod tests {
         assert!(matches!(
             err,
             AplicacaoError::ContratoMissingTarget {
-                expected: "endpoint",
+                expected: WitTarget::HTTP_FIELD_NAME,
                 ..
             }
         ));
@@ -4861,7 +4926,7 @@ mod tests {
         assert!(matches!(
             err,
             AplicacaoError::ContratoWrongTarget {
-                expected: "endpoint",
+                expected: WitTarget::HTTP_FIELD_NAME,
                 ..
             }
         ));
@@ -4882,7 +4947,7 @@ mod tests {
         assert!(matches!(
             err,
             AplicacaoError::ContratoMissingTarget {
-                expected: "subject",
+                expected: WitTarget::PUBSUB_FIELD_NAME,
                 ..
             }
         ));
@@ -4903,7 +4968,7 @@ mod tests {
         assert!(matches!(
             err,
             AplicacaoError::ContratoWrongTarget {
-                expected: "subject",
+                expected: WitTarget::PUBSUB_FIELD_NAME,
                 ..
             }
         ));
@@ -4924,7 +4989,7 @@ mod tests {
         assert!(matches!(
             err,
             AplicacaoError::ContratoMissingTarget {
-                expected: "slot",
+                expected: WitTarget::STORE_FIELD_NAME,
                 ..
             }
         ));
@@ -6959,6 +7024,106 @@ mod tests {
 :slot \"checkout/$order\""
         );
         assert_eq!(WitTarget::Capability.label(), "(capability — no payload)");
+    }
+
+    #[test]
+    fn wit_target_field_name_pins_per_variant() {
+        // Pin the per-arm author-facing `:contratos` payload field
+        // name single-sourced onto [`WitTarget::HTTP_FIELD_NAME`] /
+        // [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+        // + returned by [`WitTarget::field_name`]. Every downstream
+        // consumer (the [`WitContract::target`] gate's `expected:`
+        // scalar, the [`WitTarget::label`] template's keyword prefix,
+        // the `feira app graph` verb's `endpoint=…` prefix) routes
+        // through the same three peer consts, so a rename on the
+        // author-surface `(defcaixa … :contratos ((:de … :para …
+        // :wit … :endpoint …)))` field lands in exactly one place.
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge"
+            }
+            .field_name(),
+            Some(WitTarget::HTTP_FIELD_NAME),
+        );
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.x",
+            }
+            .field_name(),
+            Some(WitTarget::PUBSUB_FIELD_NAME),
+        );
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .field_name(),
+            Some(WitTarget::STORE_FIELD_NAME),
+        );
+        // Capability arm carries no payload field — the diagnostic
+        // never reports `expected: "capability"` because the gate's
+        // Capability arm accepts no payload at all (it fires the
+        // "expected: none" WrongTarget error instead), so the field-
+        // name method returns None here rather than a placeholder.
+        assert_eq!(WitTarget::Capability.field_name(), None);
+
+        // Peer const scalar values pinned so a rename on either side
+        // (author-surface field name in the `(defcaixa …)` DSL, or
+        // the diagnostic's `expected:` scalar) can't drift without
+        // failing here first.
+        assert_eq!(WitTarget::HTTP_FIELD_NAME, "endpoint");
+        assert_eq!(WitTarget::PUBSUB_FIELD_NAME, "subject");
+        assert_eq!(WitTarget::STORE_FIELD_NAME, "slot");
+    }
+
+    #[test]
+    fn wit_target_field_names_are_pairwise_distinct() {
+        // Distinctness pin: if any two of the three payload-field-name
+        // scalars ever collapse (e.g. an accidental `endpoint` copy-
+        // paste over the `subject` const), the [`WitContract::target`]
+        // gate's diagnostic would point authors at the wrong field —
+        // an "expected `:endpoint`" error on a pub-sub edge would
+        // silently misroute the fix. Same cross-axis-distinctness
+        // discipline as the peer M3 `:placement :estrategia` variant-
+        // discriminator scalar-value pins (cc8f749) applied to the
+        // payload-field-name axis.
+        assert_ne!(WitTarget::HTTP_FIELD_NAME, WitTarget::PUBSUB_FIELD_NAME);
+        assert_ne!(WitTarget::HTTP_FIELD_NAME, WitTarget::STORE_FIELD_NAME);
+        assert_ne!(WitTarget::PUBSUB_FIELD_NAME, WitTarget::STORE_FIELD_NAME);
+    }
+
+    #[test]
+    fn wit_target_field_name_routes_through_label_and_expected_diagnostic() {
+        // Consumer-side pin: the same three peer consts thread through
+        // both the [`WitTarget::label`] template (leading-`:` keyword
+        // prefix in the duplicate-`:contratos` diagnostic) and the
+        // [`WitContract::target`] gate's [`AplicacaoError::
+        // ContratoMissingTarget`] `expected:` scalar (the field the
+        // author needs to add). Pin both routes at once so a future
+        // refactor can't accidentally split them onto separate string
+        // literals — the "one place, everywhere reaches for it"
+        // invariant the peer const set carries.
+        let http_label = WitTarget::Http { endpoint: "/x" }.label();
+        assert!(
+            http_label.starts_with(&format!(":{} ", WitTarget::HTTP_FIELD_NAME)),
+            "label must lead with :{} keyword (got {http_label:?})",
+            WitTarget::HTTP_FIELD_NAME,
+        );
+
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "kafka:topic".into(),
+            endpoint: None,
+            subject: None,
+            slot: None,
+        });
+        match s.validate().unwrap_err() {
+            AplicacaoError::ContratoMissingTarget { expected, .. } => {
+                assert_eq!(expected, WitTarget::PUBSUB_FIELD_NAME);
+            }
+            other => panic!("expected ContratoMissingTarget, got {other:?}"),
+        }
     }
 
     #[test]
