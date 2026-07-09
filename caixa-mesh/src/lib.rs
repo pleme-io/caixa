@@ -35,10 +35,11 @@ use std::collections::BTreeMap;
 
 use caixa_core::{
     Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
-    FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME,
-    LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, WitContract, WitTarget,
-    aplicacao::AplicacaoSpec, kube_resource_skeleton, label_selector,
-    pleme_program_in_aplicacao_selector, pleme_program_selector, single_field_overlay,
+    FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
+    GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
+    M3_KEY_PLACEMENT, WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton,
+    label_selector, pleme_program_in_aplicacao_selector, pleme_program_selector,
+    single_field_overlay,
 };
 use thiserror::Error;
 
@@ -2579,9 +2580,28 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         BTreeMap::new(),
     );
     let mut listener = serde_yaml::Mapping::new();
+    // Per-listener name-discriminator scalar — reads from the lifted
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] `&'static str` const so
+    // a future substrate-side listener-name migration (`"http"` →
+    // `"http-v1"` once multi-listener Gateways ship under the HTTPS-by-
+    // default trajectory the sibling
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] docstring names, an
+    // operator-pinned override the future `:entrada :listener-name`
+    // slot promotes) lands at the canonical
+    // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] declaration,
+    // not at this call site. Peer with the sibling
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] port-scalar consumer on
+    // the immediately-following `listener.insert(KUBE_KEY_PORT, …)`
+    // line — both per-listener substrate-canonical scalar-value axes
+    // now route through their own lifted typed const, so a future
+    // rebrand on either axis reaches its consumer by construction.
+    // Downstream `HTTPRoute.spec.parentRefs[].sectionName` selectors
+    // that attach to this Gateway's HTTP listener bind by the same
+    // lifted byte-string, so a listener-name drift can't silently
+    // orphan the route at attachment time.
     listener.insert(
         serde_yaml::Value::String(GATEWAY_API_KEY_NAME.into()),
-        serde_yaml::Value::String("http".into()),
+        serde_yaml::Value::String(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME.into()),
     );
     // Per-listener HTTP-listener-port scalar — reads from the lifted
     // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] `u16` const so a future
@@ -7028,6 +7048,56 @@ mod tests {
         assert_eq!(
             listener.get(KUBE_KEY_PROTOCOL).and_then(|p| p.as_str()),
             Some(GATEWAY_API_PROTOCOL_HTTP)
+        );
+    }
+
+    #[test]
+    fn gateway_listener_name_routes_through_lifted_default_http_listener_name() {
+        // The per-Aplicacao `Gateway`'s sole per-listener name-
+        // discriminator axis (the `listener.insert(GATEWAY_API_KEY_NAME,
+        // …)` call site in [`gateway_routes`]) must read from the lifted
+        // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`]
+        // `&'static str` constant — not from an open-coded `"http"`
+        // literal that could drift if the substrate's canonical
+        // author-chosen short listener-name ever moved (`"http" →
+        // "http-v1"` on the multi-listener HTTPS-by-default trajectory,
+        // a per-cluster override the operator pins through a future
+        // `:entrada :listener-name` slot). A future rebrand of the
+        // constant must reach this consumer by construction so
+        // downstream `HTTPRoute.spec.parentRefs[].sectionName`
+        // selectors that bind by the canonical byte-string can't
+        // silently orphan the route at attachment time. Peer with the
+        // sibling
+        // [`gateway_listener_port_routes_through_lifted_default_http_listener_port`]
+        // pin on the [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] port-
+        // scalar consumer at the same emitter — the two per-listener
+        // substrate-canonical scalar-value axes name distinct scalars
+        // (listener name identifier vs listener port), both now routed
+        // through their own lifted const, so a substrate-side rebrand
+        // on either axis lands at exactly one consumer per axis
+        // without coupling the two rebrand cycles.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = docs
+            .iter()
+            .find(|d| {
+                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
+            })
+            .expect("Gateway present");
+        let listener = gateway
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
+            .and_then(|l| l.as_sequence())
+            .and_then(|s| s.first())
+            .expect("first listener present");
+        assert_eq!(
+            listener.get(GATEWAY_API_KEY_NAME).and_then(|n| n.as_str()),
+            Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
+            "the Gateway per-listener name-discriminator scalar must render \
+             the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME constant \
+             verbatim — drift here means the constant lift no longer reaches \
+             this consumer and every downstream HTTPRoute `sectionName` \
+             selector authored against the substrate's canonical name would \
+             miss its listener at attachment time"
         );
     }
 

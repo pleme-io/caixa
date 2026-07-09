@@ -762,6 +762,83 @@ pub const GATEWAY_API_HOSTNAME_MAX_LEN: usize = 253;
 /// [cm]: ../../caixa_mesh/fn.gateway_routes.html
 pub const GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT: u16 = 80;
 
+/// K8s Gateway API v1 `Gateway.spec.listeners[].name` — the substrate's
+/// canonical author-chosen listener-name scalar every Aplicacao-level
+/// [`caixa_mesh::gateway_routes`][cm] -emitted `Gateway`'s sole per-
+/// listener name-discriminator axis reads from. Gateway API v1's
+/// `Listener.name` is `SectionName`-typed (a required DNS-1123 label
+/// unique within the parent Gateway's listener list — see the upstream
+/// docs at
+/// <https://gateway-api.sigs.k8s.io/api-types/gateway/#listeners> and
+/// the type reference at
+/// <https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.SectionName>);
+/// downstream `HTTPRoute.spec.parentRefs[].sectionName` selectors bind
+/// to this exact byte-string when the author wants to attach a route
+/// to one specific listener out of a multi-listener Gateway. The V0
+/// substrate emits exactly one HTTP listener per Aplicacao, so the
+/// name is arbitrary from the CRD's perspective — the substrate picks
+/// the byte-string `"http"` as the canonical short name (matching the
+/// listener's protocol axis [`GATEWAY_API_PROTOCOL_HTTP`] in kind, but
+/// not in bytes: this is the lowercase-ASCII listener-name identifier,
+/// the sibling protocol scalar is the uppercase-ASCII
+/// `ProtocolType` enum value the Gateway API v1 CRD schema pins).
+///
+/// Semantically distinct from every peer `"http"`-shaped byte-string
+/// in the substrate:
+///
+///   - [`crate::GATEWAY_API_PROTOCOL_HTTP`] (`"HTTP"`) — the listener's
+///     `spec.listeners[].protocol` `ProtocolType` enum value the
+///     Gateway API v1 CRD schema pins to the uppercase-ASCII spelling;
+///     this constant names the arbitrary author-chosen listener-name
+///     identifier at the sibling `spec.listeners[].name` axis instead,
+///     and the two carry different case shapes on purpose;
+///   - [`crate::CILIUM_KEY_HTTP`] (`"http"`) — the Cilium CRD's per-
+///     `toPorts[]` L7-HTTP-rule-list-discriminator container-axis key
+///     (`spec.ingress[].toPorts[].rules.http`), a CRD-schema-pinned
+///     field name the Cilium project's per-CRD-schema-migration cycle
+///     controls; this constant names an Aplicacao-side arbitrary
+///     listener-name at a distinct K8s Gateway API CRD path, and the
+///     substrate can move it without touching the Cilium schema.
+///
+/// Byte-identical to [`CILIUM_KEY_HTTP`] today (both spell out the
+/// four ASCII bytes `h`, `t`, `t`, `p`), but the two lifted axes name
+/// semantically distinct surfaces — a future substrate-side listener-
+/// name rebrand (say, `"http" → "http-v1"` once the Aplicacao renders
+/// multiple listeners under the HTTPS-by-default trajectory) must
+/// reach this consumer without dragging the Cilium schema key with it.
+///
+/// Until this lift landed the value `"http"` lived at one production-
+/// code call site: the `listener.insert(GATEWAY_API_KEY_NAME, "http")`
+/// call inside [`caixa_mesh::gateway_routes`][cm]'s per-Aplicacao
+/// `Gateway` emitter. A future Gateway API v2 rebrand of the well-
+/// known short listener-name (a substrate-side migration to a longer
+/// discriminator once multi-listener Gateways ship, an operator-pinned
+/// override the future `:entrada :listener-name` slot promotes) —
+/// without a coordinated edit — would silently emit a `Gateway`
+/// whose listener carries the drifted identifier, so every downstream
+/// `HTTPRoute` `sectionName` selector authored against the substrate's
+/// prior canonical name misses its listener, and every external
+/// `:entrada` HTTP flow drops at attachment time with no diagnostic
+/// naming the listener-name drift root cause. Lifting the literal to
+/// a shared typed `&'static str` const closes the drift footgun
+/// structurally — every consumer reads from the same lifted constant,
+/// so any rebrand reaches every site by construction.
+///
+/// Mirrors the [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] lift
+/// (cd60fde) on the peer per-listener HTTP-listener-port scalar-axis —
+/// both are Aplicacao-side substrate-canonical scalar-value pins the
+/// sole per-Aplicacao `Gateway` emitter reaches for, and both lift to
+/// `caixa-core::render` so a future substrate-side rebrand on either
+/// listener axis (`:port` → `:443`, `:name` → `"http-v1"`) lands at
+/// exactly one const per axis. Same "typed const so the scalar has
+/// exactly one source of truth" discipline every peer scalar in this
+/// crate carries ([`DEFAULT_GATEWAY_CLASS_NAME`],
+/// [`GATEWAY_API_PROTOCOL_HTTP`],
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`]).
+///
+/// [cm]: ../../caixa_mesh/fn.gateway_routes.html
+pub const GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME: &str = "http";
+
 /// Predicate: assert that `path` is a valid HTTP path under both the
 /// K8s Gateway API v1 `HTTPPathMatch.value` admission grammar AND the
 /// Cilium L7 `path:` rule grammar — the two landing sites every
@@ -21094,6 +21171,67 @@ mod tests {
              different scalars (external-Gateway listener port vs in-cluster Servico port), \
              collapsing them silently shadows the Aplicacao's Gateway path",
             crate::DEFAULT_SERVICO_PORT,
+        );
+    }
+
+    #[test]
+    fn gateway_api_default_http_listener_name_pins_canonical_http_literal() {
+        // The canonical-constant arm — pins
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] at the verbatim
+        // `"http"` literal the sole `caixa-mesh::gateway_routes` per-
+        // Aplicacao `Gateway` per-listener name-discriminator axis
+        // reads from. Peer with the
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`]-pins-`80` discipline
+        // on the sibling per-listener HTTP-listener-port scalar-axis:
+        // both are the Aplicacao-side substrate-canonical scalar-value
+        // pins the sole per-Aplicacao `Gateway` emitter reaches for, so
+        // a future refactor that drifts either constant out from under
+        // the emitter surfaces here ahead of any per-renderer Gateway
+        // emission. The literal value is the substrate's V0 arbitrary-
+        // author-chosen short listener-name (K8s Gateway API v1's
+        // `SectionName`-typed field carries no CRD-schema-pinned value
+        // — the substrate picks `"http"` verbatim to match the
+        // listener's carried protocol shape at the reader's eye), so
+        // downstream `HTTPRoute` `sectionName` selectors bind to this
+        // exact byte-string by construction.
+        assert_eq!(
+            GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME, "http",
+            "canonical Gateway API v1 HTTP listener-name literal must remain \
+             `\"http\"` verbatim — this is the value the caixa-mesh Gateway \
+             emitter reads from and the substrate's V0 arbitrary-author-chosen \
+             short listener-name identifier every downstream `HTTPRoute` \
+             `parentRefs[].sectionName` selector binds to"
+        );
+    }
+
+    #[test]
+    fn gateway_api_default_http_listener_name_carries_dns_1123_label_shape() {
+        // Cross-axis invariant: K8s Gateway API v1 `Listener.name` is
+        // `SectionName`-typed — a required DNS-1123 label unique within
+        // the parent Gateway's listener list. Pinning the shape here
+        // means a future rebrand on the canonical lift can't silently
+        // land a malformed listener-name identifier (empty, uppercase,
+        // whitespace, `.` / `_` / non-alphanumeric characters, an
+        // overlong string past the DNS-1123 label ceiling) that the
+        // apiserver-side Gateway API CRD schema validator would reject
+        // far from the rebrand commit's source. The predicate the
+        // `caixa-mesh::gateway_routes` per-listener-name emitter never
+        // consults directly (the value is a const — no author input
+        // reaches this axis today) gets consulted here so any future
+        // rebrand routes through the same DNS-1123-label admission
+        // grammar every K8s CRD `name`-shaped axis carries. Peer to
+        // `default_gateway_class_name_is_a_valid_dns_1123_label` on
+        // the sibling per-Gateway `gatewayClassName` scalar-axis pin
+        // and `default_namespace_is_a_valid_dns_1123_label` on the
+        // canonical-K8s-namespace lifted scalar — every substrate-side
+        // K8s-CRD-name-shaped lift carries the same DNS-1123 label
+        // admission-grammar cross-axis invariant.
+        assert!(
+            is_dns_1123_label(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME).is_ok(),
+            "GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME ({GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME:?}) \
+             must be a valid DNS-1123 label — K8s Gateway API v1 `Listener.name` is \
+             `SectionName`-typed and the apiserver-side CRD schema validator refuses \
+             any other shape"
         );
     }
 }
