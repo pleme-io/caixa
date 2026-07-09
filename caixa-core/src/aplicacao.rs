@@ -678,22 +678,6 @@ fn is_canonical_rate_limit_window(window: Duration) -> bool {
     window.subsec_nanos() == 0 && (secs == 1 || secs == 60 || secs == 3600)
 }
 
-/// True when `d` is representable as an integer number of milliseconds —
-/// the round-trippable accepted set of the shared
-/// [`supervisor::duration_codec`] every typed-`Duration` `:politicas`
-/// slot ([`MeshPolicy::timeout`], [`CircuitBreaker::window`]) routes
-/// through. Thin re-export of
-/// [`supervisor::duration_codec::is_integer_millisecond_duration`] so the
-/// two `:politicas` `Duration` axes at [`AplicacaoSpec::validate_politicas`]
-/// gate on the same predicate the codec itself documents — single source
-/// of truth for the codec's round-trippable accepted set, with the
-/// `:limits :wall-clock` axis (whose own `as_millis()`-truncation codec
-/// lives in [`crate::limits`]) routing through the same predicate.
-#[must_use]
-fn is_integer_millisecond_duration(d: Duration) -> bool {
-    supervisor::duration_codec::is_integer_millisecond_duration(d)
-}
-
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
 /// validated [`MeshPolicy::timeout`] past
 /// [`AplicacaoSpec::validate_politicas`] lies in `1ms..=POLICY_TIMEOUT_MAX`
@@ -2774,72 +2758,30 @@ impl AplicacaoSpec {
     fn validate_politicas(&self) -> Result<(), AplicacaoError> {
         let p = &self.politicas;
         if let Some(t) = p.timeout {
-            if t.is_zero() {
-                return Err(AplicacaoError::PolicyTimeoutZero);
-            }
-            // Codec round-trip floor on the typed `:timeout`
-            // axis. The shared `supervisor::duration_codec` accepts
-            // `<integer><unit>` for `unit ∈ {ms,s,m,h}` and renders
-            // by picking the largest unit a value is a clean
-            // multiple of; a `Duration` carrying a sub-millisecond
-            // residue (`Duration::from_micros(1500)` =
-            // 1_500_000 ns) either truncates to `as_millis()`
-            // (renders `"1ms"` → parses back to `Duration::from_millis(1)`
-            // = 1_000_000 ns, *not* the original) or — for purely
-            // sub-millisecond magnitudes — renders as the literal
-            // `"0s"` the `PolicyTimeoutZero` arm above rejects on
-            // re-validate. Either branch breaks the THEORY.md
-            // §V.2.7 render-determinism contract every typed slot
-            // carries. Lifting the gate to validate matches the
-            // discipline `is_canonical_rate_limit_window` (808017c)
-            // applies on the sibling `:rate-limit :window` axis:
-            // every validated `Duration` past `validate_politicas`
-            // round-trips losslessly through the codec, by
-            // construction. The zero-floor gate strictly precedes
-            // this canonical gate so `Duration::ZERO` (which has
-            // `subsec_nanos() == 0` and would pass the canonical
-            // arm) surfaces the more self-locating
+            // Zero-floor + integer-millisecond canonical-form +
+            // upper-cap bracket on the typed `:timeout` axis. See
+            // [`crate::render::require_positive_canonical_bounded_duration`]
+            // for the full three-arm ordering discipline (zero-floor
+            // strictly precedes the canonical-form arm so
+            // `Duration::ZERO` surfaces the self-locating
             // `PolicyTimeoutZero` diagnostic naming the omit-axis
-            // remediation, not the round-trip-shape diagnostic.
-            if !is_integer_millisecond_duration(t) {
-                return Err(AplicacaoError::PolicyTimeoutNotCanonical { timeout: t });
-            }
-            // Upper-bound ceiling on the typed `:timeout` axis. The
-            // typed slot is `Option<Duration>` and the zero-floor +
-            // canonical-millisecond arms immediately above already
-            // bracket the bottom edge and the round-trip-stability
-            // shape; until this gate landed the top edge ran all the
-            // way to `Duration::MAX` and a struct-literal
-            // `MeshPolicy { timeout: Some(Duration::from_secs(86_400)), .. }`
-            // (or the equivalent author-surface `(:timeout "24h")` /
-            // `(:timeout "86400s")` typo landing in the slot) silently
-            // passed validate. The runtime substrate consuming the
-            // value (Envoy's per-route `timeout`, the future
-            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
-            // policy into a nominal-only deadline: the per-call
-            // timeout is structurally so long that no realistic
-            // synchronous-`:contratos` traversal can reach it, the
-            // mesh's "no infinite blocking" CSE invariant
-            // (MESH-COMPOSITION §V) degenerates to a contract
-            // enforced only at the wasm-engine `:limits :wall-clock`
-            // layer (per-Servico, far above the per-edge granularity
-            // the policy is meant to express), and every typed-slot
-            // consumer emits an Envoy timeout carrying a deadline
-            // that exists only nominally. Lifting the rejection to a
-            // build-time gate at `validate_politicas` brackets the
-            // typed `:timeout` set structurally — every validated
-            // value lies in `1ms..=POLICY_TIMEOUT_MAX` (1ms..=1h) —
-            // and matches the same top-and-bottom-edge discipline
+            // remediation; canonical-form strictly precedes the cap
+            // arm so a sub-millisecond above-cap `Duration` surfaces
+            // the more fundamental round-trip-shape diagnostic first)
+            // and the four peer typed-`Duration` sites that now share
+            // this canonical bracket. Every validated value lies in
+            // `1ms..=POLICY_TIMEOUT_MAX` (1ms..=1h), integer-millisecond
+            // granularity — the same top-and-bottom-edge discipline
             // [`POLICY_RETRIES_MAX`] and
             // [`POLICY_BREAKER_MAX_FAILURES_MAX`] apply on the sibling
-            // capped `:politicas` axes (zero-floor + canonical-form +
-            // upper-cap; the cap arm strictly after the canonical-form
-            // arm so a sub-millisecond above-cap `Duration` surfaces
-            // the more fundamental round-trip-shape diagnostic first).
-            if t > POLICY_TIMEOUT_MAX {
-                return Err(AplicacaoError::PolicyTimeoutExceedsCap { timeout: t });
-            }
+            // capped-`u32` `:politicas` axes.
+            crate::render::require_positive_canonical_bounded_duration(
+                t,
+                POLICY_TIMEOUT_MAX,
+                || AplicacaoError::PolicyTimeoutZero,
+                |timeout| AplicacaoError::PolicyTimeoutNotCanonical { timeout },
+                |timeout| AplicacaoError::PolicyTimeoutExceedsCap { timeout },
+            )?;
         }
         if let Some(r) = p.retries {
             // Zero-floor + upper-cap bracket on the typed `:retries`
@@ -2913,58 +2855,23 @@ impl AplicacaoSpec {
                 || AplicacaoError::PolicyBreakerZeroFailures,
                 |max_failures| AplicacaoError::PolicyBreakerMaxFailuresExceedsCap { max_failures },
             )?;
-            if cb.window.is_zero() {
-                return Err(AplicacaoError::PolicyBreakerZeroWindow);
-            }
-            // Same codec round-trip floor as the `:timeout` arm
-            // above, on the second typed-`Duration` `:politicas`
-            // axis: every validated `CircuitBreaker.window` past
-            // `validate_politicas` is an integer multiple of 1ms,
-            // and therefore round-trips losslessly through the
-            // shared `supervisor::duration_codec` the
-            // `duration_codec_required` adapter wires onto the
-            // (required, not optional) `:window` field. The
-            // zero-floor gate strictly precedes this canonical
-            // gate, peer to the `:timeout` ordering, so
-            // `Duration::ZERO` surfaces the more self-locating
-            // `PolicyBreakerZeroWindow` diagnostic.
-            if !is_integer_millisecond_duration(cb.window) {
-                return Err(AplicacaoError::PolicyBreakerWindowNotCanonical { window: cb.window });
-            }
-            // Upper-bound ceiling on the typed `:window` axis. The typed
-            // slot is `Duration` and the zero-floor +
-            // canonical-millisecond arms immediately above already
-            // bracket the bottom edge and the round-trip-stability
-            // shape; until this gate landed the top edge ran all the
-            // way to `Duration::MAX` and a struct-literal
-            // `CircuitBreaker { window: Duration::from_secs(86_400), .. }`
-            // (or the equivalent author-surface
-            // `(:circuit-breaker (:window "24h"))` / `(:window "7d")`
-            // typo landing in the slot) silently passed validate. The
-            // runtime substrate consuming the value (Envoy's
-            // `outlier_detection.interval`, the future
-            // `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
-            // MESH-COMPOSITION §III.2 #3 names) then turned a typed
-            // rolling-window breaker into a lifetime-counter breaker:
-            // the failure-counting window is structurally so long that
-            // transient failures are never forgotten, the breaker
-            // trips once and stays tripped for the lifetime of the
-            // component, and every typed-slot consumer emits an Envoy
-            // / Cilium L7 overlay carrying a "rolling" window that
-            // exists only nominally. Lifting the rejection to a
-            // build-time gate at `validate_politicas` brackets the
-            // typed `:window` set structurally — every validated value
-            // lies in `1ms..=POLICY_BREAKER_WINDOW_MAX` (1ms..=1h) —
-            // and matches the same top-and-bottom-edge discipline
+            // Zero-floor + integer-millisecond canonical-form +
+            // upper-cap bracket on the typed `:window` axis. See
+            // [`crate::render::require_positive_canonical_bounded_duration`]
+            // for the full three-arm ordering discipline (peer to the
+            // `:timeout` site immediately above); every validated
+            // value lies in `1ms..=POLICY_BREAKER_WINDOW_MAX`
+            // (1ms..=1h), integer-millisecond granularity — the same
+            // top-and-bottom-edge discipline
             // [`POLICY_TIMEOUT_MAX`] applies on the sibling
-            // duration-typed `:politicas :timeout` axis (zero-floor +
-            // canonical-form + upper-cap; the cap arm strictly after
-            // the canonical-form arm so a sub-millisecond above-cap
-            // `Duration` surfaces the more fundamental
-            // round-trip-shape diagnostic first).
-            if cb.window > POLICY_BREAKER_WINDOW_MAX {
-                return Err(AplicacaoError::PolicyBreakerWindowExceedsCap { window: cb.window });
-            }
+            // duration-typed `:politicas :timeout` axis.
+            crate::render::require_positive_canonical_bounded_duration(
+                cb.window,
+                POLICY_BREAKER_WINDOW_MAX,
+                || AplicacaoError::PolicyBreakerZeroWindow,
+                |window| AplicacaoError::PolicyBreakerWindowNotCanonical { window },
+                |window| AplicacaoError::PolicyBreakerWindowExceedsCap { window },
+            )?;
         }
         if let Some(rl) = &p.rate_limit {
             // Zero-floor + upper-cap bracket on the typed
@@ -10042,43 +9949,32 @@ mod tests {
         // predicate must accept exactly that set. Same shape every
         // other predicate-on-the-typed-slot helper carries
         // (`is_canonical_rate_limit_window_predicate_tracks_codec`).
-        assert!(super::is_integer_millisecond_duration(Duration::ZERO));
-        assert!(super::is_integer_millisecond_duration(
-            Duration::from_millis(1)
-        ));
-        assert!(super::is_integer_millisecond_duration(
-            Duration::from_millis(500)
-        ));
-        assert!(super::is_integer_millisecond_duration(
-            Duration::from_millis(1500)
-        ));
-        assert!(super::is_integer_millisecond_duration(Duration::from_secs(
-            30
-        )));
-        assert!(super::is_integer_millisecond_duration(Duration::from_secs(
-            3600
-        )));
+        // Read directly from the codec-owned predicate — the crate's
+        // single source of truth every typed-`Duration` axis now routes
+        // through via
+        // [`crate::render::require_positive_canonical_bounded_duration`].
+        use super::supervisor::duration_codec::is_integer_millisecond_duration;
+        assert!(is_integer_millisecond_duration(Duration::ZERO));
+        assert!(is_integer_millisecond_duration(Duration::from_millis(1)));
+        assert!(is_integer_millisecond_duration(Duration::from_millis(500)));
+        assert!(is_integer_millisecond_duration(Duration::from_millis(1500)));
+        assert!(is_integer_millisecond_duration(Duration::from_secs(30)));
+        assert!(is_integer_millisecond_duration(Duration::from_secs(3600)));
         // Non-integer-millisecond residue: rejected.
-        assert!(!super::is_integer_millisecond_duration(
-            Duration::from_micros(1)
-        ));
-        assert!(!super::is_integer_millisecond_duration(
-            Duration::from_micros(500)
-        ));
-        assert!(!super::is_integer_millisecond_duration(
-            Duration::from_micros(1500)
-        ));
-        assert!(!super::is_integer_millisecond_duration(
-            Duration::from_nanos(1)
-        ));
-        assert!(!super::is_integer_millisecond_duration(
-            Duration::from_nanos(999_999)
-        ));
+        assert!(!is_integer_millisecond_duration(Duration::from_micros(1)));
+        assert!(!is_integer_millisecond_duration(Duration::from_micros(500)));
+        assert!(!is_integer_millisecond_duration(Duration::from_micros(
+            1500
+        )));
+        assert!(!is_integer_millisecond_duration(Duration::from_nanos(1)));
+        assert!(!is_integer_millisecond_duration(Duration::from_nanos(
+            999_999
+        )));
         // The 1-ns-past-1ms boundary: rejected (no longer a clean
         // integer-millisecond multiple).
-        assert!(!super::is_integer_millisecond_duration(
-            Duration::from_nanos(1_000_001)
-        ));
+        assert!(!is_integer_millisecond_duration(Duration::from_nanos(
+            1_000_001
+        )));
     }
 
     #[test]

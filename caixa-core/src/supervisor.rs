@@ -420,100 +420,30 @@ impl SupervisorSpec {
             || SupervisorError::ZeroMaxRestarts,
             |max_restarts| SupervisorError::MaxRestartsExceedsCap { max_restarts },
         )?;
-        if matches!(self.restart_window, Some(d) if d.is_zero()) {
-            return Err(SupervisorError::RestartWindowZero);
-        }
-        // Sub-millisecond residue gate on the typed `:restart-window`
-        // axis. The shared `duration_codec` (which serializes /
-        // deserializes this slot via `with = "duration_codec"`)
-        // truncates to `as_millis()` before picking the canonical unit,
-        // so any `Duration` whose `subsec_nanos() % 1_000_000 != 0`
-        // either truncates on first serialize (e.g.
-        // `Duration::from_micros(1500)` = 1_500_000 ns → renders
-        // `"1ms"` → parses back to `Duration::from_millis(1)` =
-        // 1_000_000 ns ≠ original) or — for sub-millisecond magnitudes
-        // — renders as the literal `"0s"` (`from_micros(500)` →
-        // `as_millis() == 0` → renders `"0s"`) the zero-floor arm
-        // immediately above rejects on re-validate. The serde path is
-        // already gated at the codec layer (a4ae535 — every
-        // `{"restartWindow":"1.5s"}`-shaped JSON payload surfaces a
-        // structured diagnostic at deserialize); this arm closes the
-        // programmatic-struct-literal path the codec gate can't see
-        // (`SupervisorSpec { restart_window: Some(Duration::from_micros(1500)), .. }`,
-        // or any wasm-operator / supervisor-tree caller propagating a
-        // `Duration` from a non-`<integer><unit>`-string source). The
-        // shared predicate
-        // [`duration_codec::is_integer_millisecond_duration`] lives
-        // next to the codec — single source of truth, drift between
-        // the codec's accepted granularity and any typed `Duration`
-        // slot's accepted set is a single-edit fix at the predicate
-        // rather than a silent round-trip break the next consumer (the
-        // future wasm-operator's per-supervisor MaxIntensity/Period
-        // accounting, the M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
-        // materializer's `:restart-window` admission webhook)
-        // discovers at apply time. Closes the fourth (and last) typed-
-        // `Duration` axis on this discipline — peer with
-        // [`crate::LimitsError::WallClockNotCanonical`] (82fc3ef on
-        // `:limits :wall-clock`) and
-        // [`crate::AplicacaoError::PolicyTimeoutNotCanonical`] /
-        // [`crate::AplicacaoError::PolicyBreakerWindowNotCanonical`]
-        // (a4ae535 on the two `:politicas` axes). The zero-floor arm
-        // strictly precedes this canonical gate so `Duration::ZERO`
-        // (`subsec_nanos() == 0` — a value the canonical arm would
-        // otherwise accept) surfaces the more self-locating
-        // `RestartWindowZero` diagnostic with its omit-axis
-        // remediation directly named, peer to the
-        // `WallClockZero` → `WallClockNotCanonical` and
-        // `PolicyTimeoutZero` → `PolicyTimeoutNotCanonical` cross-arm
-        // ordering on the sibling axes.
-        if let Some(w) = self.restart_window
-            && !duration_codec::is_integer_millisecond_duration(w)
-        {
-            return Err(SupervisorError::RestartWindowNotCanonical { window: w });
-        }
-        // Upper-bound gate on `:restart-window`: every validated value
-        // must also fit within the typed-`Duration` ceiling
-        // ([`SUPERVISOR_RESTART_WINDOW_MAX`] = 1h = 3600s). The zero-floor,
-        // canonical-form, and this cap arm together bracket the typed
-        // `:restart-window` axis structurally — every validated value
-        // lies in `1ms..=SUPERVISOR_RESTART_WINDOW_MAX`, integer-millisecond
-        // granularity. Until this gate landed the shared duration codec
-        // accepted any `Duration` past zero with integer-ms residue
-        // (the parser's only upper bound was `u64::MAX` seconds, the
-        // largest value the `<integer>h` form can encode), so
-        // `(:supervisor (:restart-window "24h"))` round-tripped cleanly
-        // through serde and the per-supervisor CSE invariant (no
-        // `:restart-window` the operator's `MaxIntensity / Period`
-        // reconciler can't honor as a meaningful rolling-window reset)
-        // was a runtime, not build-time, contract. Same trajectory as
-        // the three sibling typed-`Duration` cap lifts on
-        // [`crate::LIMITS_WALL_CLOCK_MAX`] (per-process wasm-engine
-        // deadline), [`crate::POLICY_TIMEOUT_MAX`] (per-edge mesh-policy
-        // deadline), and [`crate::POLICY_BREAKER_WINDOW_MAX`]
-        // (per-breaker rolling-window) — the four typed-`Duration` axes
-        // now share a single uniform top edge at the codec's largest
-        // emitted unit so the next typed-slot wiring (the future
-        // wasm-operator's per-supervisor `MaxIntensity / Period`
-        // reconciler, the M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
-        // materializer's admission webhook, the `caixa-operator`'s
-        // hierarchical reconciliation scheduler) reaches for any of the
-        // four knowing the value is in `1ms..=1h` without re-validating
-        // at the renderer layer. The canonical-form arm strictly
-        // precedes this cap so a `Duration` that is *both*
-        // sub-millisecond and above-cap surfaces the more fundamental
-        // round-trip-shape diagnostic first (the cap's `1ms..=1h`
-        // remediation would be misleading when no integer-ms form of
-        // the offending value exists). Same posture every peer
-        // zero-then-shape-then-cap chain uses on this surface
-        // (`WallClockZero` → `WallClockNotCanonical` →
-        // `WallClockExceedsCap`, `PolicyTimeoutZero` →
-        // `PolicyTimeoutNotCanonical` → `PolicyTimeoutExceedsCap`,
-        // `PolicyBreakerZeroWindow` → `PolicyBreakerWindowNotCanonical`
-        // → `PolicyBreakerWindowExceedsCap`).
-        if let Some(w) = self.restart_window
-            && w > SUPERVISOR_RESTART_WINDOW_MAX
-        {
-            return Err(SupervisorError::RestartWindowExceedsCap { window: w });
+        if let Some(w) = self.restart_window {
+            // Zero-floor + integer-millisecond canonical-form +
+            // upper-cap bracket on the typed `:restart-window` axis.
+            // See
+            // [`crate::render::require_positive_canonical_bounded_duration`]
+            // for the full three-arm ordering discipline (zero-floor
+            // strictly precedes canonical-form so `Duration::ZERO`
+            // surfaces the self-locating `RestartWindowZero`
+            // diagnostic; canonical-form strictly precedes the cap arm
+            // so a sub-millisecond above-cap value surfaces the more
+            // fundamental round-trip-shape diagnostic first) and the
+            // three peer typed-`Duration` sites that share this
+            // canonical bracket ([`crate::MeshPolicy::timeout`],
+            // [`crate::CircuitBreaker::window`],
+            // [`crate::LimitsSpec::wall_clock`]). Every validated
+            // value lies in `1ms..=SUPERVISOR_RESTART_WINDOW_MAX`
+            // (1ms..=1h), integer-millisecond granularity.
+            crate::render::require_positive_canonical_bounded_duration(
+                w,
+                SUPERVISOR_RESTART_WINDOW_MAX,
+                || SupervisorError::RestartWindowZero,
+                |window| SupervisorError::RestartWindowNotCanonical { window },
+                |window| SupervisorError::RestartWindowExceedsCap { window },
+            )?;
         }
         let mut seen = std::collections::HashSet::new();
         for child in &self.children {
