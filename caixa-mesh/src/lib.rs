@@ -2474,9 +2474,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
         }
         ingress_rule.insert_sequence(CILIUM_KEY_TO_PORTS, to_ports_seq);
-        if let Some(a) = &mtls_overlay {
-            ingress_rule.insert_str_key(CILIUM_KEY_AUTHENTICATION, a.clone());
-        }
+        ingress_rule.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, mtls_overlay.as_ref());
 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert_str_key(CILIUM_KEY_ENDPOINT_SELECTOR, endpoint_selector);
@@ -2684,12 +2682,8 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         let mut rule = serde_yaml::Mapping::new();
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_MATCHES, match_entry);
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_BACKEND_REFS, backend_ref);
-        if let Some(t) = &timeout_overlay {
-            rule.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, t.clone());
-        }
-        if let Some(r) = &retry_overlay {
-            rule.insert_str_key(GATEWAY_API_KEY_RETRY, r.clone());
-        }
+        rule.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, timeout_overlay.as_ref());
+        rule.insert_str_key_if_some(GATEWAY_API_KEY_RETRY, retry_overlay.as_ref());
         rules.push(serde_yaml::Value::Mapping(rule));
     }
 
