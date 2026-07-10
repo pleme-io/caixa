@@ -849,23 +849,14 @@ pub fn upsert_into_helmrelease_programs(
     let serde_yaml::Value::Mapping(spec_map) = spec else {
         return Err(Error::MissingField("spec must be a mapping"));
     };
-    let values = spec_map
-        .entry_str_key(FLUX_KEY_VALUES)
-        .or_insert(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
-    let serde_yaml::Value::Mapping(values_map) = values else {
-        return Err(Error::MissingField("spec.values must be a mapping"));
-    };
-    let programs_val = values_map
-        .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
-        .or_insert(serde_yaml::Value::Sequence(Vec::new()));
-    let arr = match programs_val {
-        serde_yaml::Value::Sequence(seq) => seq,
-        _ => {
-            return Err(Error::MissingField(
-                "spec.values.programs must be a sequence",
-            ));
-        }
-    };
+    let values_map = spec_map
+        .entry_or_default_mapping(FLUX_KEY_VALUES)
+        .ok_or(Error::MissingField("spec.values must be a mapping"))?;
+    let arr = values_map
+        .entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS)
+        .ok_or(Error::MissingField(
+            "spec.values.programs must be a sequence",
+        ))?;
 
     let inserted = caixa_core::upsert_named_entry(arr, new_entry, FLEET_PROGRAMS_KEY_NAME, || {
         Error::MissingField(FLEET_PROGRAMS_KEY_NAME)
@@ -894,14 +885,9 @@ pub fn upsert_into_programs_yaml(
         ));
     };
 
-    let programs_val = root
-        .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
-        .or_insert(serde_yaml::Value::Sequence(Vec::new()));
-
-    let arr = match programs_val {
-        serde_yaml::Value::Sequence(seq) => seq,
-        _ => return Err(Error::MissingField("programs must be a sequence")),
-    };
+    let arr = root
+        .entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS)
+        .ok_or(Error::MissingField("programs must be a sequence"))?;
 
     let inserted = caixa_core::upsert_named_entry(arr, new_entry, FLEET_PROGRAMS_KEY_NAME, || {
         Error::MissingField(FLEET_PROGRAMS_KEY_NAME)

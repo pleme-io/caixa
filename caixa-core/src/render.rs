@@ -13910,6 +13910,149 @@ pub trait MappingExt {
         key: &str,
         value: Option<&serde_yaml::Value>,
     ) -> Option<serde_yaml::Value>;
+
+    /// Fetch a `&mut serde_yaml::Mapping` at `key`, defaulting an empty
+    /// [`serde_yaml::Mapping`] into place when the entry is absent.
+    /// Returns `Some(&mut inner)` on the absent-key (fresh empty
+    /// Mapping) and present-Mapping arms; `None` iff `key` holds a
+    /// different [`serde_yaml::Value`] variant — a structural
+    /// container-type mismatch the caller surfaces as its own
+    /// domain-specific error (`Error::MissingField("spec.values must
+    /// be a mapping")` for the caixa-flux Flux-HelmRelease overlay
+    /// walker).
+    ///
+    /// The canonical shape 1 production call site in `caixa-flux`
+    /// (`upsert_into_helmrelease_programs`'s per-`HelmRelease.spec.values`
+    /// container-upsert on the way down to
+    /// `spec.values.programs[]`) previously carried inline as a
+    /// four-line block combining [`Self::entry_str_key`]'s entry-API
+    /// key promotion (68d035e), an
+    /// `.or_insert(Value::Mapping(Mapping::new()))` empty-Mapping
+    /// default, and a `let Value::Mapping(inner) = _ else { Err(...) }`
+    /// destructure — a two-token semantic payload (the schema key +
+    /// the domain-specific type-mismatch diagnostic) buried under
+    /// three boilerplate axes (`Value::Mapping(_)` variant promotion,
+    /// `Mapping::new()` empty-container construction, the outer
+    /// `let else` destructure). Peer to
+    /// [`Self::entry_or_default_sequence`] on the sibling `Vec<Value>`-
+    /// valued idempotent-container-upsert axis — the two together
+    /// partition the entry-API-container-upsert surface exactly on the
+    /// container-variant axis: [`Self::entry_or_default_mapping`] for
+    /// nested-Mapping sub-blocks, [`Self::entry_or_default_sequence`]
+    /// for list-shape sub-blocks.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-flux's `upsert_into_helmrelease_programs` per-
+    ///     `HelmRelease.spec.values` container-upsert
+    ///     (`FLUX_KEY_VALUES` around the default fresh
+    ///     `Value::Mapping`, on the way down to the nested
+    ///     `spec.values.programs[]` sequence).
+    ///
+    /// Lifting collapses the four-line block into one method call the
+    /// caller reads as intent (`mapping.entry_or_default_mapping(<KEY>)
+    /// .ok_or(<ERR>)?` — "give me the nested Mapping at this schema
+    /// key, defaulting empty if absent, else surface my domain
+    /// error") rather than five hand-spelled positional artifacts
+    /// (`serde_yaml::` path re-quote, `Value::Mapping(_)` promotion,
+    /// `Mapping::new()` construction, the entry-API `.or_insert(...)`
+    /// call, plus the outer `let Value::Mapping(_) = _ else {}`
+    /// destructure). The next renderer to land — the per-`:politicas`
+    /// `CiliumClusterwideEnvoyConfig` emitter (whose per-cluster
+    /// upsert walks
+    /// `HelmRelease.spec.values.<library>.<:politicas-axis>`,
+    /// idempotent-upserting nested-Mapping sub-blocks under each
+    /// axis, MESH-COMPOSITION §III.2 #3), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (which
+    /// upserts `status.<axis>` nested-Mapping sub-blocks on partial
+    /// reconciles, §III.2 #5), the M4 cross-cluster fan-out's
+    /// per-cluster idempotent `HelmRelease.spec.values.<library>`
+    /// container-upsert — gets the canonical entry-API-with-
+    /// container-type-check for free with one method call, instead
+    /// of re-inlining the four-line block.
+    ///
+    /// The default-empty-Mapping construction fires only on the
+    /// absent-key arm (`.or_insert_with(...)` gates the closure on
+    /// vacancy) — the present-key arm reuses the existing Mapping
+    /// verbatim, so the caller's downstream writes on `&mut inner`
+    /// compose with any prior overlay writes from earlier passes
+    /// (the exact idempotent-upsert semantic the caixa-flux
+    /// per-cluster `feira app deploy` write path depends on to
+    /// preserve operator-pinned overlays across re-renders).
+    fn entry_or_default_mapping(&mut self, key: &str) -> Option<&mut serde_yaml::Mapping>;
+
+    /// Fetch a `&mut Vec<serde_yaml::Value>` at `key`, defaulting an
+    /// empty [`Vec<serde_yaml::Value>`] into place when the entry is
+    /// absent. Returns `Some(&mut inner)` on the absent-key (fresh
+    /// empty Sequence) and present-Sequence arms; `None` iff `key`
+    /// holds a different [`serde_yaml::Value`] variant — a structural
+    /// container-type mismatch the caller surfaces as its own
+    /// domain-specific error (`Error::MissingField("programs must be
+    /// a sequence")` for the caixa-flux fleet-programs upsert
+    /// walkers).
+    ///
+    /// The canonical shape 2 production call sites in `caixa-flux`
+    /// (`upsert_into_helmrelease_programs`'s per-
+    /// `HelmRelease.spec.values.programs` container-upsert and
+    /// `upsert_into_programs_yaml`'s top-level `programs:` container-
+    /// upsert) previously carried inline as a four-line block
+    /// combining [`Self::entry_str_key`]'s entry-API key promotion
+    /// (68d035e), an `.or_insert(Value::Sequence(Vec::new()))`
+    /// empty-Sequence default, and a `match _ { Value::Sequence(seq)
+    /// => seq, _ => return Err(...) }` destructure — a two-token
+    /// semantic payload (the schema key + the domain-specific
+    /// type-mismatch diagnostic) buried under three boilerplate axes
+    /// (`Value::Sequence(_)` variant promotion, `Vec::new()`
+    /// empty-container construction, the outer `match` destructure).
+    /// Peer to [`Self::entry_or_default_mapping`] on the sibling
+    /// nested-Mapping-valued idempotent-container-upsert axis.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-flux's `upsert_into_helmrelease_programs` per-
+    ///     `HelmRelease.spec.values.programs` list-container-upsert
+    ///     (`FLEET_PROGRAMS_KEY_PROGRAMS` around the default fresh
+    ///     `Value::Sequence`, one path deep in a `HelmRelease`
+    ///     `spec.values.` sub-tree);
+    ///   * caixa-flux's `upsert_into_programs_yaml` per-top-level
+    ///     `programs:` list-container-upsert
+    ///     (`FLEET_PROGRAMS_KEY_PROGRAMS` around the default fresh
+    ///     `Value::Sequence` — the sibling of the
+    ///     `upsert_into_helmrelease_programs` site on the same key,
+    ///     one path at the values.yaml root).
+    ///
+    /// Lifting collapses the four-line block into one method call the
+    /// caller reads as intent (`mapping.entry_or_default_sequence(<KEY>)
+    /// .ok_or(<ERR>)?` — "give me the list at this schema key,
+    /// defaulting empty if absent, else surface my domain error")
+    /// rather than five hand-spelled positional artifacts
+    /// (`serde_yaml::` path re-quote, `Value::Sequence(_)` promotion,
+    /// `Vec::new()` construction, the entry-API `.or_insert(...)`
+    /// call, plus the outer `match { Value::Sequence(_) => _, _ =>
+    /// return Err(_) }` destructure). The next renderer to land — the
+    /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter
+    /// (whose per-cluster upsert walks nested list-shape sub-blocks
+    /// `spec.resources[]` / `spec.listeners[]` / `spec.virtualHosts[]`
+    /// under existing operator-pinned overlay CRs, MESH-COMPOSITION
+    /// §III.2 #3), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (which
+    /// upserts `status.selectors[]` / `status.gates[]` list-shape
+    /// sub-blocks on partial reconciles, §III.2 #5), the M4 cross-
+    /// cluster fan-out's per-cluster idempotent
+    /// `HelmRelease.spec.values.programs` list-upsert — gets the
+    /// canonical entry-API-with-container-type-check for free with
+    /// one method call, instead of re-inlining the four-line block.
+    ///
+    /// The default-empty-Sequence construction fires only on the
+    /// absent-key arm (`.or_insert_with(...)` gates the closure on
+    /// vacancy) — the present-key arm reuses the existing Vec
+    /// verbatim, so the caller's downstream `upsert_named_entry`
+    /// (10bf310) call on `&mut inner` composes with any prior
+    /// entries the emitter wrote on earlier passes (the exact
+    /// idempotent-upsert semantic the `feira app deploy` per-cluster
+    /// write path depends on to preserve prior `programs[]` entries
+    /// across per-Servico rewrites).
+    fn entry_or_default_sequence(&mut self, key: &str) -> Option<&mut Vec<serde_yaml::Value>>;
 }
 
 impl MappingExt for serde_yaml::Mapping {
@@ -13971,6 +14114,28 @@ impl MappingExt for serde_yaml::Mapping {
         value: Option<&serde_yaml::Value>,
     ) -> Option<serde_yaml::Value> {
         value.and_then(|v| self.insert_str_key(key, v.clone()))
+    }
+
+    #[inline]
+    fn entry_or_default_mapping(&mut self, key: &str) -> Option<&mut serde_yaml::Mapping> {
+        match self
+            .entry_str_key(key)
+            .or_insert_with(|| serde_yaml::Value::Mapping(serde_yaml::Mapping::new()))
+        {
+            serde_yaml::Value::Mapping(m) => Some(m),
+            _ => None,
+        }
+    }
+
+    #[inline]
+    fn entry_or_default_sequence(&mut self, key: &str) -> Option<&mut Vec<serde_yaml::Value>> {
+        match self
+            .entry_str_key(key)
+            .or_insert_with(|| serde_yaml::Value::Sequence(Vec::new()))
+        {
+            serde_yaml::Value::Sequence(s) => Some(s),
+            _ => None,
+        }
     }
 }
 
@@ -24908,6 +25073,217 @@ spec:
              overwrite the emitter's prior write while the hand-written \
              inline routing sees it as present and preserves it (or vice \
              versa)"
+        );
+    }
+
+    // ── entry_or_default_{mapping,sequence} — entry-API-with-container-check ─
+
+    #[test]
+    fn mapping_ext_entry_or_default_mapping_seeds_empty_inner_when_absent() {
+        // Absent-key path — the helper mints an empty
+        // `Value::Mapping(Mapping::new())` under the promoted key and
+        // returns `Some(&mut inner)` pointing at the fresh empty inner.
+        // Pin the seed shape so a future refactor that reaches for a
+        // different empty-container variant (e.g. `Value::Null`, or a
+        // `Mapping::with_capacity(_)` non-empty pre-allocation) or
+        // breaks the `Option::Some` return contract is a compile-visible
+        // break, not a silent per-consumer regression at the caixa-flux
+        // `upsert_into_helmrelease_programs` `spec.values` container-
+        // upsert. Peer with the sibling
+        // [`mapping_ext_entry_or_default_sequence_seeds_empty_inner_when_absent`]
+        // on the sibling list-container axis.
+        let mut m = serde_yaml::Mapping::new();
+        {
+            let inner = m
+                .entry_or_default_mapping(FLUX_KEY_VALUES)
+                .expect("absent-key path seeds an empty Mapping and returns Some(&mut _)");
+            assert!(
+                inner.is_empty(),
+                "the seeded default must be an EMPTY Mapping — a \
+                 non-empty pre-allocation would land a K8s CRD schema \
+                 pre-populated block the emitter never authored"
+            );
+        }
+        // Key is exactly the `Value::String` promotion of the input,
+        // and the value is the empty-Mapping seed.
+        let got = m
+            .get(FLUX_KEY_VALUES)
+            .expect("or_default seeded the key under Value::String promotion");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+            "entry_or_default_mapping seeds Value::Mapping(Mapping::new()) \
+             verbatim on the absent-key arm — no reshape, no wrap"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_or_default_mapping_preserves_prior_mapping_on_present_arm() {
+        // Present-key path with matching variant — the helper mirrors
+        // [`serde_yaml::mapping::Entry::or_insert_with`]'s occupied
+        // branch: the prior value is preserved, and the returned
+        // `&mut Mapping` points at that prior inner Mapping (NOT a
+        // fresh empty default). Pin the leave-prior-untouched semantic
+        // so a future refactor that reaches for an `.insert`-style
+        // overwrite flow doesn't silently clobber every idempotent-
+        // container-upsert consumer (the `feira app deploy` per-cluster
+        // write path, the M4 per-cluster HelmRelease overlay merger).
+        let mut m = serde_yaml::Mapping::new();
+        let mut prior_inner = serde_yaml::Mapping::new();
+        prior_inner.insert_str_key(HELM_VALUES_KEY_ENABLED, serde_yaml::Value::Bool(true));
+        m.insert_mapping(FLUX_KEY_VALUES, prior_inner.clone());
+        {
+            let inner = m
+                .entry_or_default_mapping(FLUX_KEY_VALUES)
+                .expect("present-Mapping-variant path returns Some(&mut prior)");
+            assert_eq!(
+                inner, &prior_inner,
+                "entry_or_default_mapping returns &mut prior on the \
+                 present-key path — the default empty Mapping must not \
+                 overwrite the emitter's prior write"
+            );
+        }
+        // Value at the key is still the pre-existing one, verbatim.
+        let got = m
+            .get(FLUX_KEY_VALUES)
+            .expect("key is still present after or_default on the present-key path");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Mapping(prior_inner),
+            "or_default on the present-key path preserves the prior \
+             value verbatim — no clobber, no reshape"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_or_default_mapping_returns_none_on_variant_mismatch() {
+        // Present-key path with mismatched variant — the helper returns
+        // `None`, letting the caller surface its domain-specific
+        // "expected Mapping at this schema key" diagnostic (rather than
+        // silently clobbering the mismatched prior value). Pin the
+        // structural-mismatch-is-None contract so a future refactor
+        // that reaches for a fallback-to-empty-default flow doesn't
+        // silently overwrite user-authored non-Mapping data at the
+        // canonical caixa-flux `Error::MissingField("spec.values must
+        // be a mapping")` site — the mismatched-variant arm is
+        // load-bearing for the domain-error diagnostic path, not just
+        // a corner case.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(FLUX_KEY_VALUES, "not-a-mapping");
+        let result = m.entry_or_default_mapping(FLUX_KEY_VALUES);
+        assert!(
+            result.is_none(),
+            "entry_or_default_mapping returns None on variant \
+             mismatch — the caller's `.ok_or(Error::MissingField(_))?` \
+             chain surfaces the structural type-mismatch diagnostic"
+        );
+        let got = m
+            .get(FLUX_KEY_VALUES)
+            .expect("mismatched-variant prior value stays present after variant-check");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::String("not-a-mapping".into()),
+            "None arm on variant mismatch leaves the prior value \
+             untouched — the caller's domain-error path fires without \
+             clobbering the user-authored data"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_or_default_sequence_seeds_empty_inner_when_absent() {
+        // Absent-key path — the helper mints an empty
+        // `Value::Sequence(Vec::new())` under the promoted key and
+        // returns `Some(&mut inner)` pointing at the fresh empty
+        // `Vec<Value>`. Peer with
+        // [`mapping_ext_entry_or_default_mapping_seeds_empty_inner_when_absent`]
+        // on the nested-Mapping-container axis.
+        let mut m = serde_yaml::Mapping::new();
+        {
+            let inner = m
+                .entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS)
+                .expect("absent-key path seeds an empty Vec and returns Some(&mut _)");
+            assert!(
+                inner.is_empty(),
+                "the seeded default must be an EMPTY Vec — a non-empty \
+                 pre-allocation would land a pre-populated fleet-programs \
+                 list the emitter never authored"
+            );
+        }
+        let got = m
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .expect("or_default seeded the key under Value::String promotion");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(Vec::new()),
+            "entry_or_default_sequence seeds Value::Sequence(Vec::new()) \
+             verbatim on the absent-key arm — no reshape, no wrap"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_or_default_sequence_preserves_prior_sequence_on_present_arm() {
+        // Present-key path with matching variant — the helper mirrors
+        // [`serde_yaml::mapping::Entry::or_insert_with`]'s occupied
+        // branch: the prior `Vec` is preserved, and the returned
+        // `&mut Vec<Value>` points at that prior inner Vec (NOT a
+        // fresh empty default). The exact idempotent-upsert semantic
+        // caixa-flux's `upsert_into_programs_yaml` /
+        // `upsert_into_helmrelease_programs` depend on to preserve
+        // prior `programs[]` entries across per-Servico rewrites.
+        let mut m = serde_yaml::Mapping::new();
+        let prior_inner = vec![serde_yaml::Value::String("existing".into())];
+        m.insert_sequence(FLEET_PROGRAMS_KEY_PROGRAMS, prior_inner.clone());
+        {
+            let inner = m
+                .entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS)
+                .expect("present-Sequence-variant path returns Some(&mut prior)");
+            assert_eq!(
+                inner, &prior_inner,
+                "entry_or_default_sequence returns &mut prior on the \
+                 present-key path — the default empty Vec must not \
+                 overwrite the emitter's prior write"
+            );
+        }
+        let got = m
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .expect("key is still present after or_default on the present-key path");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(prior_inner),
+            "or_default on the present-key path preserves the prior \
+             value verbatim — no clobber, no reshape"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_or_default_sequence_returns_none_on_variant_mismatch() {
+        // Present-key path with mismatched variant — the helper returns
+        // `None`, letting the caller surface its domain-specific
+        // "programs must be a sequence" diagnostic (rather than
+        // silently clobbering the mismatched prior value). Pin the
+        // structural-mismatch-is-None contract so a future refactor
+        // that reaches for a fallback-to-empty-default flow doesn't
+        // silently overwrite user-authored non-Sequence data at the
+        // canonical caixa-flux `Error::MissingField("programs must be
+        // a sequence")` site.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_string(FLEET_PROGRAMS_KEY_PROGRAMS, "not-a-sequence");
+        let result = m.entry_or_default_sequence(FLEET_PROGRAMS_KEY_PROGRAMS);
+        assert!(
+            result.is_none(),
+            "entry_or_default_sequence returns None on variant \
+             mismatch — the caller's `.ok_or(Error::MissingField(_))?` \
+             chain surfaces the structural type-mismatch diagnostic"
+        );
+        let got = m
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .expect("mismatched-variant prior value stays present after variant-check");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::String("not-a-sequence".into()),
+            "None arm on variant mismatch leaves the prior value \
+             untouched — the caller's domain-error path fires without \
+             clobbering the user-authored data"
         );
     }
 
