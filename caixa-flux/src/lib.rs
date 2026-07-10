@@ -799,13 +799,18 @@ pub fn programs_yaml_entry(
 
     // Splice every spec.* field through (module, trigger, capabilities,
     // config, resources, serviceAccount). Operator + chart schemas are
-    // already authoritative; we don't re-validate here.
-    if let serde_yaml::Value::Mapping(spec_map) = spec {
-        for (k, v) in spec_map {
-            if let Some(s) = k.as_str() {
-                entry.insert_str_key(s, v.clone());
-            }
-        }
+    // already authoritative; we don't re-validate here. String-key
+    // filter + optional-Mapping-shape short-circuit come from the
+    // lifted caixa_core::string_keyed_entries walk — same lift as
+    // servico_m2_overlay applied to the ComputeUnit-YAML `spec.*` axis
+    // (both call sites in caixa-flux + caixa-helm now route their
+    // ComputeUnit `spec.*` splice through one canonical helper, so a
+    // future change to the string-key filter — e.g. rejecting empty
+    // string keys, canonicalizing DNS-1123 casing — reaches both
+    // renderers by construction instead of a coordinated two-file
+    // rewrite).
+    for (k, v) in caixa_core::string_keyed_entries(spec) {
+        entry.insert_str_key(k, v.clone());
     }
 
     // M2 typed-substrate slots — propagate from caixa.lisp into the

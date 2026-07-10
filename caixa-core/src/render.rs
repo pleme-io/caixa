@@ -12341,6 +12341,72 @@ pub fn singleton_mapping_sequence(m: serde_yaml::Mapping) -> serde_yaml::Value {
     serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(m)])
 }
 
+/// Iterator over the string-keyed entries of a [`serde_yaml::Value`]
+/// that may or may not be a [`serde_yaml::Mapping`] — the canonical
+/// shape both per-Servico renderers reach for when splicing the
+/// upstream `ComputeUnit` YAML's `spec.*` fields into their emitted
+/// output map.
+///
+/// Two identical-shape call sites collapse onto this helper — both
+/// per-Servico renderers previously carried a five-line
+/// `if let Value::Mapping(_) = spec { for (k, v) in _ { if let
+/// Some(s) = k.as_str() { <dst>.insert(s, v.clone()) } } }` block:
+///
+///   * [`caixa_flux`][flux-programs]'s `programs_yaml_entry` splices
+///     `computeunit_yaml.spec.*` into the emitted programs.yaml entry
+///     ([`serde_yaml::Mapping`] destination, via
+///     [`MappingExt::insert_str_key`]);
+///   * [`caixa_helm`][helm-values]'s `build_values_yaml` splices the
+///     same `computeunit_yaml.spec.*` into the values.yaml wrapped
+///     block ([`std::collections::BTreeMap`]`<String, Value>`
+///     destination, via `BTreeMap::insert`).
+///
+/// Both sites need the same walk (destructure as [`serde_yaml::Mapping`],
+/// iterate its entries, keep only string-keyed pairs, hand the caller
+/// each `(&str, &Value)` pair) but drop the values into different
+/// destination map types, so the lift is at the iterator layer, not
+/// the insert layer. The caller keeps its own insert idiom (
+/// [`MappingExt::insert_str_key`] on a [`serde_yaml::Mapping`],
+/// `BTreeMap::insert` on the [`BTreeMap`]-shaped values block, a
+/// future renderer's own destination) but reaches through one lifted
+/// walk with one contract on how non-string-keyed entries are handled:
+/// silently dropped, matching the behavior both renderers implemented
+/// inline via the `if let Some(s) = k.as_str()` filter.
+///
+/// Returns an empty iterator when `v` is not a
+/// [`serde_yaml::Value::Mapping`] — the shape the prior `if let
+/// Value::Mapping(_) = v` arm silently no-ops on (so a Null / String
+/// / Sequence / Number / Bool `spec` field, itself schema-invalid
+/// upstream but tolerated by the renderer, contributes zero entries
+/// to the destination map instead of raising a per-shape error).
+/// Non-string-keyed entries within a valid Mapping are silently
+/// dropped — the same behavior the prior `if let Some(s) = k.as_str()`
+/// arm carried, since `serde_yaml` permits arbitrary [`Value`] keys
+/// (numeric, boolean, sub-mapping) that don't round-trip through the
+/// downstream K8s YAML-key surface (which requires string keys).
+///
+/// The next per-Servico renderer to land — the future per-Servico
+/// OCI packager whose emitted `Dockerfile` LABEL block spliced through
+/// the same `computeunit_yaml.spec.*` string-key set, the M4
+/// per-Servico `wasm.pleme.io/v1alpha1/ComputeUnit` CR materializer
+/// whose emitted `spec.*` block splices the same set through onto the
+/// typed [`kube::api::CustomResource`] view, the future `caixa-otel`
+/// renderer's per-Servico OpenTelemetry-Collector resource-attribute
+/// splice — gets the canonical string-key filter for free with one
+/// method call, instead of re-inlining the same five-line
+/// `if let Value::Mapping(_) = _` walk.
+///
+/// [flux-programs]: https://docs.rs/caixa-flux
+/// [helm-values]: https://docs.rs/caixa-helm
+pub fn string_keyed_entries(
+    v: &serde_yaml::Value,
+) -> impl Iterator<Item = (&str, &serde_yaml::Value)> + '_ {
+    v.as_mapping()
+        .into_iter()
+        .flat_map(|m| m.iter())
+        .filter_map(|(k, v)| k.as_str().map(|s| (s, v)))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -25056,6 +25122,172 @@ spec:
             "singleton_mapping_sequence(m) must byte-equal \
              Value::Sequence(vec![Value::Mapping(m)]) — otherwise the \
              seven routed caixa-mesh call sites drift silently at emit time"
+        );
+    }
+
+    #[test]
+    fn string_keyed_entries_yields_each_string_key_and_value_ref() {
+        // The lift's load-bearing contract: given a Value::Mapping with
+        // string keys, yield each `(&str, &Value)` pair in insertion
+        // order. Both routed renderers (caixa-flux::programs_yaml_entry
+        // and caixa-helm::build_values_yaml) depend on the yielded pair
+        // shape to drive their per-destination insert — a drift in
+        // yielded item type is a compile-visible break, not a silent
+        // shape shift.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            COMPUTEUNIT_SPEC_KEY_MODULE,
+            serde_yaml::Value::String("oci://…".into()),
+        );
+        spec.insert_str_key(
+            COMPUTEUNIT_SPEC_KEY_TRIGGER,
+            serde_yaml::Value::String("http".into()),
+        );
+        spec.insert_str_key(
+            COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+            serde_yaml::Value::Sequence(vec![]),
+        );
+        let v = serde_yaml::Value::Mapping(spec);
+        let keys: Vec<&str> = string_keyed_entries(&v).map(|(k, _)| k).collect();
+        assert_eq!(
+            keys,
+            vec![
+                COMPUTEUNIT_SPEC_KEY_MODULE,
+                COMPUTEUNIT_SPEC_KEY_TRIGGER,
+                COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+            ],
+            "string_keyed_entries must yield every string-keyed entry in \
+             the underlying Mapping's insertion order — both routed \
+             renderers depend on `spec.module` reaching the destination \
+             ahead of `spec.trigger` ahead of `spec.capabilities` so the \
+             emitted values.yaml / programs.yaml entry's key order tracks \
+             the upstream ComputeUnit YAML author's order"
+        );
+        // The paired &Value ref also reaches through — sanity-check on
+        // the second axis of the yielded tuple.
+        let module = string_keyed_entries(&v)
+            .find(|(k, _)| *k == COMPUTEUNIT_SPEC_KEY_MODULE)
+            .map(|(_, v)| v.clone())
+            .expect("module entry present");
+        assert_eq!(module, serde_yaml::Value::String("oci://…".into()));
+    }
+
+    #[test]
+    fn string_keyed_entries_short_circuits_on_non_mapping_shapes() {
+        // The prior inline `if let Value::Mapping(_) = spec { … }` arm
+        // silently no-oped on every non-Mapping shape (Null / String /
+        // Sequence / Number / Bool). The lift's iterator surface pins
+        // the same contract: a non-Mapping Value contributes zero
+        // yielded entries. Pinned because both routed renderers'
+        // "always splice `spec.*` if it's a Mapping, otherwise skip"
+        // contract is upstream-schema-validated at the ComputeUnit CRD
+        // parser but not at the renderer entry point — so a legally-
+        // authored `spec: null` short-circuits without raising.
+        for shape in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            let count = string_keyed_entries(&shape).count();
+            assert_eq!(
+                count, 0,
+                "string_keyed_entries({shape:?}) must yield zero entries — \
+                 the prior `if let Value::Mapping(_)` arm silently \
+                 short-circuited on this shape, so the lift must preserve \
+                 that no-op contract or every routed renderer regresses on \
+                 the legally-authored non-Mapping `spec:` axis"
+            );
+        }
+    }
+
+    #[test]
+    fn string_keyed_entries_drops_non_string_keys() {
+        // serde_yaml permits arbitrary `Value` keys — numeric, boolean,
+        // sub-mapping — that don't round-trip through the downstream
+        // K8s YAML-key surface (which requires string keys). Both
+        // routed renderers previously carried an inline `if let Some(s)
+        // = k.as_str()` filter to silently drop these; pin the lift's
+        // filter contract so a future refactor that reaches for
+        // `.as_str().unwrap()` (which would panic on a numeric key) is
+        // a test-visible break, not a runtime regression at the first
+        // ComputeUnit YAML that carries one.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert(
+            serde_yaml::Value::String(COMPUTEUNIT_SPEC_KEY_MODULE.into()),
+            serde_yaml::Value::String("oci://…".into()),
+        );
+        spec.insert(
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::String("dropped".into()),
+        );
+        spec.insert(
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::String("also-dropped".into()),
+        );
+        spec.insert(
+            serde_yaml::Value::String(COMPUTEUNIT_SPEC_KEY_TRIGGER.into()),
+            serde_yaml::Value::String("http".into()),
+        );
+        let v = serde_yaml::Value::Mapping(spec);
+        let keys: Vec<&str> = string_keyed_entries(&v).map(|(k, _)| k).collect();
+        assert_eq!(
+            keys,
+            vec![COMPUTEUNIT_SPEC_KEY_MODULE, COMPUTEUNIT_SPEC_KEY_TRIGGER],
+            "string_keyed_entries must silently drop non-string-keyed \
+             entries (Value::Number, Value::Bool, Value::Mapping keys) \
+             — the K8s YAML-key surface downstream requires string keys, \
+             and every routed renderer's inline `k.as_str()` filter \
+             expected exactly this drop-not-panic contract"
+        );
+    }
+
+    #[test]
+    fn string_keyed_entries_matches_prior_inline_walk() {
+        // Cross-check the helper's yielded sequence against the prior
+        // inline `if let Value::Mapping(_) = spec { for (k, v) in _ {
+        // if let Some(s) = k.as_str() { <collect (s, v.clone())> } } }`
+        // walk both renderers previously carried. A drift between the
+        // helper's yielded sequence and the inline walk would silently
+        // emit a different destination map at every routed consumer —
+        // pin the byte-equivalence so the helper remains a drop-in
+        // replacement for both renderers' prior five-line block.
+        let mut spec = serde_yaml::Mapping::new();
+        spec.insert_str_key(
+            COMPUTEUNIT_SPEC_KEY_MODULE,
+            serde_yaml::Value::String("oci://ghcr.io/pleme-io/hello-rio:0.1.0".into()),
+        );
+        spec.insert(
+            serde_yaml::Value::Number(1.into()),
+            serde_yaml::Value::String("silently-dropped".into()),
+        );
+        spec.insert_str_key(
+            COMPUTEUNIT_SPEC_KEY_TRIGGER,
+            serde_yaml::Value::String("http".into()),
+        );
+        let v = serde_yaml::Value::Mapping(spec);
+
+        let via_helper: Vec<(String, serde_yaml::Value)> = string_keyed_entries(&v)
+            .map(|(k, v)| (k.to_string(), v.clone()))
+            .collect();
+
+        let mut via_inline: Vec<(String, serde_yaml::Value)> = Vec::new();
+        if let serde_yaml::Value::Mapping(map) = &v {
+            for (k, v) in map {
+                if let Some(s) = k.as_str() {
+                    via_inline.push((s.to_string(), v.clone()));
+                }
+            }
+        }
+
+        assert_eq!(
+            via_helper, via_inline,
+            "string_keyed_entries must yield the same (String, Value) \
+             sequence as the prior inline `if let Value::Mapping + for + \
+             if let Some(k.as_str())` walk — otherwise the two routed \
+             renderers drift silently at ComputeUnit-YAML-`spec.*`-splice \
+             time"
         );
     }
 }

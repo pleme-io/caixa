@@ -567,8 +567,7 @@ fn build_values_yaml(
     let library_alias = opts.library_name.as_str();
     let spec = computeunit_yaml
         .get(KUBE_KEY_SPEC)
-        .ok_or(Error::MissingField(KUBE_KEY_SPEC))?
-        .clone();
+        .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
 
     // Prepend a comment header so the file is human-friendly.
     let header = format!(
@@ -585,12 +584,19 @@ fn build_values_yaml(
         HELM_VALUES_KEY_ENABLED.to_string(),
         serde_yaml::Value::Bool(opts.enabled_default),
     );
-    if let serde_yaml::Value::Mapping(map) = spec {
-        for (k, v) in map {
-            if let Some(s) = k.as_str() {
-                block.insert(s.to_string(), v);
-            }
-        }
+    // Splice every spec.* field through (module, trigger, capabilities,
+    // config, resources, serviceAccount). String-key filter + optional-
+    // Mapping-shape short-circuit come from the lifted
+    // caixa_core::string_keyed_entries walk — same lift as
+    // servico_m2_overlay applied to the ComputeUnit-YAML `spec.*` axis
+    // (both call sites in caixa-flux + caixa-helm now route their
+    // ComputeUnit `spec.*` splice through one canonical helper, so a
+    // future change to the string-key filter — e.g. rejecting empty
+    // string keys, canonicalizing DNS-1123 casing — reaches both
+    // renderers by construction instead of a coordinated two-file
+    // rewrite).
+    for (k, v) in caixa_core::string_keyed_entries(spec) {
+        block.insert(k.to_string(), v.clone());
     }
 
     // M2 typed-substrate slots — propagate from caixa.lisp into the
