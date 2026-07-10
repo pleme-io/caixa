@@ -6949,6 +6949,59 @@ pub fn cilium_network_policy_name(aplicacao: &str, de: &str, para: &str) -> Stri
     format!("{aplicacao}-{edge}")
 }
 
+/// Canonical per-`:entrada` `HTTPRoute` `metadata.name` K8s-name-shaped
+/// scalar every caixa-mesh `gateway_routes` emitter mounts its
+/// per-`:entrada` HTTPRoute under. Composes the parent Aplicacao's
+/// `:nome` and the `:entrada :para` destination Servico's `:nome` on a
+/// canonical `-` separator (`format!("{aplicacao}-{para}")`), so the
+/// per-`(:aplicacao, :entrada.para)` HTTPRoute identity axis lives at
+/// one composer instead of a verbatim inline `format!("{}-{}",
+/// caixa.nome, entrada.para)` at the [`caixa_mesh::gateway_routes`]
+/// [`kube_resource_skeleton`] `name:` argument.
+///
+/// Peer of [`cilium_network_policy_name`] on the sibling per-Aplicacao
+/// per-CR K8s-name-shaped-identity-scalar axis: the CNP name composer
+/// carries the per-`(:de, :para)` L4/L7 policy CR name and this
+/// composer carries the per-`:entrada` L7 route CR name; both share
+/// the same "aplicacao-prefixed sub-identity" discipline (a per-CR
+/// identity scalar keyed off the parent Aplicacao's `:nome` joined to
+/// the per-CR sub-axis by a canonical `-` separator) so a future
+/// substrate-side per-Aplicacao Gateway API axis extension
+/// (`GRPCRoute` on grpc-shaped `:contratos` payloads once the sibling
+/// [`WitTarget`] variant lands, `TCPRoute` on the sibling l4-only
+/// tcp-shaped payload axis, per-`:entrada` `HTTPRouteFilter` /
+/// `BackendTLSPolicy` overlays the Gateway API v1.x per-route policy
+/// extension surface acknowledges) reaches the shared "aplicacao-prefix
+/// + sub-axis + canonical `-` separator" naming discipline through
+/// this composer's peer-shape by construction. Until this lift landed
+/// the HTTPRoute `metadata.name` axis sat as a verbatim inline
+/// `format!("{}-{}", caixa.nome, entrada.para)` at the
+/// [`caixa_mesh::gateway_routes`] emitter (with an in-file test-side
+/// probe pinning the expected `checkout-cart` shape by verbatim
+/// literal), and any future name-encoding rebrand on this axis
+/// (`<aplicacao>-<para>` → `<aplicacao>-httproute-<para>` for
+/// operator-side per-CR-kind disambiguation once the sibling
+/// GRPCRoute / TCPRoute lands and their names would otherwise collide,
+/// `<aplicacao>-<para>` → `<aplicacao>.<para>` on a DNS-1123-subdomain-
+/// safe axis migration, a per-namespace scoping prefix for
+/// multi-tenant Aplicacao hosting) would have had to be threaded
+/// through both sites in lockstep or the HTTPRoute `metadata.name`
+/// silently split from the operator-side grep-by-name / `kubectl get
+/// httproute -n tatara-system <aplicacao>-<para>` lookup encoding at
+/// apply time far from the source caixa.lisp.
+///
+/// The `aplicacao` prefix scopes the emitted HTTPRoute to its owning
+/// Aplicacao (so two Aplicacaos hosting a same-named `:entrada :para`
+/// destination — `checkout-cart` vs `orders-cart` — land at distinct
+/// HTTPRoute `metadata.name`s with no `kubectl apply` collision at the
+/// shared namespace, mirroring the peer CNP `metadata.name` collision
+/// posture the sibling [`cilium_network_policy_name`] composer's
+/// docstring names).
+#[must_use]
+pub fn gateway_api_http_route_name(aplicacao: &str, para: &str) -> String {
+    format!("{aplicacao}-{para}")
+}
+
 /// Canonical K8s API key naming the resource's API-version selector
 /// (e.g. `cilium.io/v2`, `gateway.networking.k8s.io/v1`,
 /// `wasm.pleme.io/v1alpha1`). Lifted to a const so a future API-server
@@ -27478,6 +27531,53 @@ spec:
         assert_eq!(
             cilium_network_policy_name(aplicacao, de, para),
             format!("{aplicacao}-{edge}"),
+        );
+    }
+
+    // ── gateway-api-http-route-name lift ────────────────────────────────
+
+    #[test]
+    fn gateway_api_http_route_name_matches_inline_aplicacao_para_encoding() {
+        // Byte-shape pin: the composer produces the same
+        // `format!("{aplicacao}-{para}")` byte-string the caixa-mesh
+        // `gateway_routes` per-`:entrada` `kube_resource_skeleton`
+        // `name:` argument previously inlined as
+        // `format!("{}-{}", caixa.nome, entrada.para)`. So a future
+        // rewire of the composer's internals reaches the HTTPRoute
+        // renderer through one canonical function-pointer edit rather
+        // than a hand-agreement between the emitter and every
+        // test-side probe pinning the expected `<aplicacao>-<para>`
+        // byte-shape at the HTTPRoute `metadata.name` axis.
+        assert_eq!(
+            gateway_api_http_route_name("checkout", "cart"),
+            "checkout-cart",
+        );
+        assert_eq!(gateway_api_http_route_name("orders", "cart"), "orders-cart",);
+    }
+
+    #[test]
+    fn gateway_api_http_route_name_composes_on_canonical_dash_separator() {
+        // Composition pin: the HTTPRoute `metadata.name` is the parent
+        // Aplicacao's `:nome` joined to the `:entrada :para`
+        // destination Servico's `:nome` by a canonical `-` separator
+        // (`format!("{aplicacao}-{para}")`) — the same
+        // "aplicacao-prefixed sub-identity" discipline the peer
+        // [`cilium_network_policy_name`] composer materializes on the
+        // sibling per-CR K8s-name-shaped-identity-scalar axis
+        // ([`format!("{aplicacao}-{edge}")`]). Pin the structural
+        // equation so a future refactor of either composer's internals
+        // that accidentally desynchronizes the two (an HTTPRoute-name
+        // rebrand landing on `format!("{aplicacao}.{para}")` while
+        // the CNP-name composer stays on `{aplicacao}-{edge}`, or a
+        // per-Aplicacao-K8s-CR-name shared-separator rebrand landing
+        // on the CNP-name composer without a coordinated edit here)
+        // fires here rather than silently splitting the two per-CR
+        // name-encoding axes across the caixa-mesh renderer.
+        let aplicacao = "checkout";
+        let para = "cart";
+        assert_eq!(
+            gateway_api_http_route_name(aplicacao, para),
+            format!("{aplicacao}-{para}"),
         );
     }
 }

@@ -718,6 +718,39 @@ pub use caixa_core::contrato_edge_label;
 /// grep-by-label query at apply time far from the source caixa.lisp.
 pub use caixa_core::cilium_network_policy_name;
 
+/// Canonical per-`:entrada` `HTTPRoute` `metadata.name` composer —
+/// the `<aplicacao>-<para>` K8s-name-shaped scalar every caixa-mesh
+/// `gateway_routes` emitter mounts its per-`:entrada` HTTPRoute
+/// under. Re-export of the canonical
+/// [`caixa_core::gateway_api_http_route_name`] composer so the
+/// per-HTTPRoute name construction lives in exactly one place across
+/// every caixa renderer. Peer of the sibling
+/// [`cilium_network_policy_name`] composer on the per-Aplicacao
+/// per-CR K8s-name-shaped-identity-scalar axis: the CNP-name composer
+/// carries the per-`(:de, :para)` L4/L7 policy CR name and this
+/// composer carries the per-`:entrada` L7 route CR name — both share
+/// the same "aplicacao-prefixed sub-identity" discipline (an
+/// aplicacao-prefix joined to a per-CR sub-axis by a canonical `-`
+/// separator) so a future substrate-side per-Aplicacao Gateway API
+/// axis extension (`GRPCRoute` on grpc-shaped `:contratos` payloads,
+/// `TCPRoute` on l4-only tcp payloads, per-`:entrada` `HTTPRouteFilter`
+/// / `BackendTLSPolicy` overlays) reaches the shared naming
+/// discipline through this composer's peer-shape by construction.
+///
+/// Until this lift landed the HTTPRoute `metadata.name` axis sat as a
+/// verbatim inline `format!("{}-{}", caixa.nome, entrada.para)` at
+/// the [`gateway_routes`] emitter (with an in-file test-side probe
+/// pinning the expected `checkout-cart` byte-shape by verbatim
+/// literal), and any future name-encoding rebrand on this axis would
+/// have had to be threaded through both sites in lockstep or the
+/// HTTPRoute `metadata.name` silently split from the operator-side
+/// grep-by-name / `kubectl get httproute -n tatara-system
+/// <aplicacao>-<para>` lookup encoding at apply time far from the
+/// source caixa.lisp. See
+/// [`caixa_core::gateway_api_http_route_name`] for the full lift
+/// rationale.
+pub use caixa_core::gateway_api_http_route_name;
+
 /// Canonical M3 [`caixa_core::aplicacao::PlacementStrategy::SingleNode`]
 /// variant discriminator scalar-value the `Serialize` derive on the
 /// un-`rename`d enum emits under [`caixa_core::M3_PLACEMENT_KEY_ESTRATEGIA`] on every
@@ -2695,11 +2728,27 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // rebrand on either axis lands on the canonical
     // [`caixa_core::GATEWAY_API_KIND_HTTP_ROUTE`] declaration, not at
     // this call site — peer with the sibling Gateway skeleton above on
-    // the canonical-Gateway-API-CRD-`kind`-discriminator surface.
+    // the canonical-Gateway-API-CRD-`kind`-discriminator surface. The
+    // HTTPRoute `metadata.name` axis now threads through the lifted
+    // [`gateway_api_http_route_name`] composer (peer of the
+    // [`cilium_network_policy_name`] composer that carries the
+    // sibling per-`(:de, :para)` CNP name on the shared
+    // "aplicacao-prefixed sub-identity" discipline) so a future
+    // per-Aplicacao Gateway API per-CR name-encoding rebrand lands at
+    // one lifted composer and reaches this call site by construction.
+    // Prior to this lift the site inlined a verbatim
+    // `format!("{}-{}", caixa.nome, entrada.para)` with no compile-
+    // time link to the peer CNP-name composer's naming discipline; a
+    // rebrand would have had to be threaded through this site and the
+    // in-file test-side `httproute_carries_canonical_kube_skeleton_
+    // without_labels` probe's `Some("checkout-cart")` byte-shape pin
+    // in lockstep or the HTTPRoute `metadata.name` would have
+    // silently split from the operator-side `kubectl get httproute -n
+    // tatara-system <aplicacao>-<para>` grep-by-name lookup encoding.
     let mut route = kube_resource_skeleton(
         GATEWAY_API_API_VERSION,
         GATEWAY_API_KIND_HTTP_ROUTE,
-        &format!("{}-{}", caixa.nome, entrada.para),
+        &gateway_api_http_route_name(&caixa.nome, &entrada.para),
         namespace,
         BTreeMap::new(),
     );
@@ -3085,6 +3134,58 @@ mod tests {
             contrato_values.contains(&contrato_edge_label("cart", "payment")),
             "CNP LABEL_CONTRATO value for (cart, payment) must match lifted composer output; \
              got values {contrato_values:?}",
+        );
+    }
+
+    #[test]
+    fn gateway_api_http_route_name_re_export_matches_caixa_core_canonical_output() {
+        // The renderer's `gateway_api_http_route_name` was lifted from
+        // the verbatim inline `format!("{}-{}", caixa.nome,
+        // entrada.para)` at the `gateway_routes`
+        // `kube_resource_skeleton` `name:` argument to a re-export of
+        // [`caixa_core::gateway_api_http_route_name`]. Pin the
+        // output-shape equality here on a representative fixture so
+        // any local re-introduction of a sibling `pub fn
+        // gateway_api_http_route_name(...)` shadow at this crate is a
+        // build-time test failure. Peer with
+        // [`cilium_network_policy_name_re_export_matches_caixa_core_canonical_output`]
+        // on the sibling per-Aplicacao per-CR K8s-name-shaped-identity-
+        // scalar composer axis — the CNP-name composer carries the
+        // per-`(:de, :para)` policy CR name and this composer carries
+        // the per-`:entrada` route CR name.
+        assert_eq!(
+            gateway_api_http_route_name("checkout", "cart"),
+            caixa_core::gateway_api_http_route_name("checkout", "cart"),
+        );
+        assert_eq!(
+            gateway_api_http_route_name("checkout", "cart"),
+            "checkout-cart",
+        );
+    }
+
+    #[test]
+    fn gateway_api_http_route_metadata_name_uses_lifted_composer() {
+        // Composition pin: the HTTPRoute `metadata.name` emitted by
+        // `gateway_routes` must byte-equal the output of the lifted
+        // [`gateway_api_http_route_name`] composer with the same
+        // arguments — so a future refactor of the composer's internals
+        // (per-Aplicacao Gateway API per-CR name-encoding rebrand)
+        // reaches the renderer through one function-pointer edit, and
+        // any rewrite of the inline `format!` at the emit site that
+        // desynchronizes from the composer fires here at build-time
+        // rather than silently splitting the emitted HTTPRoute
+        // `metadata.name` from the operator-side `kubectl get
+        // httproute -n tatara-system <aplicacao>-<para>` grep-by-name
+        // lookup encoding. Peer to
+        // [`cilium_network_policy_metadata_name_uses_lifted_composer`]
+        // on the sibling per-CR K8s-name-shaped-identity-scalar
+        // composer axis.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        assert_eq!(
+            kube_metadata_str_field(route, KUBE_KEY_NAME),
+            Some(gateway_api_http_route_name("checkout", "cart").as_str()),
+            "HTTPRoute metadata.name must match lifted composer output",
         );
     }
 
@@ -7105,6 +7206,19 @@ mod tests {
         // gateway_routes). Same empty-labels-skip semantic — the
         // route's parent-Gateway-association lives at spec.parentRefs,
         // not at metadata.labels.
+        //
+        // The `metadata.name` byte-shape probe now consults the lifted
+        // [`gateway_api_http_route_name`] composer rather than a
+        // verbatim `Some("checkout-cart")` literal so a future
+        // per-Aplicacao Gateway API per-CR name-encoding rebrand
+        // (which lands at the composer's caixa-core definition site)
+        // reaches this probe by construction — pinning the composer's
+        // output prevents the emitter and this probe from silently
+        // splitting on any rebrand. Peer to the sibling
+        // `cilium_fans_same_de_para_edges_into_one_policy` probe
+        // pinning the CNP `metadata.name` via
+        // [`cilium_network_policy_name`] on the same shared
+        // "aplicacao-prefixed sub-identity" discipline.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         assert_eq!(
@@ -7118,7 +7232,7 @@ mod tests {
         assert_eq!(metadata.len(), 2);
         assert_eq!(
             metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
-            Some("checkout-cart")
+            Some(gateway_api_http_route_name("checkout", "cart").as_str())
         );
         assert!(metadata.get(KUBE_KEY_LABELS).is_none());
     }
