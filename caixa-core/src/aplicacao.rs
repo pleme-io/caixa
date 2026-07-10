@@ -716,22 +716,85 @@ pub struct RateLimit {
     pub window: Duration,
 }
 
+/// Canonical `(unit-suffix, seconds-per-window)` bijection every
+/// consumer of the `:politicas :rate-limit` unit table reads from —
+/// [`rate_limit_codec::parse`]'s `unit → Duration` dispatch,
+/// [`rate_limit_codec::render`]'s `Duration → unit` projection, and the
+/// [`is_canonical_rate_limit_window`] predicate the
+/// [`AplicacaoSpec::validate_politicas`] gate keys off. Until this table
+/// landed the `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection was
+/// scattered across four peer sites — the codec's `match unit` parse
+/// arm, the codec's `if secs == 1 { "s" } else if …` render cascade,
+/// and the predicate's `secs == 1 || secs == 60 || secs == 3600`
+/// disjunction — each carrying its own hand-written copy of the same
+/// three (str, u64) pairs with no compile-time link between them. A
+/// future rate-limit-unit addition (a `"d"` day suffix, a `"ms"`
+/// sub-second window once Envoy's `rate_limit_action` grows fractional
+/// support) would have to be threaded through all three sites in
+/// lockstep or a drift would silently split the accepted-window set: a
+/// unit accepted by parse but unknown to render would round-trip
+/// through the codec to the fallback `<n>/<k>s` shape (breaking the
+/// THEORY.md §V.2.7 render-determinism contract every typed slot
+/// carries), and a unit accepted by parse but unknown to the predicate
+/// would silently pass validate and land at the renderer as a
+/// non-canonical fallback.
+///
+/// Lifting the pairs to one `const` collapses the three call sites onto
+/// one canonical projection each ([`rate_limit_window_unit`] for the
+/// `Duration → unit` direction, [`rate_limit_window_from_unit`] for the
+/// inverse), so a future unit addition is exactly one row appended
+/// here — every consumer picks it up by construction. Same
+/// "one canonical table, thin projections at each consumer" discipline
+/// [`PlacementStrategy::as_str`] (cc8f749) applies on the sibling M3
+/// typed-enum axis, and [`WitTarget::payload_pair`] (6788ed6) applies
+/// on the peer typed-contract-payload axis.
+const RATE_LIMIT_UNIT_TABLE: &[(&str, u64)] = &[("s", 1), ("m", 60), ("h", 3600)];
+
+/// Canonical rate-limit unit suffix for `window`, or `None` when
+/// `window` isn't one of the [`RATE_LIMIT_UNIT_TABLE`] entries (i.e.
+/// carries a non-canonical magnitude the codec's round-trip would break
+/// on). Reads the `Duration → unit` half of the lifted bijection so
+/// [`rate_limit_codec::render`] and [`is_canonical_rate_limit_window`]
+/// share the same projection — a future unit added to the table reaches
+/// both consumers by construction.
+#[must_use]
+fn rate_limit_window_unit(window: Duration) -> Option<&'static str> {
+    if window.subsec_nanos() != 0 {
+        return None;
+    }
+    let secs = window.as_secs();
+    RATE_LIMIT_UNIT_TABLE
+        .iter()
+        .find_map(|(unit, s)| (*s == secs).then_some(*unit))
+}
+
+/// Canonical rate-limit `Duration` for a unit suffix, or `None` when
+/// the suffix isn't one of the [`RATE_LIMIT_UNIT_TABLE`] entries. Reads
+/// the `unit → Duration` half of the lifted bijection so
+/// [`rate_limit_codec::parse`] shares the same projection — a future
+/// unit added to the table reaches parse by construction.
+#[must_use]
+fn rate_limit_window_from_unit(unit: &str) -> Option<Duration> {
+    RATE_LIMIT_UNIT_TABLE
+        .iter()
+        .find_map(|(u, secs)| (*u == unit).then_some(Duration::from_secs(*secs)))
+}
+
 /// True when `window` is exactly one of the three canonical rate-limit
 /// windows the [`rate_limit_codec`] round-trips losslessly: 1 second
-/// (`"<n>/s"`), 1 minute (`"<n>/m"`), or 1 hour (`"<n>/h"`). Lifted
-/// to a typed predicate (rather than an inline disjunction at the
-/// [`AplicacaoSpec::validate_politicas`] call site) so the
-/// canonical-window set lives in exactly one place — drift between
-/// the codec's accepted unit set and the validate gate's accepted
-/// window set is a build error visible at this predicate, not a
-/// silent round-trip break at the codec layer. Same shape every other
-/// predicate-on-the-typed-slot helper carries
+/// (`"<n>/s"`), 1 minute (`"<n>/m"`), or 1 hour (`"<n>/h"`). Routes
+/// through [`rate_limit_window_unit`] — the single `Duration → unit`
+/// projection [`rate_limit_codec::render`] also consumes — so the
+/// canonical-window set lives in one lifted [`RATE_LIMIT_UNIT_TABLE`]
+/// entry per unit, drift between the codec's accepted unit set and the
+/// validate gate's accepted window set is a build error visible at the
+/// table, not a silent round-trip break at the codec layer. Same shape
+/// every other predicate-on-the-typed-slot helper carries
 /// ([`MeshPolicy::is_empty`], [`crate::LimitsSpec::is_empty`],
 /// [`crate::BehaviorSpec::is_empty`]).
 #[must_use]
 fn is_canonical_rate_limit_window(window: Duration) -> bool {
-    let secs = window.as_secs();
-    window.subsec_nanos() == 0 && (secs == 1 || secs == 60 || secs == 3600)
+    rate_limit_window_unit(window).is_some()
 }
 
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
@@ -1810,7 +1873,11 @@ fn validate_entrada_path(path: &str) -> Result<(), AplicacaoError> {
 }
 
 mod rate_limit_codec {
-    use super::{Duration, RateLimit};
+    // `Duration` is no longer named here — the codec routes through
+    // the module-scope [`super::rate_limit_window_from_unit`] /
+    // [`super::rate_limit_window_unit`] projections that carry the
+    // canonical typed `Duration` unit-table axis on their signatures.
+    use super::RateLimit;
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(v: &Option<RateLimit>, s: S) -> Result<S::Ok, S::Error> {
@@ -2040,22 +2107,34 @@ mod rate_limit_codec {
         let rate: u32 = rate_trim.parse::<u32>().map_err(|_| {
             format!("rate-limit rate {rate_trim:?} (digit-only magnitude overflows u32)")
         })?;
-        let window = match unit.trim() {
-            "s" => Duration::from_secs(1),
-            "m" => Duration::from_secs(60),
-            "h" => Duration::from_secs(3600),
-            other => return Err(format!("unknown rate-limit window unit {other:?}")),
-        };
+        // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives at
+        // module scope as the lifted [`super::RATE_LIMIT_UNIT_TABLE`]
+        // const; this parse arm now consumes only the `unit → Duration`
+        // projection [`super::rate_limit_window_from_unit`], so a future
+        // rate-limit-unit addition (a `"d"` day suffix once Envoy's
+        // `rate_limit_action` grows daily-bucket support) is one row
+        // appended to the table — parse, render, and
+        // `is_canonical_rate_limit_window` all pick it up by construction.
+        let unit = unit.trim();
+        let window = super::rate_limit_window_from_unit(unit)
+            .ok_or_else(|| format!("unknown rate-limit window unit {unit:?}"))?;
         Ok(RateLimit { rate, window })
     }
 
     fn render(rl: RateLimit) -> String {
-        let unit = if rl.window.as_secs() == 1 {
-            "s"
-        } else if rl.window.as_secs() == 60 {
-            "m"
-        } else if rl.window.as_secs() == 3600 {
-            "h"
+        // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives at
+        // module scope as the lifted [`super::RATE_LIMIT_UNIT_TABLE`]
+        // const; this render arm now consumes only the `Duration → unit`
+        // projection [`super::rate_limit_window_unit`], which returns
+        // `None` on every non-canonical window (the sub-second /
+        // non-`{1, 60, 3600}` shapes the validate gate rejects). Same
+        // helper the sibling [`super::is_canonical_rate_limit_window`]
+        // predicate reads — so a future rate-limit-unit addition
+        // (a `"d"` day suffix once Envoy's `rate_limit_action` grows
+        // daily-bucket support) is one row appended to the table and
+        // both consumers pick it up by construction.
+        if let Some(unit) = super::rate_limit_window_unit(rl.window) {
+            format!("{}/{unit}", rl.rate)
         } else {
             // Defensive fallback for non-canonical windows. Note:
             // [`AplicacaoSpec::validate_politicas`] rejects any
@@ -2063,14 +2142,13 @@ mod rate_limit_codec {
             // [`AplicacaoError::PolicyRateLimitWindowNotCanonical`], so
             // a validated `RateLimit` never reaches this branch. The
             // emitted `<n>/<k>s` form is *not* round-trippable through
-            // [`parse`] (which accepts only `s`/`m`/`h` unit strings,
-            // not `<k>s` with an explicit count) — the validate gate
-            // is what makes the round-trip a structural property; this
-            // branch exists only so a programmatic non-validated
-            // serialize doesn't panic.
-            return format!("{}/{}s", rl.rate, rl.window.as_secs());
-        };
-        format!("{}/{unit}", rl.rate)
+            // [`parse`] (which accepts only the [`super::RATE_LIMIT_UNIT_TABLE`]
+            // suffixes, not `<k>s` with an explicit count) — the
+            // validate gate is what makes the round-trip a structural
+            // property; this branch exists only so a programmatic
+            // non-validated serialize doesn't panic.
+            format!("{}/{}s", rl.rate, rl.window.as_secs())
+        }
     }
 }
 
@@ -9333,6 +9411,58 @@ mod tests {
         assert!(!super::is_canonical_rate_limit_window(
             Duration::from_millis(1500)
         ));
+    }
+
+    #[test]
+    fn rate_limit_unit_table_projections_are_mutual_inverses() {
+        // Bidirection pin against the lifted [`RATE_LIMIT_UNIT_TABLE`]
+        // (the canonical `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}`
+        // bijection every consumer of the rate-limit unit surface
+        // reads from). Until this table landed the three (str,
+        // Duration) pairs sat scattered across four peer sites —
+        // `rate_limit_codec::parse`'s `match unit` arm, `render`'s
+        // `if secs == 1 { "s" } else if …` cascade, and
+        // `is_canonical_rate_limit_window`'s `secs == 1 || 60 ||
+        // 3600` disjunction — each carrying its own hand-written copy
+        // with no compile-time link between them. A future
+        // rate-limit-unit addition (a `"d"` day suffix, a `"ms"`
+        // sub-second window) would have to be threaded through all
+        // three sites in lockstep or a drift would silently split
+        // the accepted-window set. Lifting the pairs onto one const
+        // + two projection helpers collapses the surface: this pin
+        // enshrines that both projections agree on every table row
+        // and neither leaks a spurious entry the other doesn't
+        // recognize.
+        for (unit, secs) in [("s", 1u64), ("m", 60), ("h", 3600)] {
+            let window = super::rate_limit_window_from_unit(unit)
+                .unwrap_or_else(|| panic!("canonical unit {unit:?} must resolve to a Duration"));
+            assert_eq!(
+                window,
+                Duration::from_secs(secs),
+                "unit {unit:?} must resolve to {secs}s"
+            );
+            assert_eq!(
+                super::rate_limit_window_unit(window),
+                Some(unit),
+                "Duration({secs}s) must render as {unit:?}"
+            );
+        }
+        // Non-table units yield None on the `unit → Duration`
+        // projection — a future `"d"` addition to the table would
+        // flip this arm; today it pins the current three-row table's
+        // rejection semantics.
+        assert!(super::rate_limit_window_from_unit("d").is_none());
+        assert!(super::rate_limit_window_from_unit("ms").is_none());
+        assert!(super::rate_limit_window_from_unit("").is_none());
+        // Non-table Durations yield None on the `Duration → unit`
+        // projection — pins that the two projections agree on the
+        // "not in the table" semantic too, so a drift where the
+        // parse-side accepts a value the render-side can't emit is
+        // a build error at the two-arm pair, not a silent codec
+        // round-trip break.
+        assert!(super::rate_limit_window_unit(Duration::from_secs(2)).is_none());
+        assert!(super::rate_limit_window_unit(Duration::from_secs(86_400)).is_none());
+        assert!(super::rate_limit_window_unit(Duration::from_millis(1500)).is_none());
     }
 
     #[test]
