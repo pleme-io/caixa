@@ -1711,7 +1711,7 @@ spec:
         );
         assert_eq!(
             entry.get(KUBE_KEY_NAMESPACE).and_then(|n| n.as_str()),
-            Some("tatara-system")
+            Some(DEFAULT_NAMESPACE)
         );
         assert!(entry.get(COMPUTEUNIT_SPEC_KEY_MODULE).is_some());
         assert!(entry.get(COMPUTEUNIT_SPEC_KEY_TRIGGER).is_some());

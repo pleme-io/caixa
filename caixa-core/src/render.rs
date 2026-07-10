@@ -18934,12 +18934,16 @@ mod tests {
         // caller adds spec (and any other top-level keys) themselves.
         // Pin that contract so a future caller doesn't accidentally
         // double-insert apiVersion / kind / metadata after the
-        // skeleton call.
+        // skeleton call. Namespace fixture arg reads through the
+        // canonical `DEFAULT_NAMESPACE` const so a future rebrand of
+        // the substrate's default namespace reaches every fixture by
+        // construction rather than through a per-fixture stray
+        // "tatara-system" byte-sequence.
         let skel = kube_resource_skeleton(
             "cilium.io/v2",
             "CiliumNetworkPolicy",
             "p-1",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             BTreeMap::new(),
         );
         assert_eq!(skel.len(), 3);
@@ -18960,7 +18964,7 @@ mod tests {
             "gateway.networking.k8s.io/v1",
             "Gateway",
             "checkout",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             BTreeMap::new(),
         );
         let metadata = skel
@@ -18971,9 +18975,14 @@ mod tests {
             metadata.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
             Some("checkout")
         );
+        // Read-back probe reads through `DEFAULT_NAMESPACE` so a
+        // future substrate-namespace rebrand routes through the
+        // canonical const on both the emit-side fixture arg and the
+        // probe-side readback in one edit — a drift on either side
+        // would otherwise silently mask the round-trip pin.
         assert_eq!(
             metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
-            Some("tatara-system")
+            Some(DEFAULT_NAMESPACE)
         );
     }
 
@@ -18988,7 +18997,7 @@ mod tests {
             "gateway.networking.k8s.io/v1",
             "HTTPRoute",
             "r-1",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             BTreeMap::new(),
         );
         let metadata = skel
@@ -19012,7 +19021,7 @@ mod tests {
             "cilium.io/v2",
             "CiliumNetworkPolicy",
             "p-1",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             labels,
         );
         let metadata = skel
@@ -19044,7 +19053,7 @@ mod tests {
             "cilium.io/v2",
             "CiliumNetworkPolicy",
             "p-1",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             labels,
         );
         let metadata = skel
@@ -19070,7 +19079,7 @@ mod tests {
             "cilium.io/v2",
             "CiliumNetworkPolicy",
             "p-1",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             BTreeMap::new(),
         );
         let keys: Vec<&str> = skel.iter().filter_map(|(k, _)| k.as_str()).collect();
@@ -19090,7 +19099,7 @@ mod tests {
             "cilium.io/v2",
             "CiliumNetworkPolicy",
             "p-1",
-            "tatara-system",
+            DEFAULT_NAMESPACE,
             BTreeMap::new(),
         );
         assert!(
