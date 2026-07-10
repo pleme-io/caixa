@@ -794,11 +794,8 @@ pub fn programs_yaml_entry(
         .to_string();
 
     let mut entry = serde_yaml::Mapping::new();
-    entry.insert_str_key(
-        FLEET_PROGRAMS_KEY_NAME,
-        serde_yaml::Value::String(caixa.nome.clone()),
-    );
-    entry.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::String(namespace));
+    entry.insert_string(FLEET_PROGRAMS_KEY_NAME, caixa.nome.clone());
+    entry.insert_string(KUBE_KEY_NAMESPACE, namespace);
 
     // Splice every spec.* field through (module, trigger, capabilities,
     // config, resources, serviceAccount). Operator + chart schemas are
