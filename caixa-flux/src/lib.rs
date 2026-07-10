@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, MappingExt, kube_metadata_str_field, lareira_chart_name};
+use caixa_core::{Caixa, MappingExt, kube_metadata_str_field, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -779,8 +779,7 @@ pub fn programs_yaml_entry(
     caixa: &Caixa,
     computeunit_yaml: &serde_yaml::Value,
 ) -> Result<serde_yaml::Value, Error> {
-    caixa_core::require_kind(caixa, CaixaKind::Servico)?;
-    caixa_core::require_single_servico(caixa)?;
+    caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
     let spec = computeunit_yaml
         .get(KUBE_KEY_SPEC)
@@ -983,8 +982,7 @@ pub struct BundleFile {
 /// [`caixa_helm::render_chart_for_servico`] at the per-program chart
 /// path).
 pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<BundleFile>, Error> {
-    caixa_core::require_kind(caixa, CaixaKind::Servico)?;
-    caixa_core::require_single_servico(caixa)?;
+    caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
     let name = caixa.nome.clone();
     let chart_name = lareira_chart_name(&name);

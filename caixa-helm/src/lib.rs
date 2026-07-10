@@ -50,7 +50,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use caixa_core::{Caixa, CaixaKind, MappingExt, lareira_chart_name};
+use caixa_core::{Caixa, MappingExt, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -459,8 +459,7 @@ pub fn render_chart_for_servico_with(
     computeunit_yaml: &serde_yaml::Value,
     opts: &RenderOpts,
 ) -> Result<ChartDir, Error> {
-    caixa_core::require_kind(caixa, CaixaKind::Servico)?;
-    caixa_core::require_single_servico(caixa)?;
+    caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
     let chart_name = lareira_chart_name(&caixa.nome);
     let chart_yaml = build_chart_yaml(caixa, &chart_name, opts);
