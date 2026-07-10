@@ -12944,6 +12944,61 @@ pub fn kube_kind_is(value: &serde_yaml::Value, kind: &str) -> bool {
     kube_root_str_field(value, KUBE_KEY_KIND) == Some(kind)
 }
 
+/// Locate the first K8s CR YAML document in `docs` whose top-level
+/// `kind` discriminator axis equals `kind`.
+///
+/// Composes on top of [`kube_kind_is`] (2902d9d) — same one-hop
+/// `.get(KUBE_KEY_KIND).and_then(as_str) == Some(kind)` predicate —
+/// and closes the "find the one document of a given kind inside a
+/// multi-doc mesh emission" navigator axis every per-Aplicacao
+/// renderer's post-emit test harness reaches for to split the
+/// emitted sequence by CRD-kind before probing a per-CR body-axis.
+///
+/// The canonical shape 14 test-side
+///
+/// ```ignore
+/// docs.iter().find(|d| kube_kind_is(d, <KIND>))
+/// ```
+///
+/// call sites in [`caixa-mesh`][mesh]'s `gateway_routes` +
+/// `cilium_network_policies` test harnesses previously threaded the
+/// three-token `.iter().find(closure)` combinator chain around a
+/// one-token semantic payload (the `<KIND>` axis-value —
+/// [`GATEWAY_API_KIND_GATEWAY`] on the per-Gateway navigator sites,
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] on the per-HTTPRoute navigator
+/// sites). The lift collapses the three-token chain — the `.iter()`
+/// receiver-widen, the `.find(closure)` combinator, the inline
+/// closure wrap around [`kube_kind_is`] — onto one navigator
+/// function the caller reads as intent (`find_by_kind(&docs,
+/// <KIND>)` — "give me the K8s CR document of kind `<KIND>`")
+/// rather than as a receiver-widen → combinator → predicate chain.
+///
+/// Composition-symmetric to [`kube_kind_is`]: the lifted predicate
+/// answers "does *this* one document match kind `<KIND>`?", the
+/// lifted navigator answers "find the one document of kind
+/// `<KIND>` in *this list*?". Same axis, different arity — the two
+/// call shapes emit-side test harnesses reach for when splitting
+/// multi-doc CR emissions by top-level kind.
+///
+/// Every future per-CRD-kind multi-doc-navigator site (the
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's post-
+/// emit test harness, MESH-COMPOSITION §III.2 #3; the
+/// `app-operator`'s `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-status doc-navigator, §III.2 #5; the M4
+/// cross-cluster fan-out's per-cluster multi-doc split by kind)
+/// reaches the same helper by construction, with no inline
+/// `.iter().find(closure)` combinator chain and no drift surface
+/// on the receiver-widen or combinator axes.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn find_by_kind<'a>(
+    docs: &'a [serde_yaml::Value],
+    kind: &str,
+) -> Option<&'a serde_yaml::Value> {
+    docs.iter().find(|d| kube_kind_is(d, kind))
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -26884,5 +26939,94 @@ spec:
             &serde_yaml::Value::Mapping(cr_no_kind),
             GATEWAY_API_KIND_GATEWAY,
         ));
+    }
+
+    #[test]
+    fn find_by_kind_matches_inline_iter_find_kube_kind_is_shape() {
+        // Byte-equivalence pin: the lifted navigator reproduces the
+        // three-token combinator chain (`docs.iter().find(|d|
+        // kube_kind_is(d, <KIND>))`) the 14 caixa-mesh test-side
+        // per-Gateway / per-HTTPRoute find-by-kind sites previously
+        // carried inline. Closes the "did the lift accidentally
+        // widen the receiver, drop the closure, or swap `find` for
+        // `filter`" drift class every future re-lift on the sibling
+        // multi-doc-navigator axis (a hypothetical
+        // `filter_by_kind` peer that carries the same underlying
+        // predicate but returns an iterator) would otherwise reopen.
+        let mut gateway = serde_yaml::Mapping::new();
+        gateway.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let mut route = serde_yaml::Mapping::new();
+        route.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
+        );
+        let docs = vec![
+            serde_yaml::Value::Mapping(gateway),
+            serde_yaml::Value::Mapping(route),
+        ];
+
+        // Lifted navigator agrees with the inline combinator chain
+        // on every existing member of the multi-doc slice.
+        assert_eq!(
+            find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY),
+            docs.iter()
+                .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY)),
+        );
+        assert_eq!(
+            find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE),
+            docs.iter()
+                .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE)),
+        );
+
+        // And on the miss path: absent kind → None, matching the
+        // inline `.find` short-circuit that consumer sites rely on
+        // to distinguish "no such CR in this emission" from "wrong
+        // shape" in their `.unwrap()` / `.expect(...)` follow-ups.
+        assert_eq!(find_by_kind(&docs, CILIUM_KIND_NETWORK_POLICY), None);
+        let empty: Vec<serde_yaml::Value> = Vec::new();
+        assert_eq!(find_by_kind(&empty, GATEWAY_API_KIND_GATEWAY), None);
+    }
+
+    #[test]
+    fn find_by_kind_returns_first_match_on_duplicate_kind() {
+        // Order-preservation pin: the lifted navigator returns the
+        // first document of the matching kind (the same short-
+        // circuit `Iterator::find` exposes). Multi-doc mesh
+        // emissions never carry two documents of the same kind at
+        // V0 (`gateway_routes` emits exactly one `Gateway` + one
+        // `HTTPRoute` per Aplicacao), but the M4 cross-cluster
+        // fan-out will (one `HelmRelease` per cluster). Pinning the
+        // first-match contract keeps the M4 caller-side "the first
+        // hit is the primary" convention aligned with the helper's
+        // combinator half.
+        let mut gateway_a = serde_yaml::Mapping::new();
+        gateway_a.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let mut meta_a = serde_yaml::Mapping::new();
+        meta_a.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("primary".into()));
+        gateway_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
+        let mut gateway_b = serde_yaml::Mapping::new();
+        gateway_b.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let mut meta_b = serde_yaml::Mapping::new();
+        meta_b.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("secondary".into()));
+        gateway_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let docs = vec![
+            serde_yaml::Value::Mapping(gateway_a),
+            serde_yaml::Value::Mapping(gateway_b),
+        ];
+
+        let first = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).unwrap();
+        assert_eq!(
+            kube_metadata_str_field(first, KUBE_KEY_NAME),
+            Some("primary"),
+        );
     }
 }

@@ -2740,7 +2740,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
         M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro,
-        MeshPolicy, Placement, PlacementStrategy, WitContract, kube_kind_is,
+        MeshPolicy, Placement, PlacementStrategy, WitContract, find_by_kind, kube_kind_is,
         kube_metadata_str_field, kube_root_str_field,
     };
     use std::time::Duration;
@@ -6654,10 +6654,7 @@ mod tests {
     #[test]
     fn gateway_listener_carries_aplicacao_host() {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .unwrap();
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).unwrap();
         let listener = gateway
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
@@ -6702,10 +6699,7 @@ mod tests {
         // on either axis lands at exactly one consumer per axis
         // without coupling the two rebrand cycles.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         let listener = gateway
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
@@ -6745,10 +6739,7 @@ mod tests {
         // side port migration on either axis lands at exactly one
         // consumer per axis without coupling the two rebrand cycles.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         let listener = gateway
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
@@ -6768,10 +6759,7 @@ mod tests {
     #[test]
     fn httproute_routes_to_entrada_para() {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let route = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE))
-            .unwrap();
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).unwrap();
         let backend = route
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(KUBE_KEY_RULES))
@@ -6845,10 +6833,7 @@ mod tests {
         // semantic of kube_resource_skeleton; Gateway does not need
         // per-Aplicacao label grouping at the K8s-resource axis today).
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         assert_eq!(
             kube_root_str_field(gateway, KUBE_KEY_API_VERSION),
             Some("gateway.networking.k8s.io/v1")
@@ -6881,10 +6866,7 @@ mod tests {
         // route's parent-Gateway-association lives at spec.parentRefs,
         // not at metadata.labels.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let route = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE))
-            .expect("HTTPRoute present");
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         assert_eq!(
             kube_root_str_field(route, KUBE_KEY_API_VERSION),
             Some("gateway.networking.k8s.io/v1")
@@ -6924,10 +6906,7 @@ mod tests {
         // / `cluster_bundle_kustomization_uses_lifted_flux_api_version`
         // on the sibling Flux v2 controller-triplet lift trajectory.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         assert_eq!(
             kube_root_str_field(gateway, KUBE_KEY_API_VERSION),
             Some(caixa_core::GATEWAY_API_API_VERSION),
@@ -6964,10 +6943,7 @@ mod tests {
         // [`cilium_network_policies_use_lifted_cilium_kind_network_policy`]
         // on the sibling Cilium-CRD-kind-axis lift trajectory.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         assert_eq!(
             kube_root_str_field(gateway, KUBE_KEY_KIND),
             Some(caixa_core::GATEWAY_API_KIND_GATEWAY),
@@ -7007,10 +6983,7 @@ mod tests {
         // pin pair across the `(Gateway, HTTPRoute)` pair the renderer
         // emits together.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let route = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE))
-            .expect("HTTPRoute present");
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         assert_eq!(
             kube_root_str_field(route, KUBE_KEY_KIND),
             Some(caixa_core::GATEWAY_API_KIND_HTTP_ROUTE),
@@ -7037,10 +7010,7 @@ mod tests {
         // pin above — together they enforce the per-CRD-axis
         // movement-as-a-unit invariant at the renderer's exit.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let route = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE))
-            .expect("HTTPRoute present");
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         assert_eq!(
             kube_root_str_field(route, KUBE_KEY_API_VERSION),
             Some(caixa_core::GATEWAY_API_API_VERSION),
@@ -7075,10 +7045,7 @@ mod tests {
         // extends the discipline from the CRD-discriminator half of the
         // per-Gateway typed contract onto the controller-choice half.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         let class_name = gateway
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(GATEWAY_API_KEY_GATEWAY_CLASS_NAME))
@@ -7116,10 +7083,7 @@ mod tests {
         // on the canonical-Gateway-API-`(key, value)`-pair-lifted-uses
         // pin surface this pin closes the KEY half of.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let gateway = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_GATEWAY))
-            .expect("Gateway present");
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
         let spec = gateway
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.as_mapping())
@@ -7167,10 +7131,7 @@ mod tests {
         // the drift footgun the inline-literal-at-the-production-
         // skeleton-call shape carried by construction.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
-        let route = docs
-            .iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE))
-            .expect("HTTPRoute present");
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         let hostnames = route
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get(caixa_core::GATEWAY_API_KEY_HOSTNAMES))
@@ -7345,8 +7306,7 @@ mod tests {
     // ── HTTPRoute :politicas :timeout overlay ────────────────────────────
 
     fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
-        docs.iter()
-            .find(|d| kube_kind_is(d, GATEWAY_API_KIND_HTTP_ROUTE))
+        find_by_kind(docs, GATEWAY_API_KIND_HTTP_ROUTE)
             .and_then(|d| d.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get(KUBE_KEY_RULES))
             .and_then(|r| r.as_sequence())

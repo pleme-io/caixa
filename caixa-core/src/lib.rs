@@ -74,7 +74,7 @@ pub use render::{
     M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, MappingExt, NATS_SUBJECT_MAX_LEN,
     PLEME_LABEL_PREFIX, PathShapeViolation, RenderError, SequenceExt, ServicoCountMismatch,
     WASI_KV_SLOT_MAX_LEN, WIT_IDENT_MAX_LEN, assert_str_reexport_identity,
-    find_ascii_whitespace_byte, find_non_ascii_whitespace_char, insert_first_seen,
+    find_ascii_whitespace_byte, find_by_kind, find_non_ascii_whitespace_char, insert_first_seen,
     is_cargo_feature_name, is_computeunit_yaml_extension, is_digit_only_magnitude,
     is_dns_1123_label, is_gateway_api_http_path, is_git_oid, is_git_ref_name, is_git_repo_url,
     is_lareira_chart_name_shape, is_leading_zero_padded_magnitude, is_lisp_extension,
