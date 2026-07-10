@@ -13153,6 +13153,75 @@ pub fn servico_m2_overlay(
     Ok(out)
 }
 
+/// Compose the canonical per-Servico value-block splice every per-Servico
+/// renderer applies to the target values / entry mapping — the two-step
+/// sequence [`caixa_helm::build_values_yaml`] and
+/// [`caixa_flux::programs_yaml_entry`] both re-derived inline before this
+/// lift:
+///
+///   1. Splice every string-keyed entry from the `ComputeUnit` YAML's
+///      `spec.*` sub-mapping (routed through [`string_keyed_entries`],
+///      preserving the source Mapping's insertion order).
+///   2. Overlay the M2 typed slots (routed through
+///      [`servico_m2_overlay`], `BTreeMap` key-ordered) at every M2 key
+///      not already claimed by step 1 — the `or_insert` precedence rule
+///      the two prior inline call sites shared, promoted here to a
+///      filtered append so the returned `Vec` is drop-in for a target
+///      mapping whose insertion order is load-bearing (caixa-flux's
+///      `serde_yaml::Mapping` preserves it; caixa-helm's `BTreeMap`
+///      re-sorts by key, so both consumer shapes stay byte-identical
+///      to their prior inline blocks under this lift).
+///
+/// Returns a `Vec<(String, serde_yaml::Value)>` in insertion order —
+/// spec.* entries first (original ordering preserved), then the M2 slots
+/// that weren't claimed by spec.* (in [`servico_m2_overlay`]'s canonical
+/// BTreeMap-key ordering: `behavior` → `limits` → `upgradeFrom`).
+/// Callers extend their target mapping by iterating the `Vec` and
+/// inserting each pair with their own map type's canonical insert.
+///
+/// Until this lift landed the two prior inline blocks each carried the
+/// same three-shape composition: `for (k, v) in
+/// caixa_core::string_keyed_entries(spec) { <insert>(k, v.clone()); }`
+/// followed by `for (key, value) in caixa_core::servico_m2_overlay(caixa)?
+/// { <entry-and-or-insert>(key, value); }`. A future change to the
+/// per-Servico splice / overlay composition — the M4 typed per-edge
+/// policy overlay slot addition (MESH-COMPOSITION §III.2 #3), a change
+/// to the spec.* / M2 precedence rule (e.g. reversing to "M2 wins on
+/// collision" once per-Aplicacao operator overrides land), a
+/// canonicalization pass on the merged key set (e.g. rejecting empty
+/// string keys, casing-normalization on DNS-1123 labels) — would have
+/// to be threaded through both renderers in lockstep or one would
+/// silently diverge from the other on which keys it emitted and in
+/// what order. Peer with the lifted [`servico_m2_overlay`] on the
+/// per-Servico M2-overlay axis (10bf310 / 0e84fb9 on the sibling
+/// upsert-loop / test-side probe axes) — completes the
+/// "one canonical splice / overlay composition per typed axis"
+/// discipline the M2 overlay lift established, now on the composed
+/// spec.*+M2 axis every per-Servico renderer entry-point navigates.
+///
+/// # Errors
+///
+/// Propagates [`RenderError::Yaml`] from [`servico_m2_overlay`] when
+/// `serde_yaml::to_value` fails for any typed M2 slot value — the same
+/// error surface [`servico_m2_overlay`]'s docstring names.
+pub fn servico_spec_and_m2_overlay_entries(
+    caixa: &Caixa,
+    spec: &serde_yaml::Value,
+) -> Result<Vec<(String, serde_yaml::Value)>, RenderError> {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out: Vec<(String, serde_yaml::Value)> = Vec::new();
+    for (k, v) in string_keyed_entries(spec) {
+        seen.insert(k.to_string());
+        out.push((k.to_string(), v.clone()));
+    }
+    for (key, value) in servico_m2_overlay(caixa)? {
+        if !seen.contains(key) {
+            out.push((key.to_string(), value));
+        }
+    }
+    Ok(out)
+}
+
 /// Bracket a typed `u32` axis with the "zero-floor + upper-cap" gate
 /// pair every capped-`u32` `:politicas` / `:supervisor` / `:limits`
 /// axis carries. Returns `on_zero()` when `value == 0`,
@@ -14711,6 +14780,207 @@ mod tests {
         assert_eq!(
             keys,
             vec![M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM]
+        );
+    }
+
+    // ── servico_spec_and_m2_overlay_entries — composed splice ────────────
+    //
+    // The compound peer of `servico_m2_overlay` on the ComputeUnit-YAML
+    // `spec.*` + M2-overlay axis: fuses the two prior inline for-loops
+    // caixa-flux::programs_yaml_entry and caixa-helm::build_values_yaml
+    // both carried around `string_keyed_entries` + `servico_m2_overlay`
+    // into one canonical composition. The pins below bracket the shape
+    // end-to-end (spec.* keys first + preserved-insertion-order, then M2
+    // slots in BTreeMap-key order at every M2 key not already claimed by
+    // spec.*).
+
+    fn cu_yaml_with_spec_fields(spec_yaml: &str) -> serde_yaml::Value {
+        serde_yaml::from_str(&format!(
+            "apiVersion: wasm.pleme.io/v1alpha1\nkind: ComputeUnit\nmetadata:\n  name: hello-rio\nspec:\n{spec_yaml}"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn servico_spec_and_m2_overlay_entries_empty_caixa_and_empty_spec_yields_empty() {
+        let cu = cu_yaml_with_spec_fields("  {}\n");
+        let spec = cu.get(KUBE_KEY_SPEC).unwrap();
+        let out = servico_spec_and_m2_overlay_entries(&bare_servico(), spec).unwrap();
+        assert!(
+            out.is_empty(),
+            "empty spec + empty M2 surface yields zero entries \
+             (both loops short-circuit vacuously)"
+        );
+    }
+
+    #[test]
+    fn servico_spec_and_m2_overlay_entries_splices_spec_fields_in_source_insertion_order() {
+        // The spec.* field-splice loop preserves the source YAML
+        // Mapping's insertion order — caixa-flux's `serde_yaml::Mapping`
+        // target reads this back verbatim, so a rebrand of the source
+        // ComputeUnit YAML's field ordering must not silently reorder
+        // the emitted programs.yaml entry.
+        let cu = cu_yaml_with_spec_fields(
+            "  module:\n    source: oci://ghcr.io/pleme-io/hello-rio:v0.1.0\n  \
+             trigger:\n    service: {port: 8080}\n  capabilities:\n    - env\n",
+        );
+        let spec = cu.get(KUBE_KEY_SPEC).unwrap();
+        let out = servico_spec_and_m2_overlay_entries(&bare_servico(), spec).unwrap();
+        let keys: Vec<&str> = out.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec![
+                COMPUTEUNIT_SPEC_KEY_MODULE,
+                COMPUTEUNIT_SPEC_KEY_TRIGGER,
+                COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
+            ],
+            "spec.* keys must appear in source-Mapping insertion order",
+        );
+    }
+
+    #[test]
+    fn servico_spec_and_m2_overlay_entries_appends_m2_slots_after_spec_in_canonical_key_order() {
+        // Bracket the second-half of the composition — the M2 overlay
+        // walk lands after the spec.* splice, in BTreeMap-key ordering
+        // (behavior → limits → upgradeFrom).
+        let cu = cu_yaml_with_spec_fields(
+            "  module:\n    source: oci://ghcr.io/pleme-io/hello-rio:v0.1.0\n",
+        );
+        let spec = cu.get(KUBE_KEY_SPEC).unwrap();
+        let mut c = bare_servico();
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            ..Default::default()
+        });
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..Default::default()
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.0.9".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "hello-rio".into(),
+            }],
+        }];
+        let out = servico_spec_and_m2_overlay_entries(&c, spec).unwrap();
+        let keys: Vec<&str> = out.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec![
+                COMPUTEUNIT_SPEC_KEY_MODULE,
+                M2_KEY_BEHAVIOR,
+                M2_KEY_LIMITS,
+                M2_KEY_UPGRADE_FROM,
+            ],
+            "M2 slots must land after the spec.* splice, in canonical \
+             BTreeMap key order",
+        );
+    }
+
+    #[test]
+    fn servico_spec_and_m2_overlay_entries_or_insert_precedence_spec_wins_on_collision() {
+        // The or_insert precedence rule the two prior inline blocks
+        // shared: when the ComputeUnit YAML's `spec.*` sub-mapping
+        // already carries the M2 slot's key (an author-authored
+        // ComputeUnit `spec.limits` overriding the manifest-derived
+        // `caixa.limits` overlay), the spec.* value stays and the M2
+        // overlay's value is skipped. Regression-guards against a
+        // future reversal ("M2 wins on collision") silently changing
+        // the composition without an explicit slot-precedence flip at
+        // the helper.
+        let cu = cu_yaml_with_spec_fields(
+            "  limits:\n    memory: from-spec\n  module:\n    source: oci://x\n",
+        );
+        let spec = cu.get(KUBE_KEY_SPEC).unwrap();
+        let mut c = bare_servico();
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            ..Default::default()
+        });
+        let out = servico_spec_and_m2_overlay_entries(&c, spec).unwrap();
+        let limits_entries: Vec<&(String, serde_yaml::Value)> =
+            out.iter().filter(|(k, _)| k == M2_KEY_LIMITS).collect();
+        assert_eq!(
+            limits_entries.len(),
+            1,
+            "on collision the M2 overlay's `limits` entry must be \
+             filtered out — spec.* wins, and appears exactly once",
+        );
+        assert_eq!(
+            limits_entries[0].1.get("memory").and_then(|v| v.as_str()),
+            Some("from-spec"),
+            "the surviving `limits` entry must carry the spec.* value, \
+             not the manifest-derived M2 overlay's value",
+        );
+    }
+
+    #[test]
+    fn servico_spec_and_m2_overlay_entries_short_circuits_on_non_mapping_spec() {
+        // Sibling `string_keyed_entries` docstring pins the
+        // non-Mapping short-circuit; extend it to the composed splice
+        // — a spec that isn't a Mapping yields zero spec.* entries,
+        // and only the M2 overlay contributes. Bracket-guard against a
+        // future refactor that swaps `string_keyed_entries` for a
+        // stricter parser silently dropping the M2 half too.
+        let non_mapping_spec = serde_yaml::Value::String("not-a-mapping".into());
+        let mut c = bare_servico();
+        c.limits = Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            ..Default::default()
+        });
+        let out = servico_spec_and_m2_overlay_entries(&c, &non_mapping_spec).unwrap();
+        let keys: Vec<&str> = out.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(
+            keys,
+            vec![M2_KEY_LIMITS],
+            "non-Mapping spec short-circuits the spec.* splice; the M2 \
+             overlay still contributes its filled slots",
+        );
+    }
+
+    #[test]
+    fn servico_spec_and_m2_overlay_entries_matches_hand_written_composition() {
+        // Cross-check the lifted composition against the hand-written
+        // two-loop shape the two prior inline blocks carried. A drift
+        // between the helper and the inline composition would silently
+        // emit a different key set / ordering / precedence at every
+        // routed renderer — pin the equivalence so the helper stays a
+        // drop-in replacement for both.
+        let cu = cu_yaml_with_spec_fields(
+            "  module:\n    source: oci://ghcr.io/pleme-io/hello-rio:v0.1.0\n  \
+             trigger:\n    service: {port: 8080}\n",
+        );
+        let spec = cu.get(KUBE_KEY_SPEC).unwrap();
+        let mut c = bare_servico();
+        c.limits = Some(LimitsSpec {
+            memory: Some(32 * 1024 * 1024),
+            ..Default::default()
+        });
+        c.behavior = Some(BehaviorSpec {
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            ..Default::default()
+        });
+
+        let via_helper = servico_spec_and_m2_overlay_entries(&c, spec).unwrap();
+
+        let mut via_inline: Vec<(String, serde_yaml::Value)> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for (k, v) in string_keyed_entries(spec) {
+            seen.insert(k.to_string());
+            via_inline.push((k.to_string(), v.clone()));
+        }
+        for (key, value) in servico_m2_overlay(&c).unwrap() {
+            if !seen.contains(key) {
+                via_inline.push((key.to_string(), value));
+            }
+        }
+
+        assert_eq!(
+            via_helper, via_inline,
+            "servico_spec_and_m2_overlay_entries must byte-equal the \
+             hand-written two-loop composition (spec.* splice + M2 \
+             overlay with or_insert precedence) the two prior inline \
+             call sites carried",
         );
     }
 
