@@ -1152,7 +1152,9 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
 #[cfg(test)]
 mod tests {
     use super::*;
-    use caixa_core::{Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM};
+    use caixa_core::{
+        Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, kube_root_str_field,
+    };
 
     fn sample_caixa() -> Caixa {
         Caixa {
@@ -2389,7 +2391,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         assert_eq!(
-            parsed.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
+            kube_root_str_field(&parsed, KUBE_KEY_API_VERSION),
             Some(FLUX_HELMRELEASE_API_VERSION),
             "helmrelease.yaml apiVersion must spell the lifted \
              FLUX_HELMRELEASE_API_VERSION ({FLUX_HELMRELEASE_API_VERSION:?}); \
@@ -2432,7 +2434,7 @@ spec:
         );
         for (i, entry) in health_checks.iter().enumerate() {
             assert_eq!(
-                entry.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
+                kube_root_str_field(entry, KUBE_KEY_API_VERSION),
                 Some(FLUX_HELMRELEASE_API_VERSION),
                 "kustomization.yaml spec.healthChecks[{i}].apiVersion must \
                  spell the lifted FLUX_HELMRELEASE_API_VERSION \
@@ -2607,7 +2609,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
         assert_eq!(
-            parsed.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
+            kube_root_str_field(&parsed, KUBE_KEY_API_VERSION),
             Some(FLUX_GITREPOSITORY_API_VERSION),
             "gitrepository.yaml apiVersion must spell the lifted \
              FLUX_GITREPOSITORY_API_VERSION ({FLUX_GITREPOSITORY_API_VERSION:?}); \
@@ -2702,7 +2704,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         assert_eq!(
-            parsed.get(KUBE_KEY_API_VERSION).and_then(|n| n.as_str()),
+            kube_root_str_field(&parsed, KUBE_KEY_API_VERSION),
             Some(FLUX_KUSTOMIZATION_API_VERSION),
             "kustomization.yaml apiVersion must spell the lifted \
              FLUX_KUSTOMIZATION_API_VERSION ({FLUX_KUSTOMIZATION_API_VERSION:?}); \
@@ -2800,7 +2802,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
         assert_eq!(
-            parsed.get(KUBE_KEY_KIND).and_then(|n| n.as_str()),
+            kube_root_str_field(&parsed, KUBE_KEY_KIND),
             Some(FLUX_KIND_GIT_REPOSITORY),
             "gitrepository.yaml top-level kind must spell the lifted \
              FLUX_KIND_GIT_REPOSITORY ({FLUX_KIND_GIT_REPOSITORY:?}); a drifted \
@@ -3029,7 +3031,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         assert_eq!(
-            parsed.get(KUBE_KEY_KIND).and_then(|n| n.as_str()),
+            kube_root_str_field(&parsed, KUBE_KEY_KIND),
             Some(FLUX_KIND_HELM_RELEASE),
             "helmrelease.yaml top-level kind must spell the lifted \
              FLUX_KIND_HELM_RELEASE ({FLUX_KIND_HELM_RELEASE:?}); a drifted \
@@ -3342,7 +3344,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
         assert_eq!(
-            parsed.get(KUBE_KEY_KIND).and_then(|n| n.as_str()),
+            kube_root_str_field(&parsed, KUBE_KEY_KIND),
             Some(FLUX_KIND_KUSTOMIZATION),
             "kustomization.yaml top-level kind must spell the lifted \
              FLUX_KIND_KUSTOMIZATION ({FLUX_KIND_KUSTOMIZATION:?}); a drifted \

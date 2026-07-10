@@ -2726,6 +2726,7 @@ mod tests {
         Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
         M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro,
         MeshPolicy, Placement, PlacementStrategy, WitContract, kube_metadata_str_field,
+        kube_root_str_field,
     };
     use std::time::Duration;
 
@@ -5433,7 +5434,7 @@ mod tests {
         );
         for p in &policies {
             assert_eq!(
-                p.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
+                kube_root_str_field(p, KUBE_KEY_KIND),
                 Some(CILIUM_KIND_NETWORK_POLICY),
                 "every rendered CiliumNetworkPolicy must declare the lifted \
                  [`CILIUM_KIND_NETWORK_POLICY`] constant on its top-level kind \
@@ -5469,7 +5470,7 @@ mod tests {
         );
         for p in &policies {
             assert_eq!(
-                p.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
+                kube_root_str_field(p, KUBE_KEY_API_VERSION),
                 Some(CILIUM_API_VERSION),
                 "every rendered CiliumNetworkPolicy must declare the lifted \
                  [`CILIUM_API_VERSION`] constant on its top-level apiVersion \
@@ -6550,9 +6551,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .unwrap();
         let listener = gateway
             .get(KUBE_KEY_SPEC)
@@ -6600,9 +6599,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         let listener = gateway
             .get(KUBE_KEY_SPEC)
@@ -6645,9 +6642,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         let listener = gateway
             .get(KUBE_KEY_SPEC)
@@ -6670,9 +6665,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .unwrap();
         let backend = route
             .get(KUBE_KEY_SPEC)
@@ -6712,11 +6705,11 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
             assert_eq!(
-                p.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
+                kube_root_str_field(p, KUBE_KEY_API_VERSION),
                 Some("cilium.io/v2")
             );
             assert_eq!(
-                p.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
+                kube_root_str_field(p, KUBE_KEY_KIND),
                 Some(CILIUM_KIND_NETWORK_POLICY)
             );
             let metadata = p
@@ -6749,12 +6742,10 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         assert_eq!(
-            gateway.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
+            kube_root_str_field(gateway, KUBE_KEY_API_VERSION),
             Some("gateway.networking.k8s.io/v1")
         );
         let metadata = gateway
@@ -6787,12 +6778,10 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("HTTPRoute present");
         assert_eq!(
-            route.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
+            kube_root_str_field(route, KUBE_KEY_API_VERSION),
             Some("gateway.networking.k8s.io/v1")
         );
         let metadata = route
@@ -6832,12 +6821,10 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         assert_eq!(
-            gateway.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
+            kube_root_str_field(gateway, KUBE_KEY_API_VERSION),
             Some(caixa_core::GATEWAY_API_API_VERSION),
             "Gateway's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
@@ -6874,12 +6861,10 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         assert_eq!(
-            gateway.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
+            kube_root_str_field(gateway, KUBE_KEY_KIND),
             Some(caixa_core::GATEWAY_API_KIND_GATEWAY),
             "Gateway's top-level kind must equal the lifted \
              caixa_core::GATEWAY_API_KIND_GATEWAY by value — drift here \
@@ -6919,12 +6904,10 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("HTTPRoute present");
         assert_eq!(
-            route.get(KUBE_KEY_KIND).and_then(|v| v.as_str()),
+            kube_root_str_field(route, KUBE_KEY_KIND),
             Some(caixa_core::GATEWAY_API_KIND_HTTP_ROUTE),
             "HTTPRoute's top-level kind must equal the lifted \
              caixa_core::GATEWAY_API_KIND_HTTP_ROUTE by value — drift here \
@@ -6951,12 +6934,10 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("HTTPRoute present");
         assert_eq!(
-            route.get(KUBE_KEY_API_VERSION).and_then(|v| v.as_str()),
+            kube_root_str_field(route, KUBE_KEY_API_VERSION),
             Some(caixa_core::GATEWAY_API_API_VERSION),
             "HTTPRoute's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
@@ -6991,9 +6972,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         let class_name = gateway
             .get(KUBE_KEY_SPEC)
@@ -7034,9 +7013,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_GATEWAY)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY))
             .expect("Gateway present");
         let spec = gateway
             .get(KUBE_KEY_SPEC)
@@ -7087,9 +7064,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = docs
             .iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .expect("HTTPRoute present");
         let hostnames = route
             .get(KUBE_KEY_SPEC)
@@ -7266,9 +7241,7 @@ mod tests {
 
     fn httproute_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
-            .find(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(GATEWAY_API_KIND_HTTP_ROUTE)
-            })
+            .find(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_HTTP_ROUTE))
             .and_then(|d| d.get(KUBE_KEY_SPEC))
             .and_then(|s| s.get(KUBE_KEY_RULES))
             .and_then(|r| r.as_sequence())
@@ -7619,9 +7592,7 @@ mod tests {
 
     fn cnp_ingress_rules(docs: &[serde_yaml::Value]) -> Vec<serde_yaml::Value> {
         docs.iter()
-            .filter(|d| {
-                d.get(KUBE_KEY_KIND).and_then(|k| k.as_str()) == Some(CILIUM_KIND_NETWORK_POLICY)
-            })
+            .filter(|d| kube_root_str_field(d, KUBE_KEY_KIND) == Some(CILIUM_KIND_NETWORK_POLICY))
             .filter_map(|d| {
                 d.get(KUBE_KEY_SPEC)
                     .and_then(|s| s.get(CILIUM_KEY_INGRESS))

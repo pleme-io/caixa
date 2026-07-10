@@ -12521,6 +12521,89 @@ pub fn kube_metadata_str_field<'a>(value: &'a serde_yaml::Value, field: &str) ->
         .and_then(|n| n.as_str())
 }
 
+/// Read the string-scalar value at a top-level `<field>` axis-key on a
+/// K8s custom resource YAML document — the root-level readback peer to
+/// [`kube_metadata_str_field`] on the sub-`metadata:` axis. Returns
+/// `None` when either the requested `<field>` scalar is absent
+/// (defensively tolerated — the caller's own `unwrap_or(...)` /
+/// `expect(...)` names the axis) or the scalar is present but carries a
+/// non-string YAML type (a numeric, boolean, or nested mapping —
+/// invalid K8s CR shape per the apiserver's OpenAPI schema but
+/// tolerated here as `None` so the readback stays a total function).
+/// The returned `&str` borrows into the input `Value` — the caller
+/// decides whether to compare (`==`), clone (`.to_string()`), or
+/// unwrap-then-panic. The two-hop navigation happens in one function
+/// call the caller reads as intent (`kube_root_str_field(<value>,
+/// <FIELD>)` — "read this K8s CR's top-level `<FIELD>` string-scalar")
+/// rather than two hand-spelled positional artifacts (the
+/// `get(<FIELD>)` outer hop, the `and_then(|n| n.as_str())` shape gate).
+///
+/// The canonical shape 32 call sites across `caixa-mesh` (24) +
+/// `caixa-flux` (8) previously carried inline as the two-line block
+///
+/// ```ignore
+/// value
+///     .get(<FIELD>)
+///     .and_then(|n| n.as_str())
+/// ```
+///
+/// around a one-token semantic payload (the `<FIELD>` axis-key —
+/// [`KUBE_KEY_KIND`] on 22 sites, [`KUBE_KEY_API_VERSION`] on 10
+/// sites). Every routed caller keeps its downstream idiom
+/// (`.unwrap()`, `.expect(...)`, `== Some(<KIND>)`, `assert_eq!(...,
+/// Some(<API_VERSION>))`) unchanged — the lift closes the navigation
+/// surface, not the per-site error-handling posture.
+///
+/// Sites lifted include:
+///
+///   * caixa-flux's `cluster_bundle_helmrelease_uses_lifted_flux_api_version`
+///     + peer test-side pins on the emitted `helmrelease.yaml`,
+///     `gitrepository.yaml`, `kustomization.yaml` per-document
+///     top-level [`KUBE_KEY_API_VERSION`] axis;
+///   * caixa-flux's per-document top-level [`KUBE_KEY_KIND`] axis pins
+///     across the same `cluster_bundle` multi-file sequence;
+///   * caixa-mesh's `docs.iter().find(|d| d.get(KUBE_KEY_KIND).
+///     and_then(|k| k.as_str()) == Some(<KIND>))` per-CR filter over
+///     the emitted `Gateway` + `HTTPRoute` multi-doc sequence — the 15
+///     `gateway_routes` test-harness `find` sites plus the sibling
+///     [`CILIUM_KIND_NETWORK_POLICY`] filter in
+///     `cilium_authentication_mode_serialized_as_yaml_string`;
+///   * caixa-mesh's per-CR top-level [`KUBE_KEY_API_VERSION`] +
+///     [`KUBE_KEY_KIND`] discriminator-pair pins across
+///     `cilium_network_policies_emit_per_de_para_edges` +
+///     `gateway_routes_emit_gateway_and_httproute_per_aplicacao` +
+///     sibling gateway/route pins.
+///
+/// Peer to sibling [`kube_metadata_str_field`] (6809867) on the K8s
+/// CR-document readback surface: [`kube_metadata_str_field`] closes
+/// the `metadata.<field>` string-scalar readback at the sub-`metadata:`
+/// axis; this closes the root-level `<field>` string-scalar readback at
+/// the top-level axis. The two together bracket the K8s-CR YAML
+/// readback surface so every navigation into a rendered K8s CR
+/// document — the top-level `(apiVersion, kind)` discriminator pair,
+/// the sub-`metadata.(name, namespace)` identity pair — reaches
+/// through one canonical lifted helper. A future K8s API-machinery
+/// rebrand on either axis (a hypothetical `apiVersionV2:` scalar under
+/// a wrapper CRD group's schema-migration, a Server-Side-Apply-driven
+/// `metadata.name` rename under per-field ownership annotations)
+/// reaches every consumer through one lifted helper, not a coordinated
+/// rewrite across every renderer + every test-side per-CR readback
+/// path.
+///
+/// The `field` axis stays parametric (rather than pinned to
+/// [`KUBE_KEY_KIND`] or [`KUBE_KEY_API_VERSION`] as two separate
+/// helpers) so the same lift closes every top-level string-scalar
+/// axis a future K8s API-machinery revision surfaces (e.g. the
+/// `caixa-otel` per-Servico OpenTelemetry-Collector CR's top-level
+/// scalar pins, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-CR discriminator readback in the app-operator,
+/// MESH-COMPOSITION §III.2 #5) — each new axis reaches for the same
+/// helper with a new [`KUBE_KEY_<AXIS>`] const, not a fresh per-axis
+/// helper.
+pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Option<&'a str> {
+    value.get(field).and_then(|n| n.as_str())
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -25597,5 +25680,221 @@ spec:
                  production-fallback drifts silently at readback time"
             );
         }
+    }
+
+    #[test]
+    fn kube_root_str_field_reads_api_version_and_kind_string_scalars() {
+        // The lift's load-bearing contract: given a Value carrying
+        // top-level `apiVersion:` + `kind:` string scalars (every K8s
+        // CR document the emit-side `kube_resource_skeleton` renders
+        // spells the pair by construction), the helper returns
+        // Some(<str>) borrowing into the input Value on both axes.
+        // Pinned because every routed test-side site — the
+        // caixa-flux `cluster_bundle_*_uses_lifted_flux_api_version`
+        // per-document apiVersion pins + the caixa-mesh
+        // `gateway_routes` per-`(Gateway, HTTPRoute)` kind-filter
+        // + the sibling caixa-mesh
+        // `cilium_authentication_mode_serialized_as_yaml_string`
+        // CNP-kind filter — reaches through this exact top-level
+        // string-scalar readback, and a drift in the borrowed-string
+        // contract would silently regress every routed site's
+        // per-CR filter / discriminator-pin equality.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(GATEWAY_API_API_VERSION.into()),
+        );
+        cr.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_str_field(&value, KUBE_KEY_API_VERSION),
+            Some(GATEWAY_API_API_VERSION),
+            "kube_root_str_field must read top-level apiVersion as a \
+             string scalar — the caixa-flux `cluster_bundle_*_uses_\
+             lifted_flux_api_version` pins + caixa-mesh per-CR \
+             apiVersion pins reach through this axis for discriminator \
+             equality"
+        );
+        assert_eq!(
+            kube_root_str_field(&value, KUBE_KEY_KIND),
+            Some(GATEWAY_API_KIND_GATEWAY),
+            "kube_root_str_field must read top-level kind as a string \
+             scalar — the 15 caixa-mesh `gateway_routes` per-CR find \
+             sites reach through this axis to filter the multi-doc \
+             emission sequence by kind discriminator"
+        );
+    }
+
+    #[test]
+    fn kube_root_str_field_returns_none_when_field_absent() {
+        // Every K8s CR document the emit-side `kube_resource_skeleton`
+        // renders carries `apiVersion:` + `kind:` scalars, but the
+        // readback surface is called on arbitrary Value inputs
+        // (multi-doc sequences under iteration, upstream ComputeUnit
+        // YAML documents) that may legally omit either axis-key. The
+        // prior inline two-hop chain silently short-circuits on the
+        // outer `.get(field)` hop when the axis is absent; pin the
+        // helper's None return so the prior no-panic contract holds.
+        // Also verify on non-Mapping outer Value shapes an external
+        // YAML document may parse into.
+        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_root_str_field(&value, KUBE_KEY_API_VERSION),
+            None,
+            "kube_root_str_field must short-circuit to None when the \
+             requested top-level axis-key is absent — the prior inline \
+             `.get(field)` outer hop returned None here, and every \
+             routed caller (test pin + filter predicate) depends on \
+             that None-arm reaching through"
+        );
+        assert_eq!(
+            kube_root_str_field(&value, KUBE_KEY_KIND),
+            None,
+            "kube_root_str_field must short-circuit to None on a \
+             missing top-level kind axis-key — every routed \
+             caixa-mesh find-predicate compares against Some(<KIND>) \
+             and must reject None-shaped entries silently"
+        );
+
+        for shape in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_root_str_field(&shape, KUBE_KEY_KIND),
+                None,
+                "kube_root_str_field({shape:?}, KUBE_KEY_KIND) must \
+                 return None on non-Mapping shapes — the prior inline \
+                 `.get(field)` hop yields None on every non-Mapping \
+                 Value, and the lift must preserve that contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_str_field_returns_none_when_field_carries_non_string_type() {
+        // A top-level `<field>` axis-key present but carrying a non-
+        // string YAML type — schema-invalid per the K8s apiserver's
+        // OpenAPI schema but tolerated here as None so the readback
+        // stays a total function. The prior inline chain's trailing
+        // `.and_then(|n| n.as_str())` shape gate silently short-
+        // circuits here; pin the helper's None-arm so a future
+        // refactor that reaches for `.as_str().unwrap()` (which would
+        // panic on a numeric axis-value) is a test-visible break, not
+        // a runtime regression at the first schema-invalid CR the
+        // reader sees.
+        for non_string in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_KIND, non_string.clone());
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_root_str_field(&value, KUBE_KEY_KIND),
+                None,
+                "kube_root_str_field must return None when top-level \
+                 kind carries a non-string YAML type ({non_string:?}) \
+                 — the prior inline `.and_then(|n| n.as_str())` shape \
+                 gate short-circuited here, and every routed caller \
+                 depends on that None-arm to keep the readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_str_field_matches_prior_inline_chain() {
+        // Cross-check the helper's output byte-for-byte against the
+        // prior inline two-hop chain both routed renderers previously
+        // carried. A drift between the helper's return and the inline
+        // chain would silently regress every routed test-side filter's
+        // equality comparison + the caixa-flux production-shape
+        // per-document apiVersion / kind pin — pin the byte-
+        // equivalence so the helper remains a drop-in replacement for
+        // every routed site's prior two-line block.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+        );
+        cr.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(FLUX_KIND_HELM_RELEASE.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for field in [KUBE_KEY_API_VERSION, KUBE_KEY_KIND] {
+            let via_helper = kube_root_str_field(&value, field);
+            let via_inline = value.get(field).and_then(|n| n.as_str());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_root_str_field(_, {field:?}) must yield the same \
+                 Option<&str> as the prior inline two-hop chain — \
+                 otherwise every routed caller's equality-filter / \
+                 discriminator-pin drifts silently at readback time"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_root_str_field_and_kube_metadata_str_field_bracket_the_readback_surface() {
+        // Peer-pin: the two lifted K8s-CR readback primitives cover
+        // orthogonal axes on the same document. Given a full K8s CR
+        // (top-level `apiVersion:` + `kind:` discriminator pair,
+        // sub-`metadata.name:` + `metadata.namespace:` identity pair),
+        // each helper reaches through its own axis and the two
+        // together enumerate every documented top-level string
+        // scalar the substrate emits + reads back. Pin the pairing so
+        // a future refactor that collapses the two into a single
+        // navigation primitive (or splits one further) surfaces here
+        // as a test-visible break, not a silent regression at the
+        // first routed caller's per-CR readback drift.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        metadata.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+        );
+        cr.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(CILIUM_KIND_NETWORK_POLICY.into()),
+        );
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_root_str_field(&value, KUBE_KEY_API_VERSION),
+            Some(CILIUM_API_VERSION)
+        );
+        assert_eq!(
+            kube_root_str_field(&value, KUBE_KEY_KIND),
+            Some(CILIUM_KIND_NETWORK_POLICY)
+        );
+        assert_eq!(
+            kube_metadata_str_field(&value, KUBE_KEY_NAME),
+            Some("checkout-cart-to-catalog")
+        );
+        assert_eq!(
+            kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE),
+            Some(DEFAULT_NAMESPACE)
+        );
     }
 }
