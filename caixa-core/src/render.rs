@@ -12322,6 +12322,18 @@ where
 /// same mapping is one step further along the emit trajectory — the
 /// helper closes the gap in one primitive.
 ///
+/// The seven caixa-mesh call sites all followed the same
+/// insert-under-outer-key step, so the composition
+/// `mapping.insert_str_key(K, singleton_mapping_sequence(m))` is
+/// itself lifted onto the sibling [`MappingExt::insert_singleton_mapping_sequence`]
+/// method — every caixa-mesh site now reaches for the composed
+/// method rather than nesting the two calls at the call site. This
+/// standalone helper remains the semantic primitive for the
+/// singleton-Mapping-list-shape `Value` (the trait method's impl
+/// composes it internally), and stays public for future callers that
+/// want the raw `Value::Sequence(vec![Value::Mapping(m)])` payload
+/// without inserting it under a schema key.
+///
 /// [mesh]: https://docs.rs/caixa-mesh
 #[must_use]
 #[inline]
@@ -13225,9 +13237,10 @@ pub trait MappingExt {
     /// singleton-list-shape axis: `singleton_mapping_sequence(m)` builds
     /// the sole-Mapping-element `Value::Sequence` payload;
     /// `insert_sequence(K, v)` inserts an already-built `Vec<Value>`
-    /// payload under a schema key. A caller composing the two writes
-    /// `mapping.insert_str_key(K, singleton_mapping_sequence(m))` for
-    /// the singleton case (the sole element is a fresh Mapping) and
+    /// payload under a schema key. A caller composing the two through
+    /// [`Self::insert_singleton_mapping_sequence`] writes
+    /// `mapping.insert_singleton_mapping_sequence(K, m)` for the
+    /// singleton case (the sole element is a fresh Mapping); reach for
     /// `mapping.insert_sequence(K, v)` for the multi-element or
     /// non-Mapping-element case (the vec is built up per-iteration or
     /// wraps a non-Mapping scalar).
@@ -13235,6 +13248,83 @@ pub trait MappingExt {
         &mut self,
         key: &str,
         value: Vec<serde_yaml::Value>,
+    ) -> Option<serde_yaml::Value>;
+
+    /// Insert `(key, Value::Sequence(vec![Value::Mapping(value)]))` into
+    /// `self` — the singleton-Mapping-list-shape-valued-field emission
+    /// shape that composes [`Self::insert_str_key`]'s
+    /// `&str → Value::String` key promotion with the
+    /// [`singleton_mapping_sequence`] helper's singleton-list wrap of a
+    /// [`serde_yaml::Mapping`] payload. Returns the prior value at that
+    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    ///
+    /// The canonical shape 7 production call sites across `caixa-mesh`
+    /// previously carried inline as the two-token composition
+    /// `mapping.insert_str_key(<KEY>, singleton_mapping_sequence(<M>))`
+    /// — a two-token semantic payload (`<KEY>`, `<M>`) buried under a
+    /// two-symbol boilerplate (`insert_str_key(_, _)` +
+    /// `singleton_mapping_sequence(_)`) that fully covers the axis: every
+    /// site both wraps its per-call `Mapping` as the sole-element list
+    /// value and inserts it under a schema key on an outer `Mapping`. A
+    /// rebrand on either half — the outer key-scalar promotion axis
+    /// migrating to a per-key typed `Value` variant, the singleton-list
+    /// wrap migrating to a Server-Side-Apply-typed `Value::Tagged`
+    /// per-CRD-list shape once K8s per-field ownership annotations reach
+    /// the K8s Gateway API / Cilium NetworkPolicy CRD list schemas —
+    /// would silently desynchronize one site while leaving the other six
+    /// on the old shape.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-mesh's `cilium_network_policies` per-`toPorts[]` port
+    ///     entry `ports:` singleton-list (`CILIUM_KEY_PORTS` around the
+    ///     built `port_entry` Mapping);
+    ///   * caixa-mesh's `cilium_network_policies` per-`toPorts[]` L7
+    ///     `rules.http:` singleton-list (`CILIUM_KEY_HTTP` around the
+    ///     built `http_rule` Mapping);
+    ///   * caixa-mesh's `cilium_network_policies` per-`CiliumNetworkPolicy`
+    ///     `spec.ingress:` singleton-list (`CILIUM_KEY_INGRESS` around the
+    ///     built `ingress_rule` Mapping);
+    ///   * caixa-mesh's `gateway_routes` per-`Gateway` `spec.listeners:`
+    ///     singleton-list (`GATEWAY_API_KEY_LISTENERS` around the built
+    ///     `listener` Mapping);
+    ///   * caixa-mesh's `gateway_routes` per-`HTTPRoute.spec.rules[]`
+    ///     `matches:` singleton-list (`GATEWAY_API_KEY_MATCHES` around the
+    ///     built `match_entry` Mapping);
+    ///   * caixa-mesh's `gateway_routes` per-`HTTPRoute.spec.rules[]`
+    ///     `backendRefs:` singleton-list (`GATEWAY_API_KEY_BACKEND_REFS`
+    ///     around the built `backend_ref` Mapping);
+    ///   * caixa-mesh's `gateway_routes` per-`HTTPRoute`
+    ///     `spec.parentRefs:` singleton-list (`GATEWAY_API_KEY_PARENT_REFS`
+    ///     around the built `parent_ref` Mapping).
+    ///
+    /// Lifting collapses the two-symbol composition into one method call
+    /// the caller reads as intent (`mapping.insert_singleton_mapping_sequence
+    /// (<KEY>, <M>)` — "insert a singleton-Mapping-list-shape sub-block
+    /// named `KEY` wrapping the built inner `M`") rather than two
+    /// nested calls. Peer to [`Self::insert_sequence`] on the sibling
+    /// multi-element or non-Mapping-element list-shape axis — the two
+    /// together partition the list-shape-valued-field emission surface:
+    /// [`Self::insert_singleton_mapping_sequence`] for the sole-Mapping-
+    /// element case, [`Self::insert_sequence`] for every other case.
+    ///
+    /// The next renderer to land — the per-`:politicas`
+    /// `CiliumClusterwideEnvoyConfig` emitter (whose singleton
+    /// `spec.resources:[]` / `spec.listeners:[]` / `spec.virtualHosts:[]`
+    /// Mapping-element blocks, MESH-COMPOSITION §III.2 #3, are exactly the
+    /// singleton-Mapping-list shape), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (per-single-
+    /// selector / per-single-gate emission, §III.2 #5), the M4 cross-
+    /// cluster fan-out's per-cluster singleton `Service.spec.ports[]` /
+    /// `HTTPRoute.spec.rules[].backendRefs[]` sole-element emission, the
+    /// future `caixa-otel` OpenTelemetry-Collector `pipelines.traces.
+    /// receivers[]` singleton-receiver emission — gets the canonical
+    /// singleton-Mapping-list-shape wrap+insert for free with one method
+    /// call, instead of re-inlining the two-symbol composition.
+    fn insert_singleton_mapping_sequence(
+        &mut self,
+        key: &str,
+        value: serde_yaml::Mapping,
     ) -> Option<serde_yaml::Value>;
 }
 
@@ -13265,6 +13355,15 @@ impl MappingExt for serde_yaml::Mapping {
         value: Vec<serde_yaml::Value>,
     ) -> Option<serde_yaml::Value> {
         self.insert_str_key(key, serde_yaml::Value::Sequence(value))
+    }
+
+    #[inline]
+    fn insert_singleton_mapping_sequence(
+        &mut self,
+        key: &str,
+        value: serde_yaml::Mapping,
+    ) -> Option<serde_yaml::Value> {
+        self.insert_str_key(key, singleton_mapping_sequence(value))
     }
 }
 
@@ -23631,6 +23730,143 @@ spec:
             "insert_sequence(KEY, v) must byte-equal \
              insert_str_key(KEY, Value::Sequence(v)) — otherwise the \
              four routed consumer sites drift silently at emit time"
+        );
+    }
+
+    // ── insert_singleton_mapping_sequence — composed primitive ───────────
+    //
+    // The trait method composes [`Self::insert_str_key`] with
+    // [`singleton_mapping_sequence`]: every hand-inline
+    // `mapping.insert_str_key(K, singleton_mapping_sequence(m))` two-symbol
+    // composition previously carried at 7 sites across caixa-mesh
+    // collapses onto one method call. Three peer pins pin the trait
+    // method's shape end-to-end.
+
+    #[test]
+    fn mapping_ext_insert_singleton_mapping_sequence_promotes_value_to_singleton_mapping_seq() {
+        // First-insertion returns None (mirroring [`Mapping::insert`])
+        // and the inserted value is a `Value::Sequence` of exactly one
+        // element, wrapping the caller's Mapping as `Value::Mapping`.
+        // Peer with the sibling
+        // `mapping_ext_insert_sequence_promotes_value_to_yaml_sequence`
+        // / `mapping_ext_insert_mapping_promotes_value_to_yaml_mapping`
+        // / `mapping_ext_insert_string_promotes_value_to_yaml_string`
+        // first-insert pins on the sibling MappingExt primitive
+        // members.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(
+            GATEWAY_API_KEY_NAME,
+            serde_yaml::Value::String("gw-listener".into()),
+        );
+        let mut m = serde_yaml::Mapping::new();
+        let prior = m.insert_singleton_mapping_sequence(GATEWAY_API_KEY_LISTENERS, inner.clone());
+        assert_eq!(
+            prior, None,
+            "insert_singleton_mapping_sequence returns None on first insertion, \
+             mirroring serde_yaml::Mapping::insert"
+        );
+        let got = m
+            .get(GATEWAY_API_KEY_LISTENERS)
+            .expect("inserted key is present under Value::Sequence promotion");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(inner)]),
+            "insert_singleton_mapping_sequence routes value verbatim through \
+             the singleton_mapping_sequence(_) helper wrap"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_singleton_mapping_sequence_returns_prior_value_on_replace() {
+        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // return contract: the prior value at that key, or `None` if
+        // absent. Pin the replace-returns-prior semantic so a future
+        // refactor that swaps to a `HashMap::entry`-style flow doesn't
+        // silently drop the prior-value handoff downstream consumers
+        // may reach for. Peer with the sibling
+        // `mapping_ext_insert_sequence_returns_prior_value_on_replace`
+        // and its siblings on the primitive-quintuple axis.
+        let mut first = serde_yaml::Mapping::new();
+        first.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("a".into()));
+        let mut second = serde_yaml::Mapping::new();
+        second.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("b".into()));
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, first.clone());
+        let prior =
+            m.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, second.clone());
+        assert_eq!(
+            prior,
+            Some(serde_yaml::Value::Sequence(vec![
+                serde_yaml::Value::Mapping(first)
+            ])),
+            "insert_singleton_mapping_sequence returns the prior value \
+             when replacing an existing key"
+        );
+        let got = m
+            .get(GATEWAY_API_KEY_PARENT_REFS)
+            .expect("key is still present after replace");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::Mapping(second)]),
+            "replaced value is now the most-recently-inserted singleton \
+             mapping sequence"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_singleton_mapping_sequence_matches_hand_written_composition() {
+        // Cross-check the trait method against the hand-written
+        // `mapping.insert_str_key(KEY, singleton_mapping_sequence(m))`
+        // two-symbol composition the 7 lifted call sites previously
+        // carried. A drift between the trait method's routing and the
+        // inline composition would silently emit a different YAML
+        // mapping (a differently-wrapped outer variant, a
+        // differently-shaped inner singleton-Mapping list) at every
+        // routed consumer — pin the equivalence so the trait remains a
+        // drop-in replacement. Three cases pin the shape end-to-end:
+        // an empty inner Mapping (no silent is_empty short-circuit,
+        // matches the sibling `singleton_mapping_sequence_preserves_empty_inner_mapping`
+        // pin), a single-key inner Mapping (the
+        // `CILIUM_KEY_HTTP` / `CILIUM_KEY_INGRESS` singleton-rule
+        // shape), and a multi-key inner Mapping (the
+        // `GATEWAY_API_KEY_LISTENERS` per-listener shape).
+        let inner_empty = serde_yaml::Mapping::new();
+        let mut inner_single_key = serde_yaml::Mapping::new();
+        inner_single_key
+            .insert_str_key(CILIUM_KEY_PATH, serde_yaml::Value::String("/health".into()));
+        let mut inner_multi_key = serde_yaml::Mapping::new();
+        inner_multi_key.insert_str_key(
+            GATEWAY_API_KEY_NAME,
+            serde_yaml::Value::String("http".into()),
+        );
+        inner_multi_key.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
+        );
+
+        let mut via_trait = serde_yaml::Mapping::new();
+        via_trait.insert_singleton_mapping_sequence(CILIUM_KEY_HTTP, inner_empty.clone());
+        via_trait.insert_singleton_mapping_sequence(CILIUM_KEY_INGRESS, inner_single_key.clone());
+        via_trait
+            .insert_singleton_mapping_sequence(GATEWAY_API_KEY_LISTENERS, inner_multi_key.clone());
+
+        let mut via_inline = serde_yaml::Mapping::new();
+        via_inline.insert_str_key(CILIUM_KEY_HTTP, singleton_mapping_sequence(inner_empty));
+        via_inline.insert_str_key(
+            CILIUM_KEY_INGRESS,
+            singleton_mapping_sequence(inner_single_key),
+        );
+        via_inline.insert_str_key(
+            GATEWAY_API_KEY_LISTENERS,
+            singleton_mapping_sequence(inner_multi_key),
+        );
+
+        assert_eq!(
+            via_trait, via_inline,
+            "insert_singleton_mapping_sequence(KEY, m) must byte-equal \
+             insert_str_key(KEY, singleton_mapping_sequence(m)) — otherwise \
+             the seven routed caixa-mesh consumer sites drift silently at \
+             emit time"
         );
     }
 
