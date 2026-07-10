@@ -222,6 +222,94 @@ pub fn require_single_servico(caixa: &Caixa) -> Result<(), ServicoCountMismatch>
     }
 }
 
+/// Compound V0-shape entry gate: the canonical two-line
+/// `require_kind(caixa, Servico)? + require_single_servico(caixa)?`
+/// prelude every per-Servico `caixa-<target>` renderer runs at its
+/// entry-point, collapsed onto one call the caller reads as intent
+/// ("gate the input on the V0 Servico shape") rather than two
+/// hand-spelled predicate calls.
+///
+/// The pair names one contract with two axes: `:kind` is `Servico`
+/// (this is a per-Servico renderer's input, not a `Biblioteca` /
+/// `Binario` / `Supervisor` / `Aplicacao` mis-hand-off) *and*
+/// `:servicos.len() == 1` (the V0 contract every Servico caixa
+/// satisfies — one `ComputeUnit` YAML pointer, matching the one Helm
+/// chart / programs.yaml entry / cluster bundle each per-Servico
+/// renderer emits). Both axes must hold together — a `:kind Servico`
+/// caixa with two `:servicos` entries and a `:kind Aplicacao` caixa
+/// with one `:servicos` entry are equally invalid at every per-Servico
+/// renderer's entry-point — so lifting the pair onto one helper names
+/// the compound contract at each call site the way the M2 typed slots'
+/// [`servico_m2_overlay`] names the compound `:limits`+`:behavior`+
+/// `:upgrade-from` overlay contract at each call site.
+///
+/// Three production call sites previously carried the two-line pair
+/// inline:
+///
+///   * `caixa-flux`'s [`programs_yaml_entry`][flux-yaml] (the
+///     aggregator-path programs.yaml entry emitter);
+///   * `caixa-flux`'s [`cluster_bundle`][flux-bundle] (the standalone
+///     `GitRepository` + `HelmRelease` + `Kustomization` trio emitter);
+///   * `caixa-helm`'s
+///     [`render_chart_for_servico_with`][helm-chart] (the per-program
+///     `lareira-<nome>` Helm chart emitter).
+///
+/// Each site now reads `caixa_core::require_v0_servico_shape(caixa)?`
+/// instead of the two-line pair. A future per-Servico renderer
+/// (`caixa-otel`, the future per-Servico OCI packager, the future M4
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` CR materializer,
+/// MESH-COMPOSITION §III.2 #5) gets the compound V0-shape gate for
+/// free with one call, instead of re-inlining the two-line pair — and
+/// a future change to the V0 contract (e.g. adding a
+/// `:kind Servico`-only `:computeunits`-slot-shape gate when the
+/// component-model multi-world boundary lands in M5) is one edit here,
+/// not a coordinated rewrite of every renderer's inline pair.
+///
+/// The generic error type `E` accepts every renderer's local
+/// [`thiserror`] `Error` enum that carries both [`KindMismatch`] and
+/// [`ServicoCountMismatch`] via `#[from]` (`caixa_flux::Error`,
+/// `caixa_helm::Error`, and every future per-Servico renderer that
+/// wires both `#[from]` arms as the diagnostic-naming-the-offending-
+/// caixa contract already requires). Type inference at the call site
+/// resolves `E` from the caller's `?` return type, so the call reads
+/// as `caixa_core::require_v0_servico_shape(caixa)?` with no explicit
+/// turbofish — the same one-liner shape every peer `require_kind` /
+/// `require_single_servico` call site already reads as.
+///
+/// Peer to [`require_kind`] on the single-axis kind gate and
+/// [`require_single_servico`] on the single-axis count gate — both
+/// primitives stay public because per-non-Servico renderers
+/// (`caixa-mesh`'s per-Aplicacao gate, `caixa-feira`'s
+/// `first_servico_path` per-verb gate that composes both predicates
+/// with `anyhow::Context`) reach for the individual predicates rather
+/// than the compound one. Peer to [`servico_m2_overlay`] on the
+/// sibling per-Servico compound-contract surface: `servico_m2_overlay`
+/// names the compound M2 emit-side contract, `require_v0_servico_shape`
+/// names the compound V0 gate-side contract, both per-Servico shape.
+///
+/// [flux-yaml]: https://docs.rs/caixa-flux
+/// [flux-bundle]: https://docs.rs/caixa-flux
+/// [helm-chart]: https://docs.rs/caixa-helm
+///
+/// # Errors
+///
+/// Returns the caller's `E` wrapping a [`KindMismatch`] when
+/// `caixa.kind != CaixaKind::Servico`, or a [`ServicoCountMismatch`]
+/// when `caixa.servicos.len() != 1`. Order matches the two-line pair
+/// this replaces: the kind gate fires first, so a
+/// `:kind Aplicacao` caixa with zero `:servicos` entries surfaces the
+/// kind mismatch (the more actionable diagnostic — the author has the
+/// wrong `:kind`) rather than the count mismatch (a downstream
+/// consequence of the mis-kinded input).
+pub fn require_v0_servico_shape<E>(caixa: &Caixa) -> Result<(), E>
+where
+    E: From<KindMismatch> + From<ServicoCountMismatch>,
+{
+    require_kind(caixa, CaixaKind::Servico)?;
+    require_single_servico(caixa)?;
+    Ok(())
+}
+
 /// Predicate: find the first ASCII whitespace byte in `s`, or `None` if
 /// none of the string's bytes match `u8::is_ascii_whitespace`.
 ///
@@ -19051,6 +19139,136 @@ mod tests {
         });
         let overlay = servico_m2_overlay(&c).unwrap();
         assert!(overlay.contains_key(M2_KEY_LIMITS));
+    }
+
+    // ── require_v0_servico_shape — compound V0-shape entry gate ──────
+
+    /// Local `thiserror`-shaped renderer-error stand-in that mirrors the
+    /// three production callers' shape (`caixa-flux::Error`,
+    /// `caixa-helm::Error`) at the two `#[from]` variants the compound
+    /// helper's `E: From<KindMismatch> + From<ServicoCountMismatch>`
+    /// bound targets. Pinning the shape here so the compound helper's
+    /// type-inference contract is unit-testable inside caixa-core
+    /// without a workspace-crate dependency (which would bloat the
+    /// build graph).
+    #[derive(Debug, thiserror::Error)]
+    enum RendererStandIn {
+        #[error("{0}")]
+        NotAServico(#[from] KindMismatch),
+        #[error("{0}")]
+        UnsupportedServicoCount(#[from] ServicoCountMismatch),
+    }
+
+    #[test]
+    fn require_v0_servico_shape_accepts_v0_servico() {
+        // Happy path: a `:kind Servico` caixa with exactly one
+        // `:servicos` entry — the canonical V0 shape every per-Servico
+        // renderer's entry-point sees — passes the compound gate. Same
+        // outcome as the two-line pair the compound helper replaces:
+        // both predicates surface `Ok(())`, and the compound helper's
+        // return type carries the caller's `E` inferred from the `?`
+        // context (unit test uses [`RendererStandIn`] as the stand-in
+        // for `caixa-flux::Error` / `caixa-helm::Error`).
+        let c = bare_servico();
+        let r: Result<(), RendererStandIn> = require_v0_servico_shape(&c);
+        r.expect("v0 servico shape accepted");
+    }
+
+    #[test]
+    fn require_v0_servico_shape_forwards_kind_mismatch_first() {
+        // Order pin: the kind gate fires before the count gate, so a
+        // `:kind Biblioteca` caixa with zero `:servicos` entries
+        // surfaces the [`KindMismatch`] arm (the more actionable
+        // diagnostic — the author has the wrong `:kind`), not the
+        // [`ServicoCountMismatch`] arm (a downstream consequence of
+        // the mis-kinded input). Both invariants are violated on this
+        // input, so the ordering matters — reversing it would flip
+        // every current caller's diagnostic on a mis-kinded input.
+        let mut c = bare_servico();
+        c.kind = CaixaKind::Biblioteca;
+        c.servicos = vec![];
+        let err: RendererStandIn = require_v0_servico_shape(&c).unwrap_err();
+        match err {
+            RendererStandIn::NotAServico(k) => {
+                assert_eq!(k.nome, "hello-rio");
+                assert_eq!(k.expected, CaixaKind::Servico);
+                assert_eq!(k.actual, CaixaKind::Biblioteca);
+            }
+            RendererStandIn::UnsupportedServicoCount(_) => {
+                panic!("kind gate must fire before count gate on mis-kinded input")
+            }
+        }
+    }
+
+    #[test]
+    fn require_v0_servico_shape_forwards_count_mismatch_on_kind_match() {
+        // A `:kind Servico` caixa with the wrong `:servicos` count
+        // (empty or multi-entry) passes the kind gate and lands on the
+        // [`ServicoCountMismatch`] arm — the same typed view every
+        // per-renderer `#[from] ServicoCountMismatch` arm already
+        // surfaces at the two-line pair this helper replaces. Both
+        // directions of the V0 count invariant (empty AND ≥ 2) land on
+        // the same arm — pinning the multi-entry direction here; the
+        // empty direction is covered by the peer
+        // `require_single_servico_rejects_empty_list_with_typed_mismatch`
+        // test on the single-axis primitive.
+        let mut c = bare_servico();
+        c.servicos = vec![
+            "servicos/hello-rio.computeunit.yaml".into(),
+            "servicos/extra.computeunit.yaml".into(),
+        ];
+        let err: RendererStandIn = require_v0_servico_shape(&c).unwrap_err();
+        match err {
+            RendererStandIn::UnsupportedServicoCount(c) => {
+                assert_eq!(c.nome, "hello-rio");
+                assert_eq!(c.count, 2);
+            }
+            RendererStandIn::NotAServico(_) => {
+                panic!("count gate must fire when kind gate passes")
+            }
+        }
+    }
+
+    #[test]
+    fn require_v0_servico_shape_matches_two_line_pair_semantic() {
+        // Equivalence pin: on every input, the compound helper's
+        // Ok/Err discrimination matches the two-line pair verbatim —
+        // the lift is a behavioral no-op at the caller boundary. Peer
+        // to the sibling `entry_or_default_<variant>` equivalence
+        // tests that pin the lifted primitive against the inline
+        // block it replaces.
+        //
+        // Three axes covered: V0 shape (Ok/Ok), kind gate fires
+        // (Err/Ok on the two-line pair — pair short-circuits at the
+        // kind gate), count gate fires (Ok/Err on the two-line pair —
+        // pair reaches the count gate).
+        let cases: Vec<(CaixaKind, Vec<String>)> = vec![
+            (CaixaKind::Servico, vec!["servicos/x.yaml".into()]),
+            (CaixaKind::Biblioteca, vec![]),
+            (CaixaKind::Servico, vec![]),
+            (CaixaKind::Aplicacao, vec!["servicos/x.yaml".into()]),
+            (
+                CaixaKind::Servico,
+                vec!["servicos/a.yaml".into(), "servicos/b.yaml".into()],
+            ),
+        ];
+        for (kind, servicos) in cases {
+            let mut c = bare_servico();
+            c.kind = kind;
+            c.servicos = servicos;
+            let pair: Result<(), RendererStandIn> = (|| {
+                require_kind(&c, CaixaKind::Servico)?;
+                require_single_servico(&c)?;
+                Ok(())
+            })();
+            let compound: Result<(), RendererStandIn> = require_v0_servico_shape(&c);
+            assert_eq!(
+                pair.is_ok(),
+                compound.is_ok(),
+                "compound helper must match two-line pair on kind={kind:?} servicos.len()={}",
+                c.servicos.len(),
+            );
+        }
     }
 
     // ── single_field_overlay — typed per-axis overlay primitive ──────────

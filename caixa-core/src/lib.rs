@@ -82,9 +82,9 @@ pub use render::{
     label_selector, lareira_chart_name, pleme_program_in_aplicacao_selector,
     pleme_program_selector, require_kind, require_positive_bounded_u32,
     require_positive_bounded_u64, require_positive_canonical_bounded_duration,
-    require_single_servico, require_valid_dns_1123_label, require_valid_versao_requirement,
-    servico_m2_overlay, single_field_overlay, singleton_mapping_sequence, string_keyed_entries,
-    upsert_named_entry, yaml_string_mapping,
+    require_single_servico, require_v0_servico_shape, require_valid_dns_1123_label,
+    require_valid_versao_requirement, servico_m2_overlay, single_field_overlay,
+    singleton_mapping_sequence, string_keyed_entries, upsert_named_entry, yaml_string_mapping,
 };
 pub use supervisor::{
     ChildSpec, RestartPolicy, RestartStrategy, SUPERVISOR_MAX_RESTARTS_MAX,
