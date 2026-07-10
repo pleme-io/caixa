@@ -12604,6 +12604,71 @@ pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
     value.get(field).and_then(|n| n.as_str())
 }
 
+/// Predicate: does the K8s custom resource YAML document at `value`
+/// declare its top-level `kind` discriminator axis as exactly `kind`?
+///
+/// Composes on top of [`kube_root_str_field`] (ae83f4e) — same two-hop
+/// `.get(KUBE_KEY_KIND).and_then(as_str)` navigation — and closes the
+/// "top-level kind-discriminator equality" predicate axis every
+/// multi-doc mesh emission traversal reaches for to split the emitted
+/// sequence by CRD-kind.
+///
+/// The canonical shape 15 test-side `.find(|d| kube_root_str_field(d,
+/// KUBE_KEY_KIND) == Some(<KIND>))` + `.filter(|d| … == Some(<KIND>))`
+/// call sites in `caixa-mesh` previously carried inline as the
+/// three-token composition
+///
+/// ```ignore
+/// kube_root_str_field(d, KUBE_KEY_KIND) == Some(<KIND>)
+/// ```
+///
+/// around a one-token semantic payload (the `<KIND>` axis-value —
+/// [`GATEWAY_API_KIND_GATEWAY`] on the per-Gateway filter sites,
+/// [`GATEWAY_API_KIND_HTTP_ROUTE`] on the per-HTTPRoute filter sites,
+/// [`CILIUM_KIND_NETWORK_POLICY`] on the sibling CNP filter site). The
+/// lift collapses the three-token composition — the readback helper
+/// call, the `== Some(...)` equality wrap, the discriminator-axis pin
+/// on [`KUBE_KEY_KIND`] — onto one predicate function the caller
+/// reads as intent (`kube_kind_is(d, <KIND>)` — "is this K8s CR
+/// document of kind `<KIND>`") rather than as a three-hop
+/// `readback → wrap → compare` chain.
+///
+/// The [`KUBE_KEY_KIND`] axis is pinned inside the helper (unlike the
+/// parametric `field` axis of the underlying [`kube_root_str_field`])
+/// because the "does this CR document match kind X" question is a
+/// semantically-distinct discriminator predicate, not a generic
+/// scalar-readback: the K8s CRD schema pins `kind` as the load-bearing
+/// discriminator on every `CustomResource` across every group/version,
+/// so this predicate lives one abstraction step above the generic
+/// readback. Peer predicates for other top-level discriminators
+/// (e.g. `kube_api_version_is` on a hypothetical multi-version
+/// migration harness) land as sibling helpers with their own
+/// pinned axis, not as re-parameterizations of this one.
+///
+/// Sites lifted:
+///
+///   * caixa-mesh's `gateway_routes` test-harness — 14
+///     `docs.iter().find(|d| kube_root_str_field(d, KUBE_KEY_KIND) ==
+///     Some(GATEWAY_API_KIND_{GATEWAY,HTTP_ROUTE}))` sites splitting
+///     the multi-doc emission by `Gateway` vs `HTTPRoute` for per-CR
+///     body-axis assertions;
+///   * caixa-mesh's `cilium_authentication_mode_serialized_as_yaml_string`
+///     — 1 `docs.iter().filter(|d| kube_root_str_field(d,
+///     KUBE_KEY_KIND) == Some(CILIUM_KIND_NETWORK_POLICY))` filter
+///     over the emitted CNP sequence.
+///
+/// Every future per-CRD-kind traversal (the per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` emitter's per-CR filter,
+/// MESH-COMPOSITION §III.2 #3; the `app-operator`'s
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-status
+/// discriminator predicate, §III.2 #5; the M4 cross-cluster fan-out's
+/// per-cluster `HelmRelease` vs `Kustomization` split by kind) reaches
+/// the same helper by construction, with no `== Some(...)` inline
+/// composition and no drift surface on the `kind` scalar-key axis.
+pub fn kube_kind_is(value: &serde_yaml::Value, kind: &str) -> bool {
+    kube_root_str_field(value, KUBE_KEY_KIND) == Some(kind)
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -25896,5 +25961,58 @@ spec:
             kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE),
             Some(DEFAULT_NAMESPACE)
         );
+    }
+
+    #[test]
+    fn kube_kind_is_matches_lifted_kube_root_str_field_equality_shape() {
+        // Byte-equivalence pin: the lifted predicate reproduces the
+        // three-token composition (`kube_root_str_field(v,
+        // KUBE_KEY_KIND) == Some(<KIND>)`) the 15 caixa-mesh test-side
+        // `.find`/`.filter` sites previously carried inline. Closes the
+        // "did the lift accidentally rename the pinned scalar-key axis
+        // to KUBE_KEY_API_VERSION or drop the `Some(...)` wrap" drift
+        // class every future re-lift on the peer-axis surface (a
+        // hypothetical `kube_api_version_is` peer, `kube_group_is` on a
+        // multi-group router harness) would otherwise reopen.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert!(kube_kind_is(&value, GATEWAY_API_KIND_GATEWAY));
+        assert_eq!(
+            kube_kind_is(&value, GATEWAY_API_KIND_GATEWAY),
+            kube_root_str_field(&value, KUBE_KEY_KIND) == Some(GATEWAY_API_KIND_GATEWAY),
+        );
+    }
+
+    #[test]
+    fn kube_kind_is_false_on_mismatched_kind_and_missing_kind() {
+        // Complement-side pin: the predicate returns `false` when
+        // either the kind axis carries a different discriminator or the
+        // top-level `kind:` scalar is absent altogether (the same
+        // vacuous-`None` short-circuit the parent
+        // `kube_root_str_field` closes on the underlying two-hop
+        // navigation). Consumer sites (`docs.iter().find(|d|
+        // kube_kind_is(d, X))`) rely on the false-on-mismatch shape to
+        // skip the wrong CRs across the multi-doc mesh emission and
+        // land on the intended per-kind document.
+        let mut cr_wrong_kind = serde_yaml::Mapping::new();
+        cr_wrong_kind.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
+        );
+        assert!(!kube_kind_is(
+            &serde_yaml::Value::Mapping(cr_wrong_kind),
+            GATEWAY_API_KIND_GATEWAY,
+        ));
+
+        let cr_no_kind = serde_yaml::Mapping::new();
+        assert!(!kube_kind_is(
+            &serde_yaml::Value::Mapping(cr_no_kind),
+            GATEWAY_API_KIND_GATEWAY,
+        ));
     }
 }
