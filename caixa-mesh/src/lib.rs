@@ -2566,10 +2566,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // K8s-CRD-side `port:` axis now route through their own lifted
     // typed `u16` const, so a future rebrand on either axis reaches
     // its consumer by construction.
-    listener.insert_str_key(
-        KUBE_KEY_PORT,
-        serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
-    );
+    listener.insert_number(KUBE_KEY_PORT, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT);
     listener.insert_string(KUBE_KEY_PROTOCOL, GATEWAY_API_PROTOCOL_HTTP);
     listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.host.clone());
     let mut g_spec = serde_yaml::Mapping::new();
@@ -2683,10 +2680,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         match_entry.insert_mapping(GATEWAY_API_KEY_PATH, path_match);
         let mut backend_ref = serde_yaml::Mapping::new();
         backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.para.clone());
-        backend_ref.insert_str_key(
-            KUBE_KEY_PORT,
-            serde_yaml::Value::Number(entrada.port.into()),
-        );
+        backend_ref.insert_number(KUBE_KEY_PORT, entrada.port);
         let mut rule = serde_yaml::Mapping::new();
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_MATCHES, match_entry);
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_BACKEND_REFS, backend_ref);
