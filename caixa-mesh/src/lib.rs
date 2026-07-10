@@ -2419,10 +2419,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // responsibility, not this site's.
         let from_endpoint = label_selector(pleme_program_in_aplicacao_selector(de, &caixa.nome));
         let mut ingress_rule = serde_yaml::Mapping::new();
-        ingress_rule.insert_str_key(
-            CILIUM_KEY_FROM_ENDPOINTS,
-            serde_yaml::Value::Sequence(vec![from_endpoint]),
-        );
+        ingress_rule.insert_sequence(CILIUM_KEY_FROM_ENDPOINTS, vec![from_endpoint]);
 
         // One `toPorts[]` entry per typed edge in the group — Cilium
         // unions the L4/L7 rules across entries, so each edge keeps its
@@ -2476,10 +2473,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             }
             to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
         }
-        ingress_rule.insert_str_key(
-            CILIUM_KEY_TO_PORTS,
-            serde_yaml::Value::Sequence(to_ports_seq),
-        );
+        ingress_rule.insert_sequence(CILIUM_KEY_TO_PORTS, to_ports_seq);
         if let Some(a) = &mtls_overlay {
             ingress_rule.insert_str_key(CILIUM_KEY_AUTHENTICATION, a.clone());
         }
@@ -2719,11 +2713,11 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         GATEWAY_API_KEY_PARENT_REFS,
         singleton_mapping_sequence(parent_ref),
     );
-    r_spec.insert_str_key(
+    r_spec.insert_sequence(
         GATEWAY_API_KEY_HOSTNAMES,
-        serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(entrada.host.clone())]),
+        vec![serde_yaml::Value::String(entrada.host.clone())],
     );
-    r_spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(rules));
+    r_spec.insert_sequence(KUBE_KEY_RULES, rules);
     route.insert_mapping(KUBE_KEY_SPEC, r_spec);
 
     Ok(vec![

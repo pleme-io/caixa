@@ -12961,7 +12961,7 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 /// value)` three-liner the schema-key axis of every emitted YAML
 /// document tunnels a `&'static str` key axis-name through.
 ///
-/// Three methods form the primitive triple:
+/// Four methods form the primitive quadruple:
 ///
 ///   * [`Self::insert_str_key`] — insert with a `&str` key and any
 ///     fully-built [`serde_yaml::Value`]. The building block every
@@ -12983,6 +12983,14 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 ///     / `toPorts[].rules` sub-block emission uses — collapses the
 ///     two-step `insert_str_key(K, Value::Mapping(m))` boilerplate
 ///     onto one direct call.
+///   * [`Self::insert_sequence`] — insert with a `&str` key and a
+///     `Vec<serde_yaml::Value>` value that gets auto-promoted to
+///     [`serde_yaml::Value::Sequence`]. The list-shape-valued-field
+///     shape every schema-typed `spec.ingress[].fromEndpoints` /
+///     `spec.ingress[].toPorts` / `spec.hostnames` / `spec.rules` list
+///     emission uses — collapses the two-step
+///     `insert_str_key(K, Value::Sequence(v))` boilerplate onto one
+///     direct call.
 ///
 /// See each method's docstring for its compounding rationale.
 pub trait MappingExt {
@@ -13140,17 +13148,93 @@ pub trait MappingExt {
     /// `Value::Mapping(_)` promotion.
     ///
     /// Peer to [`Self::insert_string`] on the sibling scalar-value axis
-    /// — the two together with [`Self::insert_str_key`] form the "one
-    /// method call per emission axis" primitive triple the K8s-artifact-
-    /// emit surface's "same shape, written N times" duplication
+    /// and [`Self::insert_sequence`] on the sibling list-shape axis —
+    /// the four together with [`Self::insert_str_key`] form the "one
+    /// method call per emission axis" primitive quadruple the K8s-
+    /// artifact-emit surface's "same shape, written N times" duplication
     /// (THEORY.md §I.3.5) collapses onto: `insert_str_key` for any-Value
     /// inserts, `insert_string` for the string-scalar-valued-field
     /// shape, `insert_mapping` for the nested-Mapping-valued-field
-    /// shape.
+    /// shape, `insert_sequence` for the list-shape-valued-field shape.
     fn insert_mapping(
         &mut self,
         key: &str,
         value: serde_yaml::Mapping,
+    ) -> Option<serde_yaml::Value>;
+
+    /// Insert `(key, Value::Sequence(value))` into `self` — the
+    /// list-shape-valued-field emission shape that combines
+    /// [`Self::insert_str_key`]'s `&str → Value::String` key promotion
+    /// with an automatic [`serde_yaml::Value::Sequence`] promotion of a
+    /// pre-built `Vec<serde_yaml::Value>` value. Returns the prior
+    /// value at that key, mirroring [`serde_yaml::Mapping::insert`].
+    ///
+    /// The canonical shape 4 production call sites across `caixa-mesh`
+    /// previously carried inline as the three-token block
+    /// `mapping.insert_str_key(<KEY>, serde_yaml::Value::Sequence(<VEC>))`
+    /// — a two-token semantic payload (`<KEY>`, `<VEC>`) buried under a
+    /// two-axis boilerplate (`serde_yaml::` path re-quote,
+    /// `Value::Sequence(_)` promotion) around a `Vec<Value>` variable
+    /// the caller already built.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-mesh's `cilium_network_policies` per-`CiliumNetworkPolicy`
+    ///     `spec.ingress[].fromEndpoints:` singleton-list (`CILIUM_KEY_FROM_ENDPOINTS`
+    ///     around a `vec![from_endpoint]` selector wrapper);
+    ///   * caixa-mesh's `cilium_network_policies` per-`CiliumNetworkPolicy`
+    ///     `spec.ingress[].toPorts:` list (`CILIUM_KEY_TO_PORTS` around the
+    ///     built `to_ports_seq` per-edge port-and-L7-rule vec);
+    ///   * caixa-mesh's `gateway_routes` per-`HTTPRoute` `spec.hostnames:`
+    ///     singleton-list (`GATEWAY_API_KEY_HOSTNAMES` around a
+    ///     `vec![Value::String(entrada.host…)]` host wrapper);
+    ///   * caixa-mesh's `gateway_routes` per-`HTTPRoute` `spec.rules:`
+    ///     list (`KUBE_KEY_RULES` around the built `rules` per-path
+    ///     match+backend+overlay vec).
+    ///
+    /// Lifting collapses the boilerplate into one method call the
+    /// caller reads as intent (`mapping.insert_sequence(<KEY>, <VEC>)`
+    /// — "insert a list-shape-typed sub-block named `KEY` with the built
+    /// inner `VEC`") rather than three hand-spelled positional
+    /// artifacts. The next renderer to land — the per-`:politicas`
+    /// `CiliumClusterwideEnvoyConfig` emitter (whose per-policy
+    /// list-shape sub-blocks are `spec.resources[]` / `spec.listeners[]`
+    /// / `spec.virtualHosts[]`, MESH-COMPOSITION §III.2 #3), the
+    /// `app-operator`'s typed `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer (per-`spec.selectors[]` and per-`spec.gates[]`
+    /// list-shape sub-blocks, §III.2 #5), the M4 cross-cluster fan-out's
+    /// per-cluster `Service.spec.ports[]` /
+    /// `HTTPRoute.spec.rules[].backendRefs[]` list emission, the future
+    /// `caixa-otel` OpenTelemetry-Collector per-pipeline `receivers[]`
+    /// / `processors[]` / `exporters[]` list emission — gets the
+    /// canonical list-shape-valued-field shape for free with one method
+    /// call, instead of re-inlining the three-token `Value::Sequence(_)`
+    /// promotion.
+    ///
+    /// Peer to [`Self::insert_mapping`] on the sibling nested-Mapping
+    /// axis and [`Self::insert_string`] on the sibling scalar-value axis
+    /// — the four together with [`Self::insert_str_key`] form the "one
+    /// method call per emission axis" primitive quadruple the K8s-
+    /// artifact-emit surface's "same shape, written N times" duplication
+    /// (THEORY.md §I.3.5) collapses onto: `insert_str_key` for any-Value
+    /// inserts, `insert_string` for the string-scalar-valued-field
+    /// shape, `insert_mapping` for the nested-Mapping-valued-field
+    /// shape, `insert_sequence` for the list-shape-valued-field shape.
+    ///
+    /// Complementary to [`singleton_mapping_sequence`] on the peer
+    /// singleton-list-shape axis: `singleton_mapping_sequence(m)` builds
+    /// the sole-Mapping-element `Value::Sequence` payload;
+    /// `insert_sequence(K, v)` inserts an already-built `Vec<Value>`
+    /// payload under a schema key. A caller composing the two writes
+    /// `mapping.insert_str_key(K, singleton_mapping_sequence(m))` for
+    /// the singleton case (the sole element is a fresh Mapping) and
+    /// `mapping.insert_sequence(K, v)` for the multi-element or
+    /// non-Mapping-element case (the vec is built up per-iteration or
+    /// wraps a non-Mapping scalar).
+    fn insert_sequence(
+        &mut self,
+        key: &str,
+        value: Vec<serde_yaml::Value>,
     ) -> Option<serde_yaml::Value>;
 }
 
@@ -13172,6 +13256,15 @@ impl MappingExt for serde_yaml::Mapping {
         value: serde_yaml::Mapping,
     ) -> Option<serde_yaml::Value> {
         self.insert_str_key(key, serde_yaml::Value::Mapping(value))
+    }
+
+    #[inline]
+    fn insert_sequence(
+        &mut self,
+        key: &str,
+        value: Vec<serde_yaml::Value>,
+    ) -> Option<serde_yaml::Value> {
+        self.insert_str_key(key, serde_yaml::Value::Sequence(value))
     }
 }
 
@@ -23412,6 +23505,132 @@ spec:
             "insert_mapping(KEY, inner) must byte-equal \
              insert_str_key(KEY, Value::Mapping(inner)) — otherwise the \
              six routed consumer sites drift silently at emit time"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_sequence_promotes_value_to_yaml_sequence() {
+        // The trait method promotes an arbitrary `Vec<Value>` value to
+        // `Value::Sequence(value)` — pin the promotion so a future
+        // refactor that reaches for a different `Value` variant for the
+        // list-shape payload (e.g. `Value::Tagged` under a K8s Server-
+        // Side-Apply typed-field-ownership axis rebrand, a serde_yaml
+        // successor's `Value::Array` / `Value::List` variant rename) is
+        // a compile-visible break, not a silent per-consumer regression
+        // at the K8s-artifact-emit surface. Peer with
+        // [`mapping_ext_insert_mapping_promotes_value_to_yaml_mapping`]
+        // on the sibling `insert_mapping` primitive's nested-Mapping-
+        // promotion pin, and with
+        // [`mapping_ext_insert_string_promotes_value_to_yaml_string`]
+        // on the sibling `insert_string` primitive's scalar-promotion
+        // pin.
+        let inner = vec![
+            serde_yaml::Value::String("hello".into()),
+            serde_yaml::Value::String("world".into()),
+        ];
+        let mut m = serde_yaml::Mapping::new();
+        let prior = m.insert_sequence(GATEWAY_API_KEY_HOSTNAMES, inner.clone());
+        assert!(
+            prior.is_none(),
+            "insert_sequence returns None on first insertion, mirroring \
+             serde_yaml::Mapping::insert"
+        );
+        let got = m
+            .get(GATEWAY_API_KEY_HOSTNAMES)
+            .expect("inserted key is present under Value::Sequence promotion");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(inner),
+            "insert_sequence routes value verbatim through Value::Sequence \
+             promotion"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_sequence_returns_prior_value_on_replace() {
+        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // return contract: the prior value at that key, or `None` if
+        // absent. Pin the replace-returns-prior semantic so a future
+        // refactor that swaps to a `HashMap::entry`-style flow doesn't
+        // silently drop the prior-value handoff downstream consumers
+        // may reach for. Peer with
+        // [`mapping_ext_insert_mapping_returns_prior_value_on_replace`],
+        // [`mapping_ext_insert_string_returns_prior_value_on_replace`],
+        // and
+        // [`mapping_ext_insert_str_key_returns_prior_value_on_replace`]
+        // on the sibling primitive-quadruple members' replace-semantics
+        // pins.
+        let first: Vec<serde_yaml::Value> = vec![serde_yaml::Value::String("a".into())];
+        let second: Vec<serde_yaml::Value> = vec![
+            serde_yaml::Value::String("b".into()),
+            serde_yaml::Value::String("c".into()),
+        ];
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_sequence(KUBE_KEY_RULES, first.clone());
+        let prior = m.insert_sequence(KUBE_KEY_RULES, second.clone());
+        assert_eq!(
+            prior,
+            Some(serde_yaml::Value::Sequence(first)),
+            "insert_sequence returns the prior value when replacing an \
+             existing key"
+        );
+        let got = m
+            .get(KUBE_KEY_RULES)
+            .expect("key is still present after replace");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(second),
+            "replaced value is now the most-recently-inserted one"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_sequence_matches_hand_written_promotion() {
+        // Cross-check the trait method against the hand-written
+        // `mapping.insert_str_key(KEY, Value::Sequence(v))` shape the 4
+        // lifted call sites previously carried. A drift between the
+        // trait method's promotion and the inline promotion would
+        // silently emit a different YAML mapping (a differently-wrapped
+        // outer variant, a differently-shaped inner sequence) at every
+        // routed consumer — pin the equivalence so the trait remains a
+        // drop-in replacement. Three cases pin the shape end-to-end:
+        // an empty inner Vec (no silent is_empty short-circuit), a
+        // singleton-Value inner Vec (the `fromEndpoints[<selector>]` /
+        // `hostnames[<host>]` singleton shape), and a multi-Value inner
+        // Vec (the `toPorts[…]` / `rules[…]` multi-entry shape).
+        let inner_empty: Vec<serde_yaml::Value> = Vec::new();
+        let inner_singleton: Vec<serde_yaml::Value> =
+            vec![serde_yaml::Value::String("example.com".into())];
+        let mut host_entry = serde_yaml::Mapping::new();
+        host_entry.insert_string(KUBE_KEY_NAME, "svc-a");
+        let mut port_entry = serde_yaml::Mapping::new();
+        port_entry.insert_string(KUBE_KEY_NAME, "svc-b");
+        let inner_multi: Vec<serde_yaml::Value> = vec![
+            serde_yaml::Value::Mapping(host_entry.clone()),
+            serde_yaml::Value::Mapping(port_entry.clone()),
+        ];
+
+        let mut via_trait = serde_yaml::Mapping::new();
+        via_trait.insert_sequence(CILIUM_KEY_TO_PORTS, inner_empty.clone());
+        via_trait.insert_sequence(GATEWAY_API_KEY_HOSTNAMES, inner_singleton.clone());
+        via_trait.insert_sequence(KUBE_KEY_RULES, inner_multi.clone());
+
+        let mut via_inline = serde_yaml::Mapping::new();
+        via_inline.insert_str_key(
+            CILIUM_KEY_TO_PORTS,
+            serde_yaml::Value::Sequence(inner_empty),
+        );
+        via_inline.insert_str_key(
+            GATEWAY_API_KEY_HOSTNAMES,
+            serde_yaml::Value::Sequence(inner_singleton),
+        );
+        via_inline.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(inner_multi));
+
+        assert_eq!(
+            via_trait, via_inline,
+            "insert_sequence(KEY, v) must byte-equal \
+             insert_str_key(KEY, Value::Sequence(v)) — otherwise the \
+             four routed consumer sites drift silently at emit time"
         );
     }
 
