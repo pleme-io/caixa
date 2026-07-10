@@ -23584,6 +23584,90 @@ spec:
     }
 
     #[test]
+    fn mapping_get_mut_bare_str_key_byte_equals_value_string_wrapped_form() {
+        // The mutation-path twin of the read-side pin above.
+        // `serde_yaml::Mapping::get_mut<I: Index>` accepts any
+        // `I: Index` — the crate ships `impl Index for str` (routing
+        // through the same no-allocation `HashLikeValue(&str)` bucket
+        // lookup the read-side `get` / `contains_key` sweep landed on
+        // in 0e84fb9) and `impl Index for Value` (matching the
+        // `Value::String(_)` key verbatim). Until this pin landed the
+        // sole production `.get_mut(serde_yaml::Value::String(<KEY>.into()))`
+        // probe — [`caixa_flux::upsert_into_helmrelease_programs`]'s
+        // `root.get_mut(…)` HelmRelease-side spec-mutate at
+        // `caixa-flux/src/lib.rs:845` (which the sibling
+        // `kube_key_spec_re_export_points_at_caixa_core_canonical`
+        // pinning test's docstring already described in the shorter
+        // `root.get_mut("spec")` form the 0e84fb9 read-side sweep
+        // landed elsewhere on) — carried the verbose `Value::String`-
+        // wrapped shape as the last stray hold-out on the `get_mut`
+        // axis. The sweep swaps it onto the bare-`&str` form, matching
+        // the ~78 read-side probes 0e84fb9 already swept and the
+        // in-file `kube_key_spec_re_export_points_at_caixa_core_canonical`
+        // docstring's canonical description. Pin the equivalence — the
+        // `HashLikeValue(&str)` hash must byte-equal the
+        // `Value::String(String)` hash so the two paths agree on both
+        // the present-key path (returns `Some(&mut _)` at the same
+        // slot) and the absent-key path (returns `None` when the key
+        // is missing) — otherwise a future `serde_yaml` upgrade could
+        // silently divert the writer-side upsert past the value the
+        // emitter previously mutated. Peer to the read-side
+        // [`mapping_get_bare_str_key_byte_equals_value_string_wrapped_form`]
+        // pin on the sibling `get` / `contains_key` axes; together the
+        // two pins pin every `Index`-polymorphic probe axis the
+        // caixa-flux upsert path walks.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_KIND, serde_yaml::Value::String("Gateway".into()));
+        // Present-key path: both forms find the same slot.
+        // Cross-check by mutating through the bare-&str path and
+        // observing the mutation via the Value::String path (and vice
+        // versa) — anything short of exact bucket-equality would
+        // silently split the two probes onto different slots.
+        {
+            let via_bare = m
+                .get_mut(KUBE_KEY_KIND)
+                .expect("present key must resolve via bare-&str");
+            *via_bare = serde_yaml::Value::String("HTTPRoute".into());
+        }
+        assert_eq!(
+            m.get(serde_yaml::Value::String(KUBE_KEY_KIND.into())),
+            Some(&serde_yaml::Value::String("HTTPRoute".into())),
+            "mutation via mapping.get_mut(<KEY>) must be visible via \
+             mapping.get(Value::String(<KEY>.into())) — otherwise the \
+             swept `get_mut` writer-side probe drifts past the value \
+             the emitter reads through the promoted Value::String key"
+        );
+        {
+            let via_wrapped = m
+                .get_mut(serde_yaml::Value::String(KUBE_KEY_KIND.into()))
+                .expect("present key must also resolve via Value::String");
+            *via_wrapped = serde_yaml::Value::String("Gateway".into());
+        }
+        assert_eq!(
+            m.get(KUBE_KEY_KIND),
+            Some(&serde_yaml::Value::String("Gateway".into())),
+            "mutation via mapping.get_mut(Value::String(<KEY>.into())) \
+             must be visible via mapping.get(<KEY>) — the two paths \
+             address the same bucket in both directions"
+        );
+        // Absent-key path: both forms return None so the sole swept
+        // `.get_mut(<KEY>).ok_or(Error::MissingField(<KEY>))` shape
+        // stays load-bearing.
+        assert!(
+            m.get_mut(KUBE_KEY_SPEC).is_none(),
+            "absent-key mapping.get_mut(<KEY>) must return None"
+        );
+        assert!(
+            m.get_mut(serde_yaml::Value::String(KUBE_KEY_SPEC.into()))
+                .is_none(),
+            "absent-key mapping.get_mut(Value::String(<KEY>.into())) \
+             must also return None — the two forms must agree on \
+             absence so the swept `.ok_or(Error::MissingField(<KEY>))` \
+             diagnostic still fires on a missing spec block"
+        );
+    }
+
+    #[test]
     fn mapping_ext_insert_string_promotes_value_to_yaml_string() {
         // The trait method promotes an arbitrary `Into<String>` value
         // to `Value::String(value.into())` — pin the promotion so a

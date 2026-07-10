@@ -842,7 +842,7 @@ pub fn upsert_into_helmrelease_programs(
     };
 
     let spec = root
-        .get_mut(serde_yaml::Value::String(KUBE_KEY_SPEC.into()))
+        .get_mut(KUBE_KEY_SPEC)
         .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
     let serde_yaml::Value::Mapping(spec_map) = spec else {
         return Err(Error::MissingField("spec must be a mapping"));
