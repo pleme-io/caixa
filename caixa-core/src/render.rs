@@ -11053,6 +11053,69 @@ pub const GATEWAY_API_KEY_REQUEST: &str = "request";
 /// [cf]: ../../caixa_flux/index.html
 pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 
+/// Canonical Flux v2 `spec.interval` reconcile-poll cadence duration
+/// scalar every [`caixa-flux`][cf]-emitted Flux v2 CR (the per-caixa
+/// `cluster_bundle` triplet's `GitRepository` + `HelmRelease` +
+/// `Kustomization`) declares as its default reconcile-schedule when the
+/// per-caixa [`ClusterBundleOpts::for_caixa`][fc] seed doesn't carry an
+/// operator-pinned override. Every rendered per-caixa Flux v2 CR consults
+/// the same `&'static str` at seed time so a future substrate-side
+/// reconcile-cadence migration (`"10m"` → `"5m"` once the Flux v2 source-
+/// controller / helm-controller / kustomize-controller trio ships lower-
+/// latency-poll optimizations that make per-CR cluster load safe at a
+/// faster cadence, `"10m"` → `"15m"` on cost-optimized clusters where the
+/// per-CR source-controller poll cost outweighs the reconcile-freshness
+/// gain) is a one-line edit on this canonical declaration, not a
+/// coordinated rewrite across the [`ClusterBundleOpts`] default seed and
+/// every future per-target renderer the substrate adds.
+///
+/// The single source of truth the rendered per-caixa Flux v2 cluster
+/// bundle's per-CR reconcile-poll cadence default seed reaches for:
+///
+///   - [`ClusterBundleOpts::for_caixa`][fc]'s per-caixa default seed
+///     (caixa-flux/src/lib.rs — the `interval: <DEFAULT>.into()` field of
+///     the [`ClusterBundleOpts`] struct default the substrate's per-caixa
+///     `cluster_bundle` renderer threads through every emitted Flux v2 CR's
+///     [`FLUX_KEY_INTERVAL`] axis verbatim).
+///
+/// The value is a valid Flux v2 reconcile-poll cadence duration scalar (per
+/// the upstream Flux v2 `metav1.Duration` OpenAPI schema on each of the
+/// three Flux v2 CRDs — `source.toolkit.fluxcd.io/v1/GitRepository.spec.
+/// interval`, `helm.toolkit.fluxcd.io/v2/HelmRelease.spec.interval`,
+/// `kustomize.toolkit.fluxcd.io/v1/Kustomization.spec.interval`): a
+/// non-empty Go-duration-format string (e.g. `"10m"`, `"5m"`, `"1h30m"`),
+/// which the Flux v2 controller-side per-CR admission gate parses via
+/// `metav1.ParseDuration` before installing the per-CR watch. A future
+/// rebrand on this lift cannot silently land a value the Flux v2
+/// controller-side admission gate rejects at the *first* per-caixa
+/// `HelmRelease` apply against a cluster, far from the rebrand commit's
+/// source — the pin at the canonical lift documents the Go-duration-format
+/// grammar contract with the Flux v2 admission gate every downstream
+/// consumer of the rendered per-CR reconcile-cadence axis rests on.
+///
+/// Pairs with the sibling [`FLUX_KEY_INTERVAL`] (48db6e2) per-Flux-v2-CR
+/// reconcile-poll cadence scalar-axis key the value the substrate seeds
+/// here nests directly under across every rendered per-caixa Flux v2 CR
+/// — the key half of the per-CR `spec.interval` scalar-key/scalar-value
+/// pair lives at [`FLUX_KEY_INTERVAL`], the value half's substrate-side
+/// default seed lives here. Same "the typed constant lives in one place"
+/// discipline the [`DEFAULT_NAMESPACE`] (a085b26) /
+/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (7197d38) / [`DEFAULT_LIBRARY_NAME`]
+/// (41438dc) / [`DEFAULT_SERVICO_PORT`] (1e22add) /
+/// [`DEFAULT_GATEWAY_CLASS_NAME`] (d9b0743) /
+/// [`DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) lifts apply on the peer
+/// canonical-substrate-default-load-bearing-scalar surface — extends the
+/// canonical-substrate-default single-sourcing discipline from the peer
+/// substrate-side default-namespace / default-library-chart-name /
+/// default-Servico-listen-port / default-Gateway-API-controller-name /
+/// default-git-publish-tag-prefix surfaces onto the sibling default-Flux-
+/// v2-per-CR-reconcile-poll-cadence surface every rendered per-caixa
+/// Flux v2 cluster bundle CR carries.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [fc]: ../../caixa_flux/struct.ClusterBundleOpts.html#method.for_caixa
+pub const DEFAULT_FLUX_RECONCILE_INTERVAL: &str = "10m";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -14564,6 +14627,86 @@ mod tests {
             "DEFAULT_FLUX_SYSTEM_NAMESPACE {DEFAULT_FLUX_SYSTEM_NAMESPACE:?} must be a valid \
              DNS-1123 label — every K8s apiserver-side schema enforces \
              this rule on `metadata.namespace`"
+        );
+    }
+
+    #[test]
+    fn default_flux_reconcile_interval_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the substrate-side default Flux v2 reconcile-poll
+        // cadence duration scalar the substrate's per-caixa
+        // `cluster_bundle` renderer seeds into every emitted per-caixa
+        // Flux v2 CR (GitRepository / HelmRelease / Kustomization) at
+        // its `spec.interval` axis when the operator doesn't pin a per-
+        // caixa override. The string is part of the cluster-side
+        // contract with the Flux v2 source-controller / helm-controller
+        // / kustomize-controller trio: each controller's per-CR admission
+        // gate parses the value via `metav1.ParseDuration` before
+        // installing the per-CR watch, and the resulting cadence pins
+        // the per-CR reconcile-freshness / cluster-load tradeoff every
+        // substrate-side Flux v2 pipeline runs at. Changing this value
+        // is a coordinated substrate-side reconcile-cadence promotion
+        // (a `10m` → `5m` migration once lower-latency-poll optimizations
+        // ship, a `10m` → `15m` migration on cost-optimized clusters
+        // where per-CR source-controller poll cost outweighs the
+        // reconcile-freshness gain), not an incidental edit. Peer to
+        // `default_namespace_pins_canonical_value` and
+        // `default_gateway_class_name_pins_canonical_value` on the
+        // canonical-substrate-default-load-bearing-scalar pin surface.
+        assert_eq!(DEFAULT_FLUX_RECONCILE_INTERVAL, "10m");
+    }
+
+    #[test]
+    fn default_flux_reconcile_interval_is_a_valid_metav1_duration_scalar() {
+        // Cross-axis grammar invariant: the Flux v2 controller-side per-
+        // CR admission gate parses the reconcile-poll cadence scalar via
+        // `metav1.ParseDuration` before installing the per-CR watch. The
+        // Go-duration-format grammar is non-empty, ASCII, and structured
+        // as `<digits><unit>[<digits><unit>...]` where each unit is one
+        // of `{ns, us, µs, ms, s, m, h}`. Pin a floor that catches the
+        // canonical drift footguns — an empty scalar (`""` — admission
+        // gate rejects), a non-ASCII-alphanumeric byte (`"10 m"` — the
+        // whitespace defeats the parser), a missing-unit scalar (`"10"`
+        // — the parser rejects for lack of a unit suffix), or a leading-
+        // non-digit scalar (`"m10"` — the parser rejects for lack of a
+        // leading magnitude). A future rebrand on the canonical lift
+        // that lands a value outside the Go-duration-format grammar
+        // would surface here at caixa-core build time on the canonical
+        // lift, before any renderer consumes the value. Same shape as
+        // `default_namespace_is_a_valid_dns_1123_label` /
+        // `default_flux_system_namespace_is_a_valid_dns_1123_label` /
+        // `default_gateway_class_name_is_a_valid_dns_1123_label` on the
+        // peer canonical-substrate-default-grammar-floor surface.
+        let v = DEFAULT_FLUX_RECONCILE_INTERVAL;
+        assert!(
+            !v.is_empty(),
+            "DEFAULT_FLUX_RECONCILE_INTERVAL {v:?} must be non-empty \
+             per the Flux v2 controller-side `metav1.ParseDuration` \
+             admission gate"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "DEFAULT_FLUX_RECONCILE_INTERVAL {v:?} must be ASCII-\
+             alphanumeric throughout per the Go-duration-format grammar \
+             — no whitespace / separator bytes the `metav1.ParseDuration` \
+             admission gate would reject"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_digit(),
+            "DEFAULT_FLUX_RECONCILE_INTERVAL {v:?} first byte {first:?} \
+             must be an ASCII digit per the Go-duration-format grammar \
+             — the leading magnitude precedes the unit suffix; a leading \
+             non-digit defeats `metav1.ParseDuration`"
+        );
+        let last = v.chars().next_back().expect("non-empty");
+        assert!(
+            last.is_ascii_alphabetic() && last.is_ascii_lowercase(),
+            "DEFAULT_FLUX_RECONCILE_INTERVAL {v:?} last byte {last:?} \
+             must be an ASCII lowercase alphabetic unit suffix per the \
+             Go-duration-format grammar — the trailing unit follows the \
+             magnitude; an unterminated magnitude defeats \
+             `metav1.ParseDuration`"
         );
     }
 

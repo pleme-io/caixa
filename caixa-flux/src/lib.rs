@@ -95,6 +95,35 @@ pub enum Error {
 /// future per-target renderer the substrate adds.
 pub use caixa_core::DEFAULT_NAMESPACE;
 
+/// Canonical Flux v2 `spec.interval` reconcile-poll cadence default the
+/// substrate seeds into every per-caixa `cluster_bundle` CR triplet.
+/// Re-export of the canonical [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`]
+/// so the Flux v2 controller-side reconcile-cadence default scalar-value
+/// string lives in exactly one place across every caixa renderer —
+/// [`ClusterBundleOpts::for_caixa`]'s per-caixa default seed (the sole
+/// production-code site the prior inline `"10m"` scalar-value literal sat
+/// at, seeding the [`ClusterBundleOpts::interval`] field that
+/// [`cluster_bundle`]'s three per-CR format-string templates thread
+/// through their [`FLUX_KEY_INTERVAL`]-keyed `spec.interval` axis
+/// verbatim) now consults the same `&'static str`, so a future substrate-
+/// side reconcile-cadence migration (`"10m"` → `"5m"` on lower-latency-
+/// poll optimizations, `"10m"` → `"15m"` on cost-optimized clusters where
+/// per-CR source-controller poll cost outweighs reconcile-freshness
+/// gains — coordinated with the upstream Flux v2 project's per-controller
+/// tuning cycle) is a one-line edit on the canonical
+/// [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] declaration, not a
+/// coordinated rewrite across the [`ClusterBundleOpts`] default seed and
+/// every future per-target renderer the substrate adds. Pairs with the
+/// sibling [`FLUX_KEY_INTERVAL`] re-export on the same per-CR
+/// `spec.interval` scalar-axis — the key half of the per-CR scalar-key/
+/// scalar-value pair lives at [`FLUX_KEY_INTERVAL`], the value half's
+/// substrate-side default seed lives here. Same shape as the sibling
+/// [`caixa_core::DEFAULT_NAMESPACE`] / [`caixa_core::DEFAULT_LIBRARY_NAME`]
+/// / [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] re-exports on the peer
+/// canonical-substrate-default-load-bearing-scalar surface.
+pub use caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL;
+
 /// Canonical FluxCD installation namespace — re-export of the lifted
 /// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
 /// string lives in exactly one place across every consumer of the
@@ -929,7 +958,7 @@ impl ClusterBundleOpts {
         Self {
             cluster: cluster.into(),
             namespace: DEFAULT_NAMESPACE.into(),
-            interval: "10m".into(),
+            interval: DEFAULT_FLUX_RECONCILE_INTERVAL.into(),
             chart_path: "chart".into(),
             git_url: caixa
                 .repositorio
@@ -1215,6 +1244,77 @@ spec:
             "DEFAULT_NAMESPACE",
             DEFAULT_NAMESPACE,
             caixa_core::DEFAULT_NAMESPACE,
+        );
+    }
+
+    #[test]
+    fn default_flux_reconcile_interval_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `DEFAULT_FLUX_RECONCILE_INTERVAL` was lifted
+        // from the inline `"10m"` scalar-value literal at
+        // [`ClusterBundleOpts::for_caixa`]'s per-caixa default seed (the
+        // sole production-code site the substrate seeds into the
+        // [`ClusterBundleOpts::interval`] field that [`cluster_bundle`]'s
+        // three per-CR format-string templates thread through their
+        // [`FLUX_KEY_INTERVAL`]-keyed `spec.interval` axis verbatim) to a
+        // re-export of [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] so
+        // the Flux v2 controller-side reconcile-cadence default scalar-
+        // value string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so any
+        // local re-introduction of a sibling `pub const
+        // DEFAULT_FLUX_RECONCILE_INTERVAL: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior inline shape would have let a substrate-side
+        // reconcile-cadence migration without a coordinated caixa-core
+        // edit silently seed per-caixa Flux v2 CRs at a drifted per-CR
+        // reconcile-schedule, splitting the substrate's per-caixa
+        // convergence-freshness contract across renderer versions with
+        // no diagnostic naming the cadence-drift root cause. Peer to
+        // [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-substrate-default-load-bearing-
+        // scalar re-export surface.
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_FLUX_RECONCILE_INTERVAL",
+            DEFAULT_FLUX_RECONCILE_INTERVAL,
+            caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_opts_for_caixa_seeds_interval_from_lifted_default() {
+        // Fail-before-pass-after pin: the substrate's per-caixa default
+        // seed for [`ClusterBundleOpts::interval`] must resolve to the
+        // lifted [`DEFAULT_FLUX_RECONCILE_INTERVAL`] verbatim. Before the
+        // lift the field carried an inline `"10m"` literal at the sole
+        // production-code call site (the [`ClusterBundleOpts::for_caixa`]
+        // per-caixa default builder); a future substrate-side
+        // reconcile-cadence migration on the canonical
+        // [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] declaration
+        // that failed to reach this seed site would silently split the
+        // substrate's per-caixa Flux v2 convergence-freshness contract
+        // between the operator-facing canonical default and the per-
+        // caixa `cluster_bundle` renderer's seeded reconcile-schedule,
+        // freezing every per-caixa Flux v2 CR at the drifted cadence
+        // far from the rebrand commit's source. Pin the identity here
+        // so a regression that re-introduces an inline literal at the
+        // seed site surfaces at build time on this test's failure. Peer
+        // to the sibling
+        // [`cluster_bundle_every_flux_cr_carries_lifted_flux_key_interval_scalar`]
+        // pin on the per-CR `spec.interval` axis — that test pins the
+        // rendered scalar agrees with `opts.interval`, this test pins
+        // `opts.interval`'s substrate-side seed agrees with the lifted
+        // canonical default.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        assert_eq!(
+            opts.interval, DEFAULT_FLUX_RECONCILE_INTERVAL,
+            "the substrate's per-caixa Flux v2 reconcile-cadence default \
+             seed must resolve to the lifted \
+             `DEFAULT_FLUX_RECONCILE_INTERVAL` scalar — drift here \
+             silently splits the substrate's per-caixa convergence-\
+             freshness contract between the operator-facing canonical \
+             default and the per-caixa seeded reconcile-schedule"
         );
     }
 
