@@ -13646,6 +13646,104 @@ impl MappingExt for serde_yaml::Mapping {
     }
 }
 
+/// Extension methods for the [`Vec<serde_yaml::Value>`] emission
+/// surface that the K8s-artifact-emit sites of `caixa-mesh` /
+/// `caixa-flux` / `caixa-helm` / `caixa-core::render` build up as
+/// `spec.ingress[]` / `spec.rules[]` / `spec.hostnames[]` / per-
+/// programs.yaml-entry payloads before wrapping each vec as a
+/// [`serde_yaml::Value::Sequence`] on an outer [`serde_yaml::Mapping`]
+/// (via [`MappingExt::insert_sequence`]).
+///
+/// Peer to [`MappingExt`] on the sibling [`serde_yaml::Value`]-
+/// construction surface: [`MappingExt`] closes the per-key-and-value
+/// insert primitive every schema-key axis reaches through;
+/// [`SequenceExt`] closes the per-list-element push primitive every
+/// per-iteration append site reaches through when the built-up
+/// [`serde_yaml::Value`] variant is uniform across a loop body (e.g.
+/// every element is a fresh [`serde_yaml::Value::Mapping`], not a
+/// heterogeneous mix of `Mapping` / `String` / `Sequence`).
+///
+/// Each method mints the same `Value::<Variant>(<payload>)` promotion
+/// the caller would otherwise re-inline as
+/// `vec.push(serde_yaml::Value::<Variant>(<payload>))` on every
+/// iteration. Same variant-promotion contract as [`MappingExt`]'s
+/// typed inserts, applied to the sequence-append axis instead of the
+/// mapping-insert axis — so a future rebrand of the `Value` variant
+/// wrapping (e.g. to a Server-Side-Apply-typed
+/// [`serde_yaml::Value::Tagged`] per-list-element ownership axis)
+/// reaches both `Mapping`-insert and `Vec<Value>`-push sites through
+/// one lift.
+pub trait SequenceExt {
+    /// Append `Value::Mapping(value)` to `self` — the per-iteration
+    /// append shape that combines a `Vec<serde_yaml::Value>::push`
+    /// with an automatic [`serde_yaml::Value::Mapping`] promotion of a
+    /// pre-built [`serde_yaml::Mapping`] element.
+    ///
+    /// The canonical shape 4 production call sites across `caixa-mesh`
+    /// previously carried inline as the three-token block
+    /// `<vec>.push(serde_yaml::Value::Mapping(<M>))` — a one-token
+    /// semantic payload (the per-iteration `Mapping`) buried under a
+    /// two-axis boilerplate (`serde_yaml::` path re-quote,
+    /// `Value::Mapping(_)` promotion) around a `Mapping` variable the
+    /// caller already built.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-mesh's `programs_for_aplicacao` per-`:membros`
+    ///     programs.yaml entry append (per-member entry `Mapping` →
+    ///     the fan-out `Vec<Value>`);
+    ///   * caixa-mesh's `cilium_network_policies` per-edge
+    ///     `spec.ingress[].toPorts[]` L4-and-L7 port-and-rule append
+    ///     (per-`(:de, :para)` group's per-edge `to_port` Mapping →
+    ///     the `to_ports_seq` Vec);
+    ///   * caixa-mesh's `cilium_network_policies` per-policy
+    ///     top-level CNP-document append (per-`(:de, :para)` group's
+    ///     built `policy` Mapping → the render-output `Vec<Value>`);
+    ///   * caixa-mesh's `gateway_routes` per-HTTPRoute-rule
+    ///     `spec.rules[]` append (per-path built `rule` Mapping → the
+    ///     `rules` Vec).
+    ///
+    /// Lifting collapses the three-token block into one method call
+    /// the caller reads as intent (`<vec>.push_mapping(<M>)` —
+    /// "append this built inner `M` as the next `Value::Mapping`
+    /// element") rather than three hand-spelled positional artifacts
+    /// (`serde_yaml::` path re-quote, `Value::Mapping(_)` promotion,
+    /// plus the `.push(_)` call itself). Peer to
+    /// [`MappingExt::insert_singleton_mapping_sequence`] on the
+    /// singleton-Mapping-list-shape axis: [`Self::push_mapping`]
+    /// builds up a multi-element `Vec<Value>` per iteration when the
+    /// caller then calls [`MappingExt::insert_sequence`] to route the
+    /// finished vec under a schema key;
+    /// [`MappingExt::insert_singleton_mapping_sequence`] fuses the
+    /// singleton wrap + the schema-key insert into one call when the
+    /// caller has exactly one Mapping element to emit under a schema
+    /// key.
+    ///
+    /// The next renderer to land — the per-`:politicas`
+    /// `CiliumClusterwideEnvoyConfig` emitter (whose per-policy
+    /// `spec.resources[]` / `spec.listeners[]` / `spec.virtualHosts[]`
+    /// list-shape axes fan out multi-Mapping-element per iteration,
+    /// MESH-COMPOSITION §III.2 #3), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (per-
+    /// `spec.selectors[]` / per-`spec.gates[]` multi-element append,
+    /// §III.2 #5), the M4 cross-cluster fan-out's per-cluster
+    /// multi-entry `Service.spec.ports[]` /
+    /// `HTTPRoute.spec.rules[].backendRefs[]` list append, the future
+    /// `caixa-otel` OpenTelemetry-Collector per-pipeline
+    /// `receivers[]` / `processors[]` / `exporters[]` multi-element
+    /// append — gets the canonical `Value::Mapping`-promoted append
+    /// for free with one method call, instead of re-inlining the
+    /// three-token `Value::Mapping(_)` promotion.
+    fn push_mapping(&mut self, value: serde_yaml::Mapping);
+}
+
+impl SequenceExt for Vec<serde_yaml::Value> {
+    #[inline]
+    fn push_mapping(&mut self, value: serde_yaml::Mapping) {
+        self.push(serde_yaml::Value::Mapping(value));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -24728,6 +24826,148 @@ spec:
             "None arm on a present key surfaces the author's prior \
              value verbatim — the load-bearing contract the three \
              lifted `:politicas` overlay sites rest on"
+        );
+    }
+
+    // ── SequenceExt::push_mapping — Vec<Value>-side sibling ──────────────
+
+    #[test]
+    fn sequence_ext_push_mapping_appends_promoted_mapping_value() {
+        // The method appends the caller's `Mapping` as a fresh
+        // `Value::Mapping(_)` element on the tail of `self`. Pin the
+        // per-append routing (`.push(Value::Mapping(_))`) so a future
+        // refactor that reaches for a different outer variant (a
+        // Server-Side-Apply-typed `Value::Tagged`, a fresh singleton-list
+        // wrap via `singleton_mapping_sequence`) or a different
+        // Vec-mutation shape (e.g. `.insert(0, _)` shifting the axis
+        // from append to prepend) is a compile-visible break, not a
+        // silent per-consumer regression at the 4 lifted `caixa-mesh`
+        // append sites — where the emission order is load-bearing (the
+        // Cilium `spec.ingress[].toPorts[]` per-edge order, the
+        // Gateway API `spec.rules[]` per-path order, the top-level CNP
+        // and programs.yaml document order all depend on the append
+        // semantics).
+        let mut seq: Vec<serde_yaml::Value> = Vec::new();
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("first".into()));
+        seq.push_mapping(m.clone());
+        assert_eq!(
+            seq.len(),
+            1,
+            "push_mapping must append exactly one element — the axis's \
+             fresh-element semantic"
+        );
+        assert_eq!(
+            seq[0],
+            serde_yaml::Value::Mapping(m),
+            "the appended element must be the caller's Mapping wrapped \
+             verbatim as Value::Mapping — no reshape, no clone-and-drop"
+        );
+    }
+
+    #[test]
+    fn sequence_ext_push_mapping_preserves_prior_elements_in_insertion_order() {
+        // Successive push_mapping calls preserve the caller's per-
+        // iteration order — the Vec grows at the tail, prior elements
+        // stay at their prior indices. Pin the insertion-order semantic
+        // so a future refactor that reaches for a per-append sort /
+        // dedup / hoist-to-front reordering is a test-visible break,
+        // not a silent behavior shift at the 4 lifted `caixa-mesh`
+        // append sites (where THEORY.md §V.2.7 render determinism
+        // pins the per-iteration emission order to the source
+        // `:contratos` / `:paths` / `:membros` declaration order).
+        let mut seq: Vec<serde_yaml::Value> = Vec::new();
+        let mut first = serde_yaml::Mapping::new();
+        first.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("a".into()));
+        let mut second = serde_yaml::Mapping::new();
+        second.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("b".into()));
+        let mut third = serde_yaml::Mapping::new();
+        third.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("c".into()));
+        seq.push_mapping(first.clone());
+        seq.push_mapping(second.clone());
+        seq.push_mapping(third.clone());
+        assert_eq!(
+            seq.len(),
+            3,
+            "three push_mapping calls append three elements"
+        );
+        assert_eq!(
+            seq,
+            vec![
+                serde_yaml::Value::Mapping(first),
+                serde_yaml::Value::Mapping(second),
+                serde_yaml::Value::Mapping(third),
+            ],
+            "push_mapping preserves per-iteration insertion order — the \
+             axis's render-determinism contract at the 4 lifted \
+             `caixa-mesh` append sites"
+        );
+    }
+
+    #[test]
+    fn sequence_ext_push_mapping_matches_hand_written_composition() {
+        // Cross-check the trait method against the hand-written
+        // `<vec>.push(serde_yaml::Value::Mapping(<M>))` three-token
+        // block the 4 lifted `caixa-mesh` append call sites previously
+        // carried. A drift between the trait method's routing and the
+        // inline `Value::Mapping(_)` promotion would silently emit a
+        // different `Vec<Value>` (a different outer variant on the
+        // appended element, a different length, a different order) at
+        // every routed consumer — pin the equivalence so the trait
+        // remains a drop-in replacement across the fresh-empty, prior-
+        // populated, and empty-payload cases.
+
+        // Case 1: fresh-empty Vec + non-empty Mapping payload.
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("policy-a".into()));
+        let mut via_trait: Vec<serde_yaml::Value> = Vec::new();
+        via_trait.push_mapping(inner.clone());
+        let mut via_inline: Vec<serde_yaml::Value> = Vec::new();
+        via_inline.push(serde_yaml::Value::Mapping(inner.clone()));
+        assert_eq!(
+            via_trait, via_inline,
+            "push_mapping(M) on empty Vec must byte-equal \
+             `.push(Value::Mapping(M))` — same variant-promotion, same \
+             append semantics"
+        );
+
+        // Case 2: prior-populated Vec + non-empty Mapping payload — pin
+        // that the append fires at the tail, not at the head or the
+        // middle.
+        let seed = serde_yaml::Value::String("seed".into());
+        let mut via_trait_populated: Vec<serde_yaml::Value> = vec![seed.clone()];
+        via_trait_populated.push_mapping(inner.clone());
+        let mut via_inline_populated: Vec<serde_yaml::Value> = vec![seed];
+        via_inline_populated.push(serde_yaml::Value::Mapping(inner.clone()));
+        assert_eq!(
+            via_trait_populated, via_inline_populated,
+            "push_mapping(M) on populated Vec must byte-equal \
+             `.push(Value::Mapping(M))` — the append fires at the tail, \
+             prior elements stay at their prior indices"
+        );
+
+        // Case 3: empty Mapping payload — the axis's "empty-vs-absent"
+        // distinction the 4 lifted sites rest on. An empty inner
+        // `Mapping` still round-trips as a `Value::Mapping(<empty>)`
+        // element, not as a skipped no-op, because some K8s CRD schemas
+        // (Cilium CNP `spec.ingress[].toPorts[].rules.http[]` with an
+        // empty match set) require an empty inner object to distinguish
+        // "explicitly-empty" from "absent".
+        let mut via_trait_empty: Vec<serde_yaml::Value> = Vec::new();
+        via_trait_empty.push_mapping(serde_yaml::Mapping::new());
+        let mut via_inline_empty: Vec<serde_yaml::Value> = Vec::new();
+        via_inline_empty.push(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
+        assert_eq!(
+            via_trait_empty, via_inline_empty,
+            "push_mapping(empty Mapping) must byte-equal \
+             `.push(Value::Mapping(empty))` — no is_empty()-guarded \
+             short-circuit, no skip"
+        );
+        assert_eq!(
+            via_trait_empty.len(),
+            1,
+            "push_mapping on an empty Mapping still appends one element \
+             — the axis carries no is_empty() short-circuit"
         );
     }
 

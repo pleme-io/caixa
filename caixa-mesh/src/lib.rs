@@ -37,7 +37,7 @@ use caixa_core::{
     Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
     FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
     GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
-    M3_KEY_PLACEMENT, MappingExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
+    M3_KEY_PLACEMENT, MappingExt, SequenceExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
     kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
     pleme_program_selector, single_field_overlay,
 };
@@ -156,7 +156,7 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
         // self-describing for downstream filters that have no
         // Aplicacao-level context.
         entry.insert_str_key(M3_KEY_PLACEMENT, placement_value.clone());
-        out.push(serde_yaml::Value::Mapping(entry));
+        out.push_mapping(entry);
     }
     Ok(out)
 }
@@ -2471,7 +2471,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 rules.insert_singleton_mapping_sequence(CILIUM_KEY_HTTP, http_rule);
                 to_port.insert_mapping(KUBE_KEY_RULES, rules);
             }
-            to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
+            to_ports_seq.push_mapping(to_port);
         }
         ingress_rule.insert_sequence(CILIUM_KEY_TO_PORTS, to_ports_seq);
         ingress_rule.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, mtls_overlay.as_ref());
@@ -2481,7 +2481,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         policy_spec.insert_singleton_mapping_sequence(CILIUM_KEY_INGRESS, ingress_rule);
         policy.insert_mapping(KUBE_KEY_SPEC, policy_spec);
 
-        out.push(serde_yaml::Value::Mapping(policy));
+        out.push_mapping(policy);
     }
     Ok(out)
 }
@@ -2684,7 +2684,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_BACKEND_REFS, backend_ref);
         rule.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, timeout_overlay.as_ref());
         rule.insert_str_key_if_some(GATEWAY_API_KEY_RETRY, retry_overlay.as_ref());
-        rules.push(serde_yaml::Value::Mapping(rule));
+        rules.push_mapping(rule);
     }
 
     let mut r_spec = serde_yaml::Mapping::new();
