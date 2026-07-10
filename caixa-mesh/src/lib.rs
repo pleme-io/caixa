@@ -131,10 +131,7 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
     let mut out = Vec::with_capacity(spec.membros.len());
     for m in &spec.membros {
         let mut entry = serde_yaml::Mapping::new();
-        entry.insert_str_key(
-            FLEET_PROGRAMS_KEY_NAME,
-            serde_yaml::Value::String(m.caixa.clone()),
-        );
+        entry.insert_string(FLEET_PROGRAMS_KEY_NAME, m.caixa.clone());
         // Per-`:membros` version-constraint annotation — flows the
         // Membro's `:versao` (the M3 Aplicacao's per-member semver /
         // range constraint) through the canonical
@@ -146,20 +143,14 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
         // per-entry axis (name + versao + aplicacao + placement) lives
         // in exactly one `&'static str` across the emitter here + every
         // downstream aggregator/resolver call site.
-        entry.insert_str_key(
-            FLEET_PROGRAMS_KEY_VERSAO,
-            serde_yaml::Value::String(m.versao.clone()),
-        );
+        entry.insert_string(FLEET_PROGRAMS_KEY_VERSAO, m.versao.clone());
         // Annotate with the parent Aplicacao's nome so the operator
         // knows which graph this member belongs to. Consumes the
         // lifted [`caixa_core::FLEET_PROGRAMS_KEY_APLICACAO`] axis-key
         // — see its doc-comment for why the per-entry parent-graph-
         // annotation-key axis lives in one canonical const across
         // the emitter here + the readback probe below.
-        entry.insert_str_key(
-            FLEET_PROGRAMS_KEY_APLICACAO,
-            serde_yaml::Value::String(caixa.nome.clone()),
-        );
+        entry.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, caixa.nome.clone());
         // M3 `:placement` overlay — see the per-call rationale
         // above. Cloned per entry so each programs.yaml row is
         // self-describing for downstream filters that have no
@@ -2467,11 +2458,8 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 .filter(|e| e.para == c.para)
                 .map(|e| e.port)
                 .unwrap_or(DEFAULT_SERVICO_PORT);
-            port_entry.insert_str_key(KUBE_KEY_PORT, serde_yaml::Value::String(port.to_string()));
-            port_entry.insert_str_key(
-                KUBE_KEY_PROTOCOL,
-                serde_yaml::Value::String(KUBE_PROTOCOL_TCP.into()),
-            );
+            port_entry.insert_string(KUBE_KEY_PORT, port.to_string());
+            port_entry.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
             to_port.insert_str_key(CILIUM_KEY_PORTS, singleton_mapping_sequence(port_entry));
 
             // L7 introspection only fires for HTTP-shaped contracts; the
@@ -2481,10 +2469,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             // L4-only — Cilium can't introspect those protocols.
             if let WitTarget::Http { endpoint } = c.target().expect("validated by typed_view") {
                 let mut http_rule = serde_yaml::Mapping::new();
-                http_rule.insert_str_key(
-                    CILIUM_KEY_PATH,
-                    serde_yaml::Value::String(endpoint.to_string()),
-                );
+                http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string());
                 let mut rules = serde_yaml::Mapping::new();
                 rules.insert_str_key(CILIUM_KEY_HTTP, singleton_mapping_sequence(http_rule));
                 to_port.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules));
@@ -2572,10 +2557,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // that attach to this Gateway's HTTP listener bind by the same
     // lifted byte-string, so a listener-name drift can't silently
     // orphan the route at attachment time.
-    listener.insert_str_key(
-        GATEWAY_API_KEY_NAME,
-        serde_yaml::Value::String(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME.into()),
-    );
+    listener.insert_string(GATEWAY_API_KEY_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME);
     // Per-listener HTTP-listener-port scalar — reads from the lifted
     // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] `u16` const so a future
     // substrate-side external-Gateway port migration (`:80` → `:443`
@@ -2594,14 +2576,8 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         KUBE_KEY_PORT,
         serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
     );
-    listener.insert_str_key(
-        KUBE_KEY_PROTOCOL,
-        serde_yaml::Value::String(GATEWAY_API_PROTOCOL_HTTP.into()),
-    );
-    listener.insert_str_key(
-        GATEWAY_API_KEY_HOSTNAME,
-        serde_yaml::Value::String(entrada.host.clone()),
-    );
+    listener.insert_string(KUBE_KEY_PROTOCOL, GATEWAY_API_PROTOCOL_HTTP);
+    listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.host.clone());
     let mut g_spec = serde_yaml::Mapping::new();
     // `spec.gatewayClassName` binds the emitted `Gateway` to the
     // substrate's chosen K8s Gateway API controller — the same Cilium
@@ -2617,9 +2593,9 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // this call site — same discipline the [`DEFAULT_NAMESPACE`] /
     // [`GATEWAY_API_API_VERSION`] / [`GATEWAY_API_KIND_GATEWAY`]
     // lifts apply on the peer canonical-K8s-Gateway-API-axis surfaces.
-    g_spec.insert_str_key(
+    g_spec.insert_string(
         GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
-        serde_yaml::Value::String(DEFAULT_GATEWAY_CLASS_NAME.into()),
+        DEFAULT_GATEWAY_CLASS_NAME,
     );
     g_spec.insert_str_key(
         GATEWAY_API_KEY_LISTENERS,
@@ -2645,10 +2621,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     );
 
     let mut parent_ref = serde_yaml::Mapping::new();
-    parent_ref.insert_str_key(
-        GATEWAY_API_KEY_NAME,
-        serde_yaml::Value::String(caixa.nome.clone()),
-    );
+    parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome.clone());
 
     let paths: Vec<&str> = if entrada.paths.is_empty() {
         vec!["/"]
@@ -2713,21 +2686,12 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let mut rules = Vec::with_capacity(paths.len());
     for path in paths {
         let mut path_match = serde_yaml::Mapping::new();
-        path_match.insert_str_key(
-            KUBE_KEY_TYPE,
-            serde_yaml::Value::String(GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX.into()),
-        );
-        path_match.insert_str_key(
-            GATEWAY_API_KEY_VALUE,
-            serde_yaml::Value::String(path.to_string()),
-        );
+        path_match.insert_string(KUBE_KEY_TYPE, GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX);
+        path_match.insert_string(GATEWAY_API_KEY_VALUE, path.to_string());
         let mut match_entry = serde_yaml::Mapping::new();
         match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_match));
         let mut backend_ref = serde_yaml::Mapping::new();
-        backend_ref.insert_str_key(
-            GATEWAY_API_KEY_NAME,
-            serde_yaml::Value::String(entrada.para.clone()),
-        );
+        backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.para.clone());
         backend_ref.insert_str_key(
             KUBE_KEY_PORT,
             serde_yaml::Value::Number(entrada.port.into()),
