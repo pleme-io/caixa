@@ -415,6 +415,30 @@ pub use caixa_core::COMPUTEUNIT_SPEC_KEY_TRIGGER;
 /// rationale.
 pub use caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES;
 
+/// Local re-export of the canonical
+/// [`caixa_core::servico_spec_and_m2_overlay_entries`] — the composed
+/// per-Servico value-block splice helper this crate's
+/// [`build_values_yaml`] and the peer
+/// [`caixa_flux::programs_yaml_entry`] both now route their two-step
+/// `spec.*` field-splice + M2 typed-slot overlay through. The single
+/// production-code call site consuming it is [`build_values_yaml`]'s
+/// inner splice loop (formerly two hand-written for-loops chained
+/// around `string_keyed_entries` + `servico_m2_overlay`); re-exported
+/// so the shared composition contract lives in exactly one place
+/// across both per-Servico renderers — a future author reading
+/// `caixa_helm::build_values_yaml` finds the composition helper
+/// immediately without an extra `use caixa_core::…` line, and a
+/// rebrand of the composition axis (e.g. a swap of the `or_insert`
+/// precedence rule once per-Aplicacao operator overrides land)
+/// reaches both renderers through one canonical `&'static` function
+/// pointer. Same shape as the peer [`COMPUTEUNIT_SPEC_KEY_MODULE`] /
+/// [`COMPUTEUNIT_SPEC_KEY_TRIGGER`] / [`COMPUTEUNIT_SPEC_KEY_CAPABILITIES`]
+/// re-exports on the sibling canonical-ComputeUnit-CRD `spec.*` axis
+/// — extends the shared-composition discipline the per-`spec.*`
+/// sub-block re-export triple establishes onto the composed
+/// spec.*+M2 splice axis every per-Servico renderer navigates.
+pub use caixa_core::servico_spec_and_m2_overlay_entries;
+
 /// Knobs that don't come from the Caixa manifest.
 #[derive(Debug, Clone)]
 pub struct RenderOpts {
@@ -583,30 +607,27 @@ fn build_values_yaml(
         HELM_VALUES_KEY_ENABLED.to_string(),
         serde_yaml::Value::Bool(opts.enabled_default),
     );
-    // Splice every spec.* field through (module, trigger, capabilities,
-    // config, resources, serviceAccount). String-key filter + optional-
-    // Mapping-shape short-circuit come from the lifted
-    // caixa_core::string_keyed_entries walk — same lift as
-    // servico_m2_overlay applied to the ComputeUnit-YAML `spec.*` axis
-    // (both call sites in caixa-flux + caixa-helm now route their
-    // ComputeUnit `spec.*` splice through one canonical helper, so a
-    // future change to the string-key filter — e.g. rejecting empty
-    // string keys, canonicalizing DNS-1123 casing — reaches both
-    // renderers by construction instead of a coordinated two-file
-    // rewrite).
-    for (k, v) in caixa_core::string_keyed_entries(spec) {
-        block.insert(k.to_string(), v.clone());
-    }
-
-    // M2 typed-substrate slots — propagate from caixa.lisp into the
-    // rendered values block so the library chart (and the operator
-    // reading the rendered ComputeUnit) sees them. Spec values from
-    // computeunit.yaml win over duplicates in caixa.lisp (or_insert
-    // semantics). Shared with caixa-flux::programs_yaml_entry via
-    // caixa_core::render::servico_m2_overlay so both renderers agree
-    // on key naming + emptiness rules + serialization-error handling.
-    for (key, value) in caixa_core::servico_m2_overlay(caixa)? {
-        block.entry(key.to_string()).or_insert(value);
+    // Two-step per-Servico value-block splice — the `spec.*` field
+    // splice (module / trigger / capabilities / config / resources /
+    // serviceAccount) and the M2 typed-slot overlay (limits / behavior
+    // / upgradeFrom, `or_insert` semantics so `spec.*` wins on
+    // collision) now route through the canonical
+    // [`caixa_core::servico_spec_and_m2_overlay_entries`] composition
+    // helper — the two prior inline for-loops chained around
+    // `string_keyed_entries` + `servico_m2_overlay` this call site
+    // (and the peer [`caixa_flux::programs_yaml_entry`] site) each
+    // re-derived collapse onto one canonical composition, so a future
+    // change to the per-Servico splice / overlay shape (the M4 typed
+    // per-edge policy overlay slot addition MESH-COMPOSITION §III.2 #3
+    // acknowledges, a change to the precedence rule once per-Aplicacao
+    // operator overrides land, a canonicalization pass on the merged
+    // key set) reaches both renderers by construction instead of a
+    // coordinated two-file rewrite. See the helper's docstring for the
+    // full lift rationale. The target `BTreeMap` re-sorts by key on
+    // insert, so the final rendered values block stays byte-identical
+    // to the prior inline block's alphabetical shape.
+    for (k, v) in caixa_core::servico_spec_and_m2_overlay_entries(caixa, spec)? {
+        block.entry(k).or_insert(v);
     }
 
     let mut wrapped = serde_yaml::Mapping::new();
