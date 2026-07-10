@@ -39,7 +39,7 @@ use caixa_core::{
     GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
     M3_KEY_PLACEMENT, MappingExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
     kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay, singleton_mapping_sequence,
+    pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -2457,7 +2457,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 .unwrap_or(DEFAULT_SERVICO_PORT);
             port_entry.insert_string(KUBE_KEY_PORT, port.to_string());
             port_entry.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
-            to_port.insert_str_key(CILIUM_KEY_PORTS, singleton_mapping_sequence(port_entry));
+            to_port.insert_singleton_mapping_sequence(CILIUM_KEY_PORTS, port_entry);
 
             // L7 introspection only fires for HTTP-shaped contracts; the
             // typed view (validated upstream by AplicacaoSpec::validate)
@@ -2468,7 +2468,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 let mut http_rule = serde_yaml::Mapping::new();
                 http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string());
                 let mut rules = serde_yaml::Mapping::new();
-                rules.insert_str_key(CILIUM_KEY_HTTP, singleton_mapping_sequence(http_rule));
+                rules.insert_singleton_mapping_sequence(CILIUM_KEY_HTTP, http_rule);
                 to_port.insert_mapping(KUBE_KEY_RULES, rules);
             }
             to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
@@ -2480,7 +2480,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert_str_key(CILIUM_KEY_ENDPOINT_SELECTOR, endpoint_selector);
-        policy_spec.insert_str_key(CILIUM_KEY_INGRESS, singleton_mapping_sequence(ingress_rule));
+        policy_spec.insert_singleton_mapping_sequence(CILIUM_KEY_INGRESS, ingress_rule);
         policy.insert_mapping(KUBE_KEY_SPEC, policy_spec);
 
         out.push(serde_yaml::Value::Mapping(policy));
@@ -2591,10 +2591,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         GATEWAY_API_KEY_GATEWAY_CLASS_NAME,
         DEFAULT_GATEWAY_CLASS_NAME,
     );
-    g_spec.insert_str_key(
-        GATEWAY_API_KEY_LISTENERS,
-        singleton_mapping_sequence(listener),
-    );
+    g_spec.insert_singleton_mapping_sequence(GATEWAY_API_KEY_LISTENERS, listener);
     gateway.insert_mapping(KUBE_KEY_SPEC, g_spec);
 
     // HTTPRoute — all paths route to the entrada.para Servico. Same
@@ -2691,14 +2688,8 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
             serde_yaml::Value::Number(entrada.port.into()),
         );
         let mut rule = serde_yaml::Mapping::new();
-        rule.insert_str_key(
-            GATEWAY_API_KEY_MATCHES,
-            singleton_mapping_sequence(match_entry),
-        );
-        rule.insert_str_key(
-            GATEWAY_API_KEY_BACKEND_REFS,
-            singleton_mapping_sequence(backend_ref),
-        );
+        rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_MATCHES, match_entry);
+        rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_BACKEND_REFS, backend_ref);
         if let Some(t) = &timeout_overlay {
             rule.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, t.clone());
         }
@@ -2709,10 +2700,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     }
 
     let mut r_spec = serde_yaml::Mapping::new();
-    r_spec.insert_str_key(
-        GATEWAY_API_KEY_PARENT_REFS,
-        singleton_mapping_sequence(parent_ref),
-    );
+    r_spec.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, parent_ref);
     r_spec.insert_sequence(
         GATEWAY_API_KEY_HOSTNAMES,
         vec![serde_yaml::Value::String(entrada.host.clone())],
