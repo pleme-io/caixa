@@ -7233,7 +7233,7 @@ pub const DEFAULT_NAMESPACE: &str = "tatara-system";
 /// rendered `kustomization.yaml` document reach for:
 ///
 ///   - `metadata.namespace` — the namespace the `Kustomization` resource
-///     itself lives in (the FluxCD `kustomize-controller` watches this
+///     itself lives in (the `FluxCD` `kustomize-controller` watches this
 ///     namespace by default; a drifted value sits outside the controller's
 ///     watch window and is never reconciled);
 ///   - `spec.sourceRef.name` — the `GitRepository` the bootstrap pipeline
@@ -8162,6 +8162,130 @@ pub const FLUX_KEY_INTERVAL: &str = "interval";
 /// [cf]: ../../caixa_flux/index.html
 /// [cb]: ../../caixa_flux/fn.cluster_bundle.html
 pub const FLUX_HELMRELEASE_YAML_FILENAME: &str = "helmrelease.yaml";
+
+/// Canonical Flux v2 per-cluster-bundle `GitRepository` document
+/// filename every [`caixa-flux`][cf]-rendered [`cluster_bundle`][cb]
+/// carries at the per-Servico bundle's rendered file collection — the
+/// fixed filename the sibling `helmrelease.yaml` +
+/// `kustomization.yaml` documents key against when the cluster-side
+/// `FluxCD` `source-controller` reconciles the per-Servico Git-source
+/// poll cycle, and the exact filename every downstream consumer that
+/// reaches into the rendered bundle by document name looks up.
+///
+/// Two production consumers reach for this filename:
+///
+///   - [`caixa-flux`][cf]'s [`cluster_bundle`][cb] `BundleFile`
+///     assembly's per-file `path` axis for the `GitRepository`
+///     document — the sole caixa-flux production emit site the prior
+///     inline `PathBuf::from("gitrepository.yaml")` literal sat at,
+///     one of the three canonical per-Servico Flux bundle files the
+///     renderer emits alongside the sibling `helmrelease.yaml` +
+///     `kustomization.yaml` documents (the second coordinate of the
+///     per-bundle `(gitrepository, helmrelease, kustomization)`
+///     filename axis triple this const closes);
+///   - the peer test-fixture navigators in this crate reach into the
+///     rendered `BundleFile` collection by the same filename to
+///     round-trip-pin each emitted `GitRepository` axis — every
+///     `.find(|f| f.path == PathBuf::from("gitrepository.yaml"))` +
+///     `names.contains(&"gitrepository.yaml".to_string())` fixture
+///     navigator across the per-CR body-axis sweeps that pin the
+///     Git-source apiVersion / kind / `spec.url` / `spec.ref`
+///     round-trips.
+///
+/// Until this lift landed the filename `"gitrepository.yaml"` lived
+/// as nine verbatim inline literals across [`caixa-flux`][cf] (one
+/// production `PathBuf::from("gitrepository.yaml")` at the
+/// `cluster_bundle` `BundleFile`-vec construction site + eight
+/// test-side fixture navigators). A drift on the emit side (a
+/// `"GitRepository.yaml"` / `"git-repository.yaml"` /
+/// `"gitrepository.yml"` typo, or an accidental per-fork rebrand)
+/// would surface at cluster-side reconcile time far from the source:
+/// the `FluxCD` `source-controller` never registers a `GitRepository`
+/// document under the expected bundle path, the sibling
+/// `HelmRelease.spec.chart.spec.sourceRef` reference dangles at
+/// admission, and the per-Servico release cycle silently freezes at
+/// last-applied state with no field naming the filename-drift root
+/// cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// filename to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`FLUX_HELMRELEASE_YAML_FILENAME`] (ba7b0b2) /
+/// [`HELM_CHART_YAML_FILENAME`] (c2c99b0) /
+/// [`HELM_VALUES_YAML_FILENAME`] (9a980ba) lifts established on the
+/// sibling per-Flux-v2-bundle / per-Helm-chart-directory filename
+/// axes — pairs with the sibling
+/// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] on the third coordinate to
+/// close the per-bundle `(gitrepository, helmrelease, kustomization)`
+/// filename axis triple every rendered cluster bundle carries.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+pub const FLUX_GITREPOSITORY_YAML_FILENAME: &str = "gitrepository.yaml";
+
+/// Canonical Flux v2 per-cluster-bundle `Kustomization` document
+/// filename every [`caixa-flux`][cf]-rendered [`cluster_bundle`][cb]
+/// carries at the per-Servico bundle's rendered file collection — the
+/// fixed filename the sibling `gitrepository.yaml` +
+/// `helmrelease.yaml` documents key against when the cluster-side
+/// `FluxCD` `kustomize-controller` reconciles the per-Servico apply
+/// cycle, and the exact filename every downstream consumer that
+/// reaches into the rendered bundle by document name looks up.
+///
+/// Two production consumers reach for this filename:
+///
+///   - [`caixa-flux`][cf]'s [`cluster_bundle`][cb] `BundleFile`
+///     assembly's per-file `path` axis for the `Kustomization`
+///     document — the sole caixa-flux production emit site the prior
+///     inline `PathBuf::from("kustomization.yaml")` literal sat at,
+///     one of the three canonical per-Servico Flux bundle files the
+///     renderer emits alongside the sibling `gitrepository.yaml` +
+///     `helmrelease.yaml` documents (the third coordinate of the
+///     per-bundle `(gitrepository, helmrelease, kustomization)`
+///     filename axis triple this const closes);
+///   - the peer test-fixture navigators in this crate reach into the
+///     rendered `BundleFile` collection by the same filename to
+///     round-trip-pin each emitted `Kustomization` axis — every
+///     `.find(|f| f.path == PathBuf::from("kustomization.yaml"))` +
+///     `names.contains(&"kustomization.yaml".to_string())` fixture
+///     navigator across the per-CR body-axis sweeps that pin the
+///     Kustomization apiVersion / kind / `spec.sourceRef` /
+///     `spec.healthChecks` round-trips.
+///
+/// Until this lift landed the filename `"kustomization.yaml"` lived
+/// as sixteen verbatim inline literals across [`caixa-flux`][cf]
+/// (one production `PathBuf::from("kustomization.yaml")` at the
+/// `cluster_bundle` `BundleFile`-vec construction site + fifteen
+/// test-side fixture navigators). A drift on the emit side (a
+/// `"Kustomization.yaml"` / `"kustomize.yaml"` / `"kustomization.yml"`
+/// typo, or an accidental per-fork rebrand) would surface at
+/// cluster-side reconcile time far from the source: the `FluxCD`
+/// `kustomize-controller` never picks up the parent `Kustomization`
+/// under the expected bundle path, every per-Servico apply silently
+/// stops advancing at last-applied state, and the sibling
+/// `HelmRelease` / `GitRepository` reconciles register with no
+/// parent Kustomization gating their health, with no field naming
+/// the filename-drift root cause.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// filename to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`FLUX_HELMRELEASE_YAML_FILENAME`] (ba7b0b2) /
+/// [`FLUX_GITREPOSITORY_YAML_FILENAME`] (this commit) /
+/// [`HELM_CHART_YAML_FILENAME`] (c2c99b0) /
+/// [`HELM_VALUES_YAML_FILENAME`] (9a980ba) lifts established on the
+/// sibling per-Flux-v2-bundle / per-Helm-chart-directory filename
+/// axes — closes the per-bundle `(gitrepository, helmrelease,
+/// kustomization)` filename axis triple every rendered cluster
+/// bundle carries.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+pub const FLUX_KUSTOMIZATION_YAML_FILENAME: &str = "kustomization.yaml";
 
 /// Canonical K8s Gateway API CRD `apiVersion` every `caixa-mesh`-emitted
 /// `Gateway` / `HTTPRoute` document declares. The K8s apiserver-side

@@ -480,6 +480,64 @@ pub use caixa_core::FLUX_KEY_INTERVAL;
 /// this crate's [`cluster_bundle`] renders.
 pub use caixa_core::FLUX_HELMRELEASE_YAML_FILENAME;
 
+/// Canonical Flux v2 per-cluster-bundle `GitRepository` document
+/// filename every [`cluster_bundle`]-rendered `BundleFile` carries at
+/// its per-file `path` axis — re-export of the lifted
+/// [`caixa_core::FLUX_GITREPOSITORY_YAML_FILENAME`] so the fixed
+/// filename the cluster-side FluxCD `source-controller` looks up when
+/// it opens the per-Servico bundle directory lives in exactly one
+/// place across every caixa renderer. Pairs with the sibling
+/// [`FLUX_HELMRELEASE_YAML_FILENAME`] +
+/// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] re-exports to close the
+/// per-bundle `(gitrepository, helmrelease, kustomization)` filename
+/// axis triple every rendered cluster bundle carries — the single
+/// source of truth all nine consumers reach for (one production
+/// [`cluster_bundle`] `BundleFile` assembly's `GitRepository`
+/// document `path` axis plus eight test-side round-trip navigators
+/// that reach into the rendered bundle by the same filename to pin
+/// per-CR body-axis emission) now consult the same `&'static str`.
+/// Pin the equality + `&'static` static-data identity so any local
+/// re-introduction of a sibling `pub const
+/// FLUX_GITREPOSITORY_YAML_FILENAME: &str = "…"` at this crate is a
+/// build-time test failure naming the offending drift, not a silent
+/// FluxCD `source-controller` "no `GitRepository` document found
+/// under this bundle" reroute at cluster-side reconcile time far
+/// from the drift site. Peer to the sibling
+/// [`FLUX_HELMRELEASE_YAML_FILENAME`] (ba7b0b2) re-export — extends
+/// the canonical-Flux-v2-bundle-filename lifted-const discipline from
+/// the middle coordinate of the filename triple onto its first
+/// coordinate.
+pub use caixa_core::FLUX_GITREPOSITORY_YAML_FILENAME;
+
+/// Canonical Flux v2 per-cluster-bundle `Kustomization` document
+/// filename every [`cluster_bundle`]-rendered `BundleFile` carries at
+/// its per-file `path` axis — re-export of the lifted
+/// [`caixa_core::FLUX_KUSTOMIZATION_YAML_FILENAME`] so the fixed
+/// filename the cluster-side FluxCD `kustomize-controller` looks up
+/// when it opens the per-Servico bundle directory lives in exactly
+/// one place across every caixa renderer. Pairs with the sibling
+/// [`FLUX_GITREPOSITORY_YAML_FILENAME`] +
+/// [`FLUX_HELMRELEASE_YAML_FILENAME`] re-exports to close the
+/// per-bundle `(gitrepository, helmrelease, kustomization)` filename
+/// axis triple every rendered cluster bundle carries — the single
+/// source of truth all sixteen consumers reach for (one production
+/// [`cluster_bundle`] `BundleFile` assembly's `Kustomization`
+/// document `path` axis plus fifteen test-side round-trip navigators
+/// that reach into the rendered bundle by the same filename to pin
+/// per-CR body-axis emission) now consult the same `&'static str`.
+/// Pin the equality + `&'static` static-data identity so any local
+/// re-introduction of a sibling `pub const
+/// FLUX_KUSTOMIZATION_YAML_FILENAME: &str = "…"` at this crate is a
+/// build-time test failure naming the offending drift, not a silent
+/// FluxCD `kustomize-controller` "no `Kustomization` document found
+/// under this bundle" reroute at cluster-side reconcile time far
+/// from the drift site. Peer to the sibling
+/// [`FLUX_HELMRELEASE_YAML_FILENAME`] (ba7b0b2) +
+/// [`FLUX_GITREPOSITORY_YAML_FILENAME`] (this commit) re-exports —
+/// closes the canonical-Flux-v2-bundle-filename lifted-const
+/// discipline on the third coordinate of the filename triple.
+pub use caixa_core::FLUX_KUSTOMIZATION_YAML_FILENAME;
+
 /// Canonical Helm library-chart name every `lareira-<nome>` chart
 /// depends on — re-export of the lifted [`caixa_core::DEFAULT_LIBRARY_NAME`]
 /// so the load-bearing string lives in exactly one place across every
@@ -1148,7 +1206,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
 
     Ok(vec![
         BundleFile {
-            path: std::path::PathBuf::from("gitrepository.yaml"),
+            path: std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME),
             contents: gitrepo,
         },
         BundleFile {
@@ -1156,7 +1214,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
             contents: helmrelease,
         },
         BundleFile {
-            path: std::path::PathBuf::from("kustomization.yaml"),
+            path: std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME),
             contents: kustomization,
         },
     ])
@@ -2171,19 +2229,19 @@ spec:
             .iter()
             .map(|f| f.path.to_string_lossy().to_string())
             .collect();
-        assert!(names.contains(&"gitrepository.yaml".to_string()));
+        assert!(names.contains(&FLUX_GITREPOSITORY_YAML_FILENAME.to_string()));
         assert!(names.contains(&FLUX_HELMRELEASE_YAML_FILENAME.to_string()));
-        assert!(names.contains(&"kustomization.yaml".to_string()));
+        assert!(names.contains(&FLUX_KUSTOMIZATION_YAML_FILENAME.to_string()));
 
         let kust = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .unwrap();
         assert!(kust.contents.contains("./clusters/rio/services/hello-rio"));
 
         let gitrepo = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
             .unwrap();
         assert!(gitrepo.contents.contains("v0.1.0"));
     }
@@ -2388,7 +2446,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kust = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
@@ -2433,7 +2491,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kust = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .unwrap();
         assert!(
             kust.contents.contains("namespace: flux-system\n"),
@@ -2501,7 +2559,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kust = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
@@ -2558,7 +2616,7 @@ spec:
         );
         let kust = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .unwrap();
         assert!(
             kust.contents
@@ -2627,7 +2685,7 @@ spec:
         let files = cluster_bundle(&caixa, &opts).unwrap();
         let gr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
             .expect("gitrepository.yaml present");
         let expected_tag = format!(
             "{prefix}{versao}",
@@ -2688,7 +2746,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let gr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -2723,7 +2781,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let gr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
             .unwrap();
         assert!(
             gr.contents
@@ -2783,7 +2841,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kz = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -2820,7 +2878,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kz = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .unwrap();
         assert!(
             kz.contents
@@ -2881,7 +2939,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let gr = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
@@ -2957,7 +3015,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kz = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -2999,7 +3057,7 @@ spec:
         let gr_kind = serde_yaml::from_str::<serde_yaml::Value>(
             &files
                 .iter()
-                .find(|f| f.path == std::path::PathBuf::from("gitrepository.yaml"))
+                .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
@@ -3029,7 +3087,7 @@ spec:
         let kz_source_kind = serde_yaml::from_str::<serde_yaml::Value>(
             &files
                 .iter()
-                .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+                .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
@@ -3154,7 +3212,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kz = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -3218,7 +3276,7 @@ spec:
         let kz_health_kind = serde_yaml::from_str::<serde_yaml::Value>(
             &files
                 .iter()
-                .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+                .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
                 .unwrap()
                 .contents,
         )
@@ -3423,7 +3481,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kz = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -3602,7 +3660,7 @@ spec:
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         let kz = files
             .iter()
-            .find(|f| f.path == std::path::PathBuf::from("kustomization.yaml"))
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
@@ -3699,6 +3757,78 @@ spec:
     }
 
     #[test]
+    fn flux_gitrepository_yaml_filename_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLUX_GITREPOSITORY_YAML_FILENAME` was lifted
+        // from the nine production + test-side inline
+        // `"gitrepository.yaml"` / `PathBuf::from("gitrepository.yaml")`
+        // / `names.contains(&"gitrepository.yaml".to_string())` literals
+        // across [`cluster_bundle`]'s per-`BundleFile` `GitRepository`
+        // document `path` emit site + every test-side round-trip
+        // navigator that reaches into the rendered bundle by the
+        // `GitRepository` document filename to a re-export of
+        // [`caixa_core::FLUX_GITREPOSITORY_YAML_FILENAME`] so the Flux v2
+        // per-cluster-bundle `GitRepository` document filename lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + `&'static` static-data identity here so any local
+        // re-introduction of a sibling `pub const
+        // FLUX_GITREPOSITORY_YAML_FILENAME: &str = "…"` at this crate —
+        // the canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation — is a
+        // build-time test failure naming the offending drift, not a
+        // silent FluxCD `source-controller` "no `GitRepository`
+        // document found under this bundle" reroute at cluster-side
+        // reconcile time far from the drift site. Peer to
+        // [`flux_helmrelease_yaml_filename_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-`HelmRelease`-document filename surface —
+        // extends the canonical-Flux-v2-bundle-filename lifted-const
+        // discipline from the middle coordinate of the filename triple
+        // onto its first coordinate.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_YAML_FILENAME",
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            caixa_core::FLUX_GITREPOSITORY_YAML_FILENAME,
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_yaml_filename_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLUX_KUSTOMIZATION_YAML_FILENAME` was lifted
+        // from the sixteen production + test-side inline
+        // `"kustomization.yaml"` /
+        // `PathBuf::from("kustomization.yaml")` /
+        // `names.contains(&"kustomization.yaml".to_string())` literals
+        // across [`cluster_bundle`]'s per-`BundleFile` `Kustomization`
+        // document `path` emit site + every test-side round-trip
+        // navigator that reaches into the rendered bundle by the
+        // `Kustomization` document filename to a re-export of
+        // [`caixa_core::FLUX_KUSTOMIZATION_YAML_FILENAME`] so the
+        // Flux v2 per-cluster-bundle `Kustomization` document filename
+        // lives in exactly one place across every caixa renderer. Pin
+        // the equality + `&'static` static-data identity here so any
+        // local re-introduction of a sibling `pub const
+        // FLUX_KUSTOMIZATION_YAML_FILENAME: &str = "…"` at this crate —
+        // the canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation — is a
+        // build-time test failure naming the offending drift, not a
+        // silent FluxCD `kustomize-controller` "no `Kustomization`
+        // document found under this bundle" reroute at cluster-side
+        // reconcile time far from the drift site. Peer to
+        // [`flux_helmrelease_yaml_filename_re_export_points_at_caixa_core_canonical`]
+        // + [`flux_gitrepository_yaml_filename_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-`HelmRelease` / per-`GitRepository`
+        // document filename surfaces — closes the canonical-Flux-v2-
+        // bundle-filename lifted-const discipline on the third
+        // coordinate of the filename triple.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KUSTOMIZATION_YAML_FILENAME",
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+            caixa_core::FLUX_KUSTOMIZATION_YAML_FILENAME,
+        );
+    }
+
+    #[test]
     fn cluster_bundle_every_flux_cr_carries_lifted_flux_key_interval_scalar() {
         // Fail-before-pass-after pin: every rendered Flux v2 document in
         // the `cluster_bundle` triplet (`gitrepository.yaml`,
@@ -3738,9 +3868,9 @@ spec:
         let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
         let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
         for filename in [
-            "gitrepository.yaml",
+            FLUX_GITREPOSITORY_YAML_FILENAME,
             FLUX_HELMRELEASE_YAML_FILENAME,
-            "kustomization.yaml",
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
         ] {
             let doc = files
                 .iter()
