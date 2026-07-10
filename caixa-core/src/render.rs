@@ -13493,6 +13493,95 @@ pub trait MappingExt {
     /// the caller unconditionally writes a value and either drops or
     /// pattern-matches on the returned `Option<Value>` prior value.
     fn entry_str_key(&mut self, key: &str) -> serde_yaml::mapping::Entry<'_>;
+
+    /// Arity-0-or-1 twin of [`Self::insert_str_key`] — insert
+    /// `(key, value.clone())` iff `value` is `Some`; leave `self`
+    /// untouched iff `value` is `None`. Returns the prior value at that
+    /// key when the insert fires (mirroring
+    /// [`serde_yaml::Mapping::insert`]), and `None` otherwise (no insert
+    /// happened, so no prior value can be surfaced).
+    ///
+    /// The canonical shape 3 production call sites across `caixa-mesh`
+    /// previously carried inline as the three-line block
+    /// `if let Some(<x>) = &<overlay> { <mapping>.insert_str_key(<KEY>,
+    /// <x>.clone()); }` around a two-token semantic payload (the schema
+    /// key axis-name + the `Option<Value>` overlay slot). Every site
+    /// pairs a per-`:politicas` overlay [`single_field_overlay`] `Option
+    /// <Value>` output with the same conditional-insert conditional —
+    /// the arity-0-or-1 twin of [`Self::insert_str_key`]'s always-1
+    /// arity on the per-`(:de, :para)` axis.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-mesh's `cilium_network_policies` per-ingress-rule
+    ///     `:politicas :mtls-required` mutual-auth overlay
+    ///     ([`crate::CILIUM_KEY_AUTHENTICATION`] around the
+    ///     `mtls_overlay` [`single_field_overlay`] output — the
+    ///     tristate `{mode: required | disabled}` block or the
+    ///     None-omit arm);
+    ///   * caixa-mesh's `gateway_routes` per-HTTPRoute-rule
+    ///     `:politicas :timeout` request-deadline overlay
+    ///     ([`crate::GATEWAY_API_KEY_TIMEOUTS`] around the
+    ///     `timeout_overlay` [`single_field_overlay`] output — the
+    ///     `{request: "<duration>"}` block or the None-omit arm);
+    ///   * caixa-mesh's `gateway_routes` per-HTTPRoute-rule
+    ///     `:politicas :retries` retry-attempt-cap overlay
+    ///     ([`crate::GATEWAY_API_KEY_RETRY`] around the
+    ///     `retry_overlay` [`single_field_overlay`] output — the
+    ///     `{attempts: <N>}` block or the None-omit arm).
+    ///
+    /// Lifting collapses the three-line block into one method call the
+    /// caller reads as intent (`mapping.insert_str_key_if_some(<KEY>,
+    /// <overlay>.as_ref())` — "insert this schema key if the overlay
+    /// carried a value; else leave the key absent") rather than four
+    /// hand-spelled positional artifacts (the `if let Some(_) = &_`
+    /// destructure, the per-inner `.clone()`, the trailing brace, plus
+    /// the `.insert_str_key(_)` call itself). The absent-overlay arm —
+    /// which every [`MeshPolicy`] axis defaults to when the author
+    /// leaves the typed slot unset (the `None` arm of the
+    /// `Option<Value>` [`single_field_overlay`] output) — reads as the
+    /// method's own `Option::None` branch, not a per-call-site inverted
+    /// `if let Some` scaffold around a per-call-site clone.
+    ///
+    /// The next renderer to land — the per-`:politicas`
+    /// `CiliumClusterwideEnvoyConfig` emitter (whose per-policy
+    /// `authentication:` / `rateLimit:` / `circuitBreaker:` Option
+    /// overlays, MESH-COMPOSITION §III.2 #3, thread through the same
+    /// [`single_field_overlay`] `Option<Value>` axis the three lifted
+    /// sites here already reach), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (whose per-
+    /// selector `status.` sub-field overlays are the same arity-0-or-1
+    /// shape, §III.2 #5), the M4 cross-cluster fan-out's per-cluster
+    /// `HTTPRoute.spec.rules[].filters[]` per-filter Option overlays
+    /// (the same shape at the per-cluster axis) — gets the canonical
+    /// arity-0-or-1 conditional-insert for free with one method call,
+    /// instead of re-inlining the three-line `if let Some { clone;
+    /// insert_str_key }` block.
+    ///
+    /// Peer to [`Self::insert_str_key`] on the always-1 arity axis
+    /// (fresh-emit sites where the caller unconditionally writes a
+    /// value) — the two together partition the fresh-emit surface
+    /// exactly on the arity axis: [`Self::insert_str_key`] for
+    /// unconditional writes, [`Self::insert_str_key_if_some`] for
+    /// conditional writes gated on an `Option<Value>` upstream
+    /// producer (the per-`:politicas` overlay
+    /// [`single_field_overlay`] axis, and every future arity-0-or-1
+    /// axis every future renderer's optional-slot machinery reaches
+    /// through).
+    ///
+    /// The `Option<&Value>` shape (as opposed to an owned
+    /// `Option<Value>`) lets the caller pass `overlay.as_ref()` on an
+    /// owned `Option<Value>` the caller reuses across iterations of an
+    /// outer per-`(:de, :para)` or per-rule loop — every lifted site
+    /// consumes the overlay from a loop-outer binding into each of N
+    /// per-iteration `Mapping`s, so the clone happens iff the insert
+    /// fires (the None arm skips the clone entirely) and the outer
+    /// binding stays available for the next iteration.
+    fn insert_str_key_if_some(
+        &mut self,
+        key: &str,
+        value: Option<&serde_yaml::Value>,
+    ) -> Option<serde_yaml::Value>;
 }
 
 impl MappingExt for serde_yaml::Mapping {
@@ -13545,6 +13634,15 @@ impl MappingExt for serde_yaml::Mapping {
     #[inline]
     fn entry_str_key(&mut self, key: &str) -> serde_yaml::mapping::Entry<'_> {
         self.entry(serde_yaml::Value::String(key.to_string()))
+    }
+
+    #[inline]
+    fn insert_str_key_if_some(
+        &mut self,
+        key: &str,
+        value: Option<&serde_yaml::Value>,
+    ) -> Option<serde_yaml::Value> {
+        value.and_then(|v| self.insert_str_key(key, v.clone()))
     }
 }
 
@@ -24384,6 +24482,252 @@ spec:
              overwrite the emitter's prior write while the hand-written \
              inline routing sees it as present and preserves it (or vice \
              versa)"
+        );
+    }
+
+    // ── insert_str_key_if_some — arity-0-or-1 twin of insert_str_key ─────
+
+    #[test]
+    fn mapping_ext_insert_str_key_if_some_none_arm_leaves_mapping_untouched() {
+        // The None arm skips the insert entirely — no clone, no
+        // key-promotion, no bucket touch. Pin the no-op semantic so a
+        // future refactor that reaches for an `Option::unwrap_or_default`
+        // shape (which would emit `Value::Null` under the key on the
+        // None arm) or an `.into_iter().for_each` scaffold (which would
+        // still walk the bucket-lookup path) is a compile-visible break,
+        // not a silent per-consumer regression at the 3 lifted
+        // `caixa-mesh` overlay-insert sites (where the `None` arm is
+        // the author's default when no `:politicas` slot is set — a
+        // silent `Value::Null` emission would land a K8s CRD schema
+        // rejection at every unset-slot Aplicacao).
+        let mut m = serde_yaml::Mapping::new();
+        let prior = m.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, None);
+        assert_eq!(
+            prior, None,
+            "insert_str_key_if_some(K, None) returns None — no insert \
+             fires, so no prior value can be surfaced"
+        );
+        assert!(
+            m.get(CILIUM_KEY_AUTHENTICATION).is_none(),
+            "None arm must leave the key absent — a silent `Value::Null` \
+             insertion would land a K8s CRD schema rejection at every \
+             `:politicas`-unset Aplicacao"
+        );
+        assert_eq!(
+            m.len(),
+            0,
+            "None arm must not touch any bucket — the Mapping stays \
+             empty verbatim"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_str_key_if_some_some_arm_promotes_key_to_yaml_string() {
+        // The Some arm clones the borrowed inner value and delegates to
+        // [`Self::insert_str_key`] — pin the promotion + the first-
+        // insert-returns-None contract so a future refactor that reaches
+        // for a different `Value` variant for the key (e.g.
+        // `Value::Tagged`) or breaks the underlying
+        // [`serde_yaml::Mapping::insert`] return contract is a compile-
+        // visible break, not a silent per-consumer regression at the 3
+        // lifted `caixa-mesh` overlay-insert sites. Peer with the sibling
+        // [`mapping_ext_insert_str_key_promotes_key_to_yaml_string`] on
+        // the always-1 arity axis of the same key promotion.
+        let mut m = serde_yaml::Mapping::new();
+        let overlay = serde_yaml::Value::Mapping({
+            let mut inner = serde_yaml::Mapping::new();
+            inner.insert_str_key(
+                CILIUM_KEY_MODE,
+                serde_yaml::Value::String("required".into()),
+            );
+            inner
+        });
+        let prior = m.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, Some(&overlay));
+        assert_eq!(
+            prior, None,
+            "insert_str_key_if_some(K, Some(&V)) returns None on first \
+             insertion, mirroring serde_yaml::Mapping::insert"
+        );
+        // Key is exactly the `Value::String` promotion of the input.
+        let got = m
+            .get(CILIUM_KEY_AUTHENTICATION)
+            .expect("Some arm inserts under the Value::String-promoted key");
+        assert_eq!(
+            got, &overlay,
+            "insert_str_key_if_some routes the borrowed inner value \
+             through a `.clone()` verbatim to the underlying \
+             `insert_str_key` path — no reshape, no wrap, no unwrap"
+        );
+        // The borrowed input is untouched — the caller can reuse the
+        // outer overlay binding across the next iteration of a per-
+        // `(:de, :para)` loop (the exact reuse the three lifted
+        // caixa-mesh sites depend on).
+        assert!(
+            overlay.get(CILIUM_KEY_MODE).is_some(),
+            "insert_str_key_if_some must not move out of the borrowed \
+             overlay — the caller-side outer binding stays available \
+             for the next iteration of the enclosing per-`(:de, :para)` \
+             or per-rule loop"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_str_key_if_some_some_arm_returns_prior_value_on_replace() {
+        // The Some arm mirrors [`serde_yaml::Mapping::insert`]'s return
+        // contract on the replace-existing path: the prior value at that
+        // key, surfaced verbatim. Pin the replace-returns-prior semantic
+        // so a future refactor that reaches for an `entry.or_insert`-
+        // style preserve-prior flow doesn't silently swap the axis's
+        // semantic under the three routed caixa-mesh overlay sites (the
+        // `:politicas` overlay is meant to override an author-provided
+        // sub-block if one was present, not preserve it — the
+        // replace-and-return-prior semantic is load-bearing).
+        let mut m = serde_yaml::Mapping::new();
+        let existing = serde_yaml::Value::String("cluster-default".into());
+        let overlay = serde_yaml::Value::Mapping({
+            let mut inner = serde_yaml::Mapping::new();
+            inner.insert_str_key(
+                GATEWAY_API_KEY_REQUEST,
+                serde_yaml::Value::String("30s".into()),
+            );
+            inner
+        });
+        m.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
+        let prior = m.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, Some(&overlay));
+        assert_eq!(
+            prior,
+            Some(existing),
+            "insert_str_key_if_some(K, Some(&V)) returns the prior value \
+             when replacing an existing key — the overlay overrides the \
+             author-provided sub-block; the prior value surfaces so the \
+             caller can log/compare/roll back if needed"
+        );
+        // Value at the key is now the overlay, verbatim.
+        let got = m
+            .get(GATEWAY_API_KEY_TIMEOUTS)
+            .expect("key is still present after replace");
+        assert_eq!(
+            got, &overlay,
+            "replaced value is now the most-recently-inserted overlay — \
+             the Some arm carries through to the underlying \
+             `insert_str_key` replace path"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_str_key_if_some_matches_hand_written_composition() {
+        // Cross-check the trait method against the hand-written
+        // `if let Some(x) = &overlay { m.insert_str_key(K, x.clone()); }`
+        // three-line block the 3 lifted `caixa-mesh` overlay call sites
+        // previously carried. A drift between the trait method's
+        // conditional-insert routing and the inline `if let Some`
+        // composition would silently emit a different Mapping (a
+        // present-key `Value::Null` on the None arm, a different clone-
+        // vs-move policy on the Some arm) at every routed consumer —
+        // pin the equivalence so the trait remains a drop-in replacement.
+        // Four cases pin the shape end-to-end: None arm (skip), Some
+        // arm on absent key (fresh insert), Some arm on present key
+        // (replace-and-return-prior), None arm on present key (no
+        // touch — the axis's load-bearing "author's value wins when
+        // overlay is unset" contract).
+        let overlay = serde_yaml::Value::Mapping({
+            let mut inner = serde_yaml::Mapping::new();
+            inner.insert_str_key(
+                CILIUM_KEY_MODE,
+                serde_yaml::Value::String("required".into()),
+            );
+            inner
+        });
+
+        // Case 1: None arm on empty mapping — both routes no-op.
+        let mut via_trait_none = serde_yaml::Mapping::new();
+        via_trait_none.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, None);
+        let via_inline_none = serde_yaml::Mapping::new();
+        let overlay_slot_none: Option<serde_yaml::Value> = None;
+        let mut via_inline_none_mut = via_inline_none.clone();
+        if let Some(a) = &overlay_slot_none {
+            via_inline_none_mut.insert_str_key(CILIUM_KEY_AUTHENTICATION, a.clone());
+        }
+        assert_eq!(
+            via_trait_none, via_inline_none_mut,
+            "insert_str_key_if_some(K, None) must byte-equal \
+             `if let Some(_) = None {{ … }}` — the no-op arm must not \
+             emit a stray `Value::Null` under the key"
+        );
+
+        // Case 2: Some arm on empty mapping — both routes fresh-insert.
+        let mut via_trait_some = serde_yaml::Mapping::new();
+        via_trait_some.insert_str_key_if_some(CILIUM_KEY_AUTHENTICATION, Some(&overlay));
+        let mut via_inline_some = serde_yaml::Mapping::new();
+        let overlay_slot_some = Some(overlay.clone());
+        if let Some(a) = &overlay_slot_some {
+            via_inline_some.insert_str_key(CILIUM_KEY_AUTHENTICATION, a.clone());
+        }
+        assert_eq!(
+            via_trait_some, via_inline_some,
+            "insert_str_key_if_some(K, Some(&V)) must byte-equal \
+             `if let Some(x) = &Some(V.clone()) {{ m.insert_str_key(K, \
+             x.clone()); }}` on the fresh-insert path — same clone-and-\
+             insert semantics under the same Value::String-promoted \
+             bucket"
+        );
+
+        // Case 3: Some arm on present key — both routes replace-and-
+        // return-prior.
+        let existing = serde_yaml::Value::String("cluster-default".into());
+        let mut via_trait_replace = serde_yaml::Mapping::new();
+        via_trait_replace.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
+        let trait_prior =
+            via_trait_replace.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, Some(&overlay));
+        let mut via_inline_replace = serde_yaml::Mapping::new();
+        via_inline_replace.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
+        let overlay_slot_replace = Some(overlay.clone());
+        let inline_prior = if let Some(a) = &overlay_slot_replace {
+            via_inline_replace.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, a.clone())
+        } else {
+            None
+        };
+        assert_eq!(
+            trait_prior, inline_prior,
+            "insert_str_key_if_some replace-and-return-prior must byte-\
+             equal the hand-written `if let Some {{ insert_str_key }}` \
+             composition's return"
+        );
+        assert_eq!(
+            via_trait_replace, via_inline_replace,
+            "insert_str_key_if_some replace-post-state must byte-equal \
+             the hand-written composition's post-state — the overlay \
+             overrode the author's value in both routes"
+        );
+
+        // Case 4: None arm on present key — both routes preserve the
+        // author's value verbatim. The load-bearing "author's value
+        // wins when overlay is unset" contract the three lifted sites
+        // depend on.
+        let mut via_trait_preserve = serde_yaml::Mapping::new();
+        via_trait_preserve.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
+        via_trait_preserve.insert_str_key_if_some(GATEWAY_API_KEY_TIMEOUTS, None);
+        let mut via_inline_preserve = serde_yaml::Mapping::new();
+        via_inline_preserve.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, existing.clone());
+        let overlay_slot_preserve: Option<serde_yaml::Value> = None;
+        if let Some(a) = &overlay_slot_preserve {
+            via_inline_preserve.insert_str_key(GATEWAY_API_KEY_TIMEOUTS, a.clone());
+        }
+        assert_eq!(
+            via_trait_preserve, via_inline_preserve,
+            "insert_str_key_if_some(K, None) on a present key must byte-\
+             equal the hand-written `if let Some(_) = None {{ … }}` — \
+             the None arm must preserve the author's value verbatim, \
+             not clobber it with `Value::Null` or drop the key"
+        );
+        assert_eq!(
+            via_trait_preserve
+                .get(GATEWAY_API_KEY_TIMEOUTS)
+                .expect("None arm preserves the pre-existing key"),
+            &existing,
+            "None arm on a present key surfaces the author's prior \
+             value verbatim — the load-bearing contract the three \
+             lifted `:politicas` overlay sites rest on"
         );
     }
 
