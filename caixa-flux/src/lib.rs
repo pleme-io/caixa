@@ -818,9 +818,7 @@ pub fn programs_yaml_entry(
     // caixa_core::render::servico_m2_overlay so both renderers agree
     // on key naming + emptiness rules + serialization-error handling.
     for (key, value) in caixa_core::servico_m2_overlay(caixa)? {
-        entry
-            .entry(serde_yaml::Value::String(key.to_string()))
-            .or_insert(value);
+        entry.entry_str_key(key).or_insert(value);
     }
 
     Ok(serde_yaml::Value::Mapping(entry))
@@ -850,15 +848,13 @@ pub fn upsert_into_helmrelease_programs(
         return Err(Error::MissingField("spec must be a mapping"));
     };
     let values = spec_map
-        .entry(serde_yaml::Value::String(FLUX_KEY_VALUES.into()))
+        .entry_str_key(FLUX_KEY_VALUES)
         .or_insert(serde_yaml::Value::Mapping(serde_yaml::Mapping::new()));
     let serde_yaml::Value::Mapping(values_map) = values else {
         return Err(Error::MissingField("spec.values must be a mapping"));
     };
     let programs_val = values_map
-        .entry(serde_yaml::Value::String(
-            FLEET_PROGRAMS_KEY_PROGRAMS.into(),
-        ))
+        .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
         .or_insert(serde_yaml::Value::Sequence(Vec::new()));
     let arr = match programs_val {
         serde_yaml::Value::Sequence(seq) => seq,
@@ -896,9 +892,8 @@ pub fn upsert_into_programs_yaml(
         ));
     };
 
-    let programs_key = serde_yaml::Value::String(FLEET_PROGRAMS_KEY_PROGRAMS.into());
     let programs_val = root
-        .entry(programs_key.clone())
+        .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
         .or_insert(serde_yaml::Value::Sequence(Vec::new()));
 
     let arr = match programs_val {

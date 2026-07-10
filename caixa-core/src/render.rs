@@ -13013,6 +13013,20 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 ///     `insert_str_key(K, Value::Sequence(v))` boilerplate onto one
 ///     direct call.
 ///
+/// A sibling method — [`Self::entry_str_key`] — closes the entry-API
+/// twin of [`Self::insert_str_key`] on the same `&str →  Value::String`
+/// key-promotion axis: the [`serde_yaml::Mapping::entry`] method's
+/// `Value` parameter demands the same `Value::String(<K>.into())`
+/// wrapping every fresh-emit site's `insert_str_key` call closes, but
+/// on the idempotent-upsert axis (where callers compose
+/// `.or_insert(...)` / `.or_insert_with(...)` / `.and_modify(...)` /
+/// `.or_default()` on the returned entry handle) rather than the
+/// fresh-emit axis. Same key-promotion contract, different downstream
+/// API surface — so a future rebrand of the promotion (e.g. to
+/// [`serde_yaml::Value::Tagged`] under a K8s Server-Side-Apply typed-
+/// field-ownership axis) reaches both fresh-emit and upsert sites
+/// through one lift.
+///
 /// See each method's docstring for its compounding rationale.
 pub trait MappingExt {
     /// Insert `(key, value)` into `self` with `key` promoted to a
@@ -13411,6 +13425,74 @@ pub trait MappingExt {
         key: &str,
         value: serde_yaml::Mapping,
     ) -> Option<serde_yaml::Value>;
+
+    /// Entry-API sibling of [`Self::insert_str_key`] — mint the
+    /// `Value::String(<KEY>.into())` key-promotion the underlying
+    /// [`serde_yaml::Mapping::entry`] method's `Value` parameter
+    /// demands, and return the entry-API's
+    /// [`serde_yaml::mapping::Entry`] handle the caller composes
+    /// `.or_insert(<V>)` / `.or_insert_with(<F>)` /
+    /// `.and_modify(<F>)` / `.or_default()` on.
+    ///
+    /// The canonical shape 4 production call sites across `caixa-flux`
+    /// previously carried inline as the three-token composition
+    /// `mapping.entry(serde_yaml::Value::String(<KEY>.into()))` around
+    /// a one-token semantic payload (the schema key axis-name). Every
+    /// site immediately composes an `.or_insert(...)` on the returned
+    /// [`serde_yaml::mapping::Entry`] handle — the pattern is the
+    /// entry-API twin of the [`Self::insert_str_key`] pattern the
+    /// ~48 fresh-emit sites already collapsed onto (23506b3).
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-flux's `programs_yaml_entry` per-`servico_m2_overlay`
+    ///     key idempotent-upsert loop (`entry.entry(Value::String(
+    ///     <key>.to_string())).or_insert(<value>)` — one
+    ///     `.or_insert(...)` per `M2_KEY_LIMITS` / `M2_KEY_BEHAVIOR` /
+    ///     `M2_KEY_UPGRADE_FROM` axis, iterating the
+    ///     [`servico_m2_overlay`] `BTreeMap`);
+    ///   * caixa-flux's `upsert_into_helmrelease_programs` per-
+    ///     `HelmRelease.spec.values` upsert-if-absent (`FLUX_KEY_VALUES`
+    ///     around a default fresh `Value::Mapping`);
+    ///   * caixa-flux's `upsert_into_helmrelease_programs` per-
+    ///     `HelmRelease.spec.values.programs` upsert-if-absent
+    ///     (`FLEET_PROGRAMS_KEY_PROGRAMS` around a default fresh
+    ///     `Value::Sequence`);
+    ///   * caixa-flux's `upsert_into_programs_yaml` per-top-level
+    ///     `programs:` upsert-if-absent (`FLEET_PROGRAMS_KEY_PROGRAMS`
+    ///     around a default fresh `Value::Sequence` — the sibling of
+    ///     the `upsert_into_helmrelease_programs` site on the same
+    ///     key, one path deep in a HelmRelease `spec.values.` sub-tree,
+    ///     one path at the values.yaml root).
+    ///
+    /// Lifting collapses the three-token composition into one method
+    /// call the caller reads as intent
+    /// (`mapping.entry_str_key(<KEY>).or_insert(<DEFAULT>)` — "get the
+    /// entry handle for this schema key and default it if missing")
+    /// rather than four hand-spelled positional artifacts
+    /// (`serde_yaml::` path re-quote, `Value::String(_)` promotion,
+    /// the `.into() | .to_string()` `&str → String` coercion, plus the
+    /// `.entry(_)` call itself). The next renderer to land — the
+    /// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter (which
+    /// upserts singleton `spec.resources:[]` / `spec.listeners:[]`
+    /// blocks under an existing per-cluster overlay CR, MESH-COMPOSITION
+    /// §III.2 #3), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (which
+    /// upserts `status.` sub-fields on partial reconciles, §III.2 #5),
+    /// the M4 cross-cluster fan-out's per-cluster idempotent
+    /// HelmRelease upsert — gets the canonical entry-API key-promotion
+    /// for free with one method call, instead of re-inlining the
+    /// three-token block.
+    ///
+    /// Peer to [`Self::insert_str_key`] on the sibling fresh-emit
+    /// axis of the same `&str → Value::String` key-promotion — the
+    /// two together partition the `Mapping`-write surface: entry-API
+    /// for idempotent-upsert sites where the caller cares whether the
+    /// prior value was present (`or_insert` / `and_modify` /
+    /// `or_default` composition), insert-API for fresh-emit sites where
+    /// the caller unconditionally writes a value and either drops or
+    /// pattern-matches on the returned `Option<Value>` prior value.
+    fn entry_str_key(&mut self, key: &str) -> serde_yaml::mapping::Entry<'_>;
 }
 
 impl MappingExt for serde_yaml::Mapping {
@@ -13458,6 +13540,11 @@ impl MappingExt for serde_yaml::Mapping {
         value: serde_yaml::Mapping,
     ) -> Option<serde_yaml::Value> {
         self.insert_str_key(key, singleton_mapping_sequence(value))
+    }
+
+    #[inline]
+    fn entry_str_key(&mut self, key: &str) -> serde_yaml::mapping::Entry<'_> {
+        self.entry(serde_yaml::Value::String(key.to_string()))
     }
 }
 
@@ -24068,6 +24155,151 @@ spec:
              insert_str_key(KEY, singleton_mapping_sequence(m)) — otherwise \
              the seven routed caixa-mesh consumer sites drift silently at \
              emit time"
+        );
+    }
+
+    // ── entry_str_key — entry-API twin of insert_str_key ─────────────────
+
+    #[test]
+    fn mapping_ext_entry_str_key_or_inserts_default_under_yaml_string_promoted_key_when_absent() {
+        // The trait method promotes an arbitrary `&str` key to
+        // `Value::String(key.to_string())` on the entry-API axis — pin
+        // the promotion + the entry-API contract so a future refactor
+        // that reaches for a different `Value` variant for the entry
+        // key (e.g. `Value::Tagged`) or breaks the entry-API
+        // `.or_insert(...)` composition is a compile-visible break,
+        // not a silent per-consumer regression at the 4 lifted
+        // `caixa-flux` idempotent-upsert sites. Peer with the sibling
+        // [`mapping_ext_insert_str_key_promotes_key_to_yaml_string`] on
+        // the fresh-emit axis of the same key promotion.
+        let mut m = serde_yaml::Mapping::new();
+        let default_val = serde_yaml::Value::Sequence(Vec::new());
+        let inserted = m.entry_str_key("programs").or_insert(default_val.clone());
+        assert_eq!(
+            inserted, &default_val,
+            "entry_str_key(K).or_insert(D) returns &mut D on the absent-key \
+             path, mirroring serde_yaml::mapping::Entry::or_insert"
+        );
+        // Key is exactly the `Value::String` promotion of the input.
+        let got = m
+            .get("programs")
+            .expect("or_insert-defaulted key is present under Value::String promotion");
+        assert_eq!(
+            got, &default_val,
+            "entry_str_key routes the default verbatim to the underlying \
+             serde_yaml::Mapping::entry(...).or_insert(...) path"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_str_key_leaves_prior_value_untouched_on_or_insert_when_present() {
+        // The trait method mirrors [`serde_yaml::mapping::Entry::or_insert`]'s
+        // present-key contract: the prior value is preserved, and the
+        // returned `&mut Value` points at that prior value (NOT the
+        // discarded default). Pin the leave-prior-untouched semantic so a
+        // future refactor that swaps to an `.insert`-style overwrite
+        // flow doesn't silently clobber every idempotent-upsert consumer
+        // (the M4 per-`:politicas` overlay merger, the `feira app
+        // deploy` idempotent-write dry-run comparator). Peer with the
+        // sibling [`mapping_ext_insert_str_key_returns_prior_value_on_replace`]
+        // pin on the fresh-emit axis (which mirrors the `insert`
+        // replace-and-return-prior semantic, not the `entry.or_insert`
+        // preserve-prior semantic — the two APIs partition the
+        // `Mapping`-write surface exactly on this axis).
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_str_key(
+            FLEET_PROGRAMS_KEY_PROGRAMS,
+            serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("existing".into())]),
+        );
+        let discarded_default = serde_yaml::Value::Sequence(Vec::new());
+        let returned = m
+            .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .or_insert(discarded_default);
+        assert_eq!(
+            returned,
+            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("existing".into())]),
+            "entry_str_key(K).or_insert(D) returns &mut prior on the \
+             present-key path — the discarded default must not overwrite \
+             the emitter's prior write"
+        );
+        // Value at the key is still the pre-existing one, verbatim.
+        let got = m
+            .get(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .expect("key is still present after or_insert on the present-key path");
+        assert_eq!(
+            got,
+            &serde_yaml::Value::Sequence(vec![serde_yaml::Value::String("existing".into())]),
+            "or_insert on the present-key path preserves the prior value \
+             verbatim — no clobber, no reshape"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_entry_str_key_matches_hand_written_composition() {
+        // Cross-check the trait method against the hand-written
+        // `mapping.entry(Value::String(KEY.into()))` three-token
+        // composition the 4 lifted `caixa-flux` call sites previously
+        // carried. A drift between the trait method's promotion and the
+        // inline promotion the prior call sites used would silently
+        // route every idempotent-upsert consumer past a different bucket
+        // (a differently-promoted key on absent-key insert, a hash-key
+        // mismatch that always fires the `or_insert` default even when
+        // the emitter's `insert_str_key` already wrote a value under
+        // the same key). Two cases pin the shape end-to-end: an
+        // absent-key path (both routes take the vacant `or_insert`
+        // branch, both end up storing the same default under the
+        // promoted key) and a present-key path (both routes take the
+        // occupied `or_insert` branch, both leave the prior value
+        // untouched — the twin of the
+        // `mapping_ext_insert_str_key_matches_hand_written_promotion`
+        // pin on the fresh-emit axis).
+        //
+        // Absent-key path — the vacant `or_insert` branch.
+        let mut via_trait_absent = serde_yaml::Mapping::new();
+        via_trait_absent
+            .entry_str_key(FLEET_PROGRAMS_KEY_PROGRAMS)
+            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
+        let mut via_inline_absent = serde_yaml::Mapping::new();
+        via_inline_absent
+            .entry(serde_yaml::Value::String(
+                FLEET_PROGRAMS_KEY_PROGRAMS.into(),
+            ))
+            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
+        assert_eq!(
+            via_trait_absent, via_inline_absent,
+            "entry_str_key(K).or_insert(D) must byte-equal \
+             entry(Value::String(K.into())).or_insert(D) on the absent-key \
+             path — otherwise the 4 routed caixa-flux consumer sites \
+             land the default under a different bucket than the emitter's \
+             `insert_str_key` write and the idempotent-upsert semantic \
+             silently doubles the entry on every call"
+        );
+
+        // Present-key path — the occupied `or_insert` branch. Seed both
+        // mappings via the fresh-emit `insert_str_key` peer (which the
+        // `matches_hand_written_promotion` pin already gates), so the
+        // present-key path here inherits the promotion-agreement guarantee
+        // from that peer and tests only the entry-API branch difference.
+        let seed = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        let mut via_trait_present = serde_yaml::Mapping::new();
+        via_trait_present.insert_str_key(FLUX_KEY_VALUES, seed.clone());
+        via_trait_present
+            .entry_str_key(FLUX_KEY_VALUES)
+            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
+        let mut via_inline_present = serde_yaml::Mapping::new();
+        via_inline_present.insert_str_key(FLUX_KEY_VALUES, seed);
+        via_inline_present
+            .entry(serde_yaml::Value::String(FLUX_KEY_VALUES.into()))
+            .or_insert(serde_yaml::Value::Sequence(Vec::new()));
+        assert_eq!(
+            via_trait_present, via_inline_present,
+            "entry_str_key(K).or_insert(D) must byte-equal \
+             entry(Value::String(K.into())).or_insert(D) on the \
+             present-key path — otherwise a promoted-key mismatch would \
+             cause the trait routing to see the seed as absent and \
+             overwrite the emitter's prior write while the hand-written \
+             inline routing sees it as present and preserves it (or vice \
+             versa)"
         );
     }
 
