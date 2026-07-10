@@ -12973,7 +12973,9 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 /// value)` three-liner the schema-key axis of every emitted YAML
 /// document tunnels a `&'static str` key axis-name through.
 ///
-/// Four methods form the primitive quadruple:
+/// Five methods form the primitive quintuple — one per non-Null
+/// primitive [`serde_yaml::Value`] variant the K8s-artifact-emit
+/// surface actually reaches for as a leaf payload:
 ///
 ///   * [`Self::insert_str_key`] — insert with a `&str` key and any
 ///     fully-built [`serde_yaml::Value`]. The building block every
@@ -12988,6 +12990,13 @@ pub fn assert_str_reexport_identity(name: &str, local: &'static str, canonical: 
 ///     `path.value` axis emission uses — collapses the two-step
 ///     `insert_str_key(K, Value::String(V.into()))` boilerplate onto
 ///     one direct call.
+///   * [`Self::insert_number`] — insert with a `&str` key and an
+///     `Into<serde_yaml::Number>` value that gets auto-promoted to
+///     [`serde_yaml::Value::Number`]. The integer-scalar-valued-field
+///     shape every schema-typed `port` / `targetPort` / `attempts` /
+///     `maxFailures` / `hostPort` axis emission uses — collapses the
+///     two-step `insert_str_key(K, Value::Number(N.into()))`
+///     boilerplate onto one direct call.
 ///   * [`Self::insert_mapping`] — insert with a `&str` key and a
 ///     [`serde_yaml::Mapping`] value that gets auto-promoted to
 ///     [`serde_yaml::Value::Mapping`]. The nested-Mapping-valued-field
@@ -13106,6 +13115,82 @@ pub trait MappingExt {
     /// primitive pair the K8s-artifact-emit surface's "same shape,
     /// written N times" duplication (THEORY.md §I.3.5) collapses onto.
     fn insert_string<V: Into<String>>(&mut self, key: &str, value: V) -> Option<serde_yaml::Value>;
+
+    /// Insert `(key, Value::Number(value.into()))` into `self` — the
+    /// integer-scalar-valued-field emission shape that combines
+    /// [`Self::insert_str_key`]'s `&str → Value::String` key promotion
+    /// with an automatic [`serde_yaml::Value::Number`] promotion of an
+    /// `Into<serde_yaml::Number>` value. Returns the prior value at that
+    /// key, mirroring [`serde_yaml::Mapping::insert`].
+    ///
+    /// The canonical shape 2 production call sites across `caixa-mesh`
+    /// previously carried inline as the three-token block
+    /// `mapping.insert_str_key(<KEY>, serde_yaml::Value::Number(<N>.into()))`
+    /// — the two-token semantic payload (`<KEY>`, `<N>`) buried under
+    /// three boilerplate axes (`serde_yaml::` path re-quote,
+    /// `Value::Number(_)` promotion, the `<N>.into()` typed-integer →
+    /// [`serde_yaml::Number`] coercion) around a numeric constant or
+    /// typed field the caller already carries as `u16` / `u32` / `u64`.
+    ///
+    /// Sites lifted:
+    ///
+    ///   * caixa-mesh's `gateway_routes` per-`Gateway` `spec.listeners[].port`
+    ///     external HTTP listener port (`KUBE_KEY_PORT` around the lifted
+    ///     [`crate::GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] `u16` const,
+    ///     cd60fde);
+    ///   * caixa-mesh's `gateway_routes` per-`HTTPRoute.spec.rules[].backendRefs[].port`
+    ///     backend-target Servico port (`KUBE_KEY_PORT` around the
+    ///     [`crate::AplicacaoSpec`]-side `entrada.port` `u16` field the
+    ///     `:entrada :port` typed slot flows through).
+    ///
+    /// Lifting collapses the boilerplate into one method call the
+    /// caller reads as intent (`mapping.insert_number(<KEY>, <N>)` —
+    /// "insert a numeric-scalar-typed field named `KEY` with the typed
+    /// integer `N`") rather than three hand-spelled positional artifacts.
+    /// The next renderer to land — the per-`:politicas`
+    /// `CiliumClusterwideEnvoyConfig` emitter (whose per-policy
+    /// integer-scalar axes are the Envoy circuit-breaker
+    /// `maxRequests` / `maxPendingRequests` / `maxConnections` count
+    /// fields and the Cilium ratelimit `requestPerUnit` field,
+    /// MESH-COMPOSITION §III.2 #3), the `app-operator`'s typed
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer (per-`spec.
+    /// selectors[]` integer-scored `weight` fields, §III.2 #5), the
+    /// M4 cross-cluster fan-out's per-cluster
+    /// `Service.spec.ports[].{port, targetPort, nodePort}` /
+    /// `HTTPRoute.spec.rules[].backendRefs[].{port, weight}`
+    /// integer-scalar emission, the future `caixa-otel`
+    /// OpenTelemetry-Collector `service.pipelines.traces.receivers[].
+    /// grpc.max_recv_msg_size_mib` integer-scalar emission — gets the
+    /// canonical integer-scalar-valued-field shape for free with one
+    /// method call, instead of re-inlining the three-token
+    /// `Value::Number(_.into())` block.
+    ///
+    /// The `Into<serde_yaml::Number>` bound accepts every numeric
+    /// primitive [`serde_yaml::Number`] declares `From` for
+    /// (`i8`..=`i64`, `u8`..=`u64`, `f32`, `f64`) — the same coverage
+    /// the two production sites reach through with their `u16` port
+    /// fields and the same coverage every future numeric-scalar
+    /// emission (the K8s `Service.spec.ports[].targetPort` `IntOrString`
+    /// integer arm, the `HTTPRoute.spec.rules[].backendRefs[].weight`
+    /// `int32` axis, the Envoy `maxRequests` `uint32` axis) reaches
+    /// through with matching typed integer fields.
+    ///
+    /// Peer to [`Self::insert_string`] on the sibling string-scalar axis
+    /// and to [`Self::insert_mapping`] / [`Self::insert_sequence`] on
+    /// the sibling nested-Mapping / list-shape axes — the five together
+    /// with [`Self::insert_str_key`] form the "one method call per
+    /// emission axis" primitive quintuple the K8s-artifact-emit
+    /// surface's "same shape, written N times" duplication (THEORY.md
+    /// §I.3.5) collapses onto: `insert_str_key` for any-Value inserts,
+    /// `insert_string` for the string-scalar-valued-field shape,
+    /// `insert_number` for the integer-scalar-valued-field shape,
+    /// `insert_mapping` for the nested-Mapping-valued-field shape,
+    /// `insert_sequence` for the list-shape-valued-field shape.
+    fn insert_number<N: Into<serde_yaml::Number>>(
+        &mut self,
+        key: &str,
+        value: N,
+    ) -> Option<serde_yaml::Value>;
 
     /// Insert `(key, Value::Mapping(value))` into `self` — the
     /// nested-Mapping-valued-field emission shape that combines
@@ -13337,6 +13422,15 @@ impl MappingExt for serde_yaml::Mapping {
     #[inline]
     fn insert_string<V: Into<String>>(&mut self, key: &str, value: V) -> Option<serde_yaml::Value> {
         self.insert_str_key(key, serde_yaml::Value::String(value.into()))
+    }
+
+    #[inline]
+    fn insert_number<N: Into<serde_yaml::Number>>(
+        &mut self,
+        key: &str,
+        value: N,
+    ) -> Option<serde_yaml::Value> {
+        self.insert_str_key(key, serde_yaml::Value::Number(value.into()))
     }
 
     #[inline]
@@ -23496,6 +23590,113 @@ spec:
             "insert_string(KEY, V) must byte-equal \
              insert_str_key(KEY, Value::String(V.into())) — otherwise \
              the ~17 routed consumer sites drift silently at emit time"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_number_promotes_value_to_yaml_number() {
+        // The trait method promotes an arbitrary `Into<serde_yaml::Number>`
+        // value to `Value::Number(value.into())` — pin the promotion so a
+        // future refactor that reaches for a different `Value` variant
+        // for the integer-scalar payload (e.g. `Value::Tagged` under a
+        // K8s Server-Side-Apply typed-field-ownership axis rebrand, or
+        // the deprecated `Value::String(n.to_string())` "stringy port"
+        // rendering some pre-Gateway-API-v1 CRDs still shipped with) is
+        // a compile-visible break, not a silent per-consumer regression
+        // at the K8s-artifact-emit surface. Peer with
+        // [`mapping_ext_insert_string_promotes_value_to_yaml_string`] on
+        // the sibling `insert_string` primitive's string-scalar
+        // promotion pin.
+        let mut m = serde_yaml::Mapping::new();
+        let prior = m.insert_number(KUBE_KEY_PORT, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT);
+        assert!(
+            prior.is_none(),
+            "insert_number returns None on first insertion, mirroring \
+             serde_yaml::Mapping::insert"
+        );
+        let got = m
+            .get(KUBE_KEY_PORT)
+            .expect("inserted key is present under Value::Number promotion");
+        assert_eq!(
+            got.as_u64(),
+            Some(u64::from(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT)),
+            "insert_number routes value verbatim through Value::Number \
+             promotion — the u16 payload survives round-trip as a Number \
+             the as_u64 accessor decodes verbatim"
+        );
+        assert!(
+            matches!(got, serde_yaml::Value::Number(_)),
+            "the promoted value is Value::Number, not Value::String — a \
+             stringy-port drift would emit `port: \"80\"` (rejected by \
+             Gateway API v1 apiserver as a type mismatch)"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_number_returns_prior_value_on_replace() {
+        // The trait method mirrors [`serde_yaml::Mapping::insert`]'s
+        // return contract: the prior value at that key, or `None` if
+        // absent. Pin the replace-returns-prior semantic so a future
+        // refactor that swaps to a `HashMap::entry`-style flow doesn't
+        // silently drop the prior-value handoff downstream consumers
+        // may reach for. Peer with
+        // [`mapping_ext_insert_string_returns_prior_value_on_replace`] on
+        // the sibling `insert_string` primitive's replace-semantics pin.
+        let mut m = serde_yaml::Mapping::new();
+        m.insert_number(KUBE_KEY_PORT, 80u16);
+        let prior = m.insert_number(KUBE_KEY_PORT, 443u16);
+        assert_eq!(
+            prior.as_ref().and_then(serde_yaml::Value::as_u64),
+            Some(80),
+            "insert_number returns the prior value when replacing an \
+             existing key — the u16 payload round-trips verbatim through \
+             the returned Value::Number handoff"
+        );
+        let got = m
+            .get(KUBE_KEY_PORT)
+            .expect("key is still present after replace");
+        assert_eq!(
+            got.as_u64(),
+            Some(443),
+            "replaced value is now the most-recently-inserted one"
+        );
+    }
+
+    #[test]
+    fn mapping_ext_insert_number_matches_hand_written_promotion() {
+        // Cross-check the trait method against the hand-written
+        // `mapping.insert_str_key(KEY, Value::Number(N.into()))` shape
+        // the two lifted caixa-mesh call sites previously carried. A
+        // drift between the trait method's promotion and the inline
+        // promotion would silently emit a different YAML mapping (a
+        // differently-typed scalar, a different `Value` variant) at
+        // every routed consumer — pin the equivalence so the trait
+        // remains a drop-in replacement. Two arms pin the axis end-to-
+        // end: a `u16` typed-const arm (the lifted
+        // `GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT` external HTTP
+        // listener-port, cd60fde) and a `u16` typed-field arm (the
+        // per-`entrada.port` backend-target Servico port routed through
+        // the `AplicacaoSpec` `:entrada :port` slot).
+        let mut via_trait = serde_yaml::Mapping::new();
+        via_trait.insert_number(KUBE_KEY_PORT, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT);
+        via_trait.insert_number(GATEWAY_API_KEY_VALUE, 8443u16);
+
+        let mut via_inline = serde_yaml::Mapping::new();
+        via_inline.insert_str_key(
+            KUBE_KEY_PORT,
+            serde_yaml::Value::Number(GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT.into()),
+        );
+        via_inline.insert_str_key(
+            GATEWAY_API_KEY_VALUE,
+            serde_yaml::Value::Number(8443u16.into()),
+        );
+
+        assert_eq!(
+            via_trait, via_inline,
+            "insert_number(KEY, N) must byte-equal \
+             insert_str_key(KEY, Value::Number(N.into())) — otherwise \
+             the two routed caixa-mesh consumer sites drift silently at \
+             emit time"
         );
     }
 
