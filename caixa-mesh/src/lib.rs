@@ -80,11 +80,26 @@ pub enum Error {
 ///   - Mesh-level concerns (Cilium NetworkPolicy, Gateway) are
 ///     deferred to follow-up rendering verbs in this crate (M3.x).
 pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
-    caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
-    let spec = caixa
-        .aplicacao_view()
-        .expect("Aplicacao kind has an aplicacao_view");
-    spec.validate()?;
+    // Route the entry gate through the canonical [`typed_view`] entry
+    // point so every per-Aplicacao renderer in this crate
+    // (`programs_for_aplicacao`, `cilium_network_policies`,
+    // `gateway_routes`) shares one `require_kind + aplicacao_view +
+    // AplicacaoSpec::validate` cascade. Prior to this lift
+    // `programs_for_aplicacao` re-inlined the three-arm gate while its
+    // two sibling renderers reached for `typed_view`; the drift risk
+    // was structural — a future entry-gate widening (e.g. a per-
+    // Aplicacao capability-audit prelude, a `:placement`-aware
+    // pre-render normalization, the M4 CR materializer's admission-
+    // webhook floor) would have to be threaded through both call sites
+    // in lockstep or one renderer would silently diverge from the
+    // other on which shapes it accepted at emit time. Peer with the
+    // sibling `typed_view` consumers on the same one-entry-gate
+    // discipline (a4ba8ec `require_v0_servico_shape` lifted the
+    // `require_kind(Servico) + require_single_servico` compound entry-
+    // gate across `caixa-helm` + `caixa-flux`; this lift closes the
+    // matching two-caller drift surface on `caixa-mesh`'s per-
+    // Aplicacao entry-gate).
+    let spec = typed_view(caixa)?;
 
     // `:placement` overlay — surfaces the typed Aplicacao-level
     // distribution strategy + cluster list (validated upstream by
@@ -5708,6 +5723,96 @@ mod tests {
         });
         let err = programs_for_aplicacao(&c).unwrap_err();
         assert!(matches!(err, Error::InvalidAplicacao(_)));
+    }
+
+    #[test]
+    fn programs_for_aplicacao_routes_entry_gate_through_typed_view() {
+        // Drift-detection pin on the lifted per-Aplicacao entry-gate
+        // cascade: `programs_for_aplicacao` and its sibling
+        // per-Aplicacao renderers (`cilium_network_policies`,
+        // `gateway_routes`) all funnel through [`typed_view`]'s
+        // `require_kind + aplicacao_view + AplicacaoSpec::validate`
+        // three-arm gate before touching any renderer-specific
+        // emission. Feeding the same offending caixa into both paths
+        // must therefore surface byte-identical `Error` diagnostics —
+        // the same variant, the same self-locating fields, the same
+        // `Display` prose.
+        //
+        // Until `programs_for_aplicacao` was refactored onto
+        // `typed_view` it re-inlined the three-arm cascade by hand.
+        // Both paths happened to agree today only because the
+        // hand-written scaffold was the same three lines, but a
+        // future entry-gate widening on one side without a matching
+        // edit on the other would have surfaced only at the sibling
+        // renderer that took the drifted path — silently on the one
+        // that stayed on the pre-widening cascade. Pinning both
+        // paths' error surface on the same input structurally
+        // eliminates that drift: a future entry-gate change threads
+        // through both call sites together, or this test fires.
+        //
+        // Peer to the sibling `typed_view_kind_mismatch_names_
+        // offending_caixa_nome` test on the kind-check arm; this test
+        // covers the `AplicacaoSpec::validate` arm (via a
+        // non-member `:contratos :para` reference — the same fixture
+        // the pre-existing `programs_for_aplicacao_validates_typed_
+        // shape` test uses).
+        let mut c = aplicacao_caixa();
+        c.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "phantom".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        });
+        let programs_err = programs_for_aplicacao(&c).unwrap_err();
+        let typed_view_err = typed_view(&c).unwrap_err();
+        assert_eq!(
+            format!("{programs_err}"),
+            format!("{typed_view_err}"),
+            "programs_for_aplicacao must surface the same entry-gate \
+             diagnostic as typed_view — a divergence here means the \
+             renderer skipped the shared cascade"
+        );
+        assert!(
+            matches!(programs_err, Error::InvalidAplicacao(_)),
+            "programs_for_aplicacao must surface the AplicacaoSpec::validate \
+             failure through the same Error::InvalidAplicacao variant \
+             typed_view raises"
+        );
+        assert!(
+            matches!(typed_view_err, Error::InvalidAplicacao(_)),
+            "typed_view must raise the same variant so a future divergence \
+             on either path is a compile-time signal, not a silent \
+             renderer-side drift"
+        );
+    }
+
+    #[test]
+    fn programs_for_aplicacao_kind_mismatch_matches_typed_view() {
+        // Companion of the validate-arm drift-detection pin
+        // immediately above: on the kind-check arm (Supervisor caixa
+        // fed into a per-Aplicacao renderer), both `typed_view` and
+        // `programs_for_aplicacao` must surface byte-identical
+        // diagnostics — the same lifted [`caixa_core::KindMismatch`]
+        // view wrapped in the same `Error::NotAnAplicacao` variant.
+        // Pinning both arms of the shared entry-gate cascade closes
+        // the drift surface structurally; a future edit that widens
+        // the kind-check on one path without the other would have
+        // silently regressed on the sibling renderer.
+        let mut c = aplicacao_caixa();
+        c.kind = CaixaKind::Supervisor;
+        c.servicos = vec![];
+        c.children = vec![];
+        let programs_err = programs_for_aplicacao(&c).unwrap_err();
+        let typed_view_err = typed_view(&c).unwrap_err();
+        assert_eq!(
+            format!("{programs_err}"),
+            format!("{typed_view_err}"),
+            "programs_for_aplicacao and typed_view must agree on the \
+             kind-mismatch diagnostic — divergence indicates one path \
+             skipped the shared `require_kind` gate"
+        );
     }
 
     // ── programs.yaml :placement overlay ─────────────────────────────────
