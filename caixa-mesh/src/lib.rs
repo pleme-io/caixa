@@ -658,6 +658,66 @@ pub use caixa_core::CILIUM_AUTH_MODE_REQUIRED;
 /// the same tristate.
 pub use caixa_core::CILIUM_AUTH_MODE_DISABLED;
 
+/// Canonical M3 `:contratos` edge-direction separator byte-string every
+/// caixa-mesh emitter that encodes a typed edge as a K8s-name-shaped
+/// scalar reads from — the per-`(:de, :para)`
+/// [`LABEL_CONTRATO`] value threaded through
+/// [`contrato_edge_label`] and the per-`(:de, :para)`
+/// `CiliumNetworkPolicy` `metadata.name` threaded through
+/// [`cilium_network_policy_name`]. Re-export of the canonical
+/// [`caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR`] so the load-bearing
+/// `-to-` byte-string lives in exactly one place across every caixa
+/// renderer — caixa-mesh's `cilium_network_policies` per-`(:de, :para)`
+/// group (the two writer sites the prior inline `format!` literals
+/// sat at) and every future per-target renderer that encodes a typed
+/// M3 edge as a K8s-name-shaped scalar. A future edge-encoding rebrand
+/// (`-to-` → `->` for compactness, `-to-` → `_to_` to reserve `-` for
+/// embedded DNS-1123-label boundaries, an edge-direction-arrow
+/// migration to UTF-8 shapes) lands at the canonical
+/// [`caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR`] declaration, not at
+/// this crate's per-group writer sites. Peer with the
+/// [`contrato_edge_label`] / [`cilium_network_policy_name`] composer
+/// re-exports that consume this const — together the three items
+/// close the canonical per-`(:de, :para)` CNP identity pair
+/// `(metadata.labels.pleme.pleme.io/contrato, metadata.name)` onto
+/// one shared edge-encoding source of truth.
+pub use caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR;
+
+/// Canonical M3 `:contratos` edge label value composer — the
+/// `<de>-to-<para>` K8s-name-shaped scalar every per-`(:de, :para)`
+/// `CiliumNetworkPolicy` document carries at its
+/// `metadata.labels.pleme.pleme.io/contrato` axis. Re-export of the
+/// canonical [`caixa_core::contrato_edge_label`] composer so the
+/// per-CNP `LABEL_CONTRATO`-value construction lives in exactly one
+/// place across every caixa renderer. Reads from the lifted
+/// [`CONTRATO_EDGE_LABEL_SEPARATOR`] byte-string so a future
+/// edge-encoding rebrand lands at one canonical composition. Peer of
+/// [`cilium_network_policy_name`] on the sibling per-CNP
+/// `metadata.name` composition axis — the two composers close the
+/// canonical `(LABEL_CONTRATO-value, metadata.name)` per-CNP identity
+/// pair on one shared edge-encoding source of truth
+/// ([`CONTRATO_EDGE_LABEL_SEPARATOR`]).
+pub use caixa_core::contrato_edge_label;
+
+/// Canonical per-`(:de, :para)` `CiliumNetworkPolicy` `metadata.name`
+/// composer — the `<aplicacao>-<de>-to-<para>` K8s-name-shaped
+/// scalar every caixa-mesh `cilium_network_policies` emitter mounts
+/// its per-edge CNP under. Re-export of the canonical
+/// [`caixa_core::cilium_network_policy_name`] composer so the per-CNP
+/// name construction lives in exactly one place across every caixa
+/// renderer. Composes on the lifted [`contrato_edge_label`] helper so
+/// the two writer-side axes — the CNP
+/// `metadata.labels.pleme.pleme.io/contrato` value and the CNP
+/// `metadata.name` — share one canonical edge-encoding source of
+/// truth ([`CONTRATO_EDGE_LABEL_SEPARATOR`]). Peer of
+/// [`contrato_edge_label`] on the parent-composition axis — the two
+/// writer-side composers close the canonical
+/// `(LABEL_CONTRATO-value, metadata.name)` per-CNP identity pair so a
+/// future edge-encoding rebrand or a per-emitter typo can't silently
+/// split the two axes at emit time and orphan every operator-side
+/// grep-by-label query at apply time far from the source caixa.lisp.
+pub use caixa_core::cilium_network_policy_name;
+
 /// Canonical M3 [`caixa_core::aplicacao::PlacementStrategy::SingleNode`]
 /// variant discriminator scalar-value the `Serialize` derive on the
 /// un-`rename`d enum emits under [`caixa_core::M3_PLACEMENT_KEY_ESTRATEGIA`] on every
@@ -2390,9 +2450,25 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // `contrato` (which typed edge pair). Keys come from
         // caixa_core::render so a future label-namespace rebrand is a
         // one-line edit, not a search-and-replace across renderers.
+        // The per-`(:de, :para)` [`LABEL_CONTRATO`] value + the
+        // per-CNP `metadata.name` now compose on the lifted
+        // [`contrato_edge_label`] / [`cilium_network_policy_name`]
+        // helpers (which route through the canonical
+        // [`caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR`] `"-to-"`
+        // byte-string) so a future edge-encoding rebrand lands at one
+        // const-edit and both writer sites pick up the new encoding
+        // by construction. Prior to this lift the two sites carried
+        // verbatim inline `format!("{de}-to-{para}")` +
+        // `format!("{}-{}-to-{}", caixa.nome, de, para)` with no
+        // compile-time link between them; a rebrand on either half
+        // would have silently split the CNP `metadata.name` from its
+        // own `metadata.labels.pleme.pleme.io/contrato` value,
+        // orphaning every operator-side `kubectl get cnp -l
+        // pleme.pleme.io/contrato=<de>-to-<para>` grep-by-label
+        // query at apply time far from the source caixa.lisp.
         let mut labels = BTreeMap::new();
         labels.insert(LABEL_APLICACAO, caixa.nome.clone());
-        labels.insert(LABEL_CONTRATO, format!("{de}-to-{para}"));
+        labels.insert(LABEL_CONTRATO, contrato_edge_label(de, para));
         // The apiVersion + kind + metadata.{name, namespace, labels}
         // skeleton comes from caixa_core::render::kube_resource_skeleton
         // — same lift as pleme_program_*_selector applied to the K8s-
@@ -2406,11 +2482,18 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // Cilium-CRD kind rebrand lands on the canonical
         // [`caixa_core::CILIUM_KIND_NETWORK_POLICY`] declaration too —
         // both halves of the tuple move as a unit through one lifted
-        // const each, no per-renderer drift surface.
+        // const each, no per-renderer drift surface. The CNP
+        // `metadata.name` axis now threads through the lifted
+        // [`cilium_network_policy_name`] composer (peer with the
+        // [`LABEL_CONTRATO`] value composer above) so the
+        // per-CNP identity pair — `(metadata.labels.pleme.pleme.io/
+        // contrato, metadata.name)` — shares one canonical
+        // edge-encoding source of truth
+        // ([`caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR`]).
         let mut policy = kube_resource_skeleton(
             CILIUM_API_VERSION,
             CILIUM_KIND_NETWORK_POLICY,
-            &format!("{}-{}-to-{}", caixa.nome, de, para),
+            &cilium_network_policy_name(&caixa.nome, de, para),
             namespace,
             labels,
         );
@@ -2845,6 +2928,163 @@ mod tests {
             "DEFAULT_NAMESPACE",
             DEFAULT_NAMESPACE,
             caixa_core::DEFAULT_NAMESPACE,
+        );
+    }
+
+    #[test]
+    fn contrato_edge_label_separator_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `CONTRATO_EDGE_LABEL_SEPARATOR` was lifted from
+        // two verbatim inline `format!("{de}-to-{para}")` +
+        // `format!("{}-{}-to-{}", caixa.nome, de, para)` sites at the
+        // `cilium_network_policies` per-`(:de, :para)` group's
+        // [`LABEL_CONTRATO`] `labels.insert(...)` call and the peer
+        // `kube_resource_skeleton` `name:` argument to a re-export of
+        // [`caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR`] so the load-
+        // bearing `-to-` byte-string lives in exactly one place across
+        // every caixa renderer. Pin the equality + static-data identity
+        // here so any local re-introduction of a sibling `pub const
+        // CONTRATO_EDGE_LABEL_SEPARATOR: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen
+        // to carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior shape would have let an edge-encoding rebrand on
+        // the caixa-mesh side without a coordinated caixa-core edit
+        // silently split the CNP `metadata.name` from its own
+        // `metadata.labels.pleme.pleme.io/contrato` value, orphaning
+        // every operator-side `kubectl get cnp -l pleme.pleme.io/
+        // contrato=<de>-to-<para>` grep-by-label query at apply time.
+        // Peer to
+        // [`default_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling re-export axis.
+        caixa_core::assert_str_reexport_identity(
+            "CONTRATO_EDGE_LABEL_SEPARATOR",
+            CONTRATO_EDGE_LABEL_SEPARATOR,
+            caixa_core::CONTRATO_EDGE_LABEL_SEPARATOR,
+        );
+    }
+
+    #[test]
+    fn contrato_edge_label_re_export_matches_caixa_core_canonical_output() {
+        // The renderer's `contrato_edge_label` was lifted from the
+        // verbatim inline `format!("{de}-to-{para}")` at the
+        // `cilium_network_policies` per-`(:de, :para)` group's
+        // [`LABEL_CONTRATO`] `labels.insert(...)` call to a re-export
+        // of [`caixa_core::contrato_edge_label`]. Pin the output-shape
+        // equality here on a representative fixture so any local re-
+        // introduction of a sibling `pub fn contrato_edge_label(...)`
+        // shadow at this crate is a build-time test failure. Both call
+        // paths must resolve to the same canonical function through
+        // `pub use`, so their outputs agree by construction.
+        assert_eq!(
+            contrato_edge_label("cart", "catalog"),
+            caixa_core::contrato_edge_label("cart", "catalog"),
+        );
+        assert_eq!(contrato_edge_label("cart", "catalog"), "cart-to-catalog");
+    }
+
+    #[test]
+    fn cilium_network_policy_name_re_export_matches_caixa_core_canonical_output() {
+        // The renderer's `cilium_network_policy_name` was lifted from
+        // the verbatim inline `format!("{}-{}-to-{}", caixa.nome, de,
+        // para)` at the `cilium_network_policies` per-`(:de, :para)`
+        // group's `kube_resource_skeleton` `name:` argument to a re-
+        // export of [`caixa_core::cilium_network_policy_name`]. Pin the
+        // output-shape equality here on a representative fixture so any
+        // local re-introduction of a sibling `pub fn
+        // cilium_network_policy_name(...)` shadow at this crate is a
+        // build-time test failure. Peer with
+        // [`contrato_edge_label_re_export_matches_caixa_core_canonical_output`]
+        // on the sibling composer axis — the CNP metadata.name
+        // composes on [`contrato_edge_label`], so a drift on either
+        // half would silently split the per-CNP identity pair
+        // `(metadata.labels.pleme.pleme.io/contrato, metadata.name)`
+        // at emit time.
+        assert_eq!(
+            cilium_network_policy_name("checkout", "cart", "catalog"),
+            caixa_core::cilium_network_policy_name("checkout", "cart", "catalog"),
+        );
+        assert_eq!(
+            cilium_network_policy_name("checkout", "cart", "catalog"),
+            "checkout-cart-to-catalog",
+        );
+    }
+
+    #[test]
+    fn cilium_network_policy_metadata_name_uses_lifted_composer() {
+        // Composition pin: the CNP `metadata.name` emitted by
+        // `cilium_network_policies` per `(:de, :para)` group must
+        // byte-equal the output of the lifted
+        // [`cilium_network_policy_name`] composer with the same
+        // arguments — so a future refactor of the composer's internals
+        // (edge-encoding rebrand, aplicacao-prefix reshape) reaches
+        // the renderer through the one function-pointer edit, and any
+        // rewrite of the inline `format!` at the emit site that
+        // desynchronizes from the composer fires here at build-time
+        // rather than silently splitting the two writer-side axes at
+        // emit time. The fixture's two `:contratos` edges (cart→catalog
+        // and cart→payment) exercise both edges of the per-`(:de,
+        // :para)` groups the CNP emitter produces.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let names: Vec<String> = policies
+            .iter()
+            .map(|p| {
+                kube_metadata_str_field(p, KUBE_KEY_NAME)
+                    .expect("policy metadata.name")
+                    .to_string()
+            })
+            .collect();
+        assert!(
+            names.contains(&cilium_network_policy_name("checkout", "cart", "catalog")),
+            "CNP metadata.name for (cart, catalog) must match lifted composer output; \
+             got names {names:?}",
+        );
+        assert!(
+            names.contains(&cilium_network_policy_name("checkout", "cart", "payment")),
+            "CNP metadata.name for (cart, payment) must match lifted composer output; \
+             got names {names:?}",
+        );
+    }
+
+    #[test]
+    fn cilium_network_policy_label_contrato_value_uses_lifted_composer() {
+        // Composition pin: the CNP `metadata.labels.pleme.pleme.io/
+        // contrato` value emitted by `cilium_network_policies` per
+        // `(:de, :para)` group must byte-equal the output of the
+        // lifted [`contrato_edge_label`] composer with the same
+        // arguments — so a future refactor of the composer's internals
+        // (edge-encoding rebrand) reaches the label emission through
+        // one function-pointer edit, and any rewrite of the inline
+        // `format!` at the emit site that desynchronizes from the
+        // composer fires here at build-time rather than silently
+        // orphaning every operator-side grep-by-label query at apply
+        // time. Peer with
+        // [`cilium_network_policy_metadata_name_uses_lifted_composer`]
+        // on the sibling per-CNP identity-pair axis — the two pins
+        // together close the drift surface between
+        // `metadata.labels.pleme.pleme.io/contrato` and
+        // `metadata.name` on the shared
+        // [`CONTRATO_EDGE_LABEL_SEPARATOR`] byte-string.
+        let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
+        let contrato_values: Vec<String> = policies
+            .iter()
+            .filter_map(|p| {
+                p.get(KUBE_KEY_METADATA)
+                    .and_then(|m| m.get(KUBE_KEY_LABELS))
+                    .and_then(|l| l.get(LABEL_CONTRATO))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            })
+            .collect();
+        assert!(
+            contrato_values.contains(&contrato_edge_label("cart", "catalog")),
+            "CNP LABEL_CONTRATO value for (cart, catalog) must match lifted composer output; \
+             got values {contrato_values:?}",
+        );
+        assert!(
+            contrato_values.contains(&contrato_edge_label("cart", "payment")),
+            "CNP LABEL_CONTRATO value for (cart, payment) must match lifted composer output; \
+             got values {contrato_values:?}",
         );
     }
 
