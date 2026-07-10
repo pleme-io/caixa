@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, MappingExt, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, MappingExt, kube_metadata_str_field, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -786,10 +786,7 @@ pub fn programs_yaml_entry(
         .get(KUBE_KEY_SPEC)
         .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
 
-    let namespace = computeunit_yaml
-        .get(KUBE_KEY_METADATA)
-        .and_then(|m| m.get(KUBE_KEY_NAMESPACE))
-        .and_then(|n| n.as_str())
+    let namespace = kube_metadata_str_field(computeunit_yaml, KUBE_KEY_NAMESPACE)
         .unwrap_or(DEFAULT_NAMESPACE)
         .to_string();
 
@@ -2310,10 +2307,7 @@ spec:
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
         assert_eq!(
-            parsed
-                .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.get(KUBE_KEY_NAMESPACE))
-                .and_then(|n| n.as_str()),
+            kube_metadata_str_field(&parsed, KUBE_KEY_NAMESPACE),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
             "kustomization.yaml metadata.namespace must spell the lifted \
              DEFAULT_FLUX_SYSTEM_NAMESPACE ({DEFAULT_FLUX_SYSTEM_NAMESPACE:?}); \
