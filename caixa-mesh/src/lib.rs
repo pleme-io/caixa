@@ -2472,7 +2472,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
                 http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string());
                 let mut rules = serde_yaml::Mapping::new();
                 rules.insert_str_key(CILIUM_KEY_HTTP, singleton_mapping_sequence(http_rule));
-                to_port.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Mapping(rules));
+                to_port.insert_mapping(KUBE_KEY_RULES, rules);
             }
             to_ports_seq.push(serde_yaml::Value::Mapping(to_port));
         }
@@ -2487,7 +2487,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         let mut policy_spec = serde_yaml::Mapping::new();
         policy_spec.insert_str_key(CILIUM_KEY_ENDPOINT_SELECTOR, endpoint_selector);
         policy_spec.insert_str_key(CILIUM_KEY_INGRESS, singleton_mapping_sequence(ingress_rule));
-        policy.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(policy_spec));
+        policy.insert_mapping(KUBE_KEY_SPEC, policy_spec);
 
         out.push(serde_yaml::Value::Mapping(policy));
     }
@@ -2601,7 +2601,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         GATEWAY_API_KEY_LISTENERS,
         singleton_mapping_sequence(listener),
     );
-    gateway.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(g_spec));
+    gateway.insert_mapping(KUBE_KEY_SPEC, g_spec);
 
     // HTTPRoute — all paths route to the entrada.para Servico. Same
     // skeleton lift as Gateway above; caller adds spec. Both halves of
@@ -2689,7 +2689,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         path_match.insert_string(KUBE_KEY_TYPE, GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX);
         path_match.insert_string(GATEWAY_API_KEY_VALUE, path.to_string());
         let mut match_entry = serde_yaml::Mapping::new();
-        match_entry.insert_str_key(GATEWAY_API_KEY_PATH, serde_yaml::Value::Mapping(path_match));
+        match_entry.insert_mapping(GATEWAY_API_KEY_PATH, path_match);
         let mut backend_ref = serde_yaml::Mapping::new();
         backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.para.clone());
         backend_ref.insert_str_key(
@@ -2724,7 +2724,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         serde_yaml::Value::Sequence(vec![serde_yaml::Value::String(entrada.host.clone())]),
     );
     r_spec.insert_str_key(KUBE_KEY_RULES, serde_yaml::Value::Sequence(rules));
-    route.insert_str_key(KUBE_KEY_SPEC, serde_yaml::Value::Mapping(r_spec));
+    route.insert_mapping(KUBE_KEY_SPEC, r_spec);
 
     Ok(vec![
         serde_yaml::Value::Mapping(gateway),
