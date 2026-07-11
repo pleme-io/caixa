@@ -354,6 +354,131 @@ mod tests {
         assert_eq!(b.on_terminate, Some(PathBuf::from("b.lisp")));
     }
 
+    // ── drift-detection: serde-derive-to-M2_BEHAVIOR_KEY_ON_* identity ────
+
+    #[test]
+    fn behavior_spec_serde_keys_match_lifted_m2_behavior_key_consts() {
+        // Load-bearing invariant: the six `M2_BEHAVIOR_KEY_ON_*` consts
+        // (`M2_BEHAVIOR_KEY_ON_INIT` / `M2_BEHAVIOR_KEY_ON_CALL` /
+        // `M2_BEHAVIOR_KEY_ON_CAST` / `M2_BEHAVIOR_KEY_ON_INFO` /
+        // `M2_BEHAVIOR_KEY_ON_STATE_CHANGE` /
+        // `M2_BEHAVIOR_KEY_ON_TERMINATE`) name the exact camelCase JSON
+        // keys the `#[serde(rename_all = "camelCase")]` attribute on
+        // `BehaviorSpec` emits, and every test-side probe across the
+        // caixa-core / caixa-flux / caixa-helm renderer test fixtures
+        // navigates into the rendered `:behavior` overlay sub-block by
+        // consulting one of these six `&'static str`s. Serialize a
+        // fully-populated BehaviorSpec and pin that each canonical
+        // byte-sequence appears verbatim in the JSON — a future
+        // accidental `rename_all = "snake_case"` / `"kebab-case"` /
+        // verbatim-field-name flip at the derive attribute (any of
+        // which would silently break every test-side probe that reaches
+        // for one of the six consts) surfaces here as a build-time test
+        // failure at `behavior.rs`, not as an apply-time
+        // `.get(<stale-canonical-const>)` returning `None` far from the
+        // derive-attr drift's commit. Same discipline the sibling
+        // `limits_spec_serde_keys_match_lifted_m2_limits_key_consts`
+        // pin (d8b8b4f) established on the peer `:limits` sub-slot
+        // axis: one canonical byte-string per typed sub-key axis,
+        // pinned to the load-bearing serde derivation at the type
+        // itself.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+        };
+        let json = serde_json::to_string(&b).unwrap();
+        for key in [
+            crate::render::M2_BEHAVIOR_KEY_ON_INIT,
+            crate::render::M2_BEHAVIOR_KEY_ON_CALL,
+            crate::render::M2_BEHAVIOR_KEY_ON_CAST,
+            crate::render::M2_BEHAVIOR_KEY_ON_INFO,
+            crate::render::M2_BEHAVIOR_KEY_ON_STATE_CHANGE,
+            crate::render::M2_BEHAVIOR_KEY_ON_TERMINATE,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized BehaviorSpec must carry the lifted \
+                 M2_BEHAVIOR_KEY_ON_* byte-sequence {quoted} verbatim \
+                 in the JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn m2_behavior_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of two
+        // canonical sub-key byte-strings onto the same value (e.g. an
+        // accidental copy-paste flip of `M2_BEHAVIOR_KEY_ON_CAST` to
+        // also read `"onCall"`) would silently reroute every test-side
+        // probe on one axis onto the sibling axis's overlay entry and
+        // pass every propagation-probe test that expected only the
+        // stale axis's value. Peer of `m2_limits_key_consts_are_
+        // pairwise_distinct` (d8b8b4f) on the sibling `:limits`
+        // sub-slot axis.
+        let all = [
+            crate::render::M2_BEHAVIOR_KEY_ON_INIT,
+            crate::render::M2_BEHAVIOR_KEY_ON_CALL,
+            crate::render::M2_BEHAVIOR_KEY_ON_CAST,
+            crate::render::M2_BEHAVIOR_KEY_ON_INFO,
+            crate::render::M2_BEHAVIOR_KEY_ON_STATE_CHANGE,
+            crate::render::M2_BEHAVIOR_KEY_ON_TERMINATE,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "M2_BEHAVIOR_KEY_ON_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn m2_behavior_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `M2_BEHAVIOR_KEY_ON_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores,
+        // no `kebab-case` hyphens, no `PascalCase` leading capital, no
+        // whitespace / colons / dots) — the canonical shape the
+        // `#[serde(rename_all = "camelCase")]` derive produces on
+        // `BehaviorSpec`. A future flip to a non-camelCase attribute
+        // at the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `behavior_spec_serde_keys_match_lifted_m2_behavior_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer of `m2_limits_key_consts_are_lower_camel_case_shape`
+        // (d8b8b4f) on the sibling `:limits` sub-slot axis.
+        for key in [
+            crate::render::M2_BEHAVIOR_KEY_ON_INIT,
+            crate::render::M2_BEHAVIOR_KEY_ON_CALL,
+            crate::render::M2_BEHAVIOR_KEY_ON_CAST,
+            crate::render::M2_BEHAVIOR_KEY_ON_INFO,
+            crate::render::M2_BEHAVIOR_KEY_ON_STATE_CHANGE,
+            crate::render::M2_BEHAVIOR_KEY_ON_TERMINATE,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "M2_BEHAVIOR_KEY_ON_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "M2_BEHAVIOR_KEY_ON_* must lead with an ASCII-lowercase \
+                 byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "M2_BEHAVIOR_KEY_ON_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
+
     #[test]
     fn deserialize_omits_unknown_fields_via_default() {
         // Forward-compatible: a future caixa.lisp with extra fields

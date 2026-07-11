@@ -676,8 +676,9 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU,
-        M2_LIMITS_KEY_FUEL, M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK,
+        Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_CALL, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR,
+        M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
+        M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK,
     };
 
     fn sample_caixa() -> Caixa {
@@ -1114,11 +1115,15 @@ spec:
             .get(M2_KEY_BEHAVIOR)
             .expect("behavior must propagate");
         assert_eq!(
-            behavior.get("onInit").and_then(|v| v.as_str()),
+            behavior
+                .get(M2_BEHAVIOR_KEY_ON_INIT)
+                .and_then(|v| v.as_str()),
             Some("lib/init.lisp")
         );
         assert_eq!(
-            behavior.get("onCall").and_then(|v| v.as_str()),
+            behavior
+                .get(M2_BEHAVIOR_KEY_ON_CALL)
+                .and_then(|v| v.as_str()),
             Some("lib/handlers.lisp")
         );
     }

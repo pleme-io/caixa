@@ -6013,6 +6013,75 @@ pub const M2_LIMITS_KEY_WALL_CLOCK: &str = "wallClock";
 /// the sibling `:limits` sub-slot axis.
 pub const M2_LIMITS_KEY_CPU: &str = "cpu";
 
+/// Canonical camelCase YAML sub-key the `:behavior :on-init` per-Servico
+/// OTP-shaped instance-init-callback path scalar-axis lands under inside
+/// the [`M2_KEY_BEHAVIOR`] overlay block. Peer of [`M2_KEY_BEHAVIOR`] on
+/// the sibling `:behavior` sub-slot axis: [`M2_KEY_BEHAVIOR`] names the
+/// overlay-container's top-level key ("behavior"), the six
+/// `M2_BEHAVIOR_KEY_ON_*` consts name the six typed sub-keys the M2
+/// [`crate::BehaviorSpec`] struct's OTP-shaped callback fields
+/// (`on_init` / `on_call` / `on_cast` / `on_info` / `on_state_change` /
+/// `on_terminate`, analogs of `gen_server:init/1` / `handle_call/3` /
+/// `handle_cast/2` / `handle_info/2` / `code_change/3` / `terminate/2`
+/// per `theory/INSPIRATIONS.md` §II.3) serialize as under the
+/// `#[serde(rename_all = "camelCase")]` derive attribute
+/// (`"onInit"` / `"onCall"` / `"onCast"` / `"onInfo"` / `"onStateChange"`
+/// / `"onTerminate"`). Emitted by [`servico_m2_overlay`] as sub-keys of
+/// the [`M2_KEY_BEHAVIOR`] overlay block and consumed by every
+/// substrate-side test-side navigator that reaches into the rendered
+/// `programs.yaml` per-Servico entry / lareira chart `values.yaml`
+/// per-`pleme-computeunit` block to pin the per-callback round-trip.
+/// The lower-camel shape is load-bearing: the serde-derive on
+/// [`crate::BehaviorSpec`] emits under the same shape and the
+/// drift-detection pin in `behavior.rs::tests`
+/// (`behavior_spec_serde_keys_match_lifted_m2_behavior_key_consts`)
+/// serializes a fully-populated [`crate::BehaviorSpec`] and asserts each
+/// canonical `M2_BEHAVIOR_KEY_ON_*` byte-sequence appears in the JSON —
+/// so a hypothetical future `rename_all = "snake_case"` / `"kebab-case"`
+/// accident at the derive attribute or an OTP-lineage per-callback
+/// rebrand (`:on-init` → `:on-start` matching Akka's per-actor
+/// preStart naming, `:on-call` → `:on-request` matching a hypothetical
+/// wasi:http/incoming-handler terminology flip, `:on-state-change` →
+/// `:on-code-change` matching Erlang's verbatim `code_change/3` name)
+/// coordinated at the type's derive attribute surfaces as a build-time
+/// test failure at `behavior.rs` rather than as a silent test-side
+/// `.get(<stale-camelCase-const>)` returning `None` far from the
+/// derive-attr drift's commit. Same "one canonical byte-string per typed
+/// axis" discipline every peer M2 / M3 wire-key axis carries
+/// ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`],
+/// [`M2_LIMITS_KEY_MEMORY`] / [`M2_LIMITS_KEY_FUEL`] /
+/// [`M2_LIMITS_KEY_WALL_CLOCK`] / [`M2_LIMITS_KEY_CPU`] (d8b8b4f),
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.).
+pub const M2_BEHAVIOR_KEY_ON_INIT: &str = "onInit";
+/// Canonical camelCase YAML sub-key the `:behavior :on-call` per-Servico
+/// OTP-shaped sync-request-handler path scalar-axis lands under inside
+/// the [`M2_KEY_BEHAVIOR`] overlay block. Peer of
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis.
+pub const M2_BEHAVIOR_KEY_ON_CALL: &str = "onCall";
+/// Canonical camelCase YAML sub-key the `:behavior :on-cast` per-Servico
+/// OTP-shaped async-fire-and-forget-handler path scalar-axis lands under
+/// inside the [`M2_KEY_BEHAVIOR`] overlay block. Peer of
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis.
+pub const M2_BEHAVIOR_KEY_ON_CAST: &str = "onCast";
+/// Canonical camelCase YAML sub-key the `:behavior :on-info` per-Servico
+/// OTP-shaped out-of-band-message-handler path scalar-axis lands under
+/// inside the [`M2_KEY_BEHAVIOR`] overlay block. Peer of
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis.
+pub const M2_BEHAVIOR_KEY_ON_INFO: &str = "onInfo";
+/// Canonical camelCase YAML sub-key the `:behavior :on-state-change`
+/// per-Servico OTP-shaped hot-upgrade state-migration path scalar-axis
+/// lands under inside the [`M2_KEY_BEHAVIOR`] overlay block. Peer of
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis;
+/// the camelCase shape (`"onStateChange"`, not `"on_state_change"`) is
+/// load-bearing per the serde-derive attribute on
+/// [`crate::BehaviorSpec`].
+pub const M2_BEHAVIOR_KEY_ON_STATE_CHANGE: &str = "onStateChange";
+/// Canonical camelCase YAML sub-key the `:behavior :on-terminate`
+/// per-Servico OTP-shaped graceful-shutdown-callback path scalar-axis
+/// lands under inside the [`M2_KEY_BEHAVIOR`] overlay block. Peer of
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis.
+pub const M2_BEHAVIOR_KEY_ON_TERMINATE: &str = "onTerminate";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm
@@ -15056,11 +15125,15 @@ mod tests {
         let overlay = servico_m2_overlay(&c).unwrap();
         let behavior = overlay.get(M2_KEY_BEHAVIOR).expect("behavior key present");
         assert_eq!(
-            behavior.get("onInit").and_then(|v| v.as_str()),
+            behavior
+                .get(M2_BEHAVIOR_KEY_ON_INIT)
+                .and_then(|v| v.as_str()),
             Some("lib/init.lisp")
         );
         assert_eq!(
-            behavior.get("onCall").and_then(|v| v.as_str()),
+            behavior
+                .get(M2_BEHAVIOR_KEY_ON_CALL)
+                .and_then(|v| v.as_str()),
             Some("lib/handlers.lisp")
         );
     }
