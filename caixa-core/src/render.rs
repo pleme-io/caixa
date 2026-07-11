@@ -8050,12 +8050,16 @@ pub const FLUX_KIND_KUSTOMIZATION: &str = "Kustomization";
 ///
 ///   - the rendered `helmrelease.yaml` document's per-`HelmRelease`
 ///     `spec.chart.spec.sourceRef` block (caixa-flux/src/lib.rs — the
-///     `cluster_bundle` `helmrelease` format-string template's baked
-///     `sourceRef:\n` key at line 858);
+///     `cluster_bundle` `helmrelease` format-string template's
+///     `{source_ref_key}:\n` sub-block header, now threaded through
+///     the lifted const via a `{source_ref_key}` named-arg
+///     interpolation);
 ///   - the rendered `kustomization.yaml` document's per-`Kustomization`
 ///     `spec.sourceRef` block (caixa-flux/src/lib.rs — the sibling
-///     `cluster_bundle` `kustomization` format-string template's baked
-///     `sourceRef:\n` key at line 896);
+///     `cluster_bundle` `kustomization` format-string template's
+///     `{source_ref_key}:\n` sub-block header, now threaded through
+///     the lifted const via the sibling `{source_ref_key}` named-arg
+///     interpolation);
 ///   - five test-side navigation sites in `mod tests` that probe the
 ///     rendered documents' `.get("sourceRef")` container axis to pin
 ///     the emitted `(kind, name, namespace)` reference triple against
