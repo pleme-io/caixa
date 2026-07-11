@@ -1330,7 +1330,8 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, kube_root_str_field,
+        Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU,
+        M2_LIMITS_KEY_MEMORY, kube_root_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -2271,8 +2272,14 @@ spec:
         });
         let entry = programs_yaml_entry(&c, &sample_cu_yaml()).unwrap();
         let limits = entry.get(M2_KEY_LIMITS).expect("limits propagates");
-        assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
-        assert_eq!(limits.get("cpu").and_then(|m| m.as_str()), Some("500m"));
+        assert_eq!(
+            limits.get(M2_LIMITS_KEY_MEMORY).and_then(|m| m.as_str()),
+            Some("64MiB")
+        );
+        assert_eq!(
+            limits.get(M2_LIMITS_KEY_CPU).and_then(|m| m.as_str()),
+            Some("500m")
+        );
     }
 
     #[test]
