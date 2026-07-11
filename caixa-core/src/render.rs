@@ -12139,6 +12139,108 @@ pub const FLUX_HELMRELEASE_KEY_INSTALL: &str = "install";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_HELMRELEASE_KEY_UPGRADE: &str = "upgrade";
 
+/// Canonical Flux v2 `HelmRelease.spec.upgrade.remediation.remediateLastFailure`
+/// upgrade-path-only per-CR remediation-toggle leaf-scalar-key every
+/// `caixa-flux`-emitted `helmrelease.yaml` document seeds to `true` under
+/// the sibling [`FLUX_HELMRELEASE_KEY_UPGRADE`] per-CR upgrade-path phase-
+/// discriminator parent-container-axis-key's nested
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-axis-key. Sibling to
+/// the peer [`FLUX_HELMRELEASE_KEY_RETRIES`] retry-cap leaf-scalar-key at
+/// the same per-CR upgrade-path per-CR remediation sub-container position —
+/// closes the `spec.upgrade.remediation.{retries, remediateLastFailure}`
+/// per-path remediation-block leaf-scalar-key pair the substrate seeds into
+/// every emitted per-caixa `HelmRelease` CR on the upgrade-path per-CR
+/// remediation block, with retries capping the per-version chart re-apply
+/// retry-count and remediateLastFailure gating the "the Flux v2 helm-
+/// controller must actively remediate — roll back to the prior success —
+/// when the final per-version chart re-apply attempt still fails" post-
+/// retry-exhaustion behavior. The Flux v2 helm-controller-side per-CR
+/// upgrade-path remediation loop keys off this exact leaf to decide
+/// whether to leave a failed upgrade in place (`false`) or trigger the
+/// prior-release rollback pipeline (`true`); drift on this axis silently
+/// drops the substrate's chosen post-retry-exhaustion rollback semantic
+/// from every emitted per-caixa `HelmRelease` document (the helm-
+/// controller then leaves every terminally-failed upgrade in the failed
+/// state without rolling back to the prior last-known-good release the
+/// substrate's "no chart apply leaves a per-caixa CR in a stalled,
+/// unremediated state" MESH-COMPOSITION.md §V guarantee mandates — with
+/// no diagnostic naming the remediation-toggle-drift root cause far from
+/// the source `caixa.lisp` / the renderer's format-string template).
+///
+/// Note the axis is asymmetric across the peer install-path per-CR
+/// remediation block: the substrate emits the toggle only under
+/// `spec.upgrade.remediation` and not under `spec.install.remediation`
+/// because the Flux v2 helm-controller's install-path per-CR remediation
+/// loop treats a failed first-time chart apply as an uninstall-and-retry
+/// pipeline whose "prior success" state is the empty pre-install cluster
+/// state — the "roll back to the prior success" post-retry-exhaustion
+/// behavior the toggle gates is well-defined only on the upgrade-path
+/// where the prior success is a previous chart-version release, which is
+/// why the [`FLUX_HELMRELEASE_KEY_RETRIES`] retry-cap leaf-scalar-key
+/// sits under both per-CR remediation sub-containers (retry-cap applies
+/// on both paths) but this per-CR remediation-toggle leaf-scalar-key
+/// sits under the upgrade-path per-CR remediation sub-container only.
+///
+/// The single source of truth every rendered Flux bundle axis that names
+/// the upgrade-path per-CR remediation-toggle leaf reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's
+///     `spec.upgrade.remediation.remediateLastFailure` leaf-scalar-key
+///     axis (caixa-flux/src/lib.rs — the `cluster_bundle` `helmrelease
+///     .yaml` format-string template's upgrade-path remediation-toggle
+///     leaf under the [`FLUX_HELMRELEASE_KEY_REMEDIATION`]-container-keyed
+///     sub-block, threading the same `&'static str` through a new
+///     `{remediate_last_failure_key}` named-arg interpolation);
+///   - the one test-fixture navigation site in caixa-flux's `mod tests`
+///     that probes the rendered document's `.get("remediateLastFailure")`
+///     leaf axis to pin the substrate's canonical `true` seed
+///     (the [`cluster_bundle_helmrelease_upgrade_remediation_remediate_last_failure_pins_lifted_true`]
+///     upgrade-path production-emit pin).
+///
+/// Both the production emit site + the one test-fixture navigation site
+/// name the same Flux v2 per-CR upgrade-path remediation-toggle leaf-
+/// scalar-key and must move together on any hypothetical Flux v3 rename
+/// (upstream Flux v3 roadmap floats candidates like
+/// `rollbackOnFailure` / `remediateOnFailure` / `recoverLastFailure` in
+/// the migration prose). Until this lift landed the axis carried inline
+/// `remediateLastFailure` literals across the one production emit site
+/// (caixa-flux/src/lib.rs — the `remediateLastFailure: true` leaf inside
+/// the `cluster_bundle` `helmrelease.yaml` format-string template's per-
+/// CR upgrade-path remediation sub-block) — the sole occurrence of the
+/// same load-bearing Flux-v2-per-CR-upgrade-path-remediation-toggle-
+/// leaf-scalar-key convention, drift-prone by construction ahead of the
+/// second occurrence the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HelmRelease` synthesis will surface,
+/// where a per-renderer local `pub const FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE:
+/// &str = "…"` (the canonical drift footgun where a sibling local
+/// `pub const` could happen to carry the same string at the source while
+/// pointing at a different `&'static` allocation) would let the two
+/// renderers silently disagree on the post-retry-exhaustion remediation
+/// semantic.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the constant to a typed
+/// substrate-side `&'static str` in advance of the second occurrence the
+/// M4 materializer will surface — so the second consumer inherits the
+/// canonical upgrade-path per-CR remediation-toggle leaf-scalar-key by
+/// construction without opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the sibling
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key +
+/// [`FLUX_HELMRELEASE_KEY_INSTALL`] / [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+/// (7767c26) parent-container-axis-key pair +
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value halves of the per-path per-CR remediation surface established —
+/// closes the sibling upgrade-path-only per-CR remediation-toggle leaf-
+/// scalar-key half at the same `spec.upgrade.remediation.*` position the
+/// retries leaf sits at.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE: &str = "remediateLastFailure";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -16406,6 +16508,75 @@ mod tests {
              distinct — a coalesce onto one value silently drops either \
              the install-path or the upgrade-path per-CR knob-set from \
              every emitted `HelmRelease` document"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_remediate_last_failure_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `HelmRelease.spec.upgrade.remediation
+        // .remediateLastFailure` upgrade-path-only per-CR remediation-
+        // toggle leaf-scalar-key the substrate's per-caixa `cluster_bundle`
+        // renderer seeds to `true` into every emitted per-caixa
+        // `helmrelease.yaml` document under the sibling
+        // [`FLUX_HELMRELEASE_KEY_UPGRADE`] per-CR upgrade-path phase-
+        // discriminator parent-container-axis-key's nested
+        // [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-axis-key. The
+        // string is part of the cluster-side contract with the upstream
+        // Flux v2 helm-controller — the controller's per-CR upgrade-path
+        // remediation loop reaches the post-retry-exhaustion rollback
+        // toggle through this exact leaf; a drifted leaf-scalar-key
+        // silently strips the substrate's chosen post-retry-exhaustion
+        // rollback semantic from every emitted per-caixa `HelmRelease`
+        // document, leaving the helm-controller to leave every terminally-
+        // failed upgrade in the failed state without rolling back to the
+        // prior last-known-good release the substrate's "no chart apply
+        // leaves a per-caixa CR in a stalled, unremediated state"
+        // MESH-COMPOSITION.md §V guarantee mandates, with no diagnostic
+        // naming the remediation-toggle-drift root cause. Changing it is
+        // a coordinated Flux v3 CRD-schema-rebrand migration alongside
+        // the upstream `helm-controller` deprecation cycle (candidates
+        // like `rollbackOnFailure` / `remediateOnFailure` /
+        // `recoverLastFailure` that upstream Flux v3 roadmap floats in
+        // the migration prose), not an incidental edit. Peer to
+        // `flux_helmrelease_key_retries_pins_canonical_value` on the
+        // sibling per-CR retry-cap leaf-scalar-key half of the same
+        // upgrade-path per-CR remediation block leaf-scalar-key pair.
+        assert_eq!(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            "remediateLastFailure"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_remediate_last_failure_stays_independent_of_retries() {
+        // The upgrade-path per-CR remediation block hosts two independent
+        // leaf-scalar-key axes under the shared sibling
+        // [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-axis-key —
+        // the per-CR retry-cap [`FLUX_HELMRELEASE_KEY_RETRIES`] (that
+        // also sits under the install-path per-CR remediation block) and
+        // the upgrade-path-only per-CR remediation-toggle
+        // [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`]. Pin that the
+        // two consts carry byte-distinct sequences so a future rebrand
+        // on either arm can't silently coalesce onto the peer arm (a
+        // `FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE = "retries"` typo
+        // would silently rebind the post-retry-exhaustion rollback
+        // toggle onto the retry-cap ceiling axis at every emit site —
+        // the helm-controller then reads the substrate's `true` seed as
+        // an integer retry-cap `1` on the retry-cap axis instead of the
+        // rollback-on-terminal-failure boolean, silently truncating the
+        // per-CR upgrade-path retry budget and dropping the rollback
+        // semantic entirely with no diagnostic naming the leaf-key-
+        // coalesce root cause). The upgrade-path per-CR remediation
+        // leaf-scalar-key pair must always resolve to distinct emitted
+        // leaf-keys.
+        assert_ne!(
+            FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE, FLUX_HELMRELEASE_KEY_RETRIES,
+            "the upgrade-path per-CR remediation retry-cap leaf-scalar-\
+             key and remediation-toggle leaf-scalar-key must remain \
+             byte-distinct — a coalesce onto one value silently rebinds \
+             the post-retry-exhaustion rollback semantic onto the retry-\
+             cap ceiling axis at every emit site"
         );
     }
 
