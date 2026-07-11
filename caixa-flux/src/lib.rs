@@ -1240,11 +1240,19 @@ pub use caixa_core::KUBE_KEY_API_VERSION;
 /// isomorphic `namespace:` field (the `lareira-fleet-programs` chart's
 /// per-Servico namespace axis, populated verbatim from the ComputeUnit's
 /// `metadata.namespace` per the docstring on `programs_yaml_entry` above)
-/// through this key, and [`cluster_bundle`]'s rendered
-/// `kustomization.yaml` drift-detection pin traverses the emitted
-/// document's `metadata.namespace` axis to assert it binds to the lifted
+/// through this key, [`cluster_bundle`]'s rendered `kustomization.yaml`
+/// drift-detection pin traverses the emitted document's
+/// `metadata.namespace` axis to assert it binds to the lifted
 /// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] (the bootstrap kustomize-
-/// controller's watch window) through this same key.
+/// controller's watch window) through this same key, and each of the
+/// three [`cluster_bundle`] format-string templates' five `namespace:`
+/// YAML label positions — `gitrepository.yaml` top-level
+/// `metadata.namespace`, `helmrelease.yaml` top-level
+/// `metadata.namespace` + nested `spec.chart.spec.sourceRef.namespace`,
+/// `kustomization.yaml` top-level `metadata.namespace` + nested
+/// `spec.healthChecks[].namespace` — thread this `&'static str`
+/// through named-arg interpolation instead of the prior five inline
+/// `namespace:` label literals.
 ///
 /// The prior inline `"namespace"` literals at the production-code
 /// (`programs_yaml_entry` read + write) and drift-detection call sites
@@ -1711,7 +1719,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {kind_key}: {kind}\n\
          {metadata_key}:\n  \
            name: {name}\n  \
-           namespace: {namespace}\n\
+           {namespace_key}: {namespace}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
            {url_key}: {url}\n  \
@@ -1722,6 +1730,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_GIT_REPOSITORY,
         metadata_key = KUBE_KEY_METADATA,
+        namespace_key = KUBE_KEY_NAMESPACE,
         spec_key = KUBE_KEY_SPEC,
         tag_human = format!(
             "{field} {value}",
@@ -1760,7 +1769,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {kind_key}: {kind}\n\
          {metadata_key}:\n  \
            name: {name}\n  \
-           namespace: {namespace}\n\
+           {namespace_key}: {namespace}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
            {chart_key}:\n    \
@@ -1769,7 +1778,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                {source_ref_key}:\n        \
                  {kind_key}: {source_kind}\n        \
                  name: {name}\n        \
-                 namespace: {namespace}\n  \
+                 {namespace_key}: {namespace}\n  \
            {install_key}:\n    \
              {create_namespace_key}: true\n    \
              {remediation_key}:\n      \
@@ -1787,6 +1796,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         metadata_key = KUBE_KEY_METADATA,
+        namespace_key = KUBE_KEY_NAMESPACE,
         spec_key = KUBE_KEY_SPEC,
         name = name,
         namespace = opts.namespace,
@@ -1815,7 +1825,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {kind_key}: {kind}\n\
          {metadata_key}:\n  \
            name: {name}\n  \
-           namespace: {flux_system}\n\
+           {namespace_key}: {flux_system}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
            {prune_key}: true\n  \
@@ -1827,7 +1837,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              - {api_version_key}: {api_version}\n      \
                {kind_key}: {health_kind}\n      \
                name: {name}\n      \
-               namespace: {namespace}\n  \
+               {namespace_key}: {namespace}\n  \
            {timeout_key}: {timeout_default}\n",
         api_version_key = KUBE_KEY_API_VERSION,
         kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
@@ -1836,6 +1846,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         health_kind = FLUX_KIND_HELM_RELEASE,
         metadata_key = KUBE_KEY_METADATA,
+        namespace_key = KUBE_KEY_NAMESPACE,
         spec_key = KUBE_KEY_SPEC,
         api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
@@ -4712,6 +4723,80 @@ spec:
                  composed from the lifted KUBE_KEY_SPEC ({KUBE_KEY_SPEC:?}); \
                  a drifted inline label here silently rebrands the per-CR \
                  spec-block-scope axis away from the lifted key \
+                 (got: {contents:?})",
+                contents = f.contents,
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_every_flux_cr_carries_metadata_namespace_label_from_lifted_key() {
+        // Fail-before-pass-after production-side sweep pin: every one
+        // of the three rendered Flux bundle files' `namespace:` YAML
+        // label positions — the load-bearing per-CR-`metadata.namespace`
+        // axis the apiserver reads to route each CR into its target
+        // namespace (`gitrepository.yaml` top-level +
+        // `helmrelease.yaml` top-level + `helmrelease.yaml`
+        // `spec.chart.spec.sourceRef.namespace` nested + `kustomization.yaml`
+        // top-level + `kustomization.yaml`
+        // `spec.healthChecks[].namespace` nested) against the sibling
+        // `name:` half of the ObjectMeta / sourceRef / healthCheck
+        // `(name, namespace)` identity-pair — must byte-compose the
+        // lifted [`KUBE_KEY_NAMESPACE`] verbatim as its label prefix.
+        // Before this sweep the three [`cluster_bundle`] format-string
+        // templates carried five inline `namespace:` YAML label
+        // literals side-by-side with the sibling per-CR `name:` half
+        // of every `(name, namespace)` identity-pair emission; a
+        // future rebrand of the lifted [`KUBE_KEY_NAMESPACE`] const
+        // (or a coordinated K8s-API-conventions per-major-version
+        // ObjectMeta-key promotion) had to reach every inline label
+        // site in lockstep, or the emit-side silently kept the pre-
+        // rebrand label byte while the retrieval-side per-CR
+        // `metadata.namespace` readers (already routed through
+        // [`KUBE_KEY_NAMESPACE`] via caixa-core's
+        // `kube_metadata_str_field` walks + this crate's
+        // `programs_yaml_entry` upstream ComputeUnit YAML retrieval +
+        // `cluster_bundle`'s rendered `kustomization.yaml` drift-
+        // detection pin) rebranded — the two sides would then
+        // disagree on the label byte, and every downstream apiserver-
+        // side ObjectMeta parser on the rendered CR would silently
+        // miss its per-CR `metadata.namespace` lookup and route the
+        // resource into `default` (or whatever fallback the calling
+        // controller supplies) with no field naming the label-drift
+        // root cause far from the source caixa.lisp. Peer to
+        // [`cluster_bundle_every_flux_cr_carries_top_level_metadata_label_from_lifted_key`]
+        // (83ce571) /
+        // [`cluster_bundle_every_flux_cr_carries_top_level_kind_label_from_lifted_key`]
+        // (ef2c7ef) /
+        // [`cluster_bundle_every_flux_cr_carries_top_level_api_version_label_from_lifted_key`]
+        // (6d3cbf0) /
+        // [`cluster_bundle_every_flux_cr_carries_top_level_spec_label_from_lifted_key`]
+        // (ed23a31) on the sibling `metadata:` / `kind:` /
+        // `apiVersion:` / `spec:` halves of the top-level K8s-CR
+        // shape — extends the same production-side raw-byte-label-
+        // sweep discipline onto the canonical `metadata.namespace`
+        // nested axis every rendered Flux v2 bundle document
+        // navigates, so every `namespace:` label position across the
+        // whole `cluster_bundle` render surface consumes the same
+        // substrate-owned `&'static str` by construction.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let label_prefix = format!("{KUBE_KEY_NAMESPACE}:");
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let f = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename))
+                .unwrap_or_else(|| panic!("{filename} present"));
+            assert!(
+                f.contents.contains(&label_prefix),
+                "{filename} must carry the {label_prefix:?} YAML label \
+                 composed from the lifted KUBE_KEY_NAMESPACE ({KUBE_KEY_NAMESPACE:?}); \
+                 a drifted inline label here silently rebrands the per-CR \
+                 metadata.namespace axis away from the lifted key \
                  (got: {contents:?})",
                 contents = f.contents,
             );
