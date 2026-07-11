@@ -204,6 +204,47 @@ pub use caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT;
 /// a two-level nested per-path retry-cap declaration.
 pub use caixa_core::FLUX_HELMRELEASE_KEY_RETRIES;
 
+/// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation`
+/// sub-container-axis-key — re-export of the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATION`] so the Flux v2
+/// helm-controller-side per-CR remediation sub-container-axis-key lives
+/// in exactly one place across every caixa renderer. Peer to the sibling
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key half + the
+/// sibling [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae)
+/// scalar-value half of the same
+/// `(container-axis-key, leaf-scalar-key, scalar-value)` per-path retry-
+/// cap declaration triple — closes the parent-container-axis-key axis on
+/// the same per-path retry-cap declaration, so all three halves now live
+/// in one place. Two production emit sites (this crate's
+/// [`cluster_bundle`] `helmrelease.yaml` format-string template's
+/// install-path remediation sub-block-header + the sibling upgrade-path
+/// remediation sub-block-header, both threading the same `&'static str`
+/// through a `{remediation_key}` named-arg interpolation) plus two test-
+/// fixture navigation sites in `mod tests` (the install-path
+/// [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+/// pin's `.get(FLUX_HELMRELEASE_KEY_REMEDIATION)` probe + the sibling
+/// upgrade-path
+/// [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]
+/// pin's peer probe) now consult the same `&'static str`. Until this
+/// lift landed the axis carried four inline `remediation` literals across
+/// the two production emit sites and the two test-fixture navigation
+/// sites; a future hypothetical Flux v3 rename (`recovery` /
+/// `retryPolicy` / `errorHandling`) on any production-emit site without
+/// a coordinated edit on the sibling navigation sites would have
+/// silently stripped the whole per-path remediation sub-block from the
+/// emitted `HelmRelease` CR, letting the helm-controller fall back to
+/// the Flux v2 upstream defaults for the whole remediation surface
+/// rather than the substrate's chosen ceiling with no diagnostic naming
+/// the sub-container-key-drift root cause. Same shape as the sibling
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key half plus
+/// the peer [`FLUX_KEY_SOURCE_REF`] (236ef01) / [`FLUX_KEY_CHART`] /
+/// [`FLUX_KEY_VALUES`] / [`FLUX_KEY_INTERVAL`] /
+/// [`FLUX_KEY_HEALTH_CHECKS`] container-axis-key lifts on the peer per-
+/// CR container-axis-key surface — extends the discipline from the
+/// leaf-scalar-key at the bottom of the two-level nested per-path
+/// retry-cap declaration onto the sub-container-axis-key one level up.
+pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATION;
+
 /// Canonical FluxCD installation namespace — re-export of the lifted
 /// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
 /// string lives in exactly one place across every consumer of the
@@ -1361,10 +1402,10 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                  namespace: {namespace}\n  \
            install:\n    \
              createNamespace: true\n    \
-             remediation:\n      \
+             {remediation_key}:\n      \
                {retries_key}: {retries_default}\n  \
            upgrade:\n    \
-             remediation:\n      \
+             {remediation_key}:\n      \
                {retries_key}: {retries_default}\n      \
                remediateLastFailure: true\n  \
            {values_key}:\n    \
@@ -1385,6 +1426,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         enabled_key = HELM_VALUES_KEY_ENABLED,
         retries_default = FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT,
         retries_key = FLUX_HELMRELEASE_KEY_RETRIES,
+        remediation_key = FLUX_HELMRELEASE_KEY_REMEDIATION,
     );
 
     let kustomization = format!(
@@ -1687,6 +1729,62 @@ spec:
     }
 
     #[test]
+    fn flux_helmrelease_key_remediation_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATION`
+        // is the single source of truth for the Flux v2 per-CR
+        // remediation sub-container-axis-key baked into both the
+        // install-path + upgrade-path `remediation:` sub-block-header
+        // lines of the [`cluster_bundle`] `helmrelease.yaml` format-
+        // string template (both threading the same `&'static str`
+        // through the new `{remediation_key}` named-arg interpolation)
+        // plus the two test-fixture navigation sites in `mod tests` that
+        // probe the rendered document at
+        // `.get(FLUX_HELMRELEASE_KEY_REMEDIATION)`. Pin the equality
+        // (and the static-data identity, peer with the sibling
+        // [`flux_helmrelease_key_retries_re_export_points_at_caixa_core_canonical`]
+        // pin on the leaf-scalar-key half of the same
+        // `(container-axis-key, leaf-scalar-key, scalar-value)` per-path
+        // retry-cap declaration triple) so any local re-introduction of
+        // a sibling `pub const FLUX_HELMRELEASE_KEY_REMEDIATION: &str =
+        // "…"` (the canonical drift footgun this lift closes — the
+        // load-bearing Flux-v2-helm-controller-side per-CR remediation
+        // sub-container-axis-key across four prior inlined occurrences —
+        // two production emit sites in the `cluster_bundle`
+        // `helmrelease.yaml` format-string template plus two test-
+        // fixture navigation sites, lifted to one re-export at the
+        // caixa-core boundary) is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom (a stripped
+        // whole-remediation sub-block letting the helm-controller fall
+        // back to the Flux v2 upstream defaults for the whole per-path
+        // remediation surface).
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_HELMRELEASE_KEY_REMEDIATION",
+            FLUX_HELMRELEASE_KEY_REMEDIATION,
+            caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATION,
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_remediation_pins_canonical_remediation_string() {
+        // Bridge-arm pin: the lifted [`FLUX_HELMRELEASE_KEY_REMEDIATION`]
+        // constant resolves to the canonical `"remediation"` string
+        // today, and both rendered Flux v2 `HelmRelease` per-path per-CR
+        // sub-block-headers must spell it out verbatim. Pin the literal
+        // here (peer with the sibling
+        // [`flux_helmrelease_key_retries_pins_canonical_retries_string`]-shape
+        // canonical-default arm on the sibling per-CR leaf-scalar-key
+        // surface + the peer
+        // [`flux_key_source_ref_pins_canonical_source_ref_string`]-shape
+        // canonical-default arm on the peer per-CR container-axis-key
+        // surface) so a future rebrand of the lifted constant (Flux v3
+        // rename like `recovery` / `retryPolicy` / `errorHandling` —
+        // upstream Flux v3 roadmap candidates that would land the same
+        // per-CR retry-cap semantics under a different sub-container-
+        // axis-key) surfaces here as a coordinated edit-point.
+        assert_eq!(FLUX_HELMRELEASE_KEY_REMEDIATION, "remediation");
+    }
+
+    #[test]
     fn flux_helmrelease_key_retries_pins_canonical_retries_string() {
         // Bridge-arm pin: the lifted [`FLUX_HELMRELEASE_KEY_RETRIES`]
         // constant resolves to the canonical `"retries"` string today,
@@ -1742,7 +1840,7 @@ spec:
         let install_retries = parsed
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("install"))
-            .and_then(|i| i.get("remediation"))
+            .and_then(|i| i.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_RETRIES))
             .and_then(|v| v.as_u64())
             .expect(
@@ -1801,7 +1899,7 @@ spec:
         let upgrade_retries = parsed
             .get(KUBE_KEY_SPEC)
             .and_then(|s| s.get("upgrade"))
-            .and_then(|u| u.get("remediation"))
+            .and_then(|u| u.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_RETRIES))
             .and_then(|v| v.as_u64())
             .expect(

@@ -11880,6 +11880,94 @@ pub const FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT: u32 = 3;
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_HELMRELEASE_KEY_RETRIES: &str = "retries";
 
+/// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation`
+/// sub-container-axis-key every `caixa-flux`-emitted `helmrelease.yaml`
+/// document nests the sibling
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] retry-cap leaf-scalar-key under, at
+/// both the install-path + upgrade-path per-CR remediation blocks. The
+/// parent-container-axis-key half of the same
+/// `(container-axis-key, leaf-scalar-key, scalar-value)` per-path
+/// retry-cap declaration triple the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-value
+/// + [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key halves
+/// closed on the value the leaf holds + the leaf-key itself — this lift
+/// closes the third and final axis on the same per-path retry-cap
+/// declaration by extending the discipline from the leaf up to the sub-
+/// container-axis-key the leaf sits under. The Flux v2 helm-controller
+/// per-CR remediation loop navigates through this exact sub-container
+/// axis to reach the retry-cap scalar-key, so drift on this axis is
+/// equally load-bearing (a typo on the sub-container-axis-key silently
+/// strips the entire per-path remediation block from the emitted per-CR
+/// document — the helm-controller then falls back to the Flux v2
+/// upstream defaults for the whole remediation surface rather than the
+/// substrate's chosen ceiling, with no diagnostic naming the container-
+/// axis-key-drift root cause far from the source caixa.lisp / the
+/// renderer's format-string template).
+///
+/// The single source of truth every rendered Flux bundle axis that
+/// names the per-path per-CR remediation sub-container reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's `spec.install.remediation`
+///     sub-block-header axis (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `helmrelease.yaml` format-string template's install-path
+///     remediation sub-block-header nesting the retry-cap leaf under the
+///     sibling
+///     [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]-valued scalar);
+///   - the rendered `helmrelease.yaml` document's `spec.upgrade.remediation`
+///     sub-block-header axis (caixa-flux/src/lib.rs — the sibling
+///     `cluster_bundle` `helmrelease.yaml` format-string template's
+///     upgrade-path remediation sub-block-header, additionally nesting
+///     the `remediateLastFailure: true` toggle on the upgrade-path
+///     sibling axis);
+///   - the two test-fixture navigation sites in caixa-flux's `mod tests`
+///     that probe the rendered document's `.get("remediation")` container
+///     axis to reach the sibling [`FLUX_HELMRELEASE_KEY_RETRIES`] leaf-
+///     scalar-key pin (the install-path + upgrade-path production-emit
+///     pins
+///     [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+///     / [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]).
+///
+/// Both production emit sites + the two test-fixture navigation sites
+/// name the same Flux v2 per-path per-CR remediation sub-container-axis
+/// key and must move together on any hypothetical Flux v3 rename
+/// (upstream Flux v3 roadmap floats candidates like `recovery` /
+/// `retryPolicy` / `errorHandling` in the migration prose). Until this
+/// lift landed the axis carried inline `remediation` literals across the
+/// two production emit sites (caixa-flux/src/lib.rs — the two
+/// `remediation:` sub-block-header lines inside the `cluster_bundle`
+/// `helmrelease.yaml` format-string template's install-path + upgrade-
+/// path per-CR blocks) plus the two test-fixture navigation sites —
+/// four occurrences of the same load-bearing Flux-v2-per-CR-remediation-
+/// sub-container-axis-key convention, drift-prone by construction.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the sibling [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc)
+/// leaf-scalar-key half + the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value half established — closes the parent-container-axis-key axis
+/// on the same per-path retry-cap declaration triple, so all three
+/// halves now live in one place. The two render-side consumers now
+/// thread the same `&'static str` through their format-string template
+/// via a `{remediation_key}` named-arg interpolation so a future Flux v3
+/// rebrand lands in one place; every future renderer that reaches for
+/// the canonical Flux v2 per-CR per-path remediation sub-container-axis
+/// key inherits the same value by construction with no opportunity for
+/// per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the sibling
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key half plus
+/// the peer [`FLUX_KEY_SOURCE_REF`] (236ef01) / [`FLUX_KEY_CHART`] /
+/// [`FLUX_KEY_VALUES`] / [`FLUX_KEY_INTERVAL`] /
+/// [`FLUX_KEY_HEALTH_CHECKS`] container-axis-key lifts apply on the
+/// peer canonical-Flux-v2-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_KEY_REMEDIATION: &str = "remediation";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -15946,6 +16034,61 @@ mod tests {
              downstream reconciliation-topology consumer watches, the same \
              argument that motivates the peer `POLICY_RETRIES_MAX` per-\
              `:politicas :retries` axis cap"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_remediation_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the substrate-side Flux v2
+        // `HelmRelease.spec.{install,upgrade}.remediation` sub-container-
+        // axis key the substrate's per-caixa `cluster_bundle` renderer
+        // seeds into every emitted per-caixa `helmrelease.yaml` document
+        // at both the install-path + upgrade-path per-CR remediation
+        // sub-block-header positions. The string is part of the cluster-
+        // side contract with the Flux v2 helm-controller (the controller's
+        // per-CR remediation loop reaches the retry-cap scalar through
+        // this exact sub-container axis; a drifted sub-container-key
+        // silently strips the entire per-path remediation block from the
+        // emitted per-CR document, leaving the helm-controller to fall
+        // back to the Flux v2 upstream defaults for the whole remediation
+        // surface rather than the substrate's chosen ceiling, with no
+        // diagnostic naming the container-axis-key-drift root cause).
+        // Changing it is a coordinated Flux v3 CRD-schema-rebrand
+        // migration alongside the upstream `helm-controller` deprecation
+        // cycle (candidates like `recovery` / `retryPolicy` /
+        // `errorHandling` that upstream Flux v3 roadmap floats in the
+        // migration prose), not an incidental edit. Peer to
+        // `flux_helmrelease_remediation_retries_default_pins_canonical_value`
+        // on the sibling scalar-value half + the sibling
+        // [`FLUX_HELMRELEASE_KEY_RETRIES`] leaf-scalar-key half of the
+        // same per-path retry-cap declaration triple.
+        assert_eq!(FLUX_HELMRELEASE_KEY_REMEDIATION, "remediation");
+    }
+
+    #[test]
+    fn flux_helmrelease_key_remediation_is_a_valid_dns_1123_label() {
+        // Cross-axis invariant: every Flux v2 `HelmRelease` CRD-schema
+        // sub-block-header key resolves through the K8s apiserver's
+        // OpenAPI-schema-side identifier grammar, whose per-field key
+        // axis is a subset of the DNS-1123-label grammar (lowercase
+        // alphanumerics + hyphens, non-empty, ≤63 bytes). Pinning the
+        // canonical `remediation` value against the typed
+        // [`is_dns_1123_label`] floor rules out grammar drift on this
+        // lift at caixa-core build time — a future rebrand landing a
+        // value outside the DNS-1123-label subset (a leading digit, an
+        // underscore, an uppercase byte, a `.` byte, or empty) would
+        // surface here on the canonical lift, before any renderer
+        // consumes the value and before any per-caixa Flux v2 CR reaches
+        // the apiserver's OpenAPI-schema-side per-field admission gate.
+        // Same shape as `default_gateway_class_name_is_a_valid_dns_1123_label`
+        // on the peer canonical-CRD-schema-grammar-floor surface.
+        assert!(
+            is_dns_1123_label(FLUX_HELMRELEASE_KEY_REMEDIATION).is_ok(),
+            "FLUX_HELMRELEASE_KEY_REMEDIATION {FLUX_HELMRELEASE_KEY_REMEDIATION:?} \
+             must be a valid DNS-1123 label — every K8s apiserver-side \
+             OpenAPI-schema-per-field-key axis is a subset of that grammar, \
+             and the Flux v2 `HelmRelease` CRD schema is no exception"
         );
     }
 
