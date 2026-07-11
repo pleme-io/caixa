@@ -124,6 +124,49 @@ pub use caixa_core::DEFAULT_NAMESPACE;
 /// canonical-substrate-default-load-bearing-scalar surface.
 pub use caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL;
 
+/// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation.retries`
+/// bounded retry-count default the substrate seeds into every per-caixa
+/// `helmrelease.yaml` document. Re-export of the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] so the
+/// Flux v2 helm-controller-side remediation-retries default scalar-value
+/// lives in exactly one place across every caixa renderer —
+/// [`cluster_bundle`]'s `helmrelease.yaml` format-string template's two
+/// production-code retry-cap sites (the prior inline `retries: 3`
+/// scalar-value literal under the `install.remediation` sub-block + the
+/// second inline `retries: 3` scalar-value literal under the
+/// `upgrade.remediation` sub-block) now both consume the same `u32` at
+/// emit time through one `{retries_default}` named-arg interpolation, so
+/// a future substrate-side retry-ceiling migration (`3` → `5` once per-
+/// caixa idempotency invariants tighten, `3` → `1` on hardened per-caixa
+/// pipelines where a failed apply should escalate to operator-attention
+/// rather than mask under further retries — coordinated with the
+/// upstream Flux v2 project's per-controller tuning cycle) is a one-line
+/// edit on the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]
+/// declaration, not a coordinated rewrite across the two per-CR
+/// remediation-retries sites. Before this lift the two axes carried
+/// independently-inlined `retries: 3` literals in the sibling
+/// `install.remediation.retries` / `upgrade.remediation.retries`
+/// positions of the [`cluster_bundle`] `helmrelease.yaml` format-string
+/// template — any future retry-ceiling migration on one axis without a
+/// coordinated edit on the other would have silently split the
+/// substrate's canonical retry-ceiling between the install-path (first-
+/// time chart applies) and the upgrade-path (every subsequent per-
+/// caixa-version re-apply the same `HelmRelease` gates), with no field
+/// naming the ceiling-drift root cause. Pairs with the sibling
+/// [`DEFAULT_FLUX_RECONCILE_INTERVAL`] re-export on the same canonical-
+/// Flux-v2-per-CR-substrate-default surface — the reconcile-poll cadence
+/// default names how often the helm-controller re-evaluates per-CR
+/// desired state, and this retry-cap names how many times a per-
+/// evaluation Helm action is allowed to fail-and-retry before it stops.
+/// Same shape as the sibling [`caixa_core::DEFAULT_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] /
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] re-exports on the peer
+/// canonical-substrate-default-load-bearing-scalar surface.
+pub use caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT;
+
 /// Canonical FluxCD installation namespace — re-export of the lifted
 /// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
 /// string lives in exactly one place across every consumer of the
@@ -1282,10 +1325,10 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            install:\n    \
              createNamespace: true\n    \
              remediation:\n      \
-               retries: 3\n  \
+               retries: {retries_default}\n  \
            upgrade:\n    \
              remediation:\n      \
-               retries: 3\n      \
+               retries: {retries_default}\n      \
                remediateLastFailure: true\n  \
            {values_key}:\n    \
              {library_name}:\n      \
@@ -1303,6 +1346,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         values_key = FLUX_KEY_VALUES,
         library_name = DEFAULT_LIBRARY_NAME,
         enabled_key = HELM_VALUES_KEY_ENABLED,
+        retries_default = FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT,
     );
 
     let kustomization = format!(
@@ -1516,6 +1560,165 @@ spec:
              silently splits the substrate's per-caixa convergence-\
              freshness contract between the operator-facing canonical \
              default and the per-caixa seeded reconcile-schedule"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_remediation_retries_default_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`
+        // was lifted from the two production-code duplicated inline
+        // `retries: 3` scalar-value literals inside [`cluster_bundle`]'s
+        // `helmrelease.yaml` format-string template (the install-path
+        // `install.remediation.retries` site + the upgrade-path
+        // `upgrade.remediation.retries` site) to a re-export of
+        // [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] so
+        // the Flux v2 helm-controller-side per-CR remediation-retries
+        // default scalar-value lives in exactly one place across every
+        // caixa renderer. Pin the equality here so any local
+        // re-introduction of a sibling `pub const
+        // FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT: u32 = <n>` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry a different value while the rest of the
+        // codebase keeps consuming the caixa-core canonical) is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom — the prior duplicated inline shape
+        // would have let a substrate-side retry-ceiling migration on the
+        // canonical caixa-core declaration without a coordinated caixa-
+        // flux edit silently seed per-caixa Flux v2 `HelmRelease` CRs at
+        // a drifted per-path remediation-retries schedule, splitting the
+        // substrate's canonical retry-ceiling between the install-path
+        // and the upgrade-path with no diagnostic naming the ceiling-
+        // drift root cause. Peer to
+        // [`default_flux_reconcile_interval_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-substrate-default-load-bearing-scalar
+        // re-export surface.
+        assert_eq!(
+            FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT,
+            caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT,
+            "`caixa_flux::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT` \
+             must be the value-identical re-export of the canonical \
+             `caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT` — \
+             drift here silently splits the substrate's per-caixa Flux \
+             v2 `HelmRelease` remediation-retries ceiling between the \
+             canonical caixa-core declaration and the renderer's threaded \
+             seed"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`
+        // document's `spec.install.remediation.retries` scalar must
+        // resolve to the lifted
+        // [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] verbatim.
+        // Before the lift the axis carried an inline `retries: 3`
+        // scalar-value literal at the sole production-code call site
+        // (the install-path `install.remediation.retries` position of
+        // the [`cluster_bundle`] `helmrelease.yaml` format-string
+        // template); a future substrate-side retry-ceiling migration on
+        // the canonical
+        // [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]
+        // declaration that failed to reach this emit site would
+        // silently split the substrate's canonical retry-ceiling
+        // between the operator-facing canonical default and the per-
+        // caixa `helmrelease.yaml` install-path retry cap the helm-
+        // controller consumes at first-time chart apply time. Pin the
+        // identity here so a regression that re-introduces an inline
+        // literal at the emit site surfaces at build time on this
+        // test's failure. Peer to the sibling
+        // [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]
+        // pin on the upgrade-path retry-cap sibling axis — that test
+        // pins the rendered upgrade-path scalar agrees with the lifted
+        // default, this test pins the rendered install-path scalar
+        // agrees with the same.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let install_retries = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get("install"))
+            .and_then(|i| i.get("remediation"))
+            .and_then(|r| r.get("retries"))
+            .and_then(|v| v.as_u64())
+            .expect(
+                "spec.install.remediation.retries scalar present; drift on \
+                 this axis silently splits the substrate's canonical retry-\
+                 ceiling between the install-path first-time chart apply and \
+                 the canonical `FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`",
+            );
+        assert_eq!(
+            install_retries,
+            u64::from(FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT),
+            "spec.install.remediation.retries must carry the lifted \
+             `FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT` scalar — \
+             drift here silently splits the substrate's canonical retry-\
+             ceiling between the operator-facing canonical default and \
+             the install-path retry cap the Flux v2 helm-controller \
+             consumes at first-time chart apply time"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default() {
+        // Fail-before-pass-after pin: the rendered `helmrelease.yaml`
+        // document's `spec.upgrade.remediation.retries` scalar must
+        // resolve to the lifted
+        // [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] verbatim.
+        // Before the lift the axis carried a second inline `retries: 3`
+        // scalar-value literal at the sole production-code call site
+        // (the upgrade-path `upgrade.remediation.retries` position of
+        // the [`cluster_bundle`] `helmrelease.yaml` format-string
+        // template, sibling to the install-path retry-cap the peer
+        // [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+        // pin covers); a future substrate-side retry-ceiling migration
+        // on the canonical
+        // [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]
+        // declaration that failed to reach this emit site would
+        // silently split the substrate's canonical retry-ceiling
+        // between the operator-facing canonical default and the per-
+        // caixa `helmrelease.yaml` upgrade-path retry cap the helm-
+        // controller consumes on every subsequent per-version chart re-
+        // apply the same `HelmRelease` CR gates. Pin the identity here
+        // so a regression that re-introduces an inline literal at the
+        // emit site surfaces at build time on this test's failure. Peer
+        // to the sibling
+        // [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+        // pin on the install-path retry-cap sibling axis — closing the
+        // per-path retry-cap sweep the caixa-core lift established.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let upgrade_retries = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get("upgrade"))
+            .and_then(|u| u.get("remediation"))
+            .and_then(|r| r.get("retries"))
+            .and_then(|v| v.as_u64())
+            .expect(
+                "spec.upgrade.remediation.retries scalar present; drift on \
+                 this axis silently splits the substrate's canonical retry-\
+                 ceiling between the upgrade-path per-version chart re-apply \
+                 and the canonical `FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`",
+            );
+        assert_eq!(
+            upgrade_retries,
+            u64::from(FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT),
+            "spec.upgrade.remediation.retries must carry the lifted \
+             `FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT` scalar — \
+             drift here silently splits the substrate's canonical retry-\
+             ceiling between the operator-facing canonical default and \
+             the upgrade-path retry cap the Flux v2 helm-controller \
+             consumes on every subsequent per-caixa-version chart re-apply"
         );
     }
 

@@ -11702,6 +11702,101 @@ pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 /// [fc]: ../../caixa_flux/struct.ClusterBundleOpts.html#method.for_caixa
 pub const DEFAULT_FLUX_RECONCILE_INTERVAL: &str = "10m";
 
+/// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation.retries`
+/// bounded retry-count scalar every [`caixa-flux`][cf]-emitted `helmrelease.yaml`
+/// document declares under both the install-path and the upgrade-path
+/// `remediation` blocks. The Flux v2 `helm-controller` per-CR `Install` /
+/// `Upgrade` action reconciler consumes this scalar as the ceiling on the
+/// number of times it will re-attempt a failed Helm install or Helm upgrade
+/// before it marks the `HelmRelease` `Ready: False` and stops retrying — the
+/// substrate's canonical "how many times we let Flux re-try a chart apply
+/// before it stops" contract with the helm-controller-side per-CR
+/// remediation loop.
+///
+/// The single source of truth all two duplicated inline `retries: 3`
+/// scalar-value literal sites the substrate's [`cluster_bundle`][cb]
+/// `helmrelease.yaml` format-string template reaches for:
+///
+///   - `helmrelease.yaml` `spec.install.remediation.retries` — the install-
+///     path retry cap the helm-controller consumes for the first-time chart
+///     apply the `HelmRelease` CR gates. Before this lift landed the value
+///     sat as an inline `retries: 3\n` literal inside
+///     [`cluster_bundle`][cb]'s `helmrelease.yaml` format-string template's
+///     `install:` sub-block (caixa-flux/src/lib.rs — the `install.remediation`
+///     sub-block).
+///   - `helmrelease.yaml` `spec.upgrade.remediation.retries` — the upgrade-
+///     path retry cap the helm-controller consumes for every subsequent
+///     chart re-apply the same `HelmRelease` CR gates on a caixa version
+///     bump. Before this lift landed the value sat as a second inline
+///     `retries: 3\n` literal inside the same
+///     [`cluster_bundle`][cb] `helmrelease.yaml` format-string template's
+///     `upgrade:` sub-block (caixa-flux/src/lib.rs — the `upgrade.remediation`
+///     sub-block).
+///   - Every future per-caixa `HelmRelease` renderer the M3.x + M4
+///     absorption roadmap acknowledges (the future
+///     `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+///     `HelmRelease` synthesis, a future per-cluster override `HelmRelease`
+///     the operator emits for the observability-collector pipeline).
+///
+/// Both existing production-code sites carry the *same* substrate-chosen
+/// retry ceiling — the value is one canonical policy choice, not two
+/// independent axes: the operator's "how many chart-apply failures we
+/// tolerate before Flux stops retrying and surfaces the failure at the
+/// per-caixa `HelmRelease.status.conditions[]` axis the substrate's
+/// downstream reconciliation-topology consumer watches". A future
+/// substrate-side retry-ceiling migration (`3` → `5` once per-caixa
+/// idempotency invariants tighten and higher-retry recovery from
+/// transient apiserver / registry / oci-source flakes becomes safe, `3`
+/// → `1` on hardened per-caixa pipelines where a failed apply should
+/// escalate to operator-attention rather than mask under further retries,
+/// `3` → `10` on high-churn dev clusters where transient failures
+/// dominate) without a coordinated edit on *both* sites would have
+/// silently split the substrate's canonical retry-ceiling between the
+/// install-path and the upgrade-path — first-time applies would tolerate
+/// one ceiling while every subsequent per-version re-apply would tolerate
+/// another, with no field naming the ceiling-drift root cause far from
+/// the rebrand commit's source. Lifting the value to caixa-core's render-
+/// constants block alongside the peer [`DEFAULT_FLUX_RECONCILE_INTERVAL`]
+/// makes the retry-ceiling axis discipline structural: both sites consult
+/// the same `u32`, and every future per-CR remediation-retries emitter
+/// inherits the same value by construction with no opportunity for per-
+/// path drift.
+///
+/// The value is a valid Flux v2 `HelmRelease`-remediation-retries scalar
+/// (per the upstream Flux v2 `HelmRelease.spec.{install,upgrade}.remediation.retries`
+/// `OpenAPI` schema — a non-negative integer, `-1` reserved as the sentinel
+/// for "retry indefinitely" which the substrate opts out of by declaring
+/// a bounded ceiling): a positive `u32` bounded above by the substrate's
+/// tolerance for silently-masked chart-apply failures. A future rebrand
+/// on this lift cannot silently land a negative sentinel by construction:
+/// the [`flux_helmrelease_remediation_retries_default_is_a_bounded_positive_scalar`]
+/// pin trips at caixa-core build time on any drift past the typed floor.
+///
+/// Pairs with the sibling [`DEFAULT_FLUX_RECONCILE_INTERVAL`] (908180f)
+/// on the peer canonical-Flux-v2-per-CR-substrate-default surface — the
+/// reconcile-poll cadence default names how often the helm-controller
+/// re-evaluates the per-CR desired state, and this remediation-retries
+/// ceiling names how many times a per-evaluation Helm action is allowed
+/// to fail-and-retry before the controller stops. Both are substrate-side
+/// policy choices the operator inherits when the per-caixa
+/// [`ClusterBundleOpts`][co] doesn't pin an override, and both must move
+/// together on any coordinated substrate-side Flux v2 per-CR-remediation
+/// tuning-cycle promotion.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_NAMESPACE`] (a085b26) / [`DEFAULT_FLUX_SYSTEM_NAMESPACE`]
+/// (7197d38) / [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`crate::DEFAULT_SERVICO_PORT`] (1e22add) /
+/// [`DEFAULT_GATEWAY_CLASS_NAME`] (d9b0743) /
+/// [`crate::DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) /
+/// [`DEFAULT_FLUX_RECONCILE_INTERVAL`] (908180f) lifts apply on the peer
+/// canonical-substrate-default-load-bearing-scalar surface.
+///
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+/// [cf]: ../../caixa_flux/index.html
+/// [co]: ../../caixa_flux/struct.ClusterBundleOpts.html
+pub const FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT: u32 = 3;
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -15696,6 +15791,78 @@ mod tests {
              Go-duration-format grammar — the trailing unit follows the \
              magnitude; an unterminated magnitude defeats \
              `metav1.ParseDuration`"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_remediation_retries_default_pins_canonical_value() {
+        // Pin the actual scalar so a typo in this lift can't silently
+        // rebrand the substrate-side default Flux v2
+        // `HelmRelease.spec.{install,upgrade}.remediation.retries` retry-
+        // count ceiling the substrate's per-caixa `cluster_bundle`
+        // renderer seeds into every emitted per-caixa `helmrelease.yaml`
+        // document under both the install-path and the upgrade-path
+        // remediation blocks. The value is part of the cluster-side
+        // contract with the Flux v2 helm-controller (the per-CR
+        // remediation loop uses this as the ceiling on the number of
+        // Helm-install / Helm-upgrade re-attempts before the controller
+        // marks the `HelmRelease` `Ready: False` and stops retrying);
+        // changing it is a coordinated substrate-side retry-ceiling
+        // promotion (a `3` → `5` migration once per-caixa idempotency
+        // invariants tighten and higher-retry recovery from transient
+        // apiserver / registry / oci-source flakes becomes safe, a `3` →
+        // `1` migration on hardened per-caixa pipelines where a failed
+        // apply should escalate to operator-attention rather than mask
+        // under further retries), not an incidental edit. Peer to
+        // `default_flux_reconcile_interval_pins_canonical_value` on the
+        // canonical-Flux-v2-per-CR-substrate-default-scalar pin surface.
+        assert_eq!(FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT, 3);
+    }
+
+    #[test]
+    fn flux_helmrelease_remediation_retries_default_is_a_bounded_positive_scalar() {
+        // Cross-axis invariant: the Flux v2 `HelmRelease.spec.{install,
+        // upgrade}.remediation.retries` OpenAPI schema types the field
+        // as a signed 64-bit integer with a documented sentinel `-1`
+        // meaning "retry indefinitely". The substrate opts out of the
+        // unbounded-retry sentinel by declaring the canonical default as
+        // a positive `u32` — the type itself rules out `-1` at
+        // caixa-core build time, so a future rebrand on this lift cannot
+        // silently land the "retry forever" sentinel by construction
+        // (which would let a persistently-failing per-caixa chart apply
+        // consume Flux v2 helm-controller reconcile-loop cycles
+        // indefinitely, masking under further retries rather than
+        // surfacing at the `HelmRelease.status.conditions[]` axis the
+        // substrate's downstream reconciliation-topology consumer
+        // watches). Pin the positive-scalar floor + a substrate-side
+        // "sane retry ceiling" upper bound (the same 100-attempt hard
+        // cap the peer `POLICY_RETRIES_MAX` per-`:politicas :retries`
+        // axis carries; a substrate that seeds a per-CR default above
+        // that ceiling is structurally a footgun by the same
+        // "unbounded-retry masks the underlying failure" argument that
+        // motivates the mesh-policy retries cap). Same shape as
+        // `default_flux_reconcile_interval_is_a_valid_metav1_duration_scalar`
+        // on the peer canonical-substrate-default-grammar-floor surface.
+        let v = FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT;
+        assert!(
+            v > 0,
+            "FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT {v} must be strictly \
+             positive per the substrate's opt-out from the Flux v2 \
+             `retries: -1` unbounded-retry sentinel — the `u32` type rules \
+             out the sentinel, and a zero-retries default is structurally \
+             a `remediation:` sub-block that never fires the retry path it \
+             is declaring"
+        );
+        assert!(
+            v <= 100,
+            "FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT {v} must be within \
+             the substrate's canonical retry-ceiling upper bound (100) — a \
+             per-CR default above that ceiling silently masks the underlying \
+             chart-apply failure under further retries rather than surfacing \
+             it at the `HelmRelease.status.conditions[]` axis the substrate's \
+             downstream reconciliation-topology consumer watches, the same \
+             argument that motivates the peer `POLICY_RETRIES_MAX` per-\
+             `:politicas :retries` axis cap"
         );
     }
 
