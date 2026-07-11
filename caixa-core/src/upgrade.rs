@@ -4797,4 +4797,115 @@ mod tests {
              duplicate-`:from` gate fires, got {err:?}"
         );
     }
+
+    // ── drift-detection: serde-derive-to-M2_UPGRADE_FROM_KEY_* identity ──
+
+    #[test]
+    fn upgrade_from_entry_serde_keys_match_lifted_m2_upgrade_from_key_consts() {
+        // Load-bearing invariant: the two `M2_UPGRADE_FROM_KEY_*` consts
+        // (`M2_UPGRADE_FROM_KEY_FROM` / `M2_UPGRADE_FROM_KEY_INSTRUCTIONS`)
+        // name the exact camelCase JSON keys the `#[serde(rename_all =
+        // "camelCase")]` attribute on `UpgradeFromEntry` emits, and every
+        // test-side probe across the caixa-core / caixa-flux renderer
+        // test fixtures navigates into each element of the rendered
+        // `:upgrade-from` overlay sequence by consulting one of these two
+        // `&'static str`s. Serialize a fully-populated UpgradeFromEntry
+        // and pin that each canonical byte-sequence appears verbatim in
+        // the JSON — a future accidental `rename_all = "snake_case"` /
+        // `"kebab-case"` / verbatim-field-name flip at the derive
+        // attribute (any of which would silently break every test-side
+        // probe that reaches for one of the two consts) surfaces here as
+        // a build-time test failure at `upgrade.rs`, not as an apply-time
+        // `.get(<stale-canonical-const>)` returning `None` far from the
+        // derive-attr drift's commit. Same discipline the sibling
+        // `limits_spec_serde_keys_match_lifted_m2_limits_key_consts`
+        // (d8b8b4f) and
+        // `behavior_spec_serde_keys_match_lifted_m2_behavior_key_consts`
+        // (21fe462) pins established on the peer `:limits` / `:behavior`
+        // sub-slot axes: one canonical byte-string per typed sub-key
+        // axis, pinned to the load-bearing serde derivation at the type
+        // itself.
+        let e = UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "hello-rio".into(),
+            }],
+        };
+        let json = serde_json::to_string(&e).unwrap();
+        for key in [
+            crate::render::M2_UPGRADE_FROM_KEY_FROM,
+            crate::render::M2_UPGRADE_FROM_KEY_INSTRUCTIONS,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized UpgradeFromEntry must carry the lifted \
+                 M2_UPGRADE_FROM_KEY_* byte-sequence {quoted} verbatim in \
+                 the JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn m2_upgrade_from_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the two
+        // canonical sub-key byte-strings onto the same value (e.g. an
+        // accidental copy-paste flip of `M2_UPGRADE_FROM_KEY_INSTRUCTIONS`
+        // to also read `"from"`) would silently reroute every test-side
+        // probe on one axis onto the sibling axis's per-entry field and
+        // pass every propagation-probe test that expected only the stale
+        // axis's value. Peer of `m2_limits_key_consts_are_pairwise_distinct`
+        // (d8b8b4f) and `m2_behavior_key_consts_are_pairwise_distinct`
+        // (21fe462) on the sibling `:limits` / `:behavior` sub-slot axes.
+        let all = [
+            crate::render::M2_UPGRADE_FROM_KEY_FROM,
+            crate::render::M2_UPGRADE_FROM_KEY_INSTRUCTIONS,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "M2_UPGRADE_FROM_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn m2_upgrade_from_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `M2_UPGRADE_FROM_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores, no
+        // `kebab-case` hyphens, no `PascalCase` leading capital, no
+        // whitespace / colons / dots) — the canonical shape the
+        // `#[serde(rename_all = "camelCase")]` derive produces on
+        // `UpgradeFromEntry`. A future flip to a non-camelCase attribute
+        // at the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `upgrade_from_entry_serde_keys_match_lifted_m2_upgrade_from_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer of `m2_limits_key_consts_are_lower_camel_case_shape`
+        // (d8b8b4f) and `m2_behavior_key_consts_are_lower_camel_case_shape`
+        // (21fe462) on the sibling `:limits` / `:behavior` sub-slot axes.
+        for key in [
+            crate::render::M2_UPGRADE_FROM_KEY_FROM,
+            crate::render::M2_UPGRADE_FROM_KEY_INSTRUCTIONS,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "M2_UPGRADE_FROM_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "M2_UPGRADE_FROM_KEY_* must lead with an ASCII-lowercase \
+                 byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "M2_UPGRADE_FROM_KEY_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
 }
