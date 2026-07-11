@@ -11968,6 +11968,177 @@ pub const FLUX_HELMRELEASE_KEY_RETRIES: &str = "retries";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_HELMRELEASE_KEY_REMEDIATION: &str = "remediation";
 
+/// Canonical Flux v2 `HelmRelease.spec.install` per-CR helm-action-phase
+/// discriminator parent-container-axis-key every `caixa-flux`-emitted
+/// `helmrelease.yaml` document nests the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key
+/// under, at the first-time chart apply per-CR phase the Flux v2 helm-
+/// controller reconciles when the emitted `HelmRelease` CR first lands in
+/// the cluster. Pairs with the sibling [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+/// per-CR helm-action-phase discriminator parent-container-axis-key on
+/// the peer per-CR upgrade-path phase the helm-controller reconciles on
+/// every subsequent per-version chart re-apply the same CR gates. The
+/// Flux v2 helm-controller-side per-CR phase-dispatch loop keys off this
+/// exact parent-container-axis-key to select the install-path per-CR
+/// action pipeline (`createNamespace` seeder, first-time chart values
+/// merge, `spec.install.remediation.retries` retry-cap ceiling under the
+/// nested [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container), so drift
+/// on this axis is exactly as load-bearing as drift on the nested
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-axis-key it hosts
+/// (a `"initialize"` / `"apply"` / `"create"` / `"first-run"` typo at
+/// the production-code call site silently strips the entire install-path
+/// per-CR phase block from the emitted per-CR document — the helm-
+/// controller then falls back to the Flux v2 upstream defaults for the
+/// whole install-path phase surface rather than the substrate's chosen
+/// per-CR install-path knob-set — `createNamespace` never fires, the
+/// per-CR retry-cap ceiling silently drops off the emitted document,
+/// with no diagnostic naming the phase-discriminator-drift root cause
+/// far from the source `caixa.lisp` / the renderer's format-string
+/// template).
+///
+/// The single source of truth every rendered Flux bundle axis that names
+/// the per-CR install-path phase parent-container reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's `spec.install` sub-
+///     block-header axis (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `helmrelease.yaml` format-string template's install-path sub-
+///     block-header nesting the `createNamespace: true` seeder + the
+///     sibling [`FLUX_HELMRELEASE_KEY_REMEDIATION`]-container-keyed
+///     retry-cap sub-block);
+///   - the test-fixture navigation site in caixa-flux's `mod tests` that
+///     probes the rendered document's `.get("install")` container axis
+///     to reach the sibling [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-
+///     container (the install-path production-emit pin
+///     [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]).
+///
+/// Both the production emit site + the test-fixture navigation site name
+/// the same Flux v2 per-CR install-path helm-action-phase discriminator
+/// parent-container-axis-key and must move together on any hypothetical
+/// Flux v3 rename (upstream Flux v3 roadmap floats candidates like
+/// `initialize` / `apply` / `create` / `first-run` in the migration
+/// prose). Until this lift landed the axis carried inline `install`
+/// literals across the one production emit site (caixa-flux/src/lib.rs —
+/// the `install:` sub-block-header line inside the `cluster_bundle`
+/// `helmrelease.yaml` format-string template's per-CR install-path block)
+/// plus the one test-fixture navigation site — two occurrences of the
+/// same load-bearing Flux-v2-per-CR-install-path-phase-discriminator-
+/// parent-container-axis-key convention, drift-prone by construction.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the constant to a typed
+/// substrate-side `&'static str` on the same trajectory the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value halves of the same `(parent-container-key, sub-container-key,
+/// leaf-key, scalar-value)` per-path retry-cap declaration quartet
+/// established — extends the discipline from the sub-container-axis-key
+/// one level up to the parent-container-axis-key hosting it, so the
+/// four-level nested `spec.install.remediation.retries` declaration now
+/// resolves through four lifted `&'static str` / `u32` values. Companion
+/// to the sibling [`FLUX_HELMRELEASE_KEY_UPGRADE`] per-CR upgrade-path
+/// phase-discriminator parent-container-axis-key on the peer per-CR
+/// helm-action-phase surface — completes the per-CR helm-action-phase
+/// discriminator parent-container-axis-key pair the Flux v2 helm-
+/// controller reconciles between at first-time chart apply time
+/// (install-path phase) vs. every subsequent per-version chart re-apply
+/// (upgrade-path phase).
+///
+/// Same "the typed constant lives in one place" discipline the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key +
+/// the peer [`FLUX_KEY_SOURCE_REF`] (236ef01) / [`FLUX_KEY_CHART`] /
+/// [`FLUX_KEY_VALUES`] / [`FLUX_KEY_INTERVAL`] /
+/// [`FLUX_KEY_HEALTH_CHECKS`] per-CR container-axis-key lifts apply on
+/// the peer canonical-Flux-v2-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_KEY_INSTALL: &str = "install";
+
+/// Canonical Flux v2 `HelmRelease.spec.upgrade` per-CR helm-action-phase
+/// discriminator parent-container-axis-key every `caixa-flux`-emitted
+/// `helmrelease.yaml` document nests the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key
+/// under, at every subsequent per-version chart re-apply per-CR phase the
+/// Flux v2 helm-controller reconciles after the initial install-path
+/// phase completes. Pairs with the sibling
+/// [`FLUX_HELMRELEASE_KEY_INSTALL`] per-CR helm-action-phase discriminator
+/// parent-container-axis-key on the peer per-CR install-path phase the
+/// helm-controller reconciles at first-time chart apply. The Flux v2
+/// helm-controller-side per-CR phase-dispatch loop keys off this exact
+/// parent-container-axis-key to select the upgrade-path per-CR action
+/// pipeline (`remediateLastFailure` toggle the substrate pins to `true`
+/// on the upgrade-path per-CR sibling axis, the per-CR retry-cap ceiling
+/// under the nested [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container),
+/// so drift on this axis is exactly as load-bearing as drift on the
+/// nested [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-axis-key it
+/// hosts (a `"reapply"` / `"reconcile"` / `"update"` / `"promote"` typo
+/// at the production-code call site silently strips the entire upgrade-
+/// path per-CR phase block from the emitted per-CR document — the helm-
+/// controller then falls back to the Flux v2 upstream defaults for the
+/// whole upgrade-path phase surface rather than the substrate's chosen
+/// per-CR upgrade-path knob-set — `remediateLastFailure` never fires, the
+/// per-CR retry-cap ceiling silently drops off the emitted document, with
+/// no diagnostic naming the phase-discriminator-drift root cause far
+/// from the source `caixa.lisp` / the renderer's format-string template).
+///
+/// The single source of truth every rendered Flux bundle axis that names
+/// the per-CR upgrade-path phase parent-container reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's `spec.upgrade` sub-
+///     block-header axis (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `helmrelease.yaml` format-string template's upgrade-path sub-
+///     block-header nesting the substrate's `remediateLastFailure: true`
+///     toggle + the sibling [`FLUX_HELMRELEASE_KEY_REMEDIATION`]-
+///     container-keyed retry-cap sub-block);
+///   - the test-fixture navigation site in caixa-flux's `mod tests` that
+///     probes the rendered document's `.get("upgrade")` container axis to
+///     reach the sibling [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-
+///     container (the upgrade-path production-emit pin
+///     [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]).
+///
+/// Both the production emit site + the test-fixture navigation site name
+/// the same Flux v2 per-CR upgrade-path helm-action-phase discriminator
+/// parent-container-axis-key and must move together on any hypothetical
+/// Flux v3 rename (upstream Flux v3 roadmap floats candidates like
+/// `reapply` / `reconcile` / `update` / `promote` in the migration
+/// prose). Until this lift landed the axis carried inline `upgrade`
+/// literals across the one production emit site plus the one test-
+/// fixture navigation site — two occurrences of the same load-bearing
+/// Flux-v2-per-CR-upgrade-path-phase-discriminator-parent-container-
+/// axis-key convention, drift-prone by construction.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the constant to a typed
+/// substrate-side `&'static str` on the same trajectory the sibling
+/// [`FLUX_HELMRELEASE_KEY_INSTALL`] per-CR install-path phase-
+/// discriminator parent-container-axis-key +
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value halves of the same `(parent-container-key, sub-container-key,
+/// leaf-key, scalar-value)` per-path retry-cap declaration quartet
+/// established — pairs with the [`FLUX_HELMRELEASE_KEY_INSTALL`]
+/// mandatory-arm parent-container-axis-key to close the per-CR helm-
+/// action-phase discriminator parent-container-axis-key pair across
+/// both per-CR phases the helm-controller reconciles between (install-
+/// path at first-time chart apply, upgrade-path at every subsequent
+/// per-version chart re-apply).
+///
+/// Same "the typed constant lives in one place" discipline the sibling
+/// [`FLUX_HELMRELEASE_KEY_INSTALL`] per-CR install-path-phase-
+/// discriminator + [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-
+/// container-axis-key + the peer [`FLUX_KEY_SOURCE_REF`] (236ef01) /
+/// [`FLUX_KEY_CHART`] / [`FLUX_KEY_VALUES`] / [`FLUX_KEY_INTERVAL`] /
+/// [`FLUX_KEY_HEALTH_CHECKS`] per-CR container-axis-key lifts apply on
+/// the peer canonical-Flux-v2-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_KEY_UPGRADE: &str = "upgrade";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -16089,6 +16260,152 @@ mod tests {
              must be a valid DNS-1123 label — every K8s apiserver-side \
              OpenAPI-schema-per-field-key axis is a subset of that grammar, \
              and the Flux v2 `HelmRelease` CRD schema is no exception"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_install_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `HelmRelease.spec.install` per-CR helm-
+        // action-phase discriminator parent-container-axis-key the
+        // rendered `helmrelease.yaml` document mounts its per-CR first-
+        // time chart apply phase-block under. The string is part of the
+        // cluster-side contract with the upstream Flux v2 helm-
+        // controller — the helm-controller's per-CR phase-dispatch loop
+        // reaches the install-path phase block through this exact parent-
+        // container axis; a drifted parent-container-key silently strips
+        // the entire install-path phase block from the emitted per-CR
+        // document, leaving the helm-controller to fall back to the Flux
+        // v2 upstream defaults for the whole install-path phase surface
+        // rather than the substrate's chosen per-CR install-path knob-set
+        // (the `createNamespace` seeder never fires, the per-CR retry-cap
+        // ceiling silently drops off the emitted document), with no
+        // diagnostic naming the phase-discriminator-drift root cause.
+        // Changing it is a coordinated Flux v3 CRD-schema-rebrand
+        // migration alongside the upstream `helm-controller` deprecation
+        // cycle (candidates like `initialize` / `apply` / `create` /
+        // `first-run` that upstream Flux v3 roadmap floats in the
+        // migration prose), not an incidental edit. Peer to
+        // `flux_helmrelease_key_upgrade_pins_canonical_value` on the
+        // sibling per-CR upgrade-path phase-discriminator parent-
+        // container-axis-key half of the same per-CR helm-action-phase
+        // discriminator parent-container-axis-key pair + the sibling
+        // [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-axis-key
+        // hosted beneath both parent-container-axis-keys.
+        assert_eq!(FLUX_HELMRELEASE_KEY_INSTALL, "install");
+    }
+
+    #[test]
+    fn flux_helmrelease_key_install_is_a_valid_dns_1123_label() {
+        // Cross-axis invariant: every Flux v2 `HelmRelease` CRD-schema
+        // sub-block-header key resolves through the K8s apiserver's
+        // OpenAPI-schema-side identifier grammar, whose per-field key
+        // axis is a subset of the DNS-1123-label grammar (lowercase
+        // alphanumerics + hyphens, non-empty, ≤63 bytes). Pinning the
+        // canonical `install` value against the typed
+        // [`is_dns_1123_label`] floor rules out grammar drift on this
+        // lift at caixa-core build time — a future rebrand landing a
+        // value outside the DNS-1123-label subset (a leading digit, an
+        // underscore, an uppercase byte, a `.` byte, or empty) would
+        // surface here on the canonical lift, before any renderer
+        // consumes the value and before any per-caixa Flux v2 CR reaches
+        // the apiserver's OpenAPI-schema-side per-field admission gate.
+        // Same shape as `flux_helmrelease_key_remediation_is_a_valid_
+        // dns_1123_label` on the sibling per-CR sub-container-axis-key
+        // grammar-floor surface.
+        assert!(
+            is_dns_1123_label(FLUX_HELMRELEASE_KEY_INSTALL).is_ok(),
+            "FLUX_HELMRELEASE_KEY_INSTALL {FLUX_HELMRELEASE_KEY_INSTALL:?} \
+             must be a valid DNS-1123 label — every K8s apiserver-side \
+             OpenAPI-schema-per-field-key axis is a subset of that grammar, \
+             and the Flux v2 `HelmRelease` CRD schema is no exception"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_upgrade_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `HelmRelease.spec.upgrade` per-CR helm-
+        // action-phase discriminator parent-container-axis-key the
+        // rendered `helmrelease.yaml` document mounts its per-CR
+        // subsequent-per-version chart re-apply phase-block under. The
+        // string is part of the cluster-side contract with the upstream
+        // Flux v2 helm-controller — the helm-controller's per-CR phase-
+        // dispatch loop reaches the upgrade-path phase block through this
+        // exact parent-container axis on every per-version chart re-apply
+        // after the initial install-path phase completes; a drifted
+        // parent-container-key silently strips the entire upgrade-path
+        // phase block from the emitted per-CR document, leaving the
+        // helm-controller to fall back to the Flux v2 upstream defaults
+        // for the whole upgrade-path phase surface rather than the
+        // substrate's chosen per-CR upgrade-path knob-set (the
+        // `remediateLastFailure` toggle never fires, the per-CR retry-
+        // cap ceiling silently drops off the emitted document), with no
+        // diagnostic naming the phase-discriminator-drift root cause.
+        // Changing it is a coordinated Flux v3 CRD-schema-rebrand
+        // migration alongside the upstream `helm-controller` deprecation
+        // cycle (candidates like `reapply` / `reconcile` / `update` /
+        // `promote` that upstream Flux v3 roadmap floats in the
+        // migration prose), not an incidental edit. Peer to
+        // `flux_helmrelease_key_install_pins_canonical_value` on the
+        // sibling per-CR install-path phase-discriminator parent-
+        // container-axis-key half of the same per-CR helm-action-phase
+        // discriminator parent-container-axis-key pair.
+        assert_eq!(FLUX_HELMRELEASE_KEY_UPGRADE, "upgrade");
+    }
+
+    #[test]
+    fn flux_helmrelease_key_upgrade_is_a_valid_dns_1123_label() {
+        // Cross-axis invariant: every Flux v2 `HelmRelease` CRD-schema
+        // sub-block-header key resolves through the K8s apiserver's
+        // OpenAPI-schema-side identifier grammar, whose per-field key
+        // axis is a subset of the DNS-1123-label grammar. Pinning the
+        // canonical `upgrade` value against the typed
+        // [`is_dns_1123_label`] floor rules out grammar drift on this
+        // lift at caixa-core build time. Peer to
+        // `flux_helmrelease_key_install_is_a_valid_dns_1123_label` on
+        // the sibling install-path phase-discriminator grammar-floor
+        // surface + `flux_helmrelease_key_remediation_is_a_valid_dns_
+        // 1123_label` on the sibling per-CR sub-container-axis-key
+        // grammar-floor surface — same DNS-1123-label subset governs
+        // every apiserver-side per-field-key axis, so every peer per-CR
+        // sub-block-header lift carries the same grammar-floor pin.
+        assert!(
+            is_dns_1123_label(FLUX_HELMRELEASE_KEY_UPGRADE).is_ok(),
+            "FLUX_HELMRELEASE_KEY_UPGRADE {FLUX_HELMRELEASE_KEY_UPGRADE:?} \
+             must be a valid DNS-1123 label — every K8s apiserver-side \
+             OpenAPI-schema-per-field-key axis is a subset of that grammar, \
+             and the Flux v2 `HelmRelease` CRD schema is no exception"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_install_and_upgrade_stay_independent_axes() {
+        // The two per-CR helm-action-phase discriminator parent-
+        // container-axis-keys name distinct helm-controller-side phases
+        // — install-path first-time chart apply vs upgrade-path per-
+        // version chart re-apply — even though both host the same
+        // sibling [`FLUX_HELMRELEASE_KEY_REMEDIATION`] sub-container-
+        // axis-key beneath them. Pin that the two consts carry distinct
+        // byte-sequences so a future rebrand on either arm can't
+        // silently coalesce onto the peer arm (a
+        // `FLUX_HELMRELEASE_KEY_INSTALL = "upgrade"` typo would flip
+        // every substrate-side per-CR first-time chart apply phase
+        // block onto the upgrade-path phase key silently — the install-
+        // path becomes the upgrade-path at every emit site, and the
+        // helm-controller reconciles both phase blocks under the same
+        // parent-container-axis-key, silently dropping either the
+        // install-path or the upgrade-path per-CR knob-set with no
+        // diagnostic naming the phase-discriminator-coalesce root
+        // cause). The per-CR helm-action-phase discriminator pair must
+        // always resolve to distinct emitted parent-container-keys.
+        assert_ne!(
+            FLUX_HELMRELEASE_KEY_INSTALL, FLUX_HELMRELEASE_KEY_UPGRADE,
+            "the per-CR install-path and upgrade-path helm-action-phase \
+             discriminator parent-container-axis-keys must remain byte-\
+             distinct — a coalesce onto one value silently drops either \
+             the install-path or the upgrade-path per-CR knob-set from \
+             every emitted `HelmRelease` document"
         );
     }
 
