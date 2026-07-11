@@ -12241,6 +12241,117 @@ pub const FLUX_HELMRELEASE_KEY_UPGRADE: &str = "upgrade";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE: &str = "remediateLastFailure";
 
+/// Canonical Flux v2 `HelmRelease.spec.install.createNamespace` install-path-
+/// only per-CR namespace-seeder-toggle leaf-scalar-key every `caixa-flux`-
+/// emitted `helmrelease.yaml` document seeds to `true` under the sibling
+/// [`FLUX_HELMRELEASE_KEY_INSTALL`] per-CR install-path phase-discriminator
+/// parent-container-axis-key. Peer to the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] upgrade-path-only per-CR
+/// remediation-toggle leaf-scalar-key at the co-resident per-CR install/
+/// upgrade phase-discriminator parent-container position — closes the
+/// `spec.{install.createNamespace, upgrade.remediation.remediateLastFailure}`
+/// per-path per-CR phase-specific toggle leaf-scalar-key pair the substrate
+/// seeds into every emitted per-caixa `HelmRelease` CR: `createNamespace`
+/// gates the "the Flux v2 helm-controller creates the target namespace
+/// itself if the emitted `HelmRelease.metadata.namespace` (or its
+/// `spec.targetNamespace` override) does not already exist" install-path
+/// pre-apply seeder pipeline, while `remediateLastFailure` gates the
+/// upgrade-path post-retry-exhaustion rollback pipeline. The Flux v2 helm-
+/// controller-side per-CR install-path pre-apply loop keys off this exact
+/// leaf to decide whether to first materialize the target namespace or
+/// refuse the first-time chart apply when the target namespace does not
+/// yet exist (`false`); drift on this axis silently drops the substrate's
+/// chosen first-apply namespace-seeder semantic from every emitted per-
+/// caixa `HelmRelease` document (the helm-controller then refuses every
+/// first-time per-caixa chart apply against a fresh cluster whose target
+/// namespace has not been pre-provisioned by an out-of-band pipeline —
+/// the substrate's "no per-caixa Servico apply is blocked on manual
+/// namespace preprovisioning" MESH-COMPOSITION.md §V install-path-fluency
+/// guarantee silently regresses, with no diagnostic naming the seeder-
+/// toggle-drift root cause far from the source `caixa.lisp` / the
+/// renderer's format-string template).
+///
+/// Note the axis is asymmetric across the peer upgrade-path per-CR phase
+/// block: the substrate emits the toggle only under `spec.install` and not
+/// under `spec.upgrade` because the Flux v2 helm-controller's upgrade-path
+/// per-CR reconcile loop presupposes the target namespace already carries
+/// the prior release's resources (the upgrade-path is by definition a
+/// re-apply against an already-materialized namespace whose pre-apply
+/// seeding was resolved at the sibling install-path phase's first-time
+/// apply), so the "seed the target namespace if it does not already exist"
+/// pre-apply behavior the toggle gates is well-defined only on the
+/// install-path where the target namespace's existence is not yet
+/// established. This is the mirror of the peer sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] axis, which is
+/// upgrade-path-only for the mirror reason (the "roll back to the prior
+/// success" post-retry-exhaustion behavior is well-defined only on the
+/// upgrade-path where a prior success exists) — the two per-CR phase-
+/// specific toggle leaf-scalar-keys sit under mirror-symmetric
+/// parent-container-axis-keys and together close the install/upgrade
+/// phase-block per-CR-phase-specific toggle leaf-scalar-key pair.
+///
+/// The single source of truth every rendered Flux bundle axis that names
+/// the install-path per-CR namespace-seeder-toggle leaf reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's
+///     `spec.install.createNamespace` leaf-scalar-key axis
+///     (caixa-flux/src/lib.rs — the `cluster_bundle` `helmrelease.yaml`
+///     format-string template's install-path namespace-seeder-toggle leaf
+///     under the [`FLUX_HELMRELEASE_KEY_INSTALL`]-container-keyed sub-block,
+///     threading the same `&'static str` through a new
+///     `{create_namespace_key}` named-arg interpolation);
+///   - the one test-fixture navigation site in caixa-flux's `mod tests`
+///     that probes the rendered document's `.get("createNamespace")` leaf
+///     axis to pin the substrate's canonical `true` seed
+///     (the [`cluster_bundle_helmrelease_install_create_namespace_pins_lifted_true`]
+///     install-path production-emit pin).
+///
+/// Both the production emit site + the one test-fixture navigation site
+/// name the same Flux v2 per-CR install-path namespace-seeder-toggle leaf-
+/// scalar-key and must move together on any hypothetical Flux v3 rename
+/// (upstream Flux v3 roadmap floats candidates like `createTargetNamespace`
+/// / `seedNamespace` / `provisionNamespace` in the migration prose). Until
+/// this lift landed the axis carried inline `createNamespace` literals
+/// across the one production emit site (caixa-flux/src/lib.rs — the
+/// `createNamespace: true` leaf inside the `cluster_bundle` `helmrelease
+/// .yaml` format-string template's per-CR install-path sub-block) — the
+/// sole occurrence of the same load-bearing Flux-v2-per-CR-install-path-
+/// namespace-seeder-toggle-leaf-scalar-key convention, drift-prone by
+/// construction ahead of the second occurrence the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `HelmRelease` synthesis will surface, where a per-renderer local
+/// `pub const FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE: &str = "…"` (the
+/// canonical drift footgun where a sibling local `pub const` could happen
+/// to carry the same string at the source while pointing at a different
+/// `&'static` allocation) would let the two renderers silently disagree on
+/// the install-path namespace-seeder semantic.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the constant to a typed
+/// substrate-side `&'static str` in advance of the second occurrence the
+/// M4 materializer will surface — so the second consumer inherits the
+/// canonical install-path per-CR namespace-seeder-toggle leaf-scalar-key
+/// by construction without opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] (96581b7) upgrade-path-
+/// only per-CR remediation-toggle leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key +
+/// [`FLUX_HELMRELEASE_KEY_INSTALL`] / [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+/// (7767c26) parent-container-axis-key pair +
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-value
+/// halves of the per-path per-CR HelmRelease spec surface established —
+/// closes the mirror install-path-only per-CR namespace-seeder-toggle
+/// leaf-scalar-key half at the `spec.install.createNamespace` position the
+/// peer `spec.upgrade.remediation.remediateLastFailure` upgrade-path-only
+/// per-CR remediation-toggle leaf mirrors.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE: &str = "createNamespace";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -16577,6 +16688,77 @@ mod tests {
              byte-distinct — a coalesce onto one value silently rebinds \
              the post-retry-exhaustion rollback semantic onto the retry-\
              cap ceiling axis at every emit site"
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_create_namespace_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `HelmRelease.spec.install.createNamespace`
+        // install-path-only per-CR namespace-seeder-toggle leaf-scalar-key
+        // the substrate's per-caixa `cluster_bundle` renderer seeds to
+        // `true` into every emitted per-caixa `helmrelease.yaml` document
+        // under the sibling [`FLUX_HELMRELEASE_KEY_INSTALL`] per-CR
+        // install-path phase-discriminator parent-container-axis-key. The
+        // string is part of the cluster-side contract with the upstream
+        // Flux v2 helm-controller — the controller's per-CR install-path
+        // pre-apply loop reaches the target-namespace-seeder toggle
+        // through this exact leaf; a drifted leaf-scalar-key silently
+        // strips the substrate's chosen first-apply namespace-seeder
+        // semantic from every emitted per-caixa `HelmRelease` document,
+        // leaving the helm-controller to refuse every first-time per-caixa
+        // chart apply against a fresh cluster whose target namespace has
+        // not been pre-provisioned by an out-of-band pipeline the
+        // substrate's "no per-caixa Servico apply is blocked on manual
+        // namespace preprovisioning" MESH-COMPOSITION.md §V install-path-
+        // fluency guarantee mandates, with no diagnostic naming the
+        // seeder-toggle-drift root cause. Changing it is a coordinated
+        // Flux v3 CRD-schema-rebrand migration alongside the upstream
+        // `helm-controller` deprecation cycle (candidates like
+        // `createTargetNamespace` / `seedNamespace` / `provisionNamespace`
+        // that upstream Flux v3 roadmap floats in the migration prose),
+        // not an incidental edit. Peer to
+        // `flux_helmrelease_key_remediate_last_failure_pins_canonical_value`
+        // on the sibling mirror-symmetric upgrade-path-only per-CR
+        // remediation-toggle leaf-scalar-key half of the same install/
+        // upgrade per-CR phase-specific toggle leaf-scalar-key pair.
+        assert_eq!(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE, "createNamespace");
+    }
+
+    #[test]
+    fn flux_helmrelease_key_create_namespace_stays_independent_of_remediate_last_failure() {
+        // The per-CR install/upgrade phase blocks host two mirror-symmetric
+        // phase-specific toggle leaf-scalar-key axes: the install-path-only
+        // per-CR namespace-seeder-toggle
+        // [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] under the sibling
+        // [`FLUX_HELMRELEASE_KEY_INSTALL`] parent-container-axis-key (this
+        // lift) and the upgrade-path-only per-CR remediation-toggle
+        // [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] (96581b7) under the
+        // sibling [`FLUX_HELMRELEASE_KEY_UPGRADE`] parent-container-axis-key.
+        // Pin that the two consts carry byte-distinct sequences so a future
+        // rebrand on either arm can't silently coalesce onto the peer arm
+        // (a `FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE = "remediateLastFailure"`
+        // typo would silently rebind the install-path namespace-seeder
+        // toggle onto the upgrade-path per-CR remediation-toggle leaf at
+        // every emit site — the helm-controller would then read the
+        // substrate's `true` seed as a post-retry-exhaustion rollback opt-
+        // in on the upgrade-path per-CR remediation axis instead of the
+        // pre-apply namespace-seeder toggle, silently dropping the first-
+        // apply namespace-seeder semantic entirely and misrouting the
+        // install-path opt-in onto an upgrade-path axis where it never
+        // fires with no diagnostic naming the leaf-key-coalesce root
+        // cause). The install/upgrade per-CR phase-specific toggle leaf-
+        // scalar-key pair must always resolve to distinct emitted leaf-
+        // keys under mirror-symmetric parent-container-axis-keys.
+        assert_ne!(
+            FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE, FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+            "the install-path per-CR namespace-seeder-toggle leaf-scalar-\
+             key and the upgrade-path per-CR remediation-toggle leaf-\
+             scalar-key must remain byte-distinct — a coalesce onto one \
+             value silently rebinds one phase's opt-in toggle onto the \
+             peer phase's opt-in-toggle axis at every emit site, dropping \
+             the phase-specific pre-apply / post-retry-exhaustion semantic \
+             the substrate seeds on the coalesced arm"
         );
     }
 
