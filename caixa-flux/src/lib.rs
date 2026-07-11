@@ -245,6 +245,91 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_RETRIES;
 /// retry-cap declaration onto the sub-container-axis-key one level up.
 pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATION;
 
+/// Canonical Flux v2 `HelmRelease.spec.install` per-CR helm-action-phase
+/// discriminator parent-container-axis-key — re-export of the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_KEY_INSTALL`] so the Flux v2 helm-
+/// controller-side per-CR install-path phase-discriminator parent-
+/// container-axis-key lives in exactly one place across every caixa
+/// renderer. Pairs with the sibling [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+/// per-CR helm-action-phase discriminator parent-container-axis-key on
+/// the peer per-CR upgrade-path phase. Peer to the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key
+/// hosted beneath both parent-container-axis-keys +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value halves of the same `(parent-container-key, sub-container-key,
+/// leaf-key, scalar-value)` per-path retry-cap declaration quartet —
+/// closes the parent-container-axis-key axis on the same per-path retry-
+/// cap declaration quartet, so all four halves now live in one place.
+/// One production emit site (this crate's [`cluster_bundle`]
+/// `helmrelease.yaml` format-string template's install-path sub-block-
+/// header, threading the same `&'static str` through a new
+/// `{install_key}` named-arg interpolation) plus one test-fixture
+/// navigation site in `mod tests` (the install-path
+/// [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+/// pin's `.get(FLUX_HELMRELEASE_KEY_INSTALL)` probe) now consult the
+/// same `&'static str`. Until this lift landed the axis carried two
+/// inline `install` literals across the one production emit site and
+/// the one test-fixture navigation site; a future hypothetical Flux v3
+/// rename (`initialize` / `apply` / `create` / `first-run`) on the
+/// production-emit site without a coordinated edit on the sibling
+/// navigation site would have silently stripped the whole install-path
+/// per-CR phase block from the emitted `HelmRelease` CR, letting the
+/// helm-controller fall back to the Flux v2 upstream defaults for the
+/// whole install-path phase surface (the `createNamespace: true` seeder
+/// never fires, the per-CR retry-cap ceiling silently drops off the
+/// emitted document) rather than the substrate's chosen per-CR install-
+/// path knob-set with no diagnostic naming the phase-discriminator-drift
+/// root cause. Same shape as the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key + the peer
+/// [`FLUX_KEY_SOURCE_REF`] (236ef01) / [`FLUX_KEY_CHART`] /
+/// [`FLUX_KEY_VALUES`] / [`FLUX_KEY_INTERVAL`] /
+/// [`FLUX_KEY_HEALTH_CHECKS`] container-axis-key lifts on the peer per-
+/// CR container-axis-key surface — extends the discipline from the sub-
+/// container-axis-key one level up onto the parent-container-axis-key
+/// hosting it, so the four-level nested `spec.install.remediation
+/// .retries` declaration now resolves through four lifted `&'static str`
+/// / `u32` values.
+pub use caixa_core::FLUX_HELMRELEASE_KEY_INSTALL;
+
+/// Canonical Flux v2 `HelmRelease.spec.upgrade` per-CR helm-action-phase
+/// discriminator parent-container-axis-key — re-export of the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_KEY_UPGRADE`] so the Flux v2 helm-
+/// controller-side per-CR upgrade-path phase-discriminator parent-
+/// container-axis-key lives in exactly one place across every caixa
+/// renderer. Pairs with the sibling [`FLUX_HELMRELEASE_KEY_INSTALL`]
+/// per-CR helm-action-phase discriminator parent-container-axis-key on
+/// the peer per-CR install-path phase. Peer to the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key
+/// hosted beneath both parent-container-axis-keys. One production emit
+/// site (this crate's [`cluster_bundle`] `helmrelease.yaml` format-
+/// string template's upgrade-path sub-block-header, threading the same
+/// `&'static str` through a new `{upgrade_key}` named-arg interpolation)
+/// plus one test-fixture navigation site in `mod tests` (the upgrade-
+/// path
+/// [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]
+/// pin's `.get(FLUX_HELMRELEASE_KEY_UPGRADE)` probe) now consult the
+/// same `&'static str`. Until this lift landed the axis carried two
+/// inline `upgrade` literals across the one production emit site and
+/// the one test-fixture navigation site; a future hypothetical Flux v3
+/// rename (`reapply` / `reconcile` / `update` / `promote`) on the
+/// production-emit site without a coordinated edit on the sibling
+/// navigation site would have silently stripped the whole upgrade-path
+/// per-CR phase block from the emitted `HelmRelease` CR, letting the
+/// helm-controller fall back to the Flux v2 upstream defaults for the
+/// whole upgrade-path phase surface (the substrate's
+/// `remediateLastFailure: true` toggle never fires, the per-CR retry-
+/// cap ceiling silently drops off the emitted document) rather than the
+/// substrate's chosen per-CR upgrade-path knob-set with no diagnostic
+/// naming the phase-discriminator-drift root cause. Same shape as the
+/// sibling [`FLUX_HELMRELEASE_KEY_INSTALL`] parent-container-axis-key
+/// on the peer per-CR install-path phase — pairs with the install-path
+/// re-export to close the per-CR helm-action-phase discriminator
+/// parent-container-axis-key pair across both per-CR phases the helm-
+/// controller reconciles between.
+pub use caixa_core::FLUX_HELMRELEASE_KEY_UPGRADE;
+
 /// Canonical FluxCD installation namespace — re-export of the lifted
 /// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
 /// string lives in exactly one place across every consumer of the
@@ -1400,11 +1485,11 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                  kind: {source_kind}\n        \
                  name: {name}\n        \
                  namespace: {namespace}\n  \
-           install:\n    \
+           {install_key}:\n    \
              createNamespace: true\n    \
              {remediation_key}:\n      \
                {retries_key}: {retries_default}\n  \
-           upgrade:\n    \
+           {upgrade_key}:\n    \
              {remediation_key}:\n      \
                {retries_key}: {retries_default}\n      \
                remediateLastFailure: true\n  \
@@ -1427,6 +1512,8 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         retries_default = FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT,
         retries_key = FLUX_HELMRELEASE_KEY_RETRIES,
         remediation_key = FLUX_HELMRELEASE_KEY_REMEDIATION,
+        install_key = FLUX_HELMRELEASE_KEY_INSTALL,
+        upgrade_key = FLUX_HELMRELEASE_KEY_UPGRADE,
     );
 
     let kustomization = format!(
@@ -1785,6 +1872,114 @@ spec:
     }
 
     #[test]
+    fn flux_helmrelease_key_install_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_HELMRELEASE_KEY_INSTALL`
+        // is the single source of truth for the Flux v2 per-CR install-
+        // path helm-action-phase discriminator parent-container-axis-key
+        // baked into the `install:` sub-block-header line of the
+        // [`cluster_bundle`] `helmrelease.yaml` format-string template
+        // (threading the same `&'static str` through the new
+        // `{install_key}` named-arg interpolation) plus the one test-
+        // fixture navigation site in `mod tests` that probes the
+        // rendered document at `.get(FLUX_HELMRELEASE_KEY_INSTALL)`. Pin
+        // the equality (and the static-data identity, peer with the
+        // sibling
+        // [`flux_helmrelease_key_remediation_re_export_points_at_caixa_core_canonical`]
+        // pin on the sub-container-axis-key half of the same
+        // `(parent-container-key, sub-container-key, leaf-key, scalar-
+        // value)` per-path retry-cap declaration quartet) so any local
+        // re-introduction of a sibling `pub const
+        // FLUX_HELMRELEASE_KEY_INSTALL: &str = "…"` (the canonical drift
+        // footgun this lift closes — the load-bearing Flux-v2-helm-
+        // controller-side per-CR install-path phase-discriminator
+        // parent-container-axis-key across two prior inlined occurrences —
+        // one production emit site in the `cluster_bundle`
+        // `helmrelease.yaml` format-string template plus one test-
+        // fixture navigation site, lifted to one re-export at the caixa-
+        // core boundary) is a build-time test failure naming the
+        // offending drift, not a silent apply-time symptom (a stripped
+        // whole-install-path per-CR phase block letting the helm-
+        // controller fall back to the Flux v2 upstream defaults for the
+        // whole install-path phase surface).
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_HELMRELEASE_KEY_INSTALL",
+            FLUX_HELMRELEASE_KEY_INSTALL,
+            caixa_core::FLUX_HELMRELEASE_KEY_INSTALL,
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_install_pins_canonical_install_string() {
+        // Bridge-arm pin: the lifted [`FLUX_HELMRELEASE_KEY_INSTALL`]
+        // constant resolves to the canonical `"install"` string today,
+        // and the rendered Flux v2 `HelmRelease` per-CR install-path
+        // phase sub-block-header must spell it out verbatim. Pin the
+        // literal here (peer with the sibling
+        // [`flux_helmrelease_key_remediation_pins_canonical_remediation_string`]-shape
+        // canonical-default arm on the sibling per-CR sub-container-
+        // axis-key surface + the sibling
+        // [`flux_helmrelease_key_retries_pins_canonical_retries_string`]-shape
+        // canonical-default arm on the sibling per-CR leaf-scalar-key
+        // surface) so a future rebrand of the lifted constant (Flux v3
+        // rename like `initialize` / `apply` / `create` / `first-run` —
+        // upstream Flux v3 roadmap candidates that would land the same
+        // per-CR first-time chart apply phase semantics under a
+        // different parent-container-axis-key) surfaces here as a
+        // coordinated edit-point.
+        assert_eq!(FLUX_HELMRELEASE_KEY_INSTALL, "install");
+    }
+
+    #[test]
+    fn flux_helmrelease_key_upgrade_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_HELMRELEASE_KEY_UPGRADE`
+        // is the single source of truth for the Flux v2 per-CR upgrade-
+        // path helm-action-phase discriminator parent-container-axis-key
+        // baked into the `upgrade:` sub-block-header line of the
+        // [`cluster_bundle`] `helmrelease.yaml` format-string template
+        // (threading the same `&'static str` through the new
+        // `{upgrade_key}` named-arg interpolation) plus the one test-
+        // fixture navigation site in `mod tests` that probes the
+        // rendered document at `.get(FLUX_HELMRELEASE_KEY_UPGRADE)`. Pin
+        // the equality (and the static-data identity, peer with the
+        // sibling
+        // [`flux_helmrelease_key_install_re_export_points_at_caixa_core_canonical`]
+        // pin on the peer install-path phase-discriminator half of the
+        // same per-CR helm-action-phase discriminator parent-container-
+        // axis-key pair) so any local re-introduction of a sibling
+        // `pub const FLUX_HELMRELEASE_KEY_UPGRADE: &str = "…"` is a
+        // build-time test failure naming the offending drift, not a
+        // silent apply-time symptom (a stripped whole-upgrade-path per-
+        // CR phase block letting the helm-controller fall back to the
+        // Flux v2 upstream defaults for the whole upgrade-path phase
+        // surface, silently dropping the substrate's
+        // `remediateLastFailure: true` toggle + the per-CR retry-cap
+        // ceiling from every per-version chart re-apply).
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_HELMRELEASE_KEY_UPGRADE",
+            FLUX_HELMRELEASE_KEY_UPGRADE,
+            caixa_core::FLUX_HELMRELEASE_KEY_UPGRADE,
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_key_upgrade_pins_canonical_upgrade_string() {
+        // Bridge-arm pin: the lifted [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+        // constant resolves to the canonical `"upgrade"` string today,
+        // and the rendered Flux v2 `HelmRelease` per-CR upgrade-path
+        // phase sub-block-header must spell it out verbatim. Pin the
+        // literal here (peer with the sibling
+        // [`flux_helmrelease_key_install_pins_canonical_install_string`]-shape
+        // canonical-default arm on the peer per-CR install-path phase-
+        // discriminator surface) so a future rebrand of the lifted
+        // constant (Flux v3 rename like `reapply` / `reconcile` /
+        // `update` / `promote` — upstream Flux v3 roadmap candidates
+        // that would land the same per-CR per-version chart re-apply
+        // phase semantics under a different parent-container-axis-key)
+        // surfaces here as a coordinated edit-point.
+        assert_eq!(FLUX_HELMRELEASE_KEY_UPGRADE, "upgrade");
+    }
+
+    #[test]
     fn flux_helmrelease_key_retries_pins_canonical_retries_string() {
         // Bridge-arm pin: the lifted [`FLUX_HELMRELEASE_KEY_RETRIES`]
         // constant resolves to the canonical `"retries"` string today,
@@ -1839,7 +2034,7 @@ spec:
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let install_retries = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("install"))
+            .and_then(|s| s.get(FLUX_HELMRELEASE_KEY_INSTALL))
             .and_then(|i| i.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_RETRIES))
             .and_then(|v| v.as_u64())
@@ -1898,7 +2093,7 @@ spec:
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
         let upgrade_retries = parsed
             .get(KUBE_KEY_SPEC)
-            .and_then(|s| s.get("upgrade"))
+            .and_then(|s| s.get(FLUX_HELMRELEASE_KEY_UPGRADE))
             .and_then(|u| u.get(FLUX_HELMRELEASE_KEY_REMEDIATION))
             .and_then(|r| r.get(FLUX_HELMRELEASE_KEY_RETRIES))
             .and_then(|v| v.as_u64())
