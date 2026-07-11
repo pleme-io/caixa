@@ -423,6 +423,56 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE;
 /// position mirroring the peer's `spec.upgrade.remediation.*` position.
 pub use caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE;
 
+/// Canonical Flux v2 `Kustomization.spec.prune` per-CR garbage-collection-
+/// toggle leaf-scalar-key — re-export of the canonical
+/// [`caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE`] so the Flux v2 kustomize-
+/// controller-side per-CR garbage-collection-toggle leaf-scalar-key lives
+/// in exactly one place across every caixa renderer. Peer to the sibling
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] (ba9ab8b) install-path-only
+/// per-CR namespace-seeder-toggle leaf-scalar-key on the co-resident
+/// per-caixa `HelmRelease` CR — extends the per-CR-toggle leaf-scalar-key
+/// discipline from the co-resident per-caixa `HelmRelease` CR spec surface
+/// onto the co-resident per-caixa `Kustomization` CR spec surface at the
+/// mirror-symmetric top-level `spec.prune` position. One production emit
+/// site (this crate's [`cluster_bundle`] `kustomization.yaml` format-
+/// string template's per-CR garbage-collection-toggle leaf under the
+/// top-level `spec` position, threading the same `&'static str` through a
+/// new `{prune_key}` named-arg interpolation) plus one test-fixture
+/// navigation site in `mod tests` (the per-CR
+/// [`cluster_bundle_kustomization_prune_pins_lifted_true`] pin's
+/// `.get(FLUX_KUSTOMIZATION_KEY_PRUNE)` probe) now consult the same
+/// `&'static str`. Until this lift landed the axis carried the load-
+/// bearing `prune` bytes inline at the one production emit site; a
+/// future hypothetical Flux v3 rename (`garbageCollect` / `sweep` /
+/// `pruneOrphaned` / `deleteOrphans`) on the production-emit site
+/// without a coordinated edit on every per-renderer consumer the
+/// absorption roadmap surfaces (the M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR materializer's per-Aplicacao `Kustomization` synthesis) would have
+/// silently dropped the substrate's chosen sweep-what-you-removed
+/// semantic from every emitted per-caixa `Kustomization` document — the
+/// kustomize-controller would then leave every per-caixa resource the
+/// source manifest set previously reconciled but no longer carries
+/// dangling in the cluster the substrate's "the cluster's per-caixa live
+/// state converges to the caixa's tatara-lisp source-of-truth on every
+/// reconcile — resources the source no longer carries are swept by the
+/// kustomize-controller, not left dangling" CAIXA-SDLC.md §V author-to-
+/// live-convergence guarantee mandates, with no diagnostic naming the
+/// toggle-drift root cause far from the source caixa.lisp / the
+/// renderer's format-string template. Same shape as the sibling
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] (ba9ab8b) install-path-only
+/// per-CR namespace-seeder-toggle leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] (96581b7) upgrade-
+/// path-only per-CR remediation-toggle leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key + peer
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key
+/// + [`FLUX_HELMRELEASE_KEY_INSTALL`] / [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+/// (7767c26) parent-container-axis-key pair lifts on the peer per-CR
+/// HelmRelease-spec surface — extends the discipline from the co-
+/// resident per-`HelmRelease`-CR spec surface onto the co-resident per-
+/// `Kustomization`-CR spec surface at the mirror-symmetric top-level
+/// `spec.prune` position.
+pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE;
+
 /// Canonical FluxCD installation namespace — re-export of the lifted
 /// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
 /// string lives in exactly one place across every consumer of the
@@ -1622,7 +1672,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            namespace: {flux_system}\n\
          spec:\n  \
            {interval_key}: {interval}\n  \
-           prune: true\n  \
+           {prune_key}: true\n  \
            {source_ref_key}:\n    \
              kind: {source_kind}\n    \
              name: {flux_system}\n  \
@@ -1646,6 +1696,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         flux_system = DEFAULT_FLUX_SYSTEM_NAMESPACE,
         source_ref_key = FLUX_KEY_SOURCE_REF,
         health_checks_key = FLUX_KEY_HEALTH_CHECKS,
+        prune_key = FLUX_KUSTOMIZATION_KEY_PRUNE,
     );
     // chart_name is reserved for a future kustomization.yaml `resources:`
     // entry pointing at the rendered Chart.yaml; not yet wired.
@@ -2402,6 +2453,108 @@ spec:
             "FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE",
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
             caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_prune_pins_lifted_true() {
+        // Fail-before-pass-after pin: the rendered `kustomization.yaml`
+        // document's `spec.prune` per-CR garbage-collection-toggle leaf-
+        // scalar-key must resolve to `true` verbatim under the lifted
+        // [`FLUX_KUSTOMIZATION_KEY_PRUNE`] leaf-key. Before the lift the
+        // axis carried an inline `prune: true` leaf-scalar-key literal
+        // at the sole production-code call site (the top-level `spec`
+        // position of the [`cluster_bundle`] `kustomization.yaml`
+        // format-string template, mirror-symmetric to the per-caixa
+        // `HelmRelease` CR install-path-only namespace-seeder-toggle the
+        // peer
+        // [`cluster_bundle_helmrelease_install_create_namespace_pins_lifted_true`]
+        // pin covers on the co-resident per-caixa `HelmRelease` CR); a
+        // future substrate-side rebrand on the canonical
+        // [`caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE`] declaration that
+        // failed to reach this emit site would silently strip the
+        // substrate's chosen sweep-what-you-removed semantic from every
+        // emitted per-caixa `Kustomization` document — the Flux v2
+        // kustomize-controller would then leave every per-caixa
+        // resource the source manifest set previously reconciled but no
+        // longer carries dangling in the cluster the substrate's "the
+        // cluster's per-caixa live state converges to the caixa's
+        // tatara-lisp source-of-truth on every reconcile — resources
+        // the source no longer carries are swept by the kustomize-
+        // controller, not left dangling" CAIXA-SDLC.md §V author-to-
+        // live-convergence guarantee mandates. Pin the identity here so
+        // a regression that re-introduces an inline literal at the emit
+        // site — or a rebrand on the canonical const that fails to
+        // reach the emit site — surfaces at build time on this test's
+        // failure. Peer to the sibling
+        // [`cluster_bundle_helmrelease_install_create_namespace_pins_lifted_true`]
+        // pin on the co-resident per-`HelmRelease`-CR install-path per-
+        // CR namespace-seeder-toggle axis — extends the per-CR-toggle
+        // leaf-scalar-key discipline from the co-resident per-
+        // `HelmRelease`-CR spec surface onto the co-resident per-
+        // `Kustomization`-CR spec surface at the mirror-symmetric top-
+        // level `spec.prune` position.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let ks = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let prune = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_PRUNE))
+            .and_then(|v| v.as_bool())
+            .expect(
+                "spec.prune boolean scalar present; drift on this axis \
+                 silently drops the substrate's chosen sweep-what-you-\
+                 removed semantic from every emitted per-caixa \
+                 `Kustomization` document, leaving per-caixa resources \
+                 the source manifest set previously reconciled but no \
+                 longer carries dangling in the cluster",
+            );
+        assert!(
+            prune,
+            "spec.prune must carry the substrate's canonical `true` seed \
+             — drift to `false` silently drops the sweep-what-you-removed \
+             semantic the Flux v2 kustomize-controller's per-CR reconcile \
+             loop keys off to garbage-collect per-caixa resources removed \
+             from the source manifest set between reconciles, and every \
+             per-caixa `Kustomization` reconcile leaves orphaned resources \
+             dangling in the cluster with no diagnostic naming the toggle-\
+             drift root cause"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_key_prune_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLUX_KUSTOMIZATION_KEY_PRUNE` was lifted from
+        // the production-code inline `prune` literal at the sole
+        // `cluster_bundle` `kustomization.yaml` format-string template's
+        // per-CR garbage-collection-toggle leaf-scalar-key emit site +
+        // the test-fixture navigation site the sibling
+        // [`cluster_bundle_kustomization_prune_pins_lifted_true`] pin
+        // opens onto the rendered document, to a re-export of
+        // [`caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE`] so the canonical
+        // Flux v2 per-CR garbage-collection-toggle leaf-scalar-key lives
+        // in exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local re-
+        // introduction of a sibling
+        // `pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "…"` at this
+        // crate (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation)
+        // is a build-time test failure naming the offending drift. Peer
+        // to
+        // [`flux_helmrelease_key_create_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the sibling co-resident per-`HelmRelease`-CR install-path-
+        // only per-CR namespace-seeder-toggle leaf-scalar-key re-export
+        // axis.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KUSTOMIZATION_KEY_PRUNE",
+            FLUX_KUSTOMIZATION_KEY_PRUNE,
+            caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE,
         );
     }
 
