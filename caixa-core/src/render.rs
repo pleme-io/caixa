@@ -11797,6 +11797,89 @@ pub const DEFAULT_FLUX_RECONCILE_INTERVAL: &str = "10m";
 /// [co]: ../../caixa_flux/struct.ClusterBundleOpts.html
 pub const FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT: u32 = 3;
 
+/// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation.retries`
+/// leaf scalar-key every `caixa-flux`-emitted `helmrelease.yaml` document
+/// carries at both its install-path + upgrade-path per-CR remediation
+/// blocks. Peer to the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-value
+/// half of the same `(leaf-key, scalar-value)` per-path retry-cap
+/// declaration pair — the Flux v2 helm-controller's per-CR remediation
+/// loop reads the scalar under this exact leaf key, so drift on either
+/// axis is equally load-bearing (a typo on the leaf-key silently strips
+/// the retry-cap declaration from the emitted `remediation:` sub-block —
+/// the helm-controller then falls back to the Flux v2 upstream default
+/// rather than the substrate's chosen ceiling — with no diagnostic
+/// naming the leaf-key-drift root cause far from the source
+/// caixa.lisp / the renderer's format-string template).
+///
+/// The single source of truth every rendered Flux bundle axis that
+/// names the per-path per-CR retry-cap leaf reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's
+///     `spec.install.remediation.retries` scalar-key axis
+///     (caixa-flux/src/lib.rs — the `cluster_bundle` `helmrelease.yaml`
+///     format-string template's install-path retry-cap leaf under the
+///     [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]-valued sub-block);
+///   - the rendered `helmrelease.yaml` document's
+///     `spec.upgrade.remediation.retries` scalar-key axis (caixa-flux/src/
+///     lib.rs — the sibling `cluster_bundle` `helmrelease.yaml` format-
+///     string template's upgrade-path retry-cap leaf under the same
+///     [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]-valued sub-block);
+///   - the two test-fixture navigation sites in caixa-flux's `mod tests`
+///     that probe the rendered document's `.get("retries")` container
+///     axis to pin the emitted scalar-value against the sibling
+///     [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] canonical-scalar
+///     lift (the install-path + upgrade-path production-emit pins
+///     [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+///     / [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]).
+///
+/// Both production emit sites + the two test-fixture navigation sites
+/// name the same Flux v2 per-path per-CR retry-cap leaf-scalar-key and
+/// must move together on any hypothetical Flux v3 rename (upstream Flux
+/// v3 roadmap floats candidates like `attempts` / `maxRetries` /
+/// `retryCount` in the migration prose — the peer Gateway-API-side
+/// `spec.rules[].retry.attempts` leaf already uses `attempts` on the
+/// sibling `GATEWAY_API_KEY_ATTEMPTS` axis, an independent CRD group's
+/// evolution the two `pub const` declarations stay sibling constants
+/// against). Until this lift landed the axis carried inline `retries`
+/// literals across the two production emit sites (caixa-flux/src/lib.rs
+/// — the two `retries: {retries_default}` sub-block leaf-headers inside
+/// the `cluster_bundle` `helmrelease.yaml` format-string template) plus
+/// the two test-fixture navigation sites — four occurrences of the same
+/// load-bearing Flux-v2-per-CR-retry-cap-leaf-scalar-key convention,
+/// drift-prone by construction.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value half established — extends the discipline from the scalar
+/// value the leaf holds onto the leaf-key itself, closing the
+/// `(leaf-key, scalar-value)` pair on both halves. The two render-side
+/// consumers now thread the same `&'static str` through their format-
+/// string template via a `{retries_key}` named-arg interpolation so a
+/// future Flux v3 rebrand lands in one place; every future renderer
+/// that reaches for the canonical Flux v2 per-CR per-path retry-cap
+/// leaf-key (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HelmRelease`, a future per-edge
+/// `HelmRelease` the operator emits for the
+/// `CiliumClusterwideEnvoyConfig` pipeline, a future `caixa-otel`
+/// collector-pipeline `HelmRelease`) inherits the same value by
+/// construction with no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) sibling
+/// scalar-value lift plus the peer [`FLUX_KEY_SOURCE_REF`] (236ef01) /
+/// [`FLUX_KEY_CHART`] / [`FLUX_KEY_VALUES`] / [`FLUX_KEY_INTERVAL`] /
+/// [`FLUX_KEY_HEALTH_CHECKS`] container-axis-key lifts apply on the
+/// peer canonical-Flux-v2-load-bearing-string surface.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMRELEASE_KEY_RETRIES: &str = "retries";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
