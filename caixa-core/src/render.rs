@@ -12538,6 +12538,113 @@ pub const FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE: &str = "createNamespace";
 /// [kust]: https://fluxcd.io/flux/components/kustomize/kustomizations/
 pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "prune";
 
+/// Canonical Flux v2 `Kustomization.spec.path` per-CR source-sub-tree
+/// leaf-scalar-key every `caixa-flux`-emitted `kustomization.yaml`
+/// document seeds under its top-level `spec` position to name the sub-
+/// tree of the paired [`FLUX_GITREPOSITORY_YAML_FILENAME`] GitRepository
+/// the Flux v2 kustomize-controller-side per-CR reconcile loop pulls
+/// the desired-state manifest set from at reconcile time. Drift on this
+/// leaf silently unbinds every per-caixa `Kustomization` from its
+/// paired per-caixa sub-tree of the pleme-io k8s repository — the
+/// kustomize-controller then either reconciles the whole GitRepository
+/// root (when the CR omits the leaf, the controller defaults to `./`,
+/// pulling every unrelated cluster's manifests through the wrong
+/// per-caixa `Kustomization`) or refuses to reconcile at all (when the
+/// leaf points at a path the GitRepository doesn't carry, the CR sits
+/// perpetually at `BuildFailed` naming the missing sub-tree far from
+/// the source `caixa.lisp` / the renderer's format-string template).
+///
+/// Distinct from the sibling K8s-Gateway-API-side [`GATEWAY_API_KEY_PATH`]
+/// (9f45aa4) per-`HTTPRouteMatch` path-matcher container-axis key and
+/// the sibling Cilium-CNP-side [`CILIUM_KEY_PATH`] (bec2ce9) per-
+/// `toPorts[].rules.http[]` URL-path predicate leaf-scalar-key: all
+/// three constants spell the same underlying `"path"` string but name
+/// distinct schema axes on distinct CRD groups — the Flux-side axis is a
+/// per-`Kustomization`-CR source-sub-tree leaf scalar on the Flux v2
+/// `kustomize.toolkit.fluxcd.io/v1` `Kustomization` CRD's `spec.path`
+/// entry, the Gateway-API-side axis is a per-`HTTPRouteMatch` path-
+/// matcher two-leaf container (`{type, value}`) on the K8s Gateway API
+/// v1 `HTTPRoute` CRD's `spec.rules[].matches[]` entry, the Cilium-side
+/// axis is a per-HTTP-rule URL-path predicate leaf scalar on the Cilium
+/// `cilium.io/v2` `CiliumNetworkPolicy` CRD's per-`toPorts[].rules.http[]`
+/// entry. Keeping them as sibling `pub const` declarations (rather than
+/// coalescing onto a single shared constant that happens to carry the
+/// same string) mirrors the deliberate axis-independence discipline the
+/// sibling [`CILIUM_KEY_PATH`] / [`GATEWAY_API_KEY_PATH`] pair already
+/// codifies on the sibling per-CRD-group axes, so a future Flux v3 per-
+/// `Kustomization`-CR source-sub-tree leaf-key rebrand (candidates like
+/// `sourcePath` / `manifestsPath` / `sourceRoot` upstream Flux v3
+/// roadmap floats in the migration prose) can land independently of
+/// any Cilium-side or Gateway-API-side per-CRD-schema rebrand without
+/// any cross-CRD coordination footgun where a shared constant would
+/// force a coupled edit against schema evolutions the three CRD
+/// projects run on independent cadences. Note: Rust's `&'static str`
+/// interner coalesces identical byte-sequences onto one storage
+/// allocation at codegen time, so at runtime a `.as_ptr()` comparison
+/// across the trio can't distinguish "sibling `pub const` declarations
+/// carrying identical bytes" from "coalesced canonical declaration" —
+/// the axis-independence discipline lives at the rustc symbol-name
+/// axis (the three `pub const CILIUM_KEY_PATH` / `pub const
+/// GATEWAY_API_KEY_PATH` / `pub const FLUX_KUSTOMIZATION_KEY_PATH`
+/// symbols a future rebrand of one leaves the other two structurally
+/// untouched under) rather than the runtime-address axis, and the
+/// per-axis re-export identity pins in the consuming renderer crates
+/// (each pinning the local re-export against its own canonical
+/// declaration on its own axis) remain the load-bearing "no sibling
+/// local `pub const` drift" gate for the trio.
+///
+/// The single source of truth every rendered Flux bundle axis that
+/// names the per-`Kustomization`-CR source-sub-tree leaf reaches for:
+///
+///   - the rendered `kustomization.yaml` document's `spec.path` leaf-
+///     scalar-key axis (caixa-flux/src/lib.rs — the [`cluster_bundle`]
+///     `kustomization.yaml` format-string template's per-CR source-sub-
+///     tree leaf under the top-level `spec` position, threading the
+///     same `&'static str` through a new `{path_key}` named-arg
+///     interpolation);
+///   - the one test-fixture navigation site in caixa-flux's `mod tests`
+///     that probes the rendered document's `.get("path")` leaf axis to
+///     pin the substrate's canonical per-cluster / per-caixa sub-tree
+///     path seed (the [`cluster_bundle_kustomization_path_pins_lifted_sub_tree`]
+///     per-CR production-emit pin).
+///
+/// Both the production emit site + the one test-fixture navigation
+/// site name the same Flux v2 per-`Kustomization`-CR source-sub-tree
+/// leaf-scalar-key and must move together on any hypothetical Flux v3
+/// rename. Until this lift landed the axis carried an inline `path`
+/// literal at the one production emit site (caixa-flux/src/lib.rs —
+/// the `path: ./clusters/{cluster}/services/{name}` leaf inside the
+/// `cluster_bundle` `kustomization.yaml` format-string template's top-
+/// level `spec` position) — the sole occurrence of the same load-
+/// bearing Flux-v2-per-`Kustomization`-CR-source-sub-tree-leaf-scalar-
+/// key convention, drift-prone by construction ahead of the second
+/// occurrence the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `Kustomization` synthesis will
+/// surface, where a per-renderer local
+/// `pub const FLUX_KUSTOMIZATION_KEY_PATH: &str = "…"` (the canonical
+/// drift footgun where a sibling local `pub const` could happen to
+/// carry the same string at the source while pointing at a different
+/// `&'static` allocation) would let the two renderers silently
+/// disagree on the substrate's canonical per-`Kustomization`-CR
+/// source-sub-tree leaf-scalar-key convention.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5) lifts
+/// the constant in advance of the second occurrence the M4 materializer
+/// will surface — so the second consumer inherits the canonical per-CR
+/// source-sub-tree leaf-scalar-key by construction without opportunity
+/// for per-renderer drift. Same "the typed constant lives in one place"
+/// discipline the sibling [`FLUX_KUSTOMIZATION_KEY_PRUNE`] (8ec7917)
+/// per-CR garbage-collection-toggle leaf-scalar-key lift on the same
+/// per-`Kustomization`-CR spec surface established — extends the
+/// discipline from the co-resident per-`Kustomization`-CR `spec.prune`
+/// top-level per-CR-toggle leaf-scalar-key onto the co-resident per-
+/// `Kustomization`-CR `spec.path` top-level per-CR-source-sub-tree
+/// leaf-scalar-key at the mirror-symmetric top-level `spec` position.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [kust]: https://fluxcd.io/flux/components/kustomize/kustomizations/
+pub const FLUX_KUSTOMIZATION_KEY_PATH: &str = "path";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -17017,6 +17124,67 @@ mod tests {
              every emit site, dropping the per-CR-specific sweep-what-\
              you-removed / pre-apply-namespace-seeder semantic the \
              substrate seeds on the coalesced arm"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_key_path_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `Kustomization.spec.path` per-CR source-
+        // sub-tree leaf-scalar-key the substrate's per-caixa
+        // `cluster_bundle` renderer seeds into every emitted per-caixa
+        // `kustomization.yaml` document at the top-level `spec`
+        // position. The string is part of the cluster-side contract
+        // with the upstream Flux v2 kustomize-controller — the
+        // controller's per-CR reconcile loop reaches the source-sub-
+        // tree pointer through this exact leaf; a drifted leaf-scalar-
+        // key silently unbinds every per-caixa `Kustomization` from
+        // its paired per-caixa sub-tree of the pleme-io k8s repository
+        // (the controller defaults to `./` when the CR omits the leaf,
+        // pulling every unrelated cluster's manifests through the
+        // wrong per-caixa `Kustomization`), with no diagnostic naming
+        // the leaf-drift root cause. Changing it is a coordinated Flux
+        // v3 CRD-schema-rebrand migration alongside the upstream
+        // `kustomize-controller` deprecation cycle (candidates like
+        // `sourcePath` / `manifestsPath` / `sourceRoot` upstream Flux
+        // v3 roadmap floats), not an incidental edit. Peer to
+        // `flux_kustomization_key_prune_pins_canonical_value` on the
+        // sibling co-resident per-`Kustomization`-CR `spec.prune`
+        // garbage-collection-toggle leaf-scalar-key half of the same
+        // per-`Kustomization`-CR-spec surface.
+        assert_eq!(FLUX_KUSTOMIZATION_KEY_PATH, "path");
+    }
+
+    #[test]
+    fn flux_kustomization_key_path_stays_independent_of_prune() {
+        // The per-`Kustomization`-CR top-level `spec` surface hosts two
+        // co-resident leaf-scalar-key axes: the per-CR source-sub-tree
+        // pointer [`FLUX_KUSTOMIZATION_KEY_PATH`] (this lift) and the
+        // per-CR garbage-collection-toggle [`FLUX_KUSTOMIZATION_KEY_PRUNE`]
+        // (8ec7917). Pin that the two consts carry byte-distinct
+        // sequences so a future rebrand on either arm can't silently
+        // coalesce onto the peer arm (a
+        // `FLUX_KUSTOMIZATION_KEY_PATH = "prune"` typo would silently
+        // rebind the substrate's per-cluster / per-caixa sub-tree path
+        // seed onto the garbage-collection-toggle leaf at every emit
+        // site — the kustomize-controller would then read the
+        // substrate's `./clusters/<cluster>/services/<name>` seed as a
+        // boolean opt-in toggle, silently unbinding the per-caixa
+        // `Kustomization` from its source-sub-tree entirely with no
+        // diagnostic naming the leaf-key-coalesce root cause). The
+        // per-`Kustomization`-CR source-sub-tree pointer and the per-
+        // `Kustomization`-CR garbage-collection-toggle must always
+        // resolve to distinct emitted leaf-keys under the same
+        // top-level `spec` position.
+        assert_ne!(
+            FLUX_KUSTOMIZATION_KEY_PATH, FLUX_KUSTOMIZATION_KEY_PRUNE,
+            "the per-`Kustomization`-CR source-sub-tree leaf-scalar-key \
+             and the per-`Kustomization`-CR garbage-collection-toggle \
+             leaf-scalar-key must remain byte-distinct — a coalesce \
+             onto one value silently rebinds one axis onto the peer \
+             axis at every emit site, dropping the source-sub-tree / \
+             sweep-what-you-removed semantic the substrate seeds on the \
+             coalesced arm"
         );
     }
 
