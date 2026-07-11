@@ -1700,7 +1700,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         "---\n\
          # Source — pinned to {tag_human}, rendered by caixa-flux.\n\
          {api_version_key}: {api_version}\n\
-         kind: {kind}\n\
+         {kind_key}: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
            namespace: {namespace}\n\
@@ -1711,6 +1711,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {gitref_field}\n",
         api_version_key = KUBE_KEY_API_VERSION,
         api_version = FLUX_GITREPOSITORY_API_VERSION,
+        kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_GIT_REPOSITORY,
         tag_human = format!(
             "{field} {value}",
@@ -1746,7 +1747,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # HelmRelease consumes the chart caixa-helm renders for this\n\
          # caixa Servico. Per-cluster values are injected here.\n\
          {api_version_key}: {api_version}\n\
-         kind: {kind}\n\
+         {kind_key}: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
            namespace: {namespace}\n\
@@ -1756,7 +1757,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              spec:\n      \
                chart: {chart_path}\n      \
                {source_ref_key}:\n        \
-                 kind: {source_kind}\n        \
+                 {kind_key}: {source_kind}\n        \
                  name: {name}\n        \
                  namespace: {namespace}\n  \
            {install_key}:\n    \
@@ -1772,6 +1773,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                {enabled_key}: true\n",
         api_version_key = KUBE_KEY_API_VERSION,
         api_version = FLUX_HELMRELEASE_API_VERSION,
+        kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         name = name,
@@ -1798,7 +1800,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # Flux Kustomization that pins the GitRepository + HelmRelease.\n\
          # Paired path: pleme-io/k8s/clusters/{cluster}/services/{name}/\n\
          {api_version_key}: {kustomization_api_version}\n\
-         kind: {kind}\n\
+         {kind_key}: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
            namespace: {flux_system}\n\
@@ -1806,17 +1808,18 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {interval_key}: {interval}\n  \
            {prune_key}: true\n  \
            {source_ref_key}:\n    \
-             kind: {source_kind}\n    \
+             {kind_key}: {source_kind}\n    \
              name: {flux_system}\n  \
            {path_key}: ./clusters/{cluster}/services/{name}\n  \
            {health_checks_key}:\n    \
              - {api_version_key}: {api_version}\n      \
-               kind: {health_kind}\n      \
+               {kind_key}: {health_kind}\n      \
                name: {name}\n      \
                namespace: {namespace}\n  \
            {timeout_key}: {timeout_default}\n",
         api_version_key = KUBE_KEY_API_VERSION,
         kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
+        kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_KUSTOMIZATION,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         health_kind = FLUX_KIND_HELM_RELEASE,
@@ -4499,6 +4502,67 @@ spec:
                  composed from the lifted KUBE_KEY_API_VERSION ({KUBE_KEY_API_VERSION:?}); \
                  a drifted inline label here silently rebrands the per-CR \
                  CRD-group/version-axis discriminator away from the lifted key \
+                 (got: {contents:?})",
+                contents = f.contents,
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_every_flux_cr_carries_top_level_kind_label_from_lifted_key() {
+        // Fail-before-pass-after production-side sweep pin: every one of
+        // the three rendered Flux bundle files' top-level `kind:` YAML
+        // label — the load-bearing per-CR CRD-`kind`-discriminator-axis
+        // label naming the exact key the apiserver's `RESTMapper` reads
+        // to resolve each CR's registered `CustomResourceDefinition`
+        // against the sibling `apiVersion:` half of the `(apiVersion,
+        // kind)` CRD-lookup tuple — must byte-compose the lifted
+        // [`KUBE_KEY_KIND`] verbatim as its label prefix. Before this
+        // sweep the three [`cluster_bundle`] format-string templates
+        // carried six inline `kind:` YAML label literals
+        // (gitrepository.yaml top-level + helmrelease.yaml top-level +
+        // helmrelease.yaml `spec.chart.spec.sourceRef.kind` +
+        // kustomization.yaml top-level + kustomization.yaml
+        // `spec.sourceRef.kind` + kustomization.yaml
+        // `spec.healthChecks[].kind`) side-by-side with their
+        // `{kind}` / `{source_kind}` / `{health_kind}`-interpolated
+        // value axes; a future rebrand of the lifted [`KUBE_KEY_KIND`]
+        // const (or a coordinated K8s-API-conventions per-major-version
+        // discriminator promotion) had to reach every inline label site
+        // in lockstep, or the emit-side silently kept the pre-rebrand
+        // label byte while the per-CR body-key retrieval sites (already
+        // routed through [`KUBE_KEY_KIND`] via `kube_root_str_field` /
+        // `kube_kind_is`) rebranded — the two sides would then disagree
+        // on the label byte, and every downstream apiserver-side
+        // `RESTMapper` / Flux-controller-side `Watches` predicate on the
+        // rendered CR would silently miss its per-CR CRD-`kind` match
+        // with no field naming the label-drift root cause far from the
+        // source caixa.lisp. Peer to
+        // [`cluster_bundle_every_flux_cr_carries_top_level_api_version_label_from_lifted_key`]
+        // on the sibling apiVersion half of the same `(apiVersion, kind)`
+        // CRD-lookup tuple — extends the production-side raw-byte-label-
+        // sweep discipline established there onto the sibling
+        // discriminator-half's raw-byte label position, so the two
+        // halves of the tuple's label axes both consume the same
+        // substrate-owned `&'static str` by construction.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let label_prefix = format!("{KUBE_KEY_KIND}: ");
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let f = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename))
+                .unwrap_or_else(|| panic!("{filename} present"));
+            assert!(
+                f.contents.contains(&label_prefix),
+                "{filename} must carry the top-level {label_prefix:?} YAML label \
+                 composed from the lifted KUBE_KEY_KIND ({KUBE_KEY_KIND:?}); \
+                 a drifted inline label here silently rebrands the per-CR \
+                 CRD-`kind`-discriminator-axis away from the lifted key \
                  (got: {contents:?})",
                 contents = f.contents,
             );
