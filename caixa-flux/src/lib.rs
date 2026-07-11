@@ -484,6 +484,32 @@ pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_BRANCH;
 /// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] for the full lift rationale.
 pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_COMMIT;
 
+/// Canonical Flux v2 per-`GitRepository` `spec.ref` ref-selection
+/// discriminated-union parent container-axis key every
+/// [`cluster_bundle`]-rendered `gitrepository.yaml` document mounts
+/// its per-shape `{tag, branch, commit}` sub-selector arm under.
+/// Re-export of the canonical
+/// [`caixa_core::FLUX_GITREPOSITORY_KEY_REF`] so the container-axis
+/// byte-string lives in exactly one place across every consumer:
+/// the writer-side `cluster_bundle` `gitrepo` template composer's
+/// `ref:` sub-block header (the sole production emission site the
+/// prior inline `"ref:"` literal sat at) + the peer test-fixture
+/// `.get("ref")` sub-selector traversal (the sole test-side reader
+/// site the prior inline `"ref"` literal sat at) both now navigate
+/// through the same `&'static str`. Nests one level above the
+/// sibling [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+/// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
+/// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] per-shape arm sub-selector
+/// triple it wraps — the parent container-axis KEY now moves
+/// through one lifted const alongside its already-lifted per-shape
+/// arm sub-selector-KEY triple, so a future Flux v3 sub-schema
+/// rebrand (an upstream `fluxcd/flux2` rename of the ref-selection
+/// container-axis from `spec.ref` to `spec.gitRef` /
+/// `spec.source.ref`) lands as one const edit coordinated with the
+/// sibling per-shape arm lifts. See the caixa-core docstring for the
+/// full lift rationale.
+pub use caixa_core::FLUX_GITREPOSITORY_KEY_REF;
+
 /// Canonical Flux v2 per-cluster-bundle `HelmRelease` document filename
 /// every [`cluster_bundle`]-rendered `BundleFile` carries at its per-file
 /// `path` axis — re-export of the lifted
@@ -1197,7 +1223,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          spec:\n  \
            {interval_key}: {interval}\n  \
            url: {url}\n  \
-           ref:\n\
+           {ref_key}:\n\
          {gitref_field}\n",
         api_version = FLUX_GITREPOSITORY_API_VERSION,
         kind = FLUX_KIND_GIT_REPOSITORY,
@@ -1211,6 +1237,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         interval_key = FLUX_KEY_INTERVAL,
         interval = opts.interval,
         url = opts.git_url,
+        ref_key = FLUX_GITREPOSITORY_KEY_REF,
         gitref_field = gitref_field,
     );
 
@@ -3885,6 +3912,78 @@ spec:
     }
 
     #[test]
+    fn flux_gitrepository_key_ref_re_export_points_at_caixa_core_canonical() {
+        // Bridge-arm pin: the re-exported FLUX_GITREPOSITORY_KEY_REF
+        // resolves to the canonical `"ref"` byte + `&'static`
+        // allocation from caixa-core, closing the local-`pub const`-
+        // shadow footgun where a sibling `pub const
+        // FLUX_GITREPOSITORY_KEY_REF: &str = "…"` in this crate could
+        // silently carry the same string at the source while pointing
+        // at a different `&'static` allocation. Peer of the sibling
+        // [`flux_gitrepository_ref_key_tag_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_gitrepository_ref_key_branch_re_export_points_at_caixa_core_canonical`]
+        // / [`flux_gitrepository_ref_key_commit_re_export_points_at_caixa_core_canonical`]
+        // pins on the sibling per-shape arm axes of the FluxCD source-
+        // controller `GitRepository.spec.ref` discriminated-union — closes
+        // the parent-container-axis KEY pin above the already-pinned
+        // per-shape arm sub-selector-KEY triple, so the whole per-
+        // `GitRepository` `spec.ref` sub-schema (parent container-axis
+        // KEY + per-shape arm sub-selector-KEY triple) now navigates
+        // through four caixa-core `&'static str`s pinned in coordination.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_KEY_REF",
+            FLUX_GITREPOSITORY_KEY_REF,
+            caixa_core::FLUX_GITREPOSITORY_KEY_REF,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepository_spec_ref_key_pins_lifted_flux_gitrepository_key_ref() {
+        // Production-emit pin: traverse a rendered `gitrepository.yaml`
+        // document's `spec` block and assert the ref-selection
+        // discriminated-union parent container-axis is keyed by the
+        // *lifted* FLUX_GITREPOSITORY_KEY_REF (`"ref"`) verbatim — the
+        // load-bearing per-`GitRepository` `spec.ref` container-axis
+        // KEY the FluxCD source-controller reads to source the per-CR
+        // git-clone refspec. Before the lift the writer template
+        // carried an inline `ref:\n` literal at the sole
+        // `format!("… spec:\n  ref:\n{gitref_field}\n", …)` call in
+        // `cluster_bundle`; a typo there (`"gitRef:"` / `"Ref:"` /
+        // `"revision:"` / `"source:"`) would have silently landed a
+        // `GitRepository` whose ref-selection container-axis the CRD
+        // schema validator drops as unknown at admission, and every
+        // downstream `HelmRelease` / `Kustomization` bundle document
+        // that resolves through the sibling
+        // `HelmRelease.spec.chart.spec.sourceRef` reference would have
+        // silently dangled at the FluxCD apply chain with no field
+        // naming the container-axis-drift root cause. Peer of the
+        // sibling per-shape arm sub-selector-KEY test
+        // [`cluster_bundle_gitrepository_ref_key_dispatches_per_variant_onto_lifted_consts`]
+        // on the peer per-arm scalar-axis surface — closes the parent
+        // container-axis pin above the already-pinned per-shape arm
+        // sub-selector-KEY triple.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+            .expect("gitrepository.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        assert!(
+            parsed
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(FLUX_GITREPOSITORY_KEY_REF))
+                .is_some(),
+            "rendered gitrepository.yaml must carry its ref-selection \
+             container-axis at the lifted FLUX_GITREPOSITORY_KEY_REF key \
+             verbatim (got: {:?})",
+            gr.contents
+        );
+    }
+
+    #[test]
     fn gitrefspec_ref_field_name_dispatches_per_variant_onto_lifted_consts() {
         // The [`GitRefSpec::ref_field_name`] method routes each variant
         // onto the paired canonical
@@ -4055,7 +4154,7 @@ spec:
                 serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
             let sub_selector = parsed
                 .get(KUBE_KEY_SPEC)
-                .and_then(|s| s.get("ref"))
+                .and_then(|s| s.get(FLUX_GITREPOSITORY_KEY_REF))
                 .and_then(|r| r.get(expected_key))
                 .and_then(|v| v.as_str())
                 .unwrap_or_else(|| {
