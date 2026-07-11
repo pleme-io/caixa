@@ -1699,7 +1699,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     let gitrepo = format!(
         "---\n\
          # Source — pinned to {tag_human}, rendered by caixa-flux.\n\
-         apiVersion: {api_version}\n\
+         {api_version_key}: {api_version}\n\
          kind: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
@@ -1709,6 +1709,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {url_key}: {url}\n  \
            {ref_key}:\n\
          {gitref_field}\n",
+        api_version_key = KUBE_KEY_API_VERSION,
         api_version = FLUX_GITREPOSITORY_API_VERSION,
         kind = FLUX_KIND_GIT_REPOSITORY,
         tag_human = format!(
@@ -1744,7 +1745,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         "---\n\
          # HelmRelease consumes the chart caixa-helm renders for this\n\
          # caixa Servico. Per-cluster values are injected here.\n\
-         apiVersion: {api_version}\n\
+         {api_version_key}: {api_version}\n\
          kind: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
@@ -1769,6 +1770,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {values_key}:\n    \
              {library_name}:\n      \
                {enabled_key}: true\n",
+        api_version_key = KUBE_KEY_API_VERSION,
         api_version = FLUX_HELMRELEASE_API_VERSION,
         kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
@@ -1795,7 +1797,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         "---\n\
          # Flux Kustomization that pins the GitRepository + HelmRelease.\n\
          # Paired path: pleme-io/k8s/clusters/{cluster}/services/{name}/\n\
-         apiVersion: {kustomization_api_version}\n\
+         {api_version_key}: {kustomization_api_version}\n\
          kind: {kind}\n\
          metadata:\n  \
            name: {name}\n  \
@@ -1808,11 +1810,12 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
              name: {flux_system}\n  \
            {path_key}: ./clusters/{cluster}/services/{name}\n  \
            {health_checks_key}:\n    \
-             - apiVersion: {api_version}\n      \
+             - {api_version_key}: {api_version}\n      \
                kind: {health_kind}\n      \
                name: {name}\n      \
                namespace: {namespace}\n  \
            {timeout_key}: {timeout_default}\n",
+        api_version_key = KUBE_KEY_API_VERSION,
         kustomization_api_version = FLUX_KUSTOMIZATION_API_VERSION,
         kind = FLUX_KIND_KUSTOMIZATION,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
@@ -4445,6 +4448,61 @@ spec:
              apiVersion at the top-level apiVersion axis (got: {contents:?})",
             contents = kz.contents,
         );
+    }
+
+    #[test]
+    fn cluster_bundle_every_flux_cr_carries_top_level_api_version_label_from_lifted_key() {
+        // Fail-before-pass-after production-side sweep pin: every one of
+        // the three rendered Flux bundle files' top-level `apiVersion:`
+        // YAML label — the load-bearing per-CR CRD-group/version-axis
+        // label naming the exact key the apiserver's `RESTMapper` reads
+        // to resolve each CR's registered `CustomResourceDefinition` —
+        // must byte-compose the lifted [`KUBE_KEY_API_VERSION`] verbatim
+        // as its label prefix. Before this sweep the three
+        // [`cluster_bundle`] format-string templates carried four inline
+        // `apiVersion:` YAML label literals (gitrepository.yaml top-level
+        // + helmrelease.yaml top-level + kustomization.yaml top-level +
+        // kustomization.yaml `spec.healthChecks[].apiVersion`) side-by-
+        // side with their `{api_version}`-interpolated value axes; a
+        // future rebrand of the lifted [`KUBE_KEY_API_VERSION`] const
+        // (or a coordinated K8s-API-conventions per-major-version
+        // discriminator promotion) had to reach every inline label site
+        // in lockstep, or the emit-side silently kept the pre-rebrand
+        // label byte while the per-CR body-key retrieval sites (already
+        // routed through [`KUBE_KEY_API_VERSION`]) rebranded — the two
+        // sides would then disagree on the label byte, and every
+        // downstream apiserver-side `RESTMapper` lookup on the rendered
+        // CR would silently miss its per-CR CRD-group/version
+        // registration with no field naming the label-drift root cause
+        // far from the source caixa.lisp. Peer to
+        // [`cluster_bundle_helmrelease_uses_lifted_flux_api_version`] /
+        // [`cluster_bundle_gitrepository_uses_lifted_flux_api_version`] /
+        // [`cluster_bundle_kustomization_uses_lifted_flux_api_version`]
+        // on the sibling per-CR `.get(KUBE_KEY_API_VERSION)` retrieval-
+        // side pins one level below the raw-byte label-axis this pin
+        // gates.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let label_prefix = format!("{KUBE_KEY_API_VERSION}: ");
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let f = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename))
+                .unwrap_or_else(|| panic!("{filename} present"));
+            assert!(
+                f.contents.contains(&label_prefix),
+                "{filename} must carry the top-level {label_prefix:?} YAML label \
+                 composed from the lifted KUBE_KEY_API_VERSION ({KUBE_KEY_API_VERSION:?}); \
+                 a drifted inline label here silently rebrands the per-CR \
+                 CRD-group/version-axis discriminator away from the lifted key \
+                 (got: {contents:?})",
+                contents = f.contents,
+            );
+        }
     }
 
     #[test]
