@@ -453,6 +453,37 @@ pub use caixa_core::FLUX_KEY_HEALTH_CHECKS;
 /// every Flux v2 controller reads to bind its per-CR poll cycle.
 pub use caixa_core::FLUX_KEY_INTERVAL;
 
+/// Canonical Flux v2 per-`GitRepository` `spec.ref.tag` git-tag-
+/// selector scalar-axis key every [`cluster_bundle`]-rendered
+/// `gitrepository.yaml` document declares on the tag-arm of the
+/// [`GitRefSpec`] discriminated-union. Re-export of the canonical
+/// [`caixa_core::FLUX_GITREPOSITORY_REF_KEY_TAG`] so the sub-selector
+/// byte-string lives in exactly one place: the two consumer sites
+/// (the YAML emit-side `gitref_field` composer and the human-readable
+/// `tag_human` narrator prose) both now read through the lifted
+/// [`GitRefSpec::ref_field_name`] dispatch that maps the tag-arm of
+/// the discriminated-union onto this canonical scalar. Pairs with
+/// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] +
+/// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] on the sibling per-shape arms
+/// of the same FluxCD source-controller `GitRepository.spec.ref`
+/// discriminated-union axis — three consts, one per arm, one canonical
+/// dispatch. See the caixa-core docstring for the full lift rationale.
+pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_TAG;
+
+/// Canonical Flux v2 per-`GitRepository` `spec.ref.branch` git-branch-
+/// selector scalar-axis key — peer of [`FLUX_GITREPOSITORY_REF_KEY_TAG`]
+/// on the branch-arm of the [`GitRefSpec`] discriminated-union.
+/// Re-export of [`caixa_core::FLUX_GITREPOSITORY_REF_KEY_BRANCH`]; see
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] for the full lift rationale.
+pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_BRANCH;
+
+/// Canonical Flux v2 per-`GitRepository` `spec.ref.commit` git-commit-
+/// selector scalar-axis key — peer of [`FLUX_GITREPOSITORY_REF_KEY_TAG`]
+/// on the commit-arm of the [`GitRefSpec`] discriminated-union.
+/// Re-export of [`caixa_core::FLUX_GITREPOSITORY_REF_KEY_COMMIT`]; see
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] for the full lift rationale.
+pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_COMMIT;
+
 /// Canonical Flux v2 per-cluster-bundle `HelmRelease` document filename
 /// every [`cluster_bundle`]-rendered `BundleFile` carries at its per-file
 /// `path` axis — re-export of the lifted
@@ -1024,6 +1055,56 @@ pub enum GitRefSpec {
     Commit(String),
 }
 
+impl GitRefSpec {
+    /// The FluxCD source-controller `GitRepository.spec.ref.<field>`
+    /// sub-selector scalar-axis key this variant renders under — the
+    /// per-arm dispatch onto the canonical lifted
+    /// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+    /// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
+    /// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] byte-string trio the
+    /// caixa-core substrate owns.
+    ///
+    /// Both consumer sites in [`cluster_bundle`] (the `gitref_field`
+    /// YAML emit-side composer and the sibling `tag_human`
+    /// human-readable narrator prose) now route through this dispatch,
+    /// closing the 2-site duplication of the prior inline
+    /// `format!("    {arm}: {v:?}")` + `format!("{arm} {v}")` match
+    /// blocks that each open-coded the three-way arm-shape mapping
+    /// side-by-side. Same "one canonical dispatch per typed axis"
+    /// discipline the peer [`caixa_core::WitTarget::payload_pair`]
+    /// (6788ed6) established on the sibling `:contratos` payload-arm
+    /// dispatch surface — a future `GitRefSpec` variant addition
+    /// (FluxCD's source-controller `spec.ref` schema exposes further
+    /// `semver` / `name` sub-selectors this V0 shape stops short of)
+    /// becomes exactly one new match-arm here (a compile-time
+    /// exhaustiveness error otherwise), not a coordinated three-way
+    /// rewrite of both format-string templates + every downstream
+    /// consumer that reaches for the per-arm sub-selector key.
+    #[must_use]
+    pub const fn ref_field_name(&self) -> &'static str {
+        match self {
+            GitRefSpec::Tag(_) => FLUX_GITREPOSITORY_REF_KEY_TAG,
+            GitRefSpec::Branch(_) => FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+            GitRefSpec::Commit(_) => FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+        }
+    }
+
+    /// The underlying scalar the variant carries — the tag / branch /
+    /// commit value the FluxCD source-controller feeds into its
+    /// per-CR git-source clone refspec. Peer of [`Self::ref_field_name`]
+    /// on the same per-variant dispatch: both consumer sites in
+    /// [`cluster_bundle`] pair the sub-selector key with the paired
+    /// scalar to compose the rendered `spec.ref.<field>: <value>`
+    /// YAML sub-block + the sibling `<field> <value>` narrator prose,
+    /// so the pair moves together on any future variant addition.
+    #[must_use]
+    pub fn ref_value(&self) -> &str {
+        match self {
+            GitRefSpec::Tag(t) | GitRefSpec::Branch(t) | GitRefSpec::Commit(t) => t.as_str(),
+        }
+    }
+}
+
 impl ClusterBundleOpts {
     /// Sensible defaults for a per-program standalone bundle.
     #[must_use]
@@ -1089,11 +1170,21 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     let name = caixa.nome.clone();
     let chart_name = lareira_chart_name(&name);
 
-    let gitref_field = match &opts.git_ref {
-        GitRefSpec::Tag(t) => format!("    tag: {t:?}"),
-        GitRefSpec::Branch(b) => format!("    branch: {b:?}"),
-        GitRefSpec::Commit(c) => format!("    commit: {c:?}"),
-    };
+    // The per-variant sub-selector key (`tag` / `branch` / `commit`)
+    // + its paired scalar (the tag / branch / commit value) now route
+    // through the canonical [`GitRefSpec::ref_field_name`] +
+    // [`GitRefSpec::ref_value`] dispatch, closing the 2-site
+    // duplication the prior inline per-variant `format!("    <arm>:
+    // {v:?}")` match block open-coded side-by-side with the sibling
+    // `tag_human` narrator prose block. Byte-identical output to the
+    // prior 3-arm inline `format!`s: `{value:?}` on `&str` renders
+    // the same shape as `{v:?}` on `String` (both call the same
+    // `Debug` impl at the identical stack position).
+    let gitref_field = format!(
+        "    {field}: {value:?}",
+        field = opts.git_ref.ref_field_name(),
+        value = opts.git_ref.ref_value(),
+    );
 
     let gitrepo = format!(
         "---\n\
@@ -1110,11 +1201,11 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {gitref_field}\n",
         api_version = FLUX_GITREPOSITORY_API_VERSION,
         kind = FLUX_KIND_GIT_REPOSITORY,
-        tag_human = match &opts.git_ref {
-            GitRefSpec::Tag(t) => format!("tag {t}"),
-            GitRefSpec::Branch(b) => format!("branch {b}"),
-            GitRefSpec::Commit(c) => format!("commit {c}"),
-        },
+        tag_human = format!(
+            "{field} {value}",
+            field = opts.git_ref.ref_field_name(),
+            value = opts.git_ref.ref_value(),
+        ),
         name = name,
         namespace = opts.namespace,
         interval_key = FLUX_KEY_INTERVAL,
@@ -3730,6 +3821,244 @@ spec:
             FLUX_KEY_INTERVAL,
             caixa_core::FLUX_KEY_INTERVAL,
         );
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_key_tag_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_TAG`
+        // is the single source of truth for the FluxCD source-controller
+        // `GitRepository.spec.ref.tag` sub-selector scalar-axis key the
+        // rendered `gitrepository.yaml` document declares on the tag-arm
+        // of the [`GitRefSpec`] discriminated-union. Pin the equality +
+        // `&'static` static-data identity so any local re-introduction
+        // of a sibling `pub const FLUX_GITREPOSITORY_REF_KEY_TAG: &str
+        // = "…"` at this crate is a build-time test failure naming the
+        // offending drift, not a silent apply-time `GitRepository`
+        // sub-selector reroute at cluster-side reconcile time. Peer to
+        // [`flux_key_interval_re_export_points_at_caixa_core_canonical`]
+        // on the sibling per-CR body-key surface — pivots the
+        // canonical-lifted-const single-sourcing discipline onto the
+        // per-`GitRepository`-`spec.ref`-sub-selector axis.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_REF_KEY_TAG",
+            FLUX_GITREPOSITORY_REF_KEY_TAG,
+            caixa_core::FLUX_GITREPOSITORY_REF_KEY_TAG,
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_key_branch_re_export_points_at_caixa_core_canonical() {
+        // Peer of
+        // [`flux_gitrepository_ref_key_tag_re_export_points_at_caixa_core_canonical`]
+        // on the branch-arm of the FluxCD source-controller
+        // `GitRepository.spec.ref` discriminated-union axis.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_REF_KEY_BRANCH",
+            FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+            caixa_core::FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_key_commit_re_export_points_at_caixa_core_canonical() {
+        // Peer of
+        // [`flux_gitrepository_ref_key_tag_re_export_points_at_caixa_core_canonical`]
+        // on the commit-arm of the FluxCD source-controller
+        // `GitRepository.spec.ref` discriminated-union axis.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_REF_KEY_COMMIT",
+            FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+            caixa_core::FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+        );
+    }
+
+    #[test]
+    fn gitrefspec_ref_field_name_dispatches_per_variant_onto_lifted_consts() {
+        // The [`GitRefSpec::ref_field_name`] method routes each variant
+        // onto the paired canonical
+        // [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+        // [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
+        // [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] const via a compile-
+        // time-exhaustive match — closes the drift surface where a
+        // future variant addition or per-arm rebrand could silently
+        // desynchronize the YAML emit-side + human-readable narrator
+        // consumer sites from the sub-selector-key axis. Pin the
+        // per-variant dispatch identity so a refactor that swaps two
+        // arms' const references silently at the method-impl site
+        // fires as a build-time test failure, not as a
+        // `spec.ref.<wrong-key>` reroute at cluster-apply time.
+        assert_eq!(
+            GitRefSpec::Tag("v0.1.0".into()).ref_field_name(),
+            FLUX_GITREPOSITORY_REF_KEY_TAG,
+        );
+        assert_eq!(
+            GitRefSpec::Branch("main".into()).ref_field_name(),
+            FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+        );
+        assert_eq!(
+            GitRefSpec::Commit("deadbeef".into()).ref_field_name(),
+            FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+        );
+    }
+
+    #[test]
+    fn gitrefspec_ref_value_extracts_underlying_scalar_per_variant() {
+        // Peer of
+        // [`gitrefspec_ref_field_name_dispatches_per_variant_onto_lifted_consts`]:
+        // the [`GitRefSpec::ref_value`] method extracts the underlying
+        // scalar the variant carries (tag / branch / commit value)
+        // through a single collapsed match — the byte-string the
+        // FluxCD source-controller feeds into its per-CR git-source
+        // clone refspec. Both consumer sites in [`cluster_bundle`]
+        // pair the sub-selector key with this scalar; pin the
+        // per-variant extraction identity so a refactor that mixes
+        // the arms (a spurious `.to_ascii_lowercase()` in one arm,
+        // a lifetime-inversion that clones the payload as a scratch
+        // `String`) surfaces as a build-time test failure.
+        assert_eq!(GitRefSpec::Tag("v0.1.0".into()).ref_value(), "v0.1.0");
+        assert_eq!(GitRefSpec::Branch("main".into()).ref_value(), "main");
+        assert_eq!(
+            GitRefSpec::Commit("deadbeef".into()).ref_value(),
+            "deadbeef",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitref_field_composes_lifted_dispatch_byte_shape() {
+        // Fail-before-pass-after emission-side pin: the rendered
+        // `gitrepository.yaml` document's `spec.ref` sub-block byte-
+        // shape matches the composition of the canonical lifted
+        // [`GitRefSpec::ref_field_name`] +
+        // [`GitRefSpec::ref_value`] dispatch pair against the prior
+        // inline `format!("    {arm}: {v:?}")` per-arm match block,
+        // for every arm of the [`GitRefSpec`] discriminated-union.
+        // Byte-identical output to the prior 3-arm inline match
+        // (`{v:?}` on `&str` renders the same shape as `{v:?}` on
+        // `String`) — the composition equation
+        // `format!("    {field}: {value:?}", ...)` reduces to
+        // `format!("    tag: {t:?}")` / `format!("    branch: {b:?}")`
+        // / `format!("    commit: {c:?}")` per arm by construction.
+        // Peer to the sibling
+        // [`cluster_bundle_default_git_tag_uses_lifted_caixa_core_prefix`]
+        // emission-side pin on the tag-arm — pivots the discipline
+        // from the tag-value axis (the prior lift closed) onto the
+        // sub-selector-key axis (this lift closes) so the pair of
+        // pins closes both coordinates of the `spec.ref.<key>:
+        // <value>` sub-block.
+        let cases = [
+            (GitRefSpec::Tag("v0.1.0".into()), "    tag: \"v0.1.0\""),
+            (GitRefSpec::Branch("main".into()), "    branch: \"main\""),
+            (
+                GitRefSpec::Commit("deadbeef".into()),
+                "    commit: \"deadbeef\"",
+            ),
+        ];
+        for (git_ref, expected) in cases {
+            let composed = format!(
+                "    {field}: {value:?}",
+                field = git_ref.ref_field_name(),
+                value = git_ref.ref_value(),
+            );
+            assert_eq!(
+                composed, expected,
+                "GitRefSpec::{git_ref:?} must compose to the prior \
+                 inline byte-shape via the lifted dispatch",
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_gitref_narrator_composes_lifted_dispatch_byte_shape() {
+        // Peer of
+        // [`cluster_bundle_gitref_field_composes_lifted_dispatch_byte_shape`]
+        // on the sibling `tag_human` narrator-prose axis in
+        // [`cluster_bundle`] — pins the byte-shape of the `<arm>
+        // <value>` operator-facing narrator prose the rendered
+        // `gitrepository.yaml` document's leading `# Source — pinned
+        // to <tag_human>` comment quotes. Byte-identical output to
+        // the prior 3-arm inline `format!("{arm} {v}")` per-variant
+        // match block by construction.
+        let cases = [
+            (GitRefSpec::Tag("v0.1.0".into()), "tag v0.1.0"),
+            (GitRefSpec::Branch("main".into()), "branch main"),
+            (GitRefSpec::Commit("deadbeef".into()), "commit deadbeef"),
+        ];
+        for (git_ref, expected) in cases {
+            let composed = format!(
+                "{field} {value}",
+                field = git_ref.ref_field_name(),
+                value = git_ref.ref_value(),
+            );
+            assert_eq!(
+                composed, expected,
+                "GitRefSpec::{git_ref:?} narrator prose must compose \
+                 to the prior inline byte-shape via the lifted dispatch",
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepo_yaml_carries_lifted_sub_selector_keys() {
+        // End-to-end emission-side pin: for every arm of
+        // [`GitRefSpec`], the rendered `gitrepository.yaml` document's
+        // `spec.ref` sub-block declares the sub-selector under the
+        // canonical lifted [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+        // [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
+        // [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] key — pin the presence
+        // + value round-trip through the rendered YAML so a regression
+        // that re-inlines the sub-selector key at the emit site
+        // surfaces here as a test failure rather than as a silent
+        // FluxCD source-controller sub-block reroute at reconcile
+        // time. Peer to the sibling
+        // [`cluster_bundle_default_git_tag_uses_lifted_caixa_core_prefix`]
+        // pin that closes the sibling per-arm value axis on the
+        // tag-arm.
+        let caixa = sample_caixa();
+        let cases: [(GitRefSpec, &str, &str); 3] = [
+            (
+                GitRefSpec::Tag("v0.1.0".into()),
+                FLUX_GITREPOSITORY_REF_KEY_TAG,
+                "v0.1.0",
+            ),
+            (
+                GitRefSpec::Branch("main".into()),
+                FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+                "main",
+            ),
+            (
+                GitRefSpec::Commit("deadbeef".into()),
+                FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+                "deadbeef",
+            ),
+        ];
+        for (git_ref, expected_key, expected_value) in cases {
+            let mut opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+            opts.git_ref = git_ref.clone();
+            let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
+            let gr = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+                .expect("gitrepository.yaml present");
+            let parsed: serde_yaml::Value =
+                serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+            let sub_selector = parsed
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get("ref"))
+                .and_then(|r| r.get(expected_key))
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "spec.ref.{expected_key:?} missing or non-string \
+                         for GitRefSpec::{git_ref:?}: {contents:?}",
+                        contents = gr.contents,
+                    )
+                });
+            assert_eq!(
+                sub_selector, expected_value,
+                "spec.ref.{expected_key:?} must carry the paired \
+                 scalar for GitRefSpec::{git_ref:?}",
+            );
+        }
     }
 
     #[test]

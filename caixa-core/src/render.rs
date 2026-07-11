@@ -8216,6 +8216,87 @@ pub const FLUX_KEY_HEALTH_CHECKS: &str = "healthChecks";
 /// [cf]: ../../caixa_flux/fn.cluster_bundle.html
 pub const FLUX_KEY_INTERVAL: &str = "interval";
 
+/// Canonical Flux v2 per-`GitRepository` `spec.ref.tag` git-tag-selector
+/// scalar-axis key every `caixa-flux`-emitted `gitrepository.yaml`
+/// document declares when the per-Servico bundle's `git_ref` is a
+/// tag-shaped selector. Peer of [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`]
+/// / [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] on the sibling per-shape
+/// arms of the `FluxCD` source-controller `GitRepository.spec.ref`
+/// ref-selection discriminated-union axis — the three-way sub-selector
+/// key set the Flux v2 `source-controller` reads to bind the per-CR
+/// git-source clone `refspec` from the (tag | branch | commit) input
+/// triple. A drifted value at any of the three keys (`"Tag"` /
+/// `"gitTag"` / `"tagName"` at this arm, `"Branch"` / `"gitBranch"`
+/// at the sibling arm, `"Commit"` / `"sha"` / `"revision"` at the
+/// third arm) silently dangles the whole `spec.ref` sub-block at the
+/// `FluxCD` `source-controller`'s CRD registration; the per-Servico
+/// clone never resolves at reconcile time and the sibling
+/// `HelmRelease.spec.chart.spec.sourceRef` reference dangles at
+/// admission with no field naming the sub-selector-key-drift root
+/// cause. Changing this value is a coordinated Flux v3 migration
+/// alongside the upstream `fluxcd/flux2` deprecation cycle, not an
+/// incidental edit.
+///
+/// The single source of truth every Flux-v2-per-`GitRepository`-
+/// `spec.ref`-tag-arm-axis-naming reaches for — the two per-render
+/// consumer sites the [`crate::render`]-side lift closes on the
+/// [`caixa_flux::GitRefSpec::Tag`] variant are both named through this
+/// one const via the [`caixa_flux::GitRefSpec::ref_field_name`]
+/// dispatch:
+///
+///   - the rendered `gitrepository.yaml` document's per-`GitRepository`
+///     `spec.ref.tag` YAML sub-field (caixa-flux's `cluster_bundle`
+///     `gitref_field` composer, the sole in-tree emission site);
+///   - the sibling per-render human-readable narrator's `tag <value>`
+///     prefix (caixa-flux's `cluster_bundle` `tag_human` composer's
+///     tag-arm branch), the operator-facing per-arm narrator prose
+///     `feira app graph` / `feira deploy` diagnostics quote.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5) —
+/// promotes the sub-selector-key byte-string to a typed substrate-side
+/// `&'static str` on the same trajectory the peer per-CR body-key
+/// [`FLUX_KEY_SOURCE_REF`] (e985089) / [`FLUX_KEY_CHART`] (8467748) /
+/// [`FLUX_KEY_VALUES`] (b54dc87) / [`FLUX_KEY_HEALTH_CHECKS`] (6dbff58)
+/// / [`FLUX_KEY_INTERVAL`] (48db6e2) lifts established on the sibling
+/// canonical-Flux-v2-per-CR-body-key surfaces — pivots the discipline
+/// from the per-CR body-key axis onto the sibling per-`GitRepository`-
+/// `spec.ref`-sub-selector-key axis every `cluster_bundle`-rendered
+/// bundle threads its per-shape ref-selection through, and closes the
+/// coordinated 2-site duplication (`gitref_field` YAML emit +
+/// `tag_human` narrator prose) the prior inline `format!("    tag:
+/// {t:?}")` + `format!("tag {t}")` literals in
+/// caixa-flux/src/lib.rs carried on the tag-arm of the discriminated-
+/// union.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_GITREPOSITORY_REF_KEY_TAG: &str = "tag";
+
+/// Canonical Flux v2 per-`GitRepository` `spec.ref.branch`
+/// git-branch-selector scalar-axis key every `caixa-flux`-emitted
+/// `gitrepository.yaml` document declares when the per-Servico
+/// bundle's `git_ref` is a branch-shaped selector. Peer of
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+/// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] on the sibling per-shape arms
+/// of the `FluxCD` source-controller `GitRepository.spec.ref`
+/// ref-selection discriminated-union axis; see
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] for the full lift rationale.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_GITREPOSITORY_REF_KEY_BRANCH: &str = "branch";
+
+/// Canonical Flux v2 per-`GitRepository` `spec.ref.commit`
+/// git-commit-selector scalar-axis key every `caixa-flux`-emitted
+/// `gitrepository.yaml` document declares when the per-Servico
+/// bundle's `git_ref` is a commit-shaped selector. Peer of
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+/// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] on the sibling per-shape arms
+/// of the `FluxCD` source-controller `GitRepository.spec.ref`
+/// ref-selection discriminated-union axis; see
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] for the full lift rationale.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_GITREPOSITORY_REF_KEY_COMMIT: &str = "commit";
+
 /// Canonical Flux v2 per-cluster-bundle `HelmRelease` document
 /// filename every [`caixa-flux`][cf]-rendered `cluster_bundle` carries
 /// at the per-Servico bundle's rendered file collection — the fixed
@@ -16192,6 +16273,113 @@ mod tests {
              the three Flux v2 controllers' per-CR reconcile loops would \
              reject"
         );
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_key_tag_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 per-`GitRepository` `spec.ref.tag`
+        // git-tag-selector scalar-axis key the rendered
+        // `gitrepository.yaml` document declares on the tag-arm of the
+        // FluxCD source-controller `spec.ref` discriminated-union axis.
+        // A drifted value (`"Tag"` / `"gitTag"` / `"tagName"`) silently
+        // dangles the tag-arm sub-block at the FluxCD source-controller's
+        // CRD registration; the per-Servico clone never resolves at
+        // reconcile time. Peer to
+        // `flux_gitrepository_ref_key_branch_pins_canonical_value` /
+        // `flux_gitrepository_ref_key_commit_pins_canonical_value` on
+        // the sibling per-shape arms of the same discriminated-union
+        // axis — closes the three-arm sub-selector-key trio the
+        // FluxCD source-controller reads to bind the per-CR git-source
+        // clone refspec.
+        assert_eq!(FLUX_GITREPOSITORY_REF_KEY_TAG, "tag");
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_key_branch_pins_canonical_value() {
+        // Peer of `flux_gitrepository_ref_key_tag_pins_canonical_value`
+        // on the branch-arm of the FluxCD source-controller
+        // `GitRepository.spec.ref` discriminated-union axis.
+        assert_eq!(FLUX_GITREPOSITORY_REF_KEY_BRANCH, "branch");
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_key_commit_pins_canonical_value() {
+        // Peer of `flux_gitrepository_ref_key_tag_pins_canonical_value`
+        // on the commit-arm of the FluxCD source-controller
+        // `GitRepository.spec.ref` discriminated-union axis.
+        assert_eq!(FLUX_GITREPOSITORY_REF_KEY_COMMIT, "commit");
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_keys_all_carry_lower_camel_case_shape() {
+        // Cross-axis invariant on all three arms of the FluxCD
+        // source-controller `GitRepository.spec.ref` discriminated-union
+        // axis: the Flux v2 CRD field-naming convention (inherited from
+        // the upstream K8s API conventions) admits lowerCamelCase
+        // per-field keys — `tag` / `branch` / `commit` all conform.
+        // Pinning the shape here means a future rebrand on any of the
+        // three canonical lifts can't silently land a malformed
+        // sub-selector key (snake_case, kebab-case, UpperCamelCase,
+        // empty) that the Flux v2 source-controller's per-CR reconcile
+        // loop would reject at apply parse time. Peer to
+        // `flux_key_interval_carries_lower_camel_case_shape` on the
+        // sibling per-CR reconcile-poll-cadence scalar-axis key surface.
+        for v in [
+            FLUX_GITREPOSITORY_REF_KEY_TAG,
+            FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+            FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+        ] {
+            assert!(
+                !v.is_empty(),
+                "FLUX_GITREPOSITORY_REF_KEY_* {v:?} must be non-empty \
+                 per the Flux v2 CRD field-naming grammar"
+            );
+            let mut chars = v.chars();
+            assert!(
+                chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+                "FLUX_GITREPOSITORY_REF_KEY_* {v:?} must lead with an \
+                 ASCII-lowercase byte per the Flux v2 lowerCamelCase \
+                 per-CR-field-key convention"
+            );
+            assert!(
+                v.chars().all(|c| c.is_ascii_alphanumeric()),
+                "FLUX_GITREPOSITORY_REF_KEY_* {v:?} must be ASCII-\
+                 alphanumeric throughout per the Flux v2 lowerCamelCase \
+                 per-CR-field-key convention — no `_` / `-` / `.` / \
+                 whitespace bytes the Flux v2 source-controller's per-CR \
+                 reconcile loop would reject"
+            );
+        }
+    }
+
+    #[test]
+    fn flux_gitrepository_ref_keys_are_pairwise_distinct() {
+        // The three arms of the FluxCD source-controller
+        // `GitRepository.spec.ref` discriminated-union axis must remain
+        // pairwise distinct — a hypothetical drift that collapsed two
+        // sub-selector keys onto the same byte-string (e.g. an
+        // accidental copy-paste making TAG and BRANCH both spell
+        // `"tag"`) would silently reroute the per-shape emit at
+        // `caixa_flux::GitRefSpec::ref_field_name` dispatch time and
+        // dangle one arm's rendered `spec.ref` sub-block at cluster-
+        // apply time. Pin the pairwise-distinctness here so the drift
+        // fires at test time, not at cluster-apply time far from the
+        // drift site.
+        let keys = [
+            FLUX_GITREPOSITORY_REF_KEY_TAG,
+            FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+            FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+        ];
+        for (i, a) in keys.iter().enumerate() {
+            for b in keys.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "FLUX_GITREPOSITORY_REF_KEY_* arms must be pairwise \
+                     distinct (got a duplicate: {a:?})"
+                );
+            }
+        }
     }
 
     #[test]
