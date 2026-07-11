@@ -12693,6 +12693,152 @@ pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "prune";
 /// [kust]: https://fluxcd.io/flux/components/kustomize/kustomizations/
 pub const FLUX_KUSTOMIZATION_KEY_PATH: &str = "path";
 
+/// Canonical Flux v2 `Kustomization.spec.timeout` per-CR reconcile wall-
+/// clock cap leaf-scalar-key every `caixa-flux`-emitted
+/// `kustomization.yaml` document seeds under its top-level `spec`
+/// position to name the ceiling on how long the Flux v2 kustomize-
+/// controller-side per-CR reconcile loop is allowed to spend applying
+/// the paired [`FLUX_KUSTOMIZATION_KEY_PATH`]-scoped sub-tree of the
+/// paired [`FLUX_GITREPOSITORY_YAML_FILENAME`] GitRepository before it
+/// marks the `Kustomization` `Ready: False` and stops retrying — the
+/// substrate's canonical "how long we let a per-caixa manifest-set
+/// reconcile run before Flux gives up" contract with the kustomize-
+/// controller's per-CR reconcile loop. Drift on this leaf silently
+/// strips the substrate's chosen reconcile-ceiling from every emitted
+/// per-caixa `Kustomization` document — the kustomize-controller then
+/// falls back to the upstream Flux v2 controller-side default cap
+/// (which the upstream project ships at a value tuned for the average
+/// upstream Flux-managed manifest set, not the substrate's per-caixa
+/// idempotency-checkpoint cadence the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] retry-ceiling and
+/// [`DEFAULT_FLUX_RECONCILE_INTERVAL`] reconcile-poll cadence are
+/// jointly tuned against), letting a persistently-failing per-caixa
+/// manifest apply consume kustomize-controller reconcile-loop cycles
+/// past the substrate's chosen ceiling with no field naming the
+/// timeout-drift root cause.
+///
+/// The single source of truth every rendered Flux bundle axis that
+/// names the per-`Kustomization`-CR reconcile wall-clock cap leaf
+/// reaches for:
+///
+///   - the rendered `kustomization.yaml` document's `spec.timeout`
+///     leaf-scalar-key axis (caixa-flux/src/lib.rs — the
+///     [`cluster_bundle`] `kustomization.yaml` format-string template's
+///     per-CR reconcile wall-clock cap leaf under the top-level `spec`
+///     position, threading the same `&'static str` through a new
+///     `{timeout_key}` named-arg interpolation);
+///   - the one test-fixture navigation site in caixa-flux's `mod tests`
+///     that probes the rendered document's `.get("timeout")` leaf axis
+///     to pin the substrate's canonical wall-clock cap seed.
+///
+/// Both the production emit site + the one test-fixture navigation
+/// site name the same Flux v2 per-`Kustomization`-CR reconcile wall-
+/// clock cap leaf-scalar-key and must move together on any
+/// hypothetical Flux v3 rename. Until this lift landed the axis
+/// carried an inline `timeout` literal at the one production emit site
+/// (caixa-flux/src/lib.rs — the `timeout: 5m` leaf inside the
+/// `cluster_bundle` `kustomization.yaml` format-string template's top-
+/// level `spec` position) — the sole occurrence of the same load-
+/// bearing Flux-v2-per-`Kustomization`-CR-reconcile-wall-clock-cap-
+/// leaf-scalar-key convention, drift-prone by construction ahead of
+/// the second occurrence the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `Kustomization` synthesis will
+/// surface, where a per-renderer local
+/// `pub const FLUX_KUSTOMIZATION_KEY_TIMEOUT: &str = "…"` (the
+/// canonical drift footgun where a sibling local `pub const` could
+/// happen to carry the same string at the source while pointing at a
+/// different `&'static` allocation) would let the two renderers
+/// silently disagree on the substrate's canonical reconcile-ceiling-
+/// declaration leaf-scalar-key convention.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5)
+/// lifts the constant in advance of the second occurrence the M4
+/// materializer will surface — so the second consumer inherits the
+/// canonical per-CR reconcile wall-clock cap leaf-scalar-key by
+/// construction without opportunity for per-renderer drift. Pairs
+/// with the sibling [`DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] scalar-
+/// value half of the same `(leaf-key, scalar-value)` per-path
+/// reconcile-ceiling-declaration pair — extends the drift-closing
+/// discipline the scalar-value lift established from the value the
+/// leaf holds onto the leaf-key itself. Same shape as the sibling
+/// [`FLUX_KUSTOMIZATION_KEY_PATH`] (613d7ed) per-CR source-sub-tree
+/// leaf-scalar-key + [`FLUX_KUSTOMIZATION_KEY_PRUNE`] (8ec7917) per-CR
+/// garbage-collection-toggle leaf-scalar-key lifts on the co-resident
+/// per-`Kustomization`-CR spec surface — extends the discipline from
+/// the co-resident per-`Kustomization`-CR `spec.path` source-sub-tree
+/// leaf-scalar-key and per-`Kustomization`-CR `spec.prune` garbage-
+/// collection-toggle leaf-scalar-key onto the co-resident per-
+/// `Kustomization`-CR `spec.timeout` reconcile wall-clock cap leaf-
+/// scalar-key at the mirror-symmetric top-level `spec` position.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [kust]: https://fluxcd.io/flux/components/kustomize/kustomizations/
+pub const FLUX_KUSTOMIZATION_KEY_TIMEOUT: &str = "timeout";
+
+/// Canonical Flux v2 `Kustomization.spec.timeout` per-CR reconcile
+/// wall-clock cap default the substrate seeds into every per-caixa
+/// `kustomization.yaml` document. Every rendered per-caixa Flux v2
+/// `Kustomization` CR consults the same `&'static str` at emit time so
+/// a future substrate-side reconcile-ceiling migration (`"5m"` → `"3m"`
+/// on faster per-caixa idempotency-checkpoint cadence once the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] retry-ceiling
+/// tightens, `"5m"` → `"10m"` on larger per-caixa manifest sets where
+/// the upstream Flux v2 kustomize-controller-side per-CR reconcile
+/// duration outgrows the substrate's default ceiling — coordinated
+/// with the sibling [`DEFAULT_FLUX_RECONCILE_INTERVAL`] reconcile-poll
+/// cadence tuning cycle) is a one-line edit on this canonical
+/// declaration, not a coordinated rewrite across the
+/// [`cluster_bundle`] `kustomization.yaml` template + every future
+/// per-target renderer the substrate adds.
+///
+/// The single source of truth the rendered per-caixa Flux v2 cluster
+/// bundle's per-`Kustomization`-CR reconcile wall-clock cap default
+/// seed reaches for:
+///
+///   - the rendered `kustomization.yaml` document's `spec.timeout`
+///     scalar-value axis (caixa-flux/src/lib.rs — the
+///     [`cluster_bundle`] `kustomization.yaml` format-string template's
+///     per-CR reconcile wall-clock cap leaf under the top-level `spec`
+///     position, threading the same `&'static str` through a new
+///     `{timeout_default}` named-arg interpolation on the leaf keyed
+///     by the sibling [`FLUX_KUSTOMIZATION_KEY_TIMEOUT`]).
+///
+/// The value is a valid Flux v2 reconcile wall-clock cap duration
+/// scalar (per the upstream Flux v2
+/// `kustomize.toolkit.fluxcd.io/v1/Kustomization.spec.timeout`
+/// `metav1.Duration` OpenAPI schema): a non-empty Go-duration-format
+/// string (e.g. `"5m"`, `"3m"`, `"1h30m"`), which the Flux v2
+/// controller-side per-CR admission gate parses via
+/// `metav1.ParseDuration` before installing the per-CR watch. A future
+/// rebrand on this lift cannot silently land a value the Flux v2
+/// controller-side admission gate rejects at the *first* per-caixa
+/// `Kustomization` apply against a cluster, far from the rebrand
+/// commit's source — the pin at the canonical lift documents the Go-
+/// duration-format grammar contract with the Flux v2 admission gate
+/// every downstream consumer of the rendered per-CR reconcile-cap
+/// axis rests on.
+///
+/// Pairs with the sibling [`FLUX_KUSTOMIZATION_KEY_TIMEOUT`] per-Flux-
+/// v2-`Kustomization`-CR reconcile wall-clock cap scalar-axis key the
+/// value the substrate seeds here nests directly under across every
+/// rendered per-caixa Flux v2 `Kustomization` CR — the key half of
+/// the per-CR `spec.timeout` scalar-key/scalar-value pair lives at
+/// [`FLUX_KUSTOMIZATION_KEY_TIMEOUT`], the value half's substrate-side
+/// default seed lives here. Same "the typed constant lives in one
+/// place" discipline the [`DEFAULT_FLUX_RECONCILE_INTERVAL`] (908180f)
+/// / [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) /
+/// [`DEFAULT_APLICACAO_INSTALL_TIMEOUT`](caixa_tatara::DEFAULT_APLICACAO_INSTALL_TIMEOUT)
+/// (813343f) lifts apply on the peer canonical-substrate-default-
+/// load-bearing-scalar surface — extends the canonical-substrate-
+/// default single-sourcing discipline from the peer per-Flux-v2-CR-
+/// reconcile-poll-cadence / per-HelmRelease-CR-remediation-retry-
+/// ceiling / per-tatara-Process-install-wall-clock-cap surfaces onto
+/// the sibling per-Kustomization-CR-reconcile-wall-clock-cap surface
+/// every rendered per-caixa Flux v2 cluster bundle CR carries.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT: &str = "5m";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -17233,6 +17379,153 @@ mod tests {
              axis at every emit site, dropping the source-sub-tree / \
              sweep-what-you-removed semantic the substrate seeds on the \
              coalesced arm"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_key_timeout_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `Kustomization.spec.timeout` per-CR
+        // reconcile wall-clock cap leaf-scalar-key the substrate's per-
+        // caixa `cluster_bundle` renderer seeds into every emitted per-
+        // caixa `kustomization.yaml` document at the top-level `spec`
+        // position. The string is part of the cluster-side contract
+        // with the upstream Flux v2 kustomize-controller — the
+        // controller's per-CR reconcile loop reaches the wall-clock cap
+        // through this exact leaf; a drifted leaf-scalar-key silently
+        // strips the substrate's chosen reconcile-ceiling from every
+        // emitted per-caixa `Kustomization` document, letting the
+        // controller fall back to the upstream Flux v2 controller-side
+        // default cap rather than the substrate's per-caixa
+        // idempotency-checkpoint-tuned ceiling, with no diagnostic
+        // naming the timeout-drift root cause. Changing it is a
+        // coordinated Flux v3 CRD-schema-rebrand migration alongside
+        // the upstream `kustomize-controller` deprecation cycle, not
+        // an incidental edit. Peer to
+        // `flux_kustomization_key_path_pins_canonical_value` and
+        // `flux_kustomization_key_prune_pins_canonical_value` on the
+        // sibling co-resident per-`Kustomization`-CR spec surface
+        // leaf-scalar-key axes.
+        assert_eq!(FLUX_KUSTOMIZATION_KEY_TIMEOUT, "timeout");
+    }
+
+    #[test]
+    fn flux_kustomization_key_timeout_stays_independent_of_path_and_prune() {
+        // The per-`Kustomization`-CR top-level `spec` surface hosts
+        // three co-resident leaf-scalar-key axes: the per-CR reconcile
+        // wall-clock cap [`FLUX_KUSTOMIZATION_KEY_TIMEOUT`] (this
+        // lift), the per-CR source-sub-tree pointer
+        // [`FLUX_KUSTOMIZATION_KEY_PATH`] (613d7ed), and the per-CR
+        // garbage-collection-toggle [`FLUX_KUSTOMIZATION_KEY_PRUNE`]
+        // (8ec7917). Pin that the three consts carry byte-distinct
+        // sequences so a future rebrand on any one arm can't silently
+        // coalesce onto a peer arm (a
+        // `FLUX_KUSTOMIZATION_KEY_TIMEOUT = "path"` typo would silently
+        // rebind the reconcile wall-clock cap onto the source-sub-tree
+        // pointer leaf at every emit site — the kustomize-controller
+        // would then parse the substrate's `./clusters/<c>/services/<n>`
+        // seed as a `metav1.Duration` scalar and reject the per-CR
+        // admission gate, with no diagnostic naming the leaf-key-
+        // coalesce root cause). The per-`Kustomization`-CR reconcile
+        // wall-clock cap, per-CR source-sub-tree pointer, and per-CR
+        // garbage-collection-toggle must always resolve to distinct
+        // emitted leaf-keys under the same top-level `spec` position.
+        assert_ne!(
+            FLUX_KUSTOMIZATION_KEY_TIMEOUT, FLUX_KUSTOMIZATION_KEY_PATH,
+            "the per-`Kustomization`-CR reconcile wall-clock cap leaf-\
+             scalar-key and the per-`Kustomization`-CR source-sub-tree \
+             leaf-scalar-key must remain byte-distinct — a coalesce onto \
+             one value silently rebinds one axis onto the peer axis at \
+             every emit site, dropping the reconcile-ceiling / source-\
+             sub-tree semantic the substrate seeds on the coalesced arm"
+        );
+        assert_ne!(
+            FLUX_KUSTOMIZATION_KEY_TIMEOUT, FLUX_KUSTOMIZATION_KEY_PRUNE,
+            "the per-`Kustomization`-CR reconcile wall-clock cap leaf-\
+             scalar-key and the per-`Kustomization`-CR garbage-\
+             collection-toggle leaf-scalar-key must remain byte-distinct \
+             — a coalesce onto one value silently rebinds one axis onto \
+             the peer axis at every emit site, dropping the reconcile-\
+             ceiling / sweep-what-you-removed semantic the substrate \
+             seeds on the coalesced arm"
+        );
+    }
+
+    #[test]
+    fn default_flux_kustomization_timeout_pins_canonical_value() {
+        // Pin the actual scalar so a typo in this lift can't silently
+        // rebrand the substrate-side default Flux v2
+        // `Kustomization.spec.timeout` reconcile wall-clock cap the
+        // substrate's per-caixa `cluster_bundle` renderer seeds into
+        // every emitted per-caixa `kustomization.yaml` document at the
+        // top-level `spec` position. The value is part of the cluster-
+        // side contract with the Flux v2 kustomize-controller (the
+        // per-CR reconcile loop uses this as the ceiling on the wall-
+        // clock time a single reconcile attempt is allowed to consume
+        // before the controller marks the `Kustomization`
+        // `Ready: False` and stops retrying); changing it is a
+        // coordinated substrate-side reconcile-ceiling promotion (a
+        // `5m` → `3m` migration on faster per-caixa idempotency-
+        // checkpoint cadence, a `5m` → `10m` migration on larger per-
+        // caixa manifest sets), not an incidental edit. Peer to
+        // `default_flux_reconcile_interval_pins_canonical_value` and
+        // `flux_helmrelease_remediation_retries_default_pins_canonical_value`
+        // on the canonical-Flux-v2-per-CR-substrate-default-scalar pin
+        // surface.
+        assert_eq!(DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT, "5m");
+    }
+
+    #[test]
+    fn default_flux_kustomization_timeout_is_a_valid_metav1_duration_scalar() {
+        // Cross-axis grammar invariant: the Flux v2 kustomize-
+        // controller-side per-CR admission gate parses the reconcile
+        // wall-clock cap scalar via `metav1.ParseDuration` before
+        // installing the per-CR watch. The Go-duration-format grammar
+        // is non-empty, ASCII, and structured as
+        // `<digits><unit>[<digits><unit>...]` where each unit is one of
+        // `{ns, us, µs, ms, s, m, h}`. Pin a floor that catches the
+        // canonical drift footguns — an empty scalar (`""` — admission
+        // gate rejects), a non-ASCII-alphanumeric byte (`"5 m"` — the
+        // whitespace defeats the parser), a missing-unit scalar (`"5"`
+        // — the parser rejects for lack of a unit suffix), or a
+        // leading-non-digit scalar (`"m5"` — the parser rejects for
+        // lack of a leading magnitude). A future rebrand on the
+        // canonical lift that lands a value outside the Go-duration-
+        // format grammar would surface here at caixa-core build time
+        // on the canonical lift, before any renderer consumes the
+        // value. Same shape as
+        // `default_flux_reconcile_interval_is_a_valid_metav1_duration_scalar`
+        // on the peer canonical-substrate-default-grammar-floor surface.
+        let v = DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT;
+        assert!(
+            !v.is_empty(),
+            "DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT {v:?} must be non-empty \
+             per the Flux v2 controller-side `metav1.ParseDuration` \
+             admission gate"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT {v:?} must be ASCII-\
+             alphanumeric throughout per the Go-duration-format grammar \
+             — no whitespace / separator bytes the `metav1.ParseDuration` \
+             admission gate would reject"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            first.is_ascii_digit(),
+            "DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT {v:?} first byte {first:?} \
+             must be an ASCII digit per the Go-duration-format grammar \
+             — the leading magnitude precedes the unit suffix; a leading \
+             non-digit defeats `metav1.ParseDuration`"
+        );
+        let last = v.chars().next_back().expect("non-empty");
+        assert!(
+            last.is_ascii_alphabetic() && last.is_ascii_lowercase(),
+            "DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT {v:?} last byte {last:?} \
+             must be an ASCII lowercase alphabetic unit suffix per the \
+             Go-duration-format grammar — the trailing unit follows the \
+             magnitude; an unterminated magnitude defeats \
+             `metav1.ParseDuration`"
         );
     }
 
