@@ -658,6 +658,34 @@ pub use caixa_core::CILIUM_AUTH_MODE_REQUIRED;
 /// the same tristate.
 pub use caixa_core::CILIUM_AUTH_MODE_DISABLED;
 
+/// Canonical `bool → &'static str` bijection projection every consumer of the
+/// Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode` OpenAPI schema
+/// enum's closed-set author-reachable scalar-value pair
+/// ([`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]) consults
+/// so the per-tristate-arm dispatch — `Some(true)` (mTLS handshake
+/// mandatory) → [`CILIUM_AUTH_MODE_REQUIRED`], `Some(false)` (mTLS handshake
+/// skipped, explicit opt-out) → [`CILIUM_AUTH_MODE_DISABLED`] — lives in
+/// exactly one place. Re-export of the canonical
+/// [`caixa_core::cilium_auth_mode`] so a future Cilium CNP
+/// `MutualAuthenticationMode` enum rebrand (either arm's scalar-value or
+/// the per-arm dispatch shape) lands at the two consts + one projection
+/// body rather than at scattered per-emitter inline closure bodies.
+/// Consumed by the `cilium_network_policies` per-`(:de, :para)` emitter's
+/// `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
+/// |required| serde_yaml::Value::String(cilium_auth_mode(required).into()))`
+/// closure body the prior inline `if required { CILIUM_AUTH_MODE_REQUIRED }
+/// else { CILIUM_AUTH_MODE_DISABLED }` per-arm dispatch sat at (plus the
+/// caixa-core in-file `single_field_overlay_threads_typed_value_through_
+/// closure` generic-helper pin that mirrors the production overlay's
+/// shape letter-for-letter and now threads through the same projection).
+/// Peer to the [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]
+/// re-export pair the two arms of the same enum land on — completes the
+/// canonical `(closed-set-CRD-schema-enum-value pair, per-typed-arm
+/// dispatch projection)` compound re-export triple this crate's
+/// `cilium_network_policies` renderer's SPIFFE-identity-bound per-edge
+/// mTLS enforcement + explicit-opt-out contract rests on.
+pub use caixa_core::cilium_auth_mode;
+
 /// Canonical M3 `:contratos` edge-direction separator byte-string every
 /// caixa-mesh emitter that encodes a typed edge as a K8s-name-shaped
 /// scalar reads from — the per-`(:de, :para)`
@@ -2450,14 +2478,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     // [`caixa_core::render::single_field_overlay`].
     let mtls_overlay =
         single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE, |required| {
-            serde_yaml::Value::String(
-                if required {
-                    CILIUM_AUTH_MODE_REQUIRED
-                } else {
-                    CILIUM_AUTH_MODE_DISABLED
-                }
-                .into(),
-            )
+            serde_yaml::Value::String(cilium_auth_mode(required).into())
         });
     // Fan typed edges into per-`(:de, :para)` groups — the policy
     // identity axis. A `BTreeMap` keyed by the pair gives deterministic

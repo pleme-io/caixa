@@ -10444,6 +10444,80 @@ pub const CILIUM_AUTH_MODE_REQUIRED: &str = "required";
 /// [cm]: ../../caixa_mesh/index.html
 pub const CILIUM_AUTH_MODE_DISABLED: &str = "disabled";
 
+/// Canonical `bool → &'static str` bijection projection every consumer of the
+/// Cilium `CiliumNetworkPolicy` `MutualAuthenticationMode` OpenAPI schema
+/// enum's closed-set author-reachable scalar-value pair
+/// ([`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]) consults
+/// so the per-tristate-arm dispatch — `Some(true)` (mTLS handshake
+/// mandatory) → [`CILIUM_AUTH_MODE_REQUIRED`], `Some(false)` (mTLS
+/// handshake skipped, explicit opt-out) → [`CILIUM_AUTH_MODE_DISABLED`] —
+/// lives in exactly one place. The two arms of the `:politicas
+/// :mtls-required` tristate's non-`None` value-space each land on a
+/// distinct `MutualAuthenticationMode` scalar; the `None` slot-absent arm
+/// is the caller's [`single_field_overlay`] emission-gate concern (the
+/// helper returns `None` and the outer `authentication:` block is omitted
+/// entirely), not this projection's — see the per-emit-site
+/// `if let Some(overlay) = mtls_overlay { rule.insert(CILIUM_KEY_AUTHENTICATION,
+/// overlay.clone()) }` guard.
+///
+/// The single source of truth the rendered Aplicacao Cilium-CNP-side
+/// per-edge mutual-auth-mode-discriminator scalar-value dispatch reaches
+/// for:
+///
+///   - the rendered `CiliumNetworkPolicy` document's per-rule
+///     `spec.ingress[].authentication.mode` leaf value (caixa-mesh/src/lib.rs
+///     — the `cilium_network_policies` per-`(:de, :para)`
+///     `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
+///     |required| serde_yaml::Value::String(cilium_auth_mode(required).into()))`
+///     closure body).
+///   - the generic-helper pin in this crate's
+///     `single_field_overlay_threads_typed_value_through_closure` test
+///     that mirrors the production overlay's shape letter-for-letter and
+///     now threads through the same shared projection.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5, "every
+/// recurring shape becomes a generator before it becomes a pattern; every
+/// pattern becomes a library before it becomes duplicated code. The
+/// duplication budget is zero.") promotes the per-tristate-arm dispatch
+/// body onto a shared projection on the same trajectory the sibling
+/// [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]
+/// closed-set-scalar-value lifts established for the two arms of the
+/// same `MutualAuthenticationMode` enum — closes the pair of related
+/// lift trajectories the `(value-space, arm-dispatch)` per-authn-block
+/// leaf's canonical decomposition rests on. The prior inline `if required
+/// { CILIUM_AUTH_MODE_REQUIRED } else { CILIUM_AUTH_MODE_DISABLED }` body
+/// split across the two occurrences — the caixa-mesh production emitter's
+/// closure and the caixa-core generic-helper pin's closure — would have
+/// let a per-arm reassignment (e.g. an upstream Cilium v3 schema rename
+/// swap of the `required` ↔ `disabled` scalars, or the addition of a
+/// third `MutualAuthenticationMode` variant that reshapes the closed set)
+/// drift on one closure body but not the peer, silently letting a Cilium
+/// data-plane pod either enforce mTLS where the author asked for skip or
+/// skip it where the author asked for enforce.
+///
+/// Pairs with the [`CILIUM_KEY_MODE`] per-authentication-block mode-
+/// discriminator leaf-axis key at the caller's
+/// `single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE,
+/// |required| serde_yaml::Value::String(cilium_auth_mode(required).into()))`
+/// call: the key is the field name the leaf mounts under, this projection
+/// is the scalar the leaf carries. Same-shape peer to the K8s core
+/// `Protocol` closed-set enum's future `bool → {"TCP", "UDP"}` /
+/// K8s Gateway API v1 `PathMatchType` closed-set enum's future variant-
+/// pick projections the M3.x absorption roadmap acknowledges — the M3
+/// mesh renderer's `MutualAuthenticationMode` bijection surface is the
+/// first landed instance of the canonical `(closed-set-CRD-schema-enum-
+/// value pair, per-typed-arm dispatch projection)` compound.
+///
+/// [cm]: ../../caixa_mesh/index.html
+#[must_use]
+pub fn cilium_auth_mode(required: bool) -> &'static str {
+    if required {
+        CILIUM_AUTH_MODE_REQUIRED
+    } else {
+        CILIUM_AUTH_MODE_DISABLED
+    }
+}
+
 /// Canonical K8s Gateway API `HTTPRoute` parent-Gateway-binding container-
 /// axis key every `gateway_routes`-emitted `HTTPRoute` document mounts its
 /// per-route parent-Gateway `[{name}]` list under (`spec.parentRefs[]`).
@@ -19393,6 +19467,48 @@ mod tests {
     }
 
     #[test]
+    fn cilium_auth_mode_bijection_dispatches_tristate_arms_onto_scalar_values() {
+        // Pin the `bool → &'static str` projection every consumer of the
+        // Cilium `MutualAuthenticationMode` closed-set enum's author-
+        // reachable scalar-value pair reaches through: `true` (the
+        // `Some(true)` mTLS-mandatory arm of the typed `:politicas
+        // :mtls-required` tristate) maps to [`CILIUM_AUTH_MODE_REQUIRED`],
+        // `false` (the `Some(false)` explicit-opt-out arm) maps to
+        // [`CILIUM_AUTH_MODE_DISABLED`]. One projection body, both arms of
+        // the tristate's non-`None` value-space, so a future per-arm
+        // reassignment (e.g. an upstream Cilium v3 schema swap of the
+        // `required` ↔ `disabled` scalars, or a per-arm renaming of the
+        // mTLS-mandatory scalar from `required` to `enforced` / `strict`
+        // / `mandatory`) lands at the two consts + this projection body
+        // — not at the caixa-mesh production emitter's closure body and
+        // the caixa-core `single_field_overlay_threads_typed_value_
+        // through_closure` generic-helper pin's closure body independently.
+        // Pin the per-arm round-trip so a future refactor that inverts
+        // the bool → arm mapping (or collapses one arm) surfaces here
+        // rather than silently letting a Cilium data-plane pod either
+        // enforce mTLS where the author asked for skip or skip it where
+        // the author asked for enforce.
+        assert_eq!(cilium_auth_mode(true), CILIUM_AUTH_MODE_REQUIRED);
+        assert_eq!(cilium_auth_mode(false), CILIUM_AUTH_MODE_DISABLED);
+        // The two arms cover distinct value-space entries — a regression
+        // that collapses them onto the same scalar surfaces here. Peer
+        // to `cilium_auth_modes_are_distinct` (the per-arm distinctness
+        // pin at the const-declaration axis) — this test extends the
+        // pin onto the projection body axis, so both the raw consts and
+        // the projection's per-arm dispatch preserve the tristate's
+        // author-intent distinction end-to-end.
+        assert_ne!(
+            cilium_auth_mode(true),
+            cilium_auth_mode(false),
+            "cilium_auth_mode must project the two tristate arms onto \
+             distinct `MutualAuthenticationMode` value-space entries — \
+             a collapsed-arm regression would silently render both \
+             `:mtls-required t` and `:mtls-required nil` identically at \
+             the cluster artifact",
+        );
+    }
+
+    #[test]
     fn gateway_api_key_parent_refs_pins_canonical_value() {
         // Pin the actual string so a typo in this lift can't silently
         // rebrand the Gateway API `HTTPRoute` parent-Gateway-binding
@@ -21971,22 +22087,16 @@ mod tests {
         // shape — pinned end-to-end at every emit site by the
         // `cnp_authentication_mode_serialized_as_yaml_string` test).
         // Both scalar-values thread through the lifted canonical
-        // [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]
-        // constants — the same `&'static str`s the production
-        // `cilium_network_policies` per-`(:de, :para)` overlay closure
-        // reaches for, so a future Cilium CNP
-        // `MutualAuthenticationMode` OpenAPI schema enum rebrand lands
-        // at the two consts rather than duplicated across the
-        // production emitter site and this generic-helper pin.
+        // [`cilium_auth_mode`] bijection — the same `bool → &'static
+        // str` projection the production `cilium_network_policies`
+        // per-`(:de, :para)` overlay closure reaches for, so a future
+        // Cilium CNP `MutualAuthenticationMode` OpenAPI schema enum
+        // rebrand (either arm's scalar-value string, or the per-arm
+        // dispatch) lands at the two consts + one projection body
+        // rather than duplicated across the production emitter site
+        // and this generic-helper pin.
         let mode = single_field_overlay(Some(true), CILIUM_KEY_MODE, |b| {
-            serde_yaml::Value::String(
-                if b {
-                    CILIUM_AUTH_MODE_REQUIRED
-                } else {
-                    CILIUM_AUTH_MODE_DISABLED
-                }
-                .into(),
-            )
+            serde_yaml::Value::String(cilium_auth_mode(b).into())
         })
         .unwrap();
         assert_eq!(
