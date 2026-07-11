@@ -12320,6 +12320,67 @@ pub fn lareira_chart_name(nome: &str) -> String {
     format!("{LAREIRA_CHART_NAME_PREFIX}{nome}")
 }
 
+/// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
+/// substrate-side renderer that composes an OCI artifact reference for a
+/// Helm chart prepends. The Helm 3 OCI storage protocol (Helm 3.8+) and
+/// the `FluxCD` `HelmRepository` `type: oci` source both key off this
+/// literal — `helm pull` / `helm install` / `helm registry login` /
+/// `FluxCD`'s source-controller all reject any other scheme on the OCI
+/// path — so a byte-shape drift on this prefix silently splits the
+/// substrate's published chart references from the cluster-side
+/// resolvers that consume them at `helm registry` / `FluxCD` reconcile
+/// time far from the source renderer.
+///
+/// The single source of truth every downstream renderer that composes
+/// an `oci://<registry>/<chart>` reference reaches for —
+/// [`caixa-tatara`][ct]'s `derive_chart_ref` OCI ref
+/// (caixa-tatara/src/lib.rs:202), and every future OCI-ref emitter
+/// (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// `chart_ref` slot on the tatara `Process` intent, the future
+/// per-cluster snapshot bundle's OCI chart references, the future
+/// caixa-otel collector chart's OCI publish shape) inherits the prefix
+/// through this const by construction. Same "one canonical scheme /
+/// prefix / separator lives in one place" discipline the peer
+/// [`LAREIRA_CHART_NAME_PREFIX`] (f7320d7), [`CONTRATO_EDGE_LABEL_SEPARATOR`]
+/// (6d9b04e), [`PLEME_LABEL_PREFIX`] (b473c00 / 9d9813f) lifts apply
+/// on the sibling canonical-load-bearing-substrate-string axes.
+///
+/// [ct]: ../../caixa_tatara/index.html
+pub const OCI_SCHEME_PREFIX: &str = "oci://";
+
+/// Compose the canonical OCI artifact reference for a per-Servico Helm
+/// chart — the `oci://<registry>/lareira-<nome>` shape every renderer
+/// that materializes a chart-publish target (or a cluster-side chart
+/// resolver keyed off one) composes by prepending
+/// [`OCI_SCHEME_PREFIX`], joining the caller-supplied registry, and
+/// appending the per-Servico chart name derived through the canonical
+/// [`lareira_chart_name`] helper.
+///
+/// Single source of truth for the two-axis composition: every consumer
+/// reaches for this helper rather than re-deriving the
+/// `format!("oci://{}/lareira-{}", …)` shape inline, so a future change
+/// to either input axis (the [`OCI_SCHEME_PREFIX`] rebrand once Helm /
+/// `FluxCD` introduce a new registry protocol, the
+/// [`LAREIRA_CHART_NAME_PREFIX`] rebrand once `lareira-` outlives its
+/// scoping intent) is one edit here, not a coordinated sweep across
+/// every renderer crate's OCI-ref composition site.
+///
+/// The rendered reference is the substrate's contract with the
+/// chart-publishing pipeline (`helm registry login` +
+/// `helm push chart.tgz oci://<registry>/lareira-<nome>`), the
+/// cluster-side `FluxCD` `HelmRelease` `chart:` field (which Flux's
+/// source-controller resolves through the same OCI ref), and the
+/// tatara `Process` CR's `intent.aplicacao.chart_ref` slot the
+/// reconciler feeds into `helm install`. Every consumer keys off the
+/// same byte-shape by construction.
+///
+/// [ct]: ../../caixa_tatara/index.html
+#[must_use]
+pub fn oci_chart_ref(registry: &str, nome: &str) -> String {
+    let chart = lareira_chart_name(nome);
+    format!("{OCI_SCHEME_PREFIX}{registry}/{chart}")
+}
+
 /// The `:nome`-side budget the [`lareira_chart_name`] composition
 /// imposes on every caixa `:nome` reaching a renderer that derives a
 /// `lareira-<nome>` artifact (`caixa-helm`'s `ChartDir.name` +
@@ -19142,6 +19203,132 @@ mod tests {
                 "predicate / canonical-composition divergence for :nome of len {} \
                  (predicate_ok = {predicate_ok}, canonical_ok = {canonical_ok})",
                 nome.len()
+            );
+        }
+    }
+
+    // ── OCI chart-ref composer — `oci://<registry>/lareira-<nome>` ───────
+    //
+    // Peer to the `lareira_chart_name` composer above on the sibling
+    // OCI-artifact-reference axis. Until this lift landed the
+    // `caixa-tatara`'s `derive_chart_ref` carried an inline
+    // `format!("oci://{registry}/{chart}")` — a 2-axis composition
+    // (the `oci://` scheme prefix + the `lareira-<nome>` chart name)
+    // whose byte-shape had no compile-time link to the historical doc
+    // comments across `caixa-core`, `caixa-flux`, `caixa-helm`, and
+    // `caixa-tatara` promising the same shape. Pin the const, the
+    // composition equation, and the byte-shape against the prior
+    // inline `format!` so a future composer-internal drift fires at
+    // test time.
+
+    #[test]
+    fn oci_scheme_prefix_pins_canonical_value() {
+        // Pin the actual string value so a typo on the canonical lift
+        // can't silently rebrand the substrate's OCI-artifact-reference
+        // scheme. The string is part of the contract with the Helm 3
+        // OCI storage protocol (`helm push chart.tgz oci://…`,
+        // `helm registry login <registry>`, `helm install release
+        // oci://…`) and the FluxCD `HelmRepository` `type: oci` source
+        // (Flux source-controller keys off this literal on the OCI
+        // path); changing it is a coordinated multi-repo migration,
+        // not an incidental edit. Peer to
+        // [`lareira_chart_name_prefix_pins_canonical_value`] on the
+        // sibling canonical-string-value-pin axis.
+        assert_eq!(OCI_SCHEME_PREFIX, "oci://");
+    }
+
+    #[test]
+    fn oci_chart_ref_pins_byte_shape_against_prior_inline_format() {
+        // Byte-shape pin against the prior inline
+        // `format!("oci://{registry}/{chart}")` at
+        // caixa-tatara/src/lib.rs:202 (where `chart` was itself
+        // `lareira_chart_name(caixa.nome.as_str())`). Any future
+        // composer-internal drift on either axis (the `oci://` scheme
+        // prefix, the `/` scheme-authority separator, the composition
+        // with `lareira_chart_name`) surfaces here as a byte-shape
+        // regression rather than at cluster-apply time far from the
+        // drift site.
+        assert_eq!(
+            oci_chart_ref("ghcr.io/pleme-io/charts", "akeyless-attest"),
+            "oci://ghcr.io/pleme-io/charts/lareira-akeyless-attest"
+        );
+        assert_eq!(
+            oci_chart_ref("ghcr.io/pleme-io", "hello-rio"),
+            "oci://ghcr.io/pleme-io/lareira-hello-rio"
+        );
+    }
+
+    #[test]
+    fn oci_chart_ref_composes_through_canonical_helpers() {
+        // Structural composition equation: the OCI chart-ref is
+        // exactly `{OCI_SCHEME_PREFIX}{registry}/{lareira_chart_name(nome)}`
+        // — no inline `"oci://"` scheme literal, no inline
+        // `format!("lareira-{}", nome)` prefix duplication. Pinning
+        // this composition closes the drift footgun where a future
+        // composer refactor re-inlines either axis and diverges from
+        // its canonical source of truth. Sweep across the canonical
+        // fixture set so the composition holds for the same `:nome`
+        // values every peer per-Servico renderer consults.
+        for (registry, nome) in [
+            ("ghcr.io/pleme-io/charts", "hello-rio"),
+            ("ghcr.io/pleme-io", "cart"),
+            ("registry.example.com", "worker"),
+            ("localhost:5000", "checkout"),
+        ] {
+            let composed = oci_chart_ref(registry, nome);
+            let expected = format!("{OCI_SCHEME_PREFIX}{registry}/{}", lareira_chart_name(nome));
+            assert_eq!(
+                composed, expected,
+                "oci_chart_ref({registry:?}, {nome:?}) must equal the canonical composition \
+                 through OCI_SCHEME_PREFIX + lareira_chart_name"
+            );
+        }
+    }
+
+    #[test]
+    fn oci_chart_ref_starts_with_scheme_prefix() {
+        // Cross-axis invariant: every output of the composer begins
+        // with the lifted scheme prefix verbatim — a future refactor
+        // that accidentally introduced a different scheme (e.g. a
+        // `https://` transposition, or a scheme-authority separator
+        // drift) would surface here. Peer to
+        // [`lareira_chart_name_starts_with_prefix`] on the sibling
+        // per-composer prefix-anchoring axis.
+        for (registry, nome) in [
+            ("ghcr.io/pleme-io/charts", "hello-rio"),
+            ("ghcr.io/pleme-io", "cart"),
+            ("localhost:5000", "a"),
+        ] {
+            let composed = oci_chart_ref(registry, nome);
+            assert!(
+                composed.starts_with(OCI_SCHEME_PREFIX),
+                "oci_chart_ref({registry:?}, {nome:?}) = {composed:?} must start with the lifted \
+                 prefix {OCI_SCHEME_PREFIX:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn oci_chart_ref_contains_lareira_chart_name_verbatim() {
+        // Cross-axis invariant: every output of the composer contains
+        // the canonical `lareira_chart_name(nome)` output verbatim as
+        // its trailing segment — a future refactor that accidentally
+        // introduced a case fold, a hyphen-collapse, or a different
+        // prefix-application shape would surface here. Structurally
+        // pins that the OCI chart-ref path and the peer per-Servico
+        // renderer chart-name path (caixa-helm's `ChartDir.name`,
+        // caixa-flux's `HelmRelease` `chart:` field) both reach for
+        // the same canonical `lareira_chart_name` helper's output.
+        for (registry, nome) in [
+            ("ghcr.io/pleme-io/charts", "hello-rio"),
+            ("ghcr.io/pleme-io", "cart"),
+        ] {
+            let composed = oci_chart_ref(registry, nome);
+            let chart = lareira_chart_name(nome);
+            assert!(
+                composed.ends_with(&chart),
+                "oci_chart_ref({registry:?}, {nome:?}) = {composed:?} must end with the canonical \
+                 lareira_chart_name({nome:?}) = {chart:?}"
             );
         }
     }
