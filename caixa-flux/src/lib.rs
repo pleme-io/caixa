@@ -1331,7 +1331,8 @@ mod tests {
     use super::*;
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
-        M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, kube_root_str_field,
+        M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
+        kube_root_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -2319,7 +2320,9 @@ spec:
             .expect("upgradeFrom propagates as a sequence");
         assert_eq!(upgrade_from.len(), 1);
         assert_eq!(
-            upgrade_from[0].get("from").and_then(|f| f.as_str()),
+            upgrade_from[0]
+                .get(M2_UPGRADE_FROM_KEY_FROM)
+                .and_then(|f| f.as_str()),
             Some("0.0.9")
         );
     }

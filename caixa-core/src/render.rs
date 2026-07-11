@@ -6082,6 +6082,58 @@ pub const M2_BEHAVIOR_KEY_ON_STATE_CHANGE: &str = "onStateChange";
 /// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis.
 pub const M2_BEHAVIOR_KEY_ON_TERMINATE: &str = "onTerminate";
 
+/// Canonical camelCase YAML sub-key the `:upgrade-from :from` per-entry
+/// OTP-appup-shaped prior-`:versao` semver-string scalar-axis lands under
+/// inside each element of the [`M2_KEY_UPGRADE_FROM`] overlay sequence.
+/// Peer of [`M2_KEY_UPGRADE_FROM`] on the sibling `:upgrade-from` sub-slot
+/// axis: [`M2_KEY_UPGRADE_FROM`] names the overlay-container's top-level
+/// key ("upgradeFrom"), the two `M2_UPGRADE_FROM_KEY_*` consts name the
+/// two typed sub-keys the M2 [`crate::UpgradeFromEntry`] struct's
+/// OTP-appup-shaped per-entry fields (`from` semver-of-the-prior-`:versao`
+/// / `instructions` typed [`crate::UpgradeInstruction`] list, analogs of
+/// the OTP `.appup` file's `{FromVsn, [Instruction, …]}` per-entry tuple
+/// per `theory/INSPIRATIONS.md` §II.4) serialize as under the
+/// `#[serde(rename_all = "camelCase")]` derive attribute (`"from"` /
+/// `"instructions"`). Emitted by [`servico_m2_overlay`] as sub-keys of
+/// each element of the [`M2_KEY_UPGRADE_FROM`] overlay sequence and
+/// consumed by every substrate-side test-side navigator that reaches into
+/// the rendered `programs.yaml` per-Servico entry / lareira chart
+/// `values.yaml` per-`pleme-computeunit` block to pin the per-entry
+/// round-trip. The lower-camel shape (`"from"` / `"instructions"`) is
+/// load-bearing: the serde-derive on [`crate::UpgradeFromEntry`] emits
+/// under the same shape and the drift-detection pin in
+/// `upgrade.rs::tests`
+/// (`upgrade_from_entry_serde_keys_match_lifted_m2_upgrade_from_key_consts`)
+/// serializes a fully-populated [`crate::UpgradeFromEntry`] and asserts
+/// each canonical `M2_UPGRADE_FROM_KEY_*` byte-sequence appears in the
+/// JSON — so a hypothetical future `rename_all = "snake_case"` /
+/// `"kebab-case"` accident at the derive attribute or an OTP-lineage
+/// per-entry-key rebrand (`:from` → `:prior-versao` matching a hypothetical
+/// verbatim-Erlang `FromVsn` collapse, `:instructions` → `:steps` matching
+/// a hypothetical Akka appup-shape rebrand) coordinated at the type's
+/// derive attribute surfaces as a build-time test failure at `upgrade.rs`
+/// rather than as a silent test-side `.get(<stale-camelCase-const>)`
+/// returning `None` far from the derive-attr drift's commit. Same "one
+/// canonical byte-string per typed axis" discipline every peer M2 / M3
+/// wire-key axis carries ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] /
+/// [`M2_KEY_UPGRADE_FROM`], [`M2_LIMITS_KEY_MEMORY`] /
+/// [`M2_LIMITS_KEY_FUEL`] / [`M2_LIMITS_KEY_WALL_CLOCK`] /
+/// [`M2_LIMITS_KEY_CPU`] (d8b8b4f), [`M2_BEHAVIOR_KEY_ON_INIT`] /
+/// [`M2_BEHAVIOR_KEY_ON_CALL`] / [`M2_BEHAVIOR_KEY_ON_CAST`] /
+/// [`M2_BEHAVIOR_KEY_ON_INFO`] / [`M2_BEHAVIOR_KEY_ON_STATE_CHANGE`] /
+/// [`M2_BEHAVIOR_KEY_ON_TERMINATE`] (21fe462),
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.). Closes the M2 sub-slot camelCase
+/// key axis: with this lift the three M2 typed slots (`:limits` /
+/// `:behavior` / `:upgrade-from`) all have their canonical camelCase
+/// sub-slot key constants pinned into caixa-core.
+pub const M2_UPGRADE_FROM_KEY_FROM: &str = "from";
+/// Canonical camelCase YAML sub-key the `:upgrade-from :instructions`
+/// per-entry OTP-appup-shaped typed [`crate::UpgradeInstruction`] list
+/// axis lands under inside each element of the [`M2_KEY_UPGRADE_FROM`]
+/// overlay sequence. Peer of [`M2_UPGRADE_FROM_KEY_FROM`] on the sibling
+/// `:upgrade-from` sub-slot axis.
+pub const M2_UPGRADE_FROM_KEY_INSTRUCTIONS: &str = "instructions";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm
@@ -15153,7 +15205,12 @@ mod tests {
             .expect("upgradeFrom key present");
         let arr = upgrade.as_sequence().expect("sequence");
         assert_eq!(arr.len(), 1);
-        assert_eq!(arr[0].get("from").and_then(|v| v.as_str()), Some("0.0.9"));
+        assert_eq!(
+            arr[0]
+                .get(M2_UPGRADE_FROM_KEY_FROM)
+                .and_then(|v| v.as_str()),
+            Some("0.0.9")
+        );
     }
 
     #[test]
