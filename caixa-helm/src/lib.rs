@@ -675,7 +675,10 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use caixa_core::{Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM};
+    use caixa_core::{
+        Caixa, CaixaKind, M2_KEY_BEHAVIOR, M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU,
+        M2_LIMITS_KEY_FUEL, M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK,
+    };
 
     fn sample_caixa() -> Caixa {
         Caixa {
@@ -1070,13 +1073,24 @@ spec:
         let parsed: serde_yaml::Value = serde_yaml::from_str(&values.contents).unwrap();
         let cu_block = parsed.get(DEFAULT_LIBRARY_NAME).unwrap();
         let limits = cu_block.get(M2_KEY_LIMITS).expect("limits must propagate");
-        assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
-        assert_eq!(limits.get("fuel").and_then(|m| m.as_u64()), Some(1_000_000));
         assert_eq!(
-            limits.get("wallClock").and_then(|m| m.as_str()),
+            limits.get(M2_LIMITS_KEY_MEMORY).and_then(|m| m.as_str()),
+            Some("64MiB")
+        );
+        assert_eq!(
+            limits.get(M2_LIMITS_KEY_FUEL).and_then(|m| m.as_u64()),
+            Some(1_000_000)
+        );
+        assert_eq!(
+            limits
+                .get(M2_LIMITS_KEY_WALL_CLOCK)
+                .and_then(|m| m.as_str()),
             Some("30s")
         );
-        assert_eq!(limits.get("cpu").and_then(|m| m.as_str()), Some("500m"));
+        assert_eq!(
+            limits.get(M2_LIMITS_KEY_CPU).and_then(|m| m.as_str()),
+            Some("500m")
+        );
     }
 
     #[test]

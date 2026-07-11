@@ -1707,6 +1707,117 @@ mod tests {
         assert_eq!(json, "{}");
     }
 
+    // ── drift-detection: serde-derive-to-M2_LIMITS_KEY_* identity ────────
+
+    #[test]
+    fn limits_spec_serde_keys_match_lifted_m2_limits_key_consts() {
+        // Load-bearing invariant: the four `M2_LIMITS_KEY_*` consts
+        // (`M2_LIMITS_KEY_MEMORY` / `M2_LIMITS_KEY_FUEL` /
+        // `M2_LIMITS_KEY_WALL_CLOCK` / `M2_LIMITS_KEY_CPU`) name the
+        // exact camelCase JSON keys the `#[serde(rename_all = "camelCase")]`
+        // attribute on `LimitsSpec` emits, and every test-side probe
+        // across the caixa-core / caixa-flux / caixa-helm renderer test
+        // fixtures navigates into the rendered `:limits` overlay
+        // sub-block by consulting one of these four `&'static str`s.
+        // Serialize a fully-populated LimitsSpec and pin that each
+        // canonical byte-sequence appears verbatim in the JSON — a
+        // future accidental `rename_all = "snake_case"` /
+        // `"kebab-case"` / verbatim-field-name flip at the derive
+        // attribute (any of which would silently break every test-side
+        // probe that reaches for one of the four consts) surfaces here
+        // as a build-time test failure at `limits.rs`, not as an
+        // apply-time `.get(<stale-canonical-const>)` returning `None`
+        // far from the derive-attr drift's commit. Same discipline the
+        // sibling M3 `PlacementStrategy::as_str` lift (0a2f653)
+        // established on the peer per-`:placement :estrategia` axis:
+        // one canonical byte-string per typed sub-key axis, pinned to
+        // the load-bearing serde derivation at the type itself.
+        let limits = LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            fuel: Some(1_000_000),
+            wall_clock: Some(Duration::from_secs(30)),
+            cpu: Some(500),
+        };
+        let json = serde_json::to_string(&limits).unwrap();
+        for key in [
+            crate::render::M2_LIMITS_KEY_MEMORY,
+            crate::render::M2_LIMITS_KEY_FUEL,
+            crate::render::M2_LIMITS_KEY_WALL_CLOCK,
+            crate::render::M2_LIMITS_KEY_CPU,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized LimitsSpec must carry the lifted \
+                 M2_LIMITS_KEY_* byte-sequence {quoted} verbatim in \
+                 the JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn m2_limits_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of two
+        // canonical sub-key byte-strings onto the same value (e.g. an
+        // accidental copy-paste flip of `M2_LIMITS_KEY_CPU` to also
+        // read `"memory"`) would silently reroute every test-side
+        // probe on one axis onto the sibling axis's overlay entry and
+        // pass every propagation-probe test that expected only the
+        // stale axis's value. Peer of the sibling three-way distinct
+        // pin on the `FLUX_GITREPOSITORY_REF_KEY_*` trio (7d40380).
+        let all = [
+            crate::render::M2_LIMITS_KEY_MEMORY,
+            crate::render::M2_LIMITS_KEY_FUEL,
+            crate::render::M2_LIMITS_KEY_WALL_CLOCK,
+            crate::render::M2_LIMITS_KEY_CPU,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "M2_LIMITS_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn m2_limits_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `M2_LIMITS_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores,
+        // no `kebab-case` hyphens, no `PascalCase` leading capital, no
+        // whitespace / colons / dots) — the canonical shape the
+        // `#[serde(rename_all = "camelCase")]` derive produces on
+        // `LimitsSpec`. A future flip to a non-camelCase attribute at
+        // the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `limits_spec_serde_keys_match_lifted_m2_limits_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        for key in [
+            crate::render::M2_LIMITS_KEY_MEMORY,
+            crate::render::M2_LIMITS_KEY_FUEL,
+            crate::render::M2_LIMITS_KEY_WALL_CLOCK,
+            crate::render::M2_LIMITS_KEY_CPU,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "M2_LIMITS_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "M2_LIMITS_KEY_* must lead with an ASCII-lowercase byte \
+                 (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "M2_LIMITS_KEY_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
+
     // ── value-shape: zero on any declared axis is rejected ────────────────
 
     #[test]

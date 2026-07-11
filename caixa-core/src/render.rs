@@ -5966,6 +5966,53 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical camelCase YAML sub-key the `:limits :memory` per-Servico
+/// linear-memory-cap scalar-axis lands under inside the [`M2_KEY_LIMITS`]
+/// overlay block. Peer of [`M2_KEY_LIMITS`] on the sibling `:limits`
+/// sub-slot axis: `M2_KEY_LIMITS` names the overlay-container's
+/// top-level key ("limits"), the four `M2_LIMITS_KEY_*` consts name the
+/// four typed sub-keys ([`LIMITS_MEMORY_WASM32_MAX_BYTES`]-bounded
+/// memory cap, [`crate::LIMITS_FUEL_MAX`]-bounded fuel budget,
+/// [`crate::LIMITS_WALL_CLOCK_MAX`]-bounded wall-clock cap,
+/// [`crate::LIMITS_CPU_MILLICORES_MAX`]-bounded soft cgroup CPU share)
+/// that the emit-side [`servico_m2_overlay`] serializes through serde
+/// (`LimitsSpec` carries `#[serde(rename_all = "camelCase")]`) and every
+/// substrate-side test-side navigator probes to pin the round-trip
+/// through the rendered `programs.yaml` per-Servico entry / lareira
+/// chart `values.yaml` per-`pleme-computeunit` block. The lower-camel
+/// shape (`"memory"` / `"fuel"` / `"wallClock"` / `"cpu"`) is
+/// load-bearing: the serde-derive on [`crate::LimitsSpec`] emits under
+/// the same shape and the drift-detection pin in `limits.rs::tests`
+/// (`limits_spec_serde_keys_match_lifted_m2_limits_key_consts`)
+/// serializes a fully-populated [`crate::LimitsSpec`] and asserts each
+/// canonical `M2_LIMITS_KEY_*` byte-sequence appears in the JSON — so a
+/// hypothetical future `rename_all = "snake_case"` / `"kebab-case"`
+/// accident at the derive attribute surfaces as a build-time test
+/// failure at `limits.rs` rather than as a silent test-side
+/// `.get(<stale-camelCase-const>)` returning `None` far from the
+/// derive-attr drift's commit. Same "one canonical byte-string per
+/// typed axis" discipline every peer M2 / M3 wire-key axis carries
+/// ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`],
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.).
+pub const M2_LIMITS_KEY_MEMORY: &str = "memory";
+/// Canonical camelCase YAML sub-key the `:limits :fuel` per-Servico
+/// wasm-instruction-budget scalar-axis lands under inside the
+/// [`M2_KEY_LIMITS`] overlay block. Peer of [`M2_LIMITS_KEY_MEMORY`] on
+/// the sibling `:limits` sub-slot axis.
+pub const M2_LIMITS_KEY_FUEL: &str = "fuel";
+/// Canonical camelCase YAML sub-key the `:limits :wall-clock` per-Servico
+/// wall-clock-cap scalar-axis lands under inside the [`M2_KEY_LIMITS`]
+/// overlay block. Peer of [`M2_LIMITS_KEY_MEMORY`] on the sibling
+/// `:limits` sub-slot axis; the camelCase shape (`"wallClock"`, not
+/// `"wall_clock"`) is load-bearing per the serde-derive attribute on
+/// [`crate::LimitsSpec`].
+pub const M2_LIMITS_KEY_WALL_CLOCK: &str = "wallClock";
+/// Canonical camelCase YAML sub-key the `:limits :cpu` per-Servico
+/// soft-cgroup-CPU-share millicores scalar-axis lands under inside the
+/// [`M2_KEY_LIMITS`] overlay block. Peer of [`M2_LIMITS_KEY_MEMORY`] on
+/// the sibling `:limits` sub-slot axis.
+pub const M2_LIMITS_KEY_CPU: &str = "cpu";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm
@@ -14986,9 +15033,14 @@ mod tests {
         let overlay = servico_m2_overlay(&c).unwrap();
         assert_eq!(overlay.len(), 1);
         let limits = overlay.get(M2_KEY_LIMITS).expect("limits key present");
-        assert_eq!(limits.get("memory").and_then(|m| m.as_str()), Some("64MiB"));
         assert_eq!(
-            limits.get("wallClock").and_then(|m| m.as_str()),
+            limits.get(M2_LIMITS_KEY_MEMORY).and_then(|m| m.as_str()),
+            Some("64MiB")
+        );
+        assert_eq!(
+            limits
+                .get(M2_LIMITS_KEY_WALL_CLOCK)
+                .and_then(|m| m.as_str()),
             Some("30s")
         );
     }
@@ -15184,7 +15236,10 @@ mod tests {
              filtered out — spec.* wins, and appears exactly once",
         );
         assert_eq!(
-            limits_entries[0].1.get("memory").and_then(|v| v.as_str()),
+            limits_entries[0]
+                .1
+                .get(M2_LIMITS_KEY_MEMORY)
+                .and_then(|v| v.as_str()),
             Some("from-spec"),
             "the surviving `limits` entry must carry the spec.* value, \
              not the manifest-derived M2 overlay's value",
