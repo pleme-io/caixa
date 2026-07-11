@@ -8543,6 +8543,54 @@ pub const FLUX_GITREPOSITORY_REF_KEY_COMMIT: &str = "commit";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_GITREPOSITORY_KEY_REF: &str = "ref";
 
+/// Canonical Flux v2 `GitRepository.spec.url` per-CR remote-repo-URL
+/// leaf-scalar-axis key every [`caixa-flux`][cf]-rendered
+/// `gitrepository.yaml` document declares. The FluxCD `source-controller`
+/// reads `spec.url` as the git remote URL it clones per-reconcile — the
+/// authoritative remote the per-Servico artifact archive is sourced from
+/// at every reconcile cycle. A drifted key (e.g. `"URL"`, `"gitUrl"`,
+/// `"repo"`, `"repository"`) at the writer site would silently emit a
+/// `GitRepository` whose CRD schema validator drops the URL field as
+/// unknown, and the per-Servico artifact would never populate — the
+/// downstream `HelmRelease.spec.chart.spec.sourceRef` reference dangles
+/// with an empty artifact at admission, every rendered `HelmRelease` /
+/// `Kustomization` bundle document downstream silently no-ops at
+/// reconcile time with no field naming the URL-key-drift root cause.
+///
+/// Sibling to the already-lifted per-`GitRepository`-CR `spec` sub-
+/// block keys [`FLUX_GITREPOSITORY_KEY_REF`] (84a3c20, the parent
+/// container-axis for the `spec.ref.{tag,branch,commit}` per-shape arm
+/// discriminated union) — this constant names the peer per-CR leaf-
+/// scalar remote-URL axis on the same top-level `spec` position. Both
+/// axes together completely enumerate the `GitRepository.spec.*` per-
+/// CR sub-block keys `caixa-flux`'s current `cluster_bundle` gitrepo
+/// template writes (`spec.interval` reaches through the lifted
+/// `FLUX_KEY_INTERVAL`, `spec.url` through this constant, `spec.ref`
+/// through [`FLUX_GITREPOSITORY_KEY_REF`]), so any future Flux v3
+/// `GitRepository` schema promotion lands as one caixa-core edit
+/// coordinated across the sibling sub-block key axes.
+///
+/// The single source of truth every Flux-v2-per-`GitRepository`-
+/// `spec.url`-leaf-scalar-axis-naming reaches for — one production
+/// consumer today:
+///
+///   - the rendered `gitrepository.yaml` document's per-`GitRepository`
+///     `spec.url` leaf-scalar remote-URL axis (caixa-flux's
+///     `cluster_bundle` `gitrepo` template composer's `url:` sub-key
+///     — the sole production emission site the prior inline `"url:"`
+///     literal sat at).
+///
+/// Every future per-`GitRepository` renderer (the M4 typed-Aplicacao
+/// materializer's per-Aplicacao `GitRepository` synthesis for
+/// per-aggregator-manifest sources, any future `caixa-otel`
+/// collector-pipeline `GitRepository`, any future per-cluster snapshot
+/// `GitRepository` the operator emits) inherits the canonical URL
+/// leaf-scalar key by construction with no opportunity for
+/// per-renderer drift.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_GITREPOSITORY_KEY_URL: &str = "url";
+
 /// Canonical Flux v2 per-cluster-bundle `HelmRelease` document
 /// filename every [`caixa-flux`][cf]-rendered `cluster_bundle` carries
 /// at the per-Servico bundle's rendered file collection — the fixed
@@ -18082,6 +18130,48 @@ mod tests {
         // time split between the writer-side template composer and
         // the aggregator's per-CR `RESTMapper` reader.
         assert_eq!(FLUX_GITREPOSITORY_KEY_REF, "ref");
+    }
+
+    #[test]
+    fn flux_gitrepository_key_url_pins_canonical_value() {
+        // Bridge-arm pin: [`FLUX_GITREPOSITORY_KEY_URL`] resolves to
+        // the canonical `"url"` byte today — the exact YAML key the
+        // FluxCD `source-controller` reads on every rendered
+        // `GitRepository` document's `spec.url` leaf-scalar-axis to
+        // source the per-CR git-remote clone target. Pin the literal
+        // here (peer with the sibling
+        // [`flux_gitrepository_key_ref_pins_canonical_value`] on the
+        // per-CR `spec.ref` container-axis surface) so a future Flux
+        // v3 sub-schema rebrand on the URL axis (e.g. an upstream
+        // `fluxcd/flux2` rename of `spec.url` to `spec.gitUrl` /
+        // `spec.repository`) surfaces here as a coordinated edit-
+        // point at the definition site rather than a silent apply-
+        // time split between the writer-side template composer and
+        // the source-controller's per-CR `RESTMapper` reader.
+        assert_eq!(FLUX_GITREPOSITORY_KEY_URL, "url");
+    }
+
+    #[test]
+    fn flux_gitrepository_key_url_stays_independent_of_ref_and_api_version() {
+        // Cross-axis peer-independence pin: the per-`GitRepository`-CRD
+        // canonical-load-bearing-string surface carries three distinct
+        // axes on the same CRD — `apiVersion`
+        // ([`FLUX_GITREPOSITORY_API_VERSION`], the CRD-group/version
+        // half of the `(apiVersion, kind)` apiserver-side CRD-lookup
+        // tuple), `spec.ref`
+        // ([`FLUX_GITREPOSITORY_KEY_REF`], the per-CR ref-selection
+        // container-axis), and `spec.url`
+        // ([`FLUX_GITREPOSITORY_KEY_URL`], the per-CR remote-repo-URL
+        // leaf-scalar-axis). These three constants spell mutually
+        // distinct schema axes on the same Flux v2 `source-controller`
+        // CRD; pinning distinctness here means a future rebrand on
+        // any one axis (a Flux v3 CRD-version bump, a `spec.ref`
+        // container-axis rename, or a `spec.url` schema promotion)
+        // surfaces as an edit on the corresponding canonical const
+        // alone, without silently collapsing the three axes into one
+        // edit-point at the rustc symbol-name axis.
+        assert_ne!(FLUX_GITREPOSITORY_KEY_URL, FLUX_GITREPOSITORY_KEY_REF);
+        assert_ne!(FLUX_GITREPOSITORY_KEY_URL, FLUX_GITREPOSITORY_API_VERSION);
     }
 
     #[test]

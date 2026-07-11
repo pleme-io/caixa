@@ -900,6 +900,21 @@ pub use caixa_core::FLUX_GITREPOSITORY_REF_KEY_COMMIT;
 /// full lift rationale.
 pub use caixa_core::FLUX_GITREPOSITORY_KEY_REF;
 
+/// Canonical Flux v2 per-`GitRepository` `spec.url` remote-repo-URL
+/// leaf-scalar-axis key every [`cluster_bundle`]-rendered
+/// `gitrepository.yaml` document declares. Re-export of the canonical
+/// [`caixa_core::FLUX_GITREPOSITORY_KEY_URL`] so the byte-string lives
+/// in exactly one place: the writer-side `cluster_bundle` `gitrepo`
+/// template composer's `url:` sub-key (the sole production emission
+/// site the prior inline `"url:"` literal sat at). Sibling to the
+/// already-lifted [`FLUX_GITREPOSITORY_KEY_REF`] on the peer per-CR
+/// `spec.ref` container-axis surface — these two constants together
+/// with the reconcile-cadence [`FLUX_KEY_INTERVAL`] enumerate the
+/// canonical `GitRepository.spec.*` per-CR sub-block key surface
+/// caixa-flux emits today. See the caixa-core docstring for the full
+/// lift rationale.
+pub use caixa_core::FLUX_GITREPOSITORY_KEY_URL;
+
 /// Canonical Flux v2 per-cluster-bundle `HelmRelease` document filename
 /// every [`cluster_bundle`]-rendered `BundleFile` carries at its per-file
 /// `path` axis — re-export of the lifted
@@ -1612,7 +1627,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            namespace: {namespace}\n\
          spec:\n  \
            {interval_key}: {interval}\n  \
-           url: {url}\n  \
+           {url_key}: {url}\n  \
            {ref_key}:\n\
          {gitref_field}\n",
         api_version = FLUX_GITREPOSITORY_API_VERSION,
@@ -1626,6 +1641,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         namespace = opts.namespace,
         interval_key = FLUX_KEY_INTERVAL,
         interval = opts.interval,
+        url_key = FLUX_GITREPOSITORY_KEY_URL,
         url = opts.git_url,
         ref_key = FLUX_GITREPOSITORY_KEY_REF,
         gitref_field = gitref_field,
@@ -5271,6 +5287,76 @@ spec:
              container-axis at the lifted FLUX_GITREPOSITORY_KEY_REF key \
              verbatim (got: {:?})",
             gr.contents
+        );
+    }
+
+    #[test]
+    fn flux_gitrepository_key_url_re_export_points_at_caixa_core_canonical() {
+        // Bridge-arm pin: the re-exported FLUX_GITREPOSITORY_KEY_URL
+        // resolves to the canonical `"url"` byte + `&'static`
+        // allocation from caixa-core, closing the local-`pub const`-
+        // shadow footgun where a sibling `pub const
+        // FLUX_GITREPOSITORY_KEY_URL: &str = "…"` in this crate could
+        // silently carry the same string at the source while pointing
+        // at a different `&'static` allocation. Peer of the sibling
+        // [`flux_gitrepository_key_ref_re_export_points_at_caixa_core_canonical`]
+        // pin on the sibling per-CR `spec.ref` container-axis re-export
+        // surface — closes the second per-`GitRepository` sub-block
+        // key re-export identity pin, extending the discipline from
+        // the container-axis surface onto the leaf-scalar remote-URL
+        // axis.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_GITREPOSITORY_KEY_URL",
+            FLUX_GITREPOSITORY_KEY_URL,
+            caixa_core::FLUX_GITREPOSITORY_KEY_URL,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepository_spec_url_key_pins_lifted_flux_gitrepository_key_url() {
+        // Production-emit pin: traverse a rendered `gitrepository.yaml`
+        // document's `spec` block and assert the remote-repo-URL leaf-
+        // scalar-axis is keyed by the *lifted*
+        // FLUX_GITREPOSITORY_KEY_URL (`"url"`) verbatim — the load-
+        // bearing per-`GitRepository` `spec.url` leaf-scalar-axis KEY
+        // the FluxCD source-controller reads to source the per-CR
+        // git-remote clone target. Before the lift the writer template
+        // carried an inline `url: {url}\n` literal at the sole
+        // `format!(…)` call in `cluster_bundle`'s gitrepo composer;
+        // a typo there (`"URL:"` / `"gitUrl:"` / `"repository:"` /
+        // `"repo:"`) would have silently landed a `GitRepository`
+        // whose CRD schema validator drops the URL field as unknown
+        // at admission, the per-Servico artifact would never populate,
+        // and every downstream `HelmRelease` / `Kustomization` bundle
+        // document would silently no-op at reconcile time with an
+        // empty artifact. Peer of the sibling per-container-axis KEY
+        // test
+        // [`cluster_bundle_gitrepository_spec_ref_key_pins_lifted_flux_gitrepository_key_ref`]
+        // on the peer `spec.ref` container-axis surface — extends the
+        // per-CR sub-block key pin discipline from the ref-selection
+        // container-axis onto the remote-URL leaf-scalar-axis.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let files = cluster_bundle(&caixa, &opts).expect("bundle renders");
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+            .expect("gitrepository.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let url = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_GITREPOSITORY_KEY_URL))
+            .and_then(|u| u.as_str())
+            .expect(
+                "rendered gitrepository.yaml must carry its remote-URL leaf-scalar \
+                 axis at the lifted FLUX_GITREPOSITORY_KEY_URL key verbatim",
+            );
+        assert!(
+            !url.is_empty(),
+            "spec.url leaf-scalar must resolve to a non-empty git-remote clone \
+             target — a drifted key would collapse the readback to None, an \
+             empty string would break the source-controller's per-CR clone step"
         );
     }
 
