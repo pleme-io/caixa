@@ -33,7 +33,21 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, lareira_chart_name};
+use caixa_core::{Caixa, CaixaKind, lareira_chart_name, oci_chart_ref};
+
+/// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
+/// substrate-side renderer that composes an OCI artifact reference
+/// prepends. Re-export of the canonical [`caixa_core::OCI_SCHEME_PREFIX`]
+/// so the scheme string lives in exactly one place across every
+/// renderer — this crate's `derive_chart_ref` and every future OCI-ref
+/// emitter now consult the same `&'static str`, so a future
+/// registry-protocol rebrand is a one-line edit on the canonical
+/// [`caixa_core::OCI_SCHEME_PREFIX`] declaration, not a coordinated
+/// rewrite across every renderer crate's OCI-ref composition site.
+/// Peer to the existing [`caixa_core::lareira_chart_name`] re-export
+/// discipline every peer per-Servico renderer follows on the sibling
+/// per-Servico chart-name axis.
+pub use caixa_core::OCI_SCHEME_PREFIX;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -195,11 +209,12 @@ pub fn process_yaml(caixa: &Caixa, inputs: &RenderInputs) -> Result<String> {
 fn derive_chart_ref(caixa: &Caixa, registry: &str) -> String {
     // caixa-helm publishes the rendered chart as `lareira-<name>` to
     // the supplied registry; we compose the OCI ref through the same
-    // canonical `lareira_chart_name` helper every per-Servico
-    // renderer consults so the Process resolves the same chart name
-    // the publisher pushed under, with no inline prefix-format drift.
-    let chart = lareira_chart_name(caixa.nome.as_str());
-    format!("oci://{registry}/{chart}")
+    // canonical [`caixa_core::oci_chart_ref`] composer (which itself
+    // reads through [`caixa_core::OCI_SCHEME_PREFIX`] +
+    // [`caixa_core::lareira_chart_name`]) so the Process resolves the
+    // same chart name the publisher pushed under, with no inline
+    // prefix-format drift on either the scheme or the chart-name axis.
+    oci_chart_ref(registry, caixa.nome.as_str())
 }
 
 fn default_class() -> Classification {
@@ -351,5 +366,98 @@ mod tests {
         let a = process_yaml(&caixa, &sample_inputs()).unwrap();
         let b = process_yaml(&caixa, &sample_inputs()).unwrap();
         assert_eq!(a, b, "renderer must be deterministic");
+    }
+
+    // ── Drift-detection pins on the lifted `oci_chart_ref` composer ──────
+    //
+    // Until this lift landed the `derive_chart_ref` carried an inline
+    // `format!("oci://{registry}/{chart}")` — a 2-axis composition
+    // (the `oci://` scheme prefix + the `lareira-<nome>` chart name
+    // via [`lareira_chart_name`]) whose byte-shape had no compile-time
+    // link to the historical doc comments across `caixa-core`,
+    // `caixa-flux`, `caixa-helm`, and `caixa-tatara` promising the
+    // same shape. Both writer / re-export sites now consult the lifted
+    // [`caixa_core::oci_chart_ref`] + [`caixa_core::OCI_SCHEME_PREFIX`]
+    // so a future composer-internal drift fires at test time, not at
+    // cluster-apply time far from the drift site.
+
+    #[test]
+    fn oci_scheme_prefix_re_export_points_at_caixa_core_canonical() {
+        // Re-export identity pin: the local `OCI_SCHEME_PREFIX` is the
+        // canonical [`caixa_core::OCI_SCHEME_PREFIX`] `&'static str` —
+        // not a sibling `&'static str` with the same bytes. Same
+        // drift-detection discipline every peer per-crate re-export
+        // pin uses (`DEFAULT_NAMESPACE`, `LAREIRA_CHART_NAME_PREFIX`,
+        // etc.) so a future accidental shadowing surfaces here.
+        caixa_core::assert_str_reexport_identity(
+            "OCI_SCHEME_PREFIX",
+            OCI_SCHEME_PREFIX,
+            caixa_core::OCI_SCHEME_PREFIX,
+        );
+    }
+
+    #[test]
+    fn derive_chart_ref_emits_canonical_oci_chart_ref_output() {
+        // Emission-side pin: `derive_chart_ref` composes exactly what
+        // [`caixa_core::oci_chart_ref`] produces for the same inputs.
+        // A future refactor that re-inlines the `format!` shape or
+        // diverges on the scheme / chart-name axis surfaces here
+        // rather than as a `helm registry` / FluxCD reconcile
+        // failure. Sweep across the canonical fixture set — the
+        // registry the sample_inputs fixture uses + a peer registry
+        // for cross-registry drift coverage.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).unwrap();
+        for registry in [
+            "ghcr.io/pleme-io/charts",
+            "ghcr.io/pleme-io",
+            "registry.example.com",
+        ] {
+            let composed = derive_chart_ref(&caixa, registry);
+            assert_eq!(
+                composed,
+                caixa_core::oci_chart_ref(registry, caixa.nome.as_str()),
+                "derive_chart_ref must route through caixa_core::oci_chart_ref for \
+                 registry {registry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn derive_chart_ref_starts_with_lifted_scheme_prefix() {
+        // Cross-axis invariant: every output of the tatara
+        // `derive_chart_ref` composer begins with the lifted scheme
+        // prefix verbatim — a future refactor that accidentally
+        // introduced a different scheme (a `https://` transposition,
+        // a scheme-authority separator drift) would surface here.
+        // Structurally pins the tatara-side emission on the shared
+        // scheme prefix without re-inlining the `"oci://"` literal.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).unwrap();
+        let composed = derive_chart_ref(&caixa, "ghcr.io/pleme-io/charts");
+        assert!(
+            composed.starts_with(OCI_SCHEME_PREFIX),
+            "derive_chart_ref emission {composed:?} must start with the lifted \
+             OCI_SCHEME_PREFIX {OCI_SCHEME_PREFIX:?}"
+        );
+    }
+
+    #[test]
+    fn derive_chart_ref_ends_with_lareira_chart_name() {
+        // Cross-axis invariant: every output of the tatara
+        // `derive_chart_ref` composer ends with the canonical
+        // `lareira_chart_name(caixa.nome)` output verbatim. Structurally
+        // pins that the tatara-side OCI-ref emission and the peer
+        // per-Servico renderer chart-name path (caixa-helm's
+        // `ChartDir.name`, caixa-flux's `HelmRelease` `chart:` field,
+        // this crate's own `release_name`) all consult the same
+        // canonical `lareira_chart_name` helper's output.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).unwrap();
+        let composed = derive_chart_ref(&caixa, "ghcr.io/pleme-io/charts");
+        let chart = lareira_chart_name(caixa.nome.as_str());
+        assert!(
+            composed.ends_with(&chart),
+            "derive_chart_ref emission {composed:?} must end with the canonical \
+             lareira_chart_name({:?}) = {chart:?}",
+            caixa.nome
+        );
     }
 }
