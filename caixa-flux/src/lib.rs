@@ -342,11 +342,17 @@ pub use caixa_core::FLUX_KEY_CHART;
 /// [`caixa_core::FLUX_KEY_SOURCE_REF`] so the load-bearing Flux-v2-source-
 /// controller-side per-CR source-reference container-axis key lives in
 /// exactly one place across every caixa renderer — the sweep converts
-/// this crate's five test-fixture `.get("sourceRef")` navigation sites in
-/// `mod tests` (the `helmrelease.yaml` `spec.chart.spec.sourceRef.kind`
-/// pin, the `kustomization.yaml` `spec.sourceRef.name` +
-/// `spec.sourceRef.kind` pins under the paired
-/// [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] +
+/// this crate's two production emit sites (the [`cluster_bundle`]
+/// `helmrelease.yaml` format-string template's baked
+/// `spec.chart.spec.sourceRef:\n` sub-block header + the sibling
+/// `kustomization.yaml` format-string template's baked
+/// `spec.sourceRef:\n` sub-block header, both now threaded through a
+/// `{source_ref_key}` named-arg interpolation on the lifted const, closing
+/// the last two open production sites for this axis) plus the five
+/// test-fixture `.get("sourceRef")` navigation sites in `mod tests` (the
+/// `helmrelease.yaml` `spec.chart.spec.sourceRef.kind` pin, the
+/// `kustomization.yaml` `spec.sourceRef.name` + `spec.sourceRef.kind`
+/// pins under the paired [`DEFAULT_FLUX_SYSTEM_NAMESPACE`] +
 /// [`FLUX_KIND_GIT_REPOSITORY`] canonical-string axes, and the two
 /// cross-axis triplet pins that traverse both bundle documents to
 /// pin the sibling `GitRepository`-kind axis triplet against one
@@ -1269,7 +1275,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {chart_key}:\n    \
              spec:\n      \
                chart: {chart_path}\n      \
-               sourceRef:\n        \
+               {source_ref_key}:\n        \
                  kind: {source_kind}\n        \
                  name: {name}\n        \
                  namespace: {namespace}\n  \
@@ -1293,6 +1299,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         interval = opts.interval,
         chart_key = FLUX_KEY_CHART,
         chart_path = opts.chart_path,
+        source_ref_key = FLUX_KEY_SOURCE_REF,
         values_key = FLUX_KEY_VALUES,
         library_name = DEFAULT_LIBRARY_NAME,
         enabled_key = HELM_VALUES_KEY_ENABLED,
@@ -1310,7 +1317,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          spec:\n  \
            {interval_key}: {interval}\n  \
            prune: true\n  \
-           sourceRef:\n    \
+           {source_ref_key}:\n    \
              kind: {source_kind}\n    \
              name: {flux_system}\n  \
            path: ./clusters/{cluster}/services/{name}\n  \
@@ -1331,6 +1338,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         interval = opts.interval,
         cluster = opts.cluster,
         flux_system = DEFAULT_FLUX_SYSTEM_NAMESPACE,
+        source_ref_key = FLUX_KEY_SOURCE_REF,
         health_checks_key = FLUX_KEY_HEALTH_CHECKS,
     );
     // chart_name is reserved for a future kustomization.yaml `resources:`
@@ -3505,6 +3513,113 @@ spec:
             "FLUX_KEY_SOURCE_REF",
             FLUX_KEY_SOURCE_REF,
             caixa_core::FLUX_KEY_SOURCE_REF,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_spec_chart_spec_source_ref_key_pins_lifted_flux_key_source_ref() {
+        // Production-emit pin traversing a rendered `helmrelease.yaml`
+        // document via parsed YAML: the `spec.chart.spec.sourceRef:\n`
+        // sub-block header key baked into the [`cluster_bundle`]
+        // `helmrelease.yaml` format-string template — the container-axis
+        // key nesting the Flux v2 `HelmChartTemplate`'s per-CR
+        // source-of-truth `(kind, name, namespace)` reference triple —
+        // must resolve at the lifted [`FLUX_KEY_SOURCE_REF`] verbatim
+        // byte-value. Before this sweep the site inlined `sourceRef:\n`
+        // as a literal beside its sibling lifted `{chart_key}:` /
+        // `{values_key}:` axes; a caixa-core rebrand of the const would
+        // silently drift the probe path (`.get(FLUX_KEY_SOURCE_REF)`)
+        // away from the emit path (baked `sourceRef:\n`), and a future
+        // Flux v3 rename would land in the const while the emit-side
+        // format-string template silently kept the old byte sequence.
+        // The sweep threads the const through a `{source_ref_key}`
+        // named-arg interpolation so both paths consult one
+        // `&'static str`; this pin traverses the rendered document at
+        // the lifted-const-keyed navigation and asserts a populated
+        // sub-mapping (the `(kind, name, namespace)` triple) resolves
+        // there, verifying that the emit path spells the exact const
+        // byte-value. A regression that re-introduces an inline literal
+        // in the format-string template surfaces as a `None` at the
+        // lifted-const-keyed lookup. Peer to the sibling
+        // [`cluster_bundle_kustomization_spec_source_ref_key_pins_lifted_flux_key_source_ref`]
+        // pin closing the second production emit site on the same
+        // container-axis, and to the sibling
+        // [`cluster_bundle_helmrelease_values_block_uses_lifted_flux_key_values`]
+        // pin on the sibling per-`HelmRelease` body-key surface.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let source_ref = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KEY_CHART))
+            .and_then(|c| c.get(KUBE_KEY_SPEC))
+            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+            .and_then(|r| r.as_mapping())
+            .expect("spec.chart.spec.<FLUX_KEY_SOURCE_REF> mapping present");
+        assert!(
+            !source_ref.is_empty(),
+            "spec.chart.spec.<FLUX_KEY_SOURCE_REF> ({FLUX_KEY_SOURCE_REF:?}) \
+             must carry the `(kind, name, namespace)` reference triple; drift \
+             on this container-axis key silently dangles the HelmRelease's \
+             chart resolution at the Flux v2 source-controller's CRD \
+             registration"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_spec_source_ref_key_pins_lifted_flux_key_source_ref() {
+        // Production-emit pin traversing a rendered `kustomization.yaml`
+        // document via parsed YAML: the `spec.sourceRef:\n` sub-block
+        // header key baked into the [`cluster_bundle`]
+        // `kustomization.yaml` format-string template — the
+        // container-axis key nesting the parent `Kustomization`'s
+        // source-of-truth `(kind, name)` reference pair pointing back at
+        // the cluster's bootstrap `GitRepository` — must resolve at the
+        // lifted [`FLUX_KEY_SOURCE_REF`] verbatim byte-value. Before
+        // this sweep the site inlined `sourceRef:\n` as a literal
+        // beside its sibling lifted `{interval_key}:` /
+        // `{health_checks_key}:` axes; a caixa-core rebrand of the
+        // const would silently drift the probe path away from the emit
+        // path, and a future Flux v3 rename would land in the const
+        // while this format-string template silently kept the old byte
+        // sequence. The sweep threads the const through a
+        // `{source_ref_key}` named-arg interpolation so both paths
+        // consult one `&'static str`; this pin traverses the rendered
+        // document at the lifted-const-keyed navigation and asserts a
+        // populated sub-mapping resolves there. A regression that
+        // re-introduces an inline literal surfaces as a `None` at the
+        // lifted-const-keyed lookup. Peer to the sibling
+        // [`cluster_bundle_helmrelease_spec_chart_spec_source_ref_key_pins_lifted_flux_key_source_ref`]
+        // pin closing the first production emit site on the same
+        // container-axis, together closing the two-site production
+        // emit sweep the peer [`FLUX_KEY_SOURCE_REF`] doc block calls
+        // out.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let kz = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
+        let source_ref = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KEY_SOURCE_REF))
+            .and_then(|r| r.as_mapping())
+            .expect("spec.<FLUX_KEY_SOURCE_REF> mapping present");
+        assert!(
+            !source_ref.is_empty(),
+            "spec.<FLUX_KEY_SOURCE_REF> ({FLUX_KEY_SOURCE_REF:?}) must \
+             carry the `(kind, name)` reference pair pointing at the \
+             cluster's bootstrap GitRepository; drift on this \
+             container-axis key silently dangles the parent \
+             Kustomization's source resolution at the Flux v2 \
+             source-controller's CRD registration"
         );
     }
 
