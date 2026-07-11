@@ -8465,6 +8465,80 @@ pub const FLUX_GITREPOSITORY_REF_KEY_BRANCH: &str = "branch";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_GITREPOSITORY_REF_KEY_COMMIT: &str = "commit";
 
+/// Canonical Flux v2 per-`GitRepository` `spec.ref` ref-selection
+/// discriminated-union parent container-axis key every `caixa-flux`-
+/// emitted `gitrepository.yaml` document mounts its per-shape
+/// `{tag, branch, commit}` sub-selector arm under. Nests one level
+/// above the sibling [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+/// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
+/// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] triple it wraps — the K8s
+/// Flux v2 `source.toolkit.fluxcd.io/v1` `GitRepository` CRD schema
+/// pins the per-CR ref-selection through this `spec.ref` container-
+/// axis, and every rendered `spec.ref.{tag,branch,commit}` arm the
+/// [`caixa_flux::GitRefSpec`] discriminated-union emits nests
+/// beneath this exact key.
+///
+/// The FluxCD `source-controller`'s per-CR `RESTMapper` reads
+/// `spec.ref` to source the per-Servico git clone refspec (the
+/// container-axis carrying the three-way `{tag, branch, commit}`
+/// arm the controller dispatches on), so drift on the container-
+/// axis KEY is exactly as load-bearing as drift on the sibling per-
+/// shape sub-selector KEY the arms decode through: a `"Ref"` /
+/// `"gitRef"` / `"revision"` / `"source"` typo at the writer site
+/// silently emits a `GitRepository` whose ref-selection container-
+/// axis the CRD schema validator drops as unknown, and the sibling
+/// `HelmRelease.spec.chart.spec.sourceRef` reference dangles at
+/// admission with the per-Servico clone never resolving at reconcile
+/// time — apply-side: the Flux v2 `source-controller`'s per-CR
+/// reconcile loop no-ops entirely (no clone, no artifact, no
+/// checksum), the sibling `HelmRelease`'s per-chart resolve step
+/// finds the empty artifact, and every rendered `HelmRelease` /
+/// `Kustomization` bundle document downstream of this `GitRepository`
+/// silently no-ops at the FluxCD apply chain with no field naming
+/// the container-axis-drift root cause.
+///
+/// The single source of truth every Flux-v2-per-`GitRepository`-
+/// `spec.ref`-container-axis-naming reaches for — the two per-render
+/// consumer sites the [`crate::render`]-side lift closes:
+///
+///   - the rendered `gitrepository.yaml` document's per-`GitRepository`
+///     `spec.ref` YAML block-body axis (caixa-flux's `cluster_bundle`
+///     `gitrepo` template composer's `ref:` sub-block header — the
+///     sole production emission site the prior inline `"ref:"`
+///     literal sat at);
+///   - the peer test-fixture navigation site
+///     (caixa-flux's `cluster_bundle_gitrepository_ref_*` per-arm
+///     round-trip pin's `.get("ref")` sub-selector traversal step —
+///     the sole test-side reader site the prior inline `"ref"`
+///     literal sat at).
+///
+/// Changing this value is a coordinated Flux v3 migration alongside
+/// the upstream `fluxcd/flux2` deprecation cycle, not an incidental
+/// edit — pinning it here means the migration lands as one edit at
+/// the const plus a re-run of the pin tests rather than a per-
+/// renderer sweep with no single source of truth to consult.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5)
+/// promotes the parent-container-axis byte-string to a typed
+/// substrate-side `&'static str` on the same trajectory the sibling
+/// per-shape arm sub-selector-key
+/// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] (7d40380) /
+/// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] (7d40380) /
+/// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] (7d40380) triple lifts
+/// established on the sibling per-shape arm surface — nests the
+/// parent container-axis KEY above the already-lifted per-shape arm
+/// sub-selector-KEY triple, so the whole per-`GitRepository`
+/// `spec.ref` sub-schema (parent container-axis KEY + per-shape arm
+/// sub-selector-KEY triple + per-arm value) now navigates through
+/// four caixa-core `&'static str`s in coordination, and any future
+/// Flux v2 sub-schema rebrand (an upstream `fluxcd/flux2` v3
+/// rename of the ref-selection container-axis from `spec.ref` to
+/// `spec.gitRef` / `spec.source.ref`) lands at one const edit
+/// coordinated with the sibling per-shape arm lifts.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_GITREPOSITORY_KEY_REF: &str = "ref";
+
 /// Canonical Flux v2 per-cluster-bundle `HelmRelease` document
 /// filename every [`caixa-flux`][cf]-rendered `cluster_bundle` carries
 /// at the per-Servico bundle's rendered file collection — the fixed
@@ -16494,6 +16568,27 @@ mod tests {
         // on the commit-arm of the FluxCD source-controller
         // `GitRepository.spec.ref` discriminated-union axis.
         assert_eq!(FLUX_GITREPOSITORY_REF_KEY_COMMIT, "commit");
+    }
+
+    #[test]
+    fn flux_gitrepository_key_ref_pins_canonical_value() {
+        // Bridge-arm pin: [`FLUX_GITREPOSITORY_KEY_REF`] resolves to
+        // the canonical `"ref"` byte today — the exact YAML key the
+        // FluxCD `source-controller` reads on every rendered
+        // `GitRepository` document's `spec.ref` container-axis to
+        // source the per-CR git-clone refspec discriminated-union
+        // arm (`{tag, branch, commit}`). Pin the literal here (peer
+        // with the sibling
+        // [`flux_gitrepository_ref_key_tag_pins_canonical_value`] /
+        // [`flux_gitrepository_ref_key_branch_pins_canonical_value`] /
+        // [`flux_gitrepository_ref_key_commit_pins_canonical_value`]
+        // per-shape arm sub-selector pins on the same `spec.ref`
+        // sub-schema) so a future Flux v3 sub-schema rebrand on the
+        // parent container-axis surfaces here as a coordinated edit-
+        // point at the definition site rather than a silent apply-
+        // time split between the writer-side template composer and
+        // the aggregator's per-CR `RESTMapper` reader.
+        assert_eq!(FLUX_GITREPOSITORY_KEY_REF, "ref");
     }
 
     #[test]
