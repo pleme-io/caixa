@@ -12352,6 +12352,118 @@ pub const FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE: &str = "remediateLastFail
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE: &str = "createNamespace";
 
+/// Canonical Flux v2 `Kustomization.spec.prune` per-CR garbage-collection-
+/// toggle leaf-scalar-key every `caixa-flux`-emitted `kustomization.yaml`
+/// document seeds to `true` at the top-level `spec` position of the
+/// emitted [`Kustomization`][kust] CR. The Flux v2 kustomize-controller-
+/// side per-CR reconcile loop keys off this exact leaf to decide whether
+/// to garbage-collect resources that were previously reconciled by the
+/// CR but no longer appear in the CR's current desired-state manifest set
+/// (`spec.prune: true` opts every emitted per-caixa `Kustomization` into
+/// the substrate's canonical GitOps-side sweep-what-you-removed semantic;
+/// `spec.prune: false` (or absent — Flux v2 defaults the axis to `false`
+/// on any CR that omits the leaf) leaves orphaned resources dangling in
+/// the cluster after the source manifest set removes them, silently
+/// splitting per-caixa live cluster state from the caixa's tatara-lisp
+/// source-of-truth and every downstream `feira app deploy` / `feira
+/// deploy` reconcile the substrate's per-caixa GitOps pipeline emits).
+///
+/// Drift on this axis silently drops the substrate's chosen sweep-what-
+/// you-removed semantic from every emitted per-caixa `Kustomization`
+/// document — the kustomize-controller then leaves every per-caixa
+/// resource the source manifest set previously reconciled but no longer
+/// carries dangling in the cluster with no diagnostic naming the toggle-
+/// drift root cause far from the source `caixa.lisp` / the renderer's
+/// format-string template, and the substrate's "the cluster's per-caixa
+/// live state converges to the caixa's tatara-lisp source-of-truth on
+/// every reconcile — resources the source no longer carries are swept
+/// by the kustomize-controller, not left dangling" CAIXA-SDLC.md §V
+/// author-to-live-convergence guarantee silently regresses.
+///
+/// Note the axis is asymmetric across the co-resident `HelmRelease` CR:
+/// the peer `HelmRelease` document seeds no `spec.prune` leaf because
+/// the Flux v2 helm-controller-side per-CR reconcile loop keys off Helm
+/// 3's own release-scoped resource-tracking manifest (the per-release
+/// `helm.sh/release-name` label + `secrets/sh.helm.release.v1.*` release
+/// snapshots) to garbage-collect resources removed between chart
+/// versions rather than a CR-level toggle, so the `spec.prune` leaf is
+/// well-defined only on the `Kustomization` CR whose kustomize-controller
+/// reconcile loop tracks resources by the CR's manifest set rather than
+/// Helm's per-release snapshots. This is the mirror of the peer sibling
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] axis, which is `HelmRelease`-
+/// CR-only for the mirror reason (Helm 3's chart-side `Chart.yaml`
+/// declares no target-namespace-creation semantic of its own, so the
+/// helm-controller carries a per-CR toggle at `spec.install.createNamespace`
+/// that the peer kustomize-controller has no need to mirror since the
+/// upstream Kustomize project's per-CR spec block establishes the
+/// target-namespace independently at each `kustomization.yaml` document's
+/// own `metadata.namespace` axis).
+///
+/// The single source of truth every rendered Flux bundle axis that names
+/// the per-CR garbage-collection-toggle leaf reaches for:
+///
+///   - the rendered `kustomization.yaml` document's `spec.prune` leaf-
+///     scalar-key axis (caixa-flux/src/lib.rs — the `cluster_bundle`
+///     `kustomization.yaml` format-string template's per-CR garbage-
+///     collection-toggle leaf under the top-level `spec` position,
+///     threading the same `&'static str` through a new `{prune_key}`
+///     named-arg interpolation);
+///   - the one test-fixture navigation site in caixa-flux's `mod tests`
+///     that probes the rendered document's `.get("prune")` leaf axis to
+///     pin the substrate's canonical `true` seed (the
+///     [`cluster_bundle_kustomization_prune_pins_lifted_true`] per-CR
+///     production-emit pin).
+///
+/// Both the production emit site + the one test-fixture navigation site
+/// name the same Flux v2 per-CR garbage-collection-toggle leaf-scalar-
+/// key and must move together on any hypothetical Flux v3 rename
+/// (upstream Flux v3 roadmap floats candidates like `garbageCollect` /
+/// `sweep` / `pruneOrphaned` / `deleteOrphans` in the migration prose).
+/// Until this lift landed the axis carried an inline `prune` literal at
+/// the one production emit site (caixa-flux/src/lib.rs — the
+/// `prune: true` leaf inside the `cluster_bundle` `kustomization.yaml`
+/// format-string template's top-level `spec` position) — the sole
+/// occurrence of the same load-bearing Flux-v2-per-CR-garbage-
+/// collection-toggle-leaf-scalar-key convention, drift-prone by
+/// construction ahead of the second occurrence the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `Kustomization` synthesis will surface, where a per-renderer local
+/// `pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "…"` (the canonical
+/// drift footgun where a sibling local `pub const` could happen to
+/// carry the same string at the source while pointing at a different
+/// `&'static` allocation) would let the two renderers silently disagree
+/// on the substrate's canonical sweep-what-you-removed semantic.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` in advance of the
+/// second occurrence the M4 materializer will surface — so the second
+/// consumer inherits the canonical per-CR garbage-collection-toggle
+/// leaf-scalar-key by construction without opportunity for per-renderer
+/// drift.
+///
+/// Same "the typed constant lives in one place" discipline the sibling
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] (ba9ab8b) install-path-only
+/// per-CR namespace-seeder-toggle leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] (96581b7) upgrade-
+/// path-only per-CR remediation-toggle leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_RETRIES`] (a12f9fc) leaf-scalar-key +
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATION`] (6fe4e7e) sub-container-axis-key
+/// + [`FLUX_HELMRELEASE_KEY_INSTALL`] / [`FLUX_HELMRELEASE_KEY_UPGRADE`]
+/// (7767c26) parent-container-axis-key pair +
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae) scalar-
+/// value halves of the per-path per-CR HelmRelease spec surface
+/// established — extends the discipline from the co-resident per-caixa
+/// `HelmRelease` CR spec surface onto the co-resident per-caixa
+/// `Kustomization` CR spec surface at the mirror-symmetric top-level
+/// `spec.prune` position.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [kust]: https://fluxcd.io/flux/components/kustomize/kustomizations/
+pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "prune";
+
 /// Canonical K8s Gateway API `GatewayClass` name every `caixa-mesh`-emitted
 /// [`Gateway`][gw] document declares at its `spec.gatewayClassName` axis —
 /// the controller-discriminator that binds the emitted `Gateway` to a
@@ -16759,6 +16871,78 @@ mod tests {
              peer phase's opt-in-toggle axis at every emit site, dropping \
              the phase-specific pre-apply / post-retry-exhaustion semantic \
              the substrate seeds on the coalesced arm"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_key_prune_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `Kustomization.spec.prune` per-CR garbage-
+        // collection-toggle leaf-scalar-key the substrate's per-caixa
+        // `cluster_bundle` renderer seeds to `true` into every emitted
+        // per-caixa `kustomization.yaml` document at the top-level `spec`
+        // position. The string is part of the cluster-side contract with
+        // the upstream Flux v2 kustomize-controller — the controller's
+        // per-CR reconcile loop reaches the sweep-what-you-removed toggle
+        // through this exact leaf; a drifted leaf-scalar-key silently
+        // strips the substrate's chosen sweep-what-you-removed semantic
+        // from every emitted per-caixa `Kustomization` document, leaving
+        // per-caixa resources the source manifest set previously
+        // reconciled but no longer carries dangling in the cluster the
+        // substrate's "the cluster's per-caixa live state converges to
+        // the caixa's tatara-lisp source-of-truth on every reconcile —
+        // resources the source no longer carries are swept by the
+        // kustomize-controller, not left dangling" CAIXA-SDLC.md §V
+        // author-to-live-convergence guarantee mandates, with no
+        // diagnostic naming the toggle-drift root cause. Changing it is
+        // a coordinated Flux v3 CRD-schema-rebrand migration alongside
+        // the upstream `kustomize-controller` deprecation cycle
+        // (candidates like `garbageCollect` / `sweep` / `pruneOrphaned`
+        // / `deleteOrphans` that upstream Flux v3 roadmap floats in the
+        // migration prose), not an incidental edit. Peer to
+        // `flux_helmrelease_key_create_namespace_pins_canonical_value`
+        // on the sibling co-resident per-caixa `HelmRelease` CR install-
+        // path per-CR namespace-seeder-toggle leaf-scalar-key half of
+        // the same per-caixa Flux-bundle per-CR-toggle leaf-scalar-key
+        // surface.
+        assert_eq!(FLUX_KUSTOMIZATION_KEY_PRUNE, "prune");
+    }
+
+    #[test]
+    fn flux_kustomization_key_prune_stays_independent_of_create_namespace() {
+        // The per-caixa Flux bundle hosts two co-resident per-CR-toggle
+        // leaf-scalar-key axes: the per-`Kustomization`-CR garbage-
+        // collection-toggle [`FLUX_KUSTOMIZATION_KEY_PRUNE`] at the
+        // top-level `spec` position (this lift) and the per-`HelmRelease`-
+        // CR install-path namespace-seeder-toggle
+        // [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] (ba9ab8b) under the
+        // sibling [`FLUX_HELMRELEASE_KEY_INSTALL`] parent-container-axis-
+        // key. Pin that the two consts carry byte-distinct sequences so
+        // a future rebrand on either arm can't silently coalesce onto
+        // the peer arm (a `FLUX_KUSTOMIZATION_KEY_PRUNE = "createNamespace"`
+        // typo would silently rebind the Kustomization-CR garbage-
+        // collection-toggle onto the HelmRelease-CR install-path
+        // namespace-seeder-toggle leaf at every emit site — the
+        // kustomize-controller would then read the substrate's `true`
+        // seed at the drifted leaf-key rather than the canonical `prune`
+        // axis, silently dropping the sweep-what-you-removed semantic
+        // entirely and leaving per-caixa resources removed from the
+        // source manifest set dangling in the cluster with no
+        // diagnostic naming the leaf-key-coalesce root cause). The
+        // per-`Kustomization`-CR garbage-collection-toggle and the
+        // per-`HelmRelease`-CR install-path namespace-seeder-toggle must
+        // always resolve to distinct emitted leaf-keys under their
+        // respective co-resident per-CR spec surfaces.
+        assert_ne!(
+            FLUX_KUSTOMIZATION_KEY_PRUNE, FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+            "the per-`Kustomization`-CR garbage-collection-toggle leaf-\
+             scalar-key and the per-`HelmRelease`-CR install-path \
+             namespace-seeder-toggle leaf-scalar-key must remain byte-\
+             distinct — a coalesce onto one value silently rebinds one \
+             CR's opt-in toggle onto the peer CR's opt-in-toggle axis at \
+             every emit site, dropping the per-CR-specific sweep-what-\
+             you-removed / pre-apply-namespace-seeder semantic the \
+             substrate seeds on the coalesced arm"
         );
     }
 
