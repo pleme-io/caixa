@@ -48,6 +48,45 @@ use caixa_core::{Caixa, CaixaKind, lareira_chart_name, oci_chart_ref};
 /// discipline every peer per-Servico renderer follows on the sibling
 /// per-Servico chart-name axis.
 pub use caixa_core::OCI_SCHEME_PREFIX;
+
+/// Canonical wall-clock cap the caixa-tatara-emitted `Process` grants
+/// its ephemeral install-and-verify phase — the paired per-`Process`
+/// wall-clock-cap scalar-value that both the tatara `AplicacaoIntent`
+/// `install_timeout` (the Helm helm-controller install-phase wall-clock
+/// cap Flux passes through to `helm install` for the rendered chart)
+/// and the enclosing `Boundary.timeout` (the tatara-substrate outer
+/// wall-clock cap the ephemeral `Process` outcome must land within)
+/// travel on. Both layers pin the same 25-minute ceiling by construction
+/// — an ephemeral `Process` whose outer boundary is shorter than its
+/// inner Helm install budget would let the substrate declare failure
+/// under a Helm apply that's still running (a wasted retry cycle that
+/// stops the operator from ever observing a `HelmReleaseReleased`
+/// postcondition transition), and a boundary that's longer than the
+/// Helm budget would let a `HelmReleaseReleased` postcondition wait
+/// past the point Helm has already given up on the install (a wasted
+/// wall-clock the operator stops the ephemeral timer against).
+///
+/// Prior to this lift the same `"25m"` byte-string sat inline at
+/// both the `AplicacaoIntent.install_timeout` construction site and
+/// the `Boundary.timeout` construction site in [`process_for_aplicacao`],
+/// plus the paired `assert_eq!(a.install_timeout.as_deref(), Some("25m"))`
+/// test-side probe — a 3-site duplication of the load-bearing wall-clock
+/// scalar-value whose byte-shape had no compile-time link. A future
+/// per-substrate wall-clock-cap migration (`"25m"` → `"30m"` on longer
+/// chart install cycles, `"25m"` → `"15m"` on faster ephemeral turnaround
+/// SLAs) would have required a coordinated three-way edit whose miss
+/// at any one site silently emitted a `Process` whose outer boundary
+/// disagreed with its inner Helm budget by construction. Every consumer
+/// now routes through this `&'static str`, so the same migration is a
+/// one-line edit on the const.
+///
+/// Peer to the sibling [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`]
+/// / [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] lifts
+/// on the canonical Flux-v2-emit-side scalar-value-default surface —
+/// each pinned by a single canonical const the tatara / Flux emitters
+/// jointly consult.
+pub const DEFAULT_APLICACAO_INSTALL_TIMEOUT: &str = "25m";
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -152,7 +191,7 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
         values_overlay: inputs.values_overlay.clone(),
         release_name: Some(release_name.clone()),
         target_namespace: Some(inputs.target_namespace.clone()),
-        install_timeout: Some("25m".into()),
+        install_timeout: Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT.into()),
     };
 
     let mut postconditions = vec![Condition {
@@ -174,7 +213,7 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
         boundary: Boundary {
             preconditions: vec![],
             postconditions,
-            timeout: Some("25m".into()),
+            timeout: Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT.into()),
         },
         compliance: Default::default(),
         depends_on: vec![],
@@ -290,7 +329,10 @@ mod tests {
                 assert_eq!(a.profile, "gateway-with-internal-saas");
                 assert_eq!(a.release_name.as_deref(), Some("lareira-akeyless-attest"));
                 assert_eq!(a.target_namespace.as_deref(), Some("akeyless-test"));
-                assert_eq!(a.install_timeout.as_deref(), Some("25m"));
+                assert_eq!(
+                    a.install_timeout.as_deref(),
+                    Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT)
+                );
                 // Values overlay preserved.
                 assert_eq!(a.values_overlay["cluster"]["name"], "ephemeral-test-01");
             }
@@ -438,6 +480,55 @@ mod tests {
             "derive_chart_ref emission {composed:?} must start with the lifted \
              OCI_SCHEME_PREFIX {OCI_SCHEME_PREFIX:?}"
         );
+    }
+
+    #[test]
+    fn default_aplicacao_install_timeout_pins_canonical_value() {
+        // Canonical-value pin on the lifted per-Process wall-clock cap
+        // scalar. Was a 3-site duplicated `"25m"` inline literal at
+        // (i) the `AplicacaoIntent.install_timeout` construction site
+        // in `process_for_aplicacao`, (ii) the enclosing
+        // `Boundary.timeout` construction site in the same fn, and
+        // (iii) the paired `assert_eq!` probe in
+        // `renders_process_with_aplicacao_intent_and_ephemeral_lifetime`
+        // — a coordinated-edit footgun on any future wall-clock-cap
+        // migration whose miss at any one site silently emitted a
+        // `Process` whose outer boundary disagreed with its inner Helm
+        // install budget by construction. Pinning the byte-shape here
+        // fires at test time when a future accidental edit changes
+        // the const's value.
+        assert_eq!(DEFAULT_APLICACAO_INSTALL_TIMEOUT, "25m");
+    }
+
+    #[test]
+    fn default_aplicacao_install_timeout_pairs_intent_and_boundary_at_one_axis() {
+        // Emission-side pair pin: both the `AplicacaoIntent.install_timeout`
+        // (inner Helm install wall-clock cap Flux passes through to
+        // `helm install`) and the enclosing `Boundary.timeout` (outer
+        // tatara-substrate wall-clock cap the ephemeral `Process`
+        // outcome must land within) resolve to the same canonical
+        // wall-clock string on the same lifted const, so a future
+        // per-substrate migration reaches both layers through one
+        // `&'static str` by construction. A miss (a future edit that
+        // re-inlines one site or diverges the two by a different
+        // scalar) surfaces here structurally, not at
+        // `helm install` / operator-reconcile time far from the drift
+        // site.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).unwrap();
+        let process = process_for_aplicacao(&caixa, &sample_inputs()).expect("render");
+        let intent_install_timeout = match process.spec.intent.variant().expect("intent") {
+            IntentVariant::Aplicacao(a) => a.install_timeout.clone(),
+            other => panic!("expected Aplicacao, got {other:?}"),
+        };
+        assert_eq!(
+            intent_install_timeout.as_deref(),
+            Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT),
+        );
+        assert_eq!(
+            process.spec.boundary.timeout.as_deref(),
+            Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT),
+        );
+        assert_eq!(intent_install_timeout, process.spec.boundary.timeout);
     }
 
     #[test]
