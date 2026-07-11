@@ -1701,7 +1701,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # Source — pinned to {tag_human}, rendered by caixa-flux.\n\
          {api_version_key}: {api_version}\n\
          {kind_key}: {kind}\n\
-         metadata:\n  \
+         {metadata_key}:\n  \
            name: {name}\n  \
            namespace: {namespace}\n\
          spec:\n  \
@@ -1713,6 +1713,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         api_version = FLUX_GITREPOSITORY_API_VERSION,
         kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_GIT_REPOSITORY,
+        metadata_key = KUBE_KEY_METADATA,
         tag_human = format!(
             "{field} {value}",
             field = opts.git_ref.ref_field_name(),
@@ -1748,7 +1749,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # caixa Servico. Per-cluster values are injected here.\n\
          {api_version_key}: {api_version}\n\
          {kind_key}: {kind}\n\
-         metadata:\n  \
+         {metadata_key}:\n  \
            name: {name}\n  \
            namespace: {namespace}\n\
          spec:\n  \
@@ -1776,6 +1777,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
+        metadata_key = KUBE_KEY_METADATA,
         name = name,
         namespace = opts.namespace,
         interval_key = FLUX_KEY_INTERVAL,
@@ -1801,7 +1803,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          # Paired path: pleme-io/k8s/clusters/{cluster}/services/{name}/\n\
          {api_version_key}: {kustomization_api_version}\n\
          {kind_key}: {kind}\n\
-         metadata:\n  \
+         {metadata_key}:\n  \
            name: {name}\n  \
            namespace: {flux_system}\n\
          spec:\n  \
@@ -1823,6 +1825,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         kind = FLUX_KIND_KUSTOMIZATION,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         health_kind = FLUX_KIND_HELM_RELEASE,
+        metadata_key = KUBE_KEY_METADATA,
         api_version = FLUX_HELMRELEASE_API_VERSION,
         name = name,
         namespace = opts.namespace,
@@ -4563,6 +4566,68 @@ spec:
                  composed from the lifted KUBE_KEY_KIND ({KUBE_KEY_KIND:?}); \
                  a drifted inline label here silently rebrands the per-CR \
                  CRD-`kind`-discriminator-axis away from the lifted key \
+                 (got: {contents:?})",
+                contents = f.contents,
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_every_flux_cr_carries_top_level_metadata_label_from_lifted_key() {
+        // Fail-before-pass-after production-side sweep pin: every one of
+        // the three rendered Flux bundle files' top-level `metadata:`
+        // YAML label — the load-bearing per-CR block-scope key naming
+        // the exact axis the apiserver reads to resolve each CR's
+        // ObjectMeta (`.metadata.name` / `.metadata.namespace` /
+        // `.metadata.labels` / `.metadata.annotations`) against the
+        // sibling `spec:` half of the top-level `(metadata, spec)`
+        // K8s-CR-shape pair — must byte-compose the lifted
+        // [`KUBE_KEY_METADATA`] verbatim as its label prefix. Before
+        // this sweep the three [`cluster_bundle`] format-string
+        // templates carried three inline `metadata:` YAML label
+        // literals (gitrepository.yaml top-level +
+        // helmrelease.yaml top-level + kustomization.yaml top-level)
+        // side-by-side with their `name: {name}` / `namespace:
+        // {namespace}` children; a future rebrand of the lifted
+        // [`KUBE_KEY_METADATA`] const (or a coordinated
+        // K8s-API-conventions per-major-version ObjectMeta-block-key
+        // promotion) had to reach every inline label site in lockstep,
+        // or the emit-side silently kept the pre-rebrand label byte
+        // while the per-CR body-key retrieval sites (already routed
+        // through [`KUBE_KEY_METADATA`] via `kube_metadata_str_field`)
+        // rebranded — the two sides would then disagree on the label
+        // byte, and every downstream apiserver-side ObjectMeta parser
+        // on the rendered CR would silently miss its per-CR
+        // `metadata.name` / `metadata.namespace` lookup with no field
+        // naming the label-drift root cause far from the source
+        // caixa.lisp. Peer to
+        // [`cluster_bundle_every_flux_cr_carries_top_level_kind_label_from_lifted_key`]
+        // (ef2c7ef) /
+        // [`cluster_bundle_every_flux_cr_carries_top_level_api_version_label_from_lifted_key`]
+        // (6d3cbf0) on the sibling `kind:` / `apiVersion:` halves of
+        // the same top-level K8s-CR shape — extends the production-
+        // side raw-byte-label-sweep discipline established there onto
+        // the sibling ObjectMeta-block-scope label position, so the
+        // three top-level K8s-CR body-block label axes all consume
+        // the same substrate-owned `&'static str`s by construction.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let label_prefix = format!("{KUBE_KEY_METADATA}:");
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let f = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename))
+                .unwrap_or_else(|| panic!("{filename} present"));
+            assert!(
+                f.contents.contains(&label_prefix),
+                "{filename} must carry the top-level {label_prefix:?} YAML label \
+                 composed from the lifted KUBE_KEY_METADATA ({KUBE_KEY_METADATA:?}); \
+                 a drifted inline label here silently rebrands the per-CR \
+                 ObjectMeta-block-scope axis away from the lifted key \
                  (got: {contents:?})",
                 contents = f.contents,
             );
