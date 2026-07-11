@@ -473,6 +473,41 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE;
 /// `spec.prune` position.
 pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE;
 
+/// Canonical Flux v2 `Kustomization.spec.path` per-CR source-sub-tree
+/// leaf-scalar-key — re-export of the canonical
+/// [`caixa_core::FLUX_KUSTOMIZATION_KEY_PATH`] so the Flux v2 kustomize-
+/// controller-side per-CR source-sub-tree leaf-scalar-key lives in
+/// exactly one place across every caixa renderer. Peer to the sibling
+/// co-resident [`FLUX_KUSTOMIZATION_KEY_PRUNE`] (8ec7917) per-CR
+/// garbage-collection-toggle leaf-scalar-key on the same top-level
+/// `spec` position of the emitted per-caixa `Kustomization` CR — extends
+/// the per-`Kustomization`-CR-spec leaf-scalar-key discipline from the
+/// co-resident garbage-collection-toggle axis onto the co-resident
+/// source-sub-tree axis at the mirror-symmetric top-level `spec.path`
+/// position. One production emit site (this crate's [`cluster_bundle`]
+/// `kustomization.yaml` format-string template's per-CR source-sub-tree
+/// leaf under the top-level `spec` position, threading the same
+/// `&'static str` through a new `{path_key}` named-arg interpolation)
+/// plus one test-fixture navigation site in `mod tests` (the per-CR
+/// [`cluster_bundle_kustomization_path_pins_lifted_sub_tree`] pin's
+/// `.get(FLUX_KUSTOMIZATION_KEY_PATH)` probe) now consult the same
+/// `&'static str`. Until this lift landed the axis carried the load-
+/// bearing `path` bytes inline at the one production emit site; a
+/// future hypothetical Flux v3 rename (`sourcePath` / `manifestsPath` /
+/// `sourceRoot`) on the production-emit site without a coordinated edit
+/// on every per-renderer consumer the absorption roadmap surfaces (the
+/// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-
+/// Aplicacao `Kustomization` synthesis) would have silently unbound
+/// every emitted per-caixa `Kustomization` from its paired per-caixa
+/// sub-tree of the pleme-io k8s repository — the Flux v2 kustomize-
+/// controller would then either reconcile the whole GitRepository root
+/// (defaulting to `./` when the CR omits the leaf, pulling every
+/// unrelated cluster's manifests through the wrong per-caixa
+/// `Kustomization`) or refuse to reconcile at all (parking the CR at
+/// `BuildFailed` naming the missing sub-tree far from the source
+/// `caixa.lisp` / the renderer's format-string template).
+pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PATH;
+
 /// Canonical FluxCD installation namespace — re-export of the lifted
 /// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] so the load-bearing
 /// string lives in exactly one place across every consumer of the
@@ -1676,7 +1711,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {source_ref_key}:\n    \
              kind: {source_kind}\n    \
              name: {flux_system}\n  \
-           path: ./clusters/{cluster}/services/{name}\n  \
+           {path_key}: ./clusters/{cluster}/services/{name}\n  \
            {health_checks_key}:\n    \
              - apiVersion: {api_version}\n      \
                kind: {health_kind}\n      \
@@ -1697,6 +1732,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         source_ref_key = FLUX_KEY_SOURCE_REF,
         health_checks_key = FLUX_KEY_HEALTH_CHECKS,
         prune_key = FLUX_KUSTOMIZATION_KEY_PRUNE,
+        path_key = FLUX_KUSTOMIZATION_KEY_PATH,
     );
     // chart_name is reserved for a future kustomization.yaml `resources:`
     // entry pointing at the rendered Chart.yaml; not yet wired.
@@ -2555,6 +2591,107 @@ spec:
             "FLUX_KUSTOMIZATION_KEY_PRUNE",
             FLUX_KUSTOMIZATION_KEY_PRUNE,
             caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_path_pins_lifted_sub_tree() {
+        // Fail-before-pass-after pin: the rendered `kustomization.yaml`
+        // document's `spec.path` per-CR source-sub-tree leaf-scalar-key
+        // must resolve to the canonical per-cluster / per-caixa sub-
+        // tree path seed verbatim under the lifted
+        // [`FLUX_KUSTOMIZATION_KEY_PATH`] leaf-key. Before the lift the
+        // axis carried an inline `path: ./clusters/<cluster>/services/<name>`
+        // leaf-scalar-key literal at the sole production-code call
+        // site (the top-level `spec` position of the [`cluster_bundle`]
+        // `kustomization.yaml` format-string template, mirror-symmetric
+        // to the co-resident per-`Kustomization`-CR garbage-collection-
+        // toggle the sibling
+        // [`cluster_bundle_kustomization_prune_pins_lifted_true`] pin
+        // covers). A future substrate-side rebrand on the canonical
+        // [`caixa_core::FLUX_KUSTOMIZATION_KEY_PATH`] declaration that
+        // failed to reach this emit site would silently unbind every
+        // emitted per-caixa `Kustomization` from its paired per-caixa
+        // sub-tree of the pleme-io k8s repository — the Flux v2
+        // kustomize-controller would then either reconcile the whole
+        // GitRepository root (when the CR omits the leaf, the
+        // controller defaults to `./`, pulling every unrelated cluster's
+        // manifests through the wrong per-caixa `Kustomization`) or
+        // refuse to reconcile at all (when the leaf points at a path
+        // the GitRepository doesn't carry, the CR sits perpetually at
+        // `BuildFailed`). Pin the identity here so a regression that
+        // re-introduces an inline literal at the emit site — or a
+        // rebrand on the canonical const that fails to reach the emit
+        // site — surfaces at build time on this test's failure. Peer
+        // to the sibling
+        // [`cluster_bundle_kustomization_prune_pins_lifted_true`] pin
+        // on the co-resident per-`Kustomization`-CR garbage-collection-
+        // toggle axis — extends the per-`Kustomization`-CR-spec leaf-
+        // scalar-key discipline from the co-resident garbage-
+        // collection-toggle onto the co-resident source-sub-tree
+        // pointer at the mirror-symmetric top-level `spec.path`
+        // position.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let ks = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let path = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_PATH))
+            .and_then(|v| v.as_str())
+            .expect(
+                "spec.path string scalar present; drift on this axis \
+                 silently unbinds every per-caixa Kustomization from \
+                 its paired per-caixa sub-tree of the pleme-io k8s \
+                 repository, and the kustomize-controller either \
+                 defaults to reconciling the GitRepository root or \
+                 refuses to reconcile at all",
+            );
+        let expected = format!(
+            "./clusters/{cluster}/services/{name}",
+            cluster = opts.cluster,
+            name = sample_caixa().nome
+        );
+        assert_eq!(
+            path, expected,
+            "spec.path must carry the substrate's canonical per-cluster \
+             / per-caixa sub-tree seed — drift silently unbinds every \
+             per-caixa Kustomization from its paired sub-tree of the \
+             pleme-io k8s repository"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_key_path_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `FLUX_KUSTOMIZATION_KEY_PATH` was lifted from
+        // the production-code inline `path` literal at the sole
+        // `cluster_bundle` `kustomization.yaml` format-string template's
+        // per-CR source-sub-tree leaf-scalar-key emit site + the test-
+        // fixture navigation site the sibling
+        // [`cluster_bundle_kustomization_path_pins_lifted_sub_tree`] pin
+        // opens onto the rendered document, to a re-export of
+        // [`caixa_core::FLUX_KUSTOMIZATION_KEY_PATH`] so the canonical
+        // Flux v2 per-CR source-sub-tree leaf-scalar-key lives in
+        // exactly one place across every caixa renderer. Pin the
+        // equality + static-data identity here so any local re-
+        // introduction of a sibling
+        // `pub const FLUX_KUSTOMIZATION_KEY_PATH: &str = "…"` at this
+        // crate (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry the same string at the
+        // source while pointing at a different `&'static` allocation)
+        // is a build-time test failure naming the offending drift.
+        // Peer to
+        // [`flux_kustomization_key_prune_re_export_points_at_caixa_core_canonical`]
+        // on the sibling co-resident per-`Kustomization`-CR garbage-
+        // collection-toggle leaf-scalar-key re-export axis.
+        caixa_core::assert_str_reexport_identity(
+            "FLUX_KUSTOMIZATION_KEY_PATH",
+            FLUX_KUSTOMIZATION_KEY_PATH,
+            caixa_core::FLUX_KUSTOMIZATION_KEY_PATH,
         );
     }
 
