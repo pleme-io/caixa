@@ -3997,7 +3997,7 @@ mod tests {
             LayoutError::MeshSlotsOnNonAplicacao { caixa, kind, slots } => {
                 assert_eq!(caixa, "demo");
                 assert_eq!(kind, CaixaKind::Servico);
-                assert_eq!(slots, ":entrada");
+                assert_eq!(slots, crate::render::M3_AUTHOR_KEY_ENTRADA);
             }
             other => panic!("expected MeshSlotsOnNonAplicacao, got {other:?}"),
         }
@@ -4044,7 +4044,17 @@ mod tests {
         let err = layout.verify(&c, &root).unwrap_err();
         match err {
             LayoutError::MeshSlotsOnNonAplicacao { slots, .. } => {
-                assert_eq!(slots, ":membros :contratos :politicas :placement :entrada");
+                assert_eq!(
+                    slots,
+                    format!(
+                        "{} {} {} {} {}",
+                        crate::render::M3_AUTHOR_KEY_MEMBROS,
+                        crate::render::M3_AUTHOR_KEY_CONTRATOS,
+                        crate::render::M3_AUTHOR_KEY_POLITICAS,
+                        crate::render::M3_AUTHOR_KEY_PLACEMENT,
+                        crate::render::M3_AUTHOR_KEY_ENTRADA,
+                    )
+                );
             }
             other => panic!("expected MeshSlotsOnNonAplicacao, got {other:?}"),
         }

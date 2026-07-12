@@ -6727,6 +6727,94 @@ pub const COMPUTEUNIT_MODULE_KEY_SOURCE: &str = "source";
 /// land where the typed slot said it should").
 pub const M3_KEY_PLACEMENT: &str = "placement";
 
+/// Canonical author-facing kebab-case `(defcaixa … :membros (…))`
+/// top-level mesh slot label the M3 Aplicacao's constituent-Servico set
+/// surfaces under. Peer of the four sibling M3 top-level mesh-slot
+/// labels ([`M3_AUTHOR_KEY_CONTRATOS`], [`M3_AUTHOR_KEY_POLITICAS`],
+/// [`M3_AUTHOR_KEY_PLACEMENT`], [`M3_AUTHOR_KEY_ENTRADA`]) on the
+/// dual-axis pair every M3 top-level mesh slot carries: the
+/// author-facing kebab-case `[M3_AUTHOR_KEY_*]` const names the label
+/// the [`crate::Caixa::declared_mesh_slots`] tagger threads through as
+/// one of the `&'static str` entries in the canonical-declaration-order
+/// slot list the kind-coherence gate
+/// ([`crate::LayoutError::MeshSlotsOnNonAplicacao`]) joins into the
+/// space-separated `slots:` diagnostic naming which of the five mesh
+/// slots the offending caixa declared on a non-Aplicacao kind. Peer of
+/// the [`M3_KEY_PLACEMENT`] renderer-side wire-key const declared
+/// immediately above on the sole M3 mesh slot the renderer surfaces as
+/// a per-entry overlay-container key (`:membros` / `:contratos` /
+/// `:politicas` / `:entrada` render as per-arm derived artifacts —
+/// programs.yaml fan-out, CiliumNetworkPolicies, per-edge overlays,
+/// Gateway/HTTPRoute — not as a single overlay-container key).
+///
+/// Until this lift landed the five kebab-case labels sat once each in
+/// [`crate::Caixa::declared_mesh_slots`] as five-arm inline
+/// `":membros"` / `":contratos"` / `":politicas"` / `":placement"` /
+/// `":entrada"` byte-strings the tagger pushed onto its return `Vec`,
+/// plus three test-side probe literals across `layout.rs` and
+/// `manifest.rs::tests` — with no compile-time link between the
+/// tagger's arms and the tests' expected values. A future rebrand
+/// (a hypothetical `:membros` → `:members` matching English-uniformity
+/// as the substrate's per-slot vocabulary stabilizes, `:contratos` →
+/// `:contracts` matching the same, `:politicas` → `:policies`
+/// matching the same, `:placement` → `:distribution` matching
+/// MESH-COMPOSITION §II.1 vocabulary, `:entrada` → `:ingress` matching
+/// K8s Gateway API's ingress-side vocabulary, or a per-consumer
+/// disambiguation as the `defcaixa` macro stabilizes) would silently
+/// desynchronize the production
+/// [`crate::Caixa::declared_mesh_slots`] tagger from the tests until a
+/// downstream consumer surfaced the drift at build time as a
+/// matches-arm miss far from the rename's commit. This lift closes
+/// that gap by routing both halves (production tagger + tests) through
+/// five peer consts declared adjacent to the renderer-side
+/// [`M3_KEY_PLACEMENT`] peer, so the "one canonical declaration per
+/// arm, next to the axis" discipline the peer
+/// [`M2_AUTHOR_KEY_LIMITS`] / [`M2_AUTHOR_KEY_BEHAVIOR`] /
+/// [`M2_AUTHOR_KEY_UPGRADE_FROM`] top-level M2 slot consts
+/// (f49c8b0) established for the sibling per-Servico M2 slot axis
+/// extends onto the M3 top-level mesh slot axis so both altitudes
+/// of the typed-slot algebra (per-Servico M2 + per-Aplicacao M3)
+/// route through peer author-label consts.
+pub const M3_AUTHOR_KEY_MEMBROS: &str = ":membros";
+
+/// Canonical author-facing kebab-case `(defcaixa … :contratos (…))`
+/// top-level mesh slot label the M3 Aplicacao's WIT-typed inter-Servico
+/// edge set surfaces under. Peer of [`M3_AUTHOR_KEY_MEMBROS`] on the
+/// sibling M3 top-level mesh-slot dual axis; see
+/// [`M3_AUTHOR_KEY_MEMBROS`] for the full lift rationale.
+pub const M3_AUTHOR_KEY_CONTRATOS: &str = ":contratos";
+
+/// Canonical author-facing kebab-case `(defcaixa … :politicas (…))`
+/// top-level mesh slot label the M3 Aplicacao's mesh-level policy
+/// overlay ([`crate::aplicacao::MeshPolicy`]: `:timeout`, `:retries`,
+/// `:circuit-breaker`, `:mtls-required`, `:rate-limit`) surfaces under.
+/// Peer of [`M3_AUTHOR_KEY_MEMBROS`] on the sibling M3 top-level
+/// mesh-slot dual axis; see [`M3_AUTHOR_KEY_MEMBROS`] for the full lift
+/// rationale.
+pub const M3_AUTHOR_KEY_POLITICAS: &str = ":politicas";
+
+/// Canonical author-facing kebab-case `(defcaixa … :placement (…))`
+/// top-level mesh slot label the M3 Aplicacao's cross-cluster
+/// distribution strategy ([`crate::aplicacao::Placement`]:
+/// `:estrategia` + `:clusters` + `:shard-key` / `:affinity`) surfaces
+/// under. Peer of [`M3_AUTHOR_KEY_MEMBROS`] on the sibling M3
+/// top-level mesh-slot dual axis; see [`M3_AUTHOR_KEY_MEMBROS`] for
+/// the full lift rationale. Byte-identical to the peer
+/// [`M3_KEY_PLACEMENT`] renderer-side wire key modulo the leading `:`
+/// — the two consts split on the axis every M3 top-level slot carries
+/// (author-facing kebab-case label vs. renderer-side camelCase overlay
+/// key), the same split the [`M2_AUTHOR_KEY_LIMITS`] / [`M2_KEY_LIMITS`]
+/// peer pair established on the sibling M2 axis.
+pub const M3_AUTHOR_KEY_PLACEMENT: &str = ":placement";
+
+/// Canonical author-facing kebab-case `(defcaixa … :entrada (…))`
+/// top-level mesh slot label the M3 Aplicacao's external-ingress
+/// gateway surface ([`crate::aplicacao::Entrada`]: `:host`, `:para`,
+/// `:paths`, `:port`) surfaces under. Peer of [`M3_AUTHOR_KEY_MEMBROS`]
+/// on the sibling M3 top-level mesh-slot dual axis; see
+/// [`M3_AUTHOR_KEY_MEMBROS`] for the full lift rationale.
+pub const M3_AUTHOR_KEY_ENTRADA: &str = ":entrada";
+
 /// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
 /// struct's `estrategia` distribution-strategy discriminator — the
 /// per-`M3_KEY_PLACEMENT`-block field the M3 [`crate::aplicacao::PlacementStrategy`]

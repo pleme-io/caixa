@@ -258,23 +258,41 @@ impl Caixa {
     /// every consumer reaching for "which mesh slots are set" (the
     /// verify gate, a future `feira lint` kind-coherence advisory)
     /// inherits the canonical order without rolling its own.
+    ///
+    /// Each per-arm kebab-case label is routed through the peer
+    /// [`crate::M3_AUTHOR_KEY_MEMBROS`] /
+    /// [`crate::M3_AUTHOR_KEY_CONTRATOS`] /
+    /// [`crate::M3_AUTHOR_KEY_POLITICAS`] /
+    /// [`crate::M3_AUTHOR_KEY_PLACEMENT`] /
+    /// [`crate::M3_AUTHOR_KEY_ENTRADA`] consts declared next to the
+    /// [`crate::M3_KEY_PLACEMENT`] renderer-side wire-key peer, so both
+    /// halves of every M3 top-level mesh slot's dual axis (author-facing
+    /// kebab-case label + renderer-side artifact key) route through one
+    /// canonical declaration per arm — same discipline the peer
+    /// [`crate::M2_AUTHOR_KEY_LIMITS`] / [`crate::M2_AUTHOR_KEY_BEHAVIOR`]
+    /// / [`crate::M2_AUTHOR_KEY_UPGRADE_FROM`] top-level M2 slot consts
+    /// (f49c8b0) establish on the sibling per-Servico M2 top-level slot
+    /// axis, extended here to close the M3 mesh-slot author-facing-label
+    /// axis so both altitudes of the typed-slot algebra
+    /// (per-Servico M2 + per-Aplicacao M3) share the same
+    /// "one canonical byte-string per arm, next to the axis" discipline.
     #[must_use]
     pub fn declared_mesh_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
         if !self.membros.is_empty() {
-            slots.push(":membros");
+            slots.push(crate::render::M3_AUTHOR_KEY_MEMBROS);
         }
         if !self.contratos.is_empty() {
-            slots.push(":contratos");
+            slots.push(crate::render::M3_AUTHOR_KEY_CONTRATOS);
         }
         if self.politicas.is_some() {
-            slots.push(":politicas");
+            slots.push(crate::render::M3_AUTHOR_KEY_POLITICAS);
         }
         if self.placement.is_some() {
-            slots.push(":placement");
+            slots.push(crate::render::M3_AUTHOR_KEY_PLACEMENT);
         }
         if self.entrada.is_some() {
-            slots.push(":entrada");
+            slots.push(crate::render::M3_AUTHOR_KEY_ENTRADA);
         }
         slots
     }
@@ -2355,7 +2373,95 @@ mod tests {
             paths: vec![],
             port: 8080,
         });
-        assert_eq!(c.declared_mesh_slots(), vec![":membros", ":entrada"]);
+        assert_eq!(
+            c.declared_mesh_slots(),
+            vec![
+                crate::render::M3_AUTHOR_KEY_MEMBROS,
+                crate::render::M3_AUTHOR_KEY_ENTRADA,
+            ]
+        );
+    }
+
+    #[test]
+    fn m3_top_level_author_key_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin: the five author-facing kebab-case labels the
+        // `(defcaixa … :<slot> (…))` surface admits on the M3 top-level
+        // mesh slot axis, one arm per typed slot. Mirrors the peer
+        // scalar-value pin the sibling
+        // [`crate::M2_AUTHOR_KEY_LIMITS`] /
+        // [`crate::M2_AUTHOR_KEY_BEHAVIOR`] /
+        // [`crate::M2_AUTHOR_KEY_UPGRADE_FROM`] M2 top-level slot consts
+        // carry (f49c8b0), so both altitudes of the typed-slot algebra
+        // (per-Servico M2 + per-Aplicacao M3) share the same
+        // "one canonical byte-string per arm" discipline. A future
+        // rebrand (`:membros` → `:members`, `:contratos` → `:contracts`,
+        // `:politicas` → `:policies`, `:placement` → `:distribution`,
+        // `:entrada` → `:ingress`) lands as an edit to exactly one const,
+        // and every consumer that reaches for the label picks it up at
+        // build time rather than at runtime as a downstream mismatch.
+        assert_eq!(crate::render::M3_AUTHOR_KEY_MEMBROS, ":membros");
+        assert_eq!(crate::render::M3_AUTHOR_KEY_CONTRATOS, ":contratos");
+        assert_eq!(crate::render::M3_AUTHOR_KEY_POLITICAS, ":politicas");
+        assert_eq!(crate::render::M3_AUTHOR_KEY_PLACEMENT, ":placement");
+        assert_eq!(crate::render::M3_AUTHOR_KEY_ENTRADA, ":entrada");
+    }
+
+    #[test]
+    fn declared_mesh_slots_route_through_lifted_m3_author_key_consts() {
+        // Production-through-const pin: the five per-arm labels the
+        // [`Caixa::declared_mesh_slots`] tagger pushes onto its return
+        // `Vec` route through the lifted
+        // [`crate::M3_AUTHOR_KEY_MEMBROS`] /
+        // [`crate::M3_AUTHOR_KEY_CONTRATOS`] /
+        // [`crate::M3_AUTHOR_KEY_POLITICAS`] /
+        // [`crate::M3_AUTHOR_KEY_PLACEMENT`] /
+        // [`crate::M3_AUTHOR_KEY_ENTRADA`] consts, in canonical
+        // declaration order. A future re-order or drift at the tagger
+        // (a rename that reaches the tagger but not the const, or vice
+        // versa) surfaces here at build time rather than at runtime as
+        // a [`crate::LayoutError::MeshSlotsOnNonAplicacao`]
+        // `slots: <stale-kebab-case>` diagnostic far from the rename's
+        // commit. Mirror of the peer
+        // [`declared_servico_slots_route_through_lifted_m2_author_key_consts`]
+        // pin (f49c8b0) on the sibling per-Servico M2 top-level slot
+        // axis.
+        use crate::{Entrada, Membro, MeshPolicy, Placement, PlacementStrategy, WitContract};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.membros = vec![Membro {
+            caixa: "a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "a".into(),
+            para: "a".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        c.politicas = Some(MeshPolicy::default());
+        c.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c.entrada = Some(Entrada {
+            host: "x.example.com".into(),
+            para: "a".into(),
+            paths: vec![],
+            port: 8080,
+        });
+        assert_eq!(
+            c.declared_mesh_slots(),
+            vec![
+                crate::render::M3_AUTHOR_KEY_MEMBROS,
+                crate::render::M3_AUTHOR_KEY_CONTRATOS,
+                crate::render::M3_AUTHOR_KEY_POLITICAS,
+                crate::render::M3_AUTHOR_KEY_PLACEMENT,
+                crate::render::M3_AUTHOR_KEY_ENTRADA,
+            ]
+        );
     }
 
     #[test]
