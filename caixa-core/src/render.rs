@@ -8235,6 +8235,99 @@ pub const FLUX_KEY_SOURCE_REF: &str = "sourceRef";
 /// [cf]: ../../caixa_flux/index.html
 pub const FLUX_KEY_CHART: &str = "chart";
 
+/// Canonical Flux v2 `HelmChartTemplate.spec.chart` per-CR chart-NAME-
+/// reference leaf-scalar-key every `caixa-flux`-emitted `HelmRelease`
+/// document nests inside the parent `spec.chart.spec` sub-document (the
+/// `HelmChartTemplate.spec` block the parent [`FLUX_KEY_CHART`] (8467748)
+/// container-axis key opens; a nested [`KUBE_KEY_SPEC`] axis inside that
+/// container hosts this leaf plus its sibling [`FLUX_KEY_SOURCE_REF`]
+/// per-CR source-reference triple).
+///
+/// The parent [`FLUX_KEY_CHART`] docstring explicitly names this leaf-
+/// scalar axis as *not* covered by that container-axis lift ("The inner
+/// scalar-value axis `spec.chart.spec.chart` … is a schematically
+/// separate leaf-scalar-key axis (the chart-NAME field the helm-controller
+/// resolves through the sibling [`FLUX_KEY_SOURCE_REF`] triple's
+/// source), and is not covered by this lift — a rebrand of the
+/// container axis … does not necessarily coincide with a rebrand of
+/// the leaf-scalar `spec.chart.spec.chart` chart-name field key, so
+/// the two axes stay decoupled at the substrate."). This const closes
+/// the substrate-side declaration of the sibling leaf-scalar axis the
+/// parent container-axis lift explicitly left as future work.
+///
+/// The Flux v2 `helm-controller`'s reconcile pipeline reads the chart-
+/// NAME reference from this exact leaf-scalar-axis key on every
+/// reconcile: the value at `HelmChartTemplate.spec.chart` names the
+/// chart-artifact the sibling `HelmChartTemplate.spec.sourceRef`
+/// triple's source-artifact publishes (an OCIRepository's remote OCI
+/// chart archive by chart-name, a GitRepository's sub-tree path by
+/// directory-name, a HelmRepository's chart index entry by chart-name).
+/// A drifted `spec.chart.spec.Chart` / `spec.chart.spec.chartRef` /
+/// `spec.chart.spec.chartName` at the emission-side key would silently
+/// land a well-formed but ignored `HelmChartTemplate.spec.*` extra
+/// property the apiserver's CRD OpenAPI schema permits (arbitrary
+/// `spec.*` extras) and the helm-controller would fail to resolve any
+/// chart-artifact through the sibling `sourceRef` triple's source at
+/// reconcile time (the sibling `sourceRef` still resolves the *source*
+/// artifact, but the chart-NAME lookup inside the source
+/// short-circuits at the missing chart-NAME field with a
+/// non-self-locating "chart 'unknown' not found in <source>" error far
+/// from the source `caixa.lisp` / the renderer's format-string
+/// template).
+///
+/// The single source of truth the rendered Flux bundle's per-CR
+/// `HelmChartTemplate.spec.chart` chart-NAME reference leaf-scalar-
+/// axis key reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's per-`HelmChartTemplate`
+///     `spec.chart` chart-NAME leaf scalar (caixa-flux/src/lib.rs:1814
+///     — the `cluster_bundle` `helmrelease` format-string template's
+///     lifted `chart: {chart_path}` interpolation the peer sibling
+///     [`FLUX_KEY_SOURCE_REF`] source-reference triple's per-CR source-
+///     artifact publishes).
+///
+/// The leaf-scalar-axis key names the same Flux-v2-helm-controller-
+/// side per-`HelmChartTemplate` chart-NAME field every
+/// `caixa-flux`-emitted `HelmRelease` document threads the chart
+/// artifact name through, and must move together on any future Flux
+/// v3 rebrand (a hypothetical upstream Flux v3 rename of the per-
+/// `HelmChartTemplate.spec.chart` chart-NAME reference leaf-scalar-
+/// axis from `chart` to `Chart` / `chartRef` / `chartName`,
+/// coordinated with the upstream fluxcd/flux2 project's per-version
+/// deprecation cycle, would land at this one const rather than
+/// scattered across the one per-CR format-string template site).
+///
+/// Deliberate axis-independence discipline with the parent
+/// [`FLUX_KEY_CHART`] container-axis re-export: both consts spell the
+/// same underlying `"chart"` string but name distinct schema axes on
+/// the same CRD group (Flux v2 `HelmRelease.spec.chart` container-
+/// axis parent vs `HelmRelease.spec.chart.spec.chart` chart-NAME leaf
+/// grandchild), so the two `pub const` declarations stay sibling
+/// constants at the rustc symbol-name axis rather than coalescing onto
+/// one canonical declaration — a future Flux v3 rebrand on the leaf-
+/// scalar-axis lands independently of the sibling container-axis
+/// rebrand. Peer to the deliberate [`CILIUM_KEY_PATH`] (ef6114f) /
+/// [`GATEWAY_API_KEY_PATH`] (9f45aa4) axis-independence discipline the
+/// two-CRD-groups-sharing-a-string sibling `"path"` re-exports
+/// established on the peer canonical-axis-independence surface.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`FLUX_KEY_CHART`] (8467748) /
+/// [`FLUX_KEY_SOURCE_REF`] (e985089) / [`FLUX_KEY_VALUES`] (b54dc87) /
+/// [`FLUX_KEY_HEALTH_CHECKS`] (6dbff58) lifts established on the
+/// sibling canonical-Flux-v2-per-`HelmRelease`-body-key surfaces —
+/// completes the per-`HelmRelease` chart-template `(spec.chart →
+/// spec.chart.spec.chart + spec.chart.spec.sourceRef)` axis chain by
+/// declaring the leaf-scalar sibling of the container-axis parent
+/// the `FLUX_KEY_CHART` lift already anchors.
+///
+/// [cf]: ../../caixa_flux/index.html
+pub const FLUX_HELMCHART_TEMPLATE_KEY_CHART: &str = "chart";
+
 /// Canonical Flux v2 per-`HelmRelease` values-override block-body-axis key
 /// every `caixa-flux`-emitted `HelmRelease` document nests its per-cluster
 /// value overrides under (`spec.values` on `HelmRelease`) — the Flux v2
@@ -18292,6 +18385,98 @@ mod tests {
              no `_` / `-` / `.` / whitespace bytes the Flux v2 helm-\
              controller's per-CR reconcile loop would reject"
         );
+    }
+
+    #[test]
+    fn flux_helmchart_template_key_chart_pins_canonical_value() {
+        // Pin the actual string so a typo in this lift can't silently
+        // rebrand the Flux v2 `HelmChartTemplate.spec.chart` per-CR
+        // chart-NAME reference leaf-scalar-axis key every caixa-flux-
+        // emitted `HelmRelease` document nests inside the parent
+        // `spec.chart.spec` sub-document. The helm-controller's
+        // reconcile pipeline reads the chart-artifact name from this
+        // exact leaf on every reconcile — a drifted `spec.chart.spec.Chart`
+        // / `spec.chart.spec.chartRef` / `spec.chart.spec.chartName`
+        // at the emission-side leaf key would silently land as a well-
+        // formed but ignored `HelmChartTemplate.spec.*` extra property
+        // the apiserver's CRD OpenAPI schema permits (arbitrary spec
+        // extras) and the helm-controller would fail to resolve any
+        // chart-artifact through the sibling `sourceRef` triple's
+        // source at reconcile time — a non-self-locating "chart
+        // 'unknown' not found in <source>" error far from the rebrand
+        // commit's source `caixa.lisp` / the renderer's format-string
+        // template. Peer to `flux_key_chart_pins_canonical_value` on
+        // the sibling per-CR chart-template container-axis parent
+        // this leaf-scalar-axis lift extends by descending one level
+        // beneath, closing the substrate-side declaration the parent
+        // container-axis lift docstring explicitly named as future
+        // work.
+        assert_eq!(FLUX_HELMCHART_TEMPLATE_KEY_CHART, "chart");
+    }
+
+    #[test]
+    fn flux_helmchart_template_key_chart_carries_lower_camel_case_shape() {
+        // Cross-axis invariant: the Flux v2 CRD field-naming
+        // convention (inherited from the upstream K8s API conventions)
+        // admits lowerCamelCase per-field keys — the per-`HelmChartTemplate`
+        // chart-NAME reference leaf-scalar-axis conforms to this on the
+        // leading-lowercase `chart` shape (a single-word lowerCamelCase
+        // reduces to all-lowercase). Pinning the shape here means a
+        // future rebrand on the canonical lift can't silently land a
+        // malformed leaf-scalar-axis key (snake_case, kebab-case,
+        // UpperCamelCase, empty) that the Flux v2 helm-controller's
+        // per-CR reconcile loop would reject at apply parse time far
+        // from the rebrand commit's source. Peer to
+        // `flux_key_chart_carries_lower_camel_case_shape` on the
+        // sibling per-CR chart-template container-axis parent, and to
+        // the deliberate axis-independence discipline the sibling
+        // [`CILIUM_KEY_PATH`] / [`GATEWAY_API_KEY_PATH`] two-CRD-
+        // groups-sharing-a-string re-exports established (two consts
+        // spelling the same underlying string at distinct schema
+        // axes stay sibling constants at the rustc symbol-name axis).
+        let v = FLUX_HELMCHART_TEMPLATE_KEY_CHART;
+        assert!(
+            !v.is_empty(),
+            "FLUX_HELMCHART_TEMPLATE_KEY_CHART {v:?} must be non-empty per \
+             the Flux v2 CRD field-naming grammar"
+        );
+        let mut chars = v.chars();
+        assert!(
+            chars.next().is_some_and(|c| c.is_ascii_lowercase()),
+            "FLUX_HELMCHART_TEMPLATE_KEY_CHART {v:?} must lead with an \
+             ASCII-lowercase byte per the Flux v2 lowerCamelCase per-CR-\
+             field-key convention"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_alphanumeric()),
+            "FLUX_HELMCHART_TEMPLATE_KEY_CHART {v:?} must be ASCII-\
+             alphanumeric throughout per the Flux v2 lowerCamelCase per-CR-\
+             field-key convention — no `_` / `-` / `.` / whitespace bytes \
+             the Flux v2 helm-controller's per-CR reconcile loop would reject"
+        );
+    }
+
+    #[test]
+    fn flux_helmchart_template_key_chart_and_flux_key_chart_stay_independent_axes() {
+        // Cross-axis independence pin: both `FLUX_HELMCHART_TEMPLATE_KEY_CHART`
+        // (`spec.chart.spec.chart` chart-NAME reference leaf-scalar-axis)
+        // and the sibling `FLUX_KEY_CHART` (`spec.chart` per-CR chart-
+        // template container-axis parent) spell the same underlying
+        // `"chart"` string today but name distinct schema axes on the
+        // same Flux v2 `HelmRelease` CRD group (a container-axis parent
+        // vs a leaf-scalar grandchild inside it). Pin byte-equality of
+        // each half against its own canonical declaration so a future
+        // Flux v3 rebrand on either axis lands independently at the
+        // rustc symbol-name axis rather than coalescing onto one
+        // canonical declaration through a shared `&'static str`
+        // allocation Rust's string interner would otherwise fuse.
+        // Same axis-independence discipline the sibling
+        // [`CILIUM_KEY_PATH`] (ef6114f) / [`GATEWAY_API_KEY_PATH`]
+        // (9f45aa4) two-CRD-groups-sharing-a-string re-exports
+        // established on the peer canonical-axis-independence surface.
+        assert_eq!(FLUX_HELMCHART_TEMPLATE_KEY_CHART, "chart");
+        assert_eq!(FLUX_KEY_CHART, "chart");
+        assert_eq!(FLUX_HELMCHART_TEMPLATE_KEY_CHART, FLUX_KEY_CHART);
     }
 
     #[test]
