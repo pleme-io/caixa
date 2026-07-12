@@ -2057,19 +2057,31 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
     // entry pointing at the rendered Chart.yaml; not yet wired.
     let _ = chart_name;
 
+    // Each per-CR YAML leaf routes through the canonical
+    // [`caixa_core::RenderedFile::new`] `impl Into<PathBuf>` /
+    // `impl Into<String>` constructor (re-exported by the peer
+    // [`BundleFile`] alias since Rust inherent methods travel through
+    // type aliases to the aliased type at name resolution). The prior
+    // three inline `BundleFile { path: std::path::PathBuf::from(
+    // FILENAME_CONST), contents: <body> }` blocks each re-derived the
+    // same `PathBuf::from(&str)` wrap + the same two-field assembly —
+    // a byte-identical duplicate of the peer
+    // [`caixa_helm::render_chart_for_servico_with`] `Chart.yaml` /
+    // `values.yaml` / `README.md` chart-directory trio's three
+    // per-artifact emit sites. Sweeping both trios onto
+    // [`RenderedFile::new`] collapses the six substrate-side
+    // per-artifact-construction sites onto one canonical constructor
+    // so a future rebrand on the record shape (a per-artifact hash /
+    // provenance field addition, a per-artifact write-mode discriminator
+    // once per-cluster-writer sandboxing lands, the
+    // [`caixa_core::is_sandboxed_relative_path`] discipline the
+    // [`caixa_core::RenderedFile`] docstring acknowledges is not yet
+    // run at emit time) reaches every per-target renderer through one
+    // caixa-core edit instead of a coordinated six-site rewrite.
     Ok(vec![
-        BundleFile {
-            path: std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME),
-            contents: gitrepo,
-        },
-        BundleFile {
-            path: std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME),
-            contents: helmrelease,
-        },
-        BundleFile {
-            path: std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME),
-            contents: kustomization,
-        },
+        BundleFile::new(FLUX_GITREPOSITORY_YAML_FILENAME, gitrepo),
+        BundleFile::new(FLUX_HELMRELEASE_YAML_FILENAME, helmrelease),
+        BundleFile::new(FLUX_KUSTOMIZATION_YAML_FILENAME, kustomization),
     ])
 }
 
@@ -6856,5 +6868,39 @@ spec:
             via_alias.path.to_string_lossy(),
             FLUX_HELMRELEASE_YAML_FILENAME
         );
+    }
+
+    #[test]
+    fn bundle_file_new_constructor_travels_through_alias_to_canonical() {
+        // Inherent-method-through-alias pin: the canonical
+        // [`caixa_core::RenderedFile::new`] `impl Into<PathBuf>` /
+        // `impl Into<String>` constructor every per-CR YAML leaf in
+        // [`cluster_bundle`] now routes through resolves at
+        // `BundleFile::new(…)` — Rust inherent methods travel through
+        // a `pub type BundleFile = caixa_core::RenderedFile` alias to
+        // the aliased canonical at name resolution, so a drifted
+        // local `pub struct BundleFile { pub path: PathBuf, pub
+        // contents: String }` at this crate would carry the field
+        // pair the sibling type-alias-identity pin above still
+        // accepts (both records share `pub path` / `pub contents`
+        // shape) while dropping the constructor — the three sweep
+        // sites in [`cluster_bundle`] would stop compiling and the
+        // failing calls would name `BundleFile` directly, making the
+        // drift-source unambiguous. This test pins the constructor's
+        // per-alias reachability + the byte-identical record shape
+        // against a `FLUX_GITREPOSITORY_YAML_FILENAME`-keyed probe so
+        // the pin fires at caixa-flux build time.
+        let via_alias_new: BundleFile =
+            BundleFile::new(FLUX_GITREPOSITORY_YAML_FILENAME, "kind: GitRepository\n");
+        let via_canonical_new = caixa_core::RenderedFile::new(
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            String::from("kind: GitRepository\n"),
+        );
+        assert_eq!(via_alias_new, via_canonical_new);
+        assert_eq!(
+            via_alias_new.path,
+            std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME),
+        );
+        assert_eq!(via_alias_new.contents, "kind: GitRepository\n");
     }
 }
