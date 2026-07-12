@@ -324,16 +324,16 @@ impl Caixa {
     pub fn declared_supervisor_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
         if self.estrategia.is_some() {
-            slots.push(":estrategia");
+            slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA);
         }
         if self.max_restarts.is_some() {
-            slots.push(":max-restarts");
+            slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS);
         }
         if self.restart_window.is_some() {
-            slots.push(":restart-window");
+            slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW);
         }
         if !self.children.is_empty() {
-            slots.push(":children");
+            slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN);
         }
         slots
     }
@@ -2481,7 +2481,85 @@ mod tests {
         c.restart_window = Some("60s".into());
         assert_eq!(
             c.declared_supervisor_slots(),
-            vec![":estrategia", ":restart-window"]
+            vec![
+                crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA,
+                crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW,
+            ]
+        );
+    }
+
+    #[test]
+    fn supervisor_top_level_author_key_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin: the four author-facing kebab-case labels the
+        // `(defcaixa … :<slot> (…))` surface admits on the Supervisor
+        // supervision-tree slot axis, one arm per typed slot. Mirrors the
+        // peer scalar-value pins the sibling
+        // [`crate::render::M2_AUTHOR_KEY_LIMITS`] /
+        // [`crate::render::M2_AUTHOR_KEY_BEHAVIOR`] /
+        // [`crate::render::M2_AUTHOR_KEY_UPGRADE_FROM`] top-level M2 slot
+        // consts and [`crate::render::M3_AUTHOR_KEY_MEMBROS`] etc.
+        // top-level M3 slot consts carry, so all three kind-scoped
+        // typed-slot-family author-facing-label axes route through one
+        // canonical per-arm declaration. A future rebrand
+        // (`:estrategia` → `:strategy` for English uniformity,
+        // `:max-restarts` → `:max-intensity` matching Erlang/OTP's
+        // `MaxIntensity` name, `:restart-window` → `:period` matching
+        // OTP's `Period` name, `:children` → `:workers` matching Elixir
+        // idiom) lands as an edit to exactly one const, and every
+        // consumer that reaches for the label picks it up at build time
+        // rather than at runtime as a downstream mismatch.
+        assert_eq!(
+            crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA,
+            ":estrategia"
+        );
+        assert_eq!(
+            crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS,
+            ":max-restarts"
+        );
+        assert_eq!(
+            crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW,
+            ":restart-window"
+        );
+        assert_eq!(crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN, ":children");
+    }
+
+    #[test]
+    fn declared_supervisor_slots_route_through_lifted_supervisor_author_key_consts() {
+        // Production-through-const pin: the four per-arm labels the
+        // [`Caixa::declared_supervisor_slots`] tagger pushes onto its
+        // return `Vec` route through the lifted
+        // [`crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] /
+        // [`crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS`] /
+        // [`crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW`] /
+        // [`crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN`] consts, in
+        // canonical declaration order. A future re-order or drift at the
+        // tagger (a rename that reaches the tagger but not the const, or
+        // vice versa) surfaces here at build time rather than at runtime
+        // as a [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+        // `slots: <stale-kebab-case>` diagnostic far from the rename's
+        // commit. Mirror of the peer
+        // [`declared_servico_slots_route_through_lifted_m2_author_key_consts`]
+        // (f49c8b0) and
+        // [`declared_mesh_slots_route_through_lifted_m3_author_key_consts`]
+        // (882f498) pins on the sibling M2 / M3 top-level slot axes.
+        use crate::{ChildSpec, RestartPolicy, RestartStrategy};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(5);
+        c.restart_window = Some("60s".into());
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        assert_eq!(
+            c.declared_supervisor_slots(),
+            vec![
+                crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA,
+                crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS,
+                crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW,
+                crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN,
+            ]
         );
     }
 
