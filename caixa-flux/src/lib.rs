@@ -124,6 +124,41 @@ pub use caixa_core::DEFAULT_NAMESPACE;
 /// canonical-substrate-default-load-bearing-scalar surface.
 pub use caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL;
 
+/// Canonical Flux v2 `HelmRelease.spec.chart.spec.chart` per-CR chart-
+/// directory-in-GitRepository-source sub-path default the substrate seeds
+/// into every per-caixa `helmrelease.yaml` document. Re-export of the
+/// canonical [`caixa_core::DEFAULT_FLUX_CHART_SOURCE_SUBPATH`] so the
+/// Flux v2 helm-controller-side per-CR chart-directory-in-git-source
+/// default scalar-value lives in exactly one place across every caixa
+/// renderer — [`ClusterBundleOpts::for_caixa`]'s per-caixa default seed
+/// (the sole production-code site the prior inline `"chart".into()`
+/// scalar-value literal sat at, seeding the [`ClusterBundleOpts::chart_path`]
+/// field that [`cluster_bundle`]'s `helmrelease.yaml` format-string
+/// template threads through its [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`]-
+/// keyed `spec.chart.spec.chart` axis verbatim) now consults the same
+/// `&'static str`, so a future substrate-side chart-directory-in-git-
+/// source rebrand (`"chart"` → `"charts"` once a per-caixa multi-chart
+/// layout lands and the substrate publishes N sibling `lareira-<nome>/`
+/// charts under one git repository, `"chart"` → `"helm"` on a cross-
+/// language convention alignment with sibling wasm-runtime substrates,
+/// `"chart"` → `"deploy"` on a per-caixa-deploy-directory naming
+/// migration) is a one-line edit on the canonical
+/// [`caixa_core::DEFAULT_FLUX_CHART_SOURCE_SUBPATH`] declaration, not a
+/// coordinated rewrite across the [`ClusterBundleOpts`] default seed and
+/// every future per-target renderer the substrate adds. Pairs with the
+/// sibling [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`] re-export on the same
+/// per-CR `spec.chart.spec.chart` scalar-axis — the key half of the per-
+/// CR scalar-key/scalar-value pair lives at
+/// [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`], the value half's substrate-side
+/// default seed lives here. Same shape as the sibling
+/// [`caixa_core::DEFAULT_NAMESPACE`] / [`caixa_core::DEFAULT_LIBRARY_NAME`]
+/// / [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`caixa_core::DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] re-exports on the peer
+/// canonical-substrate-default-load-bearing-scalar surface.
+pub use caixa_core::DEFAULT_FLUX_CHART_SOURCE_SUBPATH;
+
 /// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation.retries`
 /// bounded retry-count default the substrate seeds into every per-caixa
 /// `helmrelease.yaml` document. Re-export of the canonical
@@ -1754,7 +1789,7 @@ impl ClusterBundleOpts {
             cluster: cluster.into(),
             namespace: DEFAULT_NAMESPACE.into(),
             interval: DEFAULT_FLUX_RECONCILE_INTERVAL.into(),
-            chart_path: "chart".into(),
+            chart_path: DEFAULT_FLUX_CHART_SOURCE_SUBPATH.into(),
             git_url: caixa.repositorio.clone().unwrap_or_else(|| {
                 format!(
                     "https://github.com/{org}/{nome}",
@@ -2175,6 +2210,84 @@ spec:
              silently splits the substrate's per-caixa convergence-\
              freshness contract between the operator-facing canonical \
              default and the per-caixa seeded reconcile-schedule"
+        );
+    }
+
+    #[test]
+    fn default_flux_chart_source_subpath_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `DEFAULT_FLUX_CHART_SOURCE_SUBPATH` was lifted
+        // from the inline `"chart".into()` scalar-value literal at
+        // [`ClusterBundleOpts::for_caixa`]'s per-caixa default seed (the
+        // sole production-code site the substrate seeds into the
+        // [`ClusterBundleOpts::chart_path`] field that [`cluster_bundle`]'s
+        // `helmrelease.yaml` format-string template threads through its
+        // [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`]-keyed `spec.chart.spec.chart`
+        // axis verbatim) to a re-export of
+        // [`caixa_core::DEFAULT_FLUX_CHART_SOURCE_SUBPATH`] so the Flux v2
+        // helm-controller-side chart-directory-in-GitRepository-source
+        // default scalar-value string lives in exactly one place across
+        // every caixa renderer. Pin the equality + static-data identity
+        // here so any local re-introduction of a sibling `pub const
+        // DEFAULT_FLUX_CHART_SOURCE_SUBPATH: &str = "…"` (the canonical
+        // drift footgun where a sibling local `pub const` could happen to
+        // carry the same string at the source while pointing at a
+        // different `&'static` allocation) is a build-time test failure
+        // naming the offending drift, not a silent apply-time symptom —
+        // the prior inline shape would have let a substrate-side chart-
+        // directory-in-git-source migration without a coordinated caixa-
+        // core edit silently seed per-caixa `HelmRelease` CRs at a
+        // drifted per-CR chart-directory pointer, splitting the
+        // substrate's per-caixa chart-open contract with the Flux v2
+        // helm-controller across renderer versions with no diagnostic
+        // naming the sub-path-drift root cause (the source-controller
+        // would then either fail to open the paired per-caixa chart
+        // directory or, worse, silently open a stale sibling directory
+        // the drifted scalar happens to name). Peer to
+        // [`default_flux_reconcile_interval_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-substrate-default-load-bearing-
+        // scalar re-export surface.
+        caixa_core::assert_str_reexport_identity(
+            "DEFAULT_FLUX_CHART_SOURCE_SUBPATH",
+            DEFAULT_FLUX_CHART_SOURCE_SUBPATH,
+            caixa_core::DEFAULT_FLUX_CHART_SOURCE_SUBPATH,
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_opts_for_caixa_seeds_chart_path_from_lifted_default() {
+        // Fail-before-pass-after pin: the substrate's per-caixa default
+        // seed for [`ClusterBundleOpts::chart_path`] must resolve to the
+        // lifted [`DEFAULT_FLUX_CHART_SOURCE_SUBPATH`] verbatim. Before
+        // the lift the field carried an inline `"chart".into()` literal
+        // at the sole production-code call site (the
+        // [`ClusterBundleOpts::for_caixa`] per-caixa default builder); a
+        // future substrate-side chart-directory-in-git-source migration
+        // on the canonical
+        // [`caixa_core::DEFAULT_FLUX_CHART_SOURCE_SUBPATH`] declaration
+        // that failed to reach this seed site would silently split the
+        // substrate's per-caixa Flux v2 chart-open contract between the
+        // operator-facing canonical default and the per-caixa
+        // `cluster_bundle` renderer's seeded chart-directory pointer,
+        // freezing every per-caixa `HelmRelease` CR at the drifted sub-
+        // path far from the rebrand commit's source. Pin the identity
+        // here so a regression that re-introduces an inline literal at
+        // the seed site surfaces at build time on this test's failure.
+        // Peer to the sibling
+        // [`cluster_bundle_opts_for_caixa_seeds_interval_from_lifted_default`]
+        // pin on the co-resident per-caixa Flux v2 CR substrate-default
+        // seed surface — that test pins `opts.interval`'s substrate-side
+        // seed agrees with the lifted canonical default, this test pins
+        // `opts.chart_path`'s substrate-side seed agrees with the peer
+        // lifted canonical default.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        assert_eq!(
+            opts.chart_path, DEFAULT_FLUX_CHART_SOURCE_SUBPATH,
+            "the substrate's per-caixa Flux v2 chart-directory-in-git-\
+             source default seed must resolve to the lifted \
+             `DEFAULT_FLUX_CHART_SOURCE_SUBPATH` scalar — drift here \
+             silently splits the substrate's per-caixa chart-open \
+             contract between the operator-facing canonical default \
+             and the per-caixa seeded chart-directory pointer"
         );
     }
 
