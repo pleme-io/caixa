@@ -1277,6 +1277,42 @@ pub use caixa_core::KUBE_KEY_API_VERSION;
 /// bundle document navigates.
 pub use caixa_core::KUBE_KEY_NAMESPACE;
 
+/// Canonical K8s CR `metadata.name` key. Re-export of the canonical
+/// [`caixa_core::KUBE_KEY_NAME`] so the per-CR name-axis key lives in
+/// exactly one place across every caixa renderer. Each of the three
+/// [`cluster_bundle`] format-string templates' six `name:` YAML label
+/// positions — `gitrepository.yaml` top-level `metadata.name`,
+/// `helmrelease.yaml` top-level `metadata.name` + nested
+/// `spec.chart.spec.sourceRef.name`, `kustomization.yaml` top-level
+/// `metadata.name` + nested `spec.sourceRef.name` + nested
+/// `spec.healthChecks[].name` — thread this `&'static str` through
+/// named-arg interpolation instead of the prior six inline `name:`
+/// label literals.
+///
+/// The prior inline `"name"` literals at the production-side call
+/// sites would have let a typo on any one site (e.g. `"Name"`,
+/// `"nane"`, `"nam"`, the canonical transposition) silently emit a
+/// document whose per-CR `metadata.name` axis the apiserver-side
+/// ObjectMeta parser cannot key on — the `helm-controller` /
+/// `source-controller` / `kustomize-controller` would then treat the
+/// rendered document as an anonymous CR (or the apiserver would
+/// reject the apply with a schema-validation error naming the wrong
+/// key), with no field naming the label-drift root cause far from
+/// the source caixa.lisp. Now the emit-side and retrieval-side both
+/// consult one substrate-owned `&'static str`, and the raw-byte-
+/// label pin structurally forbids the emit format-string from
+/// drifting away from the canonical key without failing at test
+/// time. Same shape as the [`KUBE_KEY_NAMESPACE`] /
+/// [`KUBE_KEY_METADATA`] / [`KUBE_KEY_SPEC`] / [`KUBE_KEY_KIND`] /
+/// [`KUBE_KEY_API_VERSION`] re-exports on the sibling K8s-CR
+/// canonical-key axes — extends the discipline the top-level
+/// `(apiVersion, kind, metadata, spec)` axis re-export quartet +
+/// the sibling `metadata.namespace` nested-axis re-export establish
+/// onto the paired `metadata.name` nested axis every rendered Flux
+/// v2 bundle document navigates as the other half of the `(name,
+/// namespace)` ObjectMeta / sourceRef / healthCheck identity-pair.
+pub use caixa_core::KUBE_KEY_NAME;
+
 /// Local re-export of [`caixa_core::FLEET_PROGRAMS_KEY_PROGRAMS`] —
 /// the canonical `lareira-fleet-programs` values-schema array key
 /// (`programs:` — the exact YAML key the fleet-programs library chart
@@ -1718,7 +1754,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {api_version_key}: {api_version}\n\
          {kind_key}: {kind}\n\
          {metadata_key}:\n  \
-           name: {name}\n  \
+           {name_key}: {name}\n  \
            {namespace_key}: {namespace}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
@@ -1730,6 +1766,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         kind_key = KUBE_KEY_KIND,
         kind = FLUX_KIND_GIT_REPOSITORY,
         metadata_key = KUBE_KEY_METADATA,
+        name_key = KUBE_KEY_NAME,
         namespace_key = KUBE_KEY_NAMESPACE,
         spec_key = KUBE_KEY_SPEC,
         tag_human = format!(
@@ -1768,7 +1805,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {api_version_key}: {api_version}\n\
          {kind_key}: {kind}\n\
          {metadata_key}:\n  \
-           name: {name}\n  \
+           {name_key}: {name}\n  \
            {namespace_key}: {namespace}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
@@ -1777,7 +1814,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                chart: {chart_path}\n      \
                {source_ref_key}:\n        \
                  {kind_key}: {source_kind}\n        \
-                 name: {name}\n        \
+                 {name_key}: {name}\n        \
                  {namespace_key}: {namespace}\n  \
            {install_key}:\n    \
              {create_namespace_key}: true\n    \
@@ -1796,6 +1833,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         kind = FLUX_KIND_HELM_RELEASE,
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         metadata_key = KUBE_KEY_METADATA,
+        name_key = KUBE_KEY_NAME,
         namespace_key = KUBE_KEY_NAMESPACE,
         spec_key = KUBE_KEY_SPEC,
         name = name,
@@ -1824,19 +1862,19 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
          {api_version_key}: {kustomization_api_version}\n\
          {kind_key}: {kind}\n\
          {metadata_key}:\n  \
-           name: {name}\n  \
+           {name_key}: {name}\n  \
            {namespace_key}: {flux_system}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
            {prune_key}: true\n  \
            {source_ref_key}:\n    \
              {kind_key}: {source_kind}\n    \
-             name: {flux_system}\n  \
+             {name_key}: {flux_system}\n  \
            {path_key}: ./clusters/{cluster}/services/{name}\n  \
            {health_checks_key}:\n    \
              - {api_version_key}: {api_version}\n      \
                {kind_key}: {health_kind}\n      \
-               name: {name}\n      \
+               {name_key}: {name}\n      \
                {namespace_key}: {namespace}\n  \
            {timeout_key}: {timeout_default}\n",
         api_version_key = KUBE_KEY_API_VERSION,
@@ -1846,6 +1884,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         source_kind = FLUX_KIND_GIT_REPOSITORY,
         health_kind = FLUX_KIND_HELM_RELEASE,
         metadata_key = KUBE_KEY_METADATA,
+        name_key = KUBE_KEY_NAME,
         namespace_key = KUBE_KEY_NAMESPACE,
         spec_key = KUBE_KEY_SPEC,
         api_version = FLUX_HELMRELEASE_API_VERSION,
@@ -4797,6 +4836,74 @@ spec:
                  composed from the lifted KUBE_KEY_NAMESPACE ({KUBE_KEY_NAMESPACE:?}); \
                  a drifted inline label here silently rebrands the per-CR \
                  metadata.namespace axis away from the lifted key \
+                 (got: {contents:?})",
+                contents = f.contents,
+            );
+        }
+    }
+
+    #[test]
+    fn cluster_bundle_every_flux_cr_carries_metadata_name_label_from_lifted_key() {
+        // Fail-before-pass-after production-side sweep pin: every one
+        // of the three rendered Flux bundle files' `name:` YAML label
+        // positions — the load-bearing per-CR-`metadata.name` axis the
+        // apiserver-side ObjectMeta parser keys each rendered CR off
+        // (`gitrepository.yaml` top-level +
+        // `helmrelease.yaml` top-level +
+        // `helmrelease.yaml` `spec.chart.spec.sourceRef.name` nested +
+        // `kustomization.yaml` top-level +
+        // `kustomization.yaml` `spec.sourceRef.name` nested +
+        // `kustomization.yaml` `spec.healthChecks[].name` nested)
+        // against the sibling `namespace:` half of the ObjectMeta /
+        // sourceRef / healthCheck `(name, namespace)` identity-pair —
+        // must byte-compose the lifted [`KUBE_KEY_NAME`] verbatim as
+        // its label prefix. Before this sweep the three
+        // [`cluster_bundle`] format-string templates carried six
+        // inline `name:` YAML label literals side-by-side with the
+        // sibling per-CR `namespace:` half of every `(name,
+        // namespace)` identity-pair emission; a future rebrand of the
+        // lifted [`KUBE_KEY_NAME`] const (or a coordinated K8s-API-
+        // conventions per-major-version ObjectMeta-key promotion) had
+        // to reach every inline label site in lockstep, or the emit-
+        // side silently kept the pre-rebrand label byte while the
+        // retrieval-side per-CR `metadata.name` readers (already
+        // routed through [`KUBE_KEY_NAME`] via caixa-core's
+        // `kube_metadata_str_field` walks + this crate's
+        // `programs_yaml_entry` upstream ComputeUnit YAML retrieval)
+        // rebranded — the two sides would then disagree on the label
+        // byte, and every downstream apiserver-side ObjectMeta parser
+        // on the rendered CR would treat the document as an anonymous
+        // CR (or the apiserver would reject the apply with a schema-
+        // validation error naming the wrong key) with no field naming
+        // the label-drift root cause far from the source caixa.lisp.
+        // Peer to
+        // [`cluster_bundle_every_flux_cr_carries_metadata_namespace_label_from_lifted_key`]
+        // (743e5cd) on the sibling `namespace:` half of the
+        // ObjectMeta / sourceRef / healthCheck `(name, namespace)`
+        // identity-pair — extends the same production-side raw-byte-
+        // label-sweep discipline onto the paired `metadata.name`
+        // nested axis every rendered Flux v2 bundle document
+        // navigates, so every `name:` label position across the whole
+        // `cluster_bundle` render surface consumes the same
+        // substrate-owned `&'static str` by construction.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let label_prefix = format!("{KUBE_KEY_NAME}:");
+        for filename in [
+            FLUX_GITREPOSITORY_YAML_FILENAME,
+            FLUX_HELMRELEASE_YAML_FILENAME,
+            FLUX_KUSTOMIZATION_YAML_FILENAME,
+        ] {
+            let f = files
+                .iter()
+                .find(|f| f.path == std::path::PathBuf::from(filename))
+                .unwrap_or_else(|| panic!("{filename} present"));
+            assert!(
+                f.contents.contains(&label_prefix),
+                "{filename} must carry the {label_prefix:?} YAML label \
+                 composed from the lifted KUBE_KEY_NAME ({KUBE_KEY_NAME:?}); \
+                 a drifted inline label here silently rebrands the per-CR \
+                 metadata.name axis away from the lifted key \
                  (got: {contents:?})",
                 contents = f.contents,
             );
