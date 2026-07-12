@@ -508,6 +508,42 @@ pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE;
 /// `caixa.lisp` / the renderer's format-string template).
 pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PATH;
 
+/// Canonical substrate-side per-cluster / per-caixa
+/// `Kustomization.spec.path` source-sub-tree scalar composer — re-export
+/// of the canonical [`caixa_core::flux_kustomization_source_subtree`]
+/// so the `./clusters/<cluster>/services/<nome>` GitRepository-relative
+/// directory-tree seed every emitted per-caixa `kustomization.yaml`
+/// document mounts under its lifted [`FLUX_KUSTOMIZATION_KEY_PATH`]
+/// leaf-scalar-key lives at one composer across every caixa renderer.
+///
+/// Peer to [`FLUX_KUSTOMIZATION_KEY_PATH`] (613d7ed) — the leaf-scalar-
+/// key half of the `spec.path` `(key, value)` per-CR pair — on the
+/// paired value-half axis. Until this lift landed the two-axis
+/// composition (the `./clusters/` per-cluster prefix + the `/services/`
+/// per-caixa infix) sat as a verbatim inline
+/// `format!("./clusters/{cluster}/services/{name}")` at the sole
+/// [`cluster_bundle`] `kustomization.yaml` format-string production
+/// emit site plus a mirror-symmetric verbatim inline
+/// `format!("./clusters/{cluster}/services/{name}", …)` at its paired
+/// `cluster_bundle_kustomization_path_pins_lifted_sub_tree` test-fixture
+/// navigation site, with no compile-time link between the two sites and
+/// no compile-time link ahead of the second production-emit occurrence
+/// the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-
+/// Aplicacao `Kustomization` synthesis will surface. Both sites now
+/// consult the same canonical composer, so a future substrate-side
+/// directory-tree axis rebrand (`clusters/` → `environments/` for a
+/// multi-env-per-cluster axis extension, `services/` → `servicos/` for
+/// a portuguese-canonical directory-name migration matching the sibling
+/// `:servicos` slot spelling, a per-tenant scoping prefix for multi-
+/// tenant Aplicacao hosting) is one edit at the composer, not a
+/// coordinated sweep across every renderer's `spec.path` emit site.
+/// Same shape as the sibling [`caixa_core::oci_chart_ref`] /
+/// [`caixa_core::cilium_network_policy_name`] /
+/// [`caixa_core::gateway_api_http_route_name`] composer re-exports on
+/// the peer substrate-side canonical-load-bearing-scalar-that-consumers-
+/// key-off axis.
+pub use caixa_core::flux_kustomization_source_subtree;
+
 /// Canonical Flux v2 `Kustomization.spec.timeout` per-CR reconcile
 /// wall-clock cap leaf-scalar-key — re-export of the canonical
 /// [`caixa_core::FLUX_KUSTOMIZATION_KEY_TIMEOUT`] so the Flux v2
@@ -1902,6 +1938,21 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         create_namespace_key = FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
     );
 
+    // The `spec.path` per-CR source-sub-tree scalar composes through
+    // the canonical [`flux_kustomization_source_subtree`] helper
+    // (re-exported from [`caixa_core::flux_kustomization_source_subtree`]),
+    // so the substrate's canonical per-cluster / per-caixa GitRepository-
+    // relative directory-tree seed (`./clusters/<cluster>/services/<nome>`)
+    // lives at one composer instead of a verbatim inline
+    // `format!("./clusters/{cluster}/services/{name}")` at this emit site.
+    // Threaded through a `{source_subtree}` named-arg interpolation on
+    // the paired `{path_key}` leaf-scalar-key emit. Peer to the sibling
+    // [`caixa_core::oci_chart_ref`] / [`caixa_core::cilium_network_policy_name`]
+    // / [`caixa_core::gateway_api_http_route_name`] canonical-composer
+    // re-exports on the substrate-side canonical-load-bearing-scalar
+    // axis.
+    let source_subtree = flux_kustomization_source_subtree(&opts.cluster, &name);
+
     let kustomization = format!(
         "---\n\
          # Flux Kustomization that pins the GitRepository + HelmRelease.\n\
@@ -1917,7 +1968,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {source_ref_key}:\n    \
              {kind_key}: {source_kind}\n    \
              {name_key}: {flux_system}\n  \
-           {path_key}: ./clusters/{cluster}/services/{name}\n  \
+           {path_key}: {source_subtree}\n  \
            {health_checks_key}:\n    \
              - {api_version_key}: {api_version}\n      \
                {kind_key}: {health_kind}\n      \
@@ -1947,6 +1998,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         path_key = FLUX_KUSTOMIZATION_KEY_PATH,
         timeout_key = FLUX_KUSTOMIZATION_KEY_TIMEOUT,
         timeout_default = DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT,
+        source_subtree = source_subtree,
     );
     // chart_name is reserved for a future kustomization.yaml `resources:`
     // entry pointing at the rendered Chart.yaml; not yet wired.
@@ -2865,11 +2917,7 @@ spec:
                  defaults to reconciling the GitRepository root or \
                  refuses to reconcile at all",
             );
-        let expected = format!(
-            "./clusters/{cluster}/services/{name}",
-            cluster = opts.cluster,
-            name = sample_caixa().nome
-        );
+        let expected = flux_kustomization_source_subtree(&opts.cluster, &sample_caixa().nome);
         assert_eq!(
             path, expected,
             "spec.path must carry the substrate's canonical per-cluster \
@@ -2906,6 +2954,97 @@ spec:
             "FLUX_KUSTOMIZATION_KEY_PATH",
             FLUX_KUSTOMIZATION_KEY_PATH,
             caixa_core::FLUX_KUSTOMIZATION_KEY_PATH,
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_source_subtree_re_export_matches_caixa_core_canonical_output() {
+        // The renderer's `flux_kustomization_source_subtree` was lifted
+        // from the verbatim inline
+        // `format!("./clusters/{cluster}/services/{name}")` at the sole
+        // `cluster_bundle` `kustomization.yaml` format-string production
+        // emit site + a mirror-symmetric verbatim inline
+        // `format!("./clusters/{cluster}/services/{name}", …)` at the
+        // paired `cluster_bundle_kustomization_path_pins_lifted_sub_tree`
+        // test-fixture navigation site, to a re-export of
+        // [`caixa_core::flux_kustomization_source_subtree`]. Pin the
+        // output-shape equality here on representative fixtures so any
+        // local re-introduction of a sibling
+        // `pub fn flux_kustomization_source_subtree(...)` shadow at this
+        // crate (the canonical drift footgun where a sibling local
+        // `pub fn` could happen to produce the same byte-shape at the
+        // source while diverging on either axis of the composition) is
+        // a build-time test failure naming the offending drift. Peer to
+        // [`flux_kustomization_key_path_re_export_points_at_caixa_core_canonical`]
+        // on the paired leaf-scalar-key half of the same `(key, value)`
+        // per-CR `spec.path` pair — the key half's re-export identity
+        // lives at the sibling `assert_str_reexport_identity` pin, the
+        // value half's canonical composition lives here. Same shape as
+        // the sibling composer re-export identity pins the
+        // [`caixa_mesh::cilium_network_policy_name`] and
+        // [`caixa_mesh::gateway_api_http_route_name`] re-exports carry
+        // at their crate's `mod tests` — every composer re-export in
+        // the substrate reaches the canonical `caixa-core` function
+        // through one `pub use` and the test-side output-shape identity
+        // pin closes the "sibling `pub fn` shadow" footgun by
+        // construction.
+        assert_eq!(
+            flux_kustomization_source_subtree("rio", "hello-rio"),
+            caixa_core::flux_kustomization_source_subtree("rio", "hello-rio"),
+        );
+        assert_eq!(
+            flux_kustomization_source_subtree("rio", "hello-rio"),
+            "./clusters/rio/services/hello-rio",
+        );
+        assert_eq!(
+            flux_kustomization_source_subtree("paris", "cart"),
+            caixa_core::flux_kustomization_source_subtree("paris", "cart"),
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_spec_path_uses_lifted_composer() {
+        // Composition pin: the `spec.path` scalar emitted by
+        // `cluster_bundle` for every per-caixa `kustomization.yaml`
+        // document must byte-equal the output of the lifted
+        // [`flux_kustomization_source_subtree`] composer with the same
+        // `(cluster, nome)` arguments — so a future refactor of the
+        // composer's internals (per-cluster prefix rebrand, per-caixa
+        // infix rebrand, multi-tenant scoping prefix) reaches the
+        // renderer through the one function-pointer edit at the
+        // canonical `caixa-core` declaration, and any rewrite of the
+        // format-string template's `{path_key}: {source_subtree}` emit
+        // site that desynchronizes from the composer fires here at
+        // build-time rather than silently splitting the writer-side
+        // sub-tree seed at emit time. Peer to
+        // [`cluster_bundle_kustomization_path_pins_lifted_sub_tree`]
+        // above on the paired output-shape assertion — that pin locks
+        // the emitted `spec.path` scalar against the composer's output;
+        // this pin locks the equivalence to the composer with the
+        // ClusterBundleOpts's `cluster` axis threaded through, so a
+        // regression that pinned one axis at the emit site while
+        // leaving the peer axis inline surfaces on either half.
+        let opts = ClusterBundleOpts::for_caixa(&sample_caixa(), "rio");
+        let files = cluster_bundle(&sample_caixa(), &opts).unwrap();
+        let ks = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&ks.contents).expect("kustomization.yaml parses as YAML");
+        let emitted = parsed
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(FLUX_KUSTOMIZATION_KEY_PATH))
+            .and_then(|v| v.as_str())
+            .expect("spec.path string scalar present")
+            .to_owned();
+        let composed = flux_kustomization_source_subtree(&opts.cluster, &sample_caixa().nome);
+        assert_eq!(
+            emitted, composed,
+            "spec.path emit must byte-equal the lifted \
+             flux_kustomization_source_subtree composer's output — drift \
+             at either half silently splits the per-cluster / per-caixa \
+             sub-tree seed axis at emit time from the canonical composer"
         );
     }
 

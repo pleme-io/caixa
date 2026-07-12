@@ -12851,6 +12851,86 @@ pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "prune";
 /// [kust]: https://fluxcd.io/flux/components/kustomize/kustomizations/
 pub const FLUX_KUSTOMIZATION_KEY_PATH: &str = "path";
 
+/// Canonical substrate-side per-cluster / per-caixa `Kustomization.spec.path`
+/// source-sub-tree scalar composer — the `./clusters/<cluster>/services/<nome>`
+/// GitRepository-relative directory-tree seed every `caixa-flux`-emitted
+/// `kustomization.yaml` document mounts under its lifted
+/// [`FLUX_KUSTOMIZATION_KEY_PATH`] leaf-scalar-key at the top-level `spec`
+/// position so the Flux v2 kustomize-controller's per-CR reconcile loop
+/// walks into the paired per-cluster / per-caixa sub-tree of the pleme-io
+/// k8s repository (rather than the `GitRepository` root, which would pull
+/// every unrelated cluster's manifests through the wrong per-caixa
+/// `Kustomization`).
+///
+/// The rendered string is the substrate's contract with the pleme-io k8s
+/// repository's canonical directory-tree layout: every per-caixa Servico's
+/// rendered manifests live at `pleme-io/k8s/clusters/<cluster>/services/<nome>/`,
+/// so the Flux v2 kustomize-controller-side per-CR reconcile loop keys off
+/// the same GitRepository-relative sub-tree seed by construction — the
+/// composer output is the exact `spec.path` scalar the substrate seeds into
+/// every emitted per-caixa `kustomization.yaml` document under its top-
+/// level `spec` position.
+///
+/// Composes two axes:
+///
+///   - the per-cluster prefix — the `./clusters/<cluster>/` half of the
+///     sub-tree seed that scopes the emit to the paired cluster's
+///     manifest set (so two clusters hosting the same per-caixa Servico —
+///     `rio` vs `paris` — land at distinct `spec.path` scalars with no
+///     cross-cluster reconcile drift at the kustomize-controller's per-CR
+///     apply loop);
+///   - the per-caixa suffix — the `/services/<nome>` half of the sub-tree
+///     seed that scopes the emit to the paired per-caixa Servico's
+///     manifest sub-directory under the cluster's `services/` directory
+///     (so two per-caixa Servicos co-resident under the same cluster —
+///     `hello-rio` vs `cart` — land at distinct `spec.path` scalars with
+///     no per-caixa reconcile drift at the same kustomize-controller
+///     apply loop).
+///
+/// Peer to [`cilium_network_policy_name`] / [`gateway_api_http_route_name`]
+/// / [`oci_chart_ref`] / [`lareira_chart_name`] on the sibling substrate-
+/// side canonical-composer-of-a-canonical-scalar-that-consumers-key-off
+/// axis: every writer-side helper composes a canonical load-bearing
+/// scalar the substrate contracts with a downstream consumer's index
+/// (Cilium's per-CNP `metadata.name`, Gateway API's per-HTTPRoute
+/// `metadata.name`, Helm's OCI-artifact ref, Helm's Chart.yaml `name:`
+/// axis). This composer's `Kustomization.spec.path` peer names the Flux
+/// v2 kustomize-controller-side per-CR reconcile-target sub-tree index —
+/// same "the load-bearing multi-axis composition lives in one place"
+/// discipline extended from the mesh renderer's per-CR-identity-scalar
+/// axes onto the flux renderer's per-CR-source-sub-tree axis.
+///
+/// Until this lift landed the two-axis composition sat as a verbatim
+/// inline `format!("./clusters/{cluster}/services/{name}")` template at
+/// the sole `cluster_bundle` `kustomization.yaml` format-string
+/// production emit site plus a mirror-symmetric verbatim inline
+/// `format!("./clusters/{cluster}/services/{name}", …)` at the paired
+/// `cluster_bundle_kustomization_path_pins_lifted_sub_tree` test-fixture
+/// navigation site — the substrate's canonical per-cluster / per-caixa
+/// sub-tree seed had no compile-time link between the two sites. A
+/// future substrate-side directory-tree axis rebrand (`clusters/` →
+/// `environments/` for a multi-env-per-cluster axis extension, `services/`
+/// → `servicos/` for a portuguese-canonical directory-name migration
+/// matching the sibling `:servicos` slot spelling, a per-tenant scoping
+/// prefix for multi-tenant Aplicacao hosting) would have had to be
+/// threaded through both sites in lockstep or the two would silently
+/// split: the production emit would key off the drifted encoding while
+/// the test pin still asserts the original. Lifting closes the drift
+/// footgun ahead of the second production-emit occurrence the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// `Kustomization` synthesis will surface — the second consumer inherits
+/// the canonical per-cluster / per-caixa sub-tree composition by
+/// construction without opportunity for per-renderer drift.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5) lifts
+/// the composition in advance of the second occurrence the M4 materializer
+/// will surface, so the second consumer inherits the canonical sub-tree
+/// seed by construction.
+#[must_use]
+pub fn flux_kustomization_source_subtree(cluster: &str, nome: &str) -> String {
+    format!("./clusters/{cluster}/services/{nome}")
+}
+
 /// Canonical Flux v2 `Kustomization.spec.timeout` per-CR reconcile wall-
 /// clock cap leaf-scalar-key every `caixa-flux`-emitted
 /// `kustomization.yaml` document seeds under its top-level `spec`
@@ -22022,6 +22102,136 @@ mod tests {
                  lareira_chart_name({nome:?}) = {chart:?}"
             );
         }
+    }
+
+    // ── Flux Kustomization source-sub-tree composer ───────────────────────
+    //
+    // Peer to the `oci_chart_ref` / `cilium_network_policy_name` /
+    // `gateway_api_http_route_name` composers above on the sibling
+    // canonical-load-bearing-scalar-that-consumers-key-off axis. Until
+    // this lift landed the two-axis composition
+    // (`./clusters/<cluster>/services/<nome>`) sat as an inline
+    // `format!` template at the sole `caixa-flux::cluster_bundle`
+    // `kustomization.yaml` production emit site plus a mirror-symmetric
+    // inline `format!` at its paired test-fixture navigation site — no
+    // compile-time link between the two sites and no compile-time link
+    // ahead of the second production-emit occurrence the M4
+    // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+    // `Kustomization` synthesis will surface. Pin the byte-shape, the
+    // composition equation, and the sub-tree-scope invariants against
+    // the prior inline `format!` so a future composer-internal drift
+    // fires at test time.
+
+    #[test]
+    fn flux_kustomization_source_subtree_pins_byte_shape_against_prior_inline_format() {
+        // Byte-shape pin against the prior inline
+        // `format!("./clusters/{cluster}/services/{name}")` at
+        // caixa-flux/src/lib.rs (both the `cluster_bundle`
+        // `kustomization.yaml` `spec.path` production emit site and the
+        // paired `cluster_bundle_kustomization_path_pins_lifted_sub_tree`
+        // test-fixture navigation site). Any future composer-internal
+        // drift on either axis (the `./clusters/` per-cluster prefix,
+        // the `/services/` per-caixa infix, the trailing per-caixa
+        // suffix, the composition order) surfaces here as a byte-shape
+        // regression rather than at cluster-apply time far from the
+        // drift site.
+        assert_eq!(
+            flux_kustomization_source_subtree("rio", "hello-rio"),
+            "./clusters/rio/services/hello-rio"
+        );
+        assert_eq!(
+            flux_kustomization_source_subtree("paris", "cart"),
+            "./clusters/paris/services/cart"
+        );
+        assert_eq!(
+            flux_kustomization_source_subtree("tokyo", "checkout"),
+            "./clusters/tokyo/services/checkout"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_source_subtree_starts_with_relative_clusters_prefix() {
+        // Structural invariant: every output starts with the canonical
+        // `./clusters/` per-cluster-prefix half of the sub-tree seed.
+        // The leading `./` scopes the emit to the GitRepository root
+        // (the kustomize-controller keys the per-CR reconcile loop off
+        // the GitRepository the paired `sourceRef` names, so the sub-
+        // tree seed must resolve relative to the GitRepository root,
+        // not an absolute filesystem path). The `clusters/` component
+        // scopes the emit to the paired cluster's manifest set under
+        // the pleme-io k8s repository's canonical directory-tree
+        // layout.
+        for (cluster, nome) in [
+            ("rio", "hello-rio"),
+            ("paris", "cart"),
+            ("tokyo", "checkout"),
+        ] {
+            let sub = flux_kustomization_source_subtree(cluster, nome);
+            assert!(
+                sub.starts_with("./clusters/"),
+                "flux_kustomization_source_subtree({cluster:?}, {nome:?}) = {sub:?} must start \
+                 with the canonical `./clusters/` GitRepository-root-relative per-cluster prefix"
+            );
+        }
+    }
+
+    #[test]
+    fn flux_kustomization_source_subtree_contains_paired_cluster_and_nome() {
+        // Cross-axis invariant: every output contains the paired
+        // `<cluster>` and `<nome>` scalars verbatim, at their canonical
+        // per-cluster / per-caixa sub-tree positions. A future
+        // composer-internal drift that accidentally case-folded, hyphen-
+        // collapsed, or transposed either axis (`./clusters/rio/services/hello-rio`
+        // → `./clusters/hello-rio/services/rio` under a swapped
+        // composition, `./clusters/Rio/services/HelloRio` under an
+        // accidental case fold) would surface here as a structural
+        // regression rather than at cluster-apply time far from the
+        // drift site.
+        for (cluster, nome) in [
+            ("rio", "hello-rio"),
+            ("paris", "cart"),
+            ("tokyo", "checkout"),
+            ("us-east-1", "worker"),
+        ] {
+            let sub = flux_kustomization_source_subtree(cluster, nome);
+            assert!(
+                sub.contains(&format!("/clusters/{cluster}/")),
+                "flux_kustomization_source_subtree({cluster:?}, {nome:?}) = {sub:?} must carry \
+                 the paired `<cluster>` scalar under its canonical per-cluster sub-tree position"
+            );
+            assert!(
+                sub.ends_with(&format!("/services/{nome}")),
+                "flux_kustomization_source_subtree({cluster:?}, {nome:?}) = {sub:?} must end with \
+                 the paired `/services/<nome>` per-caixa sub-tree suffix"
+            );
+        }
+    }
+
+    #[test]
+    fn flux_kustomization_source_subtree_distinct_across_clusters_and_nomes() {
+        // Uniqueness invariant: two distinct `(cluster, nome)` inputs
+        // resolve to two distinct `spec.path` scalars. A composer-
+        // internal drift that accidentally coalesced either axis onto
+        // a constant (dropping `<cluster>` or `<nome>` from the emit)
+        // would silently collapse two per-cluster / per-caixa
+        // `Kustomization` CRs onto the same reconcile-target sub-tree,
+        // routing two distinct manifest sets through the same apply
+        // loop with no diagnostic naming the coalesce root cause.
+        let a = flux_kustomization_source_subtree("rio", "hello-rio");
+        let b = flux_kustomization_source_subtree("paris", "hello-rio");
+        let c = flux_kustomization_source_subtree("rio", "cart");
+        assert_ne!(
+            a, b,
+            "distinct clusters (`rio` vs `paris`) hosting the same per-caixa Servico \
+             must resolve to distinct `spec.path` scalars — coalesce would silently route \
+             two per-cluster reconcile loops through the same manifest sub-tree"
+        );
+        assert_ne!(
+            a, c,
+            "distinct per-caixa Servicos (`hello-rio` vs `cart`) co-resident under the \
+             same cluster must resolve to distinct `spec.path` scalars — coalesce would \
+             silently route two per-caixa reconcile loops through the same manifest sub-tree"
+        );
     }
 
     #[test]
