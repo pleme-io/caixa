@@ -8388,8 +8388,18 @@ mod tests {
 
     #[test]
     fn entrada_root_path_validates() {
+        // The author-supplied bare-root `:entrada :paths` entry is the
+        // same byte-shape the peer emit-side catch-all constant
+        // [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] renders when
+        // the author's `:paths` list is empty — sweeping the test-side
+        // probe literal onto the lifted const closes the two-axis pin
+        // (author-side admit + emit-side canonical fallback) around
+        // one `&'static str`, so a future rebrand of the catch-all
+        // reaches both consumers by construction. Peer to
+        // [`crate::tests::gateway_api_default_http_route_path_pins_canonical_root_literal`]
+        // on the canonical-literal pin surface.
         let mut s = three_member_spec();
-        s.entrada.as_mut().unwrap().paths = vec!["/".into()];
+        s.entrada.as_mut().unwrap().paths = vec![crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH.into()];
         s.validate().unwrap();
     }
 

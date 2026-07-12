@@ -927,6 +927,71 @@ pub const GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT: u16 = 80;
 /// [cm]: ../../caixa_mesh/fn.gateway_routes.html
 pub const GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME: &str = "http";
 
+/// K8s Gateway API v1 `HTTPRoute.spec.rules[].matches[].path.value`
+/// substrate-side catch-all path — the fallback URL path every
+/// Aplicacao-level [`caixa_mesh::gateway_routes`][cm] -emitted
+/// `HTTPRoute` renders when the typed `:entrada :paths` slot is
+/// empty, so an author who declares an external `:entrada` but no
+/// per-path rule surface still gets a route whose sole
+/// `HTTPPathMatch` matches every incoming request under the
+/// paired [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] discriminator.
+/// K8s Gateway API v1's `PathPrefix` matcher over the bare-root
+/// `"/"` is the canonical catch-all shape — the upstream docs at
+/// <https://gateway-api.sigs.k8s.io/api-types/httproute/#path-based-routing>
+/// pin the `PathPrefix "/"` combination as the "match anything the
+/// listener admits" idiom every gateway-class controller (Cilium's
+/// Envoy today, Envoy Gateway / Istio Gateway on the peer
+/// controllers) treats as the equivalent of "no path predicate"
+/// under the CRD schema.
+///
+/// Until this lift landed the value `"/"` lived at one production-
+/// code call site: the `vec!["/"]` fallback arm inside
+/// [`caixa_mesh::gateway_routes`][cm]'s `let paths: Vec<&str> =
+/// if entrada.paths.is_empty() { vec!["/"] } else { … }` branch, the
+/// sole per-Aplicacao HTTPRoute per-rule path-list resolver that
+/// surfaces the catch-all URL path whenever the typed `:entrada
+/// :paths` list is empty. A future substrate-side rebrand of the
+/// catch-all shape — a hypothetical migration to Gateway API v2's
+/// `Exact ""` idiom, an operator-pinned per-Aplicacao override the
+/// future `:entrada :default-path` slot promotes, a per-controller
+/// variant that treats `"/"` as a literal prefix rather than the
+/// catch-all — without a coordinated edit would silently emit an
+/// `HTTPRoute` whose sole path-match predicate rejects every
+/// incoming request at the drifted shape, so every external
+/// `:entrada` HTTP flow drops at the first hop with no diagnostic
+/// naming the catch-all-path drift root cause. Lifting the literal
+/// to a shared typed `&'static str` const closes the drift footgun
+/// structurally — every consumer reads from the same lifted constant,
+/// so any rebrand reaches every site by construction.
+///
+/// Semantically distinct from every peer HTTP-path byte-string in the
+/// substrate. The typed [`Entrada::paths`] admission grammar
+/// ([`is_gateway_api_http_path`] + [`GATEWAY_API_HTTP_PATH_MAX_LEN`])
+/// admits the bare-root `"/"` at the author's slot; this constant
+/// names the substrate's *emit-side* choice for the same byte-string
+/// at the *no-author-input* path — the two axes carry the identical
+/// shape today by design (the substrate's catch-all round-trips
+/// through the same admission grammar the author's explicit `"/"`
+/// would clear), and the paired
+/// [`gateway_api_default_http_route_path_carries_valid_gateway_api_http_path_shape`]
+/// cross-axis pin closes the invariant at build time.
+///
+/// Mirrors the [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] (a12dcdd) /
+/// [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] (cd60fde) lifts on the
+/// peer per-listener substrate-canonical scalar-value axes — all
+/// three are Aplicacao-side substrate-canonical scalar-value pins the
+/// sole per-Aplicacao mesh emitter reaches for at a K8s Gateway API
+/// v1 CRD sub-path, and all three lift to `caixa-core::render` so a
+/// future substrate-side rebrand on any one axis lands at exactly one
+/// const per axis. Same "typed const so the scalar has exactly one
+/// source of truth" discipline every peer scalar in this crate
+/// carries ([`DEFAULT_GATEWAY_CLASS_NAME`],
+/// [`GATEWAY_API_PROTOCOL_HTTP`],
+/// [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`]).
+///
+/// [cm]: ../../caixa_mesh/fn.gateway_routes.html
+pub const GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH: &str = "/";
+
 /// Predicate: assert that `path` is a valid HTTP path under both the
 /// K8s Gateway API v1 `HTTPPathMatch.value` admission grammar AND the
 /// Cilium L7 `path:` rule grammar — the two landing sites every
@@ -27311,6 +27376,72 @@ mod tests {
              must be a valid DNS-1123 label — K8s Gateway API v1 `Listener.name` is \
              `SectionName`-typed and the apiserver-side CRD schema validator refuses \
              any other shape"
+        );
+    }
+
+    #[test]
+    fn gateway_api_default_http_route_path_pins_canonical_root_literal() {
+        // The canonical-constant arm — pins
+        // [`GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] at the verbatim `"/"`
+        // literal the sole `caixa-mesh::gateway_routes` per-Aplicacao
+        // `HTTPRoute` empty-`:entrada :paths` catch-all URL-path
+        // resolver reads from. Peer with the
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`]-pins-`"http"` and
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`]-pins-`80`
+        // disciplines on the sibling per-listener substrate-canonical
+        // scalar-value axes: all three are the Aplicacao-side
+        // substrate-canonical scalar-value pins the sole per-Aplicacao
+        // Gateway API v1 CRD emitter reaches for, so a future refactor
+        // that drifts any one constant out from under the emitter
+        // surfaces here ahead of any per-renderer HTTPRoute emission.
+        // The literal value is the K8s Gateway API v1 canonical
+        // catch-all shape: `PathPrefix "/"` — the upstream docs at
+        // <https://gateway-api.sigs.k8s.io/api-types/httproute/#path-based-routing>
+        // pin the bare-root byte-string as the "match anything the
+        // listener admits" idiom every gateway-class controller treats
+        // as the equivalent of "no path predicate".
+        assert_eq!(
+            GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH, "/",
+            "canonical Gateway API v1 HTTPRoute catch-all path literal must remain \
+             `\"/\"` verbatim — this is the value the caixa-mesh HTTPRoute emitter \
+             renders whenever the typed `:entrada :paths` list is empty and every \
+             gateway-class controller (Cilium's Envoy, Envoy Gateway, Istio Gateway) \
+             treats as the canonical `PathPrefix` catch-all"
+        );
+    }
+
+    #[test]
+    fn gateway_api_default_http_route_path_carries_valid_gateway_api_http_path_shape() {
+        // Cross-axis invariant: K8s Gateway API v1
+        // `HTTPPathMatch.value` is admitted by the apiserver-side CRD
+        // schema regex the substrate mirrors in the shared
+        // [`is_gateway_api_http_path`] predicate — the same admission
+        // grammar every author-supplied [`crate::aplicacao::Entrada`]
+        // `:paths` entry clears at typed-validate time. Pinning the
+        // shape here means a future rebrand on the canonical lift can't
+        // silently land a malformed catch-all URL-path scalar (empty,
+        // no leading `/`, overlong past the K8s Gateway API v1
+        // `HTTPPathMatch.value` ceiling, `..`-segment-bearing, ASCII-
+        // control-bearing, non-ASCII-bearing) that the apiserver-side
+        // Gateway API CRD schema validator would reject far from the
+        // rebrand commit's source. The paired
+        // [`caixa_mesh::gateway_routes`] emitter never consults the
+        // predicate directly (the catch-all value is a const — no
+        // author input reaches this axis today) so consulting it here
+        // means any future rebrand routes through the same
+        // admission-grammar the peer author-side
+        // `:entrada :paths` slot's `AplicacaoSpec::validate` gate
+        // carries. Peer to
+        // `gateway_api_default_http_listener_name_carries_dns_1123_label_shape`
+        // on the sibling per-listener name-scalar cross-axis invariant
+        // — every substrate-side Gateway-API-scalar lift carries the
+        // matching per-axis admission-grammar cross-axis pin.
+        assert!(
+            is_gateway_api_http_path(GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH).is_ok(),
+            "GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH ({GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH:?}) \
+             must clear the shared HTTP-path admission grammar — K8s Gateway API v1 \
+             `HTTPPathMatch.value` is CRD-schema-regex-validated and the apiserver-side \
+             schema validator refuses any other shape at apply time"
         );
     }
 
