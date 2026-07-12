@@ -2524,8 +2524,8 @@ impl AplicacaoSpec {
             // the canonical edge-direction order the existing
             // membership lookup, self-edge check, target dispatch,
             // and diagnostic strings already use.
-            validate_contrato_caixa(":de", &c.de)?;
-            validate_contrato_caixa(":para", &c.para)?;
+            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, &c.de)?;
+            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, &c.para)?;
             if !names.contains(c.de.as_str()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
                     caixa: c.de.clone(),
@@ -4367,7 +4367,9 @@ mod tests {
         let err = s.validate().unwrap_err();
         assert_eq!(
             err,
-            AplicacaoError::ContratoCaixaEmpty { slot: ":de" },
+            AplicacaoError::ContratoCaixaEmpty {
+                slot: crate::render::CONTRATO_AUTHOR_KEY_DE
+            },
             "got {err:?}"
         );
     }
@@ -4381,7 +4383,9 @@ mod tests {
         let err = s.validate().unwrap_err();
         assert_eq!(
             err,
-            AplicacaoError::ContratoCaixaEmpty { slot: ":para" },
+            AplicacaoError::ContratoCaixaEmpty {
+                slot: crate::render::CONTRATO_AUTHOR_KEY_PARA
+            },
             "got {err:?}"
         );
     }
@@ -4407,7 +4411,7 @@ mod tests {
         else {
             panic!("expected ContratoCaixaInvalid, got other variant");
         };
-        assert_eq!(slot, ":de");
+        assert_eq!(slot, crate::render::CONTRATO_AUTHOR_KEY_DE);
         assert_eq!(caixa, "Cart");
         assert!(
             reason.contains("uppercase"),
@@ -4428,7 +4432,7 @@ mod tests {
             matches!(
                 err,
                 AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, ref reason }
-                    if slot == ":para" && caixa == "my_catalog" && reason.contains('_')
+                    if slot == crate::render::CONTRATO_AUTHOR_KEY_PARA && caixa == "my_catalog" && reason.contains('_')
             ),
             "got {err:?}"
         );
@@ -4447,7 +4451,7 @@ mod tests {
             matches!(
                 err,
                 AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, ref reason }
-                    if slot == ":de" && caixa == "team.cart" && reason.contains('.')
+                    if slot == crate::render::CONTRATO_AUTHOR_KEY_DE && caixa == "team.cart" && reason.contains('.')
             ),
             "got {err:?}"
         );
@@ -4466,7 +4470,7 @@ mod tests {
             matches!(
                 err,
                 AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, .. }
-                    if slot == ":para" && caixa == "café"
+                    if slot == crate::render::CONTRATO_AUTHOR_KEY_PARA && caixa == "café"
             ),
             "got {err:?}"
         );
@@ -4485,7 +4489,7 @@ mod tests {
             matches!(
                 err,
                 AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, ref reason }
-                    if slot == ":de" && caixa == "-cart" && reason.contains("start and end")
+                    if slot == crate::render::CONTRATO_AUTHOR_KEY_DE && caixa == "-cart" && reason.contains("start and end")
             ),
             "got {err:?}"
         );
@@ -4503,7 +4507,12 @@ mod tests {
         let mut s = three_member_spec();
         s.contratos.push(contract_http("", "catalog", "/x"));
         let err = s.validate().unwrap_err();
-        assert_eq!(err, AplicacaoError::ContratoCaixaEmpty { slot: ":de" });
+        assert_eq!(
+            err,
+            AplicacaoError::ContratoCaixaEmpty {
+                slot: crate::render::CONTRATO_AUTHOR_KEY_DE
+            }
+        );
     }
 
     #[test]
@@ -4522,7 +4531,7 @@ mod tests {
             matches!(
                 err,
                 AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, .. }
-                    if slot == ":de" && caixa == "Cart"
+                    if slot == crate::render::CONTRATO_AUTHOR_KEY_DE && caixa == "Cart"
             ),
             "got {err:?}"
         );
@@ -4544,7 +4553,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                AplicacaoError::ContratoCaixaInvalid { slot, .. } if slot == ":de"
+                AplicacaoError::ContratoCaixaInvalid { slot, .. } if slot == crate::render::CONTRATO_AUTHOR_KEY_DE
             ),
             "got {err:?}"
         );
@@ -4556,7 +4565,7 @@ mod tests {
         assert!(
             matches!(
                 err,
-                AplicacaoError::ContratoCaixaInvalid { slot, .. } if slot == ":para"
+                AplicacaoError::ContratoCaixaInvalid { slot, .. } if slot == crate::render::CONTRATO_AUTHOR_KEY_PARA
             ),
             "got {err:?}"
         );
@@ -4578,7 +4587,7 @@ mod tests {
             matches!(
                 err,
                 AplicacaoError::ContratoCaixaInvalid { slot, ref caixa, .. }
-                    if slot == ":de" && caixa == "Cart"
+                    if slot == crate::render::CONTRATO_AUTHOR_KEY_DE && caixa == "Cart"
             ),
             "got {err:?}"
         );
@@ -4627,11 +4636,70 @@ mod tests {
         else {
             panic!("expected ContratoCaixaInvalid, got {err:?}");
         };
-        assert_eq!(slot, ":para");
+        assert_eq!(slot, crate::render::CONTRATO_AUTHOR_KEY_PARA);
         assert_eq!(caixa, "BAD_NAME");
         assert!(
             !reason.is_empty(),
             "ContratoCaixaInvalid `reason` must carry a parser-shaped wording"
+        );
+    }
+
+    #[test]
+    fn contrato_author_key_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin: the two author-facing kebab-case labels the
+        // `(:contratos ((:de "<caixa>" :para "<caixa>" …) …))` surface
+        // admits on the `:contratos` per-entry endpoint-shape axis,
+        // one arm per typed sub-slot. Mirrors the peer scalar-value
+        // pin the sibling top-level M2 / M3 / Supervisor
+        // author-facing-label consts carry
+        // (`m3_top_level_author_key_consts_pin_canonical_kebab_case_labels`
+        // for the parent [`crate::render::M3_AUTHOR_KEY_CONTRATOS`]
+        // slot itself), so every altitude of the typed-slot algebra
+        // shares the same "one canonical byte-string per arm"
+        // discipline. A future rebrand (`:de` → `:from` matching the
+        // OTP `appup` [`crate::render::M2_UPGRADE_FROM_KEY_FROM`]
+        // sibling, `:para` → `:to` matching the same, or
+        // `:de`/`:para` → `:source`/`:target` matching the WIT
+        // world's `import`/`export` half-vocabulary) lands as an
+        // edit to exactly one const, and every consumer that reaches
+        // for the label picks it up at build time rather than at
+        // runtime as a downstream `ContratoCaixaEmpty` /
+        // `ContratoCaixaInvalid` `slot: <stale-kebab-case>`
+        // diagnostic mismatch far from the rename's commit.
+        assert_eq!(crate::render::CONTRATO_AUTHOR_KEY_DE, ":de");
+        assert_eq!(crate::render::CONTRATO_AUTHOR_KEY_PARA, ":para");
+    }
+
+    #[test]
+    fn contrato_shape_gate_routes_through_lifted_contrato_author_key_consts() {
+        // Production-through-const pin: the two per-axis labels the
+        // per-`:contratos` entry endpoint-shape gate at
+        // [`AplicacaoSpec::validate`] passes as the `slot: &'static str`
+        // argument to [`validate_contrato_caixa`] route through the
+        // lifted [`crate::render::CONTRATO_AUTHOR_KEY_DE`] /
+        // [`crate::render::CONTRATO_AUTHOR_KEY_PARA`] consts, so a
+        // future rebrand that reaches the const but not the gate (or
+        // vice versa) surfaces here at build time rather than at
+        // runtime as a downstream [`AplicacaoError::ContratoCaixaEmpty`]
+        // `slot: <stale-kebab-case>` diagnostic far from the rename's
+        // commit. Mirror of the peer
+        // [`manifest::declared_mesh_slots_route_through_lifted_m3_author_key_consts`]
+        // pin (882f498) on the sibling M3 top-level slot axis.
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("", "catalog", "/x"));
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoCaixaEmpty {
+                slot: crate::render::CONTRATO_AUTHOR_KEY_DE
+            }
+        );
+        let mut s = three_member_spec();
+        s.contratos.push(contract_http("cart", "", "/x"));
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::ContratoCaixaEmpty {
+                slot: crate::render::CONTRATO_AUTHOR_KEY_PARA
+            }
         );
     }
 

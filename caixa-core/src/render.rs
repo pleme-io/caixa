@@ -6815,6 +6815,63 @@ pub const M3_AUTHOR_KEY_PLACEMENT: &str = ":placement";
 /// [`M3_AUTHOR_KEY_MEMBROS`] for the full lift rationale.
 pub const M3_AUTHOR_KEY_ENTRADA: &str = ":entrada";
 
+/// Canonical author-facing kebab-case `(:de "<caixa>")` per-`:contratos`
+/// entry source-endpoint sub-slot label the M3 Aplicacao's WIT-typed
+/// inter-Servico edge set surfaces under. Names the "edge tail" —
+/// which member `:contratos` entry `n` originates from — per
+/// MESH-COMPOSITION §IV table row "`:contratos` | typed inter-Servico
+/// edges | each :de + :para must be in :membros; :wit must reference a
+/// registered WIT world".
+///
+/// Peer of [`M3_AUTHOR_KEY_CONTRATOS`] on the `:contratos` sub-slot
+/// author-facing-label dual axis: the top-level [`M3_AUTHOR_KEY_CONTRATOS`]
+/// const (882f498) names the M3 slot itself, the two
+/// `CONTRATO_AUTHOR_KEY_{DE,PARA}` consts name the per-entry endpoint
+/// axes the parser reads (`(:de "cart" :para "catalog" …)`).
+///
+/// Until this lift landed the two kebab-case labels sat once each in
+/// [`crate::aplicacao::AplicacaoSpec::validate`]'s per-`:contratos`
+/// entry endpoint-shape gate as two two-arm inline `":de"` / `":para"`
+/// byte-strings passed as the `slot: &'static str` argument to
+/// [`validate_contrato_caixa`], plus a family of test-side probe
+/// literals asserting the [`crate::aplicacao::AplicacaoError::ContratoCaixaEmpty`]
+/// / [`crate::aplicacao::AplicacaoError::ContratoCaixaInvalid`]
+/// diagnostic's `slot:` field carries the expected per-arm value
+/// verbatim — with no compile-time link between the validator's arms
+/// and the tests' expected values. A future rebrand (a hypothetical
+/// `:de` → `:from` for English uniformity matching the OTP `appup`
+/// `M2_UPGRADE_FROM_KEY_FROM` (36ffe65) sibling, `:para` → `:to`
+/// matching the same, `:de`/`:para` → `:source`/`:target` matching
+/// the WIT world's `import`/`export` half-vocabulary, or a per-consumer
+/// disambiguation as the `defcaixa` macro stabilizes) would silently
+/// desynchronize the production per-entry endpoint-shape gate from the
+/// tests until a downstream consumer surfaced the drift at build time
+/// as a matches-arm miss far from the rename's commit. This lift closes
+/// that gap by routing both halves (production endpoint-shape gate +
+/// tests) through two peer consts declared adjacent to the
+/// [`M3_AUTHOR_KEY_CONTRATOS`] parent-slot label, so the "one
+/// canonical declaration per arm, next to the axis" discipline the
+/// peer [`M2_AUTHOR_KEY_LIMITS`] / [`M2_AUTHOR_KEY_BEHAVIOR`] /
+/// [`M2_AUTHOR_KEY_UPGRADE_FROM`] (f49c8b0), [`M3_AUTHOR_KEY_MEMBROS`]
+/// / [`M3_AUTHOR_KEY_CONTRATOS`] / [`M3_AUTHOR_KEY_POLITICAS`] /
+/// [`M3_AUTHOR_KEY_PLACEMENT`] / [`M3_AUTHOR_KEY_ENTRADA`] (882f498),
+/// and [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] etc. (be40492) top-level
+/// slot consts established for the sibling M2 / M3 / Supervisor
+/// top-level slot axes extends onto the `:contratos` sub-slot
+/// endpoint axis.
+pub const CONTRATO_AUTHOR_KEY_DE: &str = ":de";
+
+/// Canonical author-facing kebab-case `(:para "<caixa>")` per-`:contratos`
+/// entry target-endpoint sub-slot label the M3 Aplicacao's WIT-typed
+/// inter-Servico edge set surfaces under. Names the "edge head" —
+/// which member `:contratos` entry `n` terminates at — per
+/// MESH-COMPOSITION §IV table row "`:contratos` | typed inter-Servico
+/// edges | each :de + :para must be in :membros". Peer of
+/// [`CONTRATO_AUTHOR_KEY_DE`] on the sibling `:contratos` per-entry
+/// endpoint-shape axis; see [`CONTRATO_AUTHOR_KEY_DE`] for the full
+/// lift rationale.
+pub const CONTRATO_AUTHOR_KEY_PARA: &str = ":para";
+
 /// Canonical author-facing kebab-case `(defcaixa … :estrategia <s>)`
 /// top-level supervisor-tree slot label the OTP `:kind Supervisor`
 /// caixa's [`crate::supervisor::RestartStrategy`] discriminator surfaces
