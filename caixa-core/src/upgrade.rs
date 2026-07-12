@@ -574,8 +574,14 @@ impl UpgradeFromEntry {
         let mut seen: Vec<(&str, &'static str)> = Vec::new();
         for instr in &self.instructions {
             let (module, kind) = match instr {
-                UpgradeInstruction::SoftPurge { module } => (module.as_str(), ":soft-purge"),
-                UpgradeInstruction::Purge { module } => (module.as_str(), ":purge"),
+                UpgradeInstruction::SoftPurge { module } => (
+                    module.as_str(),
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                ),
+                UpgradeInstruction::Purge { module } => (
+                    module.as_str(),
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ),
                 _ => continue,
             };
             if let Some(prior_idx) = seen.iter().position(|(m, _)| *m == module) {
@@ -1122,11 +1128,11 @@ impl UpgradeInstruction {
     #[must_use]
     const fn lisp_form(&self) -> &'static str {
         match self {
-            Self::LoadModule { .. } => ":load-module",
-            Self::StateChange { .. } => ":state-change",
-            Self::SoftPurge { .. } => ":soft-purge",
-            Self::Purge { .. } => ":purge",
-            Self::Restart => ":restart",
+            Self::LoadModule { .. } => crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            Self::StateChange { .. } => crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+            Self::SoftPurge { .. } => crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            Self::Purge { .. } => crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            Self::Restart => crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
         }
     }
 
@@ -1665,19 +1671,19 @@ mod tests {
                 UpgradeInstruction::LoadModule {
                     module: String::new(),
                 },
-                ":load-module",
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
             ),
             (
                 UpgradeInstruction::SoftPurge {
                     module: String::new(),
                 },
-                ":soft-purge",
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
             ),
             (
                 UpgradeInstruction::Purge {
                     module: String::new(),
                 },
-                ":purge",
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
             ),
         ];
         for (instr, expected_kind) in cases {
@@ -1716,13 +1722,16 @@ mod tests {
         let variants: &[(Build, &'static str)] = &[
             (
                 |m| UpgradeInstruction::LoadModule { module: m },
-                ":load-module",
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
             ),
             (
                 |m| UpgradeInstruction::SoftPurge { module: m },
-                ":soft-purge",
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
             ),
-            (|m| UpgradeInstruction::Purge { module: m }, ":purge"),
+            (
+                |m| UpgradeInstruction::Purge { module: m },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            ),
         ];
         for (build, expected_kind) in variants {
             for module in footguns {
@@ -1810,7 +1819,7 @@ mod tests {
         assert_eq!(
             err,
             UpgradeError::ModuleEmpty {
-                kind: ":load-module"
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE
             }
         );
     }
@@ -2059,7 +2068,7 @@ mod tests {
             "diagnostic must name the expected `.lisp` extension, got {msg:?}"
         );
         assert!(
-            msg.contains(":state-change"),
+            msg.contains(crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE),
             "diagnostic must name the offending `:state-change` instruction, got {msg:?}"
         );
         match err {
@@ -2297,7 +2306,7 @@ mod tests {
         assert_eq!(
             err,
             UpgradeError::ModuleEmpty {
-                kind: ":load-module"
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE
             },
             "malformed instruction on the first entry of a duplicate pair must surface its \
              per-entry diagnostic before the duplicate gate fires, got {err:?}"
@@ -2538,7 +2547,7 @@ mod tests {
             UpgradeError::RestartNotExclusive {
                 from: "0.1.0".into(),
                 restart_count: 1,
-                other_kinds: vec![":load-module"],
+                other_kinds: vec![crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE],
             },
             "restart + load-module mix must surface as RestartNotExclusive naming the \
              offending `:from` + the non-:restart kinds verbatim, got {err:?}"
@@ -2578,7 +2587,12 @@ mod tests {
             UpgradeError::RestartNotExclusive {
                 from: "0.1.0".into(),
                 restart_count: 1,
-                other_kinds: vec![":load-module", ":state-change", ":soft-purge", ":purge"],
+                other_kinds: vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ],
             },
         );
     }
@@ -2786,7 +2800,7 @@ mod tests {
             err,
             UpgradeError::PurgeWithoutPriorLoad {
                 from: "0.1.0".into(),
-                kind: ":soft-purge",
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                 module: "x-old".into(),
             },
             "a `:soft-purge` with no preceding `:load-module` must surface as \
@@ -2811,7 +2825,7 @@ mod tests {
             err,
             UpgradeError::PurgeWithoutPriorLoad {
                 from: "0.1.0".into(),
-                kind: ":purge",
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
                 module: "x-old".into(),
             },
         );
@@ -2838,7 +2852,7 @@ mod tests {
             matches!(
                 err,
                 UpgradeError::PurgeWithoutPriorLoad {
-                    kind: ":soft-purge",
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                     ..
                 }
             ),
@@ -2865,7 +2879,10 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UpgradeError::PurgeWithoutPriorLoad { kind: ":purge", .. }
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                    ..
+                }
             ),
             "a `:purge` ahead of its `:load-module` must surface as \
              PurgeWithoutPriorLoad, got {err:?}"
@@ -2962,7 +2979,7 @@ mod tests {
         assert_eq!(
             err,
             UpgradeError::ModuleEmpty {
-                kind: ":soft-purge"
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE
             },
             "malformed instruction must surface its kind-tagged diagnostic before the \
              purge-ordering gate fires, got {err:?}"
@@ -2986,7 +3003,10 @@ mod tests {
         assert!(
             matches!(
                 err,
-                UpgradeError::PurgeWithoutPriorLoad { kind: ":purge", .. }
+                UpgradeError::PurgeWithoutPriorLoad {
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                    ..
+                }
             ),
             "validate_upgrade_from must thread the purge-ordering error, got {err:?}"
         );
@@ -3039,7 +3059,10 @@ mod tests {
             UpgradeError::DuplicateCleanup {
                 from: "0.1.0".into(),
                 module: "x-old".into(),
-                kinds: vec![":soft-purge", ":soft-purge"],
+                kinds: vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                ],
             },
             "two `:soft-purge` of the same module must surface as DuplicateCleanup naming the \
              module + both kinds in declaration order, got {err:?}"
@@ -3070,7 +3093,10 @@ mod tests {
             UpgradeError::DuplicateCleanup {
                 from: "0.1.0".into(),
                 module: "x-old".into(),
-                kinds: vec![":purge", ":purge"],
+                kinds: vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ],
             },
         );
     }
@@ -3104,7 +3130,10 @@ mod tests {
             UpgradeError::DuplicateCleanup {
                 from: "0.1.0".into(),
                 module: "x-old".into(),
-                kinds: vec![":soft-purge", ":purge"],
+                kinds: vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                ],
             },
         );
     }
@@ -3133,7 +3162,10 @@ mod tests {
             UpgradeError::DuplicateCleanup {
                 from: "0.1.0".into(),
                 module: "x-old".into(),
-                kinds: vec![":purge", ":soft-purge"],
+                kinds: vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                ],
             },
         );
     }
@@ -3232,7 +3264,7 @@ mod tests {
             matches!(
                 err,
                 UpgradeError::PurgeWithoutPriorLoad {
-                    kind: ":soft-purge",
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                     ..
                 }
             ),
@@ -3273,7 +3305,7 @@ mod tests {
         assert_eq!(
             err,
             UpgradeError::ModuleEmpty {
-                kind: ":soft-purge"
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE
             },
             "malformed instruction must surface its kind-tagged diagnostic before the \
              cleanup-singularity gate fires, got {err:?}"
@@ -3309,7 +3341,10 @@ mod tests {
             UpgradeError::DuplicateCleanup {
                 from: "0.1.0".into(),
                 module: "x-old".into(),
-                kinds: vec![":soft-purge", ":soft-purge"],
+                kinds: vec![
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                ],
             },
             "the first colliding pair must surface, not the later `:purge` collision"
         );
@@ -3486,7 +3521,7 @@ mod tests {
             matches!(
                 err,
                 UpgradeError::PurgeWithoutPriorLoad {
-                    kind: ":soft-purge",
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                     ..
                 }
             ),
@@ -3526,7 +3561,7 @@ mod tests {
         assert_eq!(
             err,
             UpgradeError::ModuleEmpty {
-                kind: ":load-module",
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
             },
             "malformed instruction must surface its kind-tagged diagnostic before the \
              load-singularity gate fires, got {err:?}"
@@ -3803,7 +3838,7 @@ mod tests {
             matches!(
                 err,
                 UpgradeError::PurgeWithoutPriorLoad {
-                    kind: ":soft-purge",
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                     ..
                 }
             ),
@@ -4027,7 +4062,7 @@ mod tests {
             UpgradeError::StateChangeAfterCleanup {
                 from: "0.1.0".into(),
                 script: PathBuf::from("lib/m.lisp"),
-                prior_cleanup_kind: ":soft-purge",
+                prior_cleanup_kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                 prior_cleanup_module: "x-old".into(),
             },
             "a `:state-change` after a `:soft-purge` must surface as StateChangeAfterCleanup \
@@ -4060,7 +4095,7 @@ mod tests {
             UpgradeError::StateChangeAfterCleanup {
                 from: "0.1.0".into(),
                 script: PathBuf::from("lib/m.lisp"),
-                prior_cleanup_kind: ":purge",
+                prior_cleanup_kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
                 prior_cleanup_module: "x-old".into(),
             },
             "a `:state-change` after a `:purge` must surface as StateChangeAfterCleanup with \
@@ -4197,7 +4232,7 @@ mod tests {
             UpgradeError::StateChangeAfterCleanup {
                 from: "0.1.0".into(),
                 script: PathBuf::from("lib/m.lisp"),
-                prior_cleanup_kind: ":soft-purge",
+                prior_cleanup_kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                 prior_cleanup_module: "x-old".into(),
             },
             "the first cleanup the state-change follows must surface (not the trailing one), \
@@ -4248,7 +4283,7 @@ mod tests {
             matches!(
                 err,
                 UpgradeError::PurgeWithoutPriorLoad {
-                    kind: ":soft-purge",
+                    kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
                     ..
                 }
             ),
@@ -4466,7 +4501,7 @@ mod tests {
         assert_eq!(
             err,
             UpgradeError::ModuleEmpty {
-                kind: ":load-module"
+                kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE
             },
             "malformed instruction must surface its kind-tagged diagnostic before the \
              restart-exclusivity gate fires, got {err:?}"
@@ -4905,6 +4940,119 @@ mod tests {
                 key.chars().all(|c| c.is_ascii_alphanumeric()),
                 "M2_UPGRADE_FROM_KEY_* must be ASCII-alphanumeric only \
                  — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn m2_upgrade_instruction_kind_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin on the M2 `:upgrade-from :instructions` per-entry
+        // OTP-appup variant-tag axis: the five canonical author-facing
+        // kebab-case labels (`:load-module` / `:state-change` /
+        // `:soft-purge` / `:purge` / `:restart`) the substrate's
+        // per-variant [`UpgradeInstruction::lisp_form`] dispatch reads
+        // from and every downstream consumer probes for verbatim. Same
+        // scalar-value discipline the peer
+        // `contrato_author_key_consts_pin_canonical_kebab_case_labels`
+        // (f50c875), `m3_top_level_author_key_consts_pin_canonical_kebab_case_labels`
+        // (882f498), `m2_top_level_author_key_consts_pin_canonical_kebab_case_labels`
+        // (f49c8b0), and `supervisor_top_level_author_key_consts_pin_canonical_kebab_case_labels`
+        // (be40492) established for the sibling M2 / M3 / Supervisor
+        // top-level and sub-slot author-facing-label axes. Fail-before-
+        // pass-after locally verified by mutating
+        // `M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE` to `":load"` — this
+        // pin fires as expected; restoring passes.
+        //
+        // A future OTP-lineage per-variant rebrand (e.g.
+        // `:load-module` → `:load` matching Erlang's abbreviated
+        // `code:load_module` name, `:state-change` → `:code-change`
+        // matching Erlang's verbatim `code_change/3` callback,
+        // `:soft-purge` → `:drain` matching a hypothetical operator-side
+        // vocabulary flip, `:purge` → `:discard` matching a hypothetical
+        // Elixir/Phoenix hot-reload rebrand, `:restart` → `:reboot`
+        // matching a supervisor-tree vocabulary alignment) lands as an
+        // edit to exactly one const, and every consumer that reaches for
+        // the label (the [`UpgradeInstruction::lisp_form`] dispatch, the
+        // [`validate_cleanup_singularity`] per-variant `kind:` tagger,
+        // every [`UpgradeError`] `kind:` / `kinds:` / `other_kinds:` /
+        // `prior_cleanup_kind:` diagnostic field, the
+        // [`LayoutError::UpgradeViolation`] `issue:` probe in
+        // `layout.rs`) picks it up at build time rather than at runtime
+        // as a downstream `kind: <stale-kebab-case>` diagnostic mismatch
+        // far from the rename's commit.
+        assert_eq!(
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            ":load-module"
+        );
+        assert_eq!(
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+            ":state-change"
+        );
+        assert_eq!(
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            ":soft-purge"
+        );
+        assert_eq!(crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE, ":purge");
+        assert_eq!(
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
+            ":restart"
+        );
+    }
+
+    #[test]
+    fn upgrade_instruction_lisp_form_routes_through_lifted_kind_consts() {
+        // Production-through-const pin: the five per-variant labels
+        // [`UpgradeInstruction::lisp_form`] returns route through the
+        // lifted [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_*`] consts,
+        // so a future rebrand that reaches the const but not the
+        // dispatch (or vice versa) surfaces here at build time rather
+        // than at runtime as a downstream
+        // [`UpgradeError::ModuleEmpty`] `kind: <stale-kebab-case>`
+        // diagnostic drift far from the rename's commit. Mirror of the
+        // peer `contrato_shape_gate_routes_through_lifted_contrato_author_key_consts`
+        // (f50c875), `declared_mesh_slots_route_through_lifted_m3_author_key_consts`
+        // (882f498), and `declared_servico_slots_route_through_lifted_m2_author_key_consts`
+        // (f49c8b0) production-through-const pins on the sibling M3 /
+        // M2 top-level slot axes.
+        //
+        // Fail-before-pass-after locally verified by mutating
+        // `UpgradeInstruction::lisp_form`'s `Self::Purge` arm to return
+        // `":purge-drift"` — this pin fires as expected; restoring
+        // passes.
+        let cases: &[(UpgradeInstruction, &'static str)] = &[
+            (
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            ),
+            (
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+            ),
+            (
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            ),
+            (
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            ),
+            (
+                UpgradeInstruction::Restart,
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
+            ),
+        ];
+        for (instr, expected) in cases {
+            assert_eq!(
+                instr.lisp_form(),
+                *expected,
+                "UpgradeInstruction::lisp_form on {instr:?} must route through the lifted \
+                 const (expected {expected:?})",
             );
         }
     }
