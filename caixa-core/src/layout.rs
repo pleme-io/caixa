@@ -3441,7 +3441,7 @@ mod tests {
             LayoutError::UpgradeViolation { caixa, issue } => {
                 assert_eq!(caixa, "demo", "diagnostic must name the offending caixa");
                 assert!(
-                    issue.contains(":on-state-change"),
+                    issue.contains(crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE),
                     "diagnostic must name the missing callback slot for self-locating fix, \
                      got {issue:?}"
                 );
