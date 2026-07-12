@@ -1719,10 +1719,13 @@ impl ClusterBundleOpts {
             namespace: DEFAULT_NAMESPACE.into(),
             interval: DEFAULT_FLUX_RECONCILE_INTERVAL.into(),
             chart_path: "chart".into(),
-            git_url: caixa
-                .repositorio
-                .clone()
-                .unwrap_or_else(|| format!("https://github.com/pleme-io/{}", caixa.nome)),
+            git_url: caixa.repositorio.clone().unwrap_or_else(|| {
+                format!(
+                    "https://github.com/{org}/{nome}",
+                    org = caixa_core::DEFAULT_PLEME_GIT_ORG,
+                    nome = caixa.nome,
+                )
+            }),
             git_ref: GitRefSpec::Tag(format!(
                 "{prefix}{versao}",
                 prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,

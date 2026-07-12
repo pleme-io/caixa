@@ -177,6 +177,81 @@ pub const DEFAULT_PUBLISH_TAG_PREFIX: &str = "v";
 /// Both halves of the publish-side convention now live in one place.
 pub const DEFAULT_GIT_REMOTE: &str = "origin";
 
+/// Canonical GitHub org name the pleme-io substrate defaults every un-
+/// pinned caixa's source repo to — the org handle the two substrate-side
+/// "no `:repositorio` / no `:fonte` declared, fall back to the canonical
+/// org" paths compose their `github:<org>/<nome>` shorthand + full
+/// `https://github.com/<org>/<nome>` URL under.
+///
+/// Two production-code consumers carry this org name on the same
+/// canonical-substrate-default-git-org axis:
+///
+/// 1. [`caixa-feira`]'s `feira lock` verb's `resolve_stub` (caixa-feira/src/cmd/lock.rs)
+///    — the resolver-side default. When a declared dep has no
+///    `:fonte` block the stub resolver composes
+///    `caixa_core::DepSource::default_github(<org>, &dep.nome)` to fill
+///    the shorthand `github:<org>/<nome>` fallback the phase 1.B
+///    `feira resolve` walker will resolve against upstream.
+/// 2. [`caixa-flux`]'s [`caixa-flux::cluster_bundle`] renderer
+///    (caixa-flux/src/lib.rs) — the renderer-side default. Its
+///    `ClusterBundleOpts::for_caixa` constructor defaults
+///    `git_url` to `format!("https://github.com/{org}/{}", caixa.nome)`
+///    when the caixa carries no `:repositorio`, so the rendered
+///    `gitrepository.yaml` points `FluxCD`'s `GitRepository`
+///    reconciler at the substrate's canonical git host for un-pinned
+///    caixas.
+///
+/// Until this lift landed both consumers carried the bare `"pleme-io"`
+/// byte inline — `caixa-feira/src/cmd/lock.rs:61`'s
+/// `default_github("pleme-io", …)` call and `caixa-flux/src/lib.rs`'s
+/// `format!("https://github.com/pleme-io/{}", …)` literal. A future
+/// substrate-side git-org migration (the pleme-io org renaming to a
+/// short form, forking to a per-tenant `<org>-<tenant>` shape once the
+/// operator-flux pipeline grows a `:placement :org` slot, or moving to
+/// a self-hosted forge under a wholly-owned org name once the
+/// substrate's forge-gen roadmap graduates past GitHub) without a
+/// coordinated edit on both sides would silently emit a `feira lock`-
+/// side `github:<old-org>/<nome>` fallback shorthand while the
+/// `cluster_bundle`-side `gitrepository.yaml` pointed at the new org's
+/// `<nome>` — the phase 1.B `feira resolve` walker would probe the
+/// prior org's git host for a repo that migrated with the org, or vice-
+/// versa: Flux's `GitRepository` reconciler would loop forever looking
+/// for an upstream repo the old org handle no longer maps to, the
+/// dependent `HelmRelease`'s `chart: sourceRef` would never resolve,
+/// every per-Servico apply would silently come up with the prior
+/// reconciled state, and the failure would surface at `kubectl describe
+/// gitrepository` time (the `Status: Stalled` / `Reason: Failed` arm)
+/// far from the org-migration commit's source.
+///
+/// Lifting the literal to one `&'static str` constant closes the drift
+/// footgun structurally — both consumers read from the same memory, so
+/// any future org migration reaches both sites by construction and a CI
+/// build that re-introduces a sibling inline `"pleme-io"` literal trips
+/// the peer pinning tests at the build-time fail-before-deploy posture
+/// every prior load-bearing-string lift on this surface
+/// ([`crate::DEFAULT_NAMESPACE`] a085b26,
+/// [`crate::DEFAULT_LIBRARY_NAME`] 41438dc,
+/// [`crate::DEFAULT_SERVICO_PORT`] 1e22add,
+/// [`DEFAULT_PUBLISH_TAG_PREFIX`] 0a6a602,
+/// [`DEFAULT_GIT_REMOTE`],
+/// [`crate::DEFAULT_FLUX_SYSTEM_NAMESPACE`] 7197d38) establishes.
+///
+/// Distinct from the [`crate::PLEME_LABEL_PREFIX`] canonical pleme-io
+/// label-namespace prefix (`"pleme.pleme.io"`, the K8s label-namespace
+/// axis every substrate-emitted cluster object's `LABEL_APLICACAO` /
+/// `LABEL_PROGRAM` / `LABEL_CONTRATO` axis shares) — these constants
+/// sit on separate schema-contract surfaces (the git-host org handle
+/// vs. the K8s label-namespace prefix) governed by independent rebrand
+/// cycles, so a git-org rename must not couple the K8s label-namespace
+/// axis to the git-host axis (or vice-versa). Splitting the two lets
+/// each schema's future rebrand land independently at its canonical
+/// const definition without silently coupling the surfaces — same
+/// "byte-distinct, semantically distinct" discipline the
+/// [`crate::PLEME_LABEL_PREFIX`] / [`crate::LABEL_APLICACAO`] /
+/// [`crate::LABEL_PROGRAM`] / [`crate::LABEL_CONTRATO`] set establishes
+/// on the peer per-K8s-label-namespace canonical-string surface.
+pub const DEFAULT_PLEME_GIT_ORG: &str = "pleme-io";
+
 /// Parse a dep's `:versao` string as a [`semver::VersionReq`].
 ///
 /// Treats the literal `"*"` as "any version" (semver's wildcard).
@@ -250,6 +325,28 @@ mod tests {
         // to the canonical git-default-remote convention's documented
         // shape.
         assert_eq!(DEFAULT_GIT_REMOTE, "origin");
+    }
+
+    #[test]
+    fn default_pleme_git_org_pins_canonical_pleme_io_byte() {
+        // Bridge-arm pin: [`DEFAULT_PLEME_GIT_ORG`] resolves to the
+        // canonical `"pleme-io"` GitHub-org-handle today, the same org
+        // name every peer substrate-side default-git-source consumer
+        // ([`caixa-feira`]'s `feira lock` `resolve_stub` for the
+        // per-dep `:fonte`-elided `github:<org>/<nome>` fallback,
+        // [`caixa-flux`]'s `ClusterBundleOpts::for_caixa` constructor
+        // for the per-caixa `:repositorio`-elided
+        // `https://github.com/<org>/<nome>` fallback) fills into its
+        // per-consumer render/resolve compose site. Pin the literal
+        // here (peer with the [`DEFAULT_PUBLISH_TAG_PREFIX`] /
+        // [`DEFAULT_GIT_REMOTE`] canonical-literal pins on the sibling
+        // lifted-constant surfaces) so a future substrate-side git-org
+        // migration surfaces here as a coordinated edit-point: both
+        // sibling consumer sites already thread through the same
+        // `&'static str`, this pin anchors the lifted constant's
+        // current byte to the canonical substrate-git-org convention's
+        // documented shape.
+        assert_eq!(DEFAULT_PLEME_GIT_ORG, "pleme-io");
     }
 
     #[test]

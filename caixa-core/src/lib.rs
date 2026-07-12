@@ -111,5 +111,6 @@ pub use upgrade::{
     validate_upgrade_from_against_behavior, validate_upgrade_from_against_versao,
 };
 pub use version::{
-    CaixaVersion, DEFAULT_GIT_REMOTE, DEFAULT_PUBLISH_TAG_PREFIX, VersionError, parse_requirement,
+    CaixaVersion, DEFAULT_GIT_REMOTE, DEFAULT_PLEME_GIT_ORG, DEFAULT_PUBLISH_TAG_PREFIX,
+    VersionError, parse_requirement,
 };
