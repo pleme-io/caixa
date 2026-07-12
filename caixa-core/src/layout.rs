@@ -899,7 +899,7 @@ impl LayoutInvariants for StandardLayout {
                 let full = root.join(p);
                 if !self.exists(&full) {
                     return Err(LayoutError::MissingEntry {
-                        kind: "behavior-callback",
+                        kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
                         path: full,
                     });
                 }
@@ -1014,7 +1014,7 @@ impl LayoutInvariants for StandardLayout {
                     let full = root.join(p);
                     if !self.exists(&full) {
                         return Err(LayoutError::MissingEntry {
-                            kind: "upgrade-script",
+                            kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
                             path: full,
                         });
                     }
@@ -3148,10 +3148,8 @@ mod tests {
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(
             err,
-            LayoutError::MissingEntry {
-                kind: "behavior-callback",
-                ..
-            }
+            LayoutError::MissingEntry { kind, .. }
+                if kind == crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK
         ));
 
         // Now declare the path exists — passes.
@@ -3389,11 +3387,40 @@ mod tests {
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(
             err,
-            LayoutError::MissingEntry {
-                kind: "upgrade-script",
-                ..
-            }
+            LayoutError::MissingEntry { kind, .. }
+                if kind == crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT
         ));
+    }
+
+    #[test]
+    fn layout_missing_entry_kind_m2_consts_pin_canonical_kebab_case_labels() {
+        // Byte-identity pin: the two per-M2-slot leaf-kind labels the
+        // [`LayoutError::MissingEntry`] `kind: &'static str`
+        // discriminator surfaces under (the M2 `:behavior` per-callback
+        // on-disk-leaf axis, the M2 `:upgrade-from :instructions`
+        // per-`:state-change` script-path on-disk-leaf axis) route
+        // through the lifted [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`]
+        // / [`crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT`]
+        // consts, so a future rebrand that reaches the const but not
+        // the production emit / test probe (or vice versa) surfaces
+        // here at build time rather than at runtime as a downstream
+        // [`LayoutError::MissingEntry`] `kind: <stale-label>`
+        // diagnostic mismatch far from the rename's commit. Mirror of
+        // the peer
+        // [`crate::aplicacao::tests::contrato_author_key_consts_pin_canonical_kebab_case_labels`]
+        // (f50c875) and
+        // [`crate::upgrade::tests::upgrade_instruction_kind_consts_pin_canonical_kebab_case_tags`]
+        // (56120ef) byte-identity pins on the sibling M3 `:contratos`
+        // per-entry endpoint-label + M2 `:upgrade-from :instructions`
+        // per-variant kind-tag axes.
+        assert_eq!(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+            "behavior-callback"
+        );
+        assert_eq!(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+            "upgrade-script"
+        );
     }
 
     #[test]

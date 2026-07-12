@@ -6562,6 +6562,95 @@ pub const M2_UPGRADE_INSTRUCTION_KIND_PURGE: &str = ":purge";
 /// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
 pub const M2_UPGRADE_INSTRUCTION_KIND_RESTART: &str = ":restart";
 
+/// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
+/// discriminator scalar the M2 `:behavior` typed slot's per-callback
+/// on-disk-leaf existence gate surfaces under — the byte-string every
+/// [`crate::LayoutInvariants::verify`] emission carries when a
+/// `:behavior :on-init` / `:on-call` / `:on-cast` / `:on-info` /
+/// `:on-state-change` / `:on-terminate` sub-slot's tatara-lisp source
+/// path fails to resolve against the caixa root's on-disk layout. Names
+/// the "M2 :behavior sub-slot leaf-kind" axis one altitude below the
+/// [`M2_AUTHOR_KEY_BEHAVIOR`] (f49c8b0) parent-slot label: the
+/// top-level [`M2_AUTHOR_KEY_BEHAVIOR`] const names the M2 slot itself
+/// on the author surface (`(defcaixa … :behavior (…))`), the six
+/// [`M2_BEHAVIOR_AUTHOR_KEY_ON_*`] consts (889dc18) name the per-
+/// callback sub-slot labels the author writes (`(:on-init "lib/init.lisp"
+/// …)`), and this const names the per-slot-family leaf-kind byte-string
+/// the layout diagnostic emits when the on-disk `lib/init.lisp` file
+/// doesn't exist ("MissingEntry { kind: \"behavior-callback\", path:
+/// /root/lib/init.lisp }").
+///
+/// Peer of [`LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT`] on the sibling
+/// M2 `:upgrade-from` typed slot's per-entry leaf-kind axis: the two
+/// consts split the M2 slot-family's on-disk-leaf categorization axis
+/// into its two per-slot arms, so the `LayoutError::MissingEntry
+/// { kind: &'static str, .. }` discriminator's accept-set has one
+/// canonical declaration per arm rather than two inline byte-strings
+/// scattered across [`crate::layout`]'s per-slot existence gates.
+///
+/// Until this lift landed the byte `"behavior-callback"` sat at two
+/// sites in [`crate::layout`] — once at the [`crate::LayoutInvariants::verify`]
+/// per-`:behavior :on-*` sub-slot existence gate's `MissingEntry` emit
+/// (production, layout.rs:902), once at the
+/// [`crate::layout::tests::behavior_callback_must_exist`]
+/// (or peer test) `matches!(…, MissingEntry { kind: "behavior-callback",
+/// .. })` shape probe (layout.rs:3152) — with no compile-time link
+/// between the two: a future per-consumer rebrand (a hypothetical
+/// `"behavior-callback"` → `"m2-behavior-callback"` for altitude-explicit
+/// scoping as the M3+ layout gates grow their own per-slot leaf-kind
+/// labels, `"behavior-callback"` → `"gen-server-callback"` matching a
+/// verbatim-OTP rebrand of the [`M2_AUTHOR_KEY_BEHAVIOR`] slot's
+/// `gen_server`-lineage identity, or a per-diagnostic disambiguation as
+/// the `defcaixa` macro stabilizes and per-callback shapes diverge)
+/// would silently desynchronize the production `MissingEntry` emission
+/// from the test's `matches!` shape probe until build time surfaced the
+/// drift as a pattern-arm miss far from the rename's commit. This lift
+/// closes that gap by routing both halves (production emit + test
+/// probe) through one peer const declared adjacent to the M2 top-level
+/// slot-label family, so the "one canonical declaration per arm, next
+/// to the axis" discipline the peer [`M2_AUTHOR_KEY_LIMITS`] /
+/// [`M2_AUTHOR_KEY_BEHAVIOR`] / [`M2_AUTHOR_KEY_UPGRADE_FROM`]
+/// (f49c8b0), [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`] etc. (889dc18),
+/// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] etc. (56120ef),
+/// [`M3_AUTHOR_KEY_MEMBROS`] etc. (882f498), and
+/// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] etc. (be40492) top-level +
+/// sub-slot author-facing-label consts established for the sibling
+/// M2 / M3 / Supervisor slot-family axes extends onto the M2
+/// layout-check leaf-kind categorization axis.
+///
+/// Byte-shape note: unlike the peer author-facing kebab-case slot
+/// labels (which carry the leading `:` sigil because the tatara-lisp
+/// reader emits keyword tokens as `:kebab-case` and the author writes
+/// them verbatim in `caixa.lisp`), this discriminator has no leading
+/// `:` because the substrate consumer reading the value is the layout
+/// diagnostic's downstream printer — the operator running `feira build`
+/// sees `LayoutError::MissingEntry { kind: "behavior-callback", .. }`
+/// as a categorization label, not as a tatara-lisp keyword to be
+/// grep'd for in the source `.lisp`. Same shape distinction the peer
+/// [`crate::WitTarget::HTTP_FIELD_NAME`] (= `"endpoint"`) /
+/// [`crate::WitTarget::PUBSUB_FIELD_NAME`] (= `"subject"`) /
+/// [`crate::WitTarget::STORE_FIELD_NAME`] (= `"slot"`) /
+/// [`crate::WitTarget::CAPABILITY_EXPECTED`] (= `"none"`) consts
+/// established on the sibling `:contratos` per-entry payload-field-
+/// name axis: the field-name byte-strings are the downstream
+/// diagnostic's format-argument scalars, prefixed by the `:` inside
+/// the error format template (`":{expected}"`) rather than baked into
+/// the const.
+pub const LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK: &str = "behavior-callback";
+
+/// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
+/// discriminator scalar the M2 `:upgrade-from` typed slot's per-entry
+/// [`crate::UpgradeInstruction::StateChange`] script-path on-disk-leaf
+/// existence gate surfaces under — the byte-string every
+/// [`crate::LayoutInvariants::verify`] emission carries when a
+/// `(:state-change "<script>.lisp")` instruction's tatara-lisp source
+/// path fails to resolve against the caixa root's on-disk layout.
+/// Peer of [`LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`] on the sibling
+/// M2 `:behavior` typed slot's per-callback leaf-kind axis; see
+/// [`LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`] for the full lift
+/// rationale.
+pub const LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT: &str = "upgrade-script";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm
