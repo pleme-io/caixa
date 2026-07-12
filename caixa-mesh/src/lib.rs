@@ -36,10 +36,11 @@ use std::collections::BTreeMap;
 use caixa_core::{
     Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
     FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
-    GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
-    M3_KEY_PLACEMENT, MappingExt, SequenceExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
-    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
-    pleme_program_selector, single_field_overlay,
+    GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
+    GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, MappingExt,
+    SequenceExt, WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton,
+    label_selector, pleme_program_in_aplicacao_selector, pleme_program_selector,
+    single_field_overlay,
 };
 use thiserror::Error;
 
@@ -2777,8 +2778,24 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let mut parent_ref = serde_yaml::Mapping::new();
     parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome.clone());
 
+    // Empty-`:entrada :paths` catch-all fallback — the substrate's
+    // canonical URL-path scalar for an HTTPRoute whose author declared
+    // no per-path rule surface routes through the lifted
+    // [`GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] `&'static str` const so a
+    // future substrate-side rebrand of the catch-all shape (a
+    // hypothetical Gateway API v2 `Exact ""` migration, a per-cluster
+    // override the future `:entrada :default-path` slot promotes)
+    // lands at the canonical
+    // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] declaration,
+    // not at this call site. Peer with the sibling
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] /
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] lifts on the
+    // per-Gateway per-listener substrate-canonical scalar-value axes —
+    // all three are Aplicacao-side substrate-canonical scalar-value
+    // pins the sole per-Aplicacao mesh emitter reaches for at a K8s
+    // Gateway API v1 CRD sub-path, all three lift to `caixa-core::render`.
     let paths: Vec<&str> = if entrada.paths.is_empty() {
-        vec!["/"]
+        vec![GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH]
     } else {
         entrada.paths.iter().map(String::as_str).collect()
     };
@@ -7115,6 +7132,64 @@ mod tests {
              the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT constant \
              verbatim — drift here means the constant lift no longer reaches \
              this consumer"
+        );
+    }
+
+    #[test]
+    fn httproute_catch_all_path_routes_through_lifted_default_http_route_path() {
+        // The per-Aplicacao `HTTPRoute`'s empty-`:entrada :paths`
+        // catch-all resolver (the `let paths: Vec<&str> = if
+        // entrada.paths.is_empty() { vec![…] } else { … }` branch in
+        // [`gateway_routes`]) must read from the lifted
+        // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`]
+        // `&'static str` constant — not from an open-coded `"/"`
+        // literal that could drift if the substrate's canonical
+        // catch-all URL-path shape ever moved (`"/"` → the Gateway API
+        // v2 `Exact ""` idiom on a per-controller variant that treats
+        // `"/"` as a literal prefix rather than the catch-all, an
+        // operator-pinned override the future `:entrada :default-path`
+        // slot promotes). A future rebrand of the constant must reach
+        // this consumer by construction so an author who declared an
+        // external `:entrada` but no per-path rule surface still gets
+        // a route whose sole `HTTPPathMatch` matches every incoming
+        // request under the paired
+        // [`GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] discriminator.
+        // Peer with the sibling
+        // [`gateway_listener_name_routes_through_lifted_default_http_listener_name`]
+        // and
+        // [`gateway_listener_port_routes_through_lifted_default_http_listener_port`]
+        // pins on the [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] /
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] consumers at the
+        // same emitter — all three per-Gateway-API-CRD substrate-
+        // canonical scalar-value axes now routed through their own
+        // lifted const, so a substrate-side rebrand on any one axis
+        // lands at exactly one consumer per axis without coupling the
+        // rebrand cycles.
+        let mut caixa = aplicacao_caixa();
+        caixa.entrada.as_mut().unwrap().paths = Vec::new();
+        let docs = gateway_routes(&caixa).unwrap();
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        let match_path_value = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(KUBE_KEY_RULES))
+            .and_then(|r| r.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|r| r.get(GATEWAY_API_KEY_MATCHES))
+            .and_then(|m| m.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
+            .and_then(|p| p.get(GATEWAY_API_KEY_VALUE))
+            .and_then(|v| v.as_str())
+            .expect("HTTPRoute rules[0].matches[0].path.value present");
+        assert_eq!(
+            match_path_value, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
+            "the HTTPRoute empty-`:entrada :paths` catch-all URL-path scalar \
+             must render the lifted GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH \
+             constant verbatim — drift here means the constant lift no longer \
+             reaches this consumer and every external `:entrada` HTTP flow \
+             authored against a Servico with no per-path rule surface would \
+             drop at the first hop with no diagnostic naming the catch-all-path \
+             drift root cause"
         );
     }
 
