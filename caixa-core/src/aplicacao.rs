@@ -445,7 +445,7 @@ impl WitContract {
                 de,
                 para,
                 wit,
-                expected: "none",
+                expected: WitTarget::CAPABILITY_EXPECTED,
             });
         }
         Ok(WitTarget::Capability)
@@ -548,6 +548,38 @@ impl<'a> WitTarget<'a> {
     /// desynchronize until a downstream consumer surfaced the drift at
     /// runtime.
     pub const CAPABILITY_LABEL: &'static str = "(capability — no payload)";
+
+    /// Canonical `expected:` scalar the
+    /// [`AplicacaoError::ContratoWrongTarget`] diagnostic threads
+    /// through for the payload-less [`WitTarget::Capability`] arm — the
+    /// byte-string authors read as "this WIT world's shape is not one
+    /// of {`HTTP`, `PubSub`, `Store`}, so it must not carry
+    /// `:endpoint` / `:subject` / `:slot`". Peer of the payload-arm
+    /// [`Self::HTTP_FIELD_NAME`] / [`Self::PUBSUB_FIELD_NAME`] /
+    /// [`Self::STORE_FIELD_NAME`] consts on the
+    /// `ContratoWrongTarget::expected` axis — the fourth arm of the
+    /// same "which payload field name goes in the diagnostic" dispatch
+    /// the three payload-arm consts cover, extended to the payload-less
+    /// arm. Until this lift landed the byte-string sat twice — once
+    /// inline in the [`Self::target`] Capability-arm rejection at the
+    /// production dispatch, once in the pin test asserting the
+    /// diagnostic's `expected:` scalar carries `"none"` verbatim — with
+    /// no compile-time link between the two: a rebrand on either side
+    /// (an author-facing vocabulary shift to `"capability"` /
+    /// `"(none)"` / `"no-payload"` as the WIT registry's shape
+    /// vocabulary sharpens, a per-consumer disambiguation as M4 splits
+    /// [`WitTarget::Capability`] into per-shape peers) would silently
+    /// desynchronize until a downstream consumer surfaced the drift at
+    /// runtime. Same "one canonical declaration per arm, next to the
+    /// variant, so a future rename lands in one place" discipline the
+    /// peer [`Self::CAPABILITY_LABEL`] lift (7ed03a3-era) already
+    /// established for the payload-less arm's human-readable label
+    /// axis; this lift extends it onto the peer diagnostic-scalar axis
+    /// so both halves of the "how does the Capability arm surface at
+    /// its two consumer axes (human-readable label, wrong-target
+    /// diagnostic)" pipeline route through peer consts declared next
+    /// to the variant.
+    pub const CAPABILITY_EXPECTED: &'static str = "none";
 
     /// The `(author-facing field name, payload)` pair this typed target
     /// arm carries — `Some((HTTP_FIELD_NAME, endpoint))` for
@@ -5546,10 +5578,56 @@ mod tests {
         assert!(matches!(
             err,
             AplicacaoError::ContratoWrongTarget {
-                expected: "none",
+                expected: WitTarget::CAPABILITY_EXPECTED,
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn wit_target_capability_expected_pins_wrong_target_diagnostic_scalar() {
+        // Pin the Capability-arm `ContratoWrongTarget::expected` scalar
+        // single-sourced onto [`WitTarget::CAPABILITY_EXPECTED`] — the
+        // fourth arm of the same "which payload field name goes in the
+        // diagnostic" dispatch the payload-arm [`WitTarget::HTTP_FIELD_NAME`]
+        // / [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+        // consts cover on the peer HTTP / PubSub / Store arms
+        // (`wit_target_field_name_pins_per_variant`). Until this lift
+        // landed the byte-string sat twice — once inline in the
+        // [`WitContract::target`] Capability-arm rejection at the
+        // production dispatch, once in `rejects_unknown_wit_with_target_set`
+        // pinning against the same literal — with no compile-time link
+        // between them. Same "one canonical declaration, next to the
+        // variant" trajectory the peer [`WitTarget::CAPABILITY_LABEL`]
+        // lift established for the payload-less arm's human-readable
+        // label axis; this test is the shape peer of
+        // `wit_target_label_pins_per_variant`'s Capability-arm assertion
+        // pair (routes-through-const + scalar-value pin) on the
+        // wrong-target diagnostic-scalar axis.
+        //
+        // Fail-before-pass-after was verified locally by mutating the
+        // const declaration to `"capability"` — the scalar-value pin
+        // below fires (`"capability" != "none"`) and the routes-through
+        // assertion below still holds (production and const walk in
+        // lockstep), which is the correct behavior: a rename on the
+        // const drifts here first, not at a downstream consumer.
+        assert_eq!(WitTarget::CAPABILITY_EXPECTED, "none");
+
+        let mut s = three_member_spec();
+        s.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "custom:exchange".into(),
+            endpoint: Some("/leaked".into()),
+            subject: None,
+            slot: None,
+        });
+        match s.validate().unwrap_err() {
+            AplicacaoError::ContratoWrongTarget { expected, .. } => {
+                assert_eq!(expected, WitTarget::CAPABILITY_EXPECTED);
+            }
+            other => panic!("expected ContratoWrongTarget, got {other:?}"),
+        }
     }
 
     #[test]
