@@ -113,6 +113,29 @@ pub const WIT_PUBSUB_SHAPE_PREFIXES: &[&str] = &["nats:", "kafka:"];
 /// HTTP constant's docstring for the full lift rationale.
 pub const WIT_STORE_SHAPE_PREFIXES: &[&str] = &["wasi:keyvalue/", "kv:"];
 
+/// True when `wit` — a raw `:contratos :wit` value — starts with any
+/// entry in the `prefixes` accept-set. The single canonical
+/// prefix-driven WIT-shape classification combinator every peer
+/// per-shape predicate ([`wit_shape_is_http`], [`wit_shape_is_pubsub`],
+/// [`wit_shape_is_store`]) routes through, closing the 3-site
+/// duplication of the `PREFIXES.iter().any(|p| wit.starts_with(p))`
+/// combinator the prior open-coded implementations each carried.
+///
+/// A future 4th WIT-shape dispatch arm (a hypothetical `wasi:sockets/*`
+/// / `tcp:*` transport-layer shape, an `oci:*` capability-import
+/// carrier) becomes exactly one new [`WIT_*_SHAPE_PREFIXES`] const +
+/// one new `wit_shape_is_<name>` one-liner routing through this
+/// combinator, not a fourth copy of the `iter().any(starts_with)`
+/// combinator paired to its own prefix-set. Same "one canonical
+/// combinator, thin per-arm projections" discipline the peer
+/// [`WitTarget::payload_pair`] (6788ed6) already established for the
+/// downstream per-arm `(field, payload)` dispatch, extended to the
+/// upstream per-arm `PREFIXES → bool` dispatch.
+#[must_use]
+pub fn wit_shape_matches(wit: &str, prefixes: &[&str]) -> bool {
+    prefixes.iter().any(|p| wit.starts_with(p))
+}
+
 /// True when `wit` — a raw `:contratos :wit` value — targets an
 /// HTTP-shaped WIT world (starts with any prefix in
 /// [`WIT_HTTP_SHAPE_PREFIXES`]). The single dispatch predicate every
@@ -121,33 +144,38 @@ pub const WIT_STORE_SHAPE_PREFIXES: &[&str] = &["wasi:keyvalue/", "kv:"];
 /// here) or only the raw `wit` string (the positive-sweep test's
 /// payload-dispatch helper, future renderers that classify off a
 /// bare `&str`). Lifting to a free function makes the shape-dispatch
-/// arm reachable without materializing a scratch `WitContract` at
+/// arm reachable without materializing a scratch [`WitContract`] at
 /// every classification point, and pins the six-prefix accept-set at
 /// one place so future additions (e.g. an `"https:"` peer of
-/// `"http:"`) reach every consumer by construction.
+/// `"http:"`) reach every consumer by construction. Routes through
+/// the lifted [`wit_shape_matches`] combinator so the
+/// `PREFIXES.iter().any(|p| wit.starts_with(p))` scan lives at one
+/// canonical primitive, not one open-coded copy per peer arm.
 #[must_use]
 pub fn wit_shape_is_http(wit: &str) -> bool {
-    WIT_HTTP_SHAPE_PREFIXES.iter().any(|p| wit.starts_with(p))
+    wit_shape_matches(wit, WIT_HTTP_SHAPE_PREFIXES)
 }
 
 /// True when `wit` — a raw `:contratos :wit` value — targets a
 /// pub-sub-shaped WIT world (starts with any prefix in
 /// [`WIT_PUBSUB_SHAPE_PREFIXES`]). Peer of [`wit_shape_is_http`] /
 /// [`wit_shape_is_store`] on the shape-dispatch axis; see
-/// [`wit_shape_is_http`] for the lift rationale.
+/// [`wit_shape_is_http`] for the lift rationale. Routes through the
+/// lifted [`wit_shape_matches`] combinator.
 #[must_use]
 pub fn wit_shape_is_pubsub(wit: &str) -> bool {
-    WIT_PUBSUB_SHAPE_PREFIXES.iter().any(|p| wit.starts_with(p))
+    wit_shape_matches(wit, WIT_PUBSUB_SHAPE_PREFIXES)
 }
 
 /// True when `wit` — a raw `:contratos :wit` value — targets a
 /// key/value-store-shaped WIT world (starts with any prefix in
 /// [`WIT_STORE_SHAPE_PREFIXES`]). Peer of [`wit_shape_is_http`] /
 /// [`wit_shape_is_pubsub`] on the shape-dispatch axis; see
-/// [`wit_shape_is_http`] for the lift rationale.
+/// [`wit_shape_is_http`] for the lift rationale. Routes through the
+/// lifted [`wit_shape_matches`] combinator.
 #[must_use]
 pub fn wit_shape_is_store(wit: &str) -> bool {
-    WIT_STORE_SHAPE_PREFIXES.iter().any(|p| wit.starts_with(p))
+    wit_shape_matches(wit, WIT_STORE_SHAPE_PREFIXES)
 }
 
 impl WitContract {
@@ -5934,6 +5962,82 @@ mod tests {
             assert!(!wit_shape_is_http(&sample));
             assert!(!wit_shape_is_pubsub(&sample));
             assert!(wit_shape_is_store(&sample));
+        }
+    }
+
+    #[test]
+    fn wit_shape_matches_scans_prefix_set_with_starts_with_semantics() {
+        // Positive pin: [`wit_shape_matches`] is exactly the
+        // `PREFIXES.iter().any(|p| wit.starts_with(p))` combinator,
+        // parameterized on the accept-set. Two-prefix accept-set,
+        // one-prefix accept-set, and empty accept-set (which must
+        // reject everything, including the empty string — an empty
+        // `any()` fold returns `false`) all pinned so a future
+        // reimplementation that swaps `starts_with` for `contains`,
+        // `==`, or a case-folded comparator surfaces at unit-test
+        // time.
+        let two = &["wasi:http/", "http:"];
+        assert!(wit_shape_matches("wasi:http/proxy", two));
+        assert!(wit_shape_matches("http:incoming", two));
+        assert!(!wit_shape_matches("wasi:keyvalue/store", two));
+
+        let one = &["nats:"];
+        assert!(wit_shape_matches("nats:pub-sub", one));
+        assert!(!wit_shape_matches("kafka:topic", one));
+
+        // Empty accept-set matches nothing — the identity element
+        // for the disjunctive `any()` fold across the prefix set.
+        // Reachable via a future `wit_shape_is_<name>` const paired
+        // to a still-empty prefix table on a nascent shape-arm draft.
+        let empty: &[&str] = &[];
+        assert!(!wit_shape_matches("wasi:http/proxy", empty));
+        assert!(!wit_shape_matches("", empty));
+
+        // starts_with, not contains: a prefix embedded mid-string
+        // never matches. Pins the routing invariant [`WitContract::target`]
+        // relies on (an authored `:wit "custom:wasi:http/"` string
+        // does not silently route through the HTTP arm just because
+        // it happens to contain the canonical HTTP prefix).
+        assert!(!wit_shape_matches("custom:wasi:http/proxy", two));
+    }
+
+    #[test]
+    fn wit_shape_predicates_delegate_to_wit_shape_matches() {
+        // Equivalence pin: each per-shape predicate is exactly
+        // `wit_shape_matches(wit, WIT_<SHAPE>_SHAPE_PREFIXES)`. Sweeps
+        // every canonical prefix + the empty string + one negative
+        // sample against every peer so a future predicate that grew
+        // its own inline `iter().any(starts_with)` (rather than
+        // delegating through the lifted combinator) drifts loudly here
+        // — the peer-const table's contents must agree with the
+        // predicate's accept-set by construction.
+        let samples = [
+            String::new(),
+            "wasi:http/proxy".to_string(),
+            "http:incoming".to_string(),
+            "nats:pub-sub".to_string(),
+            "kafka:topic".to_string(),
+            "wasi:keyvalue/store".to_string(),
+            "kv:cache/session".to_string(),
+            "custom-shape".to_string(),
+            "WASI:HTTP/proxy".to_string(),
+        ];
+        for wit in &samples {
+            assert_eq!(
+                wit_shape_is_http(wit),
+                wit_shape_matches(wit, WIT_HTTP_SHAPE_PREFIXES),
+                "wit_shape_is_http drifted from combinator on {wit:?}",
+            );
+            assert_eq!(
+                wit_shape_is_pubsub(wit),
+                wit_shape_matches(wit, WIT_PUBSUB_SHAPE_PREFIXES),
+                "wit_shape_is_pubsub drifted from combinator on {wit:?}",
+            );
+            assert_eq!(
+                wit_shape_is_store(wit),
+                wit_shape_matches(wit, WIT_STORE_SHAPE_PREFIXES),
+                "wit_shape_is_store drifted from combinator on {wit:?}",
+            );
         }
     }
 
