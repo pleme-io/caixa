@@ -6815,6 +6815,82 @@ pub const M3_AUTHOR_KEY_PLACEMENT: &str = ":placement";
 /// [`M3_AUTHOR_KEY_MEMBROS`] for the full lift rationale.
 pub const M3_AUTHOR_KEY_ENTRADA: &str = ":entrada";
 
+/// Canonical author-facing kebab-case `(defcaixa … :estrategia <s>)`
+/// top-level supervisor-tree slot label the OTP `:kind Supervisor`
+/// caixa's [`crate::supervisor::RestartStrategy`] discriminator surfaces
+/// under. Peer of [`M2_AUTHOR_KEY_LIMITS`] /
+/// [`M3_AUTHOR_KEY_MEMBROS`] on the third kind-scoped
+/// typed-slot-family axis: the M2 `M2_AUTHOR_KEY_*` consts (f49c8b0)
+/// name the Servico-runtime slots, the M3 `M3_AUTHOR_KEY_*` consts
+/// (882f498) name the Aplicacao mesh slots, and these
+/// `SUPERVISOR_AUTHOR_KEY_*` consts close the last remaining kind ↔
+/// slot-family axis — the Supervisor supervision-tree slots
+/// (`:estrategia`, `:max-restarts`, `:restart-window`, `:children`) that
+/// [`crate::Caixa::declared_supervisor_slots`] tags for the sibling
+/// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+/// kind-coherence gate.
+///
+/// Until this lift landed the four kebab-case labels sat once each in
+/// [`crate::Caixa::declared_supervisor_slots`] as four-arm inline
+/// `":estrategia"` / `":max-restarts"` / `":restart-window"` /
+/// `":children"` byte-strings the tagger pushed onto its return `Vec`,
+/// plus a handful of test-side probe literals asserting the diagnostic's
+/// `slots:` field carries the expected per-arm value verbatim — with no
+/// compile-time link between the tagger's arms and the tests' expected
+/// values. A future rebrand (a hypothetical `:estrategia` →
+/// `:strategy` for English uniformity, `:max-restarts` →
+/// `:max-intensity` matching Erlang/OTP's `MaxIntensity` terminology
+/// verbatim, `:restart-window` → `:period` matching OTP's `Period` name,
+/// `:children` → `:workers` matching the Elixir `Supervisor.child_spec`
+/// idiom, or a per-consumer disambiguation as the `defcaixa` macro
+/// stabilizes) would silently desynchronize the production
+/// [`crate::Caixa::declared_supervisor_slots`] tagger from the tests
+/// until a downstream consumer surfaced the drift at build time as a
+/// matches-arm miss far from the rename's commit. This lift closes that
+/// gap by routing both halves (production tagger + tests) through four
+/// peer consts declared adjacent to the peer M2 / M3 top-level
+/// author-key consts, so the "one canonical declaration per arm, next
+/// to the axis" discipline the peer [`M2_AUTHOR_KEY_LIMITS`] /
+/// [`M2_AUTHOR_KEY_BEHAVIOR`] / [`M2_AUTHOR_KEY_UPGRADE_FROM`] top-level
+/// M2 slot consts (f49c8b0) and [`M3_AUTHOR_KEY_MEMBROS`] /
+/// [`M3_AUTHOR_KEY_CONTRATOS`] / [`M3_AUTHOR_KEY_POLITICAS`] /
+/// [`M3_AUTHOR_KEY_PLACEMENT`] / [`M3_AUTHOR_KEY_ENTRADA`] top-level
+/// M3 slot consts (882f498) established for the sibling
+/// per-Servico / per-Aplicacao top-level slot axes extends onto the
+/// per-Supervisor supervision-tree slot axis, closing the last of the
+/// three kind-scoped typed-slot-family author-facing-label axes.
+///
+/// Same "one canonical byte-string per typed axis" discipline every
+/// peer M2 / M3 renderer-wire-key axis carries ([`M2_KEY_LIMITS`] /
+/// [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`],
+/// [`M2_LIMITS_KEY_MEMORY`] / [`M2_LIMITS_KEY_FUEL`] /
+/// [`M2_LIMITS_KEY_WALL_CLOCK`] / [`M2_LIMITS_KEY_CPU`] (d8b8b4f),
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] etc. (21fe462),
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (36ffe65), [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.).
+pub const SUPERVISOR_AUTHOR_KEY_ESTRATEGIA: &str = ":estrategia";
+/// Canonical author-facing kebab-case `(defcaixa … :max-restarts <n>)`
+/// top-level supervisor-tree slot label the OTP `:kind Supervisor`
+/// caixa's `MaxIntensity` restart-budget counter surfaces under. Peer of
+/// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] on the sibling supervision-tree
+/// slot axis; see [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] for the full lift
+/// rationale.
+pub const SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS: &str = ":max-restarts";
+/// Canonical author-facing kebab-case
+/// `(defcaixa … :restart-window "<duration>")` top-level supervisor-tree
+/// slot label the OTP `:kind Supervisor` caixa's `Period` rolling-window
+/// counter surfaces under. Peer of [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`]
+/// on the sibling supervision-tree slot axis; see
+/// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] for the full lift rationale.
+pub const SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW: &str = ":restart-window";
+/// Canonical author-facing kebab-case `(defcaixa … :children (…))`
+/// top-level supervisor-tree slot label the OTP `:kind Supervisor`
+/// caixa's static child-spec list ([`crate::supervisor::ChildSpec`])
+/// surfaces under. Peer of [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] on the
+/// sibling supervision-tree slot axis; see
+/// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] for the full lift rationale.
+pub const SUPERVISOR_AUTHOR_KEY_CHILDREN: &str = ":children";
+
 /// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
 /// struct's `estrategia` distribution-strategy discriminator — the
 /// per-`M3_KEY_PLACEMENT`-block field the M3 [`crate::aplicacao::PlacementStrategy`]

@@ -4100,7 +4100,7 @@ mod tests {
             LayoutError::SupervisorSlotsOnNonSupervisor { caixa, kind, slots } => {
                 assert_eq!(caixa, "demo");
                 assert_eq!(kind, CaixaKind::Servico);
-                assert_eq!(slots, ":children");
+                assert_eq!(slots, crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN);
             }
             other => panic!("expected SupervisorSlotsOnNonSupervisor, got {other:?}"),
         }
@@ -4171,7 +4171,7 @@ mod tests {
             LayoutError::SupervisorSlotsOnNonSupervisor { caixa, kind, slots } => {
                 assert_eq!(caixa, "demo");
                 assert_eq!(kind, CaixaKind::Aplicacao);
-                assert_eq!(slots, ":estrategia");
+                assert_eq!(slots, crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA);
             }
             other => panic!("expected SupervisorSlotsOnNonSupervisor, got {other:?}"),
         }
