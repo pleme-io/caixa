@@ -11982,6 +11982,95 @@ pub const DEFAULT_LIBRARY_NAME: &str = "pleme-computeunit";
 /// [fc]: ../../caixa_flux/struct.ClusterBundleOpts.html#method.for_caixa
 pub const DEFAULT_FLUX_RECONCILE_INTERVAL: &str = "10m";
 
+/// Canonical Flux v2 `HelmRelease.spec.chart.spec.chart` per-CR chart-
+/// directory-in-GitRepository-source sub-path scalar every
+/// [`caixa-flux`][cf]-emitted `helmrelease.yaml` document declares as the
+/// default chart-directory-in-git-source pointer when the per-caixa
+/// [`ClusterBundleOpts::for_caixa`][fc] seed doesn't carry an operator-
+/// pinned override. The Flux v2 source-controller resolves the pointer
+/// relative to the paired [`FLUX_KIND_GIT_REPOSITORY`] the sibling
+/// [`FLUX_KEY_SOURCE_REF`]-keyed `sourceRef:` block names — the substrate's
+/// canonical contract with every caixa Servico's git repository is that
+/// the per-caixa `lareira-<nome>` chart the peer `caixa-helm` renderer
+/// emits lives at the `./chart/` sub-tree of the repository root, so the
+/// helm-controller's per-CR chart-open loop keys off this exact scalar to
+/// locate the [`HELM_CHART_YAML_FILENAME`] + [`HELM_VALUES_YAML_FILENAME`]
+/// pair the per-caixa rendered chart declares. Every rendered per-caixa
+/// `HelmRelease` CR consults the same `&'static str` at seed time so a
+/// future substrate-side chart-directory-in-git-source rebrand
+/// (`"chart"` → `"charts"` once a per-caixa multi-chart layout lands and
+/// the substrate publishes N sibling `lareira-<nome>/` charts under one
+/// git repository, `"chart"` → `"helm"` on a cross-language convention
+/// alignment with sibling wasm-runtime substrates, `"chart"` → `"deploy"`
+/// on a per-caixa-deploy-directory naming migration) is a one-line edit
+/// on this canonical declaration, not a coordinated rewrite across the
+/// [`ClusterBundleOpts`] default seed and every future per-target
+/// renderer the substrate adds.
+///
+/// The single source of truth the rendered per-caixa Flux v2 cluster
+/// bundle's per-CR chart-directory-in-git-source default seed reaches for:
+///
+///   - [`ClusterBundleOpts::for_caixa`][fc]'s per-caixa default seed
+///     (caixa-flux/src/lib.rs — the `chart_path: <DEFAULT>.into()` field
+///     of the [`ClusterBundleOpts`] struct default the substrate's per-
+///     caixa `cluster_bundle` renderer threads through every emitted per-
+///     caixa `helmrelease.yaml` document's [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`]
+///     -keyed `spec.chart.spec.chart` axis verbatim).
+///
+/// The value is a valid Flux v2 `HelmRelease.spec.chart.spec.chart` scalar
+/// (per the upstream Flux v2 `helm.toolkit.fluxcd.io/v2/HelmRelease` `OpenAPI`
+/// schema — a non-empty string interpreted by the source-controller as a
+/// relative directory-tree path from the paired `GitRepository` clone
+/// root): a non-empty ASCII scalar with no leading path separator (which
+/// would break the source-controller's relative-path composition against
+/// the per-clone-root anchor). A future rebrand on this lift cannot
+/// silently land an empty scalar or a leading-separator scalar the source-
+/// controller-side per-CR chart-open loop would then reject at the *first*
+/// per-caixa `HelmRelease` apply against a cluster, far from the rebrand
+/// commit's source — the [`default_flux_chart_source_subpath_is_a_valid_relative_directory_scalar`]
+/// pin trips at caixa-core build time on any drift past the typed floor.
+///
+/// Pairs with the sibling [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`] (0fef82e)
+/// per-Flux-v2-`HelmRelease.spec.chart.spec.chart` leaf-scalar-key the
+/// value the substrate seeds here nests directly under across every
+/// rendered per-caixa `HelmRelease` CR — the key half of the per-CR
+/// `spec.chart.spec.chart` scalar-key/scalar-value pair lives at
+/// [`FLUX_HELMCHART_TEMPLATE_KEY_CHART`], the value half's substrate-side
+/// default seed lives here. Peer with [`flux_kustomization_source_subtree`]
+/// on the sibling `Kustomization.spec.path` per-cluster / per-caixa `GitOps`-
+/// repository-relative directory-tree seed composer — both name a load-
+/// bearing directory-tree relative path the Flux v2 controller family's
+/// per-CR reconcile loop navigates into, at the two paired axes of the
+/// per-caixa `cluster_bundle` triplet (the `HelmRelease` chart-directory
+/// axis names *where in the caixa's own git repo the chart lives*, the
+/// `Kustomization` sub-tree axis names *where in the k8s-GitOps repo the
+/// per-cluster manifest sub-tree lives*, and the two together close the
+/// Flux v2 kustomize-controller → helm-controller reconcile-chain axis
+/// the substrate's per-caixa cluster-bundle-triplet reconcile-topology
+/// rests on).
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`DEFAULT_NAMESPACE`] (a085b26) / [`DEFAULT_FLUX_SYSTEM_NAMESPACE`]
+/// (7197d38) / [`DEFAULT_LIBRARY_NAME`] (41438dc) /
+/// [`DEFAULT_SERVICO_PORT`] (1e22add) / [`DEFAULT_GATEWAY_CLASS_NAME`]
+/// (d9b0743) / [`DEFAULT_PUBLISH_TAG_PREFIX`] (0a6a602) /
+/// [`DEFAULT_FLUX_RECONCILE_INTERVAL`] (908180f) /
+/// [`DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] (64bdb2b) /
+/// [`DEFAULT_PLEME_GIT_ORG`] (9952bd9) lifts apply on the peer
+/// canonical-substrate-default-load-bearing-scalar surface — extends the
+/// canonical-substrate-default single-sourcing discipline from the peer
+/// substrate-side default-namespace / default-library-chart-name /
+/// default-Servico-listen-port / default-Gateway-API-controller-name /
+/// default-git-publish-tag-prefix / default-Flux-v2-per-CR-reconcile-poll-
+/// cadence / default-Flux-v2-per-CR-kustomization-reconcile-wall-clock-cap
+/// / default-pleme-io-git-org surfaces onto the sibling default-Flux-v2-
+/// per-CR-HelmRelease-chart-directory-in-git-source surface every rendered
+/// per-caixa Flux v2 cluster bundle `HelmRelease` CR carries.
+///
+/// [cf]: ../../caixa_flux/index.html
+/// [fc]: ../../caixa_flux/struct.ClusterBundleOpts.html#method.for_caixa
+pub const DEFAULT_FLUX_CHART_SOURCE_SUBPATH: &str = "chart";
+
 /// Canonical Flux v2 `HelmRelease.spec.{install,upgrade}.remediation.retries`
 /// bounded retry-count scalar every [`caixa-flux`][cf]-emitted `helmrelease.yaml`
 /// document declares under both the install-path and the upgrade-path
@@ -17126,6 +17215,80 @@ mod tests {
              Go-duration-format grammar — the trailing unit follows the \
              magnitude; an unterminated magnitude defeats \
              `metav1.ParseDuration`"
+        );
+    }
+
+    #[test]
+    fn default_flux_chart_source_subpath_pins_canonical_value() {
+        // Pin the actual scalar so a typo in this lift can't silently
+        // rebrand the substrate-side default Flux v2
+        // `HelmRelease.spec.chart.spec.chart` chart-directory-in-
+        // GitRepository-source sub-path the substrate's per-caixa
+        // `cluster_bundle` renderer seeds into every emitted per-caixa
+        // `helmrelease.yaml` document. The value is part of the
+        // cluster-side contract with the Flux v2 helm-controller (the
+        // per-CR chart-open loop uses this to locate the
+        // `Chart.yaml` + `values.yaml` pair inside the paired
+        // GitRepository clone root); changing it is a coordinated
+        // substrate-side chart-directory-in-git-source promotion
+        // (a `"chart"` → `"charts"` migration on a per-caixa multi-chart
+        // layout landing, a `"chart"` → `"helm"` migration on a
+        // cross-language convention alignment, a `"chart"` → `"deploy"`
+        // migration on a per-caixa-deploy-directory naming migration),
+        // not an incidental edit. Peer to
+        // `default_flux_reconcile_interval_pins_canonical_value` +
+        // `flux_helmrelease_remediation_retries_default_pins_canonical_value`
+        // on the canonical-Flux-v2-per-CR-substrate-default-scalar pin
+        // surface.
+        assert_eq!(DEFAULT_FLUX_CHART_SOURCE_SUBPATH, "chart");
+    }
+
+    #[test]
+    fn default_flux_chart_source_subpath_is_a_valid_relative_directory_scalar() {
+        // Cross-axis grammar invariant: the Flux v2 source-controller
+        // resolves the per-CR `HelmRelease.spec.chart.spec.chart` scalar
+        // as a directory path relative to the paired `GitRepository`
+        // clone root. Pin a floor that catches the canonical drift
+        // footguns — an empty scalar (`""` — the source-controller-side
+        // per-CR chart-open loop rejects for lack of a target directory),
+        // a leading-separator scalar (`"/chart"` — the source-controller
+        // rejects for the absolute-path shape breaking the relative-path
+        // composition against the per-clone-root anchor), a non-ASCII
+        // byte (a UTF-8 multi-byte name defeating the per-clone-root
+        // filesystem name resolution on the source-controller pod's
+        // filesystem layer), or a leading whitespace / dot byte (`" chart"`
+        // / `".chart"` — surface as either a "directory not found" per-
+        // CR error or, worse, a silent match against a hidden dot-file
+        // sibling of the intended chart directory). A future rebrand on
+        // the canonical lift that lands a value outside the grammar
+        // would surface here at caixa-core build time on the canonical
+        // lift, before any renderer consumes the value. Same shape as
+        // `default_flux_reconcile_interval_is_a_valid_metav1_duration_scalar`
+        // on the peer canonical-substrate-default-grammar-floor surface.
+        let v = DEFAULT_FLUX_CHART_SOURCE_SUBPATH;
+        assert!(
+            !v.is_empty(),
+            "DEFAULT_FLUX_CHART_SOURCE_SUBPATH {v:?} must be non-empty \
+             per the Flux v2 source-controller-side per-CR chart-open \
+             loop's requirement of a target directory"
+        );
+        assert!(
+            v.is_ascii(),
+            "DEFAULT_FLUX_CHART_SOURCE_SUBPATH {v:?} must be ASCII \
+             throughout — a non-ASCII multi-byte name defeats the per-\
+             clone-root filesystem name resolution on the source-\
+             controller pod's filesystem layer"
+        );
+        let first = v.chars().next().expect("non-empty");
+        assert!(
+            !matches!(first, '/' | '.' | ' ' | '\t'),
+            "DEFAULT_FLUX_CHART_SOURCE_SUBPATH {v:?} first byte {first:?} \
+             must not be a leading separator (`/`), leading dot (`.`), or \
+             leading whitespace — a leading separator breaks the relative-\
+             path composition against the per-clone-root anchor, a leading \
+             dot risks silent matches against hidden dot-file siblings, and \
+             leading whitespace defeats the per-clone-root filesystem name \
+             resolution"
         );
     }
 
