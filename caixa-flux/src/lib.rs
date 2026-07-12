@@ -1806,12 +1806,30 @@ impl ClusterBundleOpts {
     }
 }
 
-/// One file of the cluster bundle.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BundleFile {
-    pub path: std::path::PathBuf,
-    pub contents: String,
-}
+/// One file of the cluster bundle — `(path, contents)` pair every
+/// [`cluster_bundle`]-rendered Flux v2 CR YAML document lands at.
+///
+/// Type-aliased to the canonical [`caixa_core::RenderedFile`] so the
+/// substrate-side "one rendered leaf artifact" shape lives at one
+/// struct definition across every per-target renderer — the peer
+/// [`caixa_helm::ChartFile`] alias resolves to the same canonical, so
+/// a future rebrand on either axis (a per-artifact hash / provenance
+/// field addition, a per-artifact write-mode discriminator once
+/// per-cluster-writer sandboxing lands) lands at one caixa-core `pub
+/// struct RenderedFile` edit and reaches both crates by construction.
+/// Prior to this lift both crates carried an inline `pub struct
+/// <Xxx>File { pub path: PathBuf, pub contents: String }` with
+/// identical `#[derive(Debug, Clone, PartialEq, Eq)]` shapes and no
+/// per-type impls; a future per-target renderer (`caixa-otel`, the
+/// future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer, the
+/// future per-Supervisor reconciler renderer) would have carried a
+/// third and fourth clone of the same record. Type aliases preserve
+/// every existing struct-literal construction site
+/// (`BundleFile { path, contents }`), every field-access site (`f.path`,
+/// `f.contents`), and every derive-fed navigator by construction —
+/// Rust type aliases inherit the aliased type's `#[derive]`-generated
+/// `Debug`/`Clone`/`PartialEq`/`Eq` impls with no per-alias glue.
+pub type BundleFile = caixa_core::RenderedFile;
 
 /// Cluster bundle: the FluxCD trio for a standalone caixa deploy.
 ///
@@ -6799,5 +6817,44 @@ spec:
                  schedule across the three Flux v2 controllers",
             );
         }
+    }
+
+    #[test]
+    fn bundle_file_alias_resolves_to_caixa_core_rendered_file() {
+        // Type-alias identity pin: the [`BundleFile`] alias at this
+        // crate's boundary resolves to the canonical
+        // [`caixa_core::RenderedFile`] the substrate-side "one rendered
+        // leaf artifact" shape lives at. `let _: BundleFile = <a
+        // RenderedFile>` type-checks *iff* [`BundleFile`] is the
+        // aliased canonical (not a sibling pub-struct re-declaration
+        // that happens to carry the same field pair — that would
+        // compile past the struct-literal navigators below but fail
+        // this assignment). A drifted local `pub struct BundleFile
+        // { pub path: PathBuf, pub contents: String }` at this crate —
+        // the canonical drift footgun that would carry the same
+        // field pair at the source while pointing at a different
+        // struct definition — trips this pin at caixa-flux build time
+        // rather than surfacing as a downstream `caixa_core::RenderedFile`
+        // consumer refusing a `BundleFile`-shaped value at type-check
+        // time far from the drift commit.
+        let canonical: caixa_core::RenderedFile = caixa_core::RenderedFile {
+            path: std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME),
+            contents: String::new(),
+        };
+        let aliased: BundleFile = canonical.clone();
+        assert_eq!(aliased, canonical);
+        // Struct-literal construction still resolves through the alias
+        // — the pre-lift `BundleFile { path, contents }` shape at every
+        // production emit site (three sites in [`cluster_bundle`])
+        // continues to compile, and the derive tuple travels through
+        // the alias.
+        let via_alias = BundleFile {
+            path: std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME),
+            contents: "kind: HelmRelease\n".to_string(),
+        };
+        assert_eq!(
+            via_alias.path.to_string_lossy(),
+            FLUX_HELMRELEASE_YAML_FILENAME
+        );
     }
 }

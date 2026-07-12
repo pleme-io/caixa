@@ -86,12 +86,31 @@ pub enum Error {
     Io(#[from] std::io::Error),
 }
 
-/// One file in the rendered chart.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChartFile {
-    pub path: PathBuf,
-    pub contents: String,
-}
+/// One file in the rendered chart — `(path, contents)` pair every
+/// [`render_chart_for_servico`]-rendered `lareira-<nome>` chart-tree
+/// leaf lands at (`Chart.yaml`, `values.yaml`, `README.md`).
+///
+/// Type-aliased to the canonical [`caixa_core::RenderedFile`] so the
+/// substrate-side "one rendered leaf artifact" shape lives at one
+/// struct definition across every per-target renderer — the peer
+/// [`caixa_flux::BundleFile`] alias resolves to the same canonical, so
+/// a future rebrand on either axis (a per-artifact hash / provenance
+/// field addition, a per-artifact write-mode discriminator once
+/// per-cluster-writer sandboxing lands) lands at one caixa-core `pub
+/// struct RenderedFile` edit and reaches both crates by construction.
+/// Prior to this lift both crates carried an inline `pub struct
+/// <Xxx>File { pub path: PathBuf, pub contents: String }` with
+/// identical `#[derive(Debug, Clone, PartialEq, Eq)]` shapes and no
+/// per-type impls; a future per-target renderer (`caixa-otel`, the
+/// future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer, the
+/// future per-Supervisor reconciler renderer) would have carried a
+/// third and fourth clone of the same record. Type aliases preserve
+/// every existing struct-literal construction site
+/// (`ChartFile { path, contents }`), every field-access site (`f.path`,
+/// `f.contents`), and every derive-fed navigator by construction —
+/// Rust type aliases inherit the aliased type's `#[derive]`-generated
+/// `Debug`/`Clone`/`PartialEq`/`Eq` impls with no per-alias glue.
+pub type ChartFile = caixa_core::RenderedFile;
 
 /// The rendered chart — a flat list of files, plus the chart name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1635,5 +1654,50 @@ spec:
             COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
             caixa_core::COMPUTEUNIT_SPEC_KEY_CAPABILITIES,
         );
+    }
+
+    #[test]
+    fn chart_file_alias_resolves_to_caixa_core_rendered_file() {
+        // Type-alias identity pin: the [`ChartFile`] alias at this
+        // crate's boundary resolves to the canonical
+        // [`caixa_core::RenderedFile`] the substrate-side "one rendered
+        // leaf artifact" shape lives at. `let _: ChartFile = <a
+        // RenderedFile>` type-checks *iff* [`ChartFile`] is the aliased
+        // canonical (not a sibling pub-struct re-declaration that
+        // happens to carry the same field pair — that would compile
+        // past the struct-literal navigators below but fail this
+        // assignment). A drifted local `pub struct ChartFile { pub
+        // path: PathBuf, pub contents: String }` at this crate — the
+        // canonical drift footgun that would carry the same field pair
+        // at the source while pointing at a different struct
+        // definition — trips this pin at caixa-helm build time rather
+        // than surfacing as a downstream `caixa_core::RenderedFile`
+        // consumer refusing a `ChartFile`-shaped value at type-check
+        // time far from the drift commit. Peer to the sibling
+        // [`caixa_flux::BundleFile`]-alias-identity pin on the same
+        // per-target-renderer canonical [`caixa_core::RenderedFile`]
+        // re-export surface — both crates' per-artifact leaf type now
+        // resolves through the same canonical struct definition, so a
+        // future rebrand on the record shape lands at one caixa-core
+        // edit and reaches both consumers by construction.
+        let canonical: caixa_core::RenderedFile = caixa_core::RenderedFile {
+            path: PathBuf::from(HELM_CHART_YAML_FILENAME),
+            contents: String::new(),
+        };
+        let aliased: ChartFile = canonical.clone();
+        assert_eq!(aliased, canonical);
+        // Struct-literal construction still resolves through the alias
+        // — the pre-lift `ChartFile { path, contents }` shape at every
+        // production emit site (three sites in
+        // `render_chart_for_servico_with`'s `ChartDir::files` assembly)
+        // continues to compile, and the derive tuple travels through
+        // the alias so downstream `ChartDir::files.iter().find(|f|
+        // f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))`
+        // navigators keep matching by `PartialEq` on `PathBuf`.
+        let via_alias = ChartFile {
+            path: PathBuf::from(HELM_VALUES_YAML_FILENAME),
+            contents: format!("{DEFAULT_LIBRARY_NAME}:\n  enabled: false\n"),
+        };
+        assert_eq!(via_alias.path.to_string_lossy(), HELM_VALUES_YAML_FILENAME);
     }
 }

@@ -31,7 +31,7 @@
 //! is preserved by construction).
 
 use std::collections::BTreeMap;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 use thiserror::Error;
 
 use crate::{Caixa, CaixaKind};
@@ -308,6 +308,90 @@ where
     require_kind(caixa, CaixaKind::Servico)?;
     require_single_servico(caixa)?;
     Ok(())
+}
+
+/// One rendered artifact — a `(path, contents)` pair every per-target
+/// `caixa-<target>` renderer emits at every leaf of its output tree.
+/// Carries the sandboxed relative path the substrate writes the artifact
+/// under (relative to the renderer-chosen output root — the per-chart
+/// directory for [`caixa-helm`][cf-helm]'s `lareira-<nome>` chart tree,
+/// the per-caixa `./clusters/<cluster>/services/<nome>/` sub-tree for
+/// [`caixa-flux`][cf-flux]'s [`cluster_bundle`][cb] Flux v2 CR trio)
+/// alongside the pre-serialized byte contents the substrate writes to it.
+///
+/// Lifted from two identical-shape per-renderer arms in
+/// [`caixa-flux`][cf-flux] (`BundleFile { path: PathBuf, contents:
+/// String }`) and [`caixa-helm`][cf-helm] (`ChartFile { path: PathBuf,
+/// contents: String }`) — same field pair, same derives (`Debug + Clone
+/// + PartialEq + Eq`), no per-type impls — carrying the same "one
+/// rendered leaf artifact" contract twice. Every prior per-target
+/// renderer had reinvented the same two-field record because there was
+/// no substrate-side canonical `(path, contents)` shape to reach for;
+/// the future per-target renderers the M4/M5 roadmap acknowledges
+/// (`caixa-otel`'s per-collector-config emit, the future per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR YAML
+/// emit, the future per-Supervisor reconciler renderer's per-child
+/// bundle emit) would have re-added a third and fourth clone of the
+/// same record — exactly the "render-side patterns recurring ≥2 times
+/// across `caixa-helm` / `caixa-flux` / `caixa-mesh` become helpers.
+/// Duplication is a bug. (PRIME DIRECTIVE.)" compounding-mandate slot
+/// item.
+///
+/// Both prior arms remain as public `pub type BundleFile =
+/// caixa_core::RenderedFile;` / `pub type ChartFile =
+/// caixa_core::RenderedFile;` aliases at their crate boundary so every
+/// existing struct-literal construction site
+/// (`BundleFile { path: …, contents: … }` / `ChartFile { path: …,
+/// contents: … }`), every field-access site (`.path` / `.contents`),
+/// and every derive-fed navigator (`==` equality pins, `Debug`
+/// formatting probes) resolves through the type alias to the canonical
+/// [`RenderedFile`] with no per-call-site edit — Rust type aliases
+/// carry the same `#[derive]`-generated `Debug`/`Clone`/`PartialEq`/
+/// `Eq` impls as their canonical, so the shared-shape contract lives
+/// at one type definition instead of two verbatim clones drifting
+/// silently on any future rebrand.
+///
+/// Peer to the [`KindMismatch`] / [`ServicoCountMismatch`] typed-view
+/// lifts on the sibling per-renderer-error-diagnostic-shape axis: both
+/// families lift a per-renderer duplicated record onto a canonical
+/// substrate-side type, so a future per-target renderer joins the
+/// pattern by re-exporting one alias instead of open-coding another
+/// clone.
+///
+/// The `path` axis carries the sandboxed relative path — the same
+/// [`is_sandboxed_relative_path`] discipline the [`Caixa::validate_code_paths`]
+/// invariant enforces at the manifest-side path axis. No renderer today
+/// runs the predicate against the emit-side per-`RenderedFile.path`
+/// — the paths are picked from substrate-canonical `&'static str`
+/// filename constants ([`FLUX_GITREPOSITORY_YAML_FILENAME`],
+/// [`FLUX_HELMRELEASE_YAML_FILENAME`], [`FLUX_KUSTOMIZATION_YAML_FILENAME`],
+/// [`HELM_CHART_YAML_FILENAME`], [`HELM_VALUES_YAML_FILENAME`]) rather
+/// than author input, so a per-emit-time sandbox check would be
+/// belt-and-suspenders — but the shared type shape makes a future
+/// sandbox-at-emit-time invariant a one-place add across every
+/// per-target renderer.
+///
+/// [cf-flux]: https://docs.rs/caixa-flux
+/// [cf-helm]: https://docs.rs/caixa-helm
+/// [cb]: https://docs.rs/caixa-flux/latest/caixa_flux/fn.cluster_bundle.html
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderedFile {
+    /// Sandboxed relative path the substrate writes the artifact under
+    /// (relative to the renderer-chosen output root). Substrate-canonical
+    /// filename constants ([`FLUX_GITREPOSITORY_YAML_FILENAME`] /
+    /// [`FLUX_HELMRELEASE_YAML_FILENAME`] /
+    /// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] for the `caixa-flux`
+    /// [`cluster_bundle`] Flux v2 CR trio, [`HELM_CHART_YAML_FILENAME`] /
+    /// [`HELM_VALUES_YAML_FILENAME`] for the `caixa-helm`
+    /// `lareira-<nome>` chart directory) source every path today.
+    pub path: PathBuf,
+    /// The rendered byte contents — a pre-serialized UTF-8 body every
+    /// downstream writer (`caixa-flux::cluster_bundle`'s
+    /// per-`GitRepository`/`HelmRelease`/`Kustomization` YAML emit,
+    /// `caixa-helm::render_chart_for_servico`'s per-`Chart.yaml`/
+    /// `values.yaml`/`README.md` chart-directory emit) hands to
+    /// `std::fs::write` verbatim under the paired [`Self::path`].
+    pub contents: String,
 }
 
 /// Predicate: find the first ASCII whitespace byte in `s`, or `None` if
@@ -30928,6 +31012,61 @@ spec:
             "checkout-cart",
         );
         assert_eq!(gateway_api_http_route_name("orders", "cart"), "orders-cart",);
+    }
+
+    #[test]
+    fn rendered_file_carries_path_and_contents_fields() {
+        // Field-shape pin: the canonical [`RenderedFile`] every
+        // per-target `caixa-<target>` renderer's per-artifact leaf
+        // resolves through carries exactly the `(path, contents)` pair
+        // the prior per-crate `BundleFile { path: PathBuf, contents:
+        // String }` (`caixa-flux`) / `ChartFile { path: PathBuf,
+        // contents: String }` (`caixa-helm`) clones each carried
+        // verbatim. A future refactor that adds a per-artifact
+        // hash / provenance / write-mode discriminator on the record
+        // must land at the canonical struct definition (this file) —
+        // the two type aliases at `caixa-flux::BundleFile` /
+        // `caixa-helm::ChartFile` re-export the canonical unchanged, so
+        // an addition here reaches both per-target renderers at once,
+        // and a struct-literal drift that inlines the pre-lift shape
+        // at either alias trips this pin at caixa-core build time
+        // rather than surfacing as a divergent per-target renderer's
+        // record shape far from the source.
+        let f = RenderedFile {
+            path: PathBuf::from("Chart.yaml"),
+            contents: "apiVersion: v2\n".to_string(),
+        };
+        assert_eq!(f.path, PathBuf::from("Chart.yaml"));
+        assert_eq!(f.contents, "apiVersion: v2\n");
+    }
+
+    #[test]
+    fn rendered_file_derives_pattern_pin() {
+        // Derive-shape pin: the canonical [`RenderedFile`] carries the
+        // `Debug + Clone + PartialEq + Eq` derive tuple the two per-
+        // renderer clones (`caixa-flux::BundleFile` /
+        // `caixa-helm::ChartFile`) each carried verbatim before the
+        // lift. `Clone::clone` returns a byte-equal record + the
+        // `PartialEq::eq` impl returns `true` on the round-trip; a
+        // future refactor that drops one of the four derives (say,
+        // removes `PartialEq` on a per-artifact-hash addition) trips
+        // this pin at caixa-core build time and surfaces the
+        // per-alias downstream `assert_eq!(bundle_file_a,
+        // bundle_file_b)` / `assert_eq!(chart_file_a, chart_file_b)`
+        // navigators in `caixa-flux` / `caixa-helm` — every
+        // per-alias derive-fed navigator threads through this
+        // canonical derive tuple by construction.
+        let f = RenderedFile {
+            path: PathBuf::from("values.yaml"),
+            contents: "pleme-computeunit:\n  enabled: false\n".to_string(),
+        };
+        let clone = f.clone();
+        assert_eq!(f, clone);
+        let dbg = format!("{f:?}");
+        assert!(
+            dbg.contains("RenderedFile"),
+            "Debug output must name the canonical type, got: {dbg:?}",
+        );
     }
 
     #[test]
