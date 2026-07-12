@@ -518,12 +518,12 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
         .etiquetas
         .iter()
         .cloned()
-        .chain([
-            "lareira".to_string(),
-            "wasm".to_string(),
-            "tatara-lisp".to_string(),
-            "caixa-servico".to_string(),
-        ])
+        .chain(
+            caixa_core::LAREIRA_CHART_KEYWORDS
+                .iter()
+                .copied()
+                .map(String::from),
+        )
         .collect::<Vec<_>>()
         .into_iter()
         .collect::<std::collections::BTreeSet<_>>()
@@ -771,6 +771,47 @@ spec:
         assert!(chart.keywords.contains(&"caixa-servico".to_string()));
         assert!(chart.keywords.contains(&"hello-world".to_string()));
         assert_eq!(chart.maintainers[0].name, "pleme-io");
+    }
+
+    #[test]
+    fn chart_yaml_keywords_union_pins_every_lareira_chart_keywords_entry() {
+        // Structural pin: `build_chart_yaml`'s substrate-fixed
+        // chart-keyword union routes through the canonical
+        // `caixa_core::LAREIRA_CHART_KEYWORDS` array — every rendered
+        // `lareira-<nome>` chart's emitted `Chart.yaml` `keywords:`
+        // sequence carries every substrate-fixed entry the array
+        // declares. A future substrate-fixed keyword addition
+        // (an `"opentelemetry"` entry once the caixa-otel collector-
+        // pipeline chart lands, a `"lunatic"` entry once the wasm-
+        // process-runtime marker lands, a `"gen_server"` entry once
+        // the OTP-shape callback marker lands per the
+        // [`caixa_core::behavior`] surface) that lands in the array
+        // reaches this crate's production emit site by construction
+        // through the shared `&[&str]` reference — a drift where the
+        // production emit at `build_chart_yaml` re-inlines the pre-
+        // lift `["lareira", "wasm", "tatara-lisp", "caixa-servico"]`
+        // literal set (or drops a per-entry axis on a rebrand
+        // sweep) fails this pin at caixa-helm build time rather than
+        // surfacing as a `helm search hub caixa-servico` miss on the
+        // Artifact Hub keyword-search index at chart-publish time
+        // downstream. Peer to
+        // [`chart_yaml_metadata_propagates`] on the
+        // per-`Chart.yaml`-body-field propagation surface.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
+            .unwrap();
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        for keyword in caixa_core::LAREIRA_CHART_KEYWORDS {
+            assert!(
+                chart.keywords.contains(&(*keyword).to_string()),
+                "rendered Chart.yaml keywords {:?} must contain the \
+                 substrate-fixed LAREIRA_CHART_KEYWORDS entry {keyword:?}",
+                chart.keywords,
+            );
+        }
     }
 
     #[test]
