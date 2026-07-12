@@ -79,14 +79,39 @@ impl BehaviorSpec {
     /// kebab-case `:on-*` slot it came from. Used by the layout
     /// checker (existence) and by [`BehaviorSpec::validate`]
     /// (value-shape) so diagnostics can name the offending slot.
+    ///
+    /// Each per-arm kebab-case label is routed through the peer
+    /// [`crate::M2_BEHAVIOR_AUTHOR_KEY_ON_*`] consts declared next to
+    /// the [`crate::M2_BEHAVIOR_KEY_ON_*`] renderer-side wire-key
+    /// peers, so both halves of the M2 `:behavior` sub-slot's dual
+    /// axis (author-facing kebab-case label + renderer-side camelCase
+    /// wire key) route through one canonical declaration per arm.
     pub fn declared_slots(&self) -> impl Iterator<Item = (&'static str, &PathBuf)> {
         [
-            (":on-init", self.on_init.as_ref()),
-            (":on-call", self.on_call.as_ref()),
-            (":on-cast", self.on_cast.as_ref()),
-            (":on-info", self.on_info.as_ref()),
-            (":on-state-change", self.on_state_change.as_ref()),
-            (":on-terminate", self.on_terminate.as_ref()),
+            (
+                crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_INIT,
+                self.on_init.as_ref(),
+            ),
+            (
+                crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_CALL,
+                self.on_call.as_ref(),
+            ),
+            (
+                crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_CAST,
+                self.on_cast.as_ref(),
+            ),
+            (
+                crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_INFO,
+                self.on_info.as_ref(),
+            ),
+            (
+                crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
+                self.on_state_change.as_ref(),
+            ),
+            (
+                crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
+                self.on_terminate.as_ref(),
+            ),
         ]
         .into_iter()
         .filter_map(|(slot, opt)| opt.map(|p| (slot, p)))
@@ -279,6 +304,11 @@ pub enum BehaviorError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::render::{
+        M2_BEHAVIOR_AUTHOR_KEY_ON_CALL, M2_BEHAVIOR_AUTHOR_KEY_ON_CAST,
+        M2_BEHAVIOR_AUTHOR_KEY_ON_INFO, M2_BEHAVIOR_AUTHOR_KEY_ON_INIT,
+        M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE, M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
+    };
 
     #[test]
     fn empty_behavior_round_trip() {
@@ -512,27 +542,27 @@ mod tests {
     #[test]
     fn validate_rejects_empty_path_per_slot() {
         let cases: [(&'static str, fn(PathBuf) -> BehaviorSpec); 6] = [
-            (":on-init", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_INIT, |p| BehaviorSpec {
                 on_init: Some(p),
                 ..Default::default()
             }),
-            (":on-call", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_CALL, |p| BehaviorSpec {
                 on_call: Some(p),
                 ..Default::default()
             }),
-            (":on-cast", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_CAST, |p| BehaviorSpec {
                 on_cast: Some(p),
                 ..Default::default()
             }),
-            (":on-info", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_INFO, |p| BehaviorSpec {
                 on_info: Some(p),
                 ..Default::default()
             }),
-            (":on-state-change", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE, |p| BehaviorSpec {
                 on_state_change: Some(p),
                 ..Default::default()
             }),
-            (":on-terminate", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE, |p| BehaviorSpec {
                 on_terminate: Some(p),
                 ..Default::default()
             }),
@@ -555,10 +585,7 @@ mod tests {
         let err = b.validate().unwrap_err();
         assert!(matches!(
             err,
-            BehaviorError::AbsolutePath {
-                slot: ":on-init",
-                ..
-            }
+            BehaviorError::AbsolutePath { slot, .. } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT
         ));
     }
 
@@ -571,10 +598,7 @@ mod tests {
         let err = b.validate().unwrap_err();
         assert!(matches!(
             err,
-            BehaviorError::ParentEscape {
-                slot: ":on-state-change",
-                ..
-            }
+            BehaviorError::ParentEscape { slot, .. } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE
         ));
     }
 
@@ -589,10 +613,7 @@ mod tests {
         let err = b.validate().unwrap_err();
         assert!(matches!(
             err,
-            BehaviorError::ParentEscape {
-                slot: ":on-terminate",
-                ..
-            }
+            BehaviorError::ParentEscape { slot, .. } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE
         ));
     }
 
@@ -607,7 +628,10 @@ mod tests {
             ..Default::default()
         };
         let err = b.validate().unwrap_err();
-        assert!(matches!(err, BehaviorError::EmptyPath { slot: ":on-init" }));
+        assert!(matches!(
+            err,
+            BehaviorError::EmptyPath { slot } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT
+        ));
     }
 
     // ── `.lisp`-extension gate on every `:behavior :on-*` axis ─────
@@ -621,27 +645,27 @@ mod tests {
         // `BehaviorError` arm carries (`EmptyPath`, `AbsolutePath`,
         // `ParentEscape`).
         let cases: [(&'static str, fn(PathBuf) -> BehaviorSpec); 6] = [
-            (":on-init", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_INIT, |p| BehaviorSpec {
                 on_init: Some(p),
                 ..Default::default()
             }),
-            (":on-call", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_CALL, |p| BehaviorSpec {
                 on_call: Some(p),
                 ..Default::default()
             }),
-            (":on-cast", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_CAST, |p| BehaviorSpec {
                 on_cast: Some(p),
                 ..Default::default()
             }),
-            (":on-info", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_INFO, |p| BehaviorSpec {
                 on_info: Some(p),
                 ..Default::default()
             }),
-            (":on-state-change", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE, |p| BehaviorSpec {
                 on_state_change: Some(p),
                 ..Default::default()
             }),
-            (":on-terminate", |p| BehaviorSpec {
+            (M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE, |p| BehaviorSpec {
                 on_terminate: Some(p),
                 ..Default::default()
             }),
@@ -676,8 +700,8 @@ mod tests {
             };
             let err = b.validate().unwrap_err();
             assert!(
-                matches!(&err, BehaviorError::NonLispExtension { slot: ":on-init", path: p }
-                    if p == &path),
+                matches!(&err, BehaviorError::NonLispExtension { slot, path: p }
+                    if *slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT && p == &path),
                 "no-extension path {path:?}: got {err:?}",
             );
         }
@@ -704,8 +728,8 @@ mod tests {
             };
             let err = b.validate().unwrap_err();
             assert!(
-                matches!(&err, BehaviorError::NonLispExtension { slot: ":on-call", path: p }
-                    if p == &path),
+                matches!(&err, BehaviorError::NonLispExtension { slot, path: p }
+                    if *slot == M2_BEHAVIOR_AUTHOR_KEY_ON_CALL && p == &path),
                 "wrong-extension path {path:?}: got {err:?}",
             );
         }
@@ -735,8 +759,8 @@ mod tests {
             };
             let err = b.validate().unwrap_err();
             assert!(
-                matches!(&err, BehaviorError::NonLispExtension { slot: ":on-init", path: p }
-                    if p == &path),
+                matches!(&err, BehaviorError::NonLispExtension { slot, path: p }
+                    if *slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT && p == &path),
                 "uppercase `.lisp` {path:?}: got {err:?}",
             );
         }
@@ -787,7 +811,7 @@ mod tests {
         };
         assert!(matches!(
             b.validate().unwrap_err(),
-            BehaviorError::EmptyPath { slot: ":on-init" }
+            BehaviorError::EmptyPath { slot } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT
         ));
 
         // Absolute + non-`.lisp` → absolute wins.
@@ -797,10 +821,7 @@ mod tests {
         };
         assert!(matches!(
             b.validate().unwrap_err(),
-            BehaviorError::AbsolutePath {
-                slot: ":on-init",
-                ..
-            }
+            BehaviorError::AbsolutePath { slot, .. } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT
         ));
 
         // Parent-escape + non-`.lisp` → parent-escape wins.
@@ -810,10 +831,7 @@ mod tests {
         };
         assert!(matches!(
             b.validate().unwrap_err(),
-            BehaviorError::ParentEscape {
-                slot: ":on-init",
-                ..
-            }
+            BehaviorError::ParentEscape { slot, .. } if slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT
         ));
     }
 
@@ -832,7 +850,7 @@ mod tests {
         let err = b.validate().unwrap_err();
         let rendered = err.to_string();
         assert!(
-            rendered.contains(":on-cast"),
+            rendered.contains(M2_BEHAVIOR_AUTHOR_KEY_ON_CAST),
             "diagnostic must name the `:on-cast` slot: {rendered}"
         );
         assert!(
@@ -861,8 +879,65 @@ mod tests {
         let err = b.validate().unwrap_err();
         assert!(matches!(
             &err,
-            BehaviorError::NonLispExtension { slot: ":on-init", path }
-                if path == &PathBuf::from("lib/init.rs")
+            BehaviorError::NonLispExtension { slot, path }
+                if *slot == M2_BEHAVIOR_AUTHOR_KEY_ON_INIT
+                    && path == &PathBuf::from("lib/init.rs")
         ));
+    }
+
+    #[test]
+    fn m2_behavior_author_key_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin: the six author-facing kebab-case labels the
+        // `(defcaixa … :behavior (:on-* …))` surface admits, one arm per
+        // sub-slot. Mirrors the peer scalar-value pin the sibling
+        // renderer-side [`crate::M2_BEHAVIOR_KEY_ON_*`] camelCase consts
+        // carry (21fe462), so both halves of the M2 `:behavior` sub-slot
+        // dual axis (author-facing kebab-case label + renderer-side
+        // camelCase wire key) route through one canonical per-arm
+        // declaration. A future rebrand (`:on-init` → `:on-start`
+        // matching Akka's per-actor preStart naming, `:on-state-change`
+        // → `:on-code-change` matching Erlang's verbatim `code_change/3`
+        // name) lands as an edit to exactly one const, and every
+        // consumer that reaches for the label picks it up at build time
+        // rather than at runtime as a downstream mismatch.
+        assert_eq!(M2_BEHAVIOR_AUTHOR_KEY_ON_INIT, ":on-init");
+        assert_eq!(M2_BEHAVIOR_AUTHOR_KEY_ON_CALL, ":on-call");
+        assert_eq!(M2_BEHAVIOR_AUTHOR_KEY_ON_CAST, ":on-cast");
+        assert_eq!(M2_BEHAVIOR_AUTHOR_KEY_ON_INFO, ":on-info");
+        assert_eq!(M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE, ":on-state-change");
+        assert_eq!(M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE, ":on-terminate");
+    }
+
+    #[test]
+    fn declared_slots_labels_route_through_lifted_author_key_consts() {
+        // Production-through-const pin: the six per-arm labels
+        // [`BehaviorSpec::declared_slots`] threads through as the
+        // `(slot, path)` iterator's first component route through the
+        // lifted [`crate::M2_BEHAVIOR_AUTHOR_KEY_ON_*`] consts, in
+        // declaration order. A future re-order or drift at the tagger
+        // (a rename that reaches the tagger but not the const, or vice
+        // versa) surfaces here at build time rather than at runtime as
+        // a diagnostic naming a stale kebab-case slot far from the
+        // rename's commit.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("a.lisp")),
+            on_call: Some(PathBuf::from("b.lisp")),
+            on_cast: Some(PathBuf::from("c.lisp")),
+            on_info: Some(PathBuf::from("d.lisp")),
+            on_state_change: Some(PathBuf::from("e.lisp")),
+            on_terminate: Some(PathBuf::from("f.lisp")),
+        };
+        let labels: Vec<&'static str> = b.declared_slots().map(|(s, _)| s).collect();
+        assert_eq!(
+            labels,
+            vec![
+                M2_BEHAVIOR_AUTHOR_KEY_ON_INIT,
+                M2_BEHAVIOR_AUTHOR_KEY_ON_CALL,
+                M2_BEHAVIOR_AUTHOR_KEY_ON_CAST,
+                M2_BEHAVIOR_AUTHOR_KEY_ON_INFO,
+                M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
+                M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
+            ]
+        );
     }
 }

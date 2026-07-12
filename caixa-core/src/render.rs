@@ -6305,6 +6305,97 @@ pub const M2_BEHAVIOR_KEY_ON_STATE_CHANGE: &str = "onStateChange";
 /// [`M2_BEHAVIOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot axis.
 pub const M2_BEHAVIOR_KEY_ON_TERMINATE: &str = "onTerminate";
 
+/// Canonical author-facing kebab-case `(defcaixa … :behavior (:on-init …))`
+/// slot label the `:behavior :on-init` per-Servico OTP-shaped instance-init
+/// callback axis surfaces under. Peer of [`M2_BEHAVIOR_KEY_ON_INIT`] on the
+/// dual-axis pair every M2 `:behavior` sub-slot carries: the camelCase
+/// [`M2_BEHAVIOR_KEY_ON_*`] const names the *renderer-side* wire key the
+/// serde-derive-emitted [`M2_KEY_BEHAVIOR`] overlay carries under
+/// (`"onInit"` etc, load-bearing per the `#[serde(rename_all = "camelCase")]`
+/// attribute on [`crate::BehaviorSpec`]), the kebab-case
+/// [`M2_BEHAVIOR_AUTHOR_KEY_ON_*`] const names the *author-facing* label the
+/// [`crate::BehaviorSpec::declared_slots`] tagger threads through as the
+/// `slot: &'static str` field on every [`crate::BehaviorError`] variant
+/// (`":on-init"` etc, the exact byte-string authors see in the
+/// per-slot value-shape diagnostic naming which of the six typed callback
+/// slots the offending path landed on).
+///
+/// Until this lift landed the six kebab-case labels sat once each in
+/// [`crate::BehaviorSpec::declared_slots`] as the six-arm inline
+/// `":on-init"` / `":on-call"` / `":on-cast"` / `":on-info"` /
+/// `":on-state-change"` / `":on-terminate"` byte-strings the tagger
+/// iterated over, plus roughly two dozen test-side probe literals
+/// asserting the diagnostic's `slot:` field carries the expected
+/// per-arm value verbatim — with no compile-time link between the
+/// tagger's arms and the tests' expected values. A future OTP-lineage
+/// per-callback rebrand (`:on-init` → `:on-start` matching Akka's
+/// per-actor preStart naming, `:on-call` → `:on-request` matching a
+/// hypothetical wasi:http/incoming-handler terminology flip,
+/// `:on-state-change` → `:on-code-change` matching Erlang's verbatim
+/// `code_change/3` name, `:on-terminate` → `:on-shutdown` matching a
+/// generic-lifecycle rebrand) or a per-consumer disambiguation (a
+/// vocabulary shift on the author surface as the `defcaixa` macro
+/// stabilizes) would silently desynchronize the production
+/// [`crate::BehaviorSpec::declared_slots`] tagger from the tests until
+/// a downstream consumer surfaced the drift at build time as a
+/// matches-arm miss. This lift closes that gap by routing both halves
+/// (production tagger + tests) through six peer consts declared
+/// adjacent to the renderer-side [`M2_BEHAVIOR_KEY_ON_*`] peers, so
+/// the "one canonical declaration per arm, next to the axis" discipline
+/// the [`WitTarget::HTTP_FIELD_NAME`] / [`WitTarget::PUBSUB_FIELD_NAME`]
+/// / [`WitTarget::STORE_FIELD_NAME`] payload-arm peer consts (174e96a)
+/// already established for the [`crate::WitContract::target`]'s per-arm
+/// diagnostic-scalar axis extends onto the M2 `:behavior` sub-slot
+/// author-facing-label axis. Same "one canonical byte-string per typed
+/// axis" discipline every peer M2 / M3 wire-key axis carries
+/// ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] / [`M2_KEY_UPGRADE_FROM`],
+/// [`M2_LIMITS_KEY_MEMORY`] / [`M2_LIMITS_KEY_FUEL`] /
+/// [`M2_LIMITS_KEY_WALL_CLOCK`] / [`M2_LIMITS_KEY_CPU`] (d8b8b4f),
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] / [`M2_BEHAVIOR_KEY_ON_CALL`] /
+/// [`M2_BEHAVIOR_KEY_ON_CAST`] / [`M2_BEHAVIOR_KEY_ON_INFO`] /
+/// [`M2_BEHAVIOR_KEY_ON_STATE_CHANGE`] / [`M2_BEHAVIOR_KEY_ON_TERMINATE`]
+/// (21fe462), [`M2_UPGRADE_FROM_KEY_FROM`] /
+/// [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`] (36ffe65),
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.), extended here to close the
+/// M2 `:behavior` sub-slot's *author-facing-label* axis so the same
+/// discipline the renderer-side wire-key axis carries applies to the
+/// author-facing side.
+pub const M2_BEHAVIOR_AUTHOR_KEY_ON_INIT: &str = ":on-init";
+/// Canonical author-facing kebab-case `(defcaixa … :behavior (:on-call …))`
+/// slot label for the `:behavior :on-call` per-Servico OTP-shaped
+/// synchronous request/response handler axis. Peer of
+/// [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot
+/// author-facing-label axis.
+pub const M2_BEHAVIOR_AUTHOR_KEY_ON_CALL: &str = ":on-call";
+/// Canonical author-facing kebab-case `(defcaixa … :behavior (:on-cast …))`
+/// slot label for the `:behavior :on-cast` per-Servico OTP-shaped
+/// asynchronous fire-and-forget handler axis. Peer of
+/// [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot
+/// author-facing-label axis.
+pub const M2_BEHAVIOR_AUTHOR_KEY_ON_CAST: &str = ":on-cast";
+/// Canonical author-facing kebab-case `(defcaixa … :behavior (:on-info …))`
+/// slot label for the `:behavior :on-info` per-Servico OTP-shaped
+/// out-of-band message handler axis. Peer of
+/// [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`] on the sibling `:behavior` sub-slot
+/// author-facing-label axis.
+pub const M2_BEHAVIOR_AUTHOR_KEY_ON_INFO: &str = ":on-info";
+/// Canonical author-facing kebab-case
+/// `(defcaixa … :behavior (:on-state-change …))` slot label for the
+/// `:behavior :on-state-change` per-Servico OTP-shaped hot-upgrade
+/// state-migration axis. Peer of [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`] on the
+/// sibling `:behavior` sub-slot author-facing-label axis; the kebab-case
+/// shape (`":on-state-change"`, not `":on-statechange"` /
+/// `":on_state_change"`) is load-bearing per the author-facing
+/// `(defcaixa …)` macro's canonical form and the exact byte-string the
+/// per-slot [`crate::BehaviorError`] diagnostic threads through.
+pub const M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE: &str = ":on-state-change";
+/// Canonical author-facing kebab-case
+/// `(defcaixa … :behavior (:on-terminate …))` slot label for the
+/// `:behavior :on-terminate` per-Servico OTP-shaped graceful-shutdown
+/// callback axis. Peer of [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`] on the sibling
+/// `:behavior` sub-slot author-facing-label axis.
+pub const M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE: &str = ":on-terminate";
+
 /// Canonical camelCase YAML sub-key the `:upgrade-from :from` per-entry
 /// OTP-appup-shaped prior-`:versao` semver-string scalar-axis lands under
 /// inside each element of the [`M2_KEY_UPGRADE_FROM`] overlay sequence.
