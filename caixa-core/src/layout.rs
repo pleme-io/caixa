@@ -4209,7 +4209,7 @@ mod tests {
             LayoutError::ServicoSlotsOnNonServico { caixa, kind, slots } => {
                 assert_eq!(caixa, "demo");
                 assert_eq!(kind, CaixaKind::Biblioteca);
-                assert_eq!(slots, ":limits");
+                assert_eq!(slots, crate::render::M2_AUTHOR_KEY_LIMITS);
             }
             other => panic!("expected ServicoSlotsOnNonServico, got {other:?}"),
         }
@@ -4245,7 +4245,15 @@ mod tests {
         let err = layout.verify(&c, &root).unwrap_err();
         match err {
             LayoutError::ServicoSlotsOnNonServico { slots, .. } => {
-                assert_eq!(slots, ":limits :behavior :upgrade-from");
+                assert_eq!(
+                    slots,
+                    format!(
+                        "{} {} {}",
+                        crate::render::M2_AUTHOR_KEY_LIMITS,
+                        crate::render::M2_AUTHOR_KEY_BEHAVIOR,
+                        crate::render::M2_AUTHOR_KEY_UPGRADE_FROM,
+                    )
+                );
             }
             other => panic!("expected ServicoSlotsOnNonServico, got {other:?}"),
         }
@@ -4286,7 +4294,7 @@ mod tests {
             LayoutError::ServicoSlotsOnNonServico { caixa, kind, slots } => {
                 assert_eq!(caixa, "demo");
                 assert_eq!(kind, CaixaKind::Aplicacao);
-                assert_eq!(slots, ":upgrade-from");
+                assert_eq!(slots, crate::render::M2_AUTHOR_KEY_UPGRADE_FROM);
             }
             other => panic!("expected ServicoSlotsOnNonServico, got {other:?}"),
         }

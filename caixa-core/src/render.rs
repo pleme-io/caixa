@@ -6189,6 +6189,65 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical author-facing kebab-case `(defcaixa … :limits (…))` top-level
+/// slot label the M2 per-Servico Lunatic sandbox `:limits` slot surfaces
+/// under. Peer of [`M2_KEY_LIMITS`] on the dual-axis pair every M2
+/// top-level slot carries: the camelCase [`M2_KEY_*`] const names the
+/// *renderer-side* overlay-container wire key the serde-derive-emitted
+/// programs.yaml / values.yaml block carries under (`"limits"`, load-bearing
+/// per the `#[serde(rename_all = "camelCase")]` attribute on the emit-side
+/// [`servico_m2_overlay`] shape), the kebab-case [`M2_AUTHOR_KEY_*`] const
+/// names the *author-facing* label the [`crate::Caixa::declared_servico_slots`]
+/// tagger threads through as one of the `&'static str` entries in the
+/// canonical-declaration-order slot list every kind-coherence gate consults
+/// ([`crate::LayoutError::ServicoSlotsOnNonServico`] joins them into the
+/// space-separated `slots:` diagnostic naming which of the three M2 slots
+/// the offending caixa declared on a non-Servico kind).
+///
+/// Until this lift landed the three kebab-case labels sat once each in
+/// [`crate::Caixa::declared_servico_slots`] as three-arm inline
+/// `":limits"` / `":behavior"` / `":upgrade-from"` byte-strings the tagger
+/// pushed onto its return `Vec`, plus a handful of test-side probe
+/// literals asserting the diagnostic's `slots:` field carries the
+/// expected per-arm value verbatim — with no compile-time link between
+/// the tagger's arms and the tests' expected values. A future rebrand
+/// (a hypothetical `:limits` → `:sandbox` matching the Lunatic
+/// terminology INSPIRATIONS §III.1 documents at the per-process level,
+/// `:behavior` → `:gen-server` matching Erlang's verbatim
+/// `gen_server` name, `:upgrade-from` → `:appup` matching Erlang's
+/// verbatim appup terminology, or a per-consumer disambiguation as the
+/// `defcaixa` macro stabilizes) would silently desynchronize the
+/// production [`crate::Caixa::declared_servico_slots`] tagger from the
+/// tests until a downstream consumer surfaced the drift at build time as
+/// a matches-arm miss far from the rename's commit. This lift closes
+/// that gap by routing both halves (production tagger + tests) through
+/// three peer consts declared adjacent to the renderer-side
+/// [`M2_KEY_*`] peers, so the "one canonical declaration per arm, next
+/// to the axis" discipline the peer [`M2_BEHAVIOR_AUTHOR_KEY_ON_*`]
+/// sub-slot author-label consts (889dc18) established for the M2
+/// `:behavior` sub-slot's per-callback kebab-case labels extends onto
+/// the M2 top-level slot axis. Same "one canonical byte-string per
+/// typed axis" discipline every peer M2 / M3 renderer-wire-key axis
+/// carries ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] /
+/// [`M2_KEY_UPGRADE_FROM`], [`M2_LIMITS_KEY_MEMORY`] /
+/// [`M2_LIMITS_KEY_FUEL`] / [`M2_LIMITS_KEY_WALL_CLOCK`] /
+/// [`M2_LIMITS_KEY_CPU`] (d8b8b4f), [`M2_BEHAVIOR_KEY_ON_INIT`] etc.
+/// (21fe462), [`M2_UPGRADE_FROM_KEY_FROM`] /
+/// [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`] (36ffe65)).
+pub const M2_AUTHOR_KEY_LIMITS: &str = ":limits";
+/// Canonical author-facing kebab-case `(defcaixa … :behavior (…))`
+/// top-level slot label the M2 per-Servico OTP-shaped `:behavior`
+/// gen_server-callback-set slot surfaces under. Peer of
+/// [`M2_AUTHOR_KEY_LIMITS`] on the sibling M2 top-level slot dual axis;
+/// see [`M2_AUTHOR_KEY_LIMITS`] for the full lift rationale.
+pub const M2_AUTHOR_KEY_BEHAVIOR: &str = ":behavior";
+/// Canonical author-facing kebab-case `(defcaixa … :upgrade-from (…))`
+/// top-level slot label the M2 per-Servico OTP-appup `:upgrade-from`
+/// hot-code-reload table slot surfaces under. Peer of
+/// [`M2_AUTHOR_KEY_LIMITS`] on the sibling M2 top-level slot dual axis;
+/// see [`M2_AUTHOR_KEY_LIMITS`] for the full lift rationale.
+pub const M2_AUTHOR_KEY_UPGRADE_FROM: &str = ":upgrade-from";
+
 /// Canonical camelCase YAML sub-key the `:limits :memory` per-Servico
 /// linear-memory-cap scalar-axis lands under inside the [`M2_KEY_LIMITS`]
 /// overlay block. Peer of [`M2_KEY_LIMITS`] on the sibling `:limits`
