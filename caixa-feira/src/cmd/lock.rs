@@ -55,10 +55,9 @@ impl Lock {
 /// missing `:fonte` to `github:pleme-io/<nome>`, following the Zig-style
 /// git-only store model.
 fn resolve_stub(dep: &caixa_core::Dep) -> LacreEntry {
-    let fonte = dep
-        .fonte
-        .clone()
-        .unwrap_or_else(|| caixa_core::DepSource::default_github("pleme-io", &dep.nome));
+    let fonte = dep.fonte.clone().unwrap_or_else(|| {
+        caixa_core::DepSource::default_github(caixa_core::DEFAULT_PLEME_GIT_ORG, &dep.nome)
+    });
     let conteudo = hash_bytes(format!("{}@{}", dep.nome, dep.versao).as_bytes());
     let fechamento = closure_hash(&conteudo, &[]);
     LacreEntry {
