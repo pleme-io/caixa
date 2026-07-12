@@ -4762,7 +4762,7 @@ mod tests {
         };
         assert_eq!(caixa, "demo");
         assert!(
-            issue.contains(":load-module"),
+            issue.contains(crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE),
             "issue must name the lisp-form of the offending instruction: {issue}"
         );
         assert!(
@@ -4800,7 +4800,7 @@ mod tests {
         };
         assert_eq!(caixa, "demo");
         assert!(
-            issue.contains(":soft-purge"),
+            issue.contains(crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE),
             "issue must name the lisp-form of the empty instruction: {issue}"
         );
     }
@@ -4985,11 +4985,11 @@ mod tests {
              {issue:?}"
         );
         assert!(
-            issue.contains(":restart"),
+            issue.contains(crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART),
             "UpgradeViolation issue must name the `:restart` axis verbatim, got {issue:?}"
         );
         assert!(
-            issue.contains(":load-module"),
+            issue.contains(crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE),
             "UpgradeViolation issue must name the non-:restart peer instruction's lisp-form \
              verbatim, got {issue:?}"
         );
@@ -5029,7 +5029,8 @@ mod tests {
              {issue:?}"
         );
         assert!(
-            issue.contains("(:restart)") || issue.contains(":restart"),
+            issue.contains("(:restart)")
+                || issue.contains(crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART),
             "UpgradeViolation issue must name the `:restart` axis verbatim, got {issue:?}"
         );
     }

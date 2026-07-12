@@ -6507,6 +6507,61 @@ pub const M2_UPGRADE_FROM_KEY_FROM: &str = "from";
 /// `:upgrade-from` sub-slot axis.
 pub const M2_UPGRADE_FROM_KEY_INSTRUCTIONS: &str = "instructions";
 
+/// Canonical author-facing kebab-case tag the M2 `:upgrade-from
+/// :instructions` per-entry OTP-appup [`crate::UpgradeInstruction::LoadModule`]
+/// variant surfaces under — the `:kind` field the
+/// [`crate::UpgradeError::ModuleEmpty`] / [`crate::UpgradeError::ModuleInvalid`]
+/// / [`crate::UpgradeError::DuplicateCleanup`] / [`crate::UpgradeError::PurgeWithoutPriorLoad`]
+/// diagnostics carry so the author can grep their caixa.lisp for
+/// `(:load-module …)` and fix it in one edit. The
+/// [`crate::UpgradeInstruction::lisp_form`] production dispatch and every
+/// test-side probe that pins a `kind:` / `kinds:` / `other_kinds:` /
+/// `prior_cleanup_kind:` field routes through this const, so a future
+/// per-variant kebab-case rebrand (`:load-module` → `:load` matching a
+/// hypothetical Erlang `code:load_module` collapse, `:load-module` →
+/// `:reload` matching a hypothetical Elixir/Phoenix hot-reload rebrand,
+/// or a per-consumer disambiguation as the `defcaixa` macro stabilizes)
+/// lands at one const-edit per arm and reaches both surfaces
+/// (production dispatch + tests) by construction. Peer of
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// on the sibling `:upgrade-from` sub-slot renderer-wire-key axis
+/// (36ffe65) — this const family extends the same "one canonical
+/// byte-string per typed axis" discipline onto the *author-facing*
+/// per-instruction-variant tag axis one altitude below the
+/// `:instructions` container. Same "one canonical declaration per arm,
+/// next to the axis" discipline the peer [`M2_BEHAVIOR_AUTHOR_KEY_ON_INIT`]
+/// etc. (889dc18) established for the M2 `:behavior` sub-slot's
+/// per-callback kebab-case labels, [`CONTRATO_AUTHOR_KEY_DE`] /
+/// [`CONTRATO_AUTHOR_KEY_PARA`] (f50c875) for the M3 `:contratos`
+/// per-entry endpoint labels, and every top-level [`M2_AUTHOR_KEY_LIMITS`]
+/// (f49c8b0) / [`M3_AUTHOR_KEY_MEMBROS`] (882f498) /
+/// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] (be40492) family established.
+pub const M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE: &str = ":load-module";
+/// Canonical author-facing kebab-case tag the M2 `:upgrade-from
+/// :instructions` per-entry [`crate::UpgradeInstruction::StateChange`]
+/// variant surfaces under. Peer of [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`]
+/// on the sibling per-instruction-variant tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
+pub const M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE: &str = ":state-change";
+/// Canonical author-facing kebab-case tag the M2 `:upgrade-from
+/// :instructions` per-entry [`crate::UpgradeInstruction::SoftPurge`]
+/// variant surfaces under. Peer of [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`]
+/// on the sibling per-instruction-variant tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
+pub const M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE: &str = ":soft-purge";
+/// Canonical author-facing kebab-case tag the M2 `:upgrade-from
+/// :instructions` per-entry [`crate::UpgradeInstruction::Purge`]
+/// variant surfaces under. Peer of [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`]
+/// on the sibling per-instruction-variant tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
+pub const M2_UPGRADE_INSTRUCTION_KIND_PURGE: &str = ":purge";
+/// Canonical author-facing kebab-case tag the M2 `:upgrade-from
+/// :instructions` per-entry [`crate::UpgradeInstruction::Restart`]
+/// variant surfaces under. Peer of [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`]
+/// on the sibling per-instruction-variant tag axis; see
+/// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
+pub const M2_UPGRADE_INSTRUCTION_KIND_RESTART: &str = ":restart";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm
