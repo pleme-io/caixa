@@ -13942,6 +13942,61 @@ pub fn lareira_chart_name(nome: &str) -> String {
     format!("{LAREIRA_CHART_NAME_PREFIX}{nome}")
 }
 
+/// Canonical substrate-fixed Chart.yaml `keywords:` entries every
+/// rendered `lareira-<nome>` Helm chart carries — the ordered
+/// (`BTreeSet`-canonical, ascii-alphabetical) list of registry-search
+/// tags `caixa-helm`'s `build_chart_yaml` unions in on top of the
+/// caixa author's own `:etiquetas` before folding the joint set into a
+/// `BTreeSet<String>` for the emitted `Chart.yaml`. Every entry —
+/// `"caixa-servico"` (the substrate-wide per-`:kind Servico` marker
+/// axis), `"lareira"` (the [`LAREIRA_CHART_NAME_PREFIX`] chart-family
+/// tag), `"tatara-lisp"` (the tatara-lisp source-language marker), and
+/// `"wasm"` (the runtime execution-format marker) — is a load-bearing
+/// discovery axis for the Artifact Hub keyword-search index and the
+/// future caixa-registry keyword axis, so a drift between the
+/// production emit at `caixa-helm::build_chart_yaml` and the two
+/// substrate-side positive-set sweep tests
+/// ([`crate::manifest::tests::validate_etiquetas_accepts_canonical_shaped_forms`]
+/// and this crate's own `chart_keyword_shape_accepts_canonical_forms`)
+/// would silently cause every rendered chart to miss the search-index
+/// axis the substrate-fixed tag encodes — a chart published without
+/// the `"caixa-servico"` tag would silently drop off the
+/// `helm search hub caixa-servico` results the substrate's chart
+/// discovery pipeline promises. Two production-side call sites
+/// (this crate's `is_chart_keyword_shape` docstring narrates the
+/// four canonical tags verbatim + [`caixa-helm`][ch]'s `build_chart_yaml`
+/// unions them into the emitted `keywords:` sequence) and two
+/// test-side positive-sweep sites this array anchors under one source
+/// of truth.
+///
+/// The array is `BTreeSet`-canonical-ordered (ascii-alphabetical: the
+/// same order the emitted `Chart.yaml` `keywords:` sequence lists them
+/// after `build_chart_yaml`'s intermediate `BTreeSet<String>` fold), so
+/// a future substrate-fixed keyword addition (an `"opentelemetry"`
+/// entry once the caixa-otel collector-pipeline chart lands, a
+/// `"lunatic"` entry once the wasm-process-runtime marker lands, a
+/// `"gen_server"` entry once the OTP-shape callback marker lands per
+/// the [`crate::behavior`] surface) lands at one edit point rather
+/// than a coordinated four-file sweep across the production emit
+/// site, the two test-side sweeps, and this docstring. Same
+/// "one canonical typed array lives in one place" discipline as
+/// the peer [`crate::aplicacao::WIT_HTTP_SHAPE_PREFIXES`] /
+/// [`crate::aplicacao::WIT_PUBSUB_SHAPE_PREFIXES`] /
+/// [`crate::aplicacao::WIT_STORE_SHAPE_PREFIXES`] arm-shape-prefix
+/// arrays apply on the sibling `:contratos :wit` dispatch-shape axis.
+///
+/// Every entry structurally satisfies [`is_chart_keyword_shape`] (the
+/// substrate's per-`Chart.yaml` `keywords:` entry validation
+/// predicate) — the substrate-side pin
+/// `lareira_chart_keywords_each_entry_passes_is_chart_keyword_shape`
+/// enforces the invariant so a future addition that happens to break
+/// the shape rule (a leading digit, an uppercase letter, a byte over
+/// the [`CHART_KEYWORD_MAX_LEN`] cap) fails at caixa-core build time
+/// rather than surfacing at chart-lint time downstream.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const LAREIRA_CHART_KEYWORDS: &[&str] = &["caixa-servico", "lareira", "tatara-lisp", "wasm"];
+
 /// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
 /// substrate-side renderer that composes an OCI artifact reference for a
 /// Helm chart prepends. The Helm 3 OCI storage protocol (Helm 3.8+) and
@@ -26470,7 +26525,7 @@ mod tests {
         // `"akeyless"`, `"pangea-native"`) and the substrate-fixed
         // tags caixa-helm unions in at chart render (`"lareira"`,
         // `"wasm"`, `"tatara-lisp"`, `"caixa-servico"`).
-        for s in [
+        let example_fixture_tags = [
             "example",
             "aplicacao",
             "mesh",
@@ -26481,18 +26536,82 @@ mod tests {
             "akeyless",
             "pangea-native",
             "hello-world",
-            "wasm",
             "rust",
-            "tatara-lisp",
-            "caixa-servico",
-            "lareira",
             "Foo",
             "Bar123",
             "x",
             "snake_case_tag",
-        ] {
+        ];
+        for s in example_fixture_tags
+            .iter()
+            .copied()
+            .chain(LAREIRA_CHART_KEYWORDS.iter().copied())
+        {
             is_chart_keyword_shape(s)
                 .unwrap_or_else(|e| panic!("canonical chart keyword {s:?} must pass: {e:?}"));
+        }
+    }
+
+    #[test]
+    fn lareira_chart_keywords_pins_canonical_ordered_set() {
+        // Substrate-side canonical-set pin: byte-pins the
+        // substrate-fixed `Chart.yaml` `keywords:` union caixa-helm's
+        // `build_chart_yaml` folds into every rendered `lareira-<nome>`
+        // chart on top of the caixa author's own `:etiquetas`. The
+        // ordered array shape (`BTreeSet`-canonical ascii-alphabetical)
+        // pins the same order the emitted `Chart.yaml` `keywords:`
+        // sequence lists them after the intermediate
+        // `BTreeSet<String>` fold at the caixa-helm emit site. A drift
+        // between the canonical array and either the production emit
+        // at `caixa-helm::build_chart_yaml` (the sole consumer) or
+        // the peer positive-set sweep tests (this crate's
+        // `chart_keyword_shape_accepts_canonical_forms` and
+        // `manifest::tests::validate_etiquetas_accepts_canonical_shaped_forms`)
+        // surfaces at this one substrate-side pin.
+        assert_eq!(
+            LAREIRA_CHART_KEYWORDS,
+            &["caixa-servico", "lareira", "tatara-lisp", "wasm"],
+        );
+    }
+
+    #[test]
+    fn lareira_chart_keywords_stays_btreeset_canonical_ordered() {
+        // Substrate-side ordering pin: the array is
+        // `BTreeSet`-canonical ascii-alphabetical, so its declared
+        // order matches the shape the emitted `Chart.yaml`
+        // `keywords:` sequence carries after
+        // `caixa-helm::build_chart_yaml`'s intermediate
+        // `BTreeSet<String>` fold — a future substrate-fixed keyword
+        // addition that lands out-of-order (an `"opentelemetry"` entry
+        // dropped before `"tatara-lisp"`, an `"lunatic"` entry dropped
+        // after `"wasm"`) trips this pin at caixa-core build time
+        // rather than surfacing as a byte-shape drift between the
+        // array's declared order and the emitted `keywords:` sequence
+        // order at chart render time downstream.
+        let mut sorted: Vec<&str> = LAREIRA_CHART_KEYWORDS.to_vec();
+        sorted.sort_unstable();
+        assert_eq!(LAREIRA_CHART_KEYWORDS, sorted.as_slice());
+    }
+
+    #[test]
+    fn lareira_chart_keywords_each_entry_passes_is_chart_keyword_shape() {
+        // Substrate-side shape-invariant pin: every substrate-fixed
+        // chart-keyword entry must satisfy the per-`Chart.yaml`
+        // `keywords:` entry validation predicate the substrate
+        // enforces on the author-side `:etiquetas` axis — a future
+        // substrate-fixed keyword addition that happens to break the
+        // shape rule (a leading digit, an uppercase letter, a byte
+        // over the `CHART_KEYWORD_MAX_LEN` cap, an ASCII whitespace,
+        // a Unicode-invisible-format code point) trips this pin at
+        // caixa-core build time rather than surfacing at
+        // `helm lint` time on the rendered chart downstream.
+        for keyword in LAREIRA_CHART_KEYWORDS {
+            is_chart_keyword_shape(keyword).unwrap_or_else(|e| {
+                panic!(
+                    "substrate-fixed chart keyword {keyword:?} must pass \
+                     is_chart_keyword_shape: {e:?}"
+                )
+            });
         }
     }
 
