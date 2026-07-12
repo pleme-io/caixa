@@ -345,17 +345,29 @@ impl Caixa {
     /// [`Self::declared_supervisor_slots`] gates on the peer
     /// kind-exclusive slot sets: a slot foreign to the kind is a build
     /// error, not a silent drop.
+    ///
+    /// Each per-arm kebab-case label is routed through the peer
+    /// [`crate::M2_AUTHOR_KEY_LIMITS`] / [`crate::M2_AUTHOR_KEY_BEHAVIOR`] /
+    /// [`crate::M2_AUTHOR_KEY_UPGRADE_FROM`] consts declared next to the
+    /// [`crate::M2_KEY_LIMITS`] / [`crate::M2_KEY_BEHAVIOR`] /
+    /// [`crate::M2_KEY_UPGRADE_FROM`] renderer-side wire-key peers, so
+    /// both halves of the M2 top-level slot's dual axis (author-facing
+    /// kebab-case label + renderer-side camelCase overlay-container wire
+    /// key) route through one canonical declaration per arm — same
+    /// discipline the peer [`crate::M2_BEHAVIOR_AUTHOR_KEY_ON_*`] sub-slot
+    /// author-label consts (889dc18) establish on the sibling
+    /// per-callback axis inside the `:behavior` overlay block.
     #[must_use]
     pub fn declared_servico_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
         if self.limits.is_some() {
-            slots.push(":limits");
+            slots.push(crate::render::M2_AUTHOR_KEY_LIMITS);
         }
         if self.behavior.is_some() {
-            slots.push(":behavior");
+            slots.push(crate::render::M2_AUTHOR_KEY_BEHAVIOR);
         }
         if !self.upgrade_from.is_empty() {
-            slots.push(":upgrade-from");
+            slots.push(crate::render::M2_AUTHOR_KEY_UPGRADE_FROM);
         }
         slots
     }
@@ -2388,7 +2400,77 @@ mod tests {
             from: "0.1.0".into(),
             instructions: vec![UpgradeInstruction::Restart],
         }];
-        assert_eq!(c.declared_servico_slots(), vec![":limits", ":upgrade-from"]);
+        assert_eq!(
+            c.declared_servico_slots(),
+            vec![
+                crate::render::M2_AUTHOR_KEY_LIMITS,
+                crate::render::M2_AUTHOR_KEY_UPGRADE_FROM,
+            ]
+        );
+    }
+
+    #[test]
+    fn m2_top_level_author_key_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin: the three author-facing kebab-case labels
+        // the `(defcaixa … :<slot> (…))` surface admits on the M2
+        // top-level slot axis, one arm per typed slot. Mirrors the peer
+        // scalar-value pin the sibling renderer-side
+        // [`crate::M2_KEY_LIMITS`] / [`crate::M2_KEY_BEHAVIOR`] /
+        // [`crate::M2_KEY_UPGRADE_FROM`] camelCase overlay-container
+        // consts carry, so both halves of the M2 top-level slot dual
+        // axis (author-facing kebab-case label + renderer-side
+        // camelCase overlay-container wire key) route through one
+        // canonical per-arm declaration. A future rebrand
+        // (`:limits` → `:sandbox` matching Lunatic per-process
+        // terminology INSPIRATIONS §III.1, `:behavior` → `:gen-server`
+        // matching Erlang's verbatim name, `:upgrade-from` → `:appup`
+        // matching Erlang's verbatim appup name) lands as an edit to
+        // exactly one const, and every consumer that reaches for the
+        // label picks it up at build time rather than at runtime as a
+        // downstream mismatch.
+        assert_eq!(crate::render::M2_AUTHOR_KEY_LIMITS, ":limits");
+        assert_eq!(crate::render::M2_AUTHOR_KEY_BEHAVIOR, ":behavior");
+        assert_eq!(crate::render::M2_AUTHOR_KEY_UPGRADE_FROM, ":upgrade-from");
+    }
+
+    #[test]
+    fn declared_servico_slots_route_through_lifted_m2_author_key_consts() {
+        // Production-through-const pin: the three per-arm labels the
+        // [`Caixa::declared_servico_slots`] tagger pushes onto its
+        // return `Vec` route through the lifted
+        // [`crate::M2_AUTHOR_KEY_LIMITS`] /
+        // [`crate::M2_AUTHOR_KEY_BEHAVIOR`] /
+        // [`crate::M2_AUTHOR_KEY_UPGRADE_FROM`] consts, in canonical
+        // declaration order. A future re-order or drift at the tagger
+        // (a rename that reaches the tagger but not the const, or vice
+        // versa) surfaces here at build time rather than at runtime as
+        // a [`crate::LayoutError::ServicoSlotsOnNonServico`]
+        // `slots: <stale-kebab-case>` diagnostic far from the rename's
+        // commit. Mirror of the peer
+        // [`crate::behavior::BehaviorSpec::declared_slots`] production
+        // tagger pin (889dc18) on the sibling per-callback axis.
+        use crate::{BehaviorSpec, UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.limits = Some(crate::LimitsSpec {
+            fuel: Some(1_000_000),
+            ..Default::default()
+        });
+        c.behavior = Some(BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..Default::default()
+        });
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.1.0".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        assert_eq!(
+            c.declared_servico_slots(),
+            vec![
+                crate::render::M2_AUTHOR_KEY_LIMITS,
+                crate::render::M2_AUTHOR_KEY_BEHAVIOR,
+                crate::render::M2_AUTHOR_KEY_UPGRADE_FROM,
+            ]
+        );
     }
 
     #[test]
