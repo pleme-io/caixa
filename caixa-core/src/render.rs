@@ -394,6 +394,80 @@ pub struct RenderedFile {
     pub contents: String,
 }
 
+impl RenderedFile {
+    /// Construct a [`RenderedFile`] from its two axes — the sandboxed
+    /// relative `path` the substrate writes the artifact under and the
+    /// pre-serialized UTF-8 `contents` the paired `std::fs::write`
+    /// hands to that path. Accepts anything convertible into a
+    /// [`PathBuf`] (`&'static str` from the substrate-canonical
+    /// filename constants [`HELM_CHART_YAML_FILENAME`] /
+    /// [`HELM_VALUES_YAML_FILENAME`] / [`FLUX_GITREPOSITORY_YAML_FILENAME`]
+    /// / [`FLUX_HELMRELEASE_YAML_FILENAME`] /
+    /// [`FLUX_KUSTOMIZATION_YAML_FILENAME`] every current per-target
+    /// renderer picks its per-artifact leaf path from, `String` /
+    /// `PathBuf` for future author-supplied paths) and anything
+    /// convertible into [`String`] (the `serde_yaml::to_string` /
+    /// `format!` outputs every current renderer already threads into
+    /// the paired `contents` field).
+    ///
+    /// Lifted from six identical-shape struct-literal construction
+    /// sites — three per-artifact leaves in
+    /// [`caixa-helm`][cf-helm]'s `render_chart_for_servico_with`
+    /// (`Chart.yaml`, `values.yaml`, `README.md`) and three per-CR
+    /// leaves in [`caixa-flux`][cf-flux]'s [`cluster_bundle`][cb]
+    /// (`gitrepository.yaml`, `helmrelease.yaml`,
+    /// `kustomization.yaml`) — each of which open-coded a four-line
+    /// `<Xxx>File { path: PathBuf::from(FILENAME_CONST), contents: <body> }`
+    /// block that re-derived the same `PathBuf::from(&str)` wrap +
+    /// the same two-field assembly. Every existing struct-
+    /// literal construction (the type-alias identity pins at
+    /// [`caixa_flux::tests::bundle_file_alias_resolves_to_caixa_core_rendered_file`]
+    /// / [`caixa_helm::tests::chart_file_alias_resolves_to_caixa_core_rendered_file`],
+    /// the substrate-side field-shape pins in this crate's test
+    /// module) continues to compile — [`RenderedFile::new`] is an
+    /// additive inherent constructor that leaves the `pub path` /
+    /// `pub contents` field visibility untouched, so a future rebrand
+    /// on the record shape (a per-artifact hash / provenance field
+    /// addition, a per-artifact write-mode discriminator once
+    /// per-cluster-writer sandboxing lands) still reaches every
+    /// per-target renderer through this canonical constructor + the
+    /// existing struct-literal pinning by construction. Peer to the
+    /// sibling substrate-side canonical-composer surface
+    /// ([`oci_chart_ref`] / [`cilium_network_policy_name`] /
+    /// [`gateway_api_http_route_name`] / [`lareira_chart_name`]) —
+    /// each is a canonical `&'static fn(&str, …) -> String` composer
+    /// that every per-target renderer routes through instead of
+    /// re-deriving the same encoding inline.
+    ///
+    /// A future per-target renderer (`caixa-otel`'s per-collector-
+    /// config emit, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's per-CR YAML emit, the future per-Supervisor
+    /// reconciler renderer's per-child bundle emit) that constructs a
+    /// [`RenderedFile`] now reaches for [`RenderedFile::new`] and
+    /// participates in the same substrate-side per-artifact-
+    /// construction contract, so any addition here (say, a
+    /// `sandboxed_relative_path` invariant check on `path` at
+    /// construction time, the `is_sandboxed_relative_path`
+    /// discipline the docstring above acknowledges is not yet run at
+    /// emit time) reaches every per-target renderer through one
+    /// caixa-core edit instead of a coordinated six-site rewrite.
+    ///
+    /// [cf-helm]: https://docs.rs/caixa-helm
+    /// [cf-flux]: https://docs.rs/caixa-flux
+    /// [cb]: https://docs.rs/caixa-flux/latest/caixa_flux/fn.cluster_bundle.html
+    #[must_use]
+    pub fn new<P, S>(path: P, contents: S) -> Self
+    where
+        P: Into<PathBuf>,
+        S: Into<String>,
+    {
+        Self {
+            path: path.into(),
+            contents: contents.into(),
+        }
+    }
+}
+
 /// Predicate: find the first ASCII whitespace byte in `s`, or `None` if
 /// none of the string's bytes match `u8::is_ascii_whitespace`.
 ///
@@ -31067,6 +31141,50 @@ spec:
             dbg.contains("RenderedFile"),
             "Debug output must name the canonical type, got: {dbg:?}",
         );
+    }
+
+    #[test]
+    fn rendered_file_new_matches_struct_literal_shape() {
+        // Constructor pin: [`RenderedFile::new(FILENAME, contents)`]
+        // (the canonical lifted `impl Into<PathBuf>` / `impl Into<String>`
+        // inherent constructor every per-target renderer's per-artifact
+        // leaf now routes through) produces the byte-identical record
+        // the six prior inline struct-literal call sites (three
+        // per-artifact leaves in
+        // [`caixa_helm::render_chart_for_servico_with`],
+        // three per-CR leaves in [`caixa_flux::cluster_bundle`]) each
+        // open-coded as `<Xxx>File { path: PathBuf::from(FILENAME_CONST),
+        // contents: <body> }`. Pin the equation on a
+        // `HELM_VALUES_YAML_FILENAME`-shaped input so a future rebrand
+        // of the constructor's internals (a per-artifact hash /
+        // provenance field addition, an
+        // [`is_sandboxed_relative_path`] check at construction time
+        // once per-cluster-writer sandboxing lands) fires here rather
+        // than silently splitting the per-target renderer's per-CR
+        // record shape from the substrate-canonical `(path, contents)`
+        // pair at the caixa-core canonical.
+        let via_new = RenderedFile::new(HELM_VALUES_YAML_FILENAME, "pleme-computeunit:\n");
+        let via_literal = RenderedFile {
+            path: PathBuf::from(HELM_VALUES_YAML_FILENAME),
+            contents: "pleme-computeunit:\n".to_string(),
+        };
+        assert_eq!(via_new, via_literal);
+        // Peer path-side pin: `impl Into<PathBuf>` accepts a `PathBuf`
+        // directly (the future per-target renderer surface where the
+        // path is composed from author input rather than picked from a
+        // substrate-canonical `&'static str` filename constant) —
+        // exercised so a drift onto a stricter `&str`-only bound
+        // trips this pin at caixa-core build time rather than at the
+        // first per-target renderer that reaches for the wider bound.
+        let via_new_from_pathbuf = RenderedFile::new(
+            PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME),
+            String::from("kind: HelmRelease\n"),
+        );
+        assert_eq!(
+            via_new_from_pathbuf.path,
+            PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME),
+        );
+        assert_eq!(via_new_from_pathbuf.contents, "kind: HelmRelease\n");
     }
 
     #[test]

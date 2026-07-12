@@ -48,7 +48,7 @@
 #![allow(clippy::module_name_repetitions)]
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use caixa_core::{Caixa, MappingExt, lareira_chart_name};
 use serde::{Deserialize, Serialize};
@@ -509,21 +509,34 @@ pub fn render_chart_for_servico_with(
     let values_yaml = build_values_yaml(caixa, computeunit_yaml, opts)?;
     let readme = build_readme(caixa, &chart_name);
 
+    // Each per-artifact leaf routes through the canonical
+    // [`caixa_core::RenderedFile::new`] `impl Into<PathBuf>` /
+    // `impl Into<String>` constructor (re-exported by the peer
+    // [`ChartFile`] alias since Rust inherent methods travel through
+    // type aliases to the aliased type at name resolution). The prior
+    // three inline `ChartFile { path: PathBuf::from(FILENAME_CONST),
+    // contents: <body> }` blocks each re-derived the same
+    // `PathBuf::from(&str)` wrap + the same two-field assembly — a
+    // byte-identical duplicate of the peer [`caixa_flux::cluster_bundle`]
+    // Flux v2 CR trio's three per-CR emit sites. Sweeping both trios
+    // onto [`RenderedFile::new`] collapses the six substrate-side
+    // per-artifact-construction sites onto one canonical constructor,
+    // so a future rebrand on the record shape (a per-artifact hash /
+    // provenance field addition, a per-artifact write-mode discriminator
+    // once per-cluster-writer sandboxing lands, the
+    // [`caixa_core::is_sandboxed_relative_path`] discipline the
+    // [`RenderedFile`] docstring acknowledges is not yet run at emit
+    // time) reaches every per-target renderer through one caixa-core
+    // edit instead of a coordinated six-site rewrite.
     Ok(ChartDir {
         name: chart_name,
         files: vec![
-            ChartFile {
-                path: PathBuf::from(HELM_CHART_YAML_FILENAME),
-                contents: serde_yaml::to_string(&chart_yaml)?,
-            },
-            ChartFile {
-                path: PathBuf::from(HELM_VALUES_YAML_FILENAME),
-                contents: values_yaml,
-            },
-            ChartFile {
-                path: PathBuf::from("README.md"),
-                contents: readme,
-            },
+            ChartFile::new(
+                HELM_CHART_YAML_FILENAME,
+                serde_yaml::to_string(&chart_yaml)?,
+            ),
+            ChartFile::new(HELM_VALUES_YAML_FILENAME, values_yaml),
+            ChartFile::new("README.md", readme),
         ],
     })
 }
@@ -699,6 +712,7 @@ mod tests {
         M2_KEY_LIMITS, M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_FUEL,
         M2_LIMITS_KEY_MEMORY, M2_LIMITS_KEY_WALL_CLOCK,
     };
+    use std::path::PathBuf;
 
     fn sample_caixa() -> Caixa {
         Caixa {
@@ -1699,5 +1713,35 @@ spec:
             contents: format!("{DEFAULT_LIBRARY_NAME}:\n  enabled: false\n"),
         };
         assert_eq!(via_alias.path.to_string_lossy(), HELM_VALUES_YAML_FILENAME);
+    }
+
+    #[test]
+    fn chart_file_new_constructor_travels_through_alias_to_canonical() {
+        // Inherent-method-through-alias pin: the canonical
+        // [`caixa_core::RenderedFile::new`] `impl Into<PathBuf>` /
+        // `impl Into<String>` constructor every per-artifact leaf in
+        // [`render_chart_for_servico_with`] now routes through
+        // resolves at `ChartFile::new(…)` — Rust inherent methods
+        // travel through a `pub type ChartFile = caixa_core::RenderedFile`
+        // alias to the aliased canonical at name resolution, so a
+        // drifted local `pub struct ChartFile { pub path: PathBuf, pub
+        // contents: String }` at this crate would carry the field
+        // pair the sibling type-alias-identity pin above still
+        // accepts (both records share `pub path` / `pub contents`
+        // shape) while dropping the constructor — the six sweep sites
+        // in [`render_chart_for_servico_with`] would stop compiling
+        // and the failing calls would name `ChartFile` directly,
+        // making the drift-source unambiguous. This test pins the
+        // constructor's per-alias reachability + the byte-identical
+        // record shape against a `HELM_CHART_YAML_FILENAME`-keyed
+        // probe so the pin fires at caixa-helm build time.
+        let via_alias_new: ChartFile = ChartFile::new(HELM_CHART_YAML_FILENAME, "apiVersion: v2\n");
+        let via_canonical_new = caixa_core::RenderedFile::new(
+            HELM_CHART_YAML_FILENAME,
+            String::from("apiVersion: v2\n"),
+        );
+        assert_eq!(via_alias_new, via_canonical_new);
+        assert_eq!(via_alias_new.path, PathBuf::from(HELM_CHART_YAML_FILENAME));
+        assert_eq!(via_alias_new.contents, "apiVersion: v2\n");
     }
 }
