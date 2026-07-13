@@ -14577,6 +14577,71 @@ pub const HELM_CHART_API_VERSION: &str = "v2";
 /// [ch]: ../../caixa_helm/index.html
 pub const HELM_CHART_TYPE_APPLICATION: &str = "application";
 
+/// Canonical Helm 3 `Chart.yaml` `type` field per-chart-kind discriminator
+/// scalar-value the sibling library-chart shape lands on — the second and
+/// only other arm of the closed set `{"application", "library"}` the Helm
+/// chart-schema pins the per-chart-kind axis to (see [chart-type-doc]).
+/// The `library` chart-kind is Helm's dependency-only install-shape: a
+/// chart authored as a shared-template substrate the per-Aplicacao
+/// `lareira-<nome>` application charts depend on for their emitted-
+/// object templates (the [`DEFAULT_LIBRARY_NAME`] `pleme-computeunit`
+/// chart out-of-tree at `pleme-io/helmworks` is the substrate's
+/// canonical instance today), and Helm refuses to install it directly
+/// (`helm install <library-chart>` fails with "Error: library charts
+/// cannot be installed") — a chart declaring itself under this
+/// scalar-value is only ever consumed as a dependency by a sibling
+/// `application`-typed chart.
+///
+/// Peer of [`HELM_CHART_TYPE_APPLICATION`] on the same closed
+/// canonical-Helm-chart-schema-per-chart-kind-discriminator axis: the
+/// two consts together name the two-arm schema-admitted set as a pair
+/// of `&'static str`s at the substrate-side canonical surface, so any
+/// consumer that reaches for either shape (the caixa-helm renderer at
+/// [`HELM_CHART_TYPE_APPLICATION`]'s single emitter site today; the
+/// future per-Aplicacao library chart the [`HELM_CHART_TYPE_APPLICATION`]
+/// docstring names as a trajectory item, whose emit site would land at
+/// this const; the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-chart-kind admission gate that needs to accept
+/// exactly the two-arm closed set) reads from one canonical declaration
+/// per arm, not a scattered mix of substrate-side const + prose-only
+/// sibling. Same "one canonical declaration per arm, next to the
+/// closed set's peer" discipline the peer
+/// [`CILIUM_AUTH_MODE_REQUIRED`] / [`CILIUM_AUTH_MODE_DISABLED`]
+/// (2c3f11b — the two-arm Cilium `MutualAuthenticationMode` `OpenAPI`
+/// enum's closed set) established for the sibling Cilium-CR-side
+/// per-enum-value axis, and the peer
+/// [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_SHARDED`] (b0ce0a5 — the three-arm typed
+/// [`crate::PlacementStrategy`] variant discriminator-value set) applies
+/// on the sibling M3 typed-enum discriminator-scalar axis — extends the
+/// discipline onto the Helm-chart-schema-enum-value closed set every
+/// rendered Chart.yaml declares its per-chart-kind axis over.
+///
+/// Until this lift landed the sibling `"library"` value lived only in
+/// prose across the [`HELM_CHART_TYPE_APPLICATION`] docstring's
+/// closed-set enumeration (3+ mentions naming the sibling `library`
+/// shape as the schema-admitted second arm, including the accidental-
+/// collapse-onto-sibling failure-mode arm the pin test
+/// [`tests::helm_chart_type_application_and_library_are_distinct`]
+/// closes), with no compile-time link between the substrate-side
+/// canonical const and the sibling closed-set arm the docstring
+/// referenced — a hypothetical future consumer reaching for the
+/// sibling shape (an operator-side per-chart-kind classifier, a
+/// helmworks-side value-drift detector, the future per-Aplicacao
+/// library chart's emit site) had to re-derive the value from the
+/// prose enumeration rather than reading the same `&'static str` the
+/// substrate declares. This lift closes that gap by pairing the
+/// canonical-Helm-chart-schema-per-chart-kind axis at both closed-set
+/// arms, so drift-detection between the two shapes is a build-time
+/// constant-value comparison at
+/// [`tests::helm_chart_type_application_and_library_are_distinct`]
+/// rather than a runtime silent-collapse-onto-sibling far from the
+/// drift's source.
+///
+/// [chart-type-doc]: https://helm.sh/docs/topics/charts/#chart-types
+pub const HELM_CHART_TYPE_LIBRARY: &str = "library";
+
 /// Canonical Helm 3 per-chart-directory metadata-file filename every
 /// rendered `lareira-<nome>` chart carries at its top-level directory —
 /// the fixed filename Helm's chart-schema parser (`helm dependency
@@ -22745,6 +22810,119 @@ mod tests {
              or whitespace bytes the Helm chart-schema parser would \
              silently treat as the default `application` shape (masking \
              the drift with no process-log signal)"
+        );
+    }
+
+    #[test]
+    fn helm_chart_type_library_pins_canonical_value() {
+        // Pin the sibling closed-set arm of the Helm 3 chart-schema
+        // `type` field's admitted set `{"application", "library"}` (see
+        // https://helm.sh/docs/topics/charts/#chart-types). A drift on
+        // this const's value (an `"Library"` / `"LIBRARY"` /
+        // `"library-chart"` / `"lib"` typo, an accidental collapse onto
+        // the sibling [`HELM_CHART_TYPE_APPLICATION`] shape) would land
+        // a future per-Aplicacao library-chart emitter — the trajectory
+        // item the [`HELM_CHART_TYPE_APPLICATION`] docstring names as
+        // the natural next consumer of this const — outside the Helm
+        // chart-schema's admitted set, with the same silent-collapse-
+        // onto-`application`-default failure mode the peer
+        // [`HELM_CHART_TYPE_APPLICATION`] pin's docstring enumerates on
+        // the sibling closed-set arm (Helm's chart-schema parser
+        // silently treats an unrecognized `type:` value as the default
+        // `application` shape, so the misdeclared library chart installs
+        // as an application chart instead of surfacing the schema
+        // violation). Peer of
+        // `helm_chart_type_application_pins_canonical_value` on the
+        // sibling closed-set arm — the two pins together enshrine the
+        // full closed set at the substrate-side canonical surface, and
+        // the paired
+        // `helm_chart_type_application_and_library_are_distinct` pin
+        // (below) enforces the two arms never accidentally converge on
+        // the same byte-shape.
+        assert_eq!(HELM_CHART_TYPE_LIBRARY, "library");
+    }
+
+    #[test]
+    fn helm_chart_type_library_carries_lowercase_shape() {
+        // Cross-axis invariant: the Helm 3 chart-schema `type` field
+        // admits the closed set `{"application", "library"}` — every
+        // admitted value is all-ASCII-lowercase throughout per the
+        // upstream Helm project's per-enum-value naming convention.
+        // Same all-ASCII-lowercase shape the peer
+        // `helm_chart_type_application_carries_lowercase_shape` pin
+        // enshrines on the sibling closed-set arm — the two pins
+        // together enforce the shape-convention across the full
+        // canonical-Helm-chart-schema-per-chart-kind-discriminator
+        // closed set.
+        //
+        // Pinning the shape here means a future rebrand on the canonical
+        // lift can't silently land a malformed per-chart-kind scalar
+        // (uppercase `"LIBRARY"`, mixed-case `"Library"`, empty) that
+        // the Helm chart-schema parser would silently treat as the
+        // default `application` shape (masking the drift with no
+        // process-log signal, and installing the misdeclared library
+        // chart as an application chart instead of surfacing the
+        // schema violation at chart-consumption time).
+        let v = HELM_CHART_TYPE_LIBRARY;
+        assert!(
+            !v.is_empty(),
+            "HELM_CHART_TYPE_LIBRARY {v:?} must be non-empty per the \
+             Helm 3 chart-schema `type` field grammar"
+        );
+        assert!(
+            v.chars().all(|c| c.is_ascii_lowercase()),
+            "HELM_CHART_TYPE_LIBRARY {v:?} must be ASCII-lowercase \
+             throughout per the Helm 3 chart-schema per-chart-kind \
+             discriminator naming convention — no uppercase, mixed-case, \
+             or whitespace bytes the Helm chart-schema parser would \
+             silently treat as the default `application` shape (masking \
+             the drift with no process-log signal)"
+        );
+    }
+
+    #[test]
+    fn helm_chart_type_application_and_library_are_distinct() {
+        // Structural distinctness invariant on the closed-set pair the
+        // Helm 3 chart-schema `type` field admits (`{"application",
+        // "library"}`). The two arms name distinct per-chart-kind
+        // install shapes at the substrate-side Helm dispatch — an
+        // `application`-typed chart installs into a namespace as a
+        // workload while a `library`-typed chart is dependency-only
+        // and Helm refuses to install it directly ("Error: library
+        // charts cannot be installed") — so a future rebrand that
+        // accidentally collapsed the two consts onto the same
+        // byte-shape would land every consumer of one arm on the
+        // sibling's install semantic by construction: a rendered
+        // `lareira-<nome>` (application) chart that silently emitted
+        // `type: library` would drop every per-Servico
+        // `helm install` / `helm upgrade` release cycle with no field
+        // naming the chart-kind-drift root cause, and (symmetrically)
+        // a future per-Aplicacao library chart emitting
+        // `type: application` would be install-able as a workload
+        // when the substrate's install-shape dispatch expects it to
+        // fail with the library-charts-cannot-be-installed diagnostic.
+        // Pinning the distinctness here means a hypothetical future
+        // edit that accidentally converges the two arms (a copy-paste
+        // rebrand at one lift that stops at the peer const declaration,
+        // a substrate-wide vocabulary shift that lands one arm without
+        // its paired peer) surfaces at caixa-core build time rather
+        // than as a chart-install-shape drift far from the source
+        // commit. Same "closed-set arms are byte-distinct by
+        // construction" discipline the peer
+        // [`crate::CILIUM_AUTH_MODE_REQUIRED`] /
+        // [`crate::CILIUM_AUTH_MODE_DISABLED`] pair carries on the
+        // sibling two-arm Cilium `MutualAuthenticationMode` OpenAPI
+        // enum closed set.
+        assert_ne!(
+            HELM_CHART_TYPE_APPLICATION, HELM_CHART_TYPE_LIBRARY,
+            "HELM_CHART_TYPE_APPLICATION ({HELM_CHART_TYPE_APPLICATION:?}) and \
+             HELM_CHART_TYPE_LIBRARY ({HELM_CHART_TYPE_LIBRARY:?}) must remain \
+             byte-distinct — the two arms name the two install shapes of the \
+             Helm 3 chart-schema `type` field's closed set {{\"application\", \
+             \"library\"}} and every substrate-side consumer that dispatches \
+             on the per-chart-kind axis relies on the two byte-shapes \
+             distinguishing the workload-install-shape arm from the \
+             dependency-only-install-shape arm"
         );
     }
 

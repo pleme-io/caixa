@@ -249,6 +249,28 @@ pub use caixa_core::HELM_CHART_API_VERSION;
 /// chart declares at its top-level Chart.yaml body.
 pub use caixa_core::HELM_CHART_TYPE_APPLICATION;
 
+/// Canonical Helm 3 `Chart.yaml` `type` field per-chart-kind discriminator
+/// scalar-value the sibling library-chart shape lands on — re-export of
+/// the lifted [`caixa_core::HELM_CHART_TYPE_LIBRARY`] so the second and
+/// only other arm of the Helm chart-schema's closed set `{"application",
+/// "library"}` lives in exactly one place across every caixa renderer.
+/// No production emitter here consumes it today — the caixa-helm
+/// renderer emits per-Servico `application`-typed `lareira-<nome>`
+/// charts, and the sibling [`DEFAULT_LIBRARY_NAME`] `pleme-computeunit`
+/// library chart is out-of-tree at `pleme-io/helmworks` (not this
+/// crate's authority) — but every future substrate-side per-chart-kind
+/// classifier and every emitter for the future per-Aplicacao library
+/// chart the [`HELM_CHART_TYPE_APPLICATION`] docstring names as a
+/// trajectory item reads the same `&'static str` by construction.
+/// Peer to the [`HELM_CHART_TYPE_APPLICATION`] re-export on the sibling
+/// closed-set arm — completes the two-arm re-export pair of the Helm
+/// chart-schema's per-chart-kind axis at the caixa-helm surface so
+/// consumers reaching for either shape read from one canonical source
+/// per arm. The paired identity pins
+/// (`helm_chart_type_library_re_export_points_at_caixa_core_canonical`)
+/// close the drift footgun at caixa-helm build time.
+pub use caixa_core::HELM_CHART_TYPE_LIBRARY;
+
 /// Canonical Helm 3 per-chart-directory metadata-file filename every
 /// rendered `lareira-<nome>` chart carries at its top-level directory —
 /// re-export of the lifted [`caixa_core::HELM_CHART_YAML_FILENAME`] so
@@ -1425,6 +1447,33 @@ spec:
             "HELM_CHART_TYPE_APPLICATION",
             HELM_CHART_TYPE_APPLICATION,
             caixa_core::HELM_CHART_TYPE_APPLICATION,
+        );
+    }
+
+    #[test]
+    fn helm_chart_type_library_re_export_points_at_caixa_core_canonical() {
+        // Re-export identity pin on the peer closed-set arm the
+        // renderer's `HELM_CHART_TYPE_LIBRARY` alias resolves to. Peer
+        // of `helm_chart_type_application_re_export_points_at_caixa_core_canonical`
+        // on the sibling closed-set arm — the two pins together enshrine
+        // the two-arm `{"application", "library"}` closed set at the
+        // caixa-helm re-export surface as byte-identical `&'static`
+        // static-data views onto the canonical caixa-core lifts, so any
+        // local re-introduction of a sibling `pub const
+        // HELM_CHART_TYPE_LIBRARY: &str = "…"` at this crate (the same
+        // drift footgun the peer pin closes on the sibling arm) is a
+        // build-time test failure naming the offending drift. The pin
+        // also structurally forbids the two arms from converging on the
+        // same `&'static` allocation — a future rebrand that
+        // accidentally aliased `HELM_CHART_TYPE_LIBRARY` at the
+        // [`caixa_core::HELM_CHART_TYPE_APPLICATION`] canonical would
+        // pass this identity check but trip the caixa-core-side
+        // `helm_chart_type_application_and_library_are_distinct` pin
+        // paired to the two arms' distinctness contract.
+        caixa_core::assert_str_reexport_identity(
+            "HELM_CHART_TYPE_LIBRARY",
+            HELM_CHART_TYPE_LIBRARY,
+            caixa_core::HELM_CHART_TYPE_LIBRARY,
         );
     }
 
