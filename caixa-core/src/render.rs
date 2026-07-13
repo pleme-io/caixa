@@ -14728,6 +14728,79 @@ pub const HELM_CHART_YAML_FILENAME: &str = "Chart.yaml";
 /// [rcs]: ../../caixa_helm/fn.render_chart_for_servico.html
 pub const HELM_VALUES_YAML_FILENAME: &str = "values.yaml";
 
+/// Canonical `lareira-<nome>` chart-directory human-facing readme filename
+/// every rendered chart carries at its top-level directory — the fixed
+/// filename the `caixa-helm` renderer emits alongside the two schema-load-
+/// bearing [`HELM_CHART_YAML_FILENAME`] + [`HELM_VALUES_YAML_FILENAME`]
+/// files as the third leg of the canonical `{Chart.yaml, values.yaml,
+/// README.md}` per-`lareira-<nome>` chart-directory `ChartFile` triple the
+/// peer [`HELM_CHART_YAML_FILENAME`] docstring explicitly acknowledges is
+/// the one axis where the substrate-side single-source discipline had not
+/// yet landed at the third file. The single source of truth every
+/// consumer that names the readme file — the sole caixa-helm production
+/// emit site the prior inline `"README.md"` literal sat at
+/// ([`caixa-helm`][ch]'s [`render_chart_for_servico`][rcs] `ChartDir`
+/// assembly's per-file `path` axis, the third of the three canonical
+/// `lareira-<nome>` chart-directory files the renderer emits as a bundle,
+/// sibling to the metadata-file [`HELM_CHART_YAML_FILENAME`] +
+/// values-file [`HELM_VALUES_YAML_FILENAME`] axes) plus every test-side
+/// round-trip navigator that reaches into the rendered `ChartDir` by the
+/// readme filename (two sites: the `renders_three_files` files-vec-
+/// membership pin + the `ChartDir::write_to` post-write existence pin) —
+/// reaches for the same `&'static str` by construction.
+///
+/// Until this lift landed the filename `"README.md"` lived as three
+/// verbatim inline literals (one production `ChartFile::new("README.md",
+/// …)` at the `ChartDir` files-vec construction site + two test-side
+/// `names.contains(&"README.md".to_string())` / `chart_root.join("README.md")`
+/// fixture navigators). A drift on the emit side (a `"readme.md"` /
+/// `"Readme.md"` / `"README"` / `"README.MD"` typo, or an accidental
+/// collapse onto the sibling per-workspace `readme.txt` axis any
+/// per-edition packaging substrate might introduce) at any one site would
+/// surface as one of two silent failure modes at chart-consumption time:
+///
+///   - GitHub / Artifact Hub / any downstream per-chart README-surfacing
+///     UI silently falls back to "no README available" — the chart lists
+///     with no per-chart elevator pitch or install instructions far from
+///     the drift commit's source, and the operator sees a chart in the
+///     hub without the canonical `## Install` block the emitter wrote,
+///     with no field naming the readme-filename-drift root cause;
+///   - the rendered chart's `ChartFile` collection lists a file at the
+///     emit-side drifted name (e.g. `"readme.md"`) while the sibling
+///     [`caixa-flux`][cf] `Kustomization` bundle-path emitter's future
+///     per-chart-directory resolver — a per-cluster snapshot bundle that
+///     re-lists the chart-dir contents by filename to surface the
+///     canonical README to per-cluster tooling — continues to look under
+///     the canonical `"README.md"` — the two-crate pair silently goes out
+///     of sync, with the flux bundle's chart-directory resolver returning
+///     `None` for the readme file at cluster-side `feira app deploy`
+///     time, and every downstream README-consuming path silently drops.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// filename to a typed substrate-side `&'static str` on the same
+/// trajectory the peer [`HELM_CHART_YAML_FILENAME`] (c2c99b0) /
+/// [`HELM_VALUES_YAML_FILENAME`] (9a980ba) lifts established on the
+/// sibling canonical-Helm-per-chart-directory-filename axes — pivots the
+/// discipline from the two schema-load-bearing filename halves onto the
+/// human-facing readme-file half, completing the per-`lareira-<nome>`-
+/// chart-directory `(Chart.yaml, values.yaml, README.md)` canonical-per-
+/// chart-directory-filename-axis re-export triple every rendered chart
+/// declares as its three `ChartDir::files` entries — the third file the
+/// peer [`HELM_VALUES_YAML_FILENAME`] docstring explicitly names as the
+/// missing leg of the triple at its "completing the per-`lareira-<nome>`-
+/// chart-directory canonical-scalar-axis re-export triple every rendered
+/// chart declares as its `ChartDir::files` entries (`{Chart.yaml,
+/// values.yaml, README.md}` — the two schema-load-bearing filenames now
+/// share the same substrate-side single-source discipline)" close.
+///
+/// [ch]: ../../caixa_helm/index.html
+/// [cf]: ../../caixa_flux/index.html
+/// [rcs]: ../../caixa_helm/fn.render_chart_for_servico.html
+pub const HELM_CHART_README_FILENAME: &str = "README.md";
+
 /// Canonical `pleme-computeunit` library-chart values-block enable-toggle
 /// key — the `enabled: <bool>` axis every `lareira-<nome>` chart's values
 /// block carries under its [`DEFAULT_LIBRARY_NAME`] wrap key, and every
@@ -22672,6 +22745,69 @@ mod tests {
              or whitespace bytes the Helm chart-schema parser would \
              silently treat as the default `application` shape (masking \
              the drift with no process-log signal)"
+        );
+    }
+
+    #[test]
+    fn helm_chart_readme_filename_pins_canonical_value() {
+        // Pin the actual byte-string so a typo on the canonical lift
+        // can't silently rebrand the third leg of the per-`lareira-<nome>`
+        // chart-directory `{Chart.yaml, values.yaml, README.md}`
+        // canonical-per-chart-directory-filename axis triple. Peer to
+        // the sibling
+        // [`HELM_CHART_YAML_FILENAME`] / [`HELM_VALUES_YAML_FILENAME`]
+        // canonical filename axes — the two schema-load-bearing halves
+        // of the triple the sibling
+        // [`HELM_VALUES_YAML_FILENAME`] docstring's closing paragraph
+        // explicitly names as the pair that needed the third-leg
+        // (`README.md`) filename half to close the discipline across
+        // every `ChartFile` the [`caixa_helm::render_chart_for_servico`]
+        // emitter's `ChartDir::files` vec carries. A drifted per-chart
+        // readme filename value would surface downstream as GitHub /
+        // Artifact Hub / any per-chart README-surfacing UI silently
+        // falling back to "no README available" for the rendered
+        // `lareira-<nome>` chart — the chart lists with no per-chart
+        // elevator pitch or install instructions far from the drift
+        // commit's source, with no field naming the readme-filename-
+        // drift root cause. Same pin discipline as the peer
+        // canonical-Helm-per-chart-directory-filename axes.
+        assert_eq!(HELM_CHART_README_FILENAME, "README.md");
+    }
+
+    #[test]
+    fn helm_chart_readme_filename_carries_readme_dot_md_shape() {
+        // Cross-axis invariant: the per-`lareira-<nome>`-chart-directory
+        // human-facing readme filename carries the `.md` Markdown
+        // extension the [`caixa_helm::build_readme`] emitter's Markdown-
+        // shaped body targets — a drift to `.txt` / `.rst` /
+        // extensionless / a per-fork rename would silently reroute the
+        // rendered readme through a downstream tool that reads by
+        // extension for its Markdown renderer (GitHub's per-repo README
+        // surfacer, Artifact Hub's per-chart README surfacer, every
+        // per-chart-directory `find . -name README.md` navigator any
+        // downstream tooling might use). Peer to the sibling
+        // [`HELM_CHART_YAML_FILENAME`] / [`HELM_VALUES_YAML_FILENAME`]
+        // schema-load-bearing filename halves — the two YAML halves
+        // carry the `.yaml` extension per Helm's per-chart-schema
+        // convention; the readme half carries the `.md` extension per
+        // the substrate's per-chart human-facing convention. Distinct
+        // per-half schema conventions do not collapse on the shared
+        // `<name>.<ext>` shape gate.
+        let v = HELM_CHART_README_FILENAME;
+        assert!(
+            !v.is_empty(),
+            "HELM_CHART_README_FILENAME {v:?} must be non-empty per the \
+             per-`lareira-<nome>`-chart-directory readme-file axis"
+        );
+        assert!(
+            v.ends_with(".md"),
+            "HELM_CHART_README_FILENAME {v:?} must carry the `.md` \
+             Markdown extension per the substrate's per-chart human-\
+             facing readme convention — a drifted extension (`.txt` / \
+             `.rst` / extensionless) would silently reroute downstream \
+             tooling's Markdown renderer (GitHub's per-repo README \
+             surfacer, Artifact Hub's per-chart README surfacer) to a \
+             non-Markdown fallback path"
         );
     }
 
