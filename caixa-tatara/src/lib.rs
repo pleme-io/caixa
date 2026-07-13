@@ -101,9 +101,19 @@ use tatara_process::prelude::{Process, ProcessSpec};
 /// Errors caixa-tatara can raise.
 #[derive(Debug, Error)]
 pub enum Error {
-    /// The caixa's `:kind` isn't Aplicacao.
-    #[error("caixa-tatara only renders :kind Aplicacao caixas (got {0:?})")]
-    NotAnAplicacao(CaixaKind),
+    /// The caixa's `:kind` doesn't match what `caixa-tatara` targets
+    /// (this renderer only emits the per-Aplicacao tatara `Process`
+    /// artifact — `Intent::Aplicacao` + `Lifetime::Ephemeral` — for
+    /// `:kind Aplicacao`). Lifted from a prior
+    /// `NotAnAplicacao(CaixaKind)` arm to wrap
+    /// [`caixa_core::KindMismatch`] so the diagnostic names the
+    /// offending caixa's `:nome` (not just its kind), shared verbatim
+    /// with `caixa-helm` / `caixa-flux` / `caixa-mesh` — every
+    /// per-kind caixa-side renderer now surfaces the same
+    /// self-locating kind-mismatch view through the shared
+    /// [`caixa_core::require_kind`] entry gate.
+    #[error("{0}")]
+    NotAnAplicacao(#[from] caixa_core::KindMismatch),
     /// The caixa is missing its `:versao` — required to materialize a chart ref.
     #[error("caixa is missing :versao — required to materialize chart_ref")]
     MissingVersao,
@@ -173,9 +183,22 @@ impl From<RenderEphemeralLifetime> for EphemeralLifetime {
 
 /// Render a `Caixa` (kind = Aplicacao) + `RenderInputs` to a `Process`.
 pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Process> {
-    if caixa.kind != CaixaKind::Aplicacao {
-        return Err(Error::NotAnAplicacao(caixa.kind));
-    }
+    // Route the kind gate through the canonical
+    // [`caixa_core::require_kind`] helper so caixa-tatara's per-Aplicacao
+    // entry-gate shares one `require_kind + KindMismatch` cascade with
+    // the peer per-Aplicacao renderer (`caixa-mesh`'s `typed_view` /
+    // `programs_for_aplicacao`) and the peer per-Servico renderers
+    // (`caixa-helm` / `caixa-flux`'s `require_v0_servico_shape`) —
+    // every caixa-side renderer's kind mismatch now surfaces a
+    // diagnostic that names the offending caixa's `:nome`, not just
+    // the rejected kind. The prior inline `if caixa.kind !=
+    // CaixaKind::Aplicacao { return Err(Error::NotAnAplicacao(caixa.
+    // kind)); }` block left this crate as the only per-kind renderer
+    // still on the pre-lift shape (the "feira verb whose error path
+    // doesn't name the offending caixa" punch-list item the compounding
+    // mandate names) — this lift closes that last per-renderer drift
+    // surface on the shared kind-gate axis.
+    caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
     if caixa.versao.is_empty() {
         return Err(Error::MissingVersao);
     }
@@ -386,7 +409,65 @@ mod tests {
 "#;
         let caixa = Caixa::from_lisp(src).expect("parse biblioteca");
         let err = process_for_aplicacao(&caixa, &sample_inputs()).unwrap_err();
-        assert!(matches!(err, Error::NotAnAplicacao(CaixaKind::Biblioteca)));
+        assert!(matches!(err, Error::NotAnAplicacao(_)));
+    }
+
+    #[test]
+    fn kind_mismatch_error_names_offending_caixa_nome() {
+        // Pinning the lifted [`caixa_core::KindMismatch`] view's
+        // load-bearing property on this crate's per-Aplicacao entry
+        // gate: a kind-mismatched caixa surfaces a diagnostic that
+        // *names the offending caixa* (`lib`), not just the rejected
+        // kind. Before this lift the renderer raised
+        // `Error::NotAnAplicacao(CaixaKind::Biblioteca)` whose
+        // `Display` said "caixa-tatara only renders :kind Aplicacao
+        // caixas (got Biblioteca)" — the user had to grep their
+        // source tree for which `caixa.lisp` triggered it. After the
+        // lift the wrapped `KindMismatch` carries the `:nome`, the
+        // renderer's `#[error("{0}")]` arm prints it through, and the
+        // diagnostic is self-locating verbatim with the sibling
+        // caixa-mesh / caixa-flux / caixa-helm per-kind renderers
+        // (which each already routed through `require_kind` +
+        // wrapped `KindMismatch`). Peer to
+        // `caixa_mesh::tests::kind_mismatch_error_names_offending_caixa_nome`
+        // (typed_view + programs_for_aplicacao entry gate) and
+        // `caixa_flux::tests::…` /
+        // `caixa_helm::tests::kind_mismatch_error_names_offending_caixa_nome`
+        // on the sibling per-Servico renderer crates — the same
+        // "one shared kind-gate helper, one shared self-locating
+        // diagnostic view" discipline now covers every per-kind
+        // caixa-side renderer with no per-crate drift surface.
+        let src = r#"
+(defcaixa
+  :nome "lib"
+  :kind Biblioteca
+  :versao "0.1.0"
+  :bibliotecas ())
+"#;
+        let caixa = Caixa::from_lisp(src).expect("parse biblioteca");
+        let err = process_for_aplicacao(&caixa, &sample_inputs()).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("lib"),
+            "kind-mismatch diagnostic must name the offending caixa nome \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Aplicacao"),
+            "diagnostic must name the expected kind (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("Biblioteca"),
+            "diagnostic must name the actual kind (got: {msg:?})"
+        );
+        match err {
+            Error::NotAnAplicacao(km) => {
+                assert_eq!(km.nome, "lib");
+                assert_eq!(km.expected, CaixaKind::Aplicacao);
+                assert_eq!(km.actual, CaixaKind::Biblioteca);
+            }
+            other => panic!("expected Error::NotAnAplicacao, got {other:?}"),
+        }
     }
 
     #[test]
