@@ -33,7 +33,9 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, CaixaKind, lareira_chart_name, oci_chart_ref};
+use caixa_core::{
+    Caixa, CaixaKind, KUBE_KEY_NAME, KUBE_KEY_NAMESPACE, lareira_chart_name, oci_chart_ref,
+};
 
 /// Canonical OCI URL scheme prefix — the `"oci://"` byte-string every
 /// substrate-side renderer that composes an OCI artifact reference
@@ -217,12 +219,40 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
         install_timeout: Some(DEFAULT_APLICACAO_INSTALL_TIMEOUT.into()),
     };
 
+    // `HelmReleaseReleased` postcondition params carry the K8s
+    // `(namespace, name)` coordinate the tatara-reconciler's boundary
+    // phase-machine probes to poll the HelmRelease's `.status.conditions[]`
+    // Released transition (tatara-reconciler/src/phase_machine.rs:543-549
+    // probes `params.get("name")` + `params.get("namespace")`). Route
+    // both write-side keys through the canonical
+    // [`caixa_core::KUBE_KEY_NAME`] / [`caixa_core::KUBE_KEY_NAMESPACE`]
+    // lifts so the emit-side JSON schema for the postcondition-params
+    // shape shares one `&'static str` per K8s CR canonical axis with
+    // every peer renderer's `metadata.name` / `metadata.namespace`
+    // emission (caixa-flux's cluster_bundle, caixa-mesh's programs
+    // fan-out + Cilium + Gateway/HTTPRoute emitters, caixa-helm's
+    // lareira-<nome> Chart.yaml/values.yaml emitter). A future K8s CR
+    // canonical-key rebrand (a hypothetical apiserver-side migration on
+    // the identity discriminator surface) would then land on the
+    // canonical const's definition rather than a coordinated four-crate
+    // sweep, and the peer-arm read-back pin in
+    // `renders_process_pins_helm_release_postcondition_params_at_lifted_keys`
+    // trips a build-time failure if any local re-introduction of a
+    // sibling inline `"name"` / `"namespace"` JSON key drifts the
+    // reconciler-side probe path off the substrate's K8s canonical
+    // axis.
+    let mut params = serde_json::Map::new();
+    params.insert(
+        KUBE_KEY_NAME.into(),
+        serde_json::Value::String(release_name.clone()),
+    );
+    params.insert(
+        KUBE_KEY_NAMESPACE.into(),
+        serde_json::Value::String(inputs.target_namespace.clone()),
+    );
     let mut postconditions = vec![Condition {
         kind: ConditionKind::HelmReleaseReleased,
-        params: serde_json::json!({
-            "name": release_name,
-            "namespace": inputs.target_namespace,
-        }),
+        params: serde_json::Value::Object(params),
     }];
     postconditions.extend(inputs.extra_postconditions.iter().cloned());
 
@@ -381,6 +411,52 @@ mod tests {
         assert_eq!(
             process.spec.boundary.postconditions[1].kind,
             ConditionKind::ClosedLoopAuth
+        );
+    }
+
+    #[test]
+    fn renders_process_pins_helm_release_postcondition_params_at_lifted_keys() {
+        // Peer-arm pin on the `HelmReleaseReleased` postcondition params
+        // schema. The emit-side builder writes the K8s
+        // `(namespace, name)` coordinate through the canonical
+        // [`caixa_core::KUBE_KEY_NAME`] / [`caixa_core::KUBE_KEY_NAMESPACE`]
+        // lifts (the exact keys the tatara-reconciler's boundary phase-
+        // machine probes to poll the HelmRelease's `.status.conditions[]`
+        // Released transition at
+        // `tatara-reconciler/src/phase_machine.rs:543-549`). Read both
+        // back at the lifted keys and pin the values against the
+        // fixture's release-name (`lareira-akeyless-attest`) + target
+        // namespace (`akeyless-test`).
+        //
+        // Before the lift the emitter carried inline `"name"` /
+        // `"namespace"` JSON keys and no test-side probe pinned them —
+        // a rebrand on the K8s canonical `metadata.{name,namespace}` axis
+        // (or a local re-introduction of a sibling inline literal that
+        // drifted the emit-side key off the reconciler-side probe path)
+        // would have silently emitted a `Process` CR whose
+        // `HelmReleaseReleased` postcondition never fired (the phase-
+        // machine's `params.get("name")` reduces to `None` under any
+        // drifted emit key, and every ephemeral install times out at the
+        // outer `Boundary.timeout` with no cluster-side symptom naming
+        // the drift). The pin here + the emit-side lift close both
+        // coordinates of the drift-vs-probe pair at build time.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        let process = process_for_aplicacao(&caixa, &sample_inputs()).expect("render");
+        let params = &process.spec.boundary.postconditions[0].params;
+        assert_eq!(
+            params.get(KUBE_KEY_NAME).and_then(|v| v.as_str()),
+            Some("lareira-akeyless-attest"),
+            "HelmReleaseReleased postcondition params must carry the release \
+             name at the lifted `caixa_core::KUBE_KEY_NAME` axis so the \
+             tatara-reconciler's `params.get(\"name\")` probe resolves it"
+        );
+        assert_eq!(
+            params.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str()),
+            Some("akeyless-test"),
+            "HelmReleaseReleased postcondition params must carry the target \
+             namespace at the lifted `caixa_core::KUBE_KEY_NAMESPACE` axis \
+             so the tatara-reconciler's `params.get(\"namespace\")` probe \
+             resolves it"
         );
     }
 
