@@ -7092,6 +7092,84 @@ pub const SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW: &str = ":restart-window";
 /// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] for the full lift rationale.
 pub const SUPERVISOR_AUTHOR_KEY_CHILDREN: &str = ":children";
 
+/// Canonical camelCase JSON/YAML top-level key for
+/// [`crate::supervisor::SupervisorSpec`]'s `estrategia` restart-strategy
+/// discriminator — the exact byte-sequence the type's
+/// `#[serde(rename_all = "camelCase")]` derive emits, and the scalar every
+/// downstream JSON/YAML consumer that reaches into a serialized
+/// `SupervisorSpec` (via `Value::get(...)`) must probe on.
+///
+/// The scalar is derived from the Rust field name `estrategia` by the
+/// `rename_all = "camelCase"` derive; `estrategia` has no `_`, so the
+/// serde transform is a no-op on this axis and the emitted key equals the
+/// source-side field name byte-for-byte. Lifting the byte to one
+/// `&'static str` closes the drift footgun structurally: a future
+/// refactor renaming the Rust field OR retaining the field name while
+/// adding a `#[serde(rename = "…")]` override would silently emit a
+/// `SupervisorSpec` whose restart-strategy discriminator lands under one
+/// key while every downstream consumer still probes another — the
+/// future wasm-operator's supervisor reconcile posture, the M4
+/// `caixa.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+/// webhook, the future `feira lint` supervisor-tree cross-check. The
+/// identity pin (`supervisor_spec_serde_keys_match_lifted_supervisor_key_consts`
+/// on the source-side type) catches drift at caixa-core build time
+/// rather than at the reconciler's dispatch step, far from the rebrand
+/// commit's source.
+///
+/// Peer of the sibling author-facing
+/// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] (`":estrategia"`) on the same
+/// per-Supervisor supervision-tree slot axis — that constant names the
+/// kebab-case `(defcaixa … :estrategia …)` author surface's top-level
+/// slot label, this one names the camelCase JSON/YAML sub-key the
+/// serialized `SupervisorSpec` carries the same axis under. Byte-distinct
+/// from (though semantically related to) the peer
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] (also `"estrategia"`) on the M3
+/// [`crate::aplicacao::Placement`] axis — that axis carries
+/// [`crate::aplicacao::PlacementStrategy`] cross-cluster distribution
+/// semantics, this axis carries [`crate::supervisor::RestartStrategy`]
+/// OTP supervisor semantics; splitting the two lets each schema's
+/// future rebrand land independently on the same
+/// "byte-identical-but-semantically-distinct" discipline the peer
+/// [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAME`] split established.
+///
+/// Same "one canonical byte-string per typed serialized-key axis"
+/// discipline every peer camelCase serde-key lift carries
+/// ([`M2_LIMITS_KEY_MEMORY`] / [`M2_LIMITS_KEY_FUEL`] /
+/// [`M2_LIMITS_KEY_WALL_CLOCK`] / [`M2_LIMITS_KEY_CPU`] (d8b8b4f),
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] etc. (21fe462),
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (36ffe65), [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.) — extended here to
+/// close the last of the four top-level typed-struct
+/// `#[serde(rename_all = "camelCase")]` axes lacking a lifted peer.
+pub const SUPERVISOR_KEY_ESTRATEGIA: &str = "estrategia";
+
+/// Canonical camelCase JSON/YAML top-level key for
+/// [`crate::supervisor::SupervisorSpec`]'s `max_restarts` axis. Peer of
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] on the same sibling
+/// supervision-tree serialized-key axis; see [`SUPERVISOR_KEY_ESTRATEGIA`]
+/// for the full lift rationale. The Rust field is `snake_case`
+/// `max_restarts`; `#[serde(rename_all = "camelCase")]` maps it to the
+/// camelCase JSON key `"maxRestarts"` this constant pins.
+pub const SUPERVISOR_KEY_MAX_RESTARTS: &str = "maxRestarts";
+
+/// Canonical camelCase JSON/YAML top-level key for
+/// [`crate::supervisor::SupervisorSpec`]'s `restart_window` axis. Peer of
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] on the same sibling
+/// supervision-tree serialized-key axis; see [`SUPERVISOR_KEY_ESTRATEGIA`]
+/// for the full lift rationale. The Rust field is `snake_case`
+/// `restart_window`; `#[serde(rename_all = "camelCase")]` maps it to the
+/// camelCase JSON key `"restartWindow"` this constant pins.
+pub const SUPERVISOR_KEY_RESTART_WINDOW: &str = "restartWindow";
+
+/// Canonical camelCase JSON/YAML top-level key for
+/// [`crate::supervisor::SupervisorSpec`]'s `children` axis. Peer of
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] on the same sibling
+/// supervision-tree serialized-key axis; see [`SUPERVISOR_KEY_ESTRATEGIA`]
+/// for the full lift rationale. The Rust field is lowercase `children`;
+/// `#[serde(rename_all = "camelCase")]` is a no-op on this axis and the
+/// emitted key equals the source-side field name byte-for-byte.
+pub const SUPERVISOR_KEY_CHILDREN: &str = "children";
+
 /// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
 /// struct's `estrategia` distribution-strategy discriminator — the
 /// per-`M3_KEY_PLACEMENT`-block field the M3 [`crate::aplicacao::PlacementStrategy`]
