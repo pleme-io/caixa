@@ -3105,4 +3105,161 @@ mod tests {
         );
         assert!(msg.contains("U+00A0"), "missing codepoint in {msg:?}");
     }
+
+    // ── drift-detection: serde-derive-to-SUPERVISOR_KEY_* identity ────────
+
+    #[test]
+    fn supervisor_spec_serde_keys_match_lifted_supervisor_key_consts() {
+        // Load-bearing invariant: the four `SUPERVISOR_KEY_*` consts
+        // (`SUPERVISOR_KEY_ESTRATEGIA` / `SUPERVISOR_KEY_MAX_RESTARTS` /
+        // `SUPERVISOR_KEY_RESTART_WINDOW` / `SUPERVISOR_KEY_CHILDREN`)
+        // name the exact camelCase JSON keys the
+        // `#[serde(rename_all = "camelCase")]` attribute on
+        // `SupervisorSpec` emits. Serialize a fully-populated spec (each
+        // field carries `Some(_)` / non-empty) and pin that each canonical
+        // byte-sequence appears verbatim in the JSON — a future accidental
+        // `rename_all = "snake_case"` / `"kebab-case"` / verbatim-field-
+        // name flip at the derive attribute (any of which would silently
+        // break every downstream JSON consumer that reaches for one of the
+        // four consts via `Value::get(...)`) surfaces here as a build-time
+        // test failure at `supervisor.rs`, not as an apply-time
+        // `.get(<stale-canonical-const>)` returning `None` far from the
+        // derive-attr drift's commit. Peer with the sibling
+        // `limits_spec_serde_keys_match_lifted_m2_limits_key_consts`
+        // (d8b8b4f) pin on the M2 `:limits` axis — same discipline the
+        // M2 typed-slot family established, extended here to close the
+        // top-level Supervisor axis.
+        let spec = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            max_restarts: 5,
+            restart_window: Some(Duration::from_secs(60)),
+            children: vec![ChildSpec {
+                caixa: "w".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            }],
+        };
+        let json = serde_json::to_string(&spec).unwrap();
+        for key in [
+            crate::render::SUPERVISOR_KEY_ESTRATEGIA,
+            crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+            crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+            crate::render::SUPERVISOR_KEY_CHILDREN,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized SupervisorSpec must carry the lifted \
+                 SUPERVISOR_KEY_* byte-sequence {quoted} verbatim in \
+                 the JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn supervisor_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of two
+        // canonical top-level byte-strings onto the same value (e.g. an
+        // accidental copy-paste flip of `SUPERVISOR_KEY_CHILDREN` to
+        // also read `"estrategia"`) would silently reroute every
+        // downstream probe on one axis onto the sibling axis's overlay
+        // entry and pass every propagation-probe test that expected only
+        // the stale axis's value. Peer of the sibling four-way distinct
+        // pin on the `M2_LIMITS_KEY_*` tetrad (d8b8b4f).
+        let all = [
+            crate::render::SUPERVISOR_KEY_ESTRATEGIA,
+            crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+            crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+            crate::render::SUPERVISOR_KEY_CHILDREN,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "SUPERVISOR_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn supervisor_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `SUPERVISOR_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores, no
+        // `kebab-case` hyphens, no leading colon, no `PascalCase` leading
+        // capital, no whitespace / dots) — the canonical shape the
+        // `#[serde(rename_all = "camelCase")]` derive produces on
+        // `SupervisorSpec`. A future flip to a non-camelCase attribute
+        // at the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `supervisor_spec_serde_keys_match_lifted_supervisor_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer with `m2_limits_key_consts_are_lower_camel_case_shape`
+        // (d8b8b4f) on the sibling M2 `:limits` axis.
+        for key in [
+            crate::render::SUPERVISOR_KEY_ESTRATEGIA,
+            crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+            crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+            crate::render::SUPERVISOR_KEY_CHILDREN,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "SUPERVISOR_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "SUPERVISOR_KEY_* must lead with an ASCII-lowercase byte \
+                 (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "SUPERVISOR_KEY_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn supervisor_key_consts_are_byte_distinct_from_supervisor_author_key_peers() {
+        // Cross-axis drift pin: the four `SUPERVISOR_KEY_*` consts
+        // (camelCase JSON keys, no leading colon) must never collide
+        // byte-for-byte with the four peer `SUPERVISOR_AUTHOR_KEY_*`
+        // consts (kebab-case author-facing labels with leading colon)
+        // that sit next to them at `caixa_core::render`. Both families
+        // cover the same four typed Supervisor slots on two distinct
+        // axes (author-side kebab vs renderer-side camelCase);
+        // collapsing either family onto the other's byte-shape would
+        // silently reroute the render-side probe onto the author-facing
+        // surface, or vice versa. Peer of the byte-distinctness
+        // discipline the `M3_PLACEMENT_KEY_ESTRATEGIA` docstring names
+        // against the peer `M3_AUTHOR_KEY_PLACEMENT`.
+        let pairs = [
+            (
+                crate::render::SUPERVISOR_KEY_ESTRATEGIA,
+                crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA,
+            ),
+            (
+                crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+                crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS,
+            ),
+            (
+                crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+                crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW,
+            ),
+            (
+                crate::render::SUPERVISOR_KEY_CHILDREN,
+                crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN,
+            ),
+        ];
+        for (json_key, author_key) in pairs {
+            assert_ne!(
+                json_key, author_key,
+                "SUPERVISOR_KEY_* (JSON side) must differ byte-for-byte \
+                 from the peer SUPERVISOR_AUTHOR_KEY_* (author side); \
+                 got JSON `{json_key}` == author `{author_key}`",
+            );
+        }
+    }
 }
