@@ -335,6 +335,39 @@ pub use caixa_core::HELM_CHART_YAML_FILENAME;
 /// schema-load-bearing `ChartDir::files` entries.
 pub use caixa_core::HELM_VALUES_YAML_FILENAME;
 
+/// Canonical `lareira-<nome>` chart-directory human-facing readme
+/// filename every rendered chart carries at its top-level directory —
+/// re-export of the lifted [`caixa_core::HELM_CHART_README_FILENAME`] so
+/// the third leg of the canonical `{Chart.yaml, values.yaml, README.md}`
+/// per-`lareira-<nome>` chart-directory `ChartFile` triple lives in
+/// exactly one place across every caixa renderer. The single
+/// production-code call site consuming it is
+/// [`render_chart_for_servico`]'s `ChartDir` assembly where the readme
+/// file's per-`ChartFile` `path` axis is set (the sole emitter site the
+/// prior inline `"README.md"` string literal sat at); every test-side
+/// round-trip navigator that reaches into the rendered `ChartDir` by
+/// the readme filename (the [`render_chart_for_servico`] files-vec-
+/// membership pin + the [`ChartDir::write_to`] post-write existence
+/// pin — two sites) now consults the same `&'static str`. A drifted
+/// local `pub const HELM_CHART_README_FILENAME: &str = "…"` at this
+/// crate — the canonical drift footgun where a sibling local
+/// `pub const` could happen to carry the same string at the source
+/// while pointing at a different `&'static` allocation — surfaces as
+/// GitHub / Artifact Hub / any downstream per-chart README-surfacing
+/// UI silently falling back to "no README available" for the rendered
+/// `lareira-<nome>` chart far from the drift commit's source, with no
+/// field naming the readme-filename-drift root cause. The equality +
+/// `&'static` static-data identity pin
+/// (`helm_chart_readme_filename_re_export_points_at_caixa_core_canonical`)
+/// closes the drift footgun at caixa-helm build time. Peer to the
+/// [`HELM_CHART_YAML_FILENAME`] / [`HELM_VALUES_YAML_FILENAME`]
+/// re-exports on the sibling canonical-Helm-per-chart-directory-
+/// filename axes — completes the per-`lareira-<nome>`-chart-directory
+/// `(Chart.yaml, values.yaml, README.md)` canonical-per-chart-directory-
+/// filename-axis re-export triple every rendered chart declares as its
+/// three `ChartDir::files` entries.
+pub use caixa_core::HELM_CHART_README_FILENAME;
+
 /// Canonical K8s CR top-level `spec` key. Re-export of the canonical
 /// [`caixa_core::KUBE_KEY_SPEC`] so the per-kind body key lives in
 /// exactly one place across every caixa renderer — caixa-helm's
@@ -536,7 +569,7 @@ pub fn render_chart_for_servico_with(
                 serde_yaml::to_string(&chart_yaml)?,
             ),
             ChartFile::new(HELM_VALUES_YAML_FILENAME, values_yaml),
-            ChartFile::new("README.md", readme),
+            ChartFile::new(HELM_CHART_README_FILENAME, readme),
         ],
     })
 }
@@ -783,7 +816,7 @@ spec:
             .collect();
         assert!(names.contains(&HELM_CHART_YAML_FILENAME.to_string()));
         assert!(names.contains(&HELM_VALUES_YAML_FILENAME.to_string()));
-        assert!(names.contains(&"README.md".to_string()));
+        assert!(names.contains(&HELM_CHART_README_FILENAME.to_string()));
     }
 
     #[test]
@@ -1248,7 +1281,7 @@ spec:
         let chart_root = tmp.path().join("lareira-hello-rio");
         assert!(chart_root.join(HELM_CHART_YAML_FILENAME).exists());
         assert!(chart_root.join(HELM_VALUES_YAML_FILENAME).exists());
-        assert!(chart_root.join("README.md").exists());
+        assert!(chart_root.join(HELM_CHART_README_FILENAME).exists());
     }
 
     #[test]
@@ -1524,6 +1557,43 @@ spec:
             "HELM_VALUES_YAML_FILENAME",
             HELM_VALUES_YAML_FILENAME,
             caixa_core::HELM_VALUES_YAML_FILENAME,
+        );
+    }
+
+    #[test]
+    fn helm_chart_readme_filename_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `HELM_CHART_README_FILENAME` was lifted from the
+        // three production + test-side inline `"README.md"` literals
+        // across [`render_chart_for_servico`]'s `ChartDir` readme-file
+        // `path` emit site + every test-side round-trip navigator that
+        // reaches into the rendered `ChartDir` by the readme filename
+        // (the [`renders_three_files`] files-vec-membership pin + the
+        // [`ChartDir::write_to`] post-write existence pin) to a
+        // re-export of [`caixa_core::HELM_CHART_README_FILENAME`] so the
+        // per-`lareira-<nome>` chart-directory human-facing readme
+        // filename lives in exactly one place across every caixa
+        // renderer. Pin the equality + `&'static` static-data identity
+        // here so any local re-introduction of a sibling `pub const
+        // HELM_CHART_README_FILENAME: &str = "…"` at this crate — the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation — is a build-
+        // time test failure naming the offending drift, not a silent
+        // GitHub / Artifact Hub / any per-chart README-surfacing UI
+        // fall-through to "no README available" at chart-consumption
+        // time far from the drift site. Peer to
+        // [`helm_chart_yaml_filename_re_export_points_at_caixa_core_canonical`]
+        // / [`helm_values_yaml_filename_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Helm-per-chart-directory-filename
+        // axis re-export surfaces — completes the
+        // per-`lareira-<nome>`-chart-directory `(Chart.yaml,
+        // values.yaml, README.md)` canonical-per-chart-directory-
+        // filename-axis re-export triple every rendered chart declares
+        // as its three `ChartDir::files` entries.
+        caixa_core::assert_str_reexport_identity(
+            "HELM_CHART_README_FILENAME",
+            HELM_CHART_README_FILENAME,
+            caixa_core::HELM_CHART_README_FILENAME,
         );
     }
 
