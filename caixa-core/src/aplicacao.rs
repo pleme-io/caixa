@@ -12222,4 +12222,98 @@ mod tests {
             "the serde default must materialize as the lifted canonical Servico port"
         );
     }
+
+    // ── drift-detection: serde-derive-to-MEMBRO_KEY_* identity ────────────
+
+    #[test]
+    fn membro_serde_keys_match_lifted_membro_key_consts() {
+        // Load-bearing invariant: the two `MEMBRO_KEY_*` consts
+        // ([`crate::MEMBRO_KEY_CAIXA`] / [`crate::MEMBRO_KEY_VERSAO`])
+        // name the exact camelCase JSON keys the
+        // `#[serde(rename_all = "camelCase")]` attribute on
+        // [`Membro`] emits. Serialize a fully-populated `Membro` and pin
+        // that each canonical byte-sequence appears verbatim in the
+        // JSON — a future accidental `rename_all = "snake_case"` /
+        // `"kebab-case"` / verbatim-field-name flip at the derive
+        // attribute (any of which would silently break every downstream
+        // JSON consumer that reaches for one of the two consts via
+        // `Value::get(...)`) surfaces here as a build-time test failure
+        // at `aplicacao.rs`, not as an apply-time
+        // `.get(<stale-canonical-const>)` returning `None` far from the
+        // derive-attr drift's commit. Peer with the sibling
+        // `supervisor_spec_serde_keys_match_lifted_supervisor_key_consts`
+        // (40cc4e5) pin on the M2 supervision-tree top-level axis —
+        // same discipline the SupervisorSpec top-level lift established,
+        // extended here to the M3 [`Membro`] per-`:membros` axis.
+        let m = Membro {
+            caixa: "catalog".into(),
+            versao: "^0.1".into(),
+        };
+        let json = serde_json::to_string(&m).unwrap();
+        for key in [crate::MEMBRO_KEY_CAIXA, crate::MEMBRO_KEY_VERSAO] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized Membro must carry the lifted MEMBRO_KEY_* \
+                 byte-sequence {quoted} verbatim in the JSON emission \
+                 (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn membro_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the two
+        // canonical [`Membro`] per-entry byte-strings onto the same
+        // value (e.g. an accidental copy-paste flip of
+        // [`crate::MEMBRO_KEY_VERSAO`] to also read `"caixa"`) would
+        // silently reroute every downstream probe on one axis onto the
+        // sibling axis's overlay entry and pass every propagation-probe
+        // test that expected only the stale axis's value. Peer of the
+        // sibling four-way distinct pin on the `SUPERVISOR_KEY_*` tetrad
+        // (40cc4e5).
+        let all = [crate::MEMBRO_KEY_CAIXA, crate::MEMBRO_KEY_VERSAO];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "MEMBRO_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn membro_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `MEMBRO_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores, no
+        // `kebab-case` hyphens, no leading colon, no `PascalCase`
+        // leading capital, no whitespace / dots) — the canonical shape
+        // the `#[serde(rename_all = "camelCase")]` derive produces on
+        // [`Membro`]. A future flip to a non-camelCase attribute at
+        // the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `membro_serde_keys_match_lifted_membro_key_consts` (that test
+        // fails on the mismatch between const and derive). Peer with
+        // `supervisor_key_consts_are_lower_camel_case_shape` (40cc4e5)
+        // on the sibling `SupervisorSpec` top-level axis.
+        for key in [crate::MEMBRO_KEY_CAIXA, crate::MEMBRO_KEY_VERSAO] {
+            assert!(
+                !key.is_empty(),
+                "MEMBRO_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "MEMBRO_KEY_* must lead with an ASCII-lowercase byte \
+                 (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "MEMBRO_KEY_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
 }
