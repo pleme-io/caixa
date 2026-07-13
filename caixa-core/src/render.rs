@@ -11498,6 +11498,102 @@ pub fn cilium_auth_mode(required: bool) -> &'static str {
 /// [cm]: ../../caixa_mesh/index.html
 pub const GATEWAY_API_KEY_PARENT_REFS: &str = "parentRefs";
 
+/// Canonical K8s Gateway API `HTTPRoute` per-`spec.parentRefs[]` entry
+/// listener-selector sub-axis key every `gateway_routes`-emitted
+/// `HTTPRoute` document mounts under each parent-Gateway attachment to
+/// pin the route to one specific listener out of the parent Gateway's
+/// `spec.listeners[]` list (`spec.parentRefs[].sectionName`). Pairs
+/// with the sibling [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) — the
+/// Gateway API v1 CRD schema pins per-HTTPRoute route→Gateway
+/// attachment through the `spec.parentRefs[]` container axis and the
+/// per-entry listener-selection sub-axis through `sectionName` beneath
+/// each entry (each `SectionName`-typed scalar binds to a
+/// `Gateway.spec.listeners[].name` byte-string). Omitting the
+/// selector attaches the route to *every* listener on the parent
+/// Gateway — the Gateway API v1 default fan-out that silently doubles
+/// route emission once the substrate ships a second listener under
+/// the HTTPS-by-default trajectory the peer
+/// [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] (cd60fde) docstring
+/// forecasts (`"http"` → `"http-v1"` alongside a sibling `"https"`
+/// listener once cert-manager-issued per-`:entrada :host` certificates
+/// land). Pinning the selector by construction binds each substrate-
+/// emitted route to exactly one listener on the parent Gateway, so a
+/// future multi-listener migration lands as one const-edit on the
+/// paired [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] declaration
+/// instead of a silent per-route dispatch flip.
+///
+/// The single source of truth the rendered Aplicacao Gateway-API-side
+/// ingress bundle's per-HTTPRoute per-parentRef listener-selector-axis-
+/// naming reaches for:
+///
+///   - the rendered `HTTPRoute` document's per-parentRef
+///     `spec.parentRefs[].sectionName` axis (the `gateway_routes` per-
+///     Aplicacao HTTPRoute's `parent_ref.insert(<KEY>, …)` call the
+///     paired [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] `&'static str`
+///     — the same byte-string the parent Gateway's sole
+///     `listener.insert(GATEWAY_API_KEY_NAME, …)` call emits at
+///     `spec.listeners[].name` — flows through, so a substrate-side
+///     rebrand of the canonical listener-name identifier reaches both
+///     the listener-name emitter and the sectionName selector by
+///     construction).
+///
+/// The per-parentRef listener-selector sub-axis names the same
+/// Gateway-API-implementation-side per-HTTPRoute route→listener
+/// attachment sub-container as the sibling
+/// [`GATEWAY_API_KEY_PARENT_REFS`] per-HTTPRoute parent-Gateway-binding
+/// container axis it accompanies, and must move together on any future
+/// Gateway API rebrand (an upstream SIG-Network Gateway API v2 rename
+/// of the per-entry listener-selection sub-axis from `sectionName` to
+/// `listenerName` / `listener` / `attachTo`, coordinated with the
+/// Gateway API deprecation cycle). Until this lift landed the axis had
+/// zero production-code call sites — the substrate emitted an
+/// `HTTPRoute` whose `spec.parentRefs[]` entries omitted the selector
+/// entirely, silently accepting the Gateway API v1 attach-to-every-
+/// listener default fan-out. A future substrate-side second listener
+/// under the same parent Gateway (the HTTPS-by-default trajectory the
+/// [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] docstring forecasts)
+/// would have silently doubled every route's emitted per-request
+/// dispatch surface — every external `:entrada` request the route was
+/// authored to accept on `:80` would have accepted a matching request
+/// on `:443` too, with the second-listener leak surfacing only in per-
+/// request access logs (never in `kubectl describe httproute` — the
+/// implicit fan-out reads as intended per the Gateway API v1 spec).
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5,
+/// "every recurring shape becomes a generator before it becomes a
+/// pattern; every pattern becomes a library before it becomes
+/// duplicated code. The duplication budget is zero.") promotes the
+/// constant to a typed substrate-side `&'static str` on the same
+/// trajectory the [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`GATEWAY_API_KEY_MATCHES`] (8f9ed08) /
+/// [`GATEWAY_API_KEY_HOSTNAME`] (c96fa22) /
+/// [`GATEWAY_API_KEY_HOSTNAMES`] (bd7ea31) lifts established on the
+/// sibling canonical-Gateway-API-HTTPRoute-body-axis surface — extends
+/// the per-Gateway-API-HTTPRoute-body-axis canonical-string-pin set
+/// onto the per-parentRef listener-selector sub-axis the M3 Aplicacao
+/// mesh renderer's external `:entrada` ingress contract now rests on.
+/// The render-side consumer threads the same `&'static str` through
+/// its `parent_ref.insert(…)` call so a future Gateway API rebrand on
+/// the per-parentRef listener-selector sub-axis (or an upstream SIG-
+/// Network Gateway API v2 rename to a per-CRD sibling name) lands in
+/// one place; every future renderer that reaches for the canonical
+/// per-HTTPRoute per-parentRef listener-selector sub-axis (the future
+/// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-
+/// Aplicacao `HTTPRoute` fan-out, a future per-edge `TCPRoute` /
+/// `TLSRoute` / `GRPCRoute` renderer whose per-parentRef listener-
+/// selection nests under the same axis convention) inherits the same
+/// value by construction with no opportunity for per-renderer drift.
+///
+/// Same "the typed constant lives in one place" discipline the
+/// [`GATEWAY_API_KEY_PARENT_REFS`] (f44e823) /
+/// [`GATEWAY_API_KEY_BACKEND_REFS`] (a6c5679) /
+/// [`GATEWAY_API_KEY_MATCHES`] (8f9ed08) lifts apply on the peer
+/// canonical-Gateway-API-HTTPRoute-body-axis surface.
+///
+/// [cm]: ../../caixa_mesh/index.html
+pub const GATEWAY_API_KEY_SECTION_NAME: &str = "sectionName";
+
 /// Canonical K8s Gateway API `HTTPRoute` per-rule backend-destination
 /// container-axis key every `gateway_routes`-emitted `HTTPRoute`
 /// document mounts its per-rule `[{name, port}]` backend list under

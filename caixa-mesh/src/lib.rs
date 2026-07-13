@@ -1132,6 +1132,53 @@ pub use caixa_core::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX;
 /// per-route body-shape.
 pub use caixa_core::GATEWAY_API_KEY_PARENT_REFS;
 
+/// Canonical K8s Gateway API `HTTPRoute` per-`spec.parentRefs[]` entry
+/// listener-selector sub-axis key every `gateway_routes`-emitted
+/// `HTTPRoute` document mounts under each parent-Gateway attachment
+/// (`spec.parentRefs[].sectionName`). Re-export of the canonical
+/// [`caixa_core::GATEWAY_API_KEY_SECTION_NAME`] so the Gateway-API-
+/// implementation-side per-parentRef listener-selector-sub-axis-key
+/// string lives in exactly one place across every caixa renderer —
+/// caixa-mesh's `gateway_routes` per-Aplicacao `HTTPRoute` emitter
+/// (the per-parentRef `parent_ref.insert(<KEY>, …)` call whose paired
+/// [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] `&'static str` value
+/// binds the emitted route to the same listener the parent Gateway's
+/// sole `listener.insert(GATEWAY_API_KEY_NAME, …)` call names) and
+/// every future per-Gateway-API-side renderer the M3.x absorption
+/// roadmap acknowledges now consult the same `&'static str`, so a
+/// future Gateway API rebrand on the per-parentRef listener-selector
+/// sub-axis (an upstream Gateway API v2 rename to `listenerName` /
+/// `listener` / `attachTo`, coordinated with the upstream SIG-Network
+/// Gateway API deprecation cycle) is a one-line edit on the canonical
+/// [`caixa_core::GATEWAY_API_KEY_SECTION_NAME`] declaration, not a
+/// coordinated rewrite across this crate's `gateway_routes` renderer
+/// + every future per-target renderer the substrate adds.
+///
+/// The per-parentRef listener-selector sub-axis binds the emitted
+/// `HTTPRoute` to exactly one listener on its parent Gateway (the
+/// paired [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] byte-string names
+/// the sole HTTP listener the substrate emits today). Omitting the
+/// selector attaches the route to *every* listener on the parent
+/// Gateway — the Gateway API v1 default fan-out that silently doubles
+/// route emission once the substrate ships a second listener under
+/// the HTTPS-by-default trajectory the peer
+/// [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] docstring forecasts.
+/// Pinning the selector by construction closes that drift footgun
+/// structurally: the listener-name emitter and the sectionName
+/// selector move as a single unit through one lifted `&'static str`,
+/// so a substrate-side rebrand of the canonical listener-name
+/// identifier reaches both sites at construction time.
+///
+/// Peer to the [`GATEWAY_API_KEY_PARENT_REFS`] re-export on the
+/// sibling canonical-Gateway-API-HTTPRoute-body-axis surface — nests
+/// the per-Gateway-API-HTTPRoute-body-axis canonical-string re-export
+/// set (`parentRefs`, `backendRefs`, future `hostnames`) one level
+/// deeper onto the per-parentRef listener-selector sub-axis this
+/// crate's `gateway_routes` renderer's external `:entrada` ingress
+/// contract now rests on across the Gateway API HTTPRoute-side per-
+/// parentRef body-shape.
+pub use caixa_core::GATEWAY_API_KEY_SECTION_NAME;
+
 /// Canonical K8s Gateway API `HTTPRoute` per-rule backend-destination
 /// container-axis key every `gateway_routes`-emitted `HTTPRoute` per-
 /// rule block mounts its `[{name, port}]` backend fan-out list under
@@ -2777,6 +2824,45 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 
     let mut parent_ref = serde_yaml::Mapping::new();
     parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome.clone());
+    // Per-parentRef listener-selector sub-axis — pins the emitted
+    // `HTTPRoute` to the parent Gateway's sole HTTP listener by name,
+    // rather than accepting the Gateway API v1 default
+    // attach-to-every-listener fan-out. Both halves of the substrate's
+    // canonical per-listener identity pair — the Gateway's
+    // `spec.listeners[].name` (emitted a few lines above through the
+    // `listener.insert(GATEWAY_API_KEY_NAME, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME)`
+    // call) and the HTTPRoute's `spec.parentRefs[].sectionName` (this
+    // call) — now thread through the same lifted
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] `&'static str`
+    // constant, so a substrate-side rebrand of the canonical listener-
+    // name identifier (`"http" → "http-v1"` on the multi-listener
+    // HTTPS-by-default trajectory the paired
+    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] docstring forecasts,
+    // a per-cluster override the future `:entrada :listener-name`
+    // slot promotes) reaches both sites by construction.
+    //
+    // Until this line landed the emitter omitted the selector
+    // entirely, silently accepting the Gateway API v1
+    // attach-to-every-listener default: a future substrate-side
+    // second listener under the same parent Gateway (the
+    // cert-manager-issued per-`:entrada :host` HTTPS listener the
+    // sibling `GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT` docstring
+    // forecasts) would have silently doubled every route's dispatch
+    // surface — every external `:entrada` request the route was
+    // authored to accept on the substrate's canonical HTTP listener
+    // would have accepted a matching request on the paired HTTPS
+    // listener too, with the second-listener leak surfacing only in
+    // per-request access logs (never in `kubectl describe httproute`
+    // — the implicit fan-out reads as intended per the Gateway API v1
+    // spec). Peer to the sibling `parent_ref.insert(GATEWAY_API_KEY_NAME,
+    // …)` call on the same parent-Gateway attachment sub-container —
+    // both per-parentRef sub-axes now name their target through the
+    // canonical byte-string sourced from `caixa-core`, so a rebrand on
+    // either axis reaches this consumer by construction.
+    parent_ref.insert_string(
+        GATEWAY_API_KEY_SECTION_NAME,
+        GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
+    );
 
     // Empty-`:entrada :paths` catch-all fallback — the substrate's
     // canonical URL-path scalar for an HTTPRoute whose author declared
@@ -5522,6 +5608,59 @@ mod tests {
     }
 
     #[test]
+    fn gateway_api_key_section_name_re_export_points_at_caixa_core_canonical() {
+        // The renderer's `GATEWAY_API_KEY_SECTION_NAME` was lifted from
+        // the (previously omitted) per-parentRef listener-selector sub-
+        // axis at the `gateway_routes` per-Aplicacao HTTPRoute's
+        // `parent_ref.insert(GATEWAY_API_KEY_SECTION_NAME,
+        // GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME)` call site (the sole
+        // per-production-code per-parentRef listener-selector-sub-axis
+        // emitter) to a re-export of
+        // [`caixa_core::GATEWAY_API_KEY_SECTION_NAME`] so the Gateway-
+        // API-CRD per-HTTPRoute per-parentRef listener-selector-sub-
+        // axis-key string lives in exactly one place across every caixa
+        // renderer. Pin the equality + static-data identity here so any
+        // local re-introduction of a sibling
+        // `pub const GATEWAY_API_KEY_SECTION_NAME: &str = "…"` (the
+        // canonical drift footgun where a sibling local `pub const`
+        // could happen to carry the same string at the source while
+        // pointing at a different `&'static` allocation) is a build-
+        // time test failure naming the offending drift, not a silent
+        // apply-time symptom — the prior shape (the selector omitted
+        // entirely) would have let a Gateway-API-CRD per-parentRef
+        // listener-selector-axis rebrand on the caixa-mesh side without
+        // a coordinated caixa-core edit silently land per-HTTPRoute
+        // parent-Gateway attachments at the drifted axis; the route
+        // reverts to the Gateway API v1 attach-to-every-listener
+        // default fan-out, silently doubling per-request dispatch
+        // surface once a second listener lands on the parent Gateway
+        // (the HTTPS-by-default trajectory the paired
+        // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] docstring
+        // forecasts). Peer to
+        // [`gateway_api_key_parent_refs_re_export_points_at_caixa_core_canonical`]
+        // on the sibling canonical-Gateway-API-HTTPRoute-body-axis re-
+        // export identity-pin set — nests the per-Gateway-API-
+        // HTTPRoute-body-axis re-export identity-pin set (`parentRefs`,
+        // `backendRefs`, future `hostnames`) one level deeper onto the
+        // per-parentRef listener-selector sub-axis this crate's
+        // `gateway_routes` renderer's external `:entrada` ingress
+        // contract now rests on across the Gateway API HTTPRoute-side
+        // per-parentRef body-shape.
+        caixa_core::assert_str_reexport_identity(
+            "GATEWAY_API_KEY_SECTION_NAME",
+            GATEWAY_API_KEY_SECTION_NAME,
+            caixa_core::GATEWAY_API_KEY_SECTION_NAME,
+        );
+        // Pin the byte-shape too so a future Gateway API v2 rebrand of
+        // the per-parentRef listener-selector sub-axis (an upstream
+        // SIG-Network Gateway API v2 rename to `listenerName` /
+        // `listener` / `attachTo`) surfaces here as an explicit
+        // byte-shape drift rather than a silent per-consumer dispatch
+        // miss at the K8s apiserver-side CRD schema validator.
+        assert_eq!(GATEWAY_API_KEY_SECTION_NAME, "sectionName");
+    }
+
+    #[test]
     fn gateway_api_key_backend_refs_re_export_points_at_caixa_core_canonical() {
         // The renderer's `GATEWAY_API_KEY_BACKEND_REFS` was lifted from
         // the inline `"backendRefs"` literal at the `gateway_routes`
@@ -7094,6 +7233,74 @@ mod tests {
              this consumer and every downstream HTTPRoute `sectionName` \
              selector authored against the substrate's canonical name would \
              miss its listener at attachment time"
+        );
+    }
+
+    #[test]
+    fn httproute_parent_ref_pins_section_name_to_lifted_default_http_listener_name() {
+        // The per-Aplicacao `HTTPRoute`'s sole per-parentRef listener-
+        // selector sub-axis (the `parent_ref.insert(GATEWAY_API_KEY_SECTION_NAME,
+        // GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME)` call site in
+        // [`gateway_routes`]) must render the same lifted
+        // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`]
+        // `&'static str` constant the sibling Gateway listener-name
+        // emitter reaches for — the paired
+        // [`gateway_listener_name_routes_through_lifted_default_http_listener_name`]
+        // pin fires the same byte-string on the sibling
+        // `listener.insert(GATEWAY_API_KEY_NAME, …)` call, and this
+        // pin closes the sectionName half so the substrate's canonical
+        // per-listener identity pair (`Gateway.spec.listeners[].name`
+        // + `HTTPRoute.spec.parentRefs[].sectionName`) moves as a
+        // single unit through one lifted `&'static str`.
+        //
+        // Until this line landed the emitter omitted the selector
+        // entirely, silently accepting the Gateway API v1 default
+        // attach-to-every-listener fan-out. A future substrate-side
+        // second listener under the same parent Gateway (the
+        // cert-manager-issued per-`:entrada :host` HTTPS listener the
+        // sibling [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] docstring
+        // forecasts) would have silently doubled every route's per-
+        // request dispatch surface — every external `:entrada`
+        // request the route was authored to accept on the HTTP
+        // listener would have accepted a matching request on the
+        // paired HTTPS listener too, with the second-listener leak
+        // surfacing only in per-request access logs (never in
+        // `kubectl describe httproute` — the implicit fan-out reads
+        // as intended per the Gateway API v1 spec). Pinning the
+        // selector by construction closes that drift footgun
+        // structurally: a substrate-side rebrand of the canonical
+        // listener-name identifier reaches both the listener-name
+        // emitter and the sectionName selector at construction time.
+        //
+        // Peer with the sibling
+        // [`gateway_listener_name_routes_through_lifted_default_http_listener_name`]
+        // pin on the same lifted const — the two per-listener
+        // substrate-canonical byte-string axes (`Gateway.spec.
+        // listeners[].name` vs `HTTPRoute.spec.parentRefs[].sectionName`)
+        // now bind by construction to the same lifted `&'static str`,
+        // so a rebrand on either axis reaches its consumer through
+        // one canonical caixa-core declaration.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        let parent = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(GATEWAY_API_KEY_PARENT_REFS))
+            .and_then(|p| p.as_sequence())
+            .and_then(|s| s.first())
+            .expect("first parentRef present");
+        assert_eq!(
+            parent
+                .get(GATEWAY_API_KEY_SECTION_NAME)
+                .and_then(|n| n.as_str()),
+            Some(GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME),
+            "the HTTPRoute per-parentRef listener-selector scalar must \
+             render the lifted GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME \
+             constant verbatim — the Gateway listener-name emitter and \
+             this sectionName selector must move as a unit through one \
+             canonical caixa-core `&'static str`, else a future \
+             listener-name rebrand silently splits the per-listener \
+             identity pair and the emitted route reverts to the Gateway \
+             API v1 attach-to-every-listener default fan-out"
         );
     }
 
