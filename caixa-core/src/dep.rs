@@ -2639,7 +2639,7 @@ pub fn validate_no_self_dep(
         if dep.nome == parent_nome {
             return Err(DepError::DepIsSelf {
                 nome: parent_nome.to_string(),
-                list: ":deps",
+                list: crate::render::DEP_AUTHOR_KEY_DEPS,
             });
         }
     }
@@ -2647,7 +2647,7 @@ pub fn validate_no_self_dep(
         if dep.nome == parent_nome {
             return Err(DepError::DepIsSelf {
                 nome: parent_nome.to_string(),
-                list: ":deps-dev",
+                list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
             });
         }
     }
@@ -14105,7 +14105,7 @@ mod tests {
         ];
         let err = validate_no_self_dep(&deps, &[], "orquestra").unwrap_err();
         assert!(
-            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == ":deps"),
+            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == crate::render::DEP_AUTHOR_KEY_DEPS),
             "got {err:?}"
         );
     }
@@ -14117,7 +14117,7 @@ mod tests {
         let deps_dev = vec![Dep::simple("orquestra", "^0.1")];
         let err = validate_no_self_dep(&[], &deps_dev, "orquestra").unwrap_err();
         assert!(
-            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == ":deps-dev"),
+            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == crate::render::DEP_AUTHOR_KEY_DEPS_DEV),
             "got {err:?}"
         );
     }
@@ -14132,7 +14132,7 @@ mod tests {
         let deps_dev = vec![Dep::simple("orquestra", "^0.2")];
         let err = validate_no_self_dep(&deps, &deps_dev, "orquestra").unwrap_err();
         assert!(
-            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == ":deps"),
+            matches!(err, DepError::DepIsSelf { ref nome, list } if nome == "orquestra" && list == crate::render::DEP_AUTHOR_KEY_DEPS),
             "got {err:?}"
         );
     }
@@ -14173,7 +14173,7 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(
-            rendered.contains(":deps-dev"),
+            rendered.contains(crate::render::DEP_AUTHOR_KEY_DEPS_DEV),
             "diagnostic must name the offending list tag: {rendered}",
         );
         assert!(
@@ -14196,5 +14196,89 @@ mod tests {
         // which all use exact-string equality on the typed identity.
         let deps = vec![Dep::simple("orquestra-helper", "^0.1")];
         validate_no_self_dep(&deps, &[], "orquestra").unwrap();
+    }
+
+    // ── drift-detection: DEP_AUTHOR_KEY_{DEPS,DEPS_DEV} pin ─────────────
+
+    #[test]
+    fn dep_author_key_consts_pin_canonical_kebab_case_labels() {
+        // Scalar-value pin: the two author-facing kebab-case labels the
+        // `(defcaixa … :deps ((…)) :deps-dev ((…)))` surface admits on
+        // the two-list dep-graph slot axis, one arm per typed slot.
+        // Mirrors the peer scalar-value pin the sibling
+        // [`crate::M2_AUTHOR_KEY_LIMITS`] /
+        // [`crate::M2_AUTHOR_KEY_BEHAVIOR`] /
+        // [`crate::M2_AUTHOR_KEY_UPGRADE_FROM`] (f49c8b0) M2 top-level
+        // author-labels, [`crate::M3_AUTHOR_KEY_MEMBROS`] etc.
+        // (882f498) M3 top-level author-labels, and
+        // [`crate::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] etc. (be40492)
+        // Supervisor top-level author-labels carry, so every kind-scoped
+        // typed-slot-family axis routes through one canonical per-arm
+        // declaration.
+        //
+        // A future rebrand (`:deps` → `:dependencies` matching Cargo's
+        // verbatim key, `:deps-dev` → `:dev-dependencies` matching the
+        // same, `:deps` / `:deps-dev` → `:runtime-deps` / `:dev-deps`
+        // for symmetry) lands as an edit to exactly one const, and
+        // every consumer that reaches for the label picks it up at
+        // build time rather than at runtime as a downstream mismatch on
+        // a `DepError::DuplicateNome { list: … }` diagnostic far from
+        // the rename's commit.
+        assert_eq!(crate::render::DEP_AUTHOR_KEY_DEPS, ":deps");
+        assert_eq!(crate::render::DEP_AUTHOR_KEY_DEPS_DEV, ":deps-dev");
+    }
+
+    #[test]
+    fn dep_author_key_consts_are_pairwise_distinct() {
+        // Distinct-labels pin: the two `:deps` / `:deps-dev` labels
+        // must not collapse onto one byte-string. A future copy-paste
+        // slip that renamed both consts to the same value (or a rebrand
+        // that dropped the `-dev` suffix from one but not the other)
+        // would leave every `DepError::DuplicateNome { list: … }`
+        // diagnostic naming an unattributable list — the linter would
+        // route the author to the wrong caixa.lisp block, or the
+        // cross-list precedence gate
+        // (`validate_deps_duplicate_in_deps_fires_before_duplicate_in_deps_dev`)
+        // would surface a `:deps`-tagged diagnostic on a `:deps-dev`
+        // duplicate. Peer of the sibling
+        // `m2_author_key_consts_are_pairwise_distinct`-shape gates the
+        // other top-level kind-scoped slot-family axes carry
+        // (implicitly held by their different byte-values today).
+        assert_ne!(
+            crate::render::DEP_AUTHOR_KEY_DEPS,
+            crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+            "DEP_AUTHOR_KEY_{{DEPS,DEPS_DEV}} consts must be pairwise-distinct \
+             so a `DepError::DuplicateNome {{ list: … }}` diagnostic \
+             self-locates the offending block in the author's caixa.lisp",
+        );
+    }
+
+    #[test]
+    fn validate_no_self_dep_routes_through_lifted_dep_author_key_consts() {
+        // Production-through-const pin: the two per-arm list tags
+        // [`validate_no_self_dep`] threads onto the `list:` field of a
+        // returned [`DepError::DepIsSelf`] route through the lifted
+        // [`crate::DEP_AUTHOR_KEY_DEPS`] /
+        // [`crate::DEP_AUTHOR_KEY_DEPS_DEV`] consts. A future drift at
+        // the walker (a rename that reaches one arm but not the const,
+        // or vice versa) surfaces here at build time rather than at
+        // runtime as a `feira lint` diagnostic naming the wrong list
+        // tag. Mirror of the peer
+        // [`crate::Caixa::declared_servico_slots`] production tagger
+        // pin (f49c8b0) on the sibling M2 top-level slot axis, extended
+        // onto the two-list dep-graph gate.
+        let deps = vec![Dep::simple("orquestra", "^0.1")];
+        let err = validate_no_self_dep(&deps, &[], "orquestra").unwrap_err();
+        let DepError::DepIsSelf { list, .. } = err else {
+            panic!("expected DepIsSelf from :deps walk");
+        };
+        assert_eq!(list, crate::render::DEP_AUTHOR_KEY_DEPS);
+
+        let deps_dev = vec![Dep::simple("orquestra", "^0.1")];
+        let err = validate_no_self_dep(&[], &deps_dev, "orquestra").unwrap_err();
+        let DepError::DepIsSelf { list, .. } = err else {
+            panic!("expected DepIsSelf from :deps-dev walk");
+        };
+        assert_eq!(list, crate::render::DEP_AUTHOR_KEY_DEPS_DEV);
     }
 }

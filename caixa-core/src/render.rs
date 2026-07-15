@@ -7341,6 +7341,67 @@ pub const SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW: &str = ":restart-window";
 /// [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`] for the full lift rationale.
 pub const SUPERVISOR_AUTHOR_KEY_CHILDREN: &str = ":children";
 
+/// Canonical author-facing kebab-case `(defcaixa … :deps ((…)))` top-
+/// level dep-list slot label the two-list dependency-graph slot family
+/// surfaces under. Peer of [`DEP_AUTHOR_KEY_DEPS_DEV`] on the two-list
+/// dep-graph slot axis: `:deps` names the runtime-closure dep-list
+/// (every `Cargo.toml [dependencies]` equivalent — reached by every
+/// build the caixa participates in), the sibling `:deps-dev` names the
+/// dev-only dep-list (every `Cargo.toml [dev-dependencies]` equivalent
+/// — reached only by test / dev-shim builds).
+///
+/// Threaded verbatim as the `list: &'static str` field on both
+/// [`crate::DepError::DuplicateNome`] (359fba5) and
+/// [`crate::DepError::DepIsSelf`] so a `feira lint` diagnostic ("`:deps`
+/// entry `caixa-teia` is duplicated" / "`:deps-dev` entry `dev-shim` is
+/// a self-reference") self-locates the offending block in the author's
+/// `caixa.lisp` without the linter re-deriving the list from context.
+///
+/// Until this lift landed the two kebab-case labels sat once each on
+/// the [`crate::Caixa::validate_deps`] per-list duplicate walk (`list:
+/// ":deps"` / `list: ":deps-dev"` in `manifest.rs`) and the paired
+/// [`crate::dep::validate_no_self_dep`] per-list self-edge walk (`list:
+/// ":deps"` / `list: ":deps-dev"` in `dep.rs`), plus a handful of
+/// test-side probe literals asserting the `list:` field of a
+/// `DepError::DuplicateNome` / `DepError::DepIsSelf` carries the
+/// expected per-list value verbatim — with no compile-time link
+/// between the two producers and the tests' expected values. A future
+/// rebrand (a hypothetical `:deps` → `:dependencies` matching Cargo's
+/// verbatim key, `:deps-dev` → `:dev-dependencies` matching the same,
+/// `:deps` / `:deps-dev` → `:runtime-deps` / `:dev-deps` for
+/// symmetry, or a per-consumer disambiguation as the `defcaixa` macro
+/// stabilizes) would silently desynchronize the two producers from
+/// each other and from the tests until a downstream consumer surfaced
+/// the drift at build time as a matches-arm miss far from the
+/// rename's commit. This lift closes that gap by routing all halves
+/// (both production walkers + tests) through two peer consts declared
+/// adjacent to the peer M2 / M3 / Supervisor top-level author-key
+/// consts, so the "one canonical declaration per arm, next to the
+/// axis" discipline the peer [`M2_AUTHOR_KEY_LIMITS`] /
+/// [`M2_AUTHOR_KEY_BEHAVIOR`] / [`M2_AUTHOR_KEY_UPGRADE_FROM`]
+/// (f49c8b0), [`M3_AUTHOR_KEY_MEMBROS`] / [`M3_AUTHOR_KEY_CONTRATOS`] /
+/// [`M3_AUTHOR_KEY_POLITICAS`] / [`M3_AUTHOR_KEY_PLACEMENT`] /
+/// [`M3_AUTHOR_KEY_ENTRADA`] (882f498), [`SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`]
+/// etc. (be40492), and [`CONTRATO_AUTHOR_KEY_DE`] /
+/// [`CONTRATO_AUTHOR_KEY_PARA`] (f50c875) top-level slot / per-entry
+/// endpoint consts established for the sibling M2 / M3 / Supervisor
+/// slot axes extends onto the two-list dep-graph slot axis.
+///
+/// Byte-identical to the peer [`crate::manifest::CAIXA_KEY_DEPS`]
+/// serde-key axis modulo the leading `:` — the two consts split on
+/// the axis every dep-graph slot carries (author-facing kebab-case
+/// label vs. renderer-side camelCase overlay key). Same
+/// "one canonical byte-string per typed axis" discipline every peer
+/// M2 / M3 renderer-wire-key axis carries.
+pub const DEP_AUTHOR_KEY_DEPS: &str = ":deps";
+
+/// Canonical author-facing kebab-case `(defcaixa … :deps-dev ((…)))`
+/// top-level dep-list slot label the dev-only two-list dependency-graph
+/// slot family surfaces under. Peer of [`DEP_AUTHOR_KEY_DEPS`] on the
+/// two-list dep-graph slot axis; see [`DEP_AUTHOR_KEY_DEPS`] for the
+/// full lift rationale.
+pub const DEP_AUTHOR_KEY_DEPS_DEV: &str = ":deps-dev";
+
 /// Canonical camelCase JSON/YAML top-level key for
 /// [`crate::supervisor::SupervisorSpec`]'s `estrategia` restart-strategy
 /// discriminator — the exact byte-sequence the type's
