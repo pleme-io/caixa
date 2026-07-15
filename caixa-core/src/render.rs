@@ -7819,6 +7819,95 @@ pub const M3_PLACEMENT_ESTRATEGIA_REPLICATED: &str = "Replicated";
 /// per-entity routing invariant vanishes at the data plane.
 pub const M3_PLACEMENT_ESTRATEGIA_SHARDED: &str = "Sharded";
 
+/// Canonical M2 [`crate::supervisor::RestartStrategy::OneForOne`] variant
+/// discriminator scalar-value — the exact byte-string the `Serialize`
+/// derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] whenever the typed `:supervisor
+/// :estrategia` slot's strategy is the restart-only-the-failed-child arm
+/// (the enum's `default()` and the canonical happy-path per
+/// theory/INSPIRATIONS.md §II.2 — Erlang/OTP `one_for_one`).
+///
+/// The scalar is the un-`rename`d Rust variant name verbatim; a future
+/// `#[serde(rename_all = "kebab-case")]` attribute on the enum, or a
+/// per-variant `#[serde(rename = "…")]` override, or a variant rename in
+/// the source, would silently emit a `:supervisor :estrategia` scalar
+/// whose per-failure sibling-restart discipline lands under one spelling
+/// while every downstream consumer still dispatches on another — the
+/// future wasm-operator's per-supervisor sibling-restart branch, the
+/// future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+/// admission-time enum-arm bind, the `caixa-operator`'s hierarchical
+/// reconciliation scheduler's per-strategy fan-out would each silently
+/// no-op onto the enum's `default()` (`OneForOne`) and the tree would
+/// come up with the wrong sibling-restart posture on every non-default
+/// arm. The serde round-trip pin the sweep introduces
+/// ([`crate::supervisor::tests::restart_strategy_variants_serialize_to_lifted_scalar_values`])
+/// catches the drift at caixa-core build time rather than at the
+/// operator's reconcile posture.
+///
+/// Peer of [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] on the same closed
+/// [`crate::supervisor::RestartStrategy`] enum surface — together the
+/// four constants name every author-reachable arm of the OTP-shaped
+/// per-supervisor sibling-restart discriminator, mirroring the
+/// closed-enum-scalar-value trajectory [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
+/// / [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_SHARDED`] (3f0e21c) established on the
+/// sibling M3 `PlacementStrategy` enum on the peer per-Aplicacao
+/// distribution-strategy axis.
+pub const SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE: &str = "OneForOne";
+
+/// Canonical M2 [`crate::supervisor::RestartStrategy::OneForAll`] variant
+/// discriminator scalar-value — the exact byte-string the `Serialize`
+/// derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] whenever the typed `:supervisor
+/// :estrategia` slot's strategy is the restart-every-sibling-on-any-
+/// failure arm (Erlang/OTP `one_for_all`, used when children share state
+/// and must be in sync).
+///
+/// Peer of the sibling [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] scalars on the same
+/// closed enum surface — see the sibling
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] doc for the full drift-mode
+/// analysis.
+pub const SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL: &str = "OneForAll";
+
+/// Canonical M2 [`crate::supervisor::RestartStrategy::RestForOne`]
+/// variant discriminator scalar-value — the exact byte-string the
+/// `Serialize` derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] whenever the typed `:supervisor
+/// :estrategia` slot's strategy is the restart-failed-and-later-started-
+/// siblings arm (Erlang/OTP `rest_for_one`, used when later children
+/// depend on earlier ones so the startup-order suffix must be
+/// re-established).
+///
+/// Peer of the sibling [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] scalars on the same
+/// closed enum surface — see the sibling
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] doc for the full drift-mode
+/// analysis.
+pub const SUPERVISOR_ESTRATEGIA_REST_FOR_ONE: &str = "RestForOne";
+
+/// Canonical M2 [`crate::supervisor::RestartStrategy::SimpleOneForOne`]
+/// variant discriminator scalar-value — the exact byte-string the
+/// `Serialize` derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] whenever the typed `:supervisor
+/// :estrategia` slot's strategy is the dynamic-children-of-one-shape arm
+/// (Erlang/OTP `simple_one_for_one`, the one arm on which
+/// [`crate::supervisor::SupervisorSpec::validate`] gates
+/// `children.is_empty()` as a structural partition — static `:children`
+/// on a `SimpleOneForOne` supervisor is a build-time rejection).
+///
+/// Peer of the sibling [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] scalars on the same closed
+/// enum surface — see the sibling
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] doc for the full drift-mode
+/// analysis.
+pub const SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE: &str = "SimpleOneForOne";
+
 /// Canonical camelCase JSON/YAML top-level key for the
 /// [`crate::aplicacao::Entrada`] struct's `host` external-hostname axis —
 /// the `host:` field the M3 Aplicacao's `#[serde(rename_all = "camelCase")]`
