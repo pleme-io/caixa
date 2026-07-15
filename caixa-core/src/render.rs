@@ -6611,6 +6611,92 @@ pub const M2_UPGRADE_INSTRUCTION_KIND_PURGE: &str = ":purge";
 /// [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] for the full lift rationale.
 pub const M2_UPGRADE_INSTRUCTION_KIND_RESTART: &str = ":restart";
 
+/// Canonical lowercase JSON/YAML discriminator-key the
+/// [`crate::dep::DepSource`] enum's `#[serde(tag = "tipo", rename_all
+/// = "lowercase")]` derive emits as the tag axis at each serialized
+/// `Dep.fonte` block — the load-bearing byte-string every downstream
+/// consumer reading a Dep source (the [`caixa_resolver`] per-`:deps`
+/// git-clone dispatcher, the future `feira lock` / `feira resolve`
+/// `lacre.lisp` closure writer, every test payload that reaches
+/// `Value::get(DEP_SOURCE_KEY_TIPO)` to pin the variant discriminator)
+/// must probe on. Peer of the two variant tag consts
+/// [`DEP_SOURCE_TIPO_GIT`] and [`DEP_SOURCE_TIPO_PATH`] the sibling
+/// `rename_all = "lowercase"` axis lifts on the same discriminator
+/// block: the [`DEP_SOURCE_KEY_TIPO`] const names the outer tag *key*
+/// (`"tipo":`) the `tag = "tipo"` attribute pins, the two
+/// `DEP_SOURCE_TIPO_*` consts name the two admitted tag *values*
+/// (`"git"` / `"path"`) the `rename_all = "lowercase"` attribute pins
+/// as the discriminator's closed-set arms.
+///
+/// Until this lift landed the two load-bearing bytes at both altitudes
+/// (`"tipo"` at the tag key, `"git"` / `"path"` at the two variant
+/// tags) sat only as inline literals — at the `#[serde(tag = "tipo",
+/// rename_all = "lowercase")]` attribute (dep.rs:59) and at one
+/// round-trip test payload (`git_source_json_round_trip` pinning
+/// `"tipo":"git"` inline, dep.rs:13563) — with no compile-time link
+/// between the load-bearing serde-derive attribute and the downstream
+/// consumers that probe the emit-side discriminator via
+/// `Value::get(...)`. A future accidental `tag = "type"` /
+/// `tag = "source_type"` typo at the attribute (English-uniformity
+/// rebrand as the substrate publishes its typed manifest schema
+/// outside pleme-io, verbatim-Cargo `"type"` alignment matching a
+/// hypothetical Zig-store convergence, or per-consumer disambiguation
+/// as the `defcaixa` macro stabilizes) — or a `rename_all` rebrand
+/// (`"UPPERCASE"` / `"snake_case"` / `"kebab-case"`) — would silently
+/// break the resolver's `Dep.fonte` dispatch and every downstream
+/// `lacre.lisp` closure consumer, with the drift surfacing at fetch
+/// time far from the derive-attr commit as an unknown-variant deserialize
+/// failure. Pinning the three canonical byte-sequences to `&'static str`
+/// consts + running the serialize-and-check drift-detection pins on
+/// both variants closes the drift structurally at caixa-core build time.
+///
+/// Same "one canonical byte-string per typed serialized-key axis"
+/// discipline the peer [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] etc.
+/// (56120ef), [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] etc., and
+/// [`HELM_CHART_TYPE_APPLICATION`] / [`HELM_CHART_TYPE_LIBRARY`]
+/// (1c5eb9d) closed-set variant-tag lifts carry — extended here to the
+/// [`crate::dep::DepSource`] `:deps :fonte` typed slot's discriminator
+/// axis at both altitudes (discriminator key + closed-set variant tags),
+/// the last `#[serde(tag = ..., rename_all = ...)]` discriminator
+/// family in caixa-core lacking a lifted peer.
+pub const DEP_SOURCE_KEY_TIPO: &str = "tipo";
+/// Canonical lowercase JSON/YAML discriminator-value the
+/// [`crate::dep::DepSource::Git`] variant surfaces under — the
+/// `"git"` scalar the `#[serde(tag = "tipo", rename_all =
+/// "lowercase")]` derive emits at the [`DEP_SOURCE_KEY_TIPO`] axis
+/// for the Git arm. Peer of [`DEP_SOURCE_TIPO_PATH`] on the sibling
+/// closed-set variant-tag axis; see [`DEP_SOURCE_KEY_TIPO`] for the
+/// full lift rationale. The scalar is derived from the Rust variant
+/// name `Git` by the `rename_all = "lowercase"` derive; ASCII-lowercase
+/// of `Git` is `git`.
+pub const DEP_SOURCE_TIPO_GIT: &str = "git";
+/// Canonical lowercase JSON/YAML discriminator-value the
+/// [`crate::dep::DepSource::Path`] variant surfaces under — the
+/// `"path"` scalar the `#[serde(tag = "tipo", rename_all =
+/// "lowercase")]` derive emits at the [`DEP_SOURCE_KEY_TIPO`] axis
+/// for the Path arm. Peer of [`DEP_SOURCE_TIPO_GIT`] on the sibling
+/// closed-set variant-tag axis; see [`DEP_SOURCE_KEY_TIPO`] for the
+/// full lift rationale.
+///
+/// Byte-identical to [`CILIUM_KEY_PATH`], [`FLUX_KUSTOMIZATION_KEY_PATH`],
+/// and [`GATEWAY_API_KEY_PATH`] today — all four resolve to the same
+/// four-byte `"path"` literal — but semantically distinct: the three
+/// `*_KEY_PATH` consts name YAML container/leaf-*key* axes on their
+/// respective K8s CR schemas (Cilium L7 HTTP-rule filesystem-path
+/// container, Flux Kustomization git-source-subtree container, Gateway
+/// API URL-path-match container), while this constant names a
+/// discriminator *value* on the manifest-side [`crate::dep::DepSource`]
+/// typed enum's closed-set variant tag axis (Path variant vs Git
+/// variant). Splitting the four lets each axis's future rebrand land
+/// independently at its canonical const definition without coupling
+/// the `:deps :fonte` Path-variant discriminator axis to the three
+/// K8s-CR key axes (or vice versa) — same
+/// "byte-identical-but-semantically-distinct" discipline the peer
+/// [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAME`] and
+/// [`FLEET_PROGRAMS_KEY_VERSAO`] / [`MEMBRO_KEY_VERSAO`] splits
+/// established on the sibling per-entry key axes.
+pub const DEP_SOURCE_TIPO_PATH: &str = "path";
+
 /// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
 /// discriminator scalar the M2 `:behavior` typed slot's per-callback
 /// on-disk-leaf existence gate surfaces under — the byte-string every
