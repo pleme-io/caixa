@@ -6786,6 +6786,79 @@ pub const LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK: &str = "behavior-callback
 /// rationale.
 pub const LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT: &str = "upgrade-script";
 
+/// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
+/// discriminator scalar the M0 `:kind Biblioteca` typed slot's
+/// per-`:bibliotecas` entry on-disk-leaf existence gate surfaces under
+/// — the byte-string every [`crate::LayoutInvariants::verify`]
+/// emission carries when a `:bibliotecas ("lib/foo.lisp" …)` entry's
+/// tatara-lisp source path fails to resolve against the caixa root's
+/// on-disk layout. Peer of [`LAYOUT_MISSING_ENTRY_KIND_EXE`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`] on the sibling M0 code-slot
+/// per-directory leaf-kind axes, and of the M2-tier
+/// [`LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT`] (95c9c4c) leaf-kind
+/// labels on the [`crate::LayoutError::MissingEntry`] `kind:
+/// &'static str` discriminator's accept-set — completes the
+/// M0-tier arm of the same per-slot leaf-kind categorization axis
+/// the M2 lift established.
+///
+/// Byte-identical to [`crate::CaixaKind::Biblioteca`]'s
+/// [`crate::CaixaKind::as_str`] output today (both resolve to the
+/// same eleven-byte `"biblioteca"` scalar) — the pin test
+/// `layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str`
+/// makes the coincidence load-bearing rather than accidental so a
+/// future rename that touches either axis (a per-consumer
+/// disambiguation as the layout diagnostic vocabulary sharpens, a
+/// verbatim-Portuguese rebrand of the [`crate::CaixaKind`]'s
+/// human-readable-form arm) has to reach both sites in lockstep
+/// or the pin trips at build time.
+pub const LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA: &str = "biblioteca";
+
+/// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
+/// discriminator scalar the M0 `:kind Binario` typed slot's per-`:exe`
+/// entry on-disk-leaf existence gate surfaces under — the byte-string
+/// every [`crate::LayoutInvariants::verify`] emission carries when an
+/// `:exe ("exe/tool.lisp" …)` entry's tatara-lisp source path fails to
+/// resolve against the caixa root's on-disk layout. Peer of
+/// [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`] on the sibling M0 code-slot
+/// per-directory leaf-kind axes; see
+/// [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] for the shared lift
+/// rationale.
+///
+/// Semantically distinct from [`crate::CaixaKind::Binario`]'s
+/// [`crate::CaixaKind::as_str`] output (`"binario"`) — this const
+/// names the *directory-entry* leaf-kind label (the M0 `:exe`
+/// per-entry axis carries source files under the `exe/` subtree),
+/// not the caixa's own [`crate::CaixaKind`] discriminator. The
+/// [`crate::LayoutError::MissingEntry`] `kind` emission consumer
+/// (the operator running `feira build`) reads this as a per-directory
+/// categorization label (`"missing exe/... entry"`), whereas
+/// [`crate::CaixaKind::as_str`] names the whole caixa's runtime kind
+/// (`"binario"` = "this caixa produces one or more binaries"). Two
+/// axes, two lifts — the pin test
+/// `layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str`
+/// asserts the *inequality* between this const and
+/// [`crate::CaixaKind::Binario`]'s [`crate::CaixaKind::as_str`]
+/// output, so a future accidental collapse of the two axes onto a
+/// single scalar surfaces at build time.
+pub const LAYOUT_MISSING_ENTRY_KIND_EXE: &str = "exe";
+
+/// Canonical [`crate::LayoutError::MissingEntry`] `kind: &'static str`
+/// discriminator scalar the M0 `:kind Servico` typed slot's
+/// per-`:servicos` entry on-disk-leaf existence gate surfaces under —
+/// the byte-string every [`crate::LayoutInvariants::verify`] emission
+/// carries when a `:servicos ("servicos/foo.computeunit.yaml" …)`
+/// entry fails to resolve against the caixa root's on-disk layout.
+/// Peer of [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_EXE`] on the sibling M0 code-slot
+/// per-directory leaf-kind axes; see
+/// [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] for the shared lift
+/// rationale. Byte-identical to [`crate::CaixaKind::Servico`]'s
+/// [`crate::CaixaKind::as_str`] output today (both resolve to the
+/// same seven-byte `"servico"` scalar).
+pub const LAYOUT_MISSING_ENTRY_KIND_SERVICO: &str = "servico";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm
