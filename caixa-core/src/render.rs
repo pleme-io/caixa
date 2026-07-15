@@ -6507,6 +6507,55 @@ pub const M2_UPGRADE_FROM_KEY_FROM: &str = "from";
 /// `:upgrade-from` sub-slot axis.
 pub const M2_UPGRADE_FROM_KEY_INSTRUCTIONS: &str = "instructions";
 
+/// Canonical `#[serde(tag = "…")]` discriminator-key byte-sequence the
+/// M2 `:upgrade-from :instructions` per-entry OTP-appup
+/// [`crate::UpgradeInstruction`] enum surfaces its variant tag under
+/// on serde emission — the internally-tagged wire key downstream
+/// consumers navigate to (`serde_json::to_value(&instr).get("kind")`
+/// / `serde_yaml::Value::Mapping.get("kind")` / hand-authored `{"kind":
+/// "load-module", "module": "…"}` JSON) to disambiguate which of the
+/// five OTP-shaped variants they hold. The `#[serde(tag = "kind",
+/// rename_all = "kebab-case")]` attribute on
+/// [`crate::UpgradeInstruction`] emits exactly this byte-sequence as
+/// the tag-slot key, and this const names the same byte-string one
+/// altitude above the derive attribute so every downstream consumer
+/// that reaches for the tag (the reflection-vs-serde round-trip check
+/// in [`caixa-core/tests/dispatcher_registration.rs`] that probes
+/// `v.get("kind")` against every variant's expected kebab-case tag,
+/// the future M4 `mesh.pleme.io/v1alpha1/Caixa` CR materializer's
+/// upgrade-instruction admission webhook, any wasm-operator dispatch
+/// step that navigates the serialized instruction blob to route by
+/// variant) routes through one canonical `&'static str` rather than
+/// re-inlining the literal.
+///
+/// Lifted as a typed `pub const` (rather than an inline literal at
+/// the `#[serde(tag = "…")]` attribute site + every consumer probe)
+/// so the tag-key axis has exactly one source of truth — a future
+/// serde-shape rebrand (`tag = "kind"` → `tag = "type"` matching a
+/// JSON-Schema `discriminator` convention, `tag = "kind"` → `tag = "op"`
+/// matching a hypothetical OTP-abbreviation collapse, `tag = "kind"`
+/// → `tag = "instruction"` matching a hypothetical author-surface
+/// self-description flip as the `defcaixa` macro stabilizes) lands as
+/// an edit to exactly one const, and every consumer that reaches for
+/// the tag picks it up at build time rather than at runtime as a
+/// silent `.get(<stale-tag-key>)` returning `None` far from the
+/// derive-attr drift's commit. Same "one canonical byte-string per
+/// typed axis" discipline every peer M2 sub-slot wire-key axis
+/// carries ([`M2_KEY_LIMITS`] / [`M2_KEY_BEHAVIOR`] /
+/// [`M2_KEY_UPGRADE_FROM`], [`M2_LIMITS_KEY_MEMORY`] etc. (d8b8b4f),
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] etc. (21fe462),
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (36ffe65)), now extending the lift onto the last remaining
+/// un-lifted wire-key axis on the M2 `:upgrade-from :instructions`
+/// typed slot: the internally-tagged variant-discriminator key that
+/// pairs with the [`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] etc.
+/// (56120ef) per-variant kebab-case *values* the same
+/// `#[serde(tag = "kind", rename_all = "kebab-case")]` attribute
+/// emits. With this lift the `:upgrade-from :instructions` axis has
+/// its dual (`key = "kind"` + five variant-value tags) fully lifted
+/// into caixa-core.
+pub const M2_UPGRADE_INSTRUCTION_KEY_KIND: &str = "kind";
+
 /// Canonical author-facing kebab-case tag the M2 `:upgrade-from
 /// :instructions` per-entry OTP-appup [`crate::UpgradeInstruction::LoadModule`]
 /// variant surfaces under — the `:kind` field the
