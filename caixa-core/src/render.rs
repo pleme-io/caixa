@@ -7245,6 +7245,83 @@ pub const MEMBRO_KEY_CAIXA: &str = "caixa";
 /// split established on the sibling per-entry name-discriminator axis.
 pub const MEMBRO_KEY_VERSAO: &str = "versao";
 
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::WitContract`] struct's `de` per-entry
+/// source-endpoint-of-the-contract axis — the `de:` field the M3
+/// Aplicacao's `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::WitContract`] emits at each `:contratos` entry,
+/// and the exact scalar every downstream consumer reaching for the
+/// caller-Servico name via `Value::get(...)` (the future
+/// wasm-operator's per-`:contratos` edge resolver, the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+/// webhook per-edge cross-check, the `feira app graph` verb's per-edge
+/// tail-label lookup, the future per-`:contratos` `CiliumNetworkPolicy`
+/// emitter's per-edge `fromEndpoints` selector projection) must probe on.
+///
+/// The scalar is derived from the Rust field name `de` by the
+/// `rename_all = "camelCase"` derive; `de` has no `_`, so the serde
+/// transform is a no-op on this axis and the emitted key equals the
+/// source-side field name byte-for-byte. Lifting the byte to one
+/// `&'static str` closes the drift footgun structurally: a future
+/// refactor renaming the Rust field OR retaining the field name while
+/// adding a `#[serde(rename = "…")]` override would silently emit a
+/// `WitContract` whose per-entry caller-Servico discriminator lands
+/// under one key while every downstream consumer still probes another —
+/// the future wasm-operator's per-`:contratos` edge resolver, the M4 CR
+/// materializer's admission webhook per-edge cross-check, the
+/// `feira app graph` verb's per-edge tail-label lookup. The identity pin
+/// (`wit_contract_serde_keys_match_lifted_contrato_key_consts` on the
+/// source-side type) catches drift at caixa-core build time rather than
+/// at the reconciler's dispatch step, far from the rebrand commit's
+/// source.
+///
+/// Peer of [`CONTRATO_KEY_PARA`] / [`CONTRATO_KEY_WIT`] on the same
+/// [`crate::aplicacao::WitContract`] per-entry serialized-key axis. Peer
+/// of the sibling [`MEMBRO_KEY_CAIXA`] / [`MEMBRO_KEY_VERSAO`] pair
+/// (ce80ca0) on the sibling M3 [`crate::aplicacao::Membro`] per-entry
+/// serialized-key axis — that lift pinned the two camelCase JSON keys
+/// the M3 per-`:membros` derive emits, this lift extends the same
+/// discipline onto the sibling M3 per-`:contratos` derive so the last
+/// M3 mesh-slot atom top-level `#[serde(rename_all = "camelCase")]`
+/// axis on the Aplicacao surface without a lifted peer joins the
+/// substrate's "one canonical byte-string per typed serialized-key
+/// axis" discipline.
+///
+/// Byte-identical to (but semantically distinct from) the sibling
+/// author-facing kebab-case [`CONTRATO_AUTHOR_KEY_DE`] (f50c875) modulo
+/// the leading `:` — the two consts split on the axis every M3 mesh-slot
+/// atom carries (author-facing kebab-case label vs. renderer-side
+/// camelCase overlay key), the same split the [`M2_AUTHOR_KEY_LIMITS`] /
+/// [`M2_KEY_LIMITS`] peer pair established on the sibling M2 axis and
+/// the [`M3_AUTHOR_KEY_PLACEMENT`] / [`M3_KEY_PLACEMENT`] peer pair
+/// established on the sibling M3 top-level slot axis.
+pub const CONTRATO_KEY_DE: &str = "de";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::WitContract`] struct's `para` per-entry
+/// target-endpoint-of-the-contract axis. Peer of [`CONTRATO_KEY_DE`] on
+/// the same [`crate::aplicacao::WitContract`] per-entry serialized-key
+/// axis; see [`CONTRATO_KEY_DE`] for the full lift rationale. The Rust
+/// field is lowercase `para`; `#[serde(rename_all = "camelCase")]` is a
+/// no-op on this axis and the emitted key equals the source-side field
+/// name byte-for-byte.
+pub const CONTRATO_KEY_PARA: &str = "para";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::WitContract`] struct's `wit` per-entry
+/// WIT-world-reference-of-the-contract axis — the discriminator every
+/// downstream WIT-shape dispatcher ([`crate::wit_shape_is_http`] /
+/// [`crate::wit_shape_is_pubsub`] / [`crate::wit_shape_is_store`], the
+/// future M4 per-edge WIT registry resolver, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-time
+/// WIT-world classification) keys off. Peer of [`CONTRATO_KEY_DE`] on
+/// the same [`crate::aplicacao::WitContract`] per-entry serialized-key
+/// axis; see [`CONTRATO_KEY_DE`] for the full lift rationale. The Rust
+/// field is lowercase `wit`; `#[serde(rename_all = "camelCase")]` is a
+/// no-op on this axis and the emitted key equals the source-side field
+/// name byte-for-byte.
+pub const CONTRATO_KEY_WIT: &str = "wit";
+
 /// Canonical camelCase YAML sub-key for the [`crate::aplicacao::Placement`]
 /// struct's `estrategia` distribution-strategy discriminator — the
 /// per-`M3_KEY_PLACEMENT`-block field the M3 [`crate::aplicacao::PlacementStrategy`]
