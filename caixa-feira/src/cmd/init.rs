@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
-use caixa_core::Caixa;
+use caixa_core::{Caixa, LAYOUT_DIR_LIB};
 use clap::Args;
 
 /// Scaffold a new caixa.
@@ -57,7 +57,7 @@ impl Init {
         std::fs::write(&manifest_path, &manifest)
             .with_context(|| format!("writing {}", manifest_path.display()))?;
 
-        let lib_dir = root.join("lib");
+        let lib_dir = root.join(LAYOUT_DIR_LIB);
         std::fs::create_dir_all(&lib_dir)?;
         let lib_entry = lib_dir.join(format!("{}.lisp", self.nome));
         let lib_src = format!(

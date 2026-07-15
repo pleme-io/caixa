@@ -813,7 +813,9 @@ impl LayoutInvariants for StandardLayout {
             })?;
 
         if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
-            let expected = root.join("lib").join(format!("{}.lisp", caixa.nome));
+            let expected = root
+                .join(crate::render::LAYOUT_DIR_LIB)
+                .join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
                 return Err(LayoutError::MissingLib {
                     caixa: caixa.nome.clone(),
@@ -840,7 +842,7 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        let exe_dir = root.join("exe");
+        let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
         for p in &caixa.exe {
             let full = root.join(p);
             if !self.exists(&full) {
@@ -854,7 +856,7 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        let servicos_dir = root.join("servicos");
+        let servicos_dir = root.join(crate::render::LAYOUT_DIR_SERVICOS);
         for p in &caixa.servicos {
             let full = root.join(p);
             if !self.exists(&full) {
@@ -3546,6 +3548,217 @@ mod tests {
                      {name_b} both resolve to {value_a:?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn layout_dir_consts_pin_canonical_directory_names() {
+        // Scalar-value pin for the three [`crate::render::LAYOUT_DIR_*`]
+        // consts naming the CSE-invariant per-[`CaixaKind`]
+        // on-disk-directory-name axes the substrate's layout invariants
+        // pin (`lib/` for [`CaixaKind::Biblioteca`], `exe/` for
+        // [`CaixaKind::Binario`], `servicos/` for [`CaixaKind::Servico`]).
+        // A future rebrand of any of the three on-disk directory landing
+        // conventions must reach this pin — the const-edit lands on one
+        // arm, the assertion here re-pins the new byte-string, and every
+        // downstream consumer (the caixa-feira `init` / `fmt` / `lint` /
+        // `tofu` scaffolders, the [`crate::LayoutInvariants::verify`]
+        // sandbox reconstruction, the future
+        // `feira app deploy`-cluster scaffolder) picks up the new
+        // directory name at build time. Mirror of the peer
+        // [`layout_missing_entry_kind_m0_consts_pin_canonical_code_slot_labels`]
+        // (fe2a898) on the sibling
+        // [`crate::LayoutError::MissingEntry`] `kind:` discriminator
+        // axis this on-disk-directory axis composes with.
+        assert_eq!(crate::render::LAYOUT_DIR_LIB, "lib");
+        assert_eq!(crate::render::LAYOUT_DIR_EXE, "exe");
+        assert_eq!(crate::render::LAYOUT_DIR_SERVICOS, "servicos");
+    }
+
+    #[test]
+    fn layout_dir_consts_are_pairwise_distinct() {
+        // Distinctness pin: the three per-[`CaixaKind`]
+        // on-disk-directory-name arms must resolve to pairwise-distinct
+        // byte-strings — a future accidental copy-paste flip that
+        // reroutes any one of the three onto another's value silently
+        // collapses two per-kind on-disk sandboxes onto one, so
+        // [`crate::LayoutInvariants::verify`] would gate a
+        // [`CaixaKind::Binario`] caixa's `:exe` entries against the
+        // wrong sub-tree (or a `:kind Servico` caixa's `:servicos`
+        // entries against `lib/` and pass every entry `feira build`
+        // should have rejected as [`crate::LayoutError::ServicoOutsideDir`]).
+        // Mirror of the peer
+        // [`layout_missing_entry_kind_consts_are_pairwise_distinct`]
+        // (fe2a898) on the sibling leaf-kind label accept-set.
+        let entries: &[(&str, &str)] = &[
+            ("LAYOUT_DIR_LIB", crate::render::LAYOUT_DIR_LIB),
+            ("LAYOUT_DIR_EXE", crate::render::LAYOUT_DIR_EXE),
+            ("LAYOUT_DIR_SERVICOS", crate::render::LAYOUT_DIR_SERVICOS),
+        ];
+        for (i, (name_a, value_a)) in entries.iter().enumerate() {
+            for (name_b, value_b) in entries.iter().skip(i + 1) {
+                assert_ne!(
+                    value_a, value_b,
+                    "LAYOUT_DIR_* consts must be pairwise-distinct \
+                     byte-strings — {name_a} and {name_b} both resolve \
+                     to {value_a:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn layout_dir_exe_matches_layout_missing_entry_kind_exe() {
+        // Cross-axis byte-identity pin: [`crate::render::LAYOUT_DIR_EXE`]
+        // (the on-disk-directory-name arm) equals
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE`] (the
+        // [`LayoutError::MissingEntry`] `kind:` leaf-kind categorization
+        // arm) verbatim — the M0 `:kind Binario` on-disk-directory axis
+        // and the [`crate::LayoutError::MissingEntry`] `kind:` leaf-kind
+        // discriminator name the same three-byte sub-tree (`exe/`), a
+        // coincidence [`crate::LayoutInvariants::verify`] itself relies
+        // on: it joins `root` with [`crate::render::LAYOUT_DIR_EXE`] to
+        // reconstruct `exe_dir` and emits [`crate::LayoutError::MissingEntry
+        // { kind: LAYOUT_MISSING_ENTRY_KIND_EXE, path: <under exe_dir> }`]
+        // for every non-resolving entry. Making the coincidence
+        // load-bearing means a future rebrand touching either axis
+        // without the other (a per-consumer disambiguation collapsing
+        // the leaf-kind label onto `"binary"` while the directory stays
+        // `"exe"`, or vice versa) trips at caixa-core build time rather
+        // than surfacing at runtime as a mismatched
+        // [`crate::LayoutInvariants::verify`] diagnostic whose `kind:`
+        // reads one label while the `path:` sits under a differently-named
+        // sub-tree.
+        assert_eq!(
+            crate::render::LAYOUT_DIR_EXE,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            "LAYOUT_DIR_EXE must equal LAYOUT_MISSING_ENTRY_KIND_EXE — \
+             both name the M0 `:kind Binario` sub-tree by the same \
+             three-byte scalar"
+        );
+    }
+
+    #[test]
+    fn layout_dir_bib_is_distinct_from_layout_missing_entry_kind_bib() {
+        // Cross-axis distinctness pin: [`crate::render::LAYOUT_DIR_LIB`]
+        // (`"lib"`, the Cargo-style abbreviated on-disk directory name)
+        // is *deliberately* distinct from
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`]
+        // (`"biblioteca"`, the full-form Portuguese-native leaf-kind
+        // label) — the substrate splits the on-disk convention terse
+        // (`lib/`) from the diagnostic vocabulary full (`biblioteca`),
+        // matching Cargo's `src/lib.rs` abbreviation of the `library`
+        // crate-type discriminator. A future accidental collapse of the
+        // two axes onto one scalar (a rebrand aligning either arm with
+        // the other for schema-clarity, an English-uniformity pass that
+        // renames `LAYOUT_DIR_LIB` to `LAYOUT_DIR_BIBLIOTECA` or the
+        // diagnostic label to `"lib"`) would silently reroute either
+        // consumer onto the other's byte-string. This pin catches the
+        // collapse at build time. Peer of the sibling
+        // [`layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str`]
+        // (fe2a898) that pins the analogous *equality* between the M0
+        // `:kind Biblioteca` diagnostic-label arm and
+        // [`crate::CaixaKind::Biblioteca`]'s [`crate::CaixaKind::as_str`]
+        // output — the two pins jointly encode the "which of the three
+        // Biblioteca-related scalars are load-bearing-equal, which are
+        // load-bearing-distinct" invariant across the substrate's
+        // per-kind vocabulary.
+        assert_ne!(
+            crate::render::LAYOUT_DIR_LIB,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            "LAYOUT_DIR_LIB (`\"lib\"`) and LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA \
+             (`\"biblioteca\"`) name two distinct axes — the on-disk \
+             directory convention (Cargo-style abbreviated) and the \
+             layout-diagnostic leaf-kind label (full-form Portuguese) — \
+             and must not silently collapse onto one scalar"
+        );
+    }
+
+    #[test]
+    fn layout_dir_servicos_is_distinct_from_layout_missing_entry_kind_servico() {
+        // Cross-axis distinctness pin: [`crate::render::LAYOUT_DIR_SERVICOS`]
+        // (`"servicos"`, the Portuguese-*plural* on-disk directory
+        // name) is *deliberately* distinct from
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO`]
+        // (`"servico"`, the singular leaf-kind label) — the on-disk
+        // sub-tree houses one-or-more ComputeUnit YAML descriptors per
+        // caixa (hence the plural), the diagnostic label names the
+        // caixa's own kind (singular). A future accidental collapse
+        // onto one scalar (a per-consumer disambiguation aligning the
+        // two, a hypothetical English-uniformity pass renaming
+        // `"servicos"` → `"services"` while retaining `"servico"` on
+        // the diagnostic arm — or vice versa) would silently reroute
+        // either consumer onto the other's byte-string. Peer of the
+        // sibling [`layout_dir_bib_is_distinct_from_layout_missing_entry_kind_bib`]
+        // pin on the M0 `:kind Biblioteca` split axis; two of the three
+        // per-kind on-disk / leaf-kind splits carry a distinctness
+        // pin here, the third ([`crate::render::LAYOUT_DIR_EXE`] vs
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE`]) carries an
+        // equality pin under
+        // [`layout_dir_exe_matches_layout_missing_entry_kind_exe`].
+        assert_ne!(
+            crate::render::LAYOUT_DIR_SERVICOS,
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            "LAYOUT_DIR_SERVICOS (`\"servicos\"`, plural on-disk sub-tree) \
+             and LAYOUT_MISSING_ENTRY_KIND_SERVICO (`\"servico\"`, singular \
+             leaf-kind label) name two distinct axes and must not silently \
+             collapse onto one scalar"
+        );
+    }
+
+    #[test]
+    fn layout_invariants_reconstruct_sandbox_roots_through_lifted_layout_dir_consts() {
+        // Production-through-const pin: [`LayoutInvariants::verify`]
+        // routes its three per-kind sandbox-root joins
+        // (`root.join(LAYOUT_DIR_LIB)` for the `:kind Biblioteca`
+        // default `lib/<nome>.lisp` reconstruction, `root.join(LAYOUT_DIR_EXE)`
+        // for the [`LayoutError::ExeOutsideDir`] gate,
+        // `root.join(LAYOUT_DIR_SERVICOS)` for the
+        // [`LayoutError::ServicoOutsideDir`] gate) through the three
+        // lifted consts, not through inline `"lib"` / `"exe"` /
+        // `"servicos"` `&str` literals. This test drives the
+        // [`LayoutError::ExeOutsideDir`] arm through a `:kind Binario`
+        // caixa whose declared `:exe` entry deliberately escapes
+        // `root.join(LAYOUT_DIR_EXE)` (a sibling `bin/tool` path) —
+        // if the production emit reads the wrong const (or reverts to
+        // an inline literal that drifts from the const) the diagnostic
+        // arm surfaces the wrong variant, catching the drift at build
+        // time rather than as a per-invocation runtime mismatch.
+        //
+        // Mirror of the peer production-through-const pin
+        // [`crate::dep::tests::validate_no_self_dep_deps_field_routes_through_dep_author_key`]
+        // (4da6fba) on the sibling M0 `:deps` `list:` diagnostic axis.
+        use std::path::PathBuf;
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let bin_entry_outside = root.join("bin/tool");
+        let mut c = caixa(CaixaKind::Binario);
+        c.exe = vec!["bin/tool".into()];
+        let manifest_clone = manifest.clone();
+        let outside_clone = bin_entry_outside.clone();
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest_clone || p == outside_clone);
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::ExeOutsideDir(path) => {
+                assert_eq!(
+                    path, bin_entry_outside,
+                    "ExeOutsideDir must carry the resolved `:exe` entry that \
+                     escapes `root.join(LAYOUT_DIR_EXE)`"
+                );
+                // Byte-identity check: the escape must be against the
+                // lifted `LAYOUT_DIR_EXE` sub-tree, not a stale inline
+                // literal — a future const-edit that drifts from `"exe"`
+                // reroutes `exe_dir` off the sandbox `bin/tool` escapes
+                // from, and this pattern-arm miss re-surfaces here.
+                assert!(
+                    !path.starts_with(root.join(crate::render::LAYOUT_DIR_EXE)),
+                    "resolved `:exe` entry {path:?} must escape the \
+                     `root.join(LAYOUT_DIR_EXE)` sub-tree the production \
+                     emit uses to gate the [`LayoutError::ExeOutsideDir`] arm"
+                );
+            }
+            other => panic!("expected ExeOutsideDir, got {other:?}"),
         }
     }
 
