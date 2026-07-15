@@ -321,11 +321,42 @@ pub use caixa_core::HELM_CHART_KEY_TYPE;
 /// per-Chart.yaml top-level YAML axis-key re-export surface —
 /// completes the per-Chart.yaml top-level YAML axis-key re-export
 /// pair at the caixa-helm surface for the two serde-rename-literal-
-/// only axes (the third top-level axis-key `apiVersion` already
-/// threads through the sibling [`caixa_core::KUBE_KEY_API_VERSION`]
-/// re-export that both K8s CRs and Helm's chart-schema share
-/// verbatim).
+/// only axes on this crate's [`ChartYaml`] struct that Rust's
+/// attribute-argument grammar leaves un-substitutable syntactically
+/// (the third top-level axis-key `apiVersion` re-exports through
+/// [`HELM_CHART_KEY_API_VERSION`] below, whose byte-shape coincides
+/// with the sibling [`caixa_core::KUBE_KEY_API_VERSION`] by Helm's
+/// design decision to inherit the K8s CR top-level shape verbatim —
+/// the paired substrate-side
+/// [`caixa_core`-side
+/// `helm_chart_key_api_version_matches_kube_key_api_version`] pin
+/// makes the byte-shape coincidence load-bearing rather than
+/// accidental).
 pub use caixa_core::HELM_CHART_KEY_APP_VERSION;
+
+/// Canonical Helm 3 `Chart.yaml` top-level YAML axis-key naming the
+/// per-chart chart-schema-apiVersion field — re-export of the lifted
+/// [`caixa_core::HELM_CHART_KEY_API_VERSION`] so the top-level chart-
+/// schema-apiVersion YAML key the [`ChartYaml`] `api_version` field's
+/// `#[serde(rename = "apiVersion")]` attribute encodes lives in
+/// exactly one place across every caixa renderer. Rust's attribute
+/// grammar admits only string literals so the const cannot substitute
+/// for the literal syntactically, but the drift-detection pin at
+/// [`tests::chart_yaml_serializes_api_version_axis_under_lifted_helm_chart_key_api_version`]
+/// round-trips a rendered `Chart.yaml` and asserts the top-level
+/// `Mapping::get(HELM_CHART_KEY_API_VERSION)` resolves, closing the
+/// drift the attribute-literal-only grammar leaves silent (a future
+/// refactor that dropped the `#[serde(rename = "apiVersion")]`
+/// attribute would silently serialize the field as Rust's default
+/// snake_case `api_version:`, which Helm's chart-schema parser
+/// rejects at `helm lint` / `helm dependency build` / `helm template`
+/// time with an "apiVersion is required" error far from the drift
+/// site). Peer to [`HELM_CHART_KEY_TYPE`] / [`HELM_CHART_KEY_APP_VERSION`]
+/// on the sibling per-Chart.yaml top-level YAML axis-key re-export
+/// surface — completes the per-Chart.yaml top-level YAML axis-key
+/// re-export trio at the caixa-helm surface for the three serde-
+/// rename-literal-only axes on this crate's [`ChartYaml`] struct.
+pub use caixa_core::HELM_CHART_KEY_API_VERSION;
 
 /// Canonical Helm 3 per-chart-directory metadata-file filename every
 /// rendered `lareira-<nome>` chart carries at its top-level directory —
@@ -1741,6 +1772,63 @@ spec:
              shape (every downstream Artifact Hub / `helm search` per-chart \
              index falls back to \"no application version\" for the rendered \
              chart with no process-log signal at the substrate-side emitter site)"
+        );
+    }
+
+    #[test]
+    fn chart_yaml_serializes_api_version_axis_under_lifted_helm_chart_key_api_version() {
+        // Fail-before-pass-after drift-detection pin on the
+        // `#[serde(rename = "apiVersion")]` attribute at [`ChartYaml`]'s
+        // `api_version` field. Same attribute-literal-only-grammar
+        // constraint the peer
+        // [`chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`]
+        // / [`chart_yaml_serializes_app_version_axis_under_lifted_helm_chart_key_app_version`]
+        // pins close on the sibling per-Chart.yaml top-level YAML
+        // axis-keys applies here: a future refactor that dropped the
+        // `#[serde(rename = "apiVersion")]` attribute (or changed the
+        // target key to `"ApiVersion"` / `"apiversion"` /
+        // `"schemaVersion"`) would silently serialize the field under
+        // Rust's default snake_case `api_version:` key, which Helm's
+        // chart-schema parser rejects at `helm lint` / `helm
+        // dependency build` / `helm template` time with an "apiVersion
+        // is required" error far from the drift site — every downstream
+        // `lareira-<nome>` chart consumer drops with no field naming
+        // the serde-rename-drift root cause. This pin closes the drift
+        // by round-tripping a rendered `Chart.yaml` through
+        // `serde_yaml::from_str::<serde_yaml::Value>` (rather than
+        // through the [`ChartYaml`]-typed deserializer that would
+        // silently absorb the rename drift via `#[serde(default)]`
+        // fall-through at the struct-side). Peer to
+        // [`chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`]
+        // / [`chart_yaml_serializes_app_version_axis_under_lifted_helm_chart_key_app_version`]
+        // on the sibling per-Chart.yaml top-level YAML axis-key
+        // serialization pin surface — completes the per-Chart.yaml
+        // top-level YAML axis-key production-emit pin trio at the
+        // caixa-helm surface for the three serde-rename-literal-only
+        // axes.
+        let dir = render_chart_for_servico(&sample_caixa(), &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
+            .unwrap();
+        let doc: serde_yaml::Value = serde_yaml::from_str(&chart_file.contents).unwrap();
+        let mapping = doc.as_mapping().expect(
+            "rendered Chart.yaml must be a top-level YAML mapping per \
+             the Helm 3 chart-schema shape",
+        );
+        assert!(
+            mapping.contains_key(serde_yaml::Value::String(
+                HELM_CHART_KEY_API_VERSION.to_string()
+            )),
+            "rendered Chart.yaml must carry a top-level \
+             {HELM_CHART_KEY_API_VERSION:?} axis-key — a drift on the \
+             `#[serde(rename = {HELM_CHART_KEY_API_VERSION:?})]` attribute at \
+             ChartYaml's `api_version` field silently reroutes the per-chart \
+             chart-schema-apiVersion axis through Rust's default snake_case \
+             serialization (`api_version:`), which Helm's chart-schema parser \
+             rejects at `helm lint` / `helm template` time with an \"apiVersion \
+             is required\" error far from the drift site"
         );
     }
 

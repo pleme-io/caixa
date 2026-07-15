@@ -15350,6 +15350,79 @@ pub const HELM_CHART_TYPE_APPLICATION: &str = "application";
 pub const HELM_CHART_TYPE_LIBRARY: &str = "library";
 
 /// Canonical Helm 3 `Chart.yaml` top-level YAML axis-key naming the
+/// per-chart chart-schema-apiVersion field whose scalar-value
+/// [`HELM_CHART_API_VERSION`] already owns as the peer axis-value
+/// lift. Where the peer axis-value lift pins the byte-shape of the
+/// `apiVersion:` field's admitted scalar (Helm 3's `"v2"`), this
+/// axis-key lift pins the byte-shape of the `apiVersion:` field's
+/// YAML-key name itself: the load-bearing serde-rename literal at
+/// [`caixa-helm`][ch]'s `ChartYaml` struct
+/// (`caixa-helm/src/lib.rs:145`, `#[serde(rename = "apiVersion")]`)
+/// that selects how the Rust field `api_version` serializes into
+/// the rendered `Chart.yaml` YAML mapping.
+///
+/// The byte-shape (`"apiVersion"`) is byte-identical to the K8s-CR
+/// top-level per-CR schema-apiVersion axis key ([`KUBE_KEY_API_VERSION`])
+/// by Helm's design decision to inherit the K8s CR top-level shape
+/// verbatim (see [chart-yaml-desc]) — the paired
+/// `helm_chart_key_api_version_matches_kube_key_api_version` pin
+/// asserts the two byte-shapes coincide, so a future K8s-side
+/// rebrand at [`KUBE_KEY_API_VERSION`] that dropped the byte-
+/// identity would fail the pin, surfacing the axis divergence at
+/// substrate-build time rather than as a silent Helm-chart-schema-
+/// parser rejection at `helm lint` / `helm template` time. The two
+/// axes are structurally-independent schema surfaces (the Helm 3
+/// chart-schema top-level shape vs. the K8s apiserver-side CR
+/// top-level shape) whose byte-shapes happen to coincide today; the
+/// paired pin makes the coincidence load-bearing rather than
+/// accidental.
+///
+/// The single source of truth every consumer that names the per-
+/// Chart.yaml top-level chart-schema-apiVersion YAML key reaches for:
+///
+///   - [`caixa-helm`][ch]'s `ChartYaml` struct's `api_version` field
+///     `#[serde(rename = "apiVersion")]` attribute (the sole
+///     production serialize-side site the literal appears at as a
+///     syntactic serde-rename argument; the attribute itself cannot
+///     consume a `const` because Rust's attribute grammar admits
+///     only string literals, so the discipline here is: the const's
+///     byte-shape must remain byte-identical to the literal the
+///     attribute pins, and the paired drift-detection pin at
+///     [`caixa-helm`]'s
+///     `chart_yaml_serializes_api_version_axis_under_lifted_helm_chart_key_api_version`
+///     round-trips a rendered [`caixa-helm`]-emitted `Chart.yaml`
+///     through `serde_yaml::from_str::<serde_yaml::Value>` and
+///     asserts the top-level `Mapping::get(HELM_CHART_KEY_API_VERSION)`
+///     resolves — closing the drift the syntactic-literal-only
+///     attribute would otherwise leave silent);
+///   - every test-side navigator that inspects the serialized
+///     [`caixa-helm`]-emitted `Chart.yaml` YAML mapping by the top-
+///     level chart-schema-apiVersion key.
+///
+/// A drift on the emitter's serde-rename literal (a future refactor
+/// that dropped the `#[serde(rename = "apiVersion")]` attribute or
+/// changed the target key to `"ApiVersion"` / `"apiversion"` /
+/// `"schemaVersion"`) would silently serialize the field under
+/// Rust's default snake_case `api_version:` key, which Helm's
+/// chart-schema parser rejects at `helm lint` / `helm dependency
+/// build` / `helm template` time with an "apiVersion is required"
+/// error — the failure surfaces far from the drift site, and every
+/// downstream `lareira-<nome>` chart consumer drops with no field
+/// naming the serde-rename-drift root cause. Same drift-detection-
+/// pin discipline the peer [`HELM_CHART_KEY_TYPE`] /
+/// [`HELM_CHART_KEY_APP_VERSION`] lifts (d29bc23) established on the
+/// sibling per-Chart.yaml serde-rename-literal-only axis pair —
+/// extends the discipline from the two axes those lifts closed onto
+/// the third and last serde-rename-literal-only axis at
+/// [`caixa-helm`]'s `ChartYaml` struct, so every `#[serde(rename =
+/// "...")]` literal on the struct threads through a canonical
+/// substrate-side `&'static str` with a paired drift-detection pin.
+///
+/// [chart-yaml-desc]: https://helm.sh/docs/topics/charts/#the-chartyaml-file
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_KEY_API_VERSION: &str = "apiVersion";
+
+/// Canonical Helm 3 `Chart.yaml` top-level YAML axis-key naming the
 /// per-chart-kind discriminator field whose closed-set scalar-value
 /// pair [`HELM_CHART_TYPE_APPLICATION`] / [`HELM_CHART_TYPE_LIBRARY`]
 /// already owns as the peer axis-value lift. Where the peer
@@ -23780,6 +23853,79 @@ mod tests {
     }
 
     #[test]
+    fn helm_chart_key_api_version_pins_canonical_value() {
+        // Pin the actual byte-string so a typo in this lift can't
+        // silently rebrand the Helm 3 `Chart.yaml` top-level chart-
+        // schema-apiVersion YAML axis-key the rendered `lareira-<nome>`
+        // chart declares. The string is part of the substrate-side
+        // contract with Helm's chart-schema parser at
+        // `helm dependency build` / `helm lint` / `helm template` /
+        // `helm install` time: the parser looks up the per-chart
+        // chart-schema-apiVersion scalar under exactly this top-level
+        // YAML key (Helm's chart-schema treats a missing `apiVersion:`
+        // top-level scalar as an "apiVersion is required" hard error,
+        // and Helm 3's chart-schema-version-router silently defaults
+        // an unrecognized top-level apiVersion-carrier key to Helm 2
+        // parsing shape). A drift on this const's value (an accidental
+        // collapse onto `"ApiVersion"` / `"apiversion"` /
+        // `"schemaVersion"` / the empty string) would silently reroute
+        // the rendered `Chart.yaml` through the wrong chart-schema
+        // parser at `helm dependency build` / `helm lint` /
+        // `helm template` time. Peer to
+        // `helm_chart_api_version_pins_canonical_value` on the sibling
+        // axis-value canonical pin — completes the per-Chart.yaml
+        // chart-schema-apiVersion axis's `(key, value)` canonical-pin
+        // pair at the substrate.
+        assert_eq!(HELM_CHART_KEY_API_VERSION, "apiVersion");
+    }
+
+    #[test]
+    fn helm_chart_key_api_version_matches_kube_key_api_version() {
+        // Load-bearing byte-shape coincidence between the Helm 3
+        // `Chart.yaml` top-level chart-schema-apiVersion YAML axis-key
+        // ([`HELM_CHART_KEY_API_VERSION`]) and the K8s-CR top-level
+        // per-CR schema-apiVersion YAML axis-key ([`KUBE_KEY_API_VERSION`])
+        // — Helm inherits the K8s CR top-level shape verbatim (see
+        // https://helm.sh/docs/topics/charts/#the-chartyaml-file), so
+        // every consumer that navigates a Chart.yaml top-level mapping
+        // by the schema-apiVersion key and every consumer that
+        // navigates a K8s CR top-level mapping by the schema-apiVersion
+        // key both read the byte-identical `"apiVersion"` key. The two
+        // axes are structurally-independent schema surfaces (the Helm 3
+        // chart-schema top-level shape vs. the K8s apiserver-side CR
+        // top-level shape), so the substrate carries two distinct
+        // `pub const` symbols; this pin makes the byte-shape
+        // coincidence load-bearing rather than accidental so a future
+        // K8s-side rebrand at [`KUBE_KEY_API_VERSION`] (or a Helm-side
+        // rebrand at [`HELM_CHART_KEY_API_VERSION`]) that dropped the
+        // byte-identity would fail the pin at substrate-build time
+        // rather than as a silent Helm-chart-schema-parser rejection
+        // at `helm lint` / `helm template` time far from the drift
+        // site. Complementary to the sibling
+        // [`helm_chart_key_type_is_byte_distinct_from_kube_key_kind`]
+        // pin — that peer asserts the per-chart-kind discriminator key
+        // pair is byte-distinct across the two schema surfaces (the
+        // Chart.yaml `type:` axis vs. the K8s CR `kind:` axis), and
+        // this pin asserts the per-schema-apiVersion axis-key pair is
+        // byte-identical across the two schema surfaces; together the
+        // two pins cover the full independence-map of the top-level
+        // discriminator axes at the two schema surfaces.
+        assert_eq!(
+            HELM_CHART_KEY_API_VERSION, KUBE_KEY_API_VERSION,
+            "HELM_CHART_KEY_API_VERSION ({HELM_CHART_KEY_API_VERSION:?}) \
+             must remain byte-identical to KUBE_KEY_API_VERSION \
+             ({KUBE_KEY_API_VERSION:?}) — Helm 3 inherits the K8s CR \
+             top-level schema-apiVersion YAML-axis-key byte-shape \
+             verbatim, and every downstream consumer that navigates a \
+             `Chart.yaml` / K8s CR top-level mapping by the schema-\
+             apiVersion key reads the byte-identical `\"apiVersion\"` \
+             key; a drift on either side silently reroutes the \
+             consumer through a schema-parser rejection far from the \
+             drift site"
+        );
+    }
+
+    #[test]
     fn helm_chart_key_type_pins_canonical_value() {
         // Pin the actual byte-string so a typo in this lift can't silently
         // rebrand the Helm 3 `Chart.yaml` top-level per-chart-kind
@@ -23866,10 +24012,15 @@ mod tests {
         // `helm_chart_key_type_pins_canonical_value` on the sibling
         // per-Chart.yaml top-level YAML axis-key canonical pin surface —
         // completes the per-Chart.yaml top-level YAML axis-key
-        // canonical-pin pair at the substrate for the two serde-rename-
-        // literal-only axes (the third top-level axis-key `apiVersion`
-        // already threads through the sibling [`KUBE_KEY_API_VERSION`]
-        // pin that both K8s CRs and Helm's chart-schema share verbatim).
+        // canonical-pin trio at the substrate for the three serde-
+        // rename-literal-only axes on [`caixa_helm::ChartYaml`] (the
+        // third top-level axis-key `apiVersion` lands under the peer
+        // [`HELM_CHART_KEY_API_VERSION`] pin whose byte-shape coincides
+        // with [`KUBE_KEY_API_VERSION`] by Helm's design decision to
+        // inherit the K8s CR top-level shape verbatim — the paired
+        // `helm_chart_key_api_version_matches_kube_key_api_version`
+        // pin makes the coincidence load-bearing rather than
+        // accidental).
         assert_eq!(HELM_CHART_KEY_APP_VERSION, "appVersion");
     }
 
