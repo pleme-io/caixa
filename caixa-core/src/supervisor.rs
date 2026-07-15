@@ -44,7 +44,6 @@ use thiserror::Error;
     gen_platform::IsVariant,
     gen_platform::FromStrKind,
 )]
-#[discriminant(also_display)]
 pub enum RestartStrategy {
     /// On child failure, restart only that child. Default; matches
     /// most "tree of independent workers" use cases.
@@ -97,6 +96,77 @@ impl RestartStrategy {
     }
 }
 
+/// [`std::fmt::Display`] routed through [`RestartStrategy::as_str`], so the
+/// pretty-printed byte-string every consumer that formats the strategy as
+/// user-facing text lands on (the future wasm-operator's per-supervisor
+/// sibling-restart-strategy diagnostic line, the future `feira app graph`
+/// per-supervisor strategy line, the future M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission-webhook
+/// rejection body) reaches for the same lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] const the
+/// wire-format `Serialize` derive already emits under
+/// [`crate::render::SUPERVISOR_KEY_ESTRATEGIA`] and the
+/// [`RestartStrategy::as_str`] helper already returns.
+///
+/// Pre-convergence the two paths structurally disagreed — the
+/// `#[derive(gen_platform::Discriminant)]` + `#[discriminant(also_display)]`
+/// route (now retired here) sent [`std::fmt::Display`] through the
+/// gen-platform discriminant catalog string, which arrives kebab-case as
+/// `"one-for-one"` / `"one-for-all"` / `"rest-for-one"` /
+/// `"simple-one-for-one"`, while the wire format ran as `PascalCase`
+/// `"OneForOne"` / `"OneForAll"` / `"RestForOne"` / `"SimpleOneForOne"`
+/// through the un-`rename`d serde derive. Every consumer that formatted
+/// the strategy for a diagnostic line, a graph, or a rejection body under
+/// `format!("{v}")` therefore landed under a different byte-string than
+/// the wire format the operator's per-strategy dispatch keyed off — a
+/// silent split whose apply-time symptom (a `format!("{v}")`-carrying
+/// diagnostic quoting `"one-for-one"` while the wire scalar the operator
+/// probed was `"OneForOne"`) surfaced as a confused correlate at
+/// operator-log time far from the two-declaration site.
+///
+/// Routing `Display` through [`RestartStrategy::as_str`] closes the third
+/// path: every `format!("{v}")` call reaches the same lifted
+/// [`crate::render::SUPERVISOR_ESTRATEGIA_*`] const the wire format and
+/// the [`RestartStrategy::as_str`] helper route through — `Debug` (the
+/// compiler-derived variant name), `Display` (via `as_str`), and `Serialize`
+/// (via the un-`rename`d derive) all resolve to the same `PascalCase`
+/// byte-string per variant. A future variant rename or
+/// `#[serde(rename_all = "kebab-case")]` attribute reaches every path at
+/// exactly one place, structurally.
+///
+/// The dispatcher-catalog identity remains kebab-case — [`Self::discriminant`]
+/// (from `#[derive(gen_platform::Discriminant)]`) still returns
+/// `"one-for-one"` / etc., and the fleet-wide
+/// [`gen_platform::register_dispatcher!("caixa.restart-strategy", …)`]
+/// registration keys the catalog off the same kebab identity. The two
+/// naming worlds now live on separate typed methods (`Display` /
+/// `as_str` for the wire byte-string, `discriminant` for the catalog
+/// identity) rather than sharing one `Display` route that structurally
+/// disagrees with the wire format.
+///
+/// Pin tests
+/// [`tests::restart_strategy_display_routes_through_as_str_helper`]
+/// and
+/// [`tests::restart_strategy_display_matches_serialized_wire_byte_string`]
+/// assert the three paths agree byte-for-byte on every variant, so a
+/// future variant rename or per-arm serde attribute drift is a build
+/// error visible at caixa-core test time, not a silent per-consumer
+/// dispatch miss at apply / reconcile time.
+///
+/// Mirrors the M3 [`crate::aplicacao::PlacementStrategy`] `Display` impl
+/// (aplicacao.rs:2306) on the sibling per-Aplicacao distribution-strategy
+/// axis — same three-path-convergence discipline, extended to close the
+/// second of three OTP-shaped closed-enum discriminator axes on the
+/// caixa typed surface.
+impl std::fmt::Display for RestartStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Per-child restart policy.
 ///
 /// Permanent / Temporary / Transient match Erlang/OTP semantics 1:1.
@@ -114,7 +184,6 @@ impl RestartStrategy {
     gen_platform::IsVariant,
     gen_platform::FromStrKind,
 )]
-#[discriminant(also_display)]
 pub enum RestartPolicy {
     /// Always restart the child, regardless of how it died. Used for
     /// long-running services that must always be up.
@@ -164,6 +233,79 @@ impl RestartPolicy {
             Self::Temporary => crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
             Self::Transient => crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
         }
+    }
+}
+
+/// [`std::fmt::Display`] routed through [`RestartPolicy::as_str`], so the
+/// pretty-printed byte-string every consumer that formats the policy as
+/// user-facing text lands on (the future wasm-operator's per-child
+/// post-exit restart-decision diagnostic line, the future `feira app
+/// graph` per-child restart column, the future M4
+/// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's per-child
+/// admission-webhook rejection body) reaches for the same lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] const the
+/// wire-format `Serialize` derive already emits under
+/// [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`] and the
+/// [`RestartPolicy::as_str`] helper already returns.
+///
+/// Pre-convergence the two paths structurally disagreed — the
+/// `#[derive(gen_platform::Discriminant)]` + `#[discriminant(also_display)]`
+/// route (now retired here) sent [`std::fmt::Display`] through the
+/// gen-platform discriminant catalog string, which arrives kebab-case as
+/// `"permanent"` / `"temporary"` / `"transient"` on this three-arm enum
+/// (whose variant names each collapse to their own lowercase form under
+/// the kebab-case transform), while the wire format ran as `PascalCase`
+/// `"Permanent"` / `"Temporary"` / `"Transient"` through the un-`rename`d
+/// serde derive. Every consumer that formatted the policy for a
+/// diagnostic line, a graph column, or a rejection body under
+/// `format!("{v}")` therefore landed under a different byte-string than
+/// the wire format the operator's per-child-policy dispatch keyed off —
+/// a silent split whose apply-time symptom (a `format!("{v}")`-carrying
+/// diagnostic quoting `"permanent"` while the wire scalar the operator
+/// probed was `"Permanent"`) surfaced as a confused correlate at
+/// operator-log time far from the two-declaration site.
+///
+/// Routing `Display` through [`RestartPolicy::as_str`] closes the third
+/// path: every `format!("{v}")` call reaches the same lifted
+/// [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const the wire format
+/// and the [`RestartPolicy::as_str`] helper route through — `Debug` (the
+/// compiler-derived variant name), `Display` (via `as_str`), and `Serialize`
+/// (via the un-`rename`d derive) all resolve to the same `PascalCase`
+/// byte-string per variant. A future variant rename or
+/// `#[serde(rename_all = "kebab-case")]` attribute reaches every path at
+/// exactly one place, structurally.
+///
+/// The dispatcher-catalog identity remains kebab-case — [`Self::discriminant`]
+/// (from `#[derive(gen_platform::Discriminant)]`) still returns
+/// `"permanent"` / `"temporary"` / `"transient"`, and the fleet-wide
+/// [`gen_platform::register_dispatcher!("caixa.restart-policy", …)`]
+/// registration keys the catalog off the same kebab identity. The two
+/// naming worlds now live on separate typed methods (`Display` /
+/// `as_str` for the wire byte-string, `discriminant` for the catalog
+/// identity) rather than sharing one `Display` route that structurally
+/// disagrees with the wire format.
+///
+/// Pin tests
+/// [`tests::restart_policy_display_routes_through_as_str_helper`]
+/// and
+/// [`tests::restart_policy_display_matches_serialized_wire_byte_string`]
+/// assert the three paths agree byte-for-byte on every variant, so a
+/// future variant rename or per-arm serde attribute drift is a build
+/// error visible at caixa-core test time, not a silent per-consumer
+/// dispatch miss at apply / reconcile time.
+///
+/// Mirrors the M3 [`crate::aplicacao::PlacementStrategy`] `Display` impl
+/// (aplicacao.rs:2306) on the per-Aplicacao distribution-strategy axis
+/// and the sibling [`RestartStrategy`] `Display` impl on the
+/// per-supervisor sibling-restart-strategy axis — same three-path-
+/// convergence discipline, extended to close the third and final of
+/// three OTP-shaped closed-enum discriminator axes on the caixa typed
+/// surface.
+impl std::fmt::Display for RestartPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -3541,41 +3683,98 @@ mod tests {
     }
 
     #[test]
-    fn restart_strategy_display_does_not_match_wire_scalar_yet() {
-        // Adversarial companion to
-        // [`restart_strategy_variants_serialize_to_lifted_scalar_values`]:
-        // pin the *current* [`std::fmt::Display`] path so the pre-existing
-        // drift between the wire-format byte-string (`Serialize` derive
-        // emits `"OneForOne"` — un-`rename`d PascalCase variant name) and
-        // the user-facing text byte-string
-        // (`#[derive(gen_platform::Discriminant)]` +
-        // `#[discriminant(also_display)]` route `Display` through the
-        // discriminant catalog string, which arrives kebab-case as
-        // `"one-for-one"`) is not silently rebranded away between runs.
-        // The two paths structurally disagree today; every
-        // `#[error("supervisor :estrategia {estrategia:?} …")]`
-        // diagnostic template on [`SupervisorError`] Debug-prints the
-        // Rust variant name (a third spelling again — `"OneForOne"` via
-        // `Debug`), so the operator-diagnostic / feira-graph / CR-
-        // materializer path lands under `"one-for-one"` while the wire
-        // format lands under `"OneForOne"`. A future compounding step
-        // can converge the three paths onto the lifted
-        // [`crate::render::SUPERVISOR_ESTRATEGIA_*`] const the wire
-        // format already emits (route Display through
-        // [`RestartStrategy::as_str`], mirroring the M3
-        // [`crate::aplicacao::PlacementStrategy`] impl at
-        // aplicacao.rs:2306); until then this pin lives here as a
-        // knowable-construction anchor naming the drift verbatim so the
-        // sweep is not a silent regression on the next reader. Peer of
-        // the M3 `placement_strategy_display_routes_through_as_str_helper`
-        // (cc8f749) which the M3 axis has already converged.
-        assert_ne!(
-            RestartStrategy::OneForOne.to_string(),
-            crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE,
-            "Display and wire-format paths for RestartStrategy are known to diverge \
-             today (kebab-case discriminant vs PascalCase serde variant); a future \
-             convergence must delete this pin, not silently re-agree with it",
-        );
+    fn restart_strategy_display_routes_through_as_str_helper() {
+        // The fail-before-pass-after pin on the first half of the
+        // three-path convergence: pre-convergence the sibling
+        // OTP-shape typed enum [`RestartStrategy`] carried a
+        // [`std::fmt::Display`] surface via its
+        // `#[discriminant(also_display)]` gen-platform derive route,
+        // which arrived kebab-case as `"one-for-one"` /
+        // `"one-for-all"` / `"rest-for-one"` /
+        // `"simple-one-for-one"` while the wire format ran as
+        // PascalCase `"OneForOne"` / `"OneForAll"` / `"RestForOne"` /
+        // `"SimpleOneForOne"` through the un-`rename`d serde derive.
+        // Every consumer reaching for a strategy byte-string past the
+        // wire format had to pick between three paths
+        // ([`RestartStrategy::as_str`], the `Serialize` derive's
+        // serialized string, or `format!("{v}")` on the
+        // discriminant-Display route), any two of which a future
+        // variant rename or `#[serde(rename_all = "kebab-case")]`
+        // attribute would silently desynchronize. Wiring
+        // [`std::fmt::Display`] through [`RestartStrategy::as_str`]
+        // closes the third path: every `format!("{v}")` call reaches
+        // the same lifted [`crate::render::SUPERVISOR_ESTRATEGIA_*`]
+        // const the wire format and the [`RestartStrategy::as_str`]
+        // helper already route through, so a future variant rename
+        // lands at exactly one place. Pin the routing here so a future
+        // `impl std::fmt::Display for RestartStrategy`
+        // reimplementation that hand-rolls the arms instead of
+        // delegating to [`RestartStrategy::as_str`] fails at
+        // caixa-core build time. Peer of the M3
+        // `placement_strategy_display_routes_through_as_str_helper`
+        // (cc8f749) which the M3 axis converged first.
+        for variant in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ] {
+            assert_eq!(
+                variant.to_string(),
+                variant.as_str(),
+                "RestartStrategy::{variant:?} Display must route through \
+                 RestartStrategy::as_str (single source of truth: the lifted \
+                 SUPERVISOR_ESTRATEGIA_* const the wire format also emits)"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_display_matches_serialized_wire_byte_string() {
+        // The fail-before-pass-after pin on the second half of the
+        // three-path convergence: `Display` (user-facing text) agrees
+        // byte-for-byte with the `Serialize` derive's wire format
+        // (canonical camelCase-schema `SUPERVISOR_KEY_ESTRATEGIA`
+        // scalar) on every variant. Pre-convergence the two paths
+        // were structurally independent — a future
+        // `#[serde(rename_all = "kebab-case")]` attribute on the
+        // enum would silently rebrand the emitted wire scalar
+        // (`one-for-one`, `one-for-all`, `rest-for-one`,
+        // `simple-one-for-one`) while every consumer that
+        // pretty-prints the strategy (the future wasm-operator's
+        // per-supervisor sibling-restart-strategy diagnostic line,
+        // the future `feira app graph` per-supervisor strategy line,
+        // the future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+        // materializer's admission-webhook rejection body) would
+        // still emit the PascalCase form the `as_str` / `Display`
+        // route returns, with the mismatch surfacing at consumer
+        // parse time / operator dispatch time far from the source
+        // rebrand commit. Pin the two paths byte-for-byte here so any
+        // future serde-attribute or variant-rename drift is a
+        // caixa-core-build-time test failure at this call, not a
+        // silent per-consumer dispatch miss. Peer of the M3
+        // `placement_strategy_display_matches_serialized_wire_byte_string`
+        // (cc8f749) which the M3 axis converged first.
+        for variant in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ] {
+            let wire = serde_json::to_string(&variant).unwrap();
+            let unquoted = wire
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized RestartStrategy is a JSON string");
+            assert_eq!(
+                variant.to_string(),
+                unquoted,
+                "RestartStrategy::{variant:?} Display byte-string must match the \
+                 Serialize derive's wire byte-string (three-path convergence: \
+                 Display + as_str + Serialize all resolve to the same \
+                 SUPERVISOR_ESTRATEGIA_* const)"
+            );
+        }
     }
 
     // ── drift-detection: serde-derive-to-SUPERVISOR_CHILD_RESTART_* identity ─
@@ -3687,45 +3886,104 @@ mod tests {
     }
 
     #[test]
-    fn restart_policy_display_does_not_match_wire_scalar_yet() {
-        // Adversarial companion to
-        // [`restart_policy_variants_serialize_to_lifted_scalar_values`]:
-        // pin the *current* [`std::fmt::Display`] path so the pre-existing
-        // drift between the wire-format byte-string (`Serialize` derive
-        // emits `"Permanent"` — un-`rename`d PascalCase variant name) and
-        // the user-facing text byte-string
-        // (`#[derive(gen_platform::Discriminant)]` +
-        // `#[discriminant(also_display)]` route `Display` through the
-        // discriminant catalog string, which arrives kebab-case as
-        // `"permanent"` on this three-arm enum whose variant names each
-        // collapse to their own lowercase form under the kebab-case
-        // transform) is not silently rebranded away between runs. The two
-        // paths structurally disagree today; every
-        // `#[error("supervisor :children :restart {restart:?} …")]`
-        // diagnostic template on [`SupervisorError`] Debug-prints the
-        // Rust variant name (a third spelling again — `"Permanent"` via
-        // `Debug`), so the operator-diagnostic / feira-graph / CR-
-        // materializer path lands under `"permanent"` while the wire
-        // format lands under `"Permanent"`. A future compounding step can
-        // converge the three paths onto the lifted
-        // [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const the wire
-        // format already emits (route Display through
-        // [`RestartPolicy::as_str`], mirroring the M3
-        // [`crate::aplicacao::PlacementStrategy`] impl at
-        // aplicacao.rs:2306); until then this pin lives here as a
-        // knowable-construction anchor naming the drift verbatim so the
-        // sweep is not a silent regression on the next reader. Peer of
-        // the sibling
-        // [`restart_strategy_display_does_not_match_wire_scalar_yet`]
-        // (09ffb2d) on the per-supervisor sibling-restart-strategy axis
-        // and the M3 `placement_strategy_display_routes_through_as_str_helper`
-        // (cc8f749) which the M3 axis has already converged.
-        assert_ne!(
-            RestartPolicy::Permanent.to_string(),
-            crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
-            "Display and wire-format paths for RestartPolicy are known to diverge \
-             today (kebab-case discriminant vs PascalCase serde variant); a future \
-             convergence must delete this pin, not silently re-agree with it",
-        );
+    fn restart_policy_display_routes_through_as_str_helper() {
+        // The fail-before-pass-after pin on the first half of the
+        // three-path convergence: pre-convergence [`RestartPolicy`]
+        // carried a [`std::fmt::Display`] surface via its
+        // `#[discriminant(also_display)]` gen-platform derive route,
+        // which arrived kebab-case as `"permanent"` / `"temporary"`
+        // / `"transient"` on this three-arm enum (whose variant
+        // names each collapse to their own lowercase form under the
+        // kebab-case transform) while the wire format ran as
+        // PascalCase `"Permanent"` / `"Temporary"` / `"Transient"`
+        // through the un-`rename`d serde derive. Every consumer
+        // reaching for a policy byte-string past the wire format had
+        // to pick between three paths ([`RestartPolicy::as_str`],
+        // the `Serialize` derive's serialized string, or
+        // `format!("{v}")` on the discriminant-Display route), any
+        // two of which a future variant rename or
+        // `#[serde(rename_all = "kebab-case")]` attribute would
+        // silently desynchronize. Wiring [`std::fmt::Display`]
+        // through [`RestartPolicy::as_str`] closes the third path:
+        // every `format!("{v}")` call reaches the same lifted
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const the
+        // wire format and the [`RestartPolicy::as_str`] helper
+        // already route through, so a future variant rename lands at
+        // exactly one place. Pin the routing here so a future
+        // `impl std::fmt::Display for RestartPolicy`
+        // reimplementation that hand-rolls the arms instead of
+        // delegating to [`RestartPolicy::as_str`] fails at
+        // caixa-core build time. Peer of the sibling
+        // [`restart_strategy_display_routes_through_as_str_helper`]
+        // on the per-supervisor sibling-restart-strategy axis and
+        // the M3
+        // `placement_strategy_display_routes_through_as_str_helper`
+        // (cc8f749) — the third of three OTP-shape closed-enum
+        // discriminator axes on the caixa typed surface now
+        // converged onto the same three-path
+        // (Display → as_str → lifted const) discipline.
+        for variant in [
+            RestartPolicy::Permanent,
+            RestartPolicy::Temporary,
+            RestartPolicy::Transient,
+        ] {
+            assert_eq!(
+                variant.to_string(),
+                variant.as_str(),
+                "RestartPolicy::{variant:?} Display must route through \
+                 RestartPolicy::as_str (single source of truth: the lifted \
+                 SUPERVISOR_CHILD_RESTART_* const the wire format also emits)"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_display_matches_serialized_wire_byte_string() {
+        // The fail-before-pass-after pin on the second half of the
+        // three-path convergence: `Display` (user-facing text) agrees
+        // byte-for-byte with the `Serialize` derive's wire format
+        // (canonical camelCase-schema `SUPERVISOR_CHILD_KEY_RESTART`
+        // scalar) on every variant. Pre-convergence the two paths
+        // were structurally independent — a future
+        // `#[serde(rename_all = "kebab-case")]` attribute on the
+        // enum would silently rebrand the emitted wire scalar
+        // (`permanent`, `temporary`, `transient`) while every
+        // consumer that pretty-prints the policy (the future
+        // wasm-operator's per-child post-exit restart-decision
+        // diagnostic line, the future `feira app graph` per-child
+        // restart column, the future M4
+        // `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+        // per-child admission-webhook rejection body) would still
+        // emit the PascalCase form the `as_str` / `Display` route
+        // returns, with the mismatch surfacing at consumer parse
+        // time / operator dispatch time far from the source rebrand
+        // commit. Pin the two paths byte-for-byte here so any future
+        // serde-attribute or variant-rename drift is a
+        // caixa-core-build-time test failure at this call, not a
+        // silent per-consumer dispatch miss. Peer of the sibling
+        // [`restart_strategy_display_matches_serialized_wire_byte_string`]
+        // on the per-supervisor sibling-restart-strategy axis and
+        // the M3
+        // `placement_strategy_display_matches_serialized_wire_byte_string`
+        // (cc8f749).
+        for variant in [
+            RestartPolicy::Permanent,
+            RestartPolicy::Temporary,
+            RestartPolicy::Transient,
+        ] {
+            let wire = serde_json::to_string(&variant).unwrap();
+            let unquoted = wire
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized RestartPolicy is a JSON string");
+            assert_eq!(
+                variant.to_string(),
+                unquoted,
+                "RestartPolicy::{variant:?} Display byte-string must match the \
+                 Serialize derive's wire byte-string (three-path convergence: \
+                 Display + as_str + Serialize all resolve to the same \
+                 SUPERVISOR_CHILD_RESTART_* const)"
+            );
+        }
     }
 }
