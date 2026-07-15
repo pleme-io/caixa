@@ -7908,6 +7908,93 @@ pub const SUPERVISOR_ESTRATEGIA_REST_FOR_ONE: &str = "RestForOne";
 /// analysis.
 pub const SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE: &str = "SimpleOneForOne";
 
+/// Canonical M2 [`crate::supervisor::RestartPolicy::Permanent`] variant
+/// discriminator scalar-value — the exact byte-string the `Serialize`
+/// derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_CHILD_KEY_RESTART`] whenever the typed `:children :restart`
+/// per-child restart-policy slot is the always-restart-regardless-of-exit
+/// arm (the enum's `default()` and the canonical happy-path per
+/// theory/INSPIRATIONS.md §II.2 — Erlang/OTP `permanent`, the
+/// long-running-service posture where the supervisor must bring the
+/// child back on every failure mode).
+///
+/// The scalar is the un-`rename`d Rust variant name verbatim; a future
+/// `#[serde(rename_all = "kebab-case")]` attribute on the enum, or a
+/// per-variant `#[serde(rename = "…")]` override, or a variant rename in
+/// the source, would silently emit a `:children :restart` scalar
+/// whose per-exit restart-decision discipline lands under one spelling
+/// while every downstream consumer still dispatches on another — the
+/// future wasm-operator's per-child restart-decision branch, the future
+/// M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+/// admission-time enum-arm bind, the `caixa-operator`'s hierarchical
+/// reconciliation scheduler's per-child-policy fan-out would each silently
+/// no-op onto the enum's `default()` (`Permanent`) and children would
+/// come up with the wrong per-exit restart posture on every non-default
+/// arm — a `:temporary` `oneShot` child would be restarted on clean
+/// exit (the successful-completion signal treated as failure), a
+/// `:transient` child that clean-exited would be restarted (masking the
+/// clean-completion contract), and the operator's post-exit dispatch
+/// would silently degrade to the always-restart posture. The serde
+/// round-trip pin the sweep introduces
+/// ([`crate::supervisor::tests::restart_policy_variants_serialize_to_lifted_scalar_values`])
+/// catches the drift at caixa-core build time rather than at the
+/// operator's reconcile posture.
+///
+/// Peer of [`SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+/// [`SUPERVISOR_CHILD_RESTART_TRANSIENT`] on the same closed
+/// [`crate::supervisor::RestartPolicy`] enum surface — together the
+/// three constants name every author-reachable arm of the OTP-shaped
+/// per-child restart-decision discriminator, mirroring the
+/// closed-enum-scalar-value trajectory
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+/// [`SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+/// [`SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`] (09ffb2d) established on
+/// the sibling `RestartStrategy` enum on the peer per-supervisor
+/// sibling-restart-strategy axis and [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
+/// / [`M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+/// [`M3_PLACEMENT_ESTRATEGIA_SHARDED`] (3f0e21c) established on the M3
+/// `PlacementStrategy` enum on the peer per-Aplicacao distribution-strategy
+/// axis. The three OTP-shaped closed-enum discriminator axes on the
+/// caixa typed surface (supervisor sibling-restart strategy, per-child
+/// restart policy, per-Aplicacao placement strategy) now each carry the
+/// same three-path-convergence (`Serialize` derive → `as_str` helper →
+/// lifted constant) drift-detection posture.
+pub const SUPERVISOR_CHILD_RESTART_PERMANENT: &str = "Permanent";
+
+/// Canonical M2 [`crate::supervisor::RestartPolicy::Temporary`] variant
+/// discriminator scalar-value — the exact byte-string the `Serialize`
+/// derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_CHILD_KEY_RESTART`] whenever the typed `:children :restart`
+/// per-child restart-policy slot is the never-restart arm (Erlang/OTP
+/// `temporary`, the one-shot posture where the child's completion — clean
+/// or not — is itself the success signal; the `oneShot`
+/// [`crate::render::COMPUTEUNIT_SPEC_KEY_TRIGGER`] arm maps here).
+///
+/// Peer of the sibling [`SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`SUPERVISOR_CHILD_RESTART_TRANSIENT`] scalars on the same
+/// closed enum surface — see the sibling
+/// [`SUPERVISOR_CHILD_RESTART_PERMANENT`] doc for the full drift-mode
+/// analysis.
+pub const SUPERVISOR_CHILD_RESTART_TEMPORARY: &str = "Temporary";
+
+/// Canonical M2 [`crate::supervisor::RestartPolicy::Transient`] variant
+/// discriminator scalar-value — the exact byte-string the `Serialize`
+/// derive on the un-`rename`d enum emits under
+/// [`SUPERVISOR_CHILD_KEY_RESTART`] whenever the typed `:children :restart`
+/// per-child restart-policy slot is the restart-only-on-abnormal-exit arm
+/// (Erlang/OTP `transient`, the "restart on non-zero exit or unhandled
+/// exception; a clean exit completes the child" posture — the third
+/// canonical OTP per-child restart-decision arm alongside `permanent`
+/// and `temporary`).
+///
+/// Peer of the sibling [`SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+/// [`SUPERVISOR_CHILD_RESTART_TEMPORARY`] scalars on the same
+/// closed enum surface — see the sibling
+/// [`SUPERVISOR_CHILD_RESTART_PERMANENT`] doc for the full drift-mode
+/// analysis.
+pub const SUPERVISOR_CHILD_RESTART_TRANSIENT: &str = "Transient";
+
 /// Canonical camelCase JSON/YAML top-level key for the
 /// [`crate::aplicacao::Entrada`] struct's `host` external-hostname axis —
 /// the `host:` field the M3 Aplicacao's `#[serde(rename_all = "camelCase")]`

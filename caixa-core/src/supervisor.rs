@@ -133,6 +133,40 @@ impl Default for RestartPolicy {
     }
 }
 
+impl RestartPolicy {
+    /// Canonical PascalCase discriminator scalar this variant serializes
+    /// as under [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`]. The three
+    /// arms return the paired
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] lifted
+    /// constants so every substrate consumer that dispatches on the
+    /// per-child restart-decision policy (the future wasm-operator's
+    /// per-child post-exit restart-decision branch, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+    /// admission-time enum-arm bind, the `caixa-operator`'s hierarchical
+    /// reconciliation scheduler's per-child-policy fan-out) reads the
+    /// same byte-string the `Serialize` derive emits — the pin test in
+    /// [`tests::restart_policy_variants_serialize_to_lifted_scalar_values`]
+    /// asserts the two paths agree, peer of the M2
+    /// [`RestartStrategy::as_str`] (09ffb2d) on the sibling per-supervisor
+    /// sibling-restart-strategy axis and the M3
+    /// [`crate::aplicacao::PlacementStrategy::as_str`] (cc8f749) on the
+    /// per-Aplicacao distribution-strategy axis — the third of three
+    /// OTP-shaped closed-enum discriminator axes on the caixa typed
+    /// surface to converge onto the same three-path-convergence
+    /// (`Serialize` derive → `as_str` helper → lifted constant)
+    /// drift-detection posture.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Permanent => crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+            Self::Temporary => crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+            Self::Transient => crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+        }
+    }
+}
+
 // Fleet-wide dispatcher-catalog registrations for caixa's OTP
 // supervisor surface — two more typed shadows over Erlang/OTP
 // primitives the substrate now mechanically tracks (see
@@ -3539,6 +3573,157 @@ mod tests {
             RestartStrategy::OneForOne.to_string(),
             crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE,
             "Display and wire-format paths for RestartStrategy are known to diverge \
+             today (kebab-case discriminant vs PascalCase serde variant); a future \
+             convergence must delete this pin, not silently re-agree with it",
+        );
+    }
+
+    // ── drift-detection: serde-derive-to-SUPERVISOR_CHILD_RESTART_* identity ─
+
+    #[test]
+    fn restart_policy_variants_serialize_to_lifted_scalar_values() {
+        // The fail-before-pass-after pin: pre-lift there was no
+        // single-source binding between the [`RestartPolicy`] variant
+        // name the un-`rename`d `Serialize` derive emits under
+        // [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`] and the
+        // byte-string every downstream cluster-side dispatcher (the
+        // future wasm-operator's per-child post-exit restart-decision
+        // branch, the future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR
+        // materializer's admission-time enum-arm bind, the
+        // `caixa-operator`'s hierarchical reconciliation scheduler's
+        // per-child-policy fan-out) probes verbatim. A future
+        // `#[serde(rename_all = "kebab-case")]` attribute on the enum —
+        // or a per-variant `#[serde(rename = "…")]` override, or a
+        // variant rename in the source — would silently rebrand the
+        // emitted scalar under one spelling while every downstream
+        // dispatcher still probed the other, with the failure surfacing
+        // at the operator's reconcile posture (children coming up under
+        // the `default()` `Permanent` arm rather than the typed slot's
+        // declared policy — a `:temporary` `oneShot` child would be
+        // restarted on clean exit, treating the successful-completion
+        // signal as failure and re-running the completion-terminal
+        // one-shot indefinitely; a `:transient` child that clean-exited
+        // would be restarted, masking the clean-completion contract)
+        // far from the source rebrand commit and with no field naming
+        // the drift. Pinning the two paths (the `Serialize` derive's
+        // serialized string AND the [`RestartPolicy::as_str`] helper)
+        // to the same three lifted
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`]
+        // byte-strings makes any future drift on either endpoint fail
+        // here at caixa-core build time. Peer of the sibling
+        // [`restart_strategy_variants_serialize_to_lifted_scalar_values`]
+        // (09ffb2d) on the per-supervisor sibling-restart-strategy axis
+        // and the M3
+        // `placement_strategy_variants_serialize_to_lifted_scalar_values`
+        // (3f0e21c) on the per-Aplicacao distribution-strategy axis —
+        // same three-path-convergence discipline, extended to close the
+        // third OTP-shaped closed-enum discriminator axis on the caixa
+        // typed surface (per-child restart-decision policy).
+        for (variant, expected) in [
+            (
+                RestartPolicy::Permanent,
+                crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+            ),
+            (
+                RestartPolicy::Temporary,
+                crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+            ),
+            (
+                RestartPolicy::Transient,
+                crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+            ),
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            assert_eq!(
+                json,
+                format!("\"{expected}\""),
+                "RestartPolicy::{variant:?} must serialize to {expected:?}"
+            );
+            assert_eq!(
+                variant.as_str(),
+                expected,
+                "RestartPolicy::{variant:?}.as_str() must return the lifted \
+                 SUPERVISOR_CHILD_RESTART_* constant"
+            );
+        }
+    }
+
+    #[test]
+    fn supervisor_child_restart_consts_are_pairwise_distinct() {
+        // Cross-arm drift-detection pin: a future collapse of two
+        // canonical variant byte-strings onto the same value (e.g. an
+        // accidental copy-paste flip of `SUPERVISOR_CHILD_RESTART_TRANSIENT`
+        // to also read `"Permanent"`) would silently reroute every
+        // downstream operator's per-child-policy dispatch onto the
+        // sibling arm's reconcile branch and pass every propagation-probe
+        // test that expected only the stale arm's value — a `:transient`
+        // child would come up under the `:permanent` restart-decision
+        // posture on every subsequent clean exit, so a completion-terminal
+        // child would be restarted indefinitely against its declared
+        // policy. Peer of the sibling
+        // [`supervisor_estrategia_consts_are_pairwise_distinct`]
+        // (09ffb2d) on the per-supervisor sibling-restart-strategy axis
+        // and the four-way distinct pin
+        // `supervisor_key_consts_are_pairwise_distinct` (40cc4e5) on the
+        // top-level `SUPERVISOR_KEY_*` axis.
+        let all = [
+            crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+            crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+            crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "SUPERVISOR_CHILD_RESTART_* consts must be pairwise distinct \
+                         — got duplicate {a:?} at indices {i} and {j}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn restart_policy_display_does_not_match_wire_scalar_yet() {
+        // Adversarial companion to
+        // [`restart_policy_variants_serialize_to_lifted_scalar_values`]:
+        // pin the *current* [`std::fmt::Display`] path so the pre-existing
+        // drift between the wire-format byte-string (`Serialize` derive
+        // emits `"Permanent"` — un-`rename`d PascalCase variant name) and
+        // the user-facing text byte-string
+        // (`#[derive(gen_platform::Discriminant)]` +
+        // `#[discriminant(also_display)]` route `Display` through the
+        // discriminant catalog string, which arrives kebab-case as
+        // `"permanent"` on this three-arm enum whose variant names each
+        // collapse to their own lowercase form under the kebab-case
+        // transform) is not silently rebranded away between runs. The two
+        // paths structurally disagree today; every
+        // `#[error("supervisor :children :restart {restart:?} …")]`
+        // diagnostic template on [`SupervisorError`] Debug-prints the
+        // Rust variant name (a third spelling again — `"Permanent"` via
+        // `Debug`), so the operator-diagnostic / feira-graph / CR-
+        // materializer path lands under `"permanent"` while the wire
+        // format lands under `"Permanent"`. A future compounding step can
+        // converge the three paths onto the lifted
+        // [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const the wire
+        // format already emits (route Display through
+        // [`RestartPolicy::as_str`], mirroring the M3
+        // [`crate::aplicacao::PlacementStrategy`] impl at
+        // aplicacao.rs:2306); until then this pin lives here as a
+        // knowable-construction anchor naming the drift verbatim so the
+        // sweep is not a silent regression on the next reader. Peer of
+        // the sibling
+        // [`restart_strategy_display_does_not_match_wire_scalar_yet`]
+        // (09ffb2d) on the per-supervisor sibling-restart-strategy axis
+        // and the M3 `placement_strategy_display_routes_through_as_str_helper`
+        // (cc8f749) which the M3 axis has already converged.
+        assert_ne!(
+            RestartPolicy::Permanent.to_string(),
+            crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+            "Display and wire-format paths for RestartPolicy are known to diverge \
              today (kebab-case discriminant vs PascalCase serde variant); a future \
              convergence must delete this pin, not silently re-agree with it",
         );
