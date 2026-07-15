@@ -6842,4 +6842,99 @@ mod tests {
         // (ca463a4) pins carry on the peer M2 / M3 top-level slot axes.
         assert_eq!(crate::render::CAIXA_KEY_DEPS_DEV, "depsDev");
     }
+
+    #[test]
+    fn caixa_key_deps_pins_canonical_byte_string() {
+        // Scalar-value pin: the byte-string the
+        // [`crate::render::CAIXA_KEY_DEPS`] const resolves to, asserted
+        // verbatim. Peer of `caixa_key_deps_dev_pins_canonical_camel_case_byte_string`
+        // on the two-list dep-graph serialized-key axis — the sibling
+        // pin covers the multi-word `deps_dev → depsDev` camelCase
+        // arm, this pin covers the single-word `deps → deps` no-op arm
+        // (the [`crate::Caixa::deps`] field name carries no `_`, so the
+        // `#[serde(rename_all = "camelCase")]` derive is a no-op on this
+        // axis and the emitted JSON key equals the source-side field
+        // name byte-for-byte). A future [`crate::Caixa::deps`] field
+        // rename (`deps` → `dependencies` matching Cargo's verbatim
+        // `[dependencies]` axis, `deps` → `runtime_deps` matching a
+        // hypothetical per-runtime-target vocabulary flip) OR an added
+        // `#[serde(rename = "…")]` explicit override lands as an edit
+        // to exactly one const AND one derive-attr / field name — the
+        // sibling `caixa_deps_serde_key_matches_lifted_caixa_key_deps`
+        // pin ties the const to the emitted JSON key, so a rebrand
+        // that touches only one side of the pair fails at caixa-core
+        // build time.
+        assert_eq!(crate::render::CAIXA_KEY_DEPS, "deps");
+    }
+
+    #[test]
+    fn caixa_deps_serde_key_matches_lifted_caixa_key_deps() {
+        // Load-bearing invariant on the single-word `deps` top-level
+        // axis: the byte-string [`crate::render::CAIXA_KEY_DEPS`] pins
+        // must appear verbatim in the JSON [`Caixa::to_lisp`]'s
+        // `serde_json::to_value(self)` step emits. Serialize a
+        // populated [`Caixa`] whose `:deps` slot carries at least one
+        // entry (the `#[serde(default)]` attribute on the field emits
+        // an empty `[]` even without members, but a non-empty vec
+        // additionally covers the codec's per-`Dep`-entry emission
+        // path) and pin that `"deps"` appears verbatim in the JSON
+        // emission — a future accidental `rename_all = "snake_case"` /
+        // `"kebab-case"` flip at the derive attribute (or an added
+        // `#[serde(rename = "…")]` explicit override on the field, or
+        // a Rust field rename) would break every [`Caixa::to_lisp`]
+        // round-trip and the future M4 operator-side manifest ingest's
+        // `Value::get(CAIXA_KEY_DEPS)` navigation — surfaces here as a
+        // build-time test failure at `manifest.rs`, not as an
+        // apply-time `.get(<stale-canonical-const>)` returning `None`
+        // far from the drift's commit. Peer of the sibling
+        // `caixa_multi_word_serde_keys_match_lifted_top_level_key_consts`
+        // multi-word pin on the same M0 [`Caixa`] top-level
+        // serialized-key axis, extended here to the single-word arm
+        // the multi-word test's `rename_all = "camelCase"` sweep can't
+        // reach (single-word `deps → deps` is a no-op the multi-word
+        // pin's `\"depsDev\"` / `\"upgradeFrom\"` / `\"maxRestarts\"` /
+        // `\"restartWindow\"` byte-scan can never observe).
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = vec![Dep::simple("caixa-core", "^0.1")];
+        let json = serde_json::to_string(&c).unwrap();
+        let quoted = format!("\"{}\"", crate::render::CAIXA_KEY_DEPS);
+        assert!(
+            json.contains(&quoted),
+            "serialized Caixa must carry the lifted top-level `deps` \
+             byte-sequence {quoted} verbatim in the JSON emission (got: \
+             {json})",
+        );
+    }
+
+    #[test]
+    fn caixa_dep_graph_two_list_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin on the two-list dep-graph
+        // renderer-side wire-key axis: a future collapse of the
+        // canonical [`crate::render::CAIXA_KEY_DEPS`] /
+        // [`crate::render::CAIXA_KEY_DEPS_DEV`] byte-strings onto the
+        // same value (e.g. an accidental copy-paste flip of
+        // `CAIXA_KEY_DEPS_DEV` to also read `"deps"`) would silently
+        // reroute every downstream `Value::get(<key>)` probe on one
+        // axis onto the sibling axis's dep-list and pass every
+        // propagation-probe test that expected only the stale axis's
+        // value — a dev-only dep would land in the runtime closure at
+        // publish time, or a runtime dep would be excluded from the
+        // published lacre. Peer of the sibling four-way distinct pin
+        // on the top-level multi-word tetrad
+        // (`caixa_top_level_multi_word_key_consts_are_pairwise_distinct`)
+        // and the two-way pin on the sibling
+        // [`DEP_AUTHOR_KEY_DEPS`] / [`DEP_AUTHOR_KEY_DEPS_DEV`]
+        // author-facing arm (4da6fba's test), extended here to the
+        // renderer-side wire-key arm of the same two-list dep-graph
+        // axis so both halves of the "one canonical byte-string per
+        // typed axis per (author, wire)" grid carry the same
+        // distinct-ness discipline.
+        assert_ne!(
+            crate::render::CAIXA_KEY_DEPS,
+            crate::render::CAIXA_KEY_DEPS_DEV,
+            "CAIXA_KEY_DEPS and CAIXA_KEY_DEPS_DEV must be distinct \
+             canonical byte-sequences on the two-list dep-graph \
+             renderer-side wire-key axis"
+        );
+    }
 }
