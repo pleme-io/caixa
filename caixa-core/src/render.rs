@@ -15830,6 +15830,154 @@ pub const HELM_CHART_KEY_TYPE: &str = "type";
 /// [ch]: ../../caixa_helm/index.html
 pub const HELM_CHART_KEY_APP_VERSION: &str = "appVersion";
 
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-name field — the load-bearing
+/// serde field-name at [`caixa-helm`][ch]'s `ChartDependency` struct's
+/// `name` field. Byte-identical to the sibling K8s CR
+/// [`KUBE_KEY_NAME`] axis-key by Helm's design decision to inherit the
+/// K8s CR body-key vocabulary at every schema surface it consumes
+/// (chart-metadata, per-CR install-payload, per-dep dependency-list);
+/// the paired
+/// [`tests::helm_chart_dependency_key_name_matches_kube_key_name`] pin
+/// asserts the two byte-shapes coincide, so a future K8s-side rebrand
+/// at [`KUBE_KEY_NAME`] that dropped the byte-identity would fail the
+/// pin at substrate-build time rather than silently drop the per-dep
+/// name lookup at `helm dependency build` time far from the drift site.
+///
+/// The chart-schema per-dep entry's `name:` value pins the exact
+/// Helm-registry chart-name Helm's per-dep alias convention scopes the
+/// per-dep values sub-block under when no `alias:` is set (see the
+/// sibling [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] docstring for the alias
+/// axis) — every rendered `lareira-<nome>` chart's Chart.yaml
+/// `dependencies[0].name:` binds to the same `&'static str` as its
+/// values.yaml wrap key (see [`caixa-helm`][ch]'s
+/// `values_yaml_wrap_key_matches_chart_dependency_name` pin on the
+/// structural alignment). A drift on this per-dep sub-key (a future
+/// refactor that renamed the `ChartDependency::name` Rust field to
+/// `ChartDependency::nome`, or added a
+/// `#[serde(rename_all = "camelCase")]` attribute that stays a no-op
+/// on the four identity-mapped keys today but silently activates on a
+/// future field addition) would rebrand the wire key silently — Helm's
+/// per-dep dependency-router silently drops the dep from the parsed
+/// chart-metadata (the substrate ships a Chart.yaml that lists no
+/// `pleme-computeunit` dep, `helm dependency build` finds no chart to
+/// vendor, and every rendered lareira-`<nome>` chart's install fails
+/// with "template: no template ... associated with template ..." far
+/// from the drift site). Peer to [`HELM_CHART_DEPENDENCY_KEY_VERSION`]
+/// / [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] on the sibling per-dep sub-key
+/// axes — completes the per-`dependencies[]`-entry YAML axis-key
+/// canonical-pin tetrad at the substrate. Same per-entry-sub-key
+/// canonical-lift discipline the peer
+/// [`SUPERVISOR_CHILD_KEY_CAIXA`] / [`SUPERVISOR_CHILD_KEY_VERSAO`] /
+/// [`SUPERVISOR_CHILD_KEY_RESTART`] triad (ef912df) established on the
+/// sibling per-`:children` sub-mapping surface, and the
+/// [`ENTRADA_KEY_HOST`] / [`ENTRADA_KEY_PARA`] / [`ENTRADA_KEY_PATHS`]
+/// / [`ENTRADA_KEY_PORT`] tetrad (a3d6162) established on the sibling
+/// per-`:entrada` sub-mapping surface.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_DEPENDENCY_KEY_NAME: &str = "name";
+
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-version-constraint field —
+/// the load-bearing serde field-name at [`caixa-helm`][ch]'s
+/// `ChartDependency` struct's `version` field. Distinct from the
+/// sibling per-Chart.yaml top-level chart-own-SemVer axis-key
+/// (`version:` at the top level, whose byte-shape coincides with this
+/// per-dep sub-key at the wire — a coincidence the substrate-side
+/// paired [`tests::helm_chart_dependency_key_version_pins_canonical_value`]
+/// pin holds byte-verbatim). The chart-schema per-dep entry's
+/// `version:` value pins the SemVer-range constraint Helm's per-dep
+/// resolver matches against the target dep's Chart.yaml `version:`
+/// scalar at `helm dependency build` / `helm dependency update` time.
+/// A drift on this per-dep sub-key would surface as one of two silent
+/// failure modes at chart-vendor time far from the drift site: Helm's
+/// per-dep chart-schema parser silently drops the version-constraint
+/// scalar from the parsed dep-entry (the per-dep resolver falls back
+/// to the wildcard `*` shape and vendors whatever chart-version the
+/// upstream registry currently advertises, silently promoting a chart
+/// upgrade the operator never authored), or a subsequent
+/// `#[serde(rename_all)]` addition rebrands the key to Helm's
+/// unrecognized shape and the per-dep entry silently vanishes from the
+/// parsed dep-list. Peer to [`HELM_CHART_DEPENDENCY_KEY_NAME`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] on the sibling per-dep sub-key
+/// axes — extends the per-entry-sub-key canonical-lift tetrad at the
+/// substrate. See [`HELM_CHART_DEPENDENCY_KEY_NAME`] for the shared
+/// per-entry-sub-mapping lift rationale.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_DEPENDENCY_KEY_VERSION: &str = "version";
+
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-registry URL field — the
+/// load-bearing serde field-name at [`caixa-helm`][ch]'s
+/// `ChartDependency` struct's `repository` field. The chart-schema
+/// per-dep entry's `repository:` value pins the Helm-registry URL
+/// (`file://…`, `https://…`, `oci://…`) Helm's per-dep resolver
+/// consults at `helm dependency build` time to fetch the per-dep
+/// chart bytes. At the caixa-helm substrate the default value is the
+/// canonical [`caixa_helm::DEFAULT_LIBRARY_REPO`] pointing at the
+/// helmworks file:// path; the future per-edition library-chart
+/// re-emission for the OCI registry (once `pleme-io/helmworks/charts`
+/// lands as an OCI-registry-backed chart-source) reaches this axis
+/// through a paired scalar-value lift on the per-dep repo axis. A
+/// drift on this per-dep sub-key would surface as one of two silent
+/// failure modes at chart-vendor time far from the drift site: Helm's
+/// per-dep resolver silently drops the repository scalar from the
+/// parsed dep-entry (the per-dep resolver falls back to the "no
+/// repository set" shape and refuses to vendor the dep with
+/// `no repository defined`), or the per-dep chart-schema parser
+/// silently absorbs a rename drift via `#[serde(default)]`
+/// fall-through at the struct-side and the per-dep repo axis lands
+/// under Rust's `""` default — Helm rejects the empty URL at
+/// `helm dependency build` time. Peer to
+/// [`HELM_CHART_DEPENDENCY_KEY_NAME`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_VERSION`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] on the sibling per-dep sub-key
+/// axes. See [`HELM_CHART_DEPENDENCY_KEY_NAME`] for the shared
+/// per-entry-sub-mapping lift rationale.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_DEPENDENCY_KEY_REPOSITORY: &str = "repository";
+
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-alias override field — the
+/// load-bearing serde field-name at [`caixa-helm`][ch]'s
+/// `ChartDependency` struct's `alias` field. The chart-schema per-dep
+/// entry's `alias:` value, when set, overrides the per-dep values
+/// wrap-key (Helm's per-dep alias convention scopes the per-dep values
+/// sub-block under `alias:` when set, and under the sibling
+/// [`HELM_CHART_DEPENDENCY_KEY_NAME`] `name:` value otherwise); the
+/// caixa-helm substrate today emits the axis as `None` at every
+/// rendered `lareira-<nome>` chart's `dependencies[0].alias:` (the
+/// `#[serde(default, skip_serializing_if = "Option::is_none")]`
+/// attribute on the `alias` field elides the axis entirely from the
+/// emitted YAML when unset), so the values wrap-key defaults to the
+/// per-dep `name:` value — but the axis-key remains part of the
+/// substrate-side chart-schema-per-dep-entry contract for the future
+/// per-Aplicacao library chart's per-Servico per-dep aliasing
+/// [`HELM_CHART_TYPE_LIBRARY`] docstring names as a trajectory item.
+/// A drift on this per-dep sub-key (a future refactor that renamed
+/// the `ChartDependency::alias` Rust field, or added a
+/// `#[serde(rename_all = "camelCase")]` attribute that silently
+/// activates on a future field addition) would rebrand the wire key
+/// silently — Helm's per-dep alias-convention router would silently
+/// drop the alias from the parsed dep-entry (the per-dep values wrap-
+/// key falls back to the sibling `name:` value, and every per-cluster
+/// per-Servico per-dep values override the operator authored under
+/// the alias-key silently routes nowhere at `helm template` time). Peer
+/// to [`HELM_CHART_DEPENDENCY_KEY_NAME`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_VERSION`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] on the sibling per-dep
+/// sub-key axes — completes the per-`dependencies[]`-entry YAML
+/// axis-key canonical-pin tetrad. See [`HELM_CHART_DEPENDENCY_KEY_NAME`]
+/// for the shared per-entry-sub-mapping lift rationale.
+///
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_DEPENDENCY_KEY_ALIAS: &str = "alias";
+
 /// Canonical Helm 3 per-chart-directory metadata-file filename every
 /// rendered `lareira-<nome>` chart carries at its top-level directory —
 /// the fixed filename Helm's chart-schema parser (`helm dependency
@@ -24328,6 +24476,75 @@ mod tests {
              top-level chart-own-SemVer `version:` key — a collapse \
              silently overwrites the chart's own SemVer at every \
              downstream Helm chart-consumer"
+        );
+    }
+
+    #[test]
+    fn helm_chart_dependency_key_tetrad_pins_canonical_values() {
+        // Byte-string pin on the per-`dependencies[]`-entry sub-mapping
+        // YAML axis-key tetrad the Helm 3 chart-schema pins for every
+        // per-dep entry the substrate emits under the top-level
+        // `dependencies:` list at every rendered `lareira-<nome>`
+        // Chart.yaml. The four axis-keys name the four load-bearing
+        // per-dep sub-mapping fields Helm's per-dep resolver consumes
+        // at `helm dependency build` / `helm dependency update` time:
+        // `name` (the Helm-registry chart name), `version` (the SemVer-
+        // range constraint), `repository` (the registry URL to fetch
+        // from), and `alias` (the per-dep values wrap-key override).
+        // A drift on any const's value (a typo on this lift, a case
+        // flip to `"Name"` / `"Version"` / `"Repository"` / `"Alias"`,
+        // an accidental collapse onto a sibling axis-key) would
+        // silently rebrand the wire key at the `caixa_helm::ChartYaml`
+        // emitter site — Helm's chart-schema parser silently drops
+        // the drifted per-dep sub-mapping field, and the per-dep
+        // resolver falls back to the parsed-shape defaults
+        // (`""` / wildcard `*` / "no repository defined") at
+        // `helm dependency build` time far from the drift site. Peer
+        // to [`supervisor_child_key_tetrad_pins_canonical_values`] on
+        // the sibling per-`:children` sub-mapping tetrad (ef912df) and
+        // [`entrada_key_tetrad_pins_canonical_values`] on the sibling
+        // per-`:entrada` sub-mapping tetrad (a3d6162).
+        assert_eq!(HELM_CHART_DEPENDENCY_KEY_NAME, "name");
+        assert_eq!(HELM_CHART_DEPENDENCY_KEY_VERSION, "version");
+        assert_eq!(HELM_CHART_DEPENDENCY_KEY_REPOSITORY, "repository");
+        assert_eq!(HELM_CHART_DEPENDENCY_KEY_ALIAS, "alias");
+    }
+
+    #[test]
+    fn helm_chart_dependency_key_name_matches_kube_key_name() {
+        // Load-bearing byte-shape coincidence between the Helm 3
+        // Chart.yaml per-`dependencies[]`-entry sub-mapping name key
+        // ([`HELM_CHART_DEPENDENCY_KEY_NAME`]) and the K8s CR
+        // per-`metadata` sub-mapping name key ([`KUBE_KEY_NAME`]) —
+        // Helm inherits the K8s CR body-key vocabulary at every schema
+        // surface it consumes (chart-metadata top-level, per-CR
+        // install-payload, per-dep dependency-list). The two axes are
+        // structurally-independent schema surfaces (the Helm 3
+        // chart-schema per-dep entry vs. the K8s apiserver-side CR
+        // metadata block) whose byte-shapes happen to coincide today;
+        // this pin makes the byte-shape coincidence load-bearing
+        // rather than accidental so a future K8s-side rebrand at
+        // [`KUBE_KEY_NAME`] (or a Helm-side rebrand at
+        // [`HELM_CHART_DEPENDENCY_KEY_NAME`]) that dropped the
+        // byte-identity would fail the pin at substrate-build time
+        // rather than as a silent Helm-per-dep-resolver drop at
+        // `helm dependency build` time far from the drift site. Same
+        // discipline as the peer
+        // [`helm_chart_key_api_version_matches_kube_key_api_version`]
+        // pin on the sibling top-level chart-schema-apiVersion axis
+        // (cc44e4b) — extends the axis-key byte-identity coincidence
+        // discipline from the per-Chart.yaml top-level shape onto the
+        // per-`dependencies[]`-entry sub-mapping shape.
+        assert_eq!(
+            HELM_CHART_DEPENDENCY_KEY_NAME, KUBE_KEY_NAME,
+            "HELM_CHART_DEPENDENCY_KEY_NAME ({HELM_CHART_DEPENDENCY_KEY_NAME:?}) \
+             must remain byte-identical to KUBE_KEY_NAME ({KUBE_KEY_NAME:?}) — \
+             Helm 3 inherits the K8s CR body-key vocabulary at every schema \
+             surface, and every downstream consumer that navigates a per-dep \
+             sub-mapping / a K8s CR metadata block by the `name` key reads the \
+             byte-identical `\"name\"` key; a drift on either side silently \
+             reroutes the consumer through a schema-parser drop far from the \
+             drift site"
         );
     }
 
