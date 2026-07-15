@@ -2452,4 +2452,133 @@ spec:
         assert_eq!(via_alias_new.path, PathBuf::from(HELM_CHART_YAML_FILENAME));
         assert_eq!(via_alias_new.contents, "apiVersion: v2\n");
     }
+
+    #[test]
+    fn render_opts_default_library_version_follows_lifted_constant() {
+        // Peer of [`render_opts_default_library_name_follows_lifted_constant`]
+        // (which pins the same alignment on the sibling
+        // [`RenderOpts::library_name`] / [`DEFAULT_LIBRARY_NAME`] axis). The
+        // [`RenderOpts::default()`] impl sets `library_version` from
+        // [`DEFAULT_LIBRARY_VERSION`]; a future refactor that detached the
+        // default-knob from the lifted constant — accidentally re-inlining
+        // `"~0.1.0"` in the impl body — would silently split the value the
+        // default knob threads into every rendered `Chart.yaml`
+        // `dependencies[0].version` axis from the const the const's callers
+        // (and this crate's future per-`DEFAULT_LIBRARY_VERSION` drift pins)
+        // read. The two `Chart.yaml`-dep `(name, version)` scalar-axes now
+        // share the same "default-knob follows lifted constant, byte for
+        // byte" pin discipline the peer library-name axis carries.
+        let opts = RenderOpts::default();
+        assert_eq!(opts.library_version, DEFAULT_LIBRARY_VERSION);
+        assert_eq!(opts.library_version, "~0.1.0");
+    }
+
+    #[test]
+    fn render_opts_default_library_repo_follows_lifted_constant() {
+        // Peer of [`render_opts_default_library_name_follows_lifted_constant`]
+        // /
+        // [`render_opts_default_library_version_follows_lifted_constant`] —
+        // the third leg of the per-`Chart.yaml`-dep
+        // `(repository, name, version)` default-knob triple. The
+        // [`RenderOpts::default()`] impl seeds `library_repo` from
+        // [`DEFAULT_LIBRARY_REPO`]; every rendered `lareira-<nome>` chart's
+        // `Chart.yaml` `dependencies[0].repository` field reads through
+        // this knob, so a future refactor that detached the default-knob
+        // from the lifted constant — re-inlining
+        // `"file://../pleme-computeunit"` in the impl body — would silently
+        // split the URL the default seed writes from the const the
+        // drift-detection pin below
+        // ([`default_library_repo_ends_with_lifted_default_library_name`])
+        // reads.
+        let opts = RenderOpts::default();
+        assert_eq!(opts.library_repo, DEFAULT_LIBRARY_REPO);
+        assert_eq!(opts.library_repo, "file://../pleme-computeunit");
+    }
+
+    #[test]
+    fn default_library_version_parses_as_valid_semver_requirement() {
+        // Structural pin: [`DEFAULT_LIBRARY_VERSION`] carries a Cargo-shaped
+        // semver-requirement string that lands verbatim in every rendered
+        // `lareira-<nome>` chart's `Chart.yaml` `dependencies[0].version`
+        // field. Helm 3's chart-schema parser (`helm dependency build`,
+        // `helm lint`, `helm template`, `helm install`) validates the
+        // scalar against the same `semver::VersionReq` grammar
+        // [`caixa_core::parse_requirement`] wraps, and rejects a malformed
+        // shape (`"~0.1.,0"` — paste-from-typography stray comma;
+        // `"v0.1.0"` — accidental Zig-style publish-tag prefix leaking back
+        // from [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] into the
+        // requirement axis; `"0.1"` with a trailing sigil dropped by a
+        // fat-fingered edit) with the load-bearing `Error: found operator
+        // …, expected version` diagnostic surfacing at chart-consumption
+        // time — far from the constant-drift commit's source, with no
+        // field naming the offending caixa or the drifted default. Routing
+        // through [`caixa_core::parse_requirement`] here — the same
+        // requirement-parser entry-point every peer typed `:versao`
+        // requirement slot (`:deps`, `:deps-dev`, `:membros`, `:children`)
+        // routes through via
+        // [`caixa_core::require_valid_versao_requirement`] — closes the
+        // drift structurally at caixa-helm build time and pins the const's
+        // accepted set to exactly the set the peer author-facing
+        // requirement axes accept: any shape a caixa author cannot write
+        // in `:deps :versao` is a shape the substrate cannot seed as the
+        // library-chart-dep default. Peer of the sibling
+        // [`default_library_repo_ends_with_lifted_default_library_name`]
+        // structural pin on the co-resident `(name, version)` per-Chart.yaml
+        // dep-scalar pair.
+        caixa_core::parse_requirement(DEFAULT_LIBRARY_VERSION).unwrap_or_else(|e| {
+            panic!(
+                "DEFAULT_LIBRARY_VERSION {DEFAULT_LIBRARY_VERSION:?} must parse as a valid \
+                 semver::VersionReq — every rendered lareira-<nome> chart's Chart.yaml \
+                 dependencies[0].version axis lands this scalar verbatim, and Helm 3's \
+                 chart-schema parser rejects a malformed shape at chart-consumption time \
+                 far from the constant-drift commit's source: {e}",
+            )
+        });
+    }
+
+    #[test]
+    fn default_library_repo_ends_with_lifted_default_library_name() {
+        // Structural cross-const coherence pin: [`DEFAULT_LIBRARY_REPO`]
+        // embeds the [`DEFAULT_LIBRARY_NAME`] byte-string verbatim as its
+        // trailing directory-name component (the canonical
+        // `file://../<library-chart-name>` shape every sibling
+        // `lareira-<nome>` chart's `Chart.yaml` `dependencies[0]` entry
+        // consults for a two-axis `(name, repository)` per-dep tuple that
+        // Helm's per-chart-dep resolver `(chart-source-scheme + chart-name)`
+        // navigator round-trips). The two axes must stay coupled: the
+        // library-chart-directory on disk (the repo's trailing component)
+        // and the library-chart's declared `name:` in its own
+        // [`DEFAULT_LIBRARY_NAME`]-published `Chart.yaml` are the same
+        // load-bearing chart-name identity. Prior to this pin the two
+        // consts were independently authored — a future substrate-side
+        // library-chart rebrand (`pleme-computeunit` → `pleme-cu` on a
+        // shorter-form migration, `pleme-computeunit` →
+        // `caixa-computeunit` on a substrate-alignment migration, a
+        // per-edition library-chart fork the [`DEFAULT_LIBRARY_NAME`]
+        // docstring names as a trajectory item) on the
+        // [`caixa_core::DEFAULT_LIBRARY_NAME`] canonical without a
+        // coordinated edit on this crate's [`DEFAULT_LIBRARY_REPO`] would
+        // silently emit rendered `Chart.yaml` documents whose
+        // `dependencies[0].name` names the new chart while
+        // `dependencies[0].repository` points at the old directory —
+        // `helm dependency build` would refuse to resolve the dep ("chart
+        // <new-name> not found in file://../<old-name>") at chart-
+        // consumption time, far from the constant-rebrand commit's source,
+        // with no field naming the two-axis coherence drift root cause.
+        // Pinning the structural `ends_with(DEFAULT_LIBRARY_NAME)` invariant
+        // here surfaces the drift as a caixa-helm build-time test failure
+        // and forces the coordinated `(REPO, NAME)` edit to move together.
+        // Peer of the sibling
+        // [`default_library_version_parses_as_valid_semver_requirement`]
+        // structural pin on the co-resident `(name, version)` per-Chart.yaml
+        // dep-scalar pair — completes the `(repository, name, version)`
+        // per-Chart.yaml-dep default-triple's structural pin surface.
+        assert!(
+            DEFAULT_LIBRARY_REPO.ends_with(DEFAULT_LIBRARY_NAME),
+            "DEFAULT_LIBRARY_REPO {DEFAULT_LIBRARY_REPO:?} must terminate with the lifted \
+             DEFAULT_LIBRARY_NAME {DEFAULT_LIBRARY_NAME:?} — the two-axis (repository, name) \
+             per-Chart.yaml-dep tuple must resolve to the same library-chart identity on \
+             disk, so a rebrand on either axis must move both",
+        );
+    }
 }
