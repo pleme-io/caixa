@@ -12316,4 +12316,169 @@ mod tests {
             );
         }
     }
+
+    // ── drift-detection: serde-derive-to-CONTRATO_KEY_* identity ─────────
+
+    #[test]
+    fn wit_contract_serde_keys_match_lifted_contrato_key_consts() {
+        // Load-bearing invariant: the three `CONTRATO_KEY_*` consts
+        // ([`crate::CONTRATO_KEY_DE`] / [`crate::CONTRATO_KEY_PARA`] /
+        // [`crate::CONTRATO_KEY_WIT`]) name the exact camelCase JSON
+        // keys the `#[serde(rename_all = "camelCase")]` attribute on
+        // [`WitContract`] emits for the required-triad. The three
+        // sibling payload-arm keys already pin under
+        // [`WitTarget::HTTP_FIELD_NAME`] / `PUBSUB_FIELD_NAME` /
+        // `STORE_FIELD_NAME` — pin all six alongside so a future
+        // accidental `rename_all = "snake_case"` / `"kebab-case"` /
+        // verbatim-field-name flip at the derive attribute (any of which
+        // would silently break every downstream JSON consumer that
+        // reaches for one of the six via `Value::get(...)`) surfaces
+        // here as a build-time test failure at `aplicacao.rs`, not as an
+        // apply-time `.get(<stale-canonical-const>)` returning `None`
+        // far from the derive-attr drift's commit. Peer with the sibling
+        // `membro_serde_keys_match_lifted_membro_key_consts` (ce80ca0)
+        // pin on the M3 `:membros` per-entry axis — same discipline the
+        // `Membro` per-entry lift established, extended here to the
+        // sibling M3 `WitContract` per-`:contratos` entry axis, the last
+        // M3 mesh-slot atom top-level `#[serde(rename_all = "camelCase")]`
+        // axis on the Aplicacao surface without a lifted serde-key peer.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        let json = serde_json::to_string(&c).unwrap();
+        for key in [
+            crate::CONTRATO_KEY_DE,
+            crate::CONTRATO_KEY_PARA,
+            crate::CONTRATO_KEY_WIT,
+            WitTarget::HTTP_FIELD_NAME,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized WitContract must carry the lifted \
+                 CONTRATO_KEY_* / WitTarget::*_FIELD_NAME byte-sequence \
+                 {quoted} verbatim in the JSON emission (got: {json})",
+            );
+        }
+
+        // Pin the two remaining payload-arm keys by round-tripping a
+        // `WitContract` under each payload-shape (pub-sub, store) — the
+        // required-triad appears on every emission but the payload arms
+        // only surface when their `Option<String>` field is `Some`.
+        let pubsub = WitContract {
+            de: "cart".into(),
+            para: "events".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("orders.placed".into()),
+            slot: None,
+        };
+        let pubsub_json = serde_json::to_string(&pubsub).unwrap();
+        let pubsub_quoted = format!("\"{}\"", WitTarget::PUBSUB_FIELD_NAME);
+        assert!(
+            pubsub_json.contains(&pubsub_quoted),
+            "serialized pub-sub WitContract must carry the lifted \
+             WitTarget::PUBSUB_FIELD_NAME byte-sequence {pubsub_quoted} \
+             verbatim in the JSON emission (got: {pubsub_json})",
+        );
+        let store = WitContract {
+            de: "cart".into(),
+            para: "sessions".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("cart/$id".into()),
+        };
+        let store_json = serde_json::to_string(&store).unwrap();
+        let store_quoted = format!("\"{}\"", WitTarget::STORE_FIELD_NAME);
+        assert!(
+            store_json.contains(&store_quoted),
+            "serialized store WitContract must carry the lifted \
+             WitTarget::STORE_FIELD_NAME byte-sequence {store_quoted} \
+             verbatim in the JSON emission (got: {store_json})",
+        );
+    }
+
+    #[test]
+    fn contrato_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the six
+        // canonical [`WitContract`] per-entry byte-strings onto the same
+        // value (e.g. an accidental copy-paste flip of
+        // [`crate::CONTRATO_KEY_WIT`] to also read `"de"`, or a
+        // rebrand of [`WitTarget::STORE_FIELD_NAME`] to match the
+        // sibling [`WitTarget::HTTP_FIELD_NAME`]) would silently reroute
+        // every downstream probe on one axis onto the sibling axis's
+        // overlay entry and pass every propagation-probe test that
+        // expected only the stale axis's value. Peer of the sibling
+        // two-way distinct pin on the `MEMBRO_KEY_*` pair (ce80ca0) —
+        // widened here to the six-way axis the `WitContract`
+        // required-triad + `WitTarget` payload-triad jointly cover.
+        let all = [
+            crate::CONTRATO_KEY_DE,
+            crate::CONTRATO_KEY_PARA,
+            crate::CONTRATO_KEY_WIT,
+            WitTarget::HTTP_FIELD_NAME,
+            WitTarget::PUBSUB_FIELD_NAME,
+            WitTarget::STORE_FIELD_NAME,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "CONTRATO_KEY_* / WitTarget::*_FIELD_NAME consts \
+                     must be pairwise-distinct canonical byte-sequences \
+                     — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn contrato_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `CONTRATO_KEY_*` (and every peer
+        // `WitTarget::*_FIELD_NAME`) const must be a lowerCamelCase
+        // byte-sequence (no `snake_case` underscores, no `kebab-case`
+        // hyphens, no leading colon, no `PascalCase` leading capital, no
+        // whitespace / dots) — the canonical shape the
+        // `#[serde(rename_all = "camelCase")]` derive produces on
+        // [`WitContract`]. A future flip to a non-camelCase attribute at
+        // the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `wit_contract_serde_keys_match_lifted_contrato_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer with `membro_key_consts_are_lower_camel_case_shape`
+        // (ce80ca0) on the sibling `Membro` per-entry axis.
+        for key in [
+            crate::CONTRATO_KEY_DE,
+            crate::CONTRATO_KEY_PARA,
+            crate::CONTRATO_KEY_WIT,
+            WitTarget::HTTP_FIELD_NAME,
+            WitTarget::PUBSUB_FIELD_NAME,
+            WitTarget::STORE_FIELD_NAME,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "CONTRATO_KEY_* / WitTarget::*_FIELD_NAME must be \
+                 non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "CONTRATO_KEY_* / WitTarget::*_FIELD_NAME must lead \
+                 with an ASCII-lowercase byte (got {key:?}, leads with \
+                 {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "CONTRATO_KEY_* / WitTarget::*_FIELD_NAME must be \
+                 ASCII-alphanumeric only — no `_` / `-` / `:` / `.` / \
+                 whitespace (got {key:?})",
+            );
+        }
+    }
 }
