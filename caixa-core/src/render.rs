@@ -7022,6 +7022,140 @@ pub const LAYOUT_MISSING_ENTRY_KIND_EXE: &str = "exe";
 /// same seven-byte `"servico"` scalar).
 pub const LAYOUT_MISSING_ENTRY_KIND_SERVICO: &str = "servico";
 
+/// Canonical human-readable label the M0 [`crate::CaixaKind::Biblioteca`]
+/// arm surfaces under [`crate::CaixaKind::as_str`] and (routed through
+/// it) [`std::fmt::Display`] — the byte-string every future diagnostic
+/// / graph / audit consumer that formats a `:kind` variant as
+/// user-facing text lands on (the future wasm-operator's per-caixa
+/// startup log line naming the loaded caixa's typed shape, the future
+/// `feira app graph` per-member kind column, the future M4
+/// `wasm.pleme.io/v1alpha1/ComputeUnit` / `mesh.pleme.io/v1alpha1/*` CR
+/// materializer's admission-webhook rejection body naming which typed
+/// kind the offending manifest carries). Peer of the sibling four
+/// [`CAIXA_KIND_LABEL_BINARIO`] / [`CAIXA_KIND_LABEL_SERVICO`] /
+/// [`CAIXA_KIND_LABEL_SUPERVISOR`] / [`CAIXA_KIND_LABEL_APLICACAO`]
+/// consts on the same closed [`crate::CaixaKind`] enum surface —
+/// together the pentad names every author-reachable arm of the
+/// substrate's most fundamental typed axis (what a caixa produces),
+/// mirroring the closed-enum-scalar-value trajectory the sibling
+/// OTP-shaped [`SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] etc. (09ffb2d) and
+/// [`SUPERVISOR_CHILD_RESTART_PERMANENT`] etc. (ccdf955) and the M3
+/// [`M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] etc. (3f0e21c) established
+/// on the sibling closed-set typed-enum discriminator axes.
+///
+/// Until this lift landed the five [`crate::CaixaKind::as_str`] arms
+/// each returned a hand-authored byte-string literal (`"biblioteca"`
+/// / `"binario"` / `"servico"` / `"supervisor"` / `"aplicacao"`) at
+/// the source-side match arm with no compile-time link to the peer
+/// [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`] consts on the sibling
+/// layout-diagnostic axis (whose bytes coincide by design), and no
+/// [`std::fmt::Display`] surface at all — every consumer reaching for
+/// a caixa-kind byte-string past the wire format
+/// (`Serialize` → PascalCase `"Biblioteca"` etc.) had to reach for the
+/// hand-authored [`crate::CaixaKind::as_str`] arm's literal or roll a
+/// per-consumer `format!("{v:?}")` `Debug` route, either of which a
+/// future variant rename would silently desynchronize. Lifting the
+/// five arms onto peer consts + routing [`std::fmt::Display`] through
+/// [`crate::CaixaKind::as_str`] closes the drift footgun structurally:
+/// the human-readable byte-string (`Display` + `as_str`), the wire
+/// byte-string (`Serialize`, PascalCase — intentionally distinct from
+/// the human-readable form), and the layout-diagnostic byte-string
+/// (`LAYOUT_MISSING_ENTRY_KIND_*`) each route through one canonical
+/// declaration per axis, with pin tests
+/// (`caixa_kind_as_str_returns_lifted_peer_const`,
+/// `caixa_kind_display_routes_through_as_str_helper`) making any drift
+/// a caixa-core-build-time failure.
+///
+/// Byte-identical to [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] today
+/// (both resolve to the same eleven-byte `"biblioteca"` scalar) — the
+/// pin test
+/// [`layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str`]
+/// (fe2a898) already made the coincidence load-bearing on the sibling
+/// layout-leaf-kind axis. Semantically distinct: this const names the
+/// [`crate::CaixaKind`] discriminator's human-readable form (the
+/// substrate's canonical `:kind` label), while
+/// [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] names the
+/// [`crate::LayoutError::MissingEntry`] `kind: &'static str`
+/// leaf-kind discriminator (the per-`:bibliotecas`-entry on-disk-leaf
+/// existence diagnostic's categorization label). Two axes, two lifts —
+/// same "byte-identical-but-semantically-distinct" discipline the peer
+/// [`FLEET_PROGRAMS_KEY_VERSAO`] / [`MEMBRO_KEY_VERSAO`] split (ce80ca0)
+/// established on the sibling per-entry version-constraint axis.
+pub const CAIXA_KIND_LABEL_BIBLIOTECA: &str = "biblioteca";
+
+/// Canonical human-readable label the M0 [`crate::CaixaKind::Binario`]
+/// arm surfaces under [`crate::CaixaKind::as_str`] and (routed through
+/// it) [`std::fmt::Display`]. Peer of [`CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`CAIXA_KIND_LABEL_SERVICO`] / [`CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`CAIXA_KIND_LABEL_APLICACAO`] on the same closed
+/// [`crate::CaixaKind`] enum surface; see [`CAIXA_KIND_LABEL_BIBLIOTECA`]
+/// for the shared lift rationale.
+///
+/// Semantically distinct from [`LAYOUT_MISSING_ENTRY_KIND_EXE`]
+/// (`"exe"`) — the alignment pin
+/// [`layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str`]
+/// (fe2a898) asserts the *inequality* between the layout-side leaf-kind
+/// label (which names the `exe/` directory sub-tree) and this
+/// [`crate::CaixaKind`] discriminator label (which names the caixa's
+/// whole runtime kind). Two axes, two lifts.
+pub const CAIXA_KIND_LABEL_BINARIO: &str = "binario";
+
+/// Canonical human-readable label the M0 [`crate::CaixaKind::Servico`]
+/// arm surfaces under [`crate::CaixaKind::as_str`] and (routed through
+/// it) [`std::fmt::Display`]. Peer of [`CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`CAIXA_KIND_LABEL_BINARIO`] / [`CAIXA_KIND_LABEL_SUPERVISOR`] /
+/// [`CAIXA_KIND_LABEL_APLICACAO`] on the same closed
+/// [`crate::CaixaKind`] enum surface; see [`CAIXA_KIND_LABEL_BIBLIOTECA`]
+/// for the shared lift rationale.
+///
+/// Byte-identical to [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`] today (both
+/// resolve to the same seven-byte `"servico"` scalar) — the pin test
+/// [`layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str`]
+/// (fe2a898) already made the coincidence load-bearing on the sibling
+/// layout-leaf-kind axis. Semantically distinct: this const names the
+/// [`crate::CaixaKind`] discriminator's human-readable form (the
+/// substrate's canonical `:kind Servico` label), while
+/// [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`] names the per-`:servicos`-entry
+/// on-disk-leaf existence diagnostic's categorization label.
+pub const CAIXA_KIND_LABEL_SERVICO: &str = "servico";
+
+/// Canonical human-readable label the M2 [`crate::CaixaKind::Supervisor`]
+/// arm surfaces under [`crate::CaixaKind::as_str`] and (routed through
+/// it) [`std::fmt::Display`]. Peer of [`CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`CAIXA_KIND_LABEL_BINARIO`] / [`CAIXA_KIND_LABEL_SERVICO`] /
+/// [`CAIXA_KIND_LABEL_APLICACAO`] on the same closed
+/// [`crate::CaixaKind`] enum surface; see [`CAIXA_KIND_LABEL_BIBLIOTECA`]
+/// for the shared lift rationale.
+///
+/// No layout-leaf-kind peer today — the `:kind Supervisor` typed slot
+/// carries no on-disk source-file sub-tree (a supervisor is composed
+/// entirely of `:children` references to other caixas), so no
+/// [`crate::LayoutError::MissingEntry`] `kind:` diagnostic reaches for
+/// this label. The const stands as the sole source of truth for the
+/// [`crate::CaixaKind::Supervisor`] arm's human-readable form.
+pub const CAIXA_KIND_LABEL_SUPERVISOR: &str = "supervisor";
+
+/// Canonical human-readable label the M3 [`crate::CaixaKind::Aplicacao`]
+/// arm surfaces under [`crate::CaixaKind::as_str`] and (routed through
+/// it) [`std::fmt::Display`]. Peer of [`CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`CAIXA_KIND_LABEL_BINARIO`] / [`CAIXA_KIND_LABEL_SERVICO`] /
+/// [`CAIXA_KIND_LABEL_SUPERVISOR`] on the same closed
+/// [`crate::CaixaKind`] enum surface; see [`CAIXA_KIND_LABEL_BIBLIOTECA`]
+/// for the shared lift rationale.
+///
+/// Byte-identical to [`FLEET_PROGRAMS_KEY_APLICACAO`] today (both
+/// resolve to the same nine-byte `"aplicacao"` scalar) — the coincidence
+/// is deliberate but semantically distinct: this const names the
+/// [`crate::CaixaKind::Aplicacao`] discriminator's human-readable form
+/// (the substrate's canonical `:kind Aplicacao` label), while
+/// [`FLEET_PROGRAMS_KEY_APLICACAO`] names the per-programs.yaml-entry
+/// passthrough-annotation YAML key that links a member entry back to
+/// its parent Aplicacao (MESH-COMPOSITION §III.4). Two axes, two lifts
+/// — same "byte-identical-but-semantically-distinct" discipline every
+/// peer split establishes.
+pub const CAIXA_KIND_LABEL_APLICACAO: &str = "aplicacao";
+
 /// Canonical caixa-root-relative directory name housing every
 /// [`crate::CaixaKind::Biblioteca`] caixa's `lib/<nome>.lisp` entry
 /// (and every `:bibliotecas ("lib/foo.lisp" …)` per-entry source
