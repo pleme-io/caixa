@@ -5039,11 +5039,20 @@ mod tests {
         // `from`/`instructions` pair.
         let key = crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND;
         // Enumerate every per-variant data-field key across all five
-        // variants of [`UpgradeInstruction`], mirroring the field-
-        // names surfaced by the `variant_fields` reflection in
-        // `caixa-core/tests/dispatcher_registration.rs`
-        // (`"module"`, `"script"`).
-        for data_field in ["module", "script"] {
+        // variants of [`UpgradeInstruction`], routing through the two
+        // lifted `M2_UPGRADE_INSTRUCTION_FIELD_KEY_*` byte-string consts
+        // that name the same per-variant data-field JSON keys the
+        // `variant_fields` reflection in
+        // `caixa-core/tests/dispatcher_registration.rs` surfaces. A future
+        // per-variant struct-field rebrand (`module` → `component`,
+        // `script` → `path`) lands as an edit to exactly one const and
+        // reaches this disjointness pin by construction — the two axes
+        // (tag-slot key on one side, per-variant data-field keys on the
+        // other) share one source of truth per axis.
+        for data_field in [
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT,
+        ] {
             assert_ne!(
                 key, data_field,
                 "M2_UPGRADE_INSTRUCTION_KEY_KIND (the serde `tag` slot) \
@@ -5052,6 +5061,141 @@ mod tests {
                  data-field {data_field:?}, which would silently corrupt \
                  the internally-tagged serialization",
             );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_variant_data_field_keys_match_lifted_field_key_consts() {
+        // Load-bearing invariant on the M2 `:upgrade-from :instructions`
+        // per-entry OTP-appup [`UpgradeInstruction`] enum's per-variant
+        // data-field JSON key axis: the two
+        // `M2_UPGRADE_INSTRUCTION_FIELD_KEY_*` consts (`_MODULE`,
+        // `_SCRIPT`) name the exact per-variant field JSON keys the
+        // `#[serde(tag = "kind", rename_all = "kebab-case")]` attribute on
+        // [`UpgradeInstruction`] emits alongside the tag-slot key from the
+        // sibling [`crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND`]
+        // const — the `module: String` struct-field on
+        // `LoadModule`/`SoftPurge`/`Purge` and the `script: PathBuf`
+        // struct-field on `StateChange` are promoted to sibling JSON keys
+        // at the same nesting level as the tag by the internally-tagged
+        // serialization, and every downstream consumer that navigates the
+        // serialized instruction blob to reach the payload (the caixa-core
+        // reflection round-trip in `dispatcher_registration.rs` that
+        // consults `variant_fields`, the sibling disjointness pin below,
+        // any future wasm-operator upgrade-dispatch step consuming the
+        // serialized instruction blob to route the per-module load /
+        // soft-purge / purge action or the per-script state-change action)
+        // reads through the same `&'static str`. Serialize one Module-
+        // bearing variant and one Script-bearing variant, then pin that
+        // each const's byte-sequence appears verbatim in the JSON emission
+        // — a future accidental struct-field rebrand (`module: String` →
+        // `component: String`, `script: PathBuf` → `path: PathBuf`) at
+        // either variant surfaces here as a build-time test failure at
+        // `upgrade.rs`, not as an apply-time `.get(<stale-field-key>)`
+        // returning `None` far from the field-name drift's commit.
+        //
+        // Same "one canonical byte-string per typed axis" discipline the
+        // sibling `upgrade_instruction_serde_tag_key_matches_lifted_m2_upgrade_instruction_key_kind_const`
+        // pin established on the peer tag-slot key axis on the same
+        // enum — this pin extends the discipline onto the per-variant
+        // data-field key axis, completing the `:upgrade-from :instructions`
+        // variant-JSON dual (tag key + tag values + per-variant field keys)
+        // fully into caixa-core.
+        let module_sample = UpgradeInstruction::LoadModule {
+            module: "hello-rio".into(),
+        };
+        let v: serde_json::Value = serde_json::to_value(&module_sample).unwrap();
+        assert_eq!(
+            v.get(crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE)
+                .and_then(|k| k.as_str()),
+            Some("hello-rio"),
+            "serialized {module_sample:?} must carry the lifted \
+             M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE byte-sequence \
+             ({:?}) verbatim as the data-field JSON key holding the \
+             module string (got: {v})",
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE,
+        );
+
+        let script_sample = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+        };
+        let v: serde_json::Value = serde_json::to_value(&script_sample).unwrap();
+        assert_eq!(
+            v.get(crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT)
+                .and_then(|k| k.as_str()),
+            Some("lib/migrations/v01-to-v02.lisp"),
+            "serialized {script_sample:?} must carry the lifted \
+             M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT byte-sequence \
+             ({:?}) verbatim as the data-field JSON key holding the \
+             script path (got: {v})",
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT,
+        );
+    }
+
+    #[test]
+    fn m2_upgrade_instruction_field_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `M2_UPGRADE_INSTRUCTION_FIELD_KEY_*` const must
+        // be a lowerCamelCase byte-sequence (non-empty, ASCII-lowercase
+        // leader, ASCII-alphanumeric only — no `snake_case` underscores,
+        // no `kebab-case` hyphens, no `PascalCase` leading capital, no
+        // whitespace / colons / dots) — the canonical shape a Rust
+        // struct-field name promoted to a JSON key by serde takes on this
+        // internally-tagged variant surface, matching the sibling
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND`] tag-slot key
+        // shape. A future flip to a non-camelCase byte at either const
+        // (an accidental `rename_all` regime interleave, or a struct-
+        // field flip like `module` → `module_name`) surfaces here at
+        // build time. Peer of
+        // `m2_upgrade_instruction_key_kind_const_is_lower_camel_case_shape`
+        // and `m2_upgrade_from_key_consts_are_lower_camel_case_shape` on
+        // the sibling wire-key axes.
+        for key in [
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "M2_UPGRADE_INSTRUCTION_FIELD_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "M2_UPGRADE_INSTRUCTION_FIELD_KEY_* must lead with an ASCII-lowercase \
+                 byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "M2_UPGRADE_INSTRUCTION_FIELD_KEY_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn m2_upgrade_instruction_field_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the two
+        // canonical per-variant data-field byte-strings onto the same
+        // value (e.g. an accidental copy-paste flip of
+        // `M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT` to also read
+        // `"module"`) would silently reroute every test-side probe on one
+        // variant's payload onto the sibling variant's payload and pass
+        // every propagation-probe test that expected only the stale
+        // axis's value. Peer of `m2_upgrade_from_key_consts_are_pairwise_distinct`
+        // on the sibling per-entry outer-container axis, and of
+        // `m2_upgrade_instruction_key_kind_const_disjoint_from_variant_data_keys`
+        // on the sibling tag-slot key ↔ per-variant data-field key axis.
+        let all = [
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "M2_UPGRADE_INSTRUCTION_FIELD_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
         }
     }
 
