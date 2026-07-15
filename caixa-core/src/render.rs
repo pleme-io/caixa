@@ -7925,6 +7925,73 @@ pub const POLITICAS_KEY_MTLS_REQUIRED: &str = "mtlsRequired";
 /// [`POLITICAS_KEY_TIMEOUT`] for the full lift rationale.
 pub const POLITICAS_KEY_RATE_LIMIT: &str = "rateLimit";
 
+/// Canonical camelCase JSON/YAML sub-key for the
+/// [`crate::aplicacao::CircuitBreaker`] struct's `max_failures`
+/// consecutive-failure-count axis — the `maxFailures:` field the M3
+/// Aplicacao's `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::CircuitBreaker`] emits inside the
+/// [`POLITICAS_KEY_CIRCUIT_BREAKER`] sub-block, and the exact camelCase
+/// scalar (Rust field `max_failures` → serde-emitted `maxFailures`,
+/// the load-bearing non-trivial camelCase transform on this
+/// [`CircuitBreaker`][cb] axis alongside the no-op
+/// [`CIRCUIT_BREAKER_KEY_WINDOW`] sibling) every downstream breaker-
+/// tuning consumer must probe on (the future M4 per-edge `:politicas`
+/// overlay projection onto the mesh's per-backend
+/// consecutive-failure-counter tripping threshold per
+/// MESH-COMPOSITION.md §III.3 breaker semantics, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-time
+/// breaker cross-check against
+/// [`crate::POLICY_BREAKER_MAX_FAILURES_MAX`], the future
+/// `feira lint` per-`:politicas :circuit-breaker` bound-check gate).
+///
+/// [cb]: crate::aplicacao::CircuitBreaker
+///
+/// Peer of [`CIRCUIT_BREAKER_KEY_WINDOW`] on the same
+/// [`crate::aplicacao::CircuitBreaker`] serialized-key axis; the two
+/// consts together close the sub-block's typed-struct axis. Extends
+/// the [`POLITICAS_KEY_CIRCUIT_BREAKER`] parent-axis lift (b55cca7)
+/// one level deeper — the parent const names the outer sub-block key
+/// the derive on [`crate::aplicacao::MeshPolicy`] emits, this pair
+/// names the inner keys the derive on the payload type emits, so a
+/// consumer walking `Value::get(POLITICAS_KEY_CIRCUIT_BREAKER)
+/// .and_then(|v| v.get(CIRCUIT_BREAKER_KEY_MAX_FAILURES))` navigates
+/// the whole [`crate::aplicacao::MeshPolicy`] breaker-tuning shape
+/// entirely through lifted canonical byte-sequences with no inline
+/// string literal at either level.
+///
+/// A future accidental `rename_all = "snake_case"` /
+/// `"kebab-case"` / verbatim-field-name flip at the derive on
+/// [`crate::aplicacao::CircuitBreaker`] would silently rebrand the
+/// emitted key to `max_failures` / `max-failures` / `max_failures`
+/// respectively, breaking every downstream
+/// `Value::get(CIRCUIT_BREAKER_KEY_MAX_FAILURES)` consumer — with the
+/// drift surfacing at apply time far from the derive-attr commit. The
+/// identity pin
+/// (`circuit_breaker_serde_keys_match_lifted_circuit_breaker_key_consts`
+/// on the source-side type) catches drift at caixa-core build time.
+///
+/// Same discipline every peer camelCase serde-key lift carries
+/// ([`M2_LIMITS_KEY_MEMORY`] etc. (d8b8b4f),
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] etc. (21fe462),
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (36ffe65), [`SUPERVISOR_KEY_ESTRATEGIA`] etc. (40cc4e5),
+/// [`POLITICAS_KEY_TIMEOUT`] etc. (b55cca7)).
+pub const CIRCUIT_BREAKER_KEY_MAX_FAILURES: &str = "maxFailures";
+
+/// Canonical camelCase JSON/YAML sub-key for the
+/// [`crate::aplicacao::CircuitBreaker`] struct's `window`
+/// failure-counter reset-window axis — the `window:` field the M3
+/// Aplicacao's `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::CircuitBreaker`] emits inside the
+/// [`POLITICAS_KEY_CIRCUIT_BREAKER`] sub-block. The Rust field is
+/// lowercase `window`; `#[serde(rename_all = "camelCase")]` is a
+/// no-op on this axis and the emitted key equals the source-side
+/// field name byte-for-byte. Peer of
+/// [`CIRCUIT_BREAKER_KEY_MAX_FAILURES`] on the same
+/// [`crate::aplicacao::CircuitBreaker`] serialized-key axis; see
+/// [`CIRCUIT_BREAKER_KEY_MAX_FAILURES`] for the full lift rationale.
+pub const CIRCUIT_BREAKER_KEY_WINDOW: &str = "window";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of

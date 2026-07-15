@@ -11618,8 +11618,12 @@ mod tests {
         // variant that delegates to the same shared parser). `"0.5m"`
         // parsed to 30s and round-tripped to `"30s"` on next emit —
         // DRIFT closed.
-        let payload = r#"{"maxFailures":5,"window":"0.5m"}"#;
-        let err = serde_json::from_str::<CircuitBreaker>(payload).unwrap_err();
+        let payload = format!(
+            r#"{{"{max_failures}":5,"{window}":"0.5m"}}"#,
+            max_failures = crate::CIRCUIT_BREAKER_KEY_MAX_FAILURES,
+            window = crate::CIRCUIT_BREAKER_KEY_WINDOW,
+        );
+        let err = serde_json::from_str::<CircuitBreaker>(&payload).unwrap_err();
         let msg = err.to_string();
         assert!(
             msg.contains("not a non-negative integer"),
@@ -11640,7 +11644,11 @@ mod tests {
         // codec's accepted set (post-gate) is exactly its emitted set
         // for the integer-magnitude class.
         for window_lit in ["30s", "500ms", "2m", "1h"] {
-            let payload = format!(r#"{{"maxFailures":5,"window":"{window_lit}"}}"#);
+            let payload = format!(
+                r#"{{"{max_failures}":5,"{window}":"{window_lit}"}}"#,
+                max_failures = crate::CIRCUIT_BREAKER_KEY_MAX_FAILURES,
+                window = crate::CIRCUIT_BREAKER_KEY_WINDOW,
+            );
             let cb: CircuitBreaker = serde_json::from_str(&payload).unwrap_or_else(|e| {
                 panic!("expected {window_lit:?} to parse cleanly through shared codec: {e}")
             });
@@ -12765,6 +12773,135 @@ mod tests {
             assert!(
                 key.chars().all(|c| c.is_ascii_alphanumeric()),
                 "POLITICAS_KEY_* must be ASCII-alphanumeric only — \
+                 no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
+
+    // ── drift-detection: serde-derive-to-CIRCUIT_BREAKER_KEY_* identity ──
+
+    #[test]
+    fn circuit_breaker_serde_keys_match_lifted_circuit_breaker_key_consts() {
+        // Load-bearing invariant: the two `CIRCUIT_BREAKER_KEY_*` consts
+        // ([`crate::CIRCUIT_BREAKER_KEY_MAX_FAILURES`] /
+        // [`crate::CIRCUIT_BREAKER_KEY_WINDOW`]) name the exact camelCase
+        // JSON keys the `#[serde(rename_all = "camelCase")]` attribute on
+        // [`CircuitBreaker`] emits inside the
+        // [`crate::POLITICAS_KEY_CIRCUIT_BREAKER`] sub-block. One of the
+        // two axes (`max_failures` → `maxFailures`) is a non-trivial
+        // camelCase transform — the derive-attribute is load-bearing on
+        // that axis, unlike the sibling `window` field where the derive
+        // is a no-op. Serialize a fully-populated [`CircuitBreaker`] and
+        // pin that each canonical byte-sequence appears verbatim in the
+        // JSON — a future accidental `rename_all = "snake_case"` /
+        // `"kebab-case"` / verbatim-field-name flip at the derive
+        // attribute (any of which would silently break every downstream
+        // JSON consumer that reaches for one of the two consts via
+        // `Value::get(POLITICAS_KEY_CIRCUIT_BREAKER).and_then(|v|
+        // v.get(CIRCUIT_BREAKER_KEY_MAX_FAILURES))` — the future M4
+        // per-edge `:politicas` overlay projection onto the mesh's
+        // per-backend consecutive-failure-counter tripping threshold, the
+        // future `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // admission-time breaker cross-check, the future `feira lint`
+        // per-`:politicas :circuit-breaker` bound-check gate) surfaces
+        // here as a build-time test failure at `aplicacao.rs`, not as an
+        // apply-time `.get(<stale-canonical-const>)` returning `None`
+        // far from the derive-attr drift's commit. Peer with the sibling
+        // `mesh_policy_serde_keys_match_lifted_politicas_key_consts`
+        // (b55cca7) parent-axis pin — that test pins the outer
+        // sub-block key the derive on [`MeshPolicy`] emits, this test
+        // pins the inner keys the derive on the payload type emits, so
+        // the two together lock the whole [`MeshPolicy`] breaker-tuning
+        // shape end-to-end at build time.
+        let cb = CircuitBreaker {
+            max_failures: 5,
+            window: Duration::from_secs(60),
+        };
+        let json = serde_json::to_string(&cb).unwrap();
+        for key in [
+            crate::CIRCUIT_BREAKER_KEY_MAX_FAILURES,
+            crate::CIRCUIT_BREAKER_KEY_WINDOW,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized CircuitBreaker must carry the lifted \
+                 CIRCUIT_BREAKER_KEY_* byte-sequence {quoted} verbatim \
+                 in the JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the two
+        // canonical [`CircuitBreaker`] sub-block byte-strings onto the
+        // same value (e.g. an accidental copy-paste flip of
+        // [`crate::CIRCUIT_BREAKER_KEY_WINDOW`] to also read
+        // `"maxFailures"`) would silently reroute every downstream
+        // probe on one axis onto the sibling axis's overlay entry and
+        // pass every propagation-probe test that expected only the
+        // stale axis's value — the M4 per-edge `:politicas` overlay
+        // projection would read the failure-count where the window
+        // duration was expected (or vice versa), the CR materializer's
+        // admission cross-check would compare the wrong pair of values,
+        // and the resulting mesh reconciler would either bind the wrong
+        // axis or reject the resource at reconcile far from the rebrand
+        // commit's source. Peer of the sibling five-way distinct pin on
+        // the `POLITICAS_KEY_*` pentad (b55cca7), the four-way distinct
+        // pin on the `ENTRADA_KEY_*` tetrad (a3d6162), the two-way
+        // distinct pin on the `MEMBRO_KEY_*` pair (ce80ca0), and the
+        // six-way distinct pin on the `CONTRATO_KEY_*` triad +
+        // `WitTarget::*_FIELD_NAME` triad (ca463a4).
+        let all = [
+            crate::CIRCUIT_BREAKER_KEY_MAX_FAILURES,
+            crate::CIRCUIT_BREAKER_KEY_WINDOW,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "CIRCUIT_BREAKER_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `CIRCUIT_BREAKER_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores, no
+        // `kebab-case` hyphens, no leading colon, no `PascalCase`
+        // leading capital, no whitespace / dots) — the canonical shape
+        // the `#[serde(rename_all = "camelCase")]` derive produces on
+        // [`CircuitBreaker`]. A future flip to a non-camelCase attribute
+        // at the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `circuit_breaker_serde_keys_match_lifted_circuit_breaker_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer with `politicas_key_consts_are_lower_camel_case_shape`
+        // (b55cca7), `entrada_key_consts_are_lower_camel_case_shape`
+        // (a3d6162), `membro_key_consts_are_lower_camel_case_shape`
+        // (ce80ca0), and `contrato_key_consts_are_lower_camel_case_shape`
+        // (ca463a4) on the sibling M3 typed-struct axes.
+        for key in [
+            crate::CIRCUIT_BREAKER_KEY_MAX_FAILURES,
+            crate::CIRCUIT_BREAKER_KEY_WINDOW,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "CIRCUIT_BREAKER_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "CIRCUIT_BREAKER_KEY_* must lead with an ASCII-lowercase \
+                 byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "CIRCUIT_BREAKER_KEY_* must be ASCII-alphanumeric only — \
                  no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
             );
         }
