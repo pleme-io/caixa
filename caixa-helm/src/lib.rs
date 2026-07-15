@@ -358,6 +358,50 @@ pub use caixa_core::HELM_CHART_KEY_APP_VERSION;
 /// rename-literal-only axes on this crate's [`ChartYaml`] struct.
 pub use caixa_core::HELM_CHART_KEY_API_VERSION;
 
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-name field — re-export of the
+/// lifted [`caixa_core::HELM_CHART_DEPENDENCY_KEY_NAME`] so the load-
+/// bearing serde field-name at [`ChartDependency`]'s `name` field lives
+/// in exactly one place across every caixa renderer. Peer to
+/// [`HELM_CHART_DEPENDENCY_KEY_VERSION`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] on the sibling per-dep sub-key
+/// axes. The drift-detection round-trip pin at
+/// [`tests::chart_dependency_serializes_tetrad_under_lifted_helm_chart_dependency_keys`]
+/// serializes a fully-populated [`ChartDependency`] and asserts each of
+/// the four per-dep sub-mapping wire keys resolves — closing the drift
+/// a rename of the Rust field or a `#[serde(rename_all)]` attribute
+/// addition would otherwise leave silent.
+pub use caixa_core::HELM_CHART_DEPENDENCY_KEY_NAME;
+
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-version-constraint field —
+/// re-export of the lifted [`caixa_core::HELM_CHART_DEPENDENCY_KEY_VERSION`]
+/// so the load-bearing serde field-name at [`ChartDependency`]'s
+/// `version` field lives in exactly one place across every caixa
+/// renderer. Peer to [`HELM_CHART_DEPENDENCY_KEY_NAME`] on the sibling
+/// per-dep sub-key axes. See [`HELM_CHART_DEPENDENCY_KEY_NAME`] for the
+/// shared per-entry-sub-mapping lift rationale.
+pub use caixa_core::HELM_CHART_DEPENDENCY_KEY_VERSION;
+
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-registry URL field — re-export
+/// of the lifted [`caixa_core::HELM_CHART_DEPENDENCY_KEY_REPOSITORY`]
+/// so the load-bearing serde field-name at [`ChartDependency`]'s
+/// `repository` field lives in exactly one place across every caixa
+/// renderer. Peer to [`HELM_CHART_DEPENDENCY_KEY_NAME`] on the sibling
+/// per-dep sub-key axes.
+pub use caixa_core::HELM_CHART_DEPENDENCY_KEY_REPOSITORY;
+
+/// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
+/// YAML axis-key naming the per-dep chart-alias override field —
+/// re-export of the lifted [`caixa_core::HELM_CHART_DEPENDENCY_KEY_ALIAS`]
+/// so the load-bearing serde field-name at [`ChartDependency`]'s
+/// `alias` field lives in exactly one place across every caixa
+/// renderer. Peer to [`HELM_CHART_DEPENDENCY_KEY_NAME`] on the sibling
+/// per-dep sub-key axes.
+pub use caixa_core::HELM_CHART_DEPENDENCY_KEY_ALIAS;
+
 /// Canonical Helm 3 per-chart-directory metadata-file filename every
 /// rendered `lareira-<nome>` chart carries at its top-level directory —
 /// re-export of the lifted [`caixa_core::HELM_CHART_YAML_FILENAME`] so
@@ -1830,6 +1874,77 @@ spec:
              rejects at `helm lint` / `helm template` time with an \"apiVersion \
              is required\" error far from the drift site"
         );
+    }
+
+    #[test]
+    fn chart_dependency_serializes_tetrad_under_lifted_helm_chart_dependency_keys() {
+        // Fail-before-pass-after drift-detection pin on the per-
+        // `dependencies[]`-entry sub-mapping serde field-name tetrad
+        // at [`ChartDependency`]. The four fields are identity-mapped
+        // to their target wire keys today (no `#[serde(rename)]` or
+        // `#[serde(rename_all)]` attribute on the struct), so a drift
+        // would surface as one of two shapes: a rename of the Rust
+        // field (`pub name` → `pub nome`) that silently rebrands the
+        // wire key, or a `#[serde(rename_all = "camelCase")]` attribute
+        // addition that stays a no-op on the four lowercase-identity
+        // fields today but silently activates on a future field
+        // addition (e.g. an `import_values: Option<Vec<String>>` axis
+        // matching Helm 3's per-dep `import-values` sub-key). Either
+        // shape silently reroutes the per-dep sub-mapping through a
+        // Helm-per-dep-resolver drop at `helm dependency build` time
+        // far from the drift site (Helm silently drops the drifted
+        // per-dep sub-mapping field and the per-dep resolver falls
+        // back to the parsed-shape defaults). This pin closes the
+        // drift by serializing a fully-populated [`ChartDependency`]
+        // (`alias` set to a non-`None` value so the
+        // `#[serde(skip_serializing_if = "Option::is_none")]`
+        // attribute doesn't elide the axis from the emitted YAML)
+        // through `serde_yaml::to_value` and asserting each of the
+        // four per-dep sub-mapping wire keys resolves via
+        // `Mapping::get(HELM_CHART_DEPENDENCY_KEY_*)`. Peer to
+        // [`chart_yaml_serializes_type_axis_under_lifted_helm_chart_key_type`]
+        // / [`chart_yaml_serializes_app_version_axis_under_lifted_helm_chart_key_app_version`]
+        // / [`chart_yaml_serializes_api_version_axis_under_lifted_helm_chart_key_api_version`]
+        // on the sibling per-Chart.yaml top-level serde-rename-literal-
+        // only axis-key drift-detection pin trio (cc44e4b / d29bc23) —
+        // extends the drift-detection discipline from the per-Chart.yaml
+        // top-level serde-rename-literal axes onto the per-
+        // `dependencies[]`-entry sub-mapping serde-field-name tetrad.
+        let dep = ChartDependency {
+            name: "pleme-computeunit".into(),
+            version: "~0.1.0".into(),
+            repository: "file://../pleme-computeunit".into(),
+            alias: Some("acme-alias".into()),
+        };
+        let doc = serde_yaml::to_value(&dep).unwrap();
+        let mapping = doc.as_mapping().expect(
+            "ChartDependency must serialize to a top-level YAML mapping per \
+             the Helm 3 per-dep sub-mapping shape",
+        );
+        for key in [
+            HELM_CHART_DEPENDENCY_KEY_NAME,
+            HELM_CHART_DEPENDENCY_KEY_VERSION,
+            HELM_CHART_DEPENDENCY_KEY_REPOSITORY,
+            HELM_CHART_DEPENDENCY_KEY_ALIAS,
+        ] {
+            assert!(
+                mapping.contains_key(serde_yaml::Value::String(key.to_string())),
+                "serialized ChartDependency must carry a top-level {key:?} \
+                 axis-key — a drift on the `ChartDependency` struct's serde \
+                 field-name (a Rust-side rename, an added \
+                 `#[serde(rename_all)]` attribute, an added `#[serde(rename)]` \
+                 per-field override) silently reroutes the per-dep sub-mapping \
+                 through a Helm-per-dep-resolver drop at `helm dependency \
+                 build` time far from the drift site (Helm silently drops the \
+                 drifted per-dep sub-mapping field and the per-dep resolver \
+                 falls back to the parsed-shape defaults); the emitted mapping \
+                 keys are {keys:?}",
+                keys = mapping
+                    .keys()
+                    .filter_map(|k| k.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 
     #[test]
