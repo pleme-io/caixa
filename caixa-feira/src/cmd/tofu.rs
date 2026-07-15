@@ -21,6 +21,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use caixa_arch::{ArchVerdict, check_manifest};
+use caixa_core::LAYOUT_DIR_LIB;
 use caixa_pangea::{ProviderBlock, RequiredProvider, TofuConfig, emit_tf_json};
 use caixa_teia::{TeiaManifest, parse_teia_source};
 use caixa_theme::{Semantic, Theme};
@@ -243,7 +244,7 @@ fn already_initialized(dir: &std::path::Path) -> bool {
 
 fn collect_manifest(root: &std::path::Path) -> Result<TeiaManifest> {
     let mut combined = String::new();
-    let lib = root.join("lib");
+    let lib = root.join(LAYOUT_DIR_LIB);
     if lib.is_dir() {
         for entry in std::fs::read_dir(&lib)? {
             let p = entry?.path();

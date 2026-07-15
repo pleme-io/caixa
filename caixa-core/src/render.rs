@@ -6939,6 +6939,115 @@ pub const LAYOUT_MISSING_ENTRY_KIND_EXE: &str = "exe";
 /// same seven-byte `"servico"` scalar).
 pub const LAYOUT_MISSING_ENTRY_KIND_SERVICO: &str = "servico";
 
+/// Canonical caixa-root-relative directory name housing every
+/// [`crate::CaixaKind::Biblioteca`] caixa's `lib/<nome>.lisp` entry
+/// (and every `:bibliotecas ("lib/foo.lisp" …)` per-entry source
+/// path the M0 `:kind Biblioteca` typed slot admits). The single
+/// source of truth every consumer that composes a caixa-root-relative
+/// path pointing at the tatara-lisp library sub-tree reaches for:
+///
+///   - [`crate::LayoutInvariants::verify`] joins `root` with this
+///     const to reconstruct the default `lib/<nome>.lisp` per-caixa
+///     entry the [`crate::LayoutError::MissingLib`] emission gates on;
+///   - `feira init`'s new-caixa scaffolder joins `root` with this
+///     const to seed the empty `lib/` sub-tree the template's
+///     `lib/<nome>.lisp` starter file lives in;
+///   - `feira fmt` / `feira lint` enumerate every `.lisp` under
+///     `root.join(LAYOUT_DIR_LIB)` as their default target set (their
+///     `--paths`-less invocation walks the library sub-tree the
+///     substrate's [`crate::LayoutInvariants::verify`] pins);
+///   - `feira tofu` reads every `.lisp` under `root.join(LAYOUT_DIR_LIB)`
+///     to concatenate the `(defteia …)` forms the caixa-arch invariants
+///     bind on.
+///
+/// The `lib/` byte-shape is a Cargo-style abbreviation of the M0
+/// `:kind Biblioteca` discriminator ([`crate::CaixaKind::Biblioteca`]
+/// / [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`], both `"biblioteca"`),
+/// deliberately distinct from the discriminator's byte-shape so the
+/// on-disk convention stays terse while the diagnostic label stays
+/// full-form Portuguese. Peer of [`LAYOUT_DIR_EXE`] /
+/// [`LAYOUT_DIR_SERVICOS`] on the sibling M0 per-`CaixaKind`
+/// on-disk-directory-name axes — the three consts jointly single-source
+/// the CSE-invariant layout convention every caixa the substrate accepts
+/// carries. A future rebrand of the on-disk directory landing convention
+/// (`"lib"` → `"src"` matching Rust's convention, `"lib"` → `"biblioteca"`
+/// matching the full-form Portuguese-uniformity a per-kind consumer
+/// disambiguation would prefer) lands as a one-line const-edit + the
+/// paired drift-detection pin that guards the two-axis distinctness
+/// (`layout_dir_bib_is_distinct_from_layout_missing_entry_kind_bib`)
+/// rather than a coordinated ~40-site sweep across production +
+/// tests + CI scaffolders.
+///
+/// Same "one canonical byte-string per typed axis + a paired
+/// drift-detection pin at every load-bearing byte-shape coincidence"
+/// discipline the M0 [`LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_EXE`] / [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`]
+/// (fe2a898) leaf-kind categorization triad established on the peer
+/// [`crate::LayoutError::MissingEntry`] `kind:` discriminator axis.
+pub const LAYOUT_DIR_LIB: &str = "lib";
+
+/// Canonical caixa-root-relative directory name housing every
+/// [`crate::CaixaKind::Binario`] caixa's `exe/<name>` entry (and
+/// every `:exe ("exe/tool" …)` per-entry source path the M0
+/// `:kind Binario` typed slot admits). Peer of [`LAYOUT_DIR_LIB`] /
+/// [`LAYOUT_DIR_SERVICOS`] on the sibling M0 per-`CaixaKind`
+/// on-disk-directory-name axes; see [`LAYOUT_DIR_LIB`] for the
+/// shared lift rationale.
+///
+/// [`crate::LayoutInvariants::verify`] joins `root` with this const
+/// to reconstruct the sandbox-root the [`crate::LayoutError::ExeOutsideDir`]
+/// emission gates every declared `:exe` entry against — a `:exe`
+/// entry whose resolved path escapes `root.join(LAYOUT_DIR_EXE)`
+/// surfaces `ExeOutsideDir(<path>)` at `feira build` time rather than
+/// silently reaching outside the caixa's sandbox at OCI-build /
+/// nix-build time. Byte-identical (by design) to
+/// [`LAYOUT_MISSING_ENTRY_KIND_EXE`] — the M0 `:kind Binario`
+/// on-disk-directory-name and the [`crate::LayoutError::MissingEntry`]
+/// `kind:` leaf-kind categorization label share the same three-byte
+/// scalar because both name the same axis (the `exe/` sub-tree), a
+/// coincidence the pin test
+/// `layout_dir_exe_matches_layout_missing_entry_kind_exe` makes
+/// load-bearing so a rebrand touching either axis without the other
+/// trips at build time rather than surfacing at
+/// [`crate::LayoutInvariants::verify`] time as a mismatched
+/// `MissingEntry.kind` diagnostic naming a stale label.
+pub const LAYOUT_DIR_EXE: &str = "exe";
+
+/// Canonical caixa-root-relative directory name housing every
+/// [`crate::CaixaKind::Servico`] caixa's
+/// `servicos/<nome>.computeunit.yaml` per-CR `ComputeUnit` descriptor
+/// (and every `:servicos ("servicos/foo.computeunit.yaml" …)`
+/// per-entry source path the M0 `:kind Servico` typed slot admits).
+/// Peer of [`LAYOUT_DIR_LIB`] / [`LAYOUT_DIR_EXE`] on the sibling M0
+/// per-`CaixaKind` on-disk-directory-name axes; see [`LAYOUT_DIR_LIB`]
+/// for the shared lift rationale.
+///
+/// [`crate::LayoutInvariants::verify`] joins `root` with this const
+/// to reconstruct the sandbox-root the
+/// [`crate::LayoutError::ServicoOutsideDir`] emission gates every
+/// declared `:servicos` entry against — a `:servicos` entry whose
+/// resolved path escapes `root.join(LAYOUT_DIR_SERVICOS)` surfaces
+/// `ServicoOutsideDir(<path>)` at `feira build` time rather than
+/// silently reaching outside the caixa's sandbox at
+/// [`caixa_helm`][ch] / [`caixa_flux`][cf] render time or at the
+/// operator's OCI-build step.
+///
+/// The `servicos/` byte-shape is the Portuguese *plural* of the M0
+/// `:kind Servico` discriminator ([`crate::CaixaKind::Servico`] /
+/// [`LAYOUT_MISSING_ENTRY_KIND_SERVICO`], both `"servico"`, singular)
+/// — the on-disk directory holds one-or-more `ComputeUnit` YAML
+/// descriptors per caixa, the discriminator names the caixa's kind.
+/// The pin test
+/// `layout_dir_servicos_is_distinct_from_layout_missing_entry_kind_servico`
+/// makes the singular/plural split load-bearing so a future rebrand
+/// touching either axis without the other (a per-consumer
+/// disambiguation collapsing them, a hypothetical English-uniformity
+/// pass renaming `"servicos"` → `"services"`) trips at build time.
+///
+/// [ch]: caixa_helm
+/// [cf]: caixa_flux
+pub const LAYOUT_DIR_SERVICOS: &str = "servicos";
+
 /// Canonical `wasm.pleme.io/v1alpha1/ComputeUnit` CRD `spec.module`
 /// per-CR wasm-module-reference sub-block key — the top-level `spec.*`
 /// child every rendered `ComputeUnit` YAML carries to name the wasm

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use caixa_core::LAYOUT_DIR_LIB;
 use caixa_fmt::{FmtConfig, format_source};
 use caixa_lint::{FixSafety, Severity, apply_fixes, lint_source};
 use caixa_theme::Theme;
@@ -147,7 +148,7 @@ impl Lint {
         if manifest.exists() {
             out.push(manifest);
         }
-        if let Ok(dir) = std::fs::read_dir(root.join("lib")) {
+        if let Ok(dir) = std::fs::read_dir(root.join(LAYOUT_DIR_LIB)) {
             for entry in dir.flatten() {
                 let p = entry.path();
                 if p.extension().is_some_and(|e| e == "lisp") {
