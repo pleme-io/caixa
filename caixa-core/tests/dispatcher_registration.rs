@@ -9,7 +9,9 @@
 //! purge / restart) — the substrate's typed shadow of an OTP
 //! ecosystem primitive.
 
-use caixa_core::{RestartPolicy, RestartStrategy, UpgradeInstruction};
+use caixa_core::{
+    M2_UPGRADE_INSTRUCTION_KEY_KIND, RestartPolicy, RestartStrategy, UpgradeInstruction,
+};
 use gen_platform::{TypedDispatcherTrait, catalog};
 
 #[test]
@@ -83,9 +85,10 @@ fn reflection_round_trips_through_serde_tags() {
     for (sample, expected_kind) in &samples {
         let v: serde_json::Value = serde_json::to_value(sample).unwrap();
         assert_eq!(
-            v.get("kind").and_then(|k| k.as_str()),
+            v.get(M2_UPGRADE_INSTRUCTION_KEY_KIND)
+                .and_then(|k| k.as_str()),
             Some(*expected_kind),
-            "variant {sample:?} should serialize with kind {expected_kind}"
+            "variant {sample:?} should serialize with tag {M2_UPGRADE_INSTRUCTION_KEY_KIND}={expected_kind}"
         );
         // And the reflected kind list must contain it.
         assert!(reflected_kinds.contains(expected_kind));

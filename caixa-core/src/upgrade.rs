@@ -4908,6 +4908,154 @@ mod tests {
     }
 
     #[test]
+    fn upgrade_instruction_serde_tag_key_matches_lifted_m2_upgrade_instruction_key_kind_const() {
+        // Load-bearing invariant on the M2 `:upgrade-from :instructions`
+        // per-entry OTP-appup [`UpgradeInstruction`] enum's internally-
+        // tagged variant-discriminator key axis: the
+        // `M2_UPGRADE_INSTRUCTION_KEY_KIND` const names the exact tag-slot
+        // JSON key the `#[serde(tag = "kind", rename_all = "kebab-case")]`
+        // attribute on [`UpgradeInstruction`] emits, and every downstream
+        // consumer that navigates the serialized instruction blob to
+        // route by variant (the caixa-core reflection-vs-serde round-trip
+        // check in `dispatcher_registration.rs` that probes
+        // `v.get("kind")` against every variant's expected kebab-case
+        // tag, the future M4 admission-webhook path, any wasm-operator
+        // dispatch step consuming the serialized instruction blob) reads
+        // through the same `&'static str`. Serialize every variant and
+        // pin that the const's byte-sequence appears verbatim as the
+        // tag-slot JSON key with the expected kebab-case value — a
+        // future accidental `tag = "type"` / `tag = "op"` /
+        // `tag = "instruction"` rebrand at the derive attribute (any of
+        // which would silently break every consumer probe reaching for
+        // the stale-tag-key const) surfaces here as a build-time test
+        // failure at `upgrade.rs`, not as an apply-time
+        // `.get(<stale-tag-key>)` returning `None` far from the derive-
+        // attr drift's commit.
+        //
+        // Same "one canonical byte-string per typed axis" discipline the
+        // sibling `upgrade_from_entry_serde_keys_match_lifted_m2_upgrade_from_key_consts`
+        // pin (36ffe65) established on the peer `:upgrade-from` per-entry
+        // outer-container axis — this pin extends the discipline one
+        // altitude deeper onto the per-instruction *tag* axis inside
+        // each element of the `:instructions` list, completing the
+        // typed coverage of the `:upgrade-from :instructions` dual
+        // (key = "kind" + five variant-value tags): the five
+        // `M2_UPGRADE_INSTRUCTION_KIND_*` consts (56120ef) pin the
+        // per-variant kebab-case *values*; this pin pins the tag *key*
+        // above them.
+        let samples: [(UpgradeInstruction, &'static str); 5] = [
+            (
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE.trim_start_matches(':'),
+            ),
+            (
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE.trim_start_matches(':'),
+            ),
+            (
+                UpgradeInstruction::SoftPurge {
+                    module: "hello-rio-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE.trim_start_matches(':'),
+            ),
+            (
+                UpgradeInstruction::Purge {
+                    module: "hello-rio-old".into(),
+                },
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE.trim_start_matches(':'),
+            ),
+            (
+                UpgradeInstruction::Restart,
+                crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART.trim_start_matches(':'),
+            ),
+        ];
+        for (sample, expected_value) in &samples {
+            let v: serde_json::Value = serde_json::to_value(sample).unwrap();
+            let got = v
+                .get(crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND)
+                .and_then(|k| k.as_str());
+            assert_eq!(
+                got,
+                Some(*expected_value),
+                "serialized {sample:?} must carry the lifted \
+                 M2_UPGRADE_INSTRUCTION_KEY_KIND byte-sequence \
+                 ({:?}) verbatim as the tag-slot JSON key, holding the \
+                 expected kebab-case value {expected_value:?} (got: {v})",
+                crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND,
+            );
+        }
+    }
+
+    #[test]
+    fn m2_upgrade_instruction_key_kind_const_is_lower_camel_case_shape() {
+        // Shape-pin: the `M2_UPGRADE_INSTRUCTION_KEY_KIND` const must be
+        // a lowerCamelCase byte-sequence (non-empty, ASCII-lowercase
+        // leader, ASCII-alphanumeric only — no `snake_case` underscores,
+        // no `kebab-case` hyphens, no `PascalCase` leading capital, no
+        // whitespace / colons / dots) — the canonical shape a serde
+        // internally-tagged discriminator key takes across every peer
+        // enum in this crate. A future flip to a non-camelCase byte at
+        // the const surfaces here at build time. Peer of
+        // `m2_upgrade_from_key_consts_are_lower_camel_case_shape` on the
+        // sibling per-entry outer-container axis.
+        let key = crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND;
+        assert!(
+            !key.is_empty(),
+            "M2_UPGRADE_INSTRUCTION_KEY_KIND must be non-empty (got {key:?})"
+        );
+        let first = key.chars().next().unwrap();
+        assert!(
+            first.is_ascii_lowercase(),
+            "M2_UPGRADE_INSTRUCTION_KEY_KIND must lead with an ASCII-lowercase \
+             byte (got {key:?}, leads with {first:?})",
+        );
+        assert!(
+            key.chars().all(|c| c.is_ascii_alphanumeric()),
+            "M2_UPGRADE_INSTRUCTION_KEY_KIND must be ASCII-alphanumeric only \
+             — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+        );
+    }
+
+    #[test]
+    fn m2_upgrade_instruction_key_kind_const_disjoint_from_variant_data_keys() {
+        // Cross-axis drift-detection pin: the tag-slot key
+        // `M2_UPGRADE_INSTRUCTION_KEY_KIND` (`"kind"`) must be
+        // disjoint from every per-variant data-field key the
+        // internally-tagged serialization also emits (`"module"` for
+        // LoadModule/SoftPurge/Purge, `"script"` for StateChange). A
+        // future accidental rebrand that collapses `tag = "kind"` onto
+        // one of the data-field names (e.g. `tag = "module"`) would
+        // silently corrupt every serialized LoadModule blob (the
+        // module string and the variant tag would collide on the same
+        // JSON key) and every consumer probe would either misread the
+        // tag or fail to distinguish variants. Pin the disjointness at
+        // build time. Same cross-axis discipline the sibling
+        // `m2_upgrade_from_key_consts_are_pairwise_distinct` pin
+        // (36ffe65) established on the outer container's own
+        // `from`/`instructions` pair.
+        let key = crate::render::M2_UPGRADE_INSTRUCTION_KEY_KIND;
+        // Enumerate every per-variant data-field key across all five
+        // variants of [`UpgradeInstruction`], mirroring the field-
+        // names surfaced by the `variant_fields` reflection in
+        // `caixa-core/tests/dispatcher_registration.rs`
+        // (`"module"`, `"script"`).
+        for data_field in ["module", "script"] {
+            assert_ne!(
+                key, data_field,
+                "M2_UPGRADE_INSTRUCTION_KEY_KIND (the serde `tag` slot) \
+                 must be disjoint from every UpgradeInstruction per-variant \
+                 data-field key — got tag-key {key:?} colliding with \
+                 data-field {data_field:?}, which would silently corrupt \
+                 the internally-tagged serialization",
+            );
+        }
+    }
+
+    #[test]
     fn m2_upgrade_from_key_consts_are_lower_camel_case_shape() {
         // Shape-pin: every `M2_UPGRADE_FROM_KEY_*` const must be a
         // lowerCamelCase byte-sequence (no `snake_case` underscores, no
