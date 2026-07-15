@@ -13560,13 +13560,137 @@ mod tests {
             branch: None,
         };
         let s = serde_json::to_string(&src).unwrap();
-        assert!(s.contains(r#""tipo":"git""#));
+        assert!(s.contains(&format!(
+            r#""{tipo}":"{git}""#,
+            tipo = crate::render::DEP_SOURCE_KEY_TIPO,
+            git = crate::render::DEP_SOURCE_TIPO_GIT,
+        )));
         assert!(s.contains(r#""repo":"github:pleme-io/caixa-teia""#));
         assert!(s.contains(r#""tag":"v0.1.0""#));
         assert!(!s.contains("rev"));
         assert!(!s.contains("branch"));
         let round: DepSource = serde_json::from_str(&s).unwrap();
         assert_eq!(round, src);
+    }
+
+    // ── DEP_SOURCE_{KEY_TIPO,TIPO_GIT,TIPO_PATH} drift-detection ────────
+    //
+    // The `#[serde(tag = "tipo", rename_all = "lowercase")]` derive
+    // attribute on [`DepSource`] pins three load-bearing byte-sequences
+    // that flow into every serialized `Dep.fonte` block: the outer
+    // discriminator-key `"tipo"` the `tag = "tipo"` attribute names, and
+    // the two admitted variant-tag values `"git"` / `"path"` the
+    // `rename_all = "lowercase"` attribute pins as the discriminator's
+    // closed-set arms. The three pin tests below round-trip a
+    // fully-populated variant of each arm through
+    // [`serde_json::to_value`] and assert each canonical byte-sequence
+    // appears at its axis — pins a hypothetical future
+    // `tag = "type"` / `tag = "source_type"` typo, a `rename_all`
+    // rebrand (`"UPPERCASE"` / `"snake_case"` / `"kebab-case"`), or a
+    // Rust-side variant rename (`Git` → `Repository`, `Path` → `Local`)
+    // at build time rather than at fetch time when the resolver's
+    // `Dep.fonte` dispatch silently fails to match on the drifted
+    // discriminator. Same "serialize-and-check" discipline the peer
+    // `M2_LIMITS_KEY_*`, `M2_BEHAVIOR_KEY_ON_*`, `SUPERVISOR_KEY_*`,
+    // and `MEMBRO_KEY_*` drift-detection pins carry — extended here
+    // to the last `#[serde(tag = ..., rename_all = ...)]` discriminator
+    // family in caixa-core lacking a lifted peer.
+
+    #[test]
+    fn dep_source_git_serde_keys_match_lifted_dep_source_key_consts() {
+        // Fail-before-pass-after: a future `tag = "type"` at the derive
+        // attribute would serialize under `"type":"git"`, and this test
+        // would trip because `"tipo"` no longer appears at the emitted
+        // discriminator key. A future `rename_all = "kebab-case"` /
+        // `"snake_case"` (both no-ops on `Git` since it lacks internal
+        // word boundaries) is caught by the sibling
+        // `dep_source_path_serde_keys_match_lifted_dep_source_key_consts`
+        // pin below (Path has no internal boundary either but the pair
+        // catches any per-arm inconsistency). A future variant rename
+        // `Git` → `Repository` would emit `"tipo":"repository"` and
+        // trip this pin.
+        let src = DepSource::Git {
+            repo: "github:pleme-io/caixa-teia".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        };
+        let json = serde_json::to_value(&src).unwrap();
+        let obj = json.as_object().expect("Git serializes as a JSON object");
+        assert_eq!(
+            obj.get(crate::render::DEP_SOURCE_KEY_TIPO)
+                .and_then(serde_json::Value::as_str),
+            Some(crate::render::DEP_SOURCE_TIPO_GIT),
+            "DepSource::Git must serialize the tipo discriminator at DEP_SOURCE_KEY_TIPO \
+             with value DEP_SOURCE_TIPO_GIT — attribute drift or variant rename \
+             detected in {json}"
+        );
+    }
+
+    #[test]
+    fn dep_source_path_serde_keys_match_lifted_dep_source_key_consts() {
+        // Fail-before-pass-after: a future variant rename `Path` →
+        // `Local` / `Filesystem` would emit `"tipo":"local"` and trip
+        // this pin. A per-consumer disambiguation as the `defcaixa`
+        // macro stabilizes ("caminho" → "path" for English-uniformity)
+        // is scoped to the inner field key, not the discriminator; this
+        // pin is orthogonal to that and catches only the outer
+        // discriminator drift.
+        let src = DepSource::Path {
+            caminho: "../caixa-teia".into(),
+        };
+        let json = serde_json::to_value(&src).unwrap();
+        let obj = json.as_object().expect("Path serializes as a JSON object");
+        assert_eq!(
+            obj.get(crate::render::DEP_SOURCE_KEY_TIPO)
+                .and_then(serde_json::Value::as_str),
+            Some(crate::render::DEP_SOURCE_TIPO_PATH),
+            "DepSource::Path must serialize the tipo discriminator at DEP_SOURCE_KEY_TIPO \
+             with value DEP_SOURCE_TIPO_PATH — attribute drift or variant rename \
+             detected in {json}"
+        );
+    }
+
+    #[test]
+    fn dep_source_key_consts_are_pairwise_distinct() {
+        // Cross-axis collapse detector: a hypothetical future edit that
+        // accidentally set two of the three consts to the same byte
+        // (`DEP_SOURCE_TIPO_GIT = "path"` typo matching a peer arm) would
+        // pass every per-arm serialize pin above but silently collapse
+        // the discriminator's closed-set arms onto one another; this pin
+        // catches the collapse at build time.
+        assert_ne!(
+            crate::render::DEP_SOURCE_KEY_TIPO,
+            crate::render::DEP_SOURCE_TIPO_GIT,
+        );
+        assert_ne!(
+            crate::render::DEP_SOURCE_KEY_TIPO,
+            crate::render::DEP_SOURCE_TIPO_PATH,
+        );
+        assert_ne!(
+            crate::render::DEP_SOURCE_TIPO_GIT,
+            crate::render::DEP_SOURCE_TIPO_PATH,
+        );
+    }
+
+    #[test]
+    fn dep_source_tipo_variant_consts_are_ascii_lowercase_shape() {
+        // Shape pin against `rename_all` drift: the two variant-tag
+        // consts must be ASCII-lowercase-only to match the
+        // `rename_all = "lowercase"` attribute the derive uses; a future
+        // rebrand to `"UPPERCASE"` / `"PascalCase"` at the attribute
+        // would emit `"GIT"` / `"Git"` instead and trip this pin.
+        for (label, s) in [
+            ("DEP_SOURCE_TIPO_GIT", crate::render::DEP_SOURCE_TIPO_GIT),
+            ("DEP_SOURCE_TIPO_PATH", crate::render::DEP_SOURCE_TIPO_PATH),
+        ] {
+            assert!(!s.is_empty(), "{label} must not be empty");
+            assert!(
+                s.bytes().all(|b| b.is_ascii_lowercase()),
+                "{label} must be ASCII-lowercase-only (matching \
+                 rename_all = \"lowercase\"), got {s:?}",
+            );
+        }
     }
 
     // ── per-entry :caracteristicas set-not-multiset gate ────────────
