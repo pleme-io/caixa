@@ -6189,6 +6189,47 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical camelCase JSON/YAML top-level key for [`crate::Caixa`]'s
+/// `deps_dev` axis — the dev-only dependency list that the M0 base
+/// package model already exposes (peer of the runtime `:deps` list, but
+/// excluded from published lacres and consumer builds). The Rust field
+/// is `snake_case` `deps_dev`; the `#[serde(rename_all = "camelCase")]`
+/// attribute on [`crate::Caixa`] maps it to the camelCase JSON key
+/// `"depsDev"` this constant pins.
+///
+/// [`crate::Caixa::to_lisp`] threads the manifest through
+/// `serde_json::to_value(self) → tatara_lisp::domain::json_to_sexp`, so
+/// the emitted JSON key is the load-bearing byte-string the round-trip
+/// consumes on its way back to the kebab-case `:deps-dev` author
+/// surface. Until this lift landed the byte-string `"depsDev"` was
+/// structurally implicit in the `#[serde(rename_all = "camelCase")]`
+/// derive attribute at [`crate::Caixa`] with no compile-time link to any
+/// downstream `.get(<key>)` consumer or drift-detection pin — a future
+/// [`crate::Caixa`] field rename (`deps_dev` → `dev_deps` matching
+/// Cargo's verbatim `dev-dependencies` axis, `deps_dev` → `deps_test`
+/// matching a hypothetical per-test-target vocabulary flip) OR a
+/// `#[serde(rename_all = "…")]` attribute flip (any of which would
+/// silently break every `Caixa::to_lisp` round-trip and the future M4
+/// operator-side manifest ingest that reaches for `depsDev` via
+/// `Value::get(...)`) would surface at consumer parse time as a
+/// silently-absent JSON key defaulting to `Vec::new()`, far from the
+/// rename's commit and with no field naming the drift.
+///
+/// Peer of [`M2_KEY_UPGRADE_FROM`] on the sibling top-level
+/// [`crate::Caixa`] multi-word camelCase-renamed serialized-key axis —
+/// both are `snake_case → camelCase` renames the `rename_all` derive
+/// produces on the M0 [`crate::Caixa`] surface. Alongside
+/// [`SUPERVISOR_KEY_MAX_RESTARTS`] (`"maxRestarts"`, 40cc4e5) and
+/// [`SUPERVISOR_KEY_RESTART_WINDOW`] (`"restartWindow"`, 40cc4e5) —
+/// which pin the two supervisor-tree top-level multi-word keys the
+/// [`crate::Caixa`] surface flattens up — this const closes the last of
+/// the four multi-word top-level [`crate::Caixa`] serde-derived JSON
+/// keys still lacking a lifted `&'static str` peer. Same "one canonical
+/// byte-string per typed serialized-key axis" discipline every peer
+/// [`M2_KEY_*`] / [`M3_KEY_PLACEMENT`] / [`SUPERVISOR_KEY_*`] const
+/// carries.
+pub const CAIXA_KEY_DEPS_DEV: &str = "depsDev";
+
 /// Canonical author-facing kebab-case `(defcaixa … :limits (…))` top-level
 /// slot label the M2 per-Servico Lunatic sandbox `:limits` slot surfaces
 /// under. Peer of [`M2_KEY_LIMITS`] on the dual-axis pair every M2

@@ -6683,4 +6683,163 @@ mod tests {
             "diagnostic must quote the offending value: {rendered}",
         );
     }
+
+    // ── drift-detection: Caixa top-level multi-word serde-derive-to-const identity ──
+
+    #[test]
+    fn caixa_multi_word_serde_keys_match_lifted_top_level_key_consts() {
+        // Load-bearing invariant: every multi-word top-level [`Caixa`]
+        // serde-derived JSON key routes through a lifted `&'static str`
+        // const. The Rust field names are `snake_case`
+        // (`deps_dev` / `upgrade_from` / `max_restarts` /
+        // `restart_window`); [`Caixa`]'s `#[serde(rename_all =
+        // "camelCase")]` derive attribute maps each to the camelCase
+        // byte-string the [`Caixa::to_lisp`] round-trip's
+        // `serde_json::to_value(self)` step lands under before
+        // `tatara_lisp::domain::json_to_sexp` re-projects the JSON keys
+        // to the kebab-case `:deps-dev` / `:upgrade-from` /
+        // `:max-restarts` / `:restart-window` author surface. Serialize
+        // a fully-populated [`Caixa`] and pin that each canonical
+        // byte-sequence appears verbatim in the JSON — a future
+        // accidental `rename_all = "snake_case"` / `"kebab-case"` /
+        // verbatim-field-name flip at the derive attribute (any of
+        // which would silently break every [`Caixa::to_lisp`]
+        // round-trip and the future M4 operator-side manifest ingest's
+        // `Value::get(<key>)` navigation) surfaces here as a build-time
+        // test failure at `manifest.rs`, not as an apply-time
+        // `.get(<stale-canonical-const>)` returning `None` far from the
+        // derive-attr drift's commit. Same discipline the sibling
+        // `supervisor_spec_serde_keys_match_lifted_supervisor_key_consts`
+        // (40cc4e5), `membro_serde_keys_match_lifted_membro_key_consts`
+        // (ce80ca0), and `upgrade_from_entry_serde_keys_match_lifted_
+        // m2_upgrade_from_key_consts` (36ffe65) pins established on the
+        // sibling M2 supervision-tree, M3 [`Membro`] per-entry, and M2
+        // [`UpgradeFromEntry`] per-entry axes — extended here to the
+        // enclosing M0 [`Caixa`] top-level axis so the last of the four
+        // multi-word top-level [`Caixa`] serde-derived JSON keys
+        // (`depsDev`) joins the substrate's "one canonical byte-string
+        // per typed serialized-key axis" discipline.
+        use crate::supervisor::{ChildSpec, RestartPolicy, RestartStrategy};
+        use crate::upgrade::{UpgradeFromEntry, UpgradeInstruction};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps_dev = vec![Dep::simple("tatara-check", "^0.1")];
+        c.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.0.1".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }];
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        c.max_restarts = Some(3);
+        c.restart_window = Some("60s".into());
+        c.children = vec![ChildSpec {
+            caixa: "child".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let json = serde_json::to_string(&c).unwrap();
+        for key in [
+            crate::render::CAIXA_KEY_DEPS_DEV,
+            crate::render::M2_KEY_UPGRADE_FROM,
+            crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+            crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized Caixa must carry the lifted top-level \
+                 multi-word byte-sequence {quoted} verbatim in the JSON \
+                 emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_top_level_multi_word_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the four
+        // canonical [`Caixa`] top-level multi-word byte-strings onto the
+        // same value (e.g. an accidental copy-paste flip of
+        // [`crate::render::CAIXA_KEY_DEPS_DEV`] to also read
+        // `"upgradeFrom"`) would silently reroute every downstream
+        // `Value::get(<key>)` probe on one axis onto the sibling axis's
+        // top-level entry and pass every propagation-probe test that
+        // expected only the stale axis's value. Peer of the sibling
+        // four-way distinct pin on the `SUPERVISOR_KEY_*` tetrad
+        // (40cc4e5) and the two-way pin on `MEMBRO_KEY_*` (ce80ca0).
+        let all = [
+            crate::render::CAIXA_KEY_DEPS_DEV,
+            crate::render::M2_KEY_UPGRADE_FROM,
+            crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+            crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "Caixa top-level multi-word key consts must be \
+                     pairwise-distinct canonical byte-sequences — got \
+                     `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn caixa_top_level_multi_word_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every [`Caixa`] top-level multi-word key const must
+        // be a lowerCamelCase byte-sequence (no `snake_case`
+        // underscores, no `kebab-case` hyphens, no leading colon, no
+        // `PascalCase` leading capital, no whitespace / dots) — the
+        // canonical shape the `#[serde(rename_all = "camelCase")]`
+        // derive produces on [`Caixa`]. A future flip to a
+        // non-camelCase attribute at the derive surfaces both here
+        // (this test fails on the stale-constant shape) and at
+        // `caixa_multi_word_serde_keys_match_lifted_top_level_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer with `membro_key_consts_are_lower_camel_case_shape`
+        // (ce80ca0) and `supervisor_key_consts_are_lower_camel_case_shape`
+        // (40cc4e5) on the sibling per-entry / supervisor-tree axes.
+        for key in [
+            crate::render::CAIXA_KEY_DEPS_DEV,
+            crate::render::M2_KEY_UPGRADE_FROM,
+            crate::render::SUPERVISOR_KEY_MAX_RESTARTS,
+            crate::render::SUPERVISOR_KEY_RESTART_WINDOW,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "Caixa top-level multi-word key const must be non-empty \
+                 (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "Caixa top-level multi-word key const must lead with an \
+                 ASCII-lowercase byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "Caixa top-level multi-word key const must be \
+                 ASCII-alphanumeric only — no `_` / `-` / `:` / `.` / \
+                 whitespace (got {key:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_key_deps_dev_pins_canonical_camel_case_byte_string() {
+        // Scalar-value pin: the byte-string the
+        // [`crate::render::CAIXA_KEY_DEPS_DEV`] const resolves to,
+        // asserted verbatim. A future rebrand (`depsDev` → `devDeps`
+        // matching Cargo's verbatim `dev-dependencies` axis, `depsDev`
+        // → `depsTest` matching a hypothetical per-test-target
+        // vocabulary flip) lands as an edit to exactly one const AND
+        // one derive attribute — the sibling
+        // `caixa_multi_word_serde_keys_match_lifted_top_level_key_consts`
+        // pin already ties the const to the derive attribute, so a
+        // rebrand that touches only one side of the pair fails at
+        // caixa-core build time. Same "scalar-value pin per const"
+        // discipline the sibling
+        // `m2_top_level_author_key_consts_pin_canonical_kebab_case_labels`
+        // (f49c8b0) and `contrato_key_consts_pin_canonical_camel_case_labels`
+        // (ca463a4) pins carry on the peer M2 / M3 top-level slot axes.
+        assert_eq!(crate::render::CAIXA_KEY_DEPS_DEV, "depsDev");
+    }
 }
