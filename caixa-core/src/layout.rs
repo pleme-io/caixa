@@ -834,7 +834,7 @@ impl LayoutInvariants for StandardLayout {
             let full = root.join(p);
             if !self.exists(&full) {
                 return Err(LayoutError::MissingEntry {
-                    kind: "biblioteca",
+                    kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
                     path: full,
                 });
             }
@@ -845,7 +845,7 @@ impl LayoutInvariants for StandardLayout {
             let full = root.join(p);
             if !self.exists(&full) {
                 return Err(LayoutError::MissingEntry {
-                    kind: "exe",
+                    kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
                     path: full,
                 });
             }
@@ -859,7 +859,7 @@ impl LayoutInvariants for StandardLayout {
             let full = root.join(p);
             if !self.exists(&full) {
                 return Err(LayoutError::MissingEntry {
-                    kind: "servico",
+                    kind: crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
                     path: full,
                 });
             }
@@ -3421,6 +3421,132 @@ mod tests {
             crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
             "upgrade-script"
         );
+    }
+
+    #[test]
+    fn layout_missing_entry_kind_m0_consts_pin_canonical_code_slot_labels() {
+        // Byte-identity pin: the three per-M0-code-slot leaf-kind
+        // labels the [`LayoutError::MissingEntry`] `kind: &'static
+        // str` discriminator surfaces under (the `:bibliotecas`
+        // per-entry axis, the `:exe` per-entry axis, the `:servicos`
+        // per-entry axis) route through the lifted
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE`] /
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO`] consts,
+        // so a future rebrand that reaches the const but not the
+        // production emit (or vice versa) surfaces here at build time
+        // rather than at runtime as a downstream
+        // [`LayoutError::MissingEntry`] `kind: <stale-label>`
+        // diagnostic mismatch far from the rename's commit. Mirror of
+        // the peer M2-tier pin
+        // [`layout_missing_entry_kind_m2_consts_pin_canonical_kebab_case_labels`]
+        // (95c9c4c) on the sibling `:behavior` / `:upgrade-from`
+        // per-slot leaf-kind axes.
+        assert_eq!(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            "biblioteca"
+        );
+        assert_eq!(crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE, "exe");
+        assert_eq!(crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO, "servico");
+    }
+
+    #[test]
+    fn layout_missing_entry_kind_m0_consts_align_with_caixa_kind_as_str() {
+        // Cross-axis byte-identity pin: the two `:kind`-namesake M0
+        // leaf-kind labels ([`crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`]
+        // = `"biblioteca"`,
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO`] =
+        // `"servico"`) must equal [`crate::CaixaKind::Biblioteca`] /
+        // [`crate::CaixaKind::Servico`]'s
+        // [`crate::CaixaKind::as_str`] outputs verbatim — the
+        // substrate's canonical human-readable-kind axis and the
+        // layout diagnostic's per-slot leaf-kind axis share one
+        // vocabulary for these two arms by design (both label the
+        // caixa's code-producing shape by its Portuguese-native
+        // idiom), so drift between the two lands as a build-time
+        // pattern-arm miss here rather than as a runtime diagnostic
+        // that reads inconsistently across `feira build`'s
+        // per-invocation output.
+        //
+        // The third M0 arm ([`crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE`]
+        // = `"exe"`) is deliberately *distinct* from
+        // [`crate::CaixaKind::Binario`]'s [`crate::CaixaKind::as_str`]
+        // output (`"binario"`) — the `:exe` code slot names the
+        // per-directory leaf-kind at the `exe/` subtree, whereas
+        // [`crate::CaixaKind::Binario`] names the caixa's own runtime
+        // kind. Two axes, two labels — the inequality assertion here
+        // pins the split so a future accidental collapse of the two
+        // onto one scalar (a rebrand that reroutes either axis to
+        // match the other) trips at build time.
+        assert_eq!(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            CaixaKind::Biblioteca.as_str()
+        );
+        assert_eq!(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            CaixaKind::Servico.as_str()
+        );
+        assert_ne!(
+            crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            CaixaKind::Binario.as_str(),
+            "`exe` leaf-kind label names the per-directory code-slot \
+             axis; `binario` names the caixa-kind axis — the two must \
+             not silently collapse onto one scalar"
+        );
+    }
+
+    #[test]
+    fn layout_missing_entry_kind_consts_are_pairwise_distinct() {
+        // Distinctness pin: the five [`LayoutError::MissingEntry`]
+        // `kind: &'static str` accept-set members
+        // ([`crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA`] /
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE`] /
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO`] on the
+        // M0 code-slot arms plus
+        // [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`]
+        // / [`crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT`]
+        // on the M2 slot arms) must be pairwise distinct — an
+        // accidental copy-paste flip that reroutes one label's byte-
+        // string to also match another silently collapses two
+        // per-slot diagnostics onto one, so an operator running
+        // `feira build` reads `kind: "biblioteca"` for what should
+        // have surfaced as a `:behavior :on-init` script-not-found
+        // diagnostic (or vice versa). This pin catches any such
+        // flip at build time. Mirror of the peer
+        // [`crate::render::tests::m2_limits_key_consts_are_pairwise_distinct`]
+        // / peer distinctness pins on other closed-set typed axes.
+        let entries: &[(&str, &str)] = &[
+            (
+                "LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA",
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BIBLIOTECA,
+            ),
+            (
+                "LAYOUT_MISSING_ENTRY_KIND_EXE",
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_EXE,
+            ),
+            (
+                "LAYOUT_MISSING_ENTRY_KIND_SERVICO",
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_SERVICO,
+            ),
+            (
+                "LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK",
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK,
+            ),
+            (
+                "LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT",
+                crate::render::LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT,
+            ),
+        ];
+        for (i, (name_a, value_a)) in entries.iter().enumerate() {
+            for (name_b, value_b) in entries.iter().skip(i + 1) {
+                assert_ne!(
+                    value_a, value_b,
+                    "LAYOUT_MISSING_ENTRY_KIND_* consts must be \
+                     pairwise-distinct byte-strings — {name_a} and \
+                     {name_b} both resolve to {value_a:?}"
+                );
+            }
+        }
     }
 
     #[test]
