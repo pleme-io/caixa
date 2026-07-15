@@ -7667,6 +7667,125 @@ pub const M3_PLACEMENT_ESTRATEGIA_REPLICATED: &str = "Replicated";
 /// per-entity routing invariant vanishes at the data plane.
 pub const M3_PLACEMENT_ESTRATEGIA_SHARDED: &str = "Sharded";
 
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::Entrada`] struct's `host` external-hostname axis —
+/// the `host:` field the M3 Aplicacao's `#[serde(rename_all = "camelCase")]`
+/// derive on [`crate::aplicacao::Entrada`] emits at the singleton
+/// `:entrada` block, and the exact scalar every downstream consumer
+/// reaching for the external hostname via `Value::get(...)` (the
+/// [`caixa_mesh`] Gateway/HTTPRoute emitter's per-Aplicacao
+/// `spec.hostnames` projection under [`GATEWAY_API_KEY_HOSTNAME`] /
+/// [`GATEWAY_API_KEY_HOSTNAMES`], the future `app-operator`
+/// reconciler's per-Aplicacao ingress-hostname bind, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-time
+/// hostname cross-check against the cluster's declared
+/// [`GATEWAY_API_HOSTNAME_MAX_LEN`] discipline) must probe on.
+///
+/// The scalar is derived from the Rust field name `host` by the
+/// `rename_all = "camelCase"` derive; `host` has no `_`, so the serde
+/// transform is a no-op on this axis and the emitted key equals the
+/// source-side field name byte-for-byte. Lifting the byte to one
+/// `&'static str` closes the drift footgun structurally: a future
+/// refactor renaming the Rust field OR retaining the field name while
+/// adding a `#[serde(rename = "…")]` override would silently emit an
+/// `Entrada` whose external-hostname discriminator lands under one key
+/// while every downstream consumer still probes another — the Gateway
+/// emitter's per-Aplicacao hostname projection, the operator's ingress
+/// bind, the CR materializer's admission-time cross-check would each
+/// silently fall back to no-hostname and the Gateway API would either
+/// admit an all-hostname listener (breaking the per-Aplicacao
+/// host-isolation contract MESH-COMPOSITION.md §III.5 promises) or
+/// reject the resource outright at admission. The identity pin
+/// (`entrada_serde_keys_match_lifted_entrada_key_consts` on the
+/// source-side type) catches drift at caixa-core build time rather than
+/// at the Gateway controller's admission step, far from the rebrand
+/// commit's source.
+///
+/// Peer of [`ENTRADA_KEY_PARA`] / [`ENTRADA_KEY_PATHS`] /
+/// [`ENTRADA_KEY_PORT`] on the same [`crate::aplicacao::Entrada`]
+/// singleton serialized-key axis. Peer of the sibling
+/// [`MEMBRO_KEY_CAIXA`] / [`MEMBRO_KEY_VERSAO`] pair (ce80ca0) and
+/// [`CONTRATO_KEY_DE`] / [`CONTRATO_KEY_PARA`] / [`CONTRATO_KEY_WIT`]
+/// triad (ca463a4) on the sibling M3 per-`:membros` and per-`:contratos`
+/// entry axes — those lifts pinned the M3 collection-slot atom
+/// camelCase JSON keys, this lift extends the same discipline onto the
+/// singleton `:entrada` mesh slot so the last M3 typed-struct
+/// `#[serde(rename_all = "camelCase")]` axis on the Aplicacao surface
+/// joins the substrate's "one canonical byte-string per typed
+/// serialized-key axis" discipline. Same discipline every peer
+/// camelCase serde-key lift carries ([`M2_LIMITS_KEY_MEMORY`] etc.
+/// (d8b8b4f), [`M2_BEHAVIOR_KEY_ON_INIT`] etc. (21fe462),
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (36ffe65), [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc.,
+/// [`SUPERVISOR_KEY_ESTRATEGIA`] etc. (40cc4e5)).
+pub const ENTRADA_KEY_HOST: &str = "host";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::Entrada`] struct's `para` destination-member axis
+/// — the `para:` field naming which `:membros` entry the external
+/// Gateway routes to. Peer of [`ENTRADA_KEY_HOST`] on the same
+/// [`crate::aplicacao::Entrada`] singleton serialized-key axis; see
+/// [`ENTRADA_KEY_HOST`] for the full lift rationale. The Rust field is
+/// lowercase `para`; `#[serde(rename_all = "camelCase")]` is a no-op on
+/// this axis and the emitted key equals the source-side field name
+/// byte-for-byte.
+///
+/// Byte-identical to [`CONTRATO_KEY_PARA`] today — both resolve to the
+/// same four-byte `"para"` literal — but semantically distinct:
+/// [`CONTRATO_KEY_PARA`] names the per-`:contratos` edge's callee-Servico
+/// discriminator on the [`crate::aplicacao::WitContract`] surface, while
+/// this constant names the singleton `:entrada` block's Gateway-route
+/// destination-Servico discriminator on the sibling
+/// [`crate::aplicacao::Entrada`] surface. Splitting the two lets each
+/// schema's future rebrand land independently on the same
+/// "byte-identical-but-semantically-distinct" discipline the peer
+/// [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAME`] split established
+/// (935979a) on the sibling per-entry name-discriminator axis and the
+/// [`FLEET_PROGRAMS_KEY_VERSAO`] / [`MEMBRO_KEY_VERSAO`] split
+/// established (ce80ca0) on the sibling per-entry version-constraint
+/// axis.
+pub const ENTRADA_KEY_PARA: &str = "para";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::Entrada`] struct's `paths` per-Aplicacao
+/// path-filter axis — the `paths:` sequence the M3 Aplicacao's
+/// `#[serde(rename_all = "camelCase")]` derive emits at the singleton
+/// `:entrada` block, and the exact scalar every downstream
+/// per-`:entrada :paths` HTTPRoute-match-projection consumer must probe
+/// on (the [`caixa_mesh`] HTTPRoute emitter's per-Aplicacao `matches[]`
+/// projection under [`GATEWAY_API_KEY_MATCHES`], defaulting to
+/// [`GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] when the slot is empty per
+/// 48e2083). Peer of [`ENTRADA_KEY_HOST`] on the same
+/// [`crate::aplicacao::Entrada`] singleton serialized-key axis; see
+/// [`ENTRADA_KEY_HOST`] for the full lift rationale. The Rust field is
+/// lowercase `paths`; `#[serde(rename_all = "camelCase")]` is a no-op
+/// on this axis and the emitted key equals the source-side field name
+/// byte-for-byte.
+pub const ENTRADA_KEY_PATHS: &str = "paths";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::Entrada`] struct's `port` destination-Servico
+/// port axis — the `port:` field the M3 Aplicacao's
+/// `#[serde(rename_all = "camelCase")]` derive emits at the singleton
+/// `:entrada` block, defaulting via [`crate::aplicacao::default_port`]
+/// to [`crate::DEFAULT_SERVICO_PORT`] when the author omits the slot.
+/// Peer of [`ENTRADA_KEY_HOST`] on the same
+/// [`crate::aplicacao::Entrada`] singleton serialized-key axis; see
+/// [`ENTRADA_KEY_HOST`] for the full lift rationale. The Rust field is
+/// lowercase `port`; `#[serde(rename_all = "camelCase")]` is a no-op on
+/// this axis and the emitted key equals the source-side field name
+/// byte-for-byte.
+///
+/// Byte-identical to [`KUBE_KEY_PORT`] today — both resolve to the same
+/// four-byte `"port"` literal — but semantically distinct:
+/// [`KUBE_KEY_PORT`] names the K8s Service/ContainerPort per-resource
+/// port-discriminator axis, while this constant names the typed
+/// [`crate::aplicacao::Entrada`] singleton block's Gateway-route
+/// destination-Servico port axis on the M3 Aplicacao surface.
+/// Splitting the two lets each schema's future rebrand land
+/// independently.
+pub const ENTRADA_KEY_PORT: &str = "port";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of
