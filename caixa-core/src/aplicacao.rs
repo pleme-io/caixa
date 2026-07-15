@@ -12614,4 +12614,159 @@ mod tests {
             );
         }
     }
+
+    // ── drift-detection: serde-derive-to-POLITICAS_KEY_* identity ────────
+
+    #[test]
+    fn mesh_policy_serde_keys_match_lifted_politicas_key_consts() {
+        // Load-bearing invariant: the five `POLITICAS_KEY_*` consts
+        // ([`crate::POLITICAS_KEY_TIMEOUT`] /
+        // [`crate::POLITICAS_KEY_RETRIES`] /
+        // [`crate::POLITICAS_KEY_CIRCUIT_BREAKER`] /
+        // [`crate::POLITICAS_KEY_MTLS_REQUIRED`] /
+        // [`crate::POLITICAS_KEY_RATE_LIMIT`]) name the exact camelCase
+        // JSON keys the `#[serde(rename_all = "camelCase")]` attribute
+        // on [`MeshPolicy`] emits. Three of the five axes
+        // (`circuit_breaker` → `circuitBreaker`, `mtls_required` →
+        // `mtlsRequired`, `rate_limit` → `rateLimit`) are non-trivial
+        // camelCase transforms — the derive-attribute is load-bearing
+        // on those, unlike the sibling `Entrada` / `Membro` /
+        // `WitContract` structs whose fields are all lowercase-single-
+        // word and where the derive is a no-op on every axis.
+        // Serialize a fully-populated [`MeshPolicy`] (every axis
+        // `Some(…)` so `skip_serializing_if = "Option::is_none"` fires
+        // on none of the five slots) and pin that each canonical
+        // byte-sequence appears verbatim in the JSON — a future
+        // accidental `rename_all = "snake_case"` / `"kebab-case"` /
+        // verbatim-field-name flip at the derive attribute (any of
+        // which would silently break every downstream JSON consumer
+        // that reaches for one of the five consts via
+        // `Value::get(...)` — the future M4 per-edge `:politicas`
+        // overlay projection onto Cilium `L7Rules` and Gateway API
+        // `HTTPRoute` backend timeouts, the future
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // admission-time mesh-policy cross-check, the future
+        // `feira lint` per-`:politicas` bound-check gate) surfaces here
+        // as a build-time test failure at `aplicacao.rs`, not as an
+        // apply-time `.get(<stale-canonical-const>)` returning `None`
+        // far from the derive-attr drift's commit. Peer with the
+        // sibling `entrada_serde_keys_match_lifted_entrada_key_consts`
+        // (a3d6162), `wit_contract_serde_keys_match_lifted_contrato_key_consts`
+        // (ca463a4), and `membro_serde_keys_match_lifted_membro_key_consts`
+        // (ce80ca0) pins on the M3 collection-slot / singleton-slot
+        // atom axes — same discipline every M3 sibling lift
+        // established, extended here to the singleton `:politicas`
+        // mesh-slot atom axis, closing the last M3 typed-struct
+        // top-level `#[serde(rename_all = "camelCase")]` axis on the
+        // Aplicacao surface without a lifted serde-key peer.
+        let p = MeshPolicy {
+            timeout: Some(Duration::from_secs(30)),
+            retries: Some(3),
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 5,
+                window: Duration::from_secs(60),
+            }),
+            mtls_required: Some(true),
+            rate_limit: Some(RateLimit {
+                rate: 100,
+                window: Duration::from_secs(1),
+            }),
+        };
+        let json = serde_json::to_string(&p).unwrap();
+        for key in [
+            crate::POLITICAS_KEY_TIMEOUT,
+            crate::POLITICAS_KEY_RETRIES,
+            crate::POLITICAS_KEY_CIRCUIT_BREAKER,
+            crate::POLITICAS_KEY_MTLS_REQUIRED,
+            crate::POLITICAS_KEY_RATE_LIMIT,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized MeshPolicy must carry the lifted \
+                 POLITICAS_KEY_* byte-sequence {quoted} verbatim in the \
+                 JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn politicas_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of the five
+        // canonical [`MeshPolicy`] singleton byte-strings onto the same
+        // value (e.g. an accidental copy-paste flip of
+        // [`crate::POLITICAS_KEY_RETRIES`] to also read `"timeout"`)
+        // would silently reroute every downstream probe on one axis
+        // onto the sibling axis's overlay entry and pass every
+        // propagation-probe test that expected only the stale axis's
+        // value — the M4 per-edge `:politicas` overlay projection would
+        // read the retry-count string where the timeout duration was
+        // expected (or vice versa), the CR materializer's admission
+        // cross-check would compare the wrong pair of values, and the
+        // resulting mesh reconciler would either bind the wrong axis
+        // or reject the resource at reconcile far from the rebrand
+        // commit's source. Peer of the sibling four-way distinct pin
+        // on the `SUPERVISOR_KEY_*` tetrad (40cc4e5), the four-way
+        // distinct pin on the `ENTRADA_KEY_*` tetrad (a3d6162), the
+        // two-way distinct pin on the `MEMBRO_KEY_*` pair (ce80ca0),
+        // and the six-way distinct pin on the `CONTRATO_KEY_*` triad +
+        // `WitTarget::*_FIELD_NAME` triad (ca463a4).
+        let all = [
+            crate::POLITICAS_KEY_TIMEOUT,
+            crate::POLITICAS_KEY_RETRIES,
+            crate::POLITICAS_KEY_CIRCUIT_BREAKER,
+            crate::POLITICAS_KEY_MTLS_REQUIRED,
+            crate::POLITICAS_KEY_RATE_LIMIT,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "POLITICAS_KEY_* consts must be pairwise-distinct \
+                     canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn politicas_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `POLITICAS_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores, no
+        // `kebab-case` hyphens, no leading colon, no `PascalCase`
+        // leading capital, no whitespace / dots) — the canonical shape
+        // the `#[serde(rename_all = "camelCase")]` derive produces on
+        // [`MeshPolicy`]. A future flip to a non-camelCase attribute
+        // at the derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `mesh_policy_serde_keys_match_lifted_politicas_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer with `entrada_key_consts_are_lower_camel_case_shape`
+        // (a3d6162), `membro_key_consts_are_lower_camel_case_shape`
+        // (ce80ca0), and `contrato_key_consts_are_lower_camel_case_shape`
+        // (ca463a4) on the sibling M3 typed-struct axes.
+        for key in [
+            crate::POLITICAS_KEY_TIMEOUT,
+            crate::POLITICAS_KEY_RETRIES,
+            crate::POLITICAS_KEY_CIRCUIT_BREAKER,
+            crate::POLITICAS_KEY_MTLS_REQUIRED,
+            crate::POLITICAS_KEY_RATE_LIMIT,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "POLITICAS_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "POLITICAS_KEY_* must lead with an ASCII-lowercase \
+                 byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "POLITICAS_KEY_* must be ASCII-alphanumeric only — \
+                 no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
 }

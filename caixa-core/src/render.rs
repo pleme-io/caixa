@@ -7786,6 +7786,145 @@ pub const ENTRADA_KEY_PATHS: &str = "paths";
 /// independently.
 pub const ENTRADA_KEY_PORT: &str = "port";
 
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::MeshPolicy`] struct's `timeout` per-call
+/// wall-clock cap axis — the `timeout:` field the M3 Aplicacao's
+/// `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::MeshPolicy`] emits at the singleton `:politicas`
+/// block, and the exact scalar every downstream mesh-timeout consumer
+/// must probe on (the future M4 per-edge `:politicas` overlay
+/// projection onto Cilium `L7Rules` / Gateway API `HTTPRoute`
+/// per-backend `timeouts.backendRequest` axis per
+/// MESH-COMPOSITION.md §III.3, the future
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-time
+/// mesh-timeout cross-check, the future `feira lint` per-`:politicas`
+/// authored-duration bound-check against
+/// [`crate::POLICY_TIMEOUT_MAX`]).
+///
+/// The scalar is derived from the Rust field name `timeout` by the
+/// `rename_all = "camelCase"` derive; `timeout` has no `_`, so the
+/// serde transform is a no-op on this axis and the emitted key equals
+/// the source-side field name byte-for-byte. Lifting the byte to one
+/// `&'static str` closes the drift footgun structurally: a future
+/// refactor renaming the Rust field OR retaining the field name while
+/// adding a `#[serde(rename = "…")]` override would silently emit a
+/// [`MeshPolicy`][mp] whose per-call timeout discriminator lands under
+/// one key while every downstream consumer still probes another — the
+/// M4 per-edge overlay projection, the CR materializer's cross-check,
+/// the linter's bound-check would each silently fall back to
+/// no-timeout and every `:contratos`-edge request would silently
+/// bypass the per-call cap the typed slot set, with the failure
+/// surfacing as "the mesh no longer enforces the timeout the
+/// Aplicacao authored" far from the rebrand commit's source. The
+/// identity pin (`mesh_policy_serde_keys_match_lifted_politicas_key_consts`
+/// on the source-side type) catches drift at caixa-core build time
+/// rather than at the mesh controller's reconcile step.
+///
+/// [mp]: crate::aplicacao::MeshPolicy
+///
+/// Peer of [`POLITICAS_KEY_RETRIES`] / [`POLITICAS_KEY_CIRCUIT_BREAKER`] /
+/// [`POLITICAS_KEY_MTLS_REQUIRED`] / [`POLITICAS_KEY_RATE_LIMIT`] on the
+/// same [`crate::aplicacao::MeshPolicy`] singleton serialized-key
+/// axis. Peer of the sibling [`ENTRADA_KEY_HOST`] etc. tetrad
+/// (a3d6162), [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc. tetrad,
+/// [`MEMBRO_KEY_CAIXA`] / [`MEMBRO_KEY_VERSAO`] pair (ce80ca0), and
+/// [`CONTRATO_KEY_DE`] / [`CONTRATO_KEY_PARA`] / [`CONTRATO_KEY_WIT`]
+/// triad (ca463a4) on the sibling M3 typed-struct axes — those lifts
+/// pinned every peer M3 mesh-slot atom, this lift closes the last M3
+/// typed-struct top-level `#[serde(rename_all = "camelCase")]` axis on
+/// the Aplicacao surface without a lifted serde-key peer (the
+/// [`crate::aplicacao::MeshPolicy`] singleton `:politicas` block) so
+/// the entire M3 typed-struct surface joins the substrate's "one
+/// canonical byte-string per typed serialized-key axis" discipline.
+/// Same discipline every peer camelCase serde-key lift carries
+/// ([`M2_LIMITS_KEY_MEMORY`] etc. (d8b8b4f),
+/// [`M2_BEHAVIOR_KEY_ON_INIT`] etc. (21fe462),
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (36ffe65), [`SUPERVISOR_KEY_ESTRATEGIA`] etc. (40cc4e5)).
+pub const POLITICAS_KEY_TIMEOUT: &str = "timeout";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::MeshPolicy`] struct's `retries` transient-failure
+/// retry-count axis — the `retries:` field the M3 Aplicacao's
+/// `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::MeshPolicy`] emits at the singleton `:politicas`
+/// block. Peer of [`POLITICAS_KEY_TIMEOUT`] on the same
+/// [`crate::aplicacao::MeshPolicy`] singleton serialized-key axis; see
+/// [`POLITICAS_KEY_TIMEOUT`] for the full lift rationale. The Rust
+/// field is lowercase `retries`; `#[serde(rename_all = "camelCase")]`
+/// is a no-op on this axis and the emitted key equals the source-side
+/// field name byte-for-byte.
+pub const POLITICAS_KEY_RETRIES: &str = "retries";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::MeshPolicy`] struct's `circuit_breaker`
+/// circuit-breaker sub-block axis — the `circuitBreaker:` field the M3
+/// Aplicacao's `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::MeshPolicy`] emits at the singleton `:politicas`
+/// block, and the exact camelCase scalar (Rust field
+/// `circuit_breaker` → serde-emitted `circuitBreaker`, one of the two
+/// `MeshPolicy` axes the derive-attribute non-trivially transforms
+/// alongside [`POLITICAS_KEY_MTLS_REQUIRED`] and
+/// [`POLITICAS_KEY_RATE_LIMIT`]) every downstream circuit-breaker
+/// consumer must probe on (the future M4 per-edge `:politicas` overlay
+/// projection onto the mesh's per-backend failure-counter reset
+/// window per MESH-COMPOSITION.md §III.3 breaker semantics, the future
+/// `feira lint` per-`:politicas` breaker-window bound-check against
+/// [`crate::POLICY_BREAKER_WINDOW_MAX`] and
+/// [`crate::POLICY_BREAKER_MAX_FAILURES_MAX`]). Peer of
+/// [`POLITICAS_KEY_TIMEOUT`] on the same
+/// [`crate::aplicacao::MeshPolicy`] singleton serialized-key axis; see
+/// [`POLITICAS_KEY_TIMEOUT`] for the full lift rationale.
+///
+/// This axis is one of the three non-trivial camelCase transforms
+/// [`crate::aplicacao::MeshPolicy`]'s derive emits (`circuit_breaker`
+/// → `circuitBreaker`, `mtls_required` → `mtlsRequired`, `rate_limit`
+/// → `rateLimit`); a future accidental `rename_all = "snake_case"` /
+/// `"kebab-case"` / verbatim-field-name flip at the derive would
+/// silently rebrand the emitted key to `circuit_breaker` /
+/// `circuit-breaker` / `circuit_breaker` respectively, breaking every
+/// downstream `Value::get(POLITICAS_KEY_CIRCUIT_BREAKER)` consumer.
+/// The identity pin (`mesh_policy_serde_keys_match_lifted_politicas_key_consts`
+/// on the source-side type) catches drift on all three non-trivial
+/// axes simultaneously.
+pub const POLITICAS_KEY_CIRCUIT_BREAKER: &str = "circuitBreaker";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::MeshPolicy`] struct's `mtls_required`
+/// mTLS-enforcement-toggle axis — the `mtlsRequired:` field the M3
+/// Aplicacao's `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::MeshPolicy`] emits at the singleton `:politicas`
+/// block, and the exact camelCase scalar (Rust field `mtls_required`
+/// → serde-emitted `mtlsRequired`) every downstream mesh-identity
+/// consumer must probe on (the future M4 per-edge `:politicas` overlay
+/// projection onto Cilium `CiliumNetworkPolicy` per-rule
+/// [`CILIUM_KEY_AUTHENTICATION`] mode dispatch under the
+/// [`cilium_auth_mode`] bijection projection (a4dc43c) — the mesh's
+/// sandboxing-by-default posture MESH-COMPOSITION.md §III.3 promises
+/// keys off this exact byte-sequence to opt out of mTLS enforcement
+/// per-edge, so drift here silently reopens the every-edge-mTLS
+/// invariant the substrate defaults to). Peer of
+/// [`POLITICAS_KEY_TIMEOUT`] on the same
+/// [`crate::aplicacao::MeshPolicy`] singleton serialized-key axis; see
+/// [`POLITICAS_KEY_TIMEOUT`] for the full lift rationale.
+pub const POLITICAS_KEY_MTLS_REQUIRED: &str = "mtlsRequired";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::aplicacao::MeshPolicy`] struct's `rate_limit`
+/// token-bucket-rate-limit axis — the `rateLimit:` field the M3
+/// Aplicacao's `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::aplicacao::MeshPolicy`] emits at the singleton `:politicas`
+/// block, and the exact camelCase scalar (Rust field `rate_limit` →
+/// serde-emitted `rateLimit`) every downstream rate-limit consumer
+/// must probe on (the future M4 per-edge `:politicas` overlay
+/// projection onto the mesh's per-backend token-bucket `(rate,
+/// window)` decoder driven by the canonical
+/// [`crate::aplicacao::rate_limit_codec`] unit-suffix bijection). Peer
+/// of [`POLITICAS_KEY_TIMEOUT`] on the same
+/// [`crate::aplicacao::MeshPolicy`] singleton serialized-key axis; see
+/// [`POLITICAS_KEY_TIMEOUT`] for the full lift rationale.
+pub const POLITICAS_KEY_RATE_LIMIT: &str = "rateLimit";
+
 /// Canonical `lareira-fleet-programs` values-schema key naming the
 /// per-caixa entry sequence — the exact YAML key the fleet-programs
 /// library chart's `values.yaml` reads as `programs:` (a sequence of
