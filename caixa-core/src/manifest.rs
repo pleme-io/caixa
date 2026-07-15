@@ -523,7 +523,7 @@ impl Caixa {
             crate::render::insert_first_seen(&mut seen, dep.nome.as_str(), || {
                 DepError::DuplicateNome {
                     nome: dep.nome.clone(),
-                    list: ":deps",
+                    list: crate::render::DEP_AUTHOR_KEY_DEPS,
                 }
             })?;
         }
@@ -533,7 +533,7 @@ impl Caixa {
             crate::render::insert_first_seen(&mut seen_dev, dep.nome.as_str(), || {
                 DepError::DuplicateNome {
                     nome: dep.nome.clone(),
-                    list: ":deps-dev",
+                    list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
                 }
             })?;
         }
@@ -2877,7 +2877,7 @@ mod tests {
             matches!(
                 err,
                 crate::dep::DepError::DuplicateNome { ref nome, list }
-                    if nome == "caixa-teia" && list == ":deps"
+                    if nome == "caixa-teia" && list == crate::render::DEP_AUTHOR_KEY_DEPS
             ),
             "got {err:?}"
         );
@@ -2898,7 +2898,7 @@ mod tests {
             matches!(
                 err,
                 crate::dep::DepError::DuplicateNome { ref nome, list }
-                    if nome == "tatara-check" && list == ":deps-dev"
+                    if nome == "tatara-check" && list == crate::render::DEP_AUTHOR_KEY_DEPS_DEV
             ),
             "got {err:?}"
         );
@@ -2984,8 +2984,8 @@ mod tests {
         assert!(
             matches!(
                 err,
-                crate::dep::DepError::DuplicateNome { ref nome, list: ":deps" }
-                    if nome == "caixa-teia"
+                crate::dep::DepError::DuplicateNome { ref nome, list }
+                    if nome == "caixa-teia" && list == crate::render::DEP_AUTHOR_KEY_DEPS
             ),
             "got {err:?}"
         );
@@ -3008,8 +3008,8 @@ mod tests {
         assert!(
             matches!(
                 err,
-                crate::dep::DepError::DuplicateNome { ref nome, list: ":deps" }
-                    if nome == "runtime-dep"
+                crate::dep::DepError::DuplicateNome { ref nome, list }
+                    if nome == "runtime-dep" && list == crate::render::DEP_AUTHOR_KEY_DEPS
             ),
             "expected :deps duplicate to surface before :deps-dev duplicate, got {err:?}"
         );
@@ -3043,7 +3043,7 @@ mod tests {
             panic!("expected DuplicateNome from :deps-dev walk");
         };
         assert_eq!(nome, "dev-thing");
-        assert_eq!(list, ":deps-dev");
+        assert_eq!(list, crate::render::DEP_AUTHOR_KEY_DEPS_DEV);
     }
 
     // ── validate_deps: per-entry :caracteristicas set-discipline gate ──
