@@ -224,11 +224,42 @@ fn restart_policy_quintet_round_trip() {
 }
 
 #[test]
-fn restart_strategy_display_delegates_to_discriminant() {
-    assert_eq!(RestartStrategy::OneForOne.to_string(), "one-for-one");
+fn restart_strategy_display_routes_through_pascalcase_wire_scalar() {
+    // Post-convergence: [`std::fmt::Display`] on [`RestartStrategy`] no
+    // longer delegates through the gen-platform discriminant catalog
+    // (which returns kebab-case identifiers used by the fleet-wide
+    // dispatcher catalog + `FromStr`); it routes through
+    // [`RestartStrategy::as_str`] instead, which returns the same
+    // lifted [`caixa_core::SUPERVISOR_ESTRATEGIA_*`] PascalCase
+    // byte-string the `Serialize` derive emits under
+    // [`caixa_core::SUPERVISOR_KEY_ESTRATEGIA`]. The two identifier
+    // worlds now live on separate typed methods:
+    //   - `.discriminant()` returns the kebab-case fleet-catalog
+    //     identity (`"one-for-one"` / `"simple-one-for-one"`); the
+    //     [`variant_kinds_via_trait`] / [`registers_into_catalog`] /
+    //     [`quintet_round_trip`] pin tests above still probe this
+    //     surface.
+    //   - `.to_string()` / [`std::fmt::Display`] returns the
+    //     PascalCase wire byte-string (`"OneForOne"` /
+    //     `"SimpleOneForOne"`) so every consumer that formats the
+    //     strategy for a diagnostic line, a graph, or a rejection
+    //     body lands on the same byte-string the operator's
+    //     per-strategy dispatch keys off.
+    // The prior `_delegates_to_discriminant` name was accurate under
+    // the pre-convergence route; the renamed pin here documents the
+    // converged posture verbatim so a future reader can locate the
+    // Display/wire agreement and the Display/discriminant separation
+    // at exactly this test. Peer of the sibling
+    // [`caixa_core::supervisor::tests::restart_strategy_display_routes_through_as_str_helper`]
+    // and
+    // [`…_display_matches_serialized_wire_byte_string`] which pin the
+    // converged Display route from inside the caixa-core crate; this
+    // test pins the same posture from the fleet-catalog test harness
+    // so the two views agree end-to-end.
+    assert_eq!(RestartStrategy::OneForOne.to_string(), "OneForOne");
     assert_eq!(
         RestartStrategy::SimpleOneForOne.to_string(),
-        "simple-one-for-one"
+        "SimpleOneForOne"
     );
 }
 
