@@ -10,6 +10,7 @@
 //! ecosystem primitive.
 
 use caixa_core::{
+    M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE, M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT,
     M2_UPGRADE_INSTRUCTION_KEY_KIND, RestartPolicy, RestartStrategy, UpgradeInstruction,
 };
 use gen_platform::{TypedDispatcherTrait, catalog};
@@ -48,10 +49,13 @@ fn variant_fields_match_otp_appup_arity() {
     assert_eq!(
         fields,
         vec![
-            ("load-module", vec!["module"]),
-            ("state-change", vec!["script"]),
-            ("soft-purge", vec!["module"]),
-            ("purge", vec!["module"]),
+            ("load-module", vec![M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE]),
+            (
+                "state-change",
+                vec![M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT]
+            ),
+            ("soft-purge", vec![M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE]),
+            ("purge", vec![M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE]),
             ("restart", vec![]),
         ]
     );

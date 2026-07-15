@@ -6636,6 +6636,89 @@ pub const M2_UPGRADE_FROM_KEY_INSTRUCTIONS: &str = "instructions";
 /// into caixa-core.
 pub const M2_UPGRADE_INSTRUCTION_KEY_KIND: &str = "kind";
 
+/// Canonical per-variant data-field JSON key the M2 `:upgrade-from
+/// :instructions` per-entry OTP-appup
+/// [`crate::UpgradeInstruction::LoadModule`] / [`crate::UpgradeInstruction::SoftPurge`]
+/// / [`crate::UpgradeInstruction::Purge`] variants surface their
+/// module-name payload under on serde emission — the internally-tagged
+/// per-variant field byte-string every downstream consumer reading the
+/// module string reaches for
+/// (`serde_json::to_value(&instr).get("module")` /
+/// `serde_yaml::Value::Mapping.get("module")` / hand-authored
+/// `{"kind": "load-module", "module": "hello-rio"}` JSON blobs the
+/// wasm-operator's upgrade-dispatch step consumes to route the
+/// per-module load / soft-purge / purge action). The three variants
+/// carrying a `module: String` field
+/// ([`crate::UpgradeInstruction::LoadModule`], [`crate::UpgradeInstruction::SoftPurge`],
+/// [`crate::UpgradeInstruction::Purge`]) all emit this exact
+/// byte-sequence as the data-field JSON key alongside the
+/// [`M2_UPGRADE_INSTRUCTION_KEY_KIND`] tag-key on the same instruction
+/// blob — the `#[serde(tag = "kind", rename_all = "kebab-case")]`
+/// attribute on [`crate::UpgradeInstruction`] promotes each variant's
+/// struct-field name to a sibling JSON key at the same nesting level as
+/// the tag, so a `LoadModule { module: "hello-rio" }` serializes to
+/// `{"kind": "load-module", "module": "hello-rio"}` — one tag axis, one
+/// data-field axis, both live on the same JSON object and both must be
+/// pinned into caixa-core so a future rebrand at either axis surfaces
+/// as a build-time test failure rather than an apply-time
+/// `.get(<stale-field-key>)` returning `None` far from the field-name
+/// drift's commit.
+///
+/// Lifted as a typed `pub const` (rather than an inline literal at every
+/// consumer probe) so the per-variant module-field axis has exactly one
+/// source of truth — a future struct-field rebrand (`module: String` →
+/// `component: String` matching a hypothetical WASI component-model
+/// naming pass, `module: String` → `name: String` matching the
+/// canonical `KUBE_KEY_NAME` axis, `module: String` → `target: String`
+/// matching the sibling `:contratos :para` axis) lands as an edit to
+/// exactly one const, and every consumer that probes the module-field
+/// key picks it up at build time. Same "one canonical byte-string per
+/// typed axis" discipline the sibling
+/// [`M2_UPGRADE_INSTRUCTION_KEY_KIND`] (6a203d7) lift established on
+/// the peer tag-slot key axis on the same
+/// [`crate::UpgradeInstruction`] enum: `KEY_KIND` names the tag axis,
+/// `FIELD_KEY_MODULE` names the module-payload axis, and the two must
+/// be disjoint by construction (an internally-tagged serialization
+/// where the tag key collides with a data-field key silently corrupts
+/// every serialized blob — same failure mode
+/// `m2_upgrade_instruction_key_kind_const_disjoint_from_variant_data_keys`
+/// pins on the sibling axis).
+///
+/// With this lift and its [`M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT`]
+/// peer, the whole `:upgrade-from :instructions` variant-JSON dual is
+/// lifted into caixa-core: the tag *key*
+/// ([`M2_UPGRADE_INSTRUCTION_KEY_KIND`]), the five tag *values*
+/// ([`M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] etc.), and the two
+/// data-field *keys* (this const and `SCRIPT`) all sit as
+/// single-source-of-truth `&'static str`s. Any future serde-shape
+/// rebrand touching either axis (tag key rename, per-variant field
+/// rename, `rename_all` regime flip) surfaces at build time.
+pub const M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE: &str = "module";
+
+/// Canonical per-variant data-field JSON key the M2 `:upgrade-from
+/// :instructions` per-entry [`crate::UpgradeInstruction::StateChange`]
+/// variant surfaces its script-path payload under on serde emission —
+/// the internally-tagged per-variant field byte-string every downstream
+/// consumer reading the migration-script path reaches for
+/// (`serde_json::to_value(&instr).get("script")` /
+/// `serde_yaml::Value::Mapping.get("script")` / hand-authored
+/// `{"kind": "state-change", "script": "lib/migrations/v01-to-v02.lisp"}`
+/// JSON blobs the wasm-operator's upgrade-dispatch step consumes to
+/// route the per-`gen_server` `code_change/3` migration action). Peer
+/// of [`M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE`] on the sibling
+/// module-payload axis; see [`M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE`]
+/// for the full lift rationale.
+///
+/// The [`crate::UpgradeInstruction::StateChange`] variant is the only
+/// one carrying a `script: PathBuf` field — the two module-bearing
+/// variants ([`crate::UpgradeInstruction::LoadModule`],
+/// [`crate::UpgradeInstruction::SoftPurge`],
+/// [`crate::UpgradeInstruction::Purge`]) route through the sibling
+/// [`M2_UPGRADE_INSTRUCTION_FIELD_KEY_MODULE`] const, and
+/// [`crate::UpgradeInstruction::Restart`] carries no data field at all.
+/// Same one-const-per-typed-axis discipline as the sibling.
+pub const M2_UPGRADE_INSTRUCTION_FIELD_KEY_SCRIPT: &str = "script";
+
 /// Canonical author-facing kebab-case tag the M2 `:upgrade-from
 /// :instructions` per-entry OTP-appup [`crate::UpgradeInstruction::LoadModule`]
 /// variant surfaces under — the `:kind` field the
