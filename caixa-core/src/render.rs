@@ -16235,6 +16235,87 @@ pub const HELM_CHART_KEY_TYPE: &str = "type";
 /// [ch]: ../../caixa_helm/index.html
 pub const HELM_CHART_KEY_APP_VERSION: &str = "appVersion";
 
+/// Canonical Helm 3 `Chart.yaml` top-level YAML axis-key naming the
+/// per-chart dependency-list field — the load-bearing serde
+/// field-name at [`caixa-helm`][ch]'s `ChartYaml` struct's
+/// `dependencies` field, the parent list-container the already-lifted
+/// [`HELM_CHART_DEPENDENCY_KEY_NAME`] / [`HELM_CHART_DEPENDENCY_KEY_VERSION`]
+/// / [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
+/// [`HELM_CHART_DEPENDENCY_KEY_ALIAS`] per-entry sub-mapping tetrad
+/// (69f62db) mounts under. The chart-schema top-level `dependencies:`
+/// field pins the list of chart-registry references Helm's per-dep
+/// resolver consults at `helm dependency build` /
+/// `helm dependency update` time to vendor each dependency chart
+/// under the substrate's canonical [`DEFAULT_LIBRARY_NAME`] wrap-key
+/// convention. Every rendered `lareira-<nome>` chart declares exactly
+/// one entry today (the [`DEFAULT_LIBRARY_NAME`] `pleme-computeunit`
+/// library-chart dep the sibling [`caixa-helm`][ch]'s `build_chart_yaml`
+/// mounts) — see [chart-dependencies-doc] for the Helm 3 upstream axis
+/// documentation.
+///
+/// The single source of truth every consumer that names the per-
+/// Chart.yaml top-level dependency-list key reaches for:
+///
+///   - [`caixa-helm`][ch]'s `ChartYaml` struct's `dependencies` field
+///     (the sole production serialize-side site the wire-key appears
+///     at — Rust's default field-name-verbatim serde emission means
+///     no `#[serde(rename = "…")]` attribute pins the key today; the
+///     paired drift-detection pin at [`caixa-helm`]'s
+///     `chart_yaml_serializes_dependencies_axis_under_lifted_helm_chart_key_dependencies`
+///     round-trips a rendered `Chart.yaml` through
+///     `serde_yaml::from_str::<serde_yaml::Value>` and asserts the
+///     top-level `Mapping::get(HELM_CHART_KEY_DEPENDENCIES)` resolves —
+///     closing the drift a future hostile refactor could otherwise
+///     leave silent: a rename of the Rust field to `Vec<ChartDependency>
+///     under a `deps:` / `chartDependencies:` name, or an accidental
+///     `#[serde(rename_all = "camelCase")]` attribute on `ChartYaml`
+///     that stays a no-op on the four identity-mapped top-level keys
+///     today but silently activates on a future multi-word field
+///     addition);
+///   - every test-side navigator that inspects the serialized
+///     [`caixa-helm`]-emitted `Chart.yaml` YAML mapping by the top-
+///     level per-chart-dependency-list key.
+///
+/// A drift on this per-Chart.yaml top-level list-container axis-key
+/// would silently rebrand the wire key — Helm's chart-schema parser
+/// silently drops the dep list from the parsed chart-metadata shape,
+/// `helm dependency build` finds no chart to vendor, and every
+/// rendered `lareira-<nome>` chart's install fails with
+/// `template: no template ... associated with template ...` far from
+/// the drift site with no field naming the top-level-list-key-drift
+/// root cause. The failure mode is byte-shape-symmetric with the peer
+/// [`HELM_CHART_DEPENDENCY_KEY_NAME`] drift narrative (which closes on
+/// the per-entry name axis one level down) — both close on the
+/// `helm dependency build` / apply-time path.
+///
+/// The PRIME DIRECTIVE duplication-budget rule (THEORY.md §I.3.5)
+/// promotes the top-level list-container axis-key to a typed
+/// substrate-side `&'static str` on the same trajectory the peer
+/// [`HELM_CHART_KEY_TYPE`] / [`HELM_CHART_KEY_APP_VERSION`] /
+/// [`HELM_CHART_KEY_API_VERSION`] top-level axis-key lifts (d29bc23,
+/// cc44e4b) established — completes the parent+children canonical-pin
+/// pair with the already-lifted per-`dependencies[]`-entry
+/// sub-mapping tetrad. Where the child tetrad pins the byte-shape of
+/// each per-dep entry's four sub-mapping keys (`name`, `version`,
+/// `repository`, `alias`), this parent-axis lift pins the byte-shape
+/// of the top-level list-container the tetrad mounts under, so the
+/// full `(dependencies: → [name/version/repository/alias])`
+/// per-Chart.yaml dependency-list schema surface lives at one
+/// canonical `&'static str` per YAML axis-key. Same
+/// "parent list-container + child sub-mapping tetrad" canonical-pin
+/// discipline the peer [`SUPERVISOR_KEY_CHILDREN`] (parent) +
+/// [`SUPERVISOR_CHILD_KEY_CAIXA`] / [`SUPERVISOR_CHILD_KEY_VERSAO`] /
+/// [`SUPERVISOR_CHILD_KEY_RESTART`] (children) pair (40cc4e5, ef912df)
+/// established on the sibling per-`:supervisor :children` axis, and the
+/// peer [`M2_KEY_UPGRADE_FROM`] (parent) +
+/// [`M2_UPGRADE_FROM_KEY_FROM`] / [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`]
+/// (children) pair established on the sibling per-`:upgrade-from` axis.
+///
+/// [chart-yaml-desc]: https://helm.sh/docs/topics/charts/#the-chartyaml-file
+/// [chart-dependencies-doc]: https://helm.sh/docs/topics/charts/#chart-dependencies
+/// [ch]: ../../caixa_helm/index.html
+pub const HELM_CHART_KEY_DEPENDENCIES: &str = "dependencies";
+
 /// Canonical Helm 3 `Chart.yaml` per-`dependencies[]`-entry sub-mapping
 /// YAML axis-key naming the per-dep chart-name field — the load-bearing
 /// serde field-name at [`caixa-helm`][ch]'s `ChartDependency` struct's
@@ -24882,6 +24963,83 @@ mod tests {
              silently overwrites the chart's own SemVer at every \
              downstream Helm chart-consumer"
         );
+    }
+
+    #[test]
+    fn helm_chart_key_dependencies_pins_canonical_value() {
+        // Pin the actual byte-string so a typo in this lift can't silently
+        // rebrand the Helm 3 `Chart.yaml` top-level per-chart dependency-
+        // list YAML axis-key the rendered `lareira-<nome>` chart declares.
+        // The string is part of the substrate-side contract with Helm's
+        // chart-schema parser — every rendered chart's `dependencies:`
+        // list-container mounts under this exact byte-shape, and Helm's
+        // per-dep resolver at `helm dependency build` / `helm dependency
+        // update` time consumes the per-entry sub-mapping tetrad only if
+        // the top-level list-container key matches this canonical shape.
+        // A drift on this const's value (`"Dependencies"` / `"deps"` /
+        // `"chartDependencies"` / `"depends"` / the empty string) would
+        // silently drop the entire per-chart dep list from the parsed
+        // chart-metadata shape, and every rendered `lareira-<nome>`
+        // chart's install would fail with `template: no template ...
+        // associated with template ...` far from the drift site with
+        // no field naming the top-level-list-key-drift root cause. Peer
+        // to [`helm_chart_key_type_pins_canonical_value`] /
+        // [`helm_chart_key_app_version_pins_canonical_value`] /
+        // [`helm_chart_key_api_version_pins_canonical_value`] on the
+        // sibling per-Chart.yaml top-level YAML axis-key canonical-pin
+        // surface — extends the per-Chart.yaml top-level YAML axis-key
+        // canonical-pin trio those pins established onto the fourth
+        // top-level axis-key at the substrate, the parent list-container
+        // whose already-lifted per-`dependencies[]`-entry sub-mapping
+        // tetrad ([`HELM_CHART_DEPENDENCY_KEY_NAME`] /
+        // [`HELM_CHART_DEPENDENCY_KEY_VERSION`] /
+        // [`HELM_CHART_DEPENDENCY_KEY_REPOSITORY`] /
+        // [`HELM_CHART_DEPENDENCY_KEY_ALIAS`]) mounts one level down.
+        assert_eq!(HELM_CHART_KEY_DEPENDENCIES, "dependencies");
+    }
+
+    #[test]
+    fn helm_chart_key_dependencies_is_byte_distinct_from_per_dep_sub_mapping_tetrad() {
+        // Structural distinctness invariant on the per-Chart.yaml
+        // `dependencies:` parent list-container axis-key vs. the four
+        // already-lifted per-entry sub-mapping keys mounted one level
+        // down. The parent+children pair spans two schema-nested YAML
+        // levels — the top-level `dependencies:` list-container and
+        // the per-entry sub-mapping `{name, version, repository,
+        // alias}` — and Helm's chart-schema parser navigates them as
+        // two structurally-independent axes: a collapse of the parent
+        // axis-key onto any child (e.g. an accidental future rebrand
+        // that renamed the [`HELM_CHART_KEY_DEPENDENCIES`] value to
+        // `"name"` or `"version"`) would either drop the entire per-
+        // chart dep list at the top-level parse (the child scalar
+        // silently masks the parent list-container the schema expects)
+        // or read the top-level list under a scalar-shaped axis-key
+        // and reject the chart at `helm lint` with a shape mismatch
+        // far from the drift site. Same "parent list-container
+        // axis-key must remain byte-distinct from every child sub-
+        // mapping axis-key" discipline the peer
+        // [`SUPERVISOR_KEY_CHILDREN`] parent axis-key already carries
+        // against the sibling [`SUPERVISOR_CHILD_KEY_CAIXA`] /
+        // [`SUPERVISOR_CHILD_KEY_VERSAO`] / [`SUPERVISOR_CHILD_KEY_RESTART`]
+        // per-entry sub-mapping triad on the M2 typed
+        // `:supervisor :children` surface — extends the discipline onto
+        // the Helm 3 `Chart.yaml` per-chart-dependency-list surface.
+        for child in [
+            HELM_CHART_DEPENDENCY_KEY_NAME,
+            HELM_CHART_DEPENDENCY_KEY_VERSION,
+            HELM_CHART_DEPENDENCY_KEY_REPOSITORY,
+            HELM_CHART_DEPENDENCY_KEY_ALIAS,
+        ] {
+            assert_ne!(
+                HELM_CHART_KEY_DEPENDENCIES, child,
+                "HELM_CHART_KEY_DEPENDENCIES \
+                 ({HELM_CHART_KEY_DEPENDENCIES:?}) must remain \
+                 byte-distinct from every per-`dependencies[]`-entry \
+                 sub-mapping key ({child:?}) — a collapse silently \
+                 orphans the parent list-container at `helm lint` / \
+                 `helm dependency build` time"
+            );
+        }
     }
 
     #[test]
