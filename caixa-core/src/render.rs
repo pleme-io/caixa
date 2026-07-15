@@ -6189,6 +6189,45 @@ pub const M2_KEY_BEHAVIOR: &str = "behavior";
 /// Canonical camelCase YAML key for the `:upgrade-from` slot's overlay.
 pub const M2_KEY_UPGRADE_FROM: &str = "upgradeFrom";
 
+/// Canonical JSON/YAML top-level key for [`crate::Caixa`]'s runtime
+/// `deps` axis — the runtime-closure dependency list every build the
+/// caixa participates in reaches (peer of the dev-only `:deps-dev`
+/// list [`CAIXA_KEY_DEPS_DEV`] pins). The Rust field is single-word
+/// `deps`; the `#[serde(rename_all = "camelCase")]` attribute on
+/// [`crate::Caixa`] is a no-op on this axis (no `_` to transform), so
+/// the emitted JSON key equals the source-side field name byte-for-byte
+/// and equals this constant's value.
+///
+/// [`crate::Caixa::to_lisp`] threads the manifest through
+/// `serde_json::to_value(self) → tatara_lisp::domain::json_to_sexp`, so
+/// the emitted JSON key is the load-bearing byte-string the round-trip
+/// consumes on its way back to the kebab-case `:deps` author surface.
+/// Until this lift landed the byte-string `"deps"` was structurally
+/// implicit in the [`crate::Caixa::deps`] field name at
+/// [`crate::Caixa`] with no compile-time link to any downstream
+/// `.get(<key>)` consumer or drift-detection pin — a future
+/// [`crate::Caixa`] field rename (`deps` → `dependencies` matching
+/// Cargo's verbatim `[dependencies]` axis, `deps` → `runtime_deps`
+/// matching a hypothetical per-runtime-target vocabulary flip) OR an
+/// added `#[serde(rename = "…")]` explicit attribute override (either
+/// of which would silently break every [`crate::Caixa::to_lisp`]
+/// round-trip and the future M4 operator-side manifest ingest that
+/// reaches for `deps` via `Value::get(...)`) would surface at consumer
+/// parse time as a silently-absent JSON key defaulting to
+/// [`Vec::new()`], far from the rename's commit and with no field
+/// naming the drift.
+///
+/// Peer of [`CAIXA_KEY_DEPS_DEV`] on the two-list dep-graph
+/// serialized-key axis: this const names the runtime-closure dep-list
+/// wire key, [`CAIXA_KEY_DEPS_DEV`] names the dev-only dep-list wire
+/// key. Byte-identical to the peer [`DEP_AUTHOR_KEY_DEPS`] author-facing
+/// kebab-case label modulo the leading `:` — the two consts split on
+/// the axis every dep-graph slot carries (author-facing kebab-case
+/// label vs. renderer-side wire key). Same "one canonical byte-string
+/// per typed axis" discipline every peer [`M2_KEY_*`] /
+/// [`M3_KEY_PLACEMENT`] / [`SUPERVISOR_KEY_*`] const carries.
+pub const CAIXA_KEY_DEPS: &str = "deps";
+
 /// Canonical camelCase JSON/YAML top-level key for [`crate::Caixa`]'s
 /// `deps_dev` axis — the dev-only dependency list that the M0 base
 /// package model already exposes (peer of the runtime `:deps` list, but
@@ -7387,12 +7426,11 @@ pub const SUPERVISOR_AUTHOR_KEY_CHILDREN: &str = ":children";
 /// endpoint consts established for the sibling M2 / M3 / Supervisor
 /// slot axes extends onto the two-list dep-graph slot axis.
 ///
-/// Byte-identical to the peer [`crate::manifest::CAIXA_KEY_DEPS`]
-/// serde-key axis modulo the leading `:` — the two consts split on
-/// the axis every dep-graph slot carries (author-facing kebab-case
-/// label vs. renderer-side camelCase overlay key). Same
-/// "one canonical byte-string per typed axis" discipline every peer
-/// M2 / M3 renderer-wire-key axis carries.
+/// Byte-identical to the peer [`CAIXA_KEY_DEPS`] renderer-side wire-key
+/// serde-key axis modulo the leading `:` — the two consts split on the
+/// axis every dep-graph slot carries (author-facing kebab-case label vs.
+/// renderer-side wire key). Same "one canonical byte-string per typed
+/// axis" discipline every peer M2 / M3 renderer-wire-key axis carries.
 pub const DEP_AUTHOR_KEY_DEPS: &str = ":deps";
 
 /// Canonical author-facing kebab-case `(defcaixa … :deps-dev ((…)))`
