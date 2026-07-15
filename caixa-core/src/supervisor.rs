@@ -3262,4 +3262,117 @@ mod tests {
             );
         }
     }
+
+    // ── drift-detection: serde-derive-to-SUPERVISOR_CHILD_KEY_* identity ──
+
+    #[test]
+    fn child_spec_serde_keys_match_lifted_supervisor_child_key_consts() {
+        // Load-bearing invariant: the three `SUPERVISOR_CHILD_KEY_*` consts
+        // (`SUPERVISOR_CHILD_KEY_CAIXA` / `SUPERVISOR_CHILD_KEY_VERSAO` /
+        // `SUPERVISOR_CHILD_KEY_RESTART`) name the exact camelCase JSON
+        // keys the `#[serde(rename_all = "camelCase")]` attribute on
+        // `ChildSpec` emits. Serialize a fully-populated `ChildSpec` and
+        // pin that each canonical byte-sequence appears verbatim in the
+        // JSON — a future accidental `rename_all = "snake_case"` /
+        // `"kebab-case"` / verbatim-field-name flip at the derive
+        // attribute (any of which would silently break every downstream
+        // JSON consumer that reaches for one of the three consts via
+        // `Value::get(...)`) surfaces here as a build-time test failure at
+        // `supervisor.rs`, not as an apply-time
+        // `.get(<stale-canonical-const>)` returning `None` far from the
+        // derive-attr drift's commit. Peer with the enclosing
+        // `supervisor_spec_serde_keys_match_lifted_supervisor_key_consts`
+        // (40cc4e5) pin on the M2 supervision-tree top-level axis — same
+        // discipline the SupervisorSpec top-level lift established,
+        // extended here to the sibling per-`:children` entry `ChildSpec`
+        // derive so the last M2 typed-struct sub-block
+        // `#[serde(rename_all = "camelCase")]` axis on the Supervisor
+        // surface without a lifted serde-key peer joins the substrate's
+        // "one canonical byte-string per typed serialized-key axis"
+        // discipline.
+        let c = ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        };
+        let json = serde_json::to_string(&c).unwrap();
+        for key in [
+            crate::render::SUPERVISOR_CHILD_KEY_CAIXA,
+            crate::render::SUPERVISOR_CHILD_KEY_VERSAO,
+            crate::render::SUPERVISOR_CHILD_KEY_RESTART,
+        ] {
+            let quoted = format!("\"{key}\"");
+            assert!(
+                json.contains(&quoted),
+                "serialized ChildSpec must carry the lifted \
+                 SUPERVISOR_CHILD_KEY_* byte-sequence {quoted} verbatim \
+                 in the JSON emission (got: {json})",
+            );
+        }
+    }
+
+    #[test]
+    fn supervisor_child_key_consts_are_pairwise_distinct() {
+        // Cross-axis drift-detection pin: a future collapse of two
+        // canonical `ChildSpec` per-entry byte-strings onto the same
+        // value (e.g. an accidental copy-paste flip of
+        // `SUPERVISOR_CHILD_KEY_RESTART` to also read `"caixa"`) would
+        // silently reroute every downstream probe on one axis onto the
+        // sibling axis's overlay entry and pass every propagation-probe
+        // test that expected only the stale axis's value. Peer of the
+        // sibling three-way distinct pin on the `CONTRATO_KEY_*` triad
+        // (ca463a4) and the two-way distinct pin on the `MEMBRO_KEY_*`
+        // pair (ce80ca0).
+        let all = [
+            crate::render::SUPERVISOR_CHILD_KEY_CAIXA,
+            crate::render::SUPERVISOR_CHILD_KEY_VERSAO,
+            crate::render::SUPERVISOR_CHILD_KEY_RESTART,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for b in all.iter().skip(i + 1) {
+                assert_ne!(
+                    a, b,
+                    "SUPERVISOR_CHILD_KEY_* consts must be pairwise-\
+                     distinct canonical byte-sequences — got `{a}` == `{b}`",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn supervisor_child_key_consts_are_lower_camel_case_shape() {
+        // Shape-pin: every `SUPERVISOR_CHILD_KEY_*` const must be a
+        // lowerCamelCase byte-sequence (no `snake_case` underscores, no
+        // `kebab-case` hyphens, no leading colon, no `PascalCase` leading
+        // capital, no whitespace / dots) — the canonical shape the
+        // `#[serde(rename_all = "camelCase")]` derive produces on
+        // `ChildSpec`. A future flip to a non-camelCase attribute at the
+        // derive surfaces both here (this test fails on the
+        // stale-constant shape) and at
+        // `child_spec_serde_keys_match_lifted_supervisor_child_key_consts`
+        // (that test fails on the mismatch between const and derive).
+        // Peer with `supervisor_key_consts_are_lower_camel_case_shape`
+        // (40cc4e5) on the sibling `SupervisorSpec` top-level axis.
+        for key in [
+            crate::render::SUPERVISOR_CHILD_KEY_CAIXA,
+            crate::render::SUPERVISOR_CHILD_KEY_VERSAO,
+            crate::render::SUPERVISOR_CHILD_KEY_RESTART,
+        ] {
+            assert!(
+                !key.is_empty(),
+                "SUPERVISOR_CHILD_KEY_* must be non-empty (got {key:?})"
+            );
+            let first = key.chars().next().unwrap();
+            assert!(
+                first.is_ascii_lowercase(),
+                "SUPERVISOR_CHILD_KEY_* must lead with an ASCII-lowercase \
+                 byte (got {key:?}, leads with {first:?})",
+            );
+            assert!(
+                key.chars().all(|c| c.is_ascii_alphanumeric()),
+                "SUPERVISOR_CHILD_KEY_* must be ASCII-alphanumeric only \
+                 — no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
+            );
+        }
+    }
 }

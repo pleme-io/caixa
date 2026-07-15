@@ -7171,8 +7171,111 @@ pub const SUPERVISOR_KEY_RESTART_WINDOW: &str = "restartWindow";
 pub const SUPERVISOR_KEY_CHILDREN: &str = "children";
 
 /// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::supervisor::ChildSpec`] struct's `caixa` per-entry-name-of-
+/// the-child-caixa axis — the `caixa:` field the M2 Supervisor's
+/// `#[serde(rename_all = "camelCase")]` derive on
+/// [`crate::supervisor::ChildSpec`] emits at each entry of the
+/// [`crate::supervisor::SupervisorSpec::children`] list, and the exact
+/// scalar every downstream consumer reaching for the child caixa's
+/// [`crate::Caixa::nome`] via `Value::get(...)` (the future wasm-operator's
+/// per-supervisor-tree child resolver, the M4
+/// `caixa.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+/// webhook per-child cross-check, the future `feira` supervisor-tree
+/// walker's per-child name-lookup, the [`caixa_resolver`] per-child
+/// git-clone step) must probe on.
+///
+/// The scalar is derived from the Rust field name `caixa` by the
+/// `rename_all = "camelCase"` derive; `caixa` has no `_`, so the serde
+/// transform is a no-op on this axis and the emitted key equals the
+/// source-side field name byte-for-byte. Lifting the byte to one
+/// `&'static str` closes the drift footgun structurally: a future
+/// refactor renaming the Rust field OR retaining the field name while
+/// adding a `#[serde(rename = "…")]` override would silently emit a
+/// `ChildSpec` whose per-entry child-caixa discriminator lands under
+/// one key while every downstream consumer still probes another. The
+/// identity pin (`child_spec_serde_keys_match_lifted_supervisor_child_key_consts`
+/// on the source-side type) catches drift at caixa-core build time
+/// rather than at the reconciler's dispatch step, far from the rebrand
+/// commit's source.
+///
+/// Peer of [`SUPERVISOR_CHILD_KEY_VERSAO`] / [`SUPERVISOR_CHILD_KEY_RESTART`]
+/// on the same [`crate::supervisor::ChildSpec`] per-entry serialized-key
+/// axis. Peer of the sibling [`SUPERVISOR_KEY_ESTRATEGIA`] /
+/// [`SUPERVISOR_KEY_MAX_RESTARTS`] / [`SUPERVISOR_KEY_RESTART_WINDOW`] /
+/// [`SUPERVISOR_KEY_CHILDREN`] tetrad (40cc4e5) on the enclosing
+/// [`crate::supervisor::SupervisorSpec`] top-level serialized-key axis
+/// — that lift pinned the four camelCase JSON keys the M2
+/// supervision-tree top-level derive emits, this lift extends the same
+/// discipline onto the sibling per-entry `ChildSpec` derive so the last
+/// M2 typed-struct sub-block `#[serde(rename_all = "camelCase")]` axis
+/// on the Supervisor surface without a lifted serde-key peer joins the
+/// substrate's "one canonical byte-string per typed serialized-key axis"
+/// discipline.
+///
+/// Byte-identical to (but semantically distinct from) the peer
+/// [`MEMBRO_KEY_CAIXA`] (ce80ca0) on the sibling M3
+/// [`crate::aplicacao::Membro`] per-`:membros` entry axis — both axes
+/// carry per-entry caixa-name discriminators on typed list slots, but
+/// splitting the two lets each schema's future rebrand land
+/// independently at its canonical const definition without coupling
+/// the M2 Supervisor per-child axis to the M3 Aplicacao per-member axis
+/// (or vice versa) — same "byte-identical-but-semantically-distinct"
+/// discipline the peer [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAME`]
+/// split established.
+///
+/// Same "one canonical byte-string per typed serialized-key axis"
+/// discipline every peer camelCase serde-key lift carries
+/// ([`M2_LIMITS_KEY_MEMORY`] etc. (d8b8b4f), [`M2_BEHAVIOR_KEY_ON_INIT`]
+/// etc. (21fe462), [`M2_UPGRADE_FROM_KEY_FROM`] /
+/// [`M2_UPGRADE_FROM_KEY_INSTRUCTIONS`] (36ffe65),
+/// [`M3_PLACEMENT_KEY_ESTRATEGIA`] etc., [`SUPERVISOR_KEY_ESTRATEGIA`]
+/// etc. (40cc4e5), [`MEMBRO_KEY_CAIXA`] / [`MEMBRO_KEY_VERSAO`]
+/// (ce80ca0), [`CONTRATO_KEY_DE`] / [`CONTRATO_KEY_PARA`] /
+/// [`CONTRATO_KEY_WIT`] (ca463a4), [`ENTRADA_KEY_HOST`] etc. (a3d6162),
+/// [`POLITICAS_KEY_TIMEOUT`] etc. (b55cca7), [`CIRCUIT_BREAKER_KEY_MAX_FAILURES`]
+/// / [`CIRCUIT_BREAKER_KEY_WINDOW`] (468e959)) — extended here to the
+/// last M2 typed-struct sub-block `#[serde(rename_all = "camelCase")]`
+/// axis on the Supervisor surface, the per-`:children` entry
+/// [`crate::supervisor::ChildSpec`] derive.
+pub const SUPERVISOR_CHILD_KEY_CAIXA: &str = "caixa";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::supervisor::ChildSpec`] struct's `versao` per-entry-semver-
+/// constraint-of-the-child axis. Peer of [`SUPERVISOR_CHILD_KEY_CAIXA`]
+/// on the same [`crate::supervisor::ChildSpec`] per-entry serialized-key
+/// axis; see [`SUPERVISOR_CHILD_KEY_CAIXA`] for the full lift rationale.
+/// The Rust field is lowercase `versao`; `#[serde(rename_all = "camelCase")]`
+/// is a no-op on this axis and the emitted key equals the source-side
+/// field name byte-for-byte.
+///
+/// Byte-identical to (but semantically distinct from) the peer
+/// [`MEMBRO_KEY_VERSAO`] (ce80ca0) on the sibling M3
+/// [`crate::aplicacao::Membro`] per-`:membros` entry axis and the peer
+/// [`FLEET_PROGRAMS_KEY_VERSAO`] on the `lareira-fleet-programs`
+/// library-chart values-schema axis — same
+/// "byte-identical-but-semantically-distinct" discipline the peer
+/// [`FLEET_PROGRAMS_KEY_NAME`] / [`KUBE_KEY_NAME`] /
+/// [`MEMBRO_KEY_CAIXA`] / [`SUPERVISOR_CHILD_KEY_CAIXA`] splits
+/// established: each schema's future rebrand lands independently at its
+/// canonical const definition without coupling one axis to the others.
+pub const SUPERVISOR_CHILD_KEY_VERSAO: &str = "versao";
+
+/// Canonical camelCase JSON/YAML top-level key for the
+/// [`crate::supervisor::ChildSpec`] struct's `restart` per-entry
+/// [`crate::supervisor::RestartPolicy`] discriminator axis. Peer of
+/// [`SUPERVISOR_CHILD_KEY_CAIXA`] on the same
+/// [`crate::supervisor::ChildSpec`] per-entry serialized-key axis; see
+/// [`SUPERVISOR_CHILD_KEY_CAIXA`] for the full lift rationale. The Rust
+/// field is lowercase `restart`; `#[serde(rename_all = "camelCase")]`
+/// is a no-op on this axis and the emitted key equals the source-side
+/// field name byte-for-byte.
+pub const SUPERVISOR_CHILD_KEY_RESTART: &str = "restart";
+
+/// Canonical camelCase JSON/YAML top-level key for the
 /// [`crate::aplicacao::Membro`] struct's `caixa` per-entry-name-of-the-
 /// member-Servico axis — the `caixa:` field the M3 Aplicacao's
+/// `#[serde(rename_all = "camelCase")]` derive on [`crate::aplicacao::Membro`]
+/// emits at each `:membros` entry, and the exact scalar every downstream
 /// `#[serde(rename_all = "camelCase")]` derive on [`crate::aplicacao::Membro`]
 /// emits at each `:membros` entry, and the exact scalar every downstream
 /// consumer reaching for the member's [`crate::Caixa::nome`] via
