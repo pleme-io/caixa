@@ -3004,7 +3004,47 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         // the operator-side `kubectl get httproute` lookup encoding
         // far from any single-site commit.
         backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.destination().to_string());
-        backend_ref.insert_number(KUBE_KEY_PORT, entrada.port);
+        // Substrate-canonical per-destination L4 port scalar — routes
+        // through the lifted [`caixa_core::AplicacaoSpec::port_for_destination`]
+        // typed dispatch on the substrate primitive so the per-HTTPRoute
+        // per-rule `backendRefs[0].port` axis and the peer per-`(:de, :para)`
+        // `CiliumNetworkPolicy` `toPorts[0].ports[0].port` axis (see the
+        // sibling consumer at `cilium_network_policies` earlier in this
+        // module — the sole other per-Aplicacao renderer that reaches for
+        // a per-destination Servico TCP port scalar) both key off exactly
+        // one typed dispatch. Prior to this lift the site inlined a
+        // verbatim `entrada.port` field access, with no compile-time link
+        // to the peer CNP-side resolver dispatch's naming discipline; a
+        // future per-destination port axis extension (a per-`:contratos`
+        // explicit `:port` slot the M4 typed-edge registry adds, a per-
+        // `:membros` `:port` overlay once heterogeneous per-Servico
+        // listener ports land, a per-cluster override the operator pins
+        // through a future `:placement :default-port` slot, the M4
+        // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+        // admission-webhook floor) would have had to be threaded through
+        // this inline field access and every future per-Aplicacao
+        // renderer's inline copy in lockstep, or the HTTPRoute
+        // `backendRefs[].port` would have silently split from the peer
+        // CNP L4 whitelist port — Gateway API v1.x forwards the request
+        // to the destination Servico's Service on the emitted `port:`,
+        // while Cilium's per-L4 policy filter drops any flow whose
+        // destination port doesn't match the CNP whitelist, so a two-
+        // consumer split silently blackholes every external `:entrada`
+        // flow at the eBPF data plane far from the source `caixa.lisp`
+        // with no field naming the port-drift root cause in the
+        // emitted YAML. Peer with the sibling `entrada.destination()`
+        // consumer on the immediately-preceding `backend_ref.insert_
+        // string(GATEWAY_API_KEY_NAME, …)` call — both per-`:entrada`
+        // backendRef scalar axes now route through their own typed
+        // dispatch on the substrate primitive, so a future rebrand on
+        // either axis reaches this consumer by construction. Same
+        // discipline the peer `cilium_network_policies` L4 port resolver
+        // at caixa-mesh/src/lib.rs:2663 established (9ca4896) on the
+        // sibling per-`(:de, :para)` CNP consumer.
+        backend_ref.insert_number(
+            KUBE_KEY_PORT,
+            spec.port_for_destination(entrada.destination()),
+        );
         let mut rule = serde_yaml::Mapping::new();
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_MATCHES, match_entry);
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_BACKEND_REFS, backend_ref);
@@ -7895,6 +7935,179 @@ mod tests {
              lookup encoding at cluster-apply time. Emitted route_name: \
              {route_name:?}, backend_name: {backend_name:?}"
         );
+    }
+
+    #[test]
+    fn httproute_backend_ref_port_routes_through_lifted_port_for_destination_resolver() {
+        // Cross-crate drift-detection pin: the per-Aplicacao HTTPRoute's
+        // per-rule `backendRefs[0].port` axis in [`gateway_routes`] now
+        // routes through the lifted
+        // [`caixa_core::AplicacaoSpec::port_for_destination`] typed
+        // dispatch (peer with the sibling
+        // `cnp_l4_port_routes_through_lifted_port_for_destination_resolver`
+        // pin on the per-`(:de, :para)` CNP L4-port axis — the two per-
+        // Aplicacao renderers that reach for a per-destination Servico
+        // TCP port scalar both key off exactly one typed dispatch on the
+        // substrate primitive now). Pin the resolver-shaped rule at the
+        // emit-side path across a non-default `:entrada :port` scalar
+        // (`8443`, exercising a hypothetical HTTPS-by-default trajectory
+        // for the destination Servico's listener port) and a `:para`
+        // permutation, so a future renderer-side detour that re-inlined
+        // the `entrada.port` field access at this call site would surface
+        // as a caixa-mesh build-time test failure — the two consumer
+        // paths on the per-Aplicacao L4 port axis (the resolver's own
+        // typed dispatch at caixa-core, this renderer's emit-side reach
+        // for it) must agree at every point on the port scalar the
+        // emitted HTTPRoute renders, per the MESH-COMPOSITION §V "one
+        // identity layer, one data plane" invariant that the CNP L4
+        // whitelist port and the HTTPRoute `backendRefs[].port` name the
+        // same destination Servico's listener.
+        for (para, port) in [
+            ("cart", 8080u16),
+            ("catalog", 8443u16),
+            ("payment", 9090u16),
+        ] {
+            let mut caixa = aplicacao_caixa();
+            let expected_port = {
+                let entrada = caixa
+                    .entrada
+                    .as_mut()
+                    .expect("aplicacao_caixa carries a typed `:entrada` block");
+                entrada.para = para.into();
+                entrada.port = port;
+                let spec =
+                    typed_view(&caixa).expect("aplicacao_caixa fixture must be a valid Aplicacao");
+                let entrada_ref = spec.entrada.as_ref().expect("entrada present in spec");
+                spec.port_for_destination(entrada_ref.destination())
+            };
+            let docs = gateway_routes(&caixa).unwrap();
+            let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
+                .expect("HTTPRoute present under every :entrada :para permutation");
+            let emitted_port = route
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(KUBE_KEY_RULES))
+                .and_then(|r| r.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
+                .and_then(|b| b.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|b| b.get(KUBE_KEY_PORT))
+                .and_then(|p| p.as_u64())
+                .expect("first HTTPRoute rule's first backendRef.port scalar present");
+            assert_eq!(
+                emitted_port,
+                u64::from(expected_port),
+                "HTTPRoute per-rule `backendRefs[0].port` must render \
+                 `AplicacaoSpec::port_for_destination(entrada.destination())` \
+                 verbatim — drift here means the emitter no longer routes \
+                 through the substrate-primitive typed dispatch and the \
+                 per-rule backend port would silently disagree with the \
+                 peer CNP L4 whitelist port on which destination Servico's \
+                 listener the ingress fronts. Input :entrada :para: \
+                 {para:?}, :entrada :port: {port}"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_backend_ref_port_and_cnp_l4_port_share_port_for_destination_resolver_at_emit_site()
+    {
+        // The two-renderer pair-invariant cross-crate pin: the per-
+        // Aplicacao HTTPRoute's per-rule `backendRefs[0].port` axis (this
+        // module's [`gateway_routes`] emit-side path) and the peer
+        // per-`(:de, :para)` `CiliumNetworkPolicy` `toPorts[0].ports[0]
+        // .port` axis (this module's [`cilium_network_policies`] emit-
+        // side path) at the same fixture must both project to
+        // [`caixa_core::AplicacaoSpec::port_for_destination`]'s scalar
+        // for the entrada apex destination — the substrate-canonical
+        // invariant the lifted resolver pins at the substrate-primitive
+        // level and both consumers now reach for by construction. A
+        // future renderer-side detour that broke the two-consumer
+        // coherence (an accidental per-cluster port stamp on one
+        // renderer, a hardcoded `DEFAULT_SERVICO_PORT` re-inline on the
+        // peer, an mTLS-by-default overlay that authored only one axis)
+        // surfaces at caixa-mesh build time rather than at cluster-apply
+        // time — a two-renderer split silently blackholes every external
+        // `:entrada` flow at the eBPF data plane far from the source
+        // `caixa.lisp` with no field naming the port-drift root cause in
+        // the emitted YAML. Peer discipline with the sibling
+        // `httproute_name_and_backend_ref_name_destination_pair_invariant_at_emit_site`
+        // pin on the per-`:entrada` destination-Servico scalar axis and
+        // the `gateway_listener_hostname_and_httproute_hostnames_pair_invariant_at_emit_site`
+        // pin on the DNS-hostname axis — same two-consumer coherence
+        // discipline the M3 mesh contract lifts encode.
+        let caixa = aplicacao_caixa();
+        let spec = typed_view(&caixa).expect("aplicacao_caixa fixture must be a valid Aplicacao");
+        let apex_destination = spec
+            .entrada
+            .as_ref()
+            .expect("aplicacao_caixa carries a typed `:entrada` block")
+            .destination()
+            .to_string();
+        let expected_port = spec.port_for_destination(&apex_destination);
+
+        let gateway_docs = gateway_routes(&caixa).unwrap();
+        let route =
+            find_by_kind(&gateway_docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        let httproute_port = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(KUBE_KEY_RULES))
+            .and_then(|r| r.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
+            .and_then(|b| b.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|b| b.get(KUBE_KEY_PORT))
+            .and_then(|p| p.as_u64())
+            .expect("HTTPRoute backendRef.port scalar present");
+        assert_eq!(
+            httproute_port,
+            u64::from(expected_port),
+            "HTTPRoute `backendRefs[0].port` must equal \
+             `spec.port_for_destination(entrada.destination())` at the \
+             gateway_routes emit site — this is one half of the two-\
+             renderer pair-invariant on the per-destination Servico L4 \
+             port axis."
+        );
+
+        // The peer CNP `toPorts[0].ports[0].port` axis must render the
+        // same resolver's answer for each destination. The per-`(:de, :para)`
+        // CNP naming scheme is `<caixa.nome>-<de>-to-<para>`; extract the
+        // `<para>` and confirm every emitted CNP's L4 port scalar equals
+        // `spec.port_for_destination(<destination>)`.
+        let policies = cilium_network_policies(&caixa).unwrap();
+        for policy in &policies {
+            let cnp_name = kube_metadata_str_field(policy, KUBE_KEY_NAME)
+                .expect("every CNP has a metadata.name")
+                .to_string();
+            let Some(destination) = cnp_name.split("-to-").nth(1) else {
+                continue;
+            };
+            let cnp_port = policy
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(CILIUM_KEY_INGRESS))
+                .and_then(|i| i.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
+                .and_then(|t| t.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|tp| tp.get(CILIUM_KEY_PORTS))
+                .and_then(|p| p.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|p| p.get(KUBE_KEY_PORT))
+                .and_then(|v| v.as_str())
+                .expect("CNP toPorts[0].ports[0].port present");
+            assert_eq!(
+                cnp_port,
+                spec.port_for_destination(destination).to_string(),
+                "CNP {cnp_name:?} toPorts[0].ports[0].port must equal \
+                 `spec.port_for_destination({destination:?})` — drift here \
+                 means the CNP emit-side path re-inlined the port \
+                 resolution rule and would silently disagree with the \
+                 HTTPRoute peer on the shared destination Servico's \
+                 listener port."
+            );
+        }
     }
 
     #[test]

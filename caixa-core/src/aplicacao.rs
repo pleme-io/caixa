@@ -14016,4 +14016,71 @@ mod tests {
              verbatim, even when the port differs from DEFAULT_SERVICO_PORT"
         );
     }
+
+    #[test]
+    fn port_for_destination_at_entrada_destination_returns_entrada_port_across_permutations() {
+        // Apex-identity pair-invariant pin composing both substrate-
+        // primitive typed dispatches — [`AplicacaoSpec::port_for_destination`]
+        // and [`Entrada::destination`] — at the emit-side call shape
+        // every per-Aplicacao renderer's ingress-apex L4 port reader
+        // now takes. The invariant:
+        //
+        //   spec.port_for_destination(entrada.destination()) == entrada.port
+        //
+        // holds by construction under today's single-destination
+        // `:entrada` slot (`destination()` returns `entrada.para`, and
+        // the resolver's apex arm matches `para == destination` and
+        // returns `entrada.port`), and every downstream consumer that
+        // composes the two accessors at the ingress apex — the
+        // `caixa_mesh::gateway_routes` HTTPRoute per-rule
+        // `backendRefs[0].port` emit-site path, the peer future M4 CR
+        // materializer's admission-webhook that promotes the scalar to
+        // a per-CR override overlay, every future per-Aplicacao snapshot
+        // renderer's apex-facing L4 port reader — reaches through the
+        // same composition. Pin the identity across four permutations
+        // (`:para` × `:port` including a non-default port to exercise
+        // the honor-verbatim arm and a non-cart `:para` to exercise
+        // destination-agnostic identity) so a future refactor that
+        // silently split either accessor's apex behavior surfaces at
+        // caixa-core build time — a subtle `destination()` renaming
+        // that returned `entrada.host.as_str()` instead of
+        // `entrada.para.as_str()` would blow this pin loudly, closing
+        // the last quiet failure mode the two lifts admit in composition.
+        //
+        // Peer discipline with the sibling caixa-mesh cross-crate pin
+        // [`caixa_mesh::tests::httproute_backend_ref_port_and_cnp_l4_port_share_port_for_destination_resolver_at_emit_site`]
+        // on the two-renderer pair-invariant axis; this pin encodes the
+        // same two-consumer coherence rule at the substrate-primitive
+        // level so the invariant survives even if every renderer is
+        // deleted.
+        for (para, port) in [
+            ("cart", DEFAULT_SERVICO_PORT),
+            ("cart", 8443u16),
+            ("payment", 9090u16),
+            ("catalog", 443u16),
+        ] {
+            let mut spec = three_member_spec();
+            if let Some(e) = spec.entrada.as_mut() {
+                e.para = para.into();
+                e.port = port;
+            }
+            let expected_port = spec
+                .entrada
+                .as_ref()
+                .expect("three_member_spec carries a typed `:entrada` block")
+                .port;
+            let composed_port = {
+                let entrada = spec.entrada.as_ref().expect("entrada present");
+                spec.port_for_destination(entrada.destination())
+            };
+            assert_eq!(
+                composed_port, expected_port,
+                "`spec.port_for_destination(entrada.destination())` must \
+                 equal `entrada.port` under today's single-destination \
+                 `:entrada` slot — this is the apex-identity contract \
+                 every downstream ingress-apex L4 port reader relies on. \
+                 Input :entrada :para: {para:?}, :entrada :port: {port}"
+            );
+        }
+    }
 }
