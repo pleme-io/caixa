@@ -2367,6 +2367,62 @@ pub struct Entrada {
     pub port: u16,
 }
 
+impl Entrada {
+    /// Substrate-canonical per-`:entrada` URL-path fallback resolver
+    /// every HTTPRoute-aware renderer keys off — returns the author-
+    /// declared `:entrada :paths` list verbatim when non-empty, and the
+    /// singleton [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] catch-
+    /// all fallback otherwise (so an Aplicacao author who declares an
+    /// external `:entrada` block but no per-path rule surface still
+    /// gets a route whose sole `HTTPPathMatch` matches every incoming
+    /// request under the paired
+    /// [`crate::GATEWAY_API_PATH_MATCH_TYPE_PATH_PREFIX`] discriminator).
+    ///
+    /// Prior to this lift the "if `:entrada :paths` is empty use the
+    /// substrate catch-all; else return each declared path verbatim"
+    /// cascade lived inline at
+    /// [`caixa_mesh::gateway_routes`]'s per-rule path-list resolver
+    /// (caixa-mesh/src/lib.rs:2883 prior to this lift), the sole
+    /// per-Aplicacao HTTPRoute per-rule path-list emit site the
+    /// substrate ships today, with no typed method on the substrate
+    /// primitive that named the rule. A future path-resolution axis
+    /// addition — a per-cluster `:entrada :default-path` override the
+    /// operator pins through a future `:placement`-scoped slot, an
+    /// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+    /// admission-webhook floor that materializes the catch-all before
+    /// the CR lands, a future per-`:entrada :paths` overlay from a
+    /// per-cluster policy the future `feira app deploy` pipeline
+    /// consumes — would have to be threaded through every renderer's
+    /// inline copy of the cascade in lockstep or one consumer would
+    /// silently disagree with the peers on which path list a given
+    /// `:entrada` block resolves to. Lifting the rule to a typed
+    /// method on the substrate primitive means every downstream
+    /// HTTPRoute-aware consumer (the M4 CR materializer, the future
+    /// per-cluster overlay resolver, every future per-Aplicacao
+    /// snapshot renderer) reaches for exactly one typed dispatch —
+    /// the resolver's accept-set moves as a unit on any future axis
+    /// addition.
+    ///
+    /// Peer of the sibling [`crate::DEFAULT_SERVICO_PORT`] /
+    /// [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] lifts on the
+    /// per-`:entrada` scalar-value axes — extends the "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline onto the per-`:entrada` path-list
+    /// resolution axis every HTTPRoute-aware renderer consumes. Same
+    /// shape as the [`MeshPolicy::is_empty`] typed predicate on the
+    /// sibling `:politicas` primitive — one typed method on the
+    /// substrate primitive that names the cascade every renderer
+    /// otherwise re-inlines.
+    #[must_use]
+    pub fn resolved_paths(&self) -> Vec<&str> {
+        if self.paths.is_empty() {
+            vec![crate::render::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH]
+        } else {
+            self.paths.iter().map(String::as_str).collect()
+        }
+    }
+}
+
 /// Canonical default L4 port every typed Servico exposes on its
 /// in-cluster K8s Service (the `trigger.service.port` axis the
 /// `pleme-computeunit` library chart emits, the `:entrada :port` author
@@ -12565,6 +12621,102 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ── Entrada::resolved_paths — the substrate-canonical per-`:entrada`
+    //    URL-path fallback resolver every HTTPRoute-aware renderer
+    //    reaching for a per-rule path-list resolution routes through.
+    //    The four pin tests below fix the four-way accept-set the
+    //    resolver must always honor: (:paths-non-empty-verbatim,
+    //    :paths-empty-falls-back-to-catchall, :paths-single-entry-verbatim,
+    //    :paths-preserves-order-across-multiple-entries) — drift on any
+    //    arm surfaces at caixa-core build time rather than at cluster-
+    //    apply time. Peer discipline with `MeshPolicy::is_empty` on the
+    //    sibling `:politicas` typed-primitive dispatch axis.
+
+    fn entrada_with_paths(paths: Vec<&str>) -> Entrada {
+        Entrada {
+            host: "example.com".into(),
+            para: "cart".into(),
+            paths: paths.into_iter().map(String::from).collect(),
+            port: DEFAULT_SERVICO_PORT,
+        }
+    }
+
+    #[test]
+    fn resolved_paths_returns_declared_paths_verbatim_when_non_empty() {
+        // The typed `:entrada :paths` slot carries an author-declared
+        // list — the resolver returns each entry verbatim, no
+        // catch-all substitution. The canonical "author declared
+        // paths, honor them verbatim" arm of the path-list dispatch.
+        let e = entrada_with_paths(vec!["/api/cart", "/api/products"]);
+        assert_eq!(
+            e.resolved_paths(),
+            vec!["/api/cart", "/api/products"],
+            "resolved_paths must return each `:entrada :paths` entry \
+             verbatim when the typed slot is non-empty (got {:?})",
+            e.resolved_paths(),
+        );
+    }
+
+    #[test]
+    fn resolved_paths_falls_back_to_gateway_api_default_http_route_path_when_paths_empty() {
+        // Empty `:entrada :paths` slot — the resolver substitutes the
+        // singleton [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`]
+        // catch-all fallback verbatim. Pins the empty-arm of the
+        // resolver's four-way accept-set against a future silent
+        // detour that returned an empty Vec (which would emit an
+        // HTTPRoute with zero rules — silently dropping every
+        // external `:entrada` flow at admission time), routed to a
+        // different fallback shape, or dropped the catch-all
+        // altogether.
+        let e = entrada_with_paths(vec![]);
+        assert_eq!(
+            e.resolved_paths(),
+            vec![crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH],
+            "resolved_paths on empty `:entrada :paths` must fall back \
+             to the lifted GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH catch-\
+             all — got {:?}",
+            e.resolved_paths(),
+        );
+    }
+
+    #[test]
+    fn resolved_paths_returns_single_declared_path_verbatim_when_len_one() {
+        // Single-entry `:entrada :paths` — the resolver returns the
+        // single declared path verbatim, NOT the catch-all fallback
+        // (author declared a path, honor it — the empty-arm and the
+        // len-1 arm are semantically distinct axes of the resolver's
+        // accept-set). Pins that the resolver treats "author declared
+        // one path" as authored input, not as the empty case.
+        let e = entrada_with_paths(vec!["/api/only"]);
+        assert_eq!(
+            e.resolved_paths(),
+            vec!["/api/only"],
+            "resolved_paths on single-entry `:entrada :paths` must \
+             return the declared path verbatim, NOT the catch-all \
+             fallback (got {:?})",
+            e.resolved_paths(),
+        );
+    }
+
+    #[test]
+    fn resolved_paths_preserves_author_declared_order() {
+        // The `:entrada :paths` list is author-ordered — the resolver
+        // preserves the author's declaration order verbatim, since
+        // per-rule dispatch order at the K8s Gateway API HTTPRoute
+        // consumer is significant (first-match-wins under the
+        // path-prefix matcher). Pins against a future silent
+        // re-sort / dedup / normalize detour that reordered author
+        // input.
+        let e = entrada_with_paths(vec!["/z/last", "/a/first", "/m/mid"]);
+        assert_eq!(
+            e.resolved_paths(),
+            vec!["/z/last", "/a/first", "/m/mid"],
+            "resolved_paths must preserve author-declared `:entrada \
+             :paths` order verbatim — got {:?}",
+            e.resolved_paths(),
+        );
     }
 
     #[test]

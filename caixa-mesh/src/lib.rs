@@ -36,11 +36,10 @@ use std::collections::BTreeMap;
 use caixa_core::{
     Caixa, CaixaKind, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
     FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
-    GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
-    GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, MappingExt,
-    SequenceExt, WitContract, WitTarget, aplicacao::AplicacaoSpec, kube_resource_skeleton,
-    label_selector, pleme_program_in_aplicacao_selector, pleme_program_selector,
-    single_field_overlay,
+    GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
+    M3_KEY_PLACEMENT, MappingExt, SequenceExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
+    kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
+    pleme_program_selector, single_field_overlay,
 };
 use thiserror::Error;
 
@@ -2871,27 +2870,26 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
     );
 
-    // Empty-`:entrada :paths` catch-all fallback — the substrate's
-    // canonical URL-path scalar for an HTTPRoute whose author declared
-    // no per-path rule surface routes through the lifted
-    // [`GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] `&'static str` const so a
-    // future substrate-side rebrand of the catch-all shape (a
-    // hypothetical Gateway API v2 `Exact ""` migration, a per-cluster
-    // override the future `:entrada :default-path` slot promotes)
-    // lands at the canonical
-    // [`caixa_core::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] declaration,
-    // not at this call site. Peer with the sibling
-    // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] /
+    // Substrate-canonical per-`:entrada` URL-path resolver — routes
+    // through the lifted [`caixa_core::Entrada::resolved_paths`] typed
+    // method on the substrate primitive so the "empty `:entrada :paths`
+    // → single [`GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] catch-all;
+    // non-empty → each declared path verbatim" cascade lives at one
+    // typed dispatch on `Entrada` rather than inline here. Every
+    // future HTTPRoute-aware consumer (the M4 `mesh.pleme.io/v1alpha1/
+    // Aplicacao` CR materializer's per-rule path-list emit site, a
+    // future per-cluster `:entrada :default-path` overlay resolver
+    // the operator pins through a `:placement`-scoped slot, every
+    // future per-Aplicacao snapshot renderer) reads from the same
+    // typed dispatch, so a rebrand of the catch-all shape (a
+    // hypothetical Gateway API v2 `Exact ""` migration, an operator-
+    // pinned override, a per-controller variant that treats `"/"` as
+    // a literal prefix rather than the catch-all) lands at exactly
+    // one caixa-core edit and reaches every consumer by construction.
+    // Peer of the sibling [`GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME`] /
     // [`GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT`] lifts on the
-    // per-Gateway per-listener substrate-canonical scalar-value axes —
-    // all three are Aplicacao-side substrate-canonical scalar-value
-    // pins the sole per-Aplicacao mesh emitter reaches for at a K8s
-    // Gateway API v1 CRD sub-path, all three lift to `caixa-core::render`.
-    let paths: Vec<&str> = if entrada.paths.is_empty() {
-        vec![GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH]
-    } else {
-        entrada.paths.iter().map(String::as_str).collect()
-    };
+    // per-Gateway per-listener substrate-canonical scalar-value axes.
+    let paths: Vec<&str> = entrada.resolved_paths();
     // `:politicas :timeout` overlay — when the typed slot carries a
     // value it surfaces as a per-rule `timeouts: { request: <K8s
     // duration> }` block on every HTTPRoute rule, the canonical
@@ -3001,10 +2999,11 @@ pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
-        M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro,
-        MeshPolicy, Placement, PlacementStrategy, WitContract, find_by_kind, kube_kind_is,
-        kube_metadata_str_field, kube_root_str_field,
+        Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
+        LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
+        M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
+        PlacementStrategy, WitContract, find_by_kind, kube_kind_is, kube_metadata_str_field,
+        kube_root_str_field,
     };
     use std::time::Duration;
 
@@ -7405,6 +7404,80 @@ mod tests {
              drop at the first hop with no diagnostic naming the catch-all-path \
              drift root cause"
         );
+    }
+
+    #[test]
+    fn httproute_path_list_routes_through_lifted_entrada_resolved_paths() {
+        // Cross-crate pin: the per-Aplicacao HTTPRoute rules[] path list
+        // must render exactly [`caixa_core::Entrada::resolved_paths`]'s
+        // typed dispatch on the substrate primitive — one rule per
+        // resolved path, in the resolver's authored order. Pins that a
+        // future renderer-side detour that re-inlined the `paths.is_empty()`
+        // cascade (or reordered / deduped / dropped author-declared
+        // paths) surfaces at caixa-mesh build time rather than at
+        // cluster-apply time as a silently-dropped-route HTTP flow.
+        //
+        // Exercises BOTH arms of the resolver's accept-set at one
+        // emitter call site: the empty-`:entrada :paths` catch-all
+        // arm (fixture cleared to `Vec::new()`; resolver returns the
+        // lifted `[GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH]` singleton)
+        // and the author-declared non-empty arm (fixture's baseline
+        // two-path `["/api/cart", "/api/products"]` list; resolver
+        // returns each entry verbatim in order). Peer discipline with
+        // the sibling
+        // [`httproute_catch_all_path_routes_through_lifted_default_http_route_path`]
+        // pin on the empty-arm arm-scalar axis — that pin nails the
+        // per-rule fallback scalar; this pin nails the per-rule
+        // dispatch shape the typed method drives.
+        for paths in [
+            vec![],
+            vec!["/api/cart".to_string(), "/api/products".to_string()],
+            vec!["/only".to_string()],
+        ] {
+            let mut caixa = aplicacao_caixa();
+            let expected: Vec<String> = caixa
+                .entrada
+                .as_mut()
+                .map(|e| {
+                    e.paths.clone_from(&paths);
+                    e.resolved_paths().iter().map(|&s| s.to_string()).collect()
+                })
+                .expect("aplicacao_caixa carries a typed `:entrada` block");
+            let docs = gateway_routes(&caixa).unwrap();
+            let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
+                .expect("HTTPRoute present under every :entrada permutation");
+            let rules = route
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(KUBE_KEY_RULES))
+                .and_then(|r| r.as_sequence())
+                .expect("HTTPRoute.spec.rules[] present");
+            let emitted: Vec<String> = rules
+                .iter()
+                .map(|r| {
+                    r.get(GATEWAY_API_KEY_MATCHES)
+                        .and_then(|m| m.as_sequence())
+                        .and_then(|s| s.first())
+                        .and_then(|m| m.get(GATEWAY_API_KEY_PATH))
+                        .and_then(|p| p.get(GATEWAY_API_KEY_VALUE))
+                        .and_then(|v| v.as_str())
+                        .expect("each HTTPRoute rule carries a matches[0].path.value scalar")
+                        .to_string()
+                })
+                .collect();
+            assert_eq!(
+                emitted, expected,
+                "HTTPRoute per-rule path list must render \
+                 `Entrada::resolved_paths()` verbatim (in author-\
+                 declared order for the non-empty arm, as the lifted \
+                 catch-all singleton for the empty arm) — drift here \
+                 means the emitter no longer routes through the \
+                 substrate-primitive typed dispatch and a future \
+                 resolver axis (:default-path override, per-cluster \
+                 overlay) would silently disagree between caixa-core \
+                 and caixa-mesh on which paths a given `:entrada` \
+                 block resolves to. Input paths: {paths:?}"
+            );
+        }
     }
 
     #[test]
