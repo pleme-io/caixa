@@ -1430,6 +1430,92 @@ impl CircuitBreaker {
     pub const fn max_failures(&self) -> u32 {
         self.max_failures
     }
+
+    /// Substrate-canonical per-`:politicas :circuit-breaker` `:window`
+    /// Envoy-outlier-detection rolling-observation-interval scalar
+    /// accessor every consumer of the Aplicacao's per-`:contratos`-edge
+    /// breaker rolling-window duration keys off — returns the
+    /// author-declared `:politicas :circuit-breaker :window` typed
+    /// `Duration` verbatim, copied out of the typed slot's own
+    /// `Duration` storage (`Duration` is `Copy`, so the accessor returns
+    /// by value; no borrow of `&self` past the call). Non-optional (the
+    /// surrounding `Option<CircuitBreaker>` is the "slot present?"
+    /// projection at the parent [`MeshPolicy::circuit_breaker`] axis; a
+    /// `CircuitBreaker` past pattern-match is definitionally present,
+    /// and its `:window` field carries the rolling-observation interval
+    /// as a required-axis scalar).
+    ///
+    /// The `:politicas :circuit-breaker :window` axis carries the
+    /// "consecutive-transient-failure rolling-observation interval"
+    /// contract (MESH-COMPOSITION §III.2 #3) — the typed slot's
+    /// `Duration` accept-set (zero-floor rejected through
+    /// [`AplicacaoError::PolicyBreakerZeroWindow`], sub-millisecond
+    /// residue rejected through
+    /// [`AplicacaoError::PolicyBreakerWindowNotCanonical`],
+    /// upper-bounded by [`POLICY_BREAKER_WINDOW_MAX`]) maps onto the
+    /// Envoy `outlier_detection.interval` per-cluster
+    /// ejection-observation-interval scalar (equivalently the future
+    /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+    /// MESH-COMPOSITION §III.2 #3 acknowledges). Every downstream
+    /// consumer that reads the rolling-observation interval keys off
+    /// this scalar (the [`AplicacaoSpec::validate_politicas`] zero-floor +
+    /// integer-millisecond canonical-form + cap bracket at
+    /// caixa-core/src/aplicacao.rs:4121 that gates on the canonical
+    /// [`crate::render::require_positive_canonical_bounded_duration`]
+    /// helper, the future M4 per-Aplicacao Envoy config reconciler
+    /// materialization pass, the future per-`:contratos`-edge
+    /// breaker-override overlay the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges).
+    ///
+    /// Prior to this lift the `.window` field was accessed inline at
+    /// one production site — [`AplicacaoSpec::validate_politicas`]'s
+    /// `require_positive_canonical_bounded_duration(cb.window, …)`
+    /// call — one open-coded field-access that expressed no compile-
+    /// time link back to the typed sub-struct axis. A future extension
+    /// of the `:window` axis to a richer author surface — a
+    /// per-`:contratos`-edge window override the operator pins through
+    /// a future `:contratos :window` slot the MESH-COMPOSITION §III.2
+    /// #3 roadmap acknowledges, a per-cluster window-default overlay
+    /// the M4 CR materializer resolves per-CR, a promotion of the plain
+    /// `Duration` observation interval to a richer
+    /// `{interval, base_ejection_time, max_ejection_percent}` tuple
+    /// once Envoy's `outlier_detection` block's peer axes come into
+    /// scope, a per-Envoy-cluster minimum-request-volume gate before
+    /// the window arms — would have had to be threaded through every
+    /// open-coded copy in lockstep or the validate gate and the future
+    /// M4 emit path would silently disagree on which observation
+    /// interval a given [`CircuitBreaker`] resolves to (an author's
+    /// `:window "60s"` would satisfy validate while the emit path
+    /// silently read a drifted other value, or vice versa: a validated
+    /// typed slot would land at the emit boundary as a breaker whose
+    /// observation window is structurally so wide that no realistic
+    /// failure-rate shape can trip it). Lifting the resolution to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the Aplicacao's per-`:politicas :circuit-breaker`
+    /// observation-window surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// Second sub-struct scalar accessor on the M3 mesh-slot family —
+    /// sibling in shape to the just-landed [`CircuitBreaker::max_failures`]
+    /// (3a74062) required-`u32` accessor on the peer per-`CircuitBreaker`
+    /// required-axis, extended onto the per-sub-struct required-`Duration`
+    /// axis; closes the last unlifted per-`CircuitBreaker` scalar-value
+    /// axis. Same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline the peer
+    /// [`WitContract::source`] / [`WitContract::destination`] (7f0fd43),
+    /// [`WitContract::world_ref`] (0804823), [`Membro::nome`] (4a32abf),
+    /// [`Membro::versao_requirement`] (a40b0e3),
+    /// [`Entrada::destination`] (6db982c) accessors carry on their
+    /// respective per-mesh-slot-atom scalar-value axes, extended onto
+    /// the per-sub-struct required-`Duration` axis. Named `window()` to
+    /// match the storage field's name; the accessor's identity maps onto
+    /// the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub const fn window(&self) -> Duration {
+        self.window
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4119,7 +4205,7 @@ impl AplicacaoSpec {
             // [`POLICY_TIMEOUT_MAX`] applies on the sibling
             // duration-typed `:politicas :timeout` axis.
             crate::render::require_positive_canonical_bounded_duration(
-                cb.window,
+                cb.window(),
                 POLICY_BREAKER_WINDOW_MAX,
                 || AplicacaoError::PolicyBreakerZeroWindow,
                 |window| AplicacaoError::PolicyBreakerWindowNotCanonical { window },
@@ -15278,6 +15364,192 @@ mod tests {
                 "CircuitBreaker::max_failures must return :politicas \
                  :circuit-breaker :max-failures verbatim by copy — \
                  got {first}, expected {max_failures}",
+            );
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_window_returns_window_duration_byte_equal_across_permutations() {
+        // The canonical per-`:politicas :circuit-breaker` `:window`
+        // Envoy-outlier-detection rolling-observation-interval scalar
+        // pin: [`CircuitBreaker::window`] must return the
+        // `:politicas :circuit-breaker :window` typed `Duration`
+        // verbatim, byte-equal to the raw field access across every
+        // representative value in the accept-set — `Duration::from_millis(1)`
+        // (the lower boundary of the `1ms..=POLICY_BREAKER_WINDOW_MAX`
+        // accept-set the surrounding [`AplicacaoSpec::validate_politicas`]
+        // gate carves out on the sibling `PolicyBreakerZeroWindow`
+        // refusal), `POLICY_BREAKER_WINDOW_MAX` (the upper boundary the
+        // same gate carves out on the sibling
+        // `PolicyBreakerWindowExceedsCap` refusal),
+        // `Duration::ZERO` (a past-the-guard sentinel that pins the
+        // accessor doesn't perform a silent bounds-collapse into
+        // `Duration::from_millis(1)` on the zero arm — validate rejects
+        // zero but the accessor must ship the raw slot verbatim so a
+        // validate-time gate regression surfaces at the emit boundary
+        // rather than being silently absorbed),
+        // `Duration::from_secs(86_400)` (a past-the-guard sentinel — 24h,
+        // far above the 1h cap — that pins the accessor doesn't perform
+        // a silent bounds-collapse through `POLICY_BREAKER_WINDOW_MAX`
+        // at the return path).
+        //
+        // Second sub-struct required-scalar accessor pin on the M3
+        // mesh-slot family — sibling in shape to the just-landed
+        // per-`CircuitBreaker` [`CircuitBreaker::max_failures`]
+        // (3a74062) required-`u32` accessor pin on the peer
+        // per-`CircuitBreaker` required-axis, extended onto the
+        // per-sub-struct required-`Duration` axis. Pins against a
+        // future silent detour that re-derived the observation window
+        // from a peer axis (an accidental
+        // `Duration::from_secs(self.max_failures as u64)` collapse that
+        // read the breaker's trip count as an observation-interval
+        // duration), a `Duration::ZERO → Duration::from_millis(1)`
+        // cluster-default projection (which would silently absorb the
+        // `PolicyBreakerZeroWindow` refusal case at the accessor
+        // boundary), or a bounds-collapsing accessor that clamped the
+        // return through `POLICY_BREAKER_WINDOW_MAX` (the
+        // `AplicacaoSpec::validate` gate owns the bounds; the accessor
+        // must ship the raw slot verbatim).
+        for window in [
+            Duration::from_millis(1),
+            POLICY_BREAKER_WINDOW_MAX,
+            Duration::ZERO,
+            Duration::from_secs(86_400),
+        ] {
+            let cb = CircuitBreaker {
+                max_failures: 5,
+                window,
+            };
+            assert_eq!(
+                cb.window(),
+                window,
+                "CircuitBreaker::window must return :politicas \
+                 :circuit-breaker :window verbatim (got {:?}, \
+                 expected {window:?})",
+                cb.window(),
+            );
+            assert_eq!(
+                cb.window(),
+                cb.window,
+                "CircuitBreaker::window must byte-equal the raw \
+                 .window field access across every value in the \
+                 Duration accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_window_zero_floor_arm_routes_through_accessor() {
+        // Composition pin: [`AplicacaoSpec::validate_politicas`]'s
+        // `:circuit-breaker :window` zero-floor arm must key off
+        // [`CircuitBreaker::window`], not the raw `.window` field
+        // access. Structurally: a `CircuitBreaker { window:
+        // Duration::ZERO, .. }` embedded in a
+        // `:politicas :circuit-breaker` slot must surface the
+        // `PolicyBreakerZeroWindow` refusal exactly, and a
+        // `CircuitBreaker { window: Duration::from_millis(1), .. }`
+        // (the lower boundary of the `1ms..=POLICY_BREAKER_WINDOW_MAX`
+        // accept-set) must pass validate. The pair jointly pins the
+        // accessor + validate-gate composition: any future silent
+        // detour that had the accessor return a fresh
+        // `Duration::from_millis(1)` on the zero arm (a
+        // `.window().max(Duration::from_millis(1))` collapse) would
+        // silently absorb the `PolicyBreakerZeroWindow` refusal at the
+        // accessor boundary and the validate gate would accept a
+        // struct-literal `CircuitBreaker { window: Duration::ZERO, .. }`
+        // — the composition pin catches that at caixa-core build time.
+        //
+        // Peer of the sibling per-`CircuitBreaker`
+        // [`CircuitBreaker::max_failures`] (3a74062) accessor-composition
+        // pin on the peer required-scalar `:max-failures` axis — same
+        // "the validate / shape-gate predicate must route through the
+        // substrate-primitive typed dispatch" discipline extended onto
+        // the peer per-`CircuitBreaker` required-`Duration` composition
+        // axis.
+        let mut spec = three_member_spec();
+        spec.politicas = MeshPolicy {
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 5,
+                window: Duration::ZERO,
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            matches!(
+                spec.validate(),
+                Err(AplicacaoError::PolicyBreakerZeroWindow)
+            ),
+            "validate_politicas must reject window == Duration::ZERO \
+             with PolicyBreakerZeroWindow — the accessor and the \
+             validate gate must route through the same substrate-\
+             primitive typed dispatch on the :window zero-floor arm",
+        );
+        spec.politicas = MeshPolicy {
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 5,
+                window: Duration::from_millis(1),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            spec.validate().is_ok(),
+            "validate_politicas must accept window == \
+             Duration::from_millis(1) (the lower boundary of the \
+             1ms..=POLICY_BREAKER_WINDOW_MAX accept-set)",
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_window_projects_duration_by_copy() {
+        // The by-copy pin: [`CircuitBreaker::window`] returns
+        // `Duration` by copy — `Duration` is `Copy` and the accessor
+        // must return by value, not by reference. Peer of the sibling
+        // per-`CircuitBreaker` [`CircuitBreaker::max_failures`]
+        // (3a74062) by-copy pin on the peer required-scalar
+        // `:max-failures` axis, extended onto the peer
+        // per-`CircuitBreaker` required-`Duration` copy-invariant shape
+        // — the accessor's returned `Duration` must outlive `&self`
+        // (multiple calls must return equal values from a
+        // dropped-`&self` copy, since the returned scalar carries no
+        // borrow), and calling the accessor twice on the same
+        // CircuitBreaker must yield the same `Duration` verbatim
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `&Duration` (which would type-check but silently break every
+        // downstream `Duration`-by-value consumer —
+        // [`crate::render::require_positive_canonical_bounded_duration`]'s
+        // first parameter is `Duration`, and `&Duration` would fold to
+        // a detached copy at the call site with a `*` deref the sibling
+        // accessors don't need), an accidental `.window + Duration::ZERO`
+        // detour that returned a fresh copy through an arithmetic
+        // no-op (breaking a future `const fn` regression), or a
+        // one-arm-only accessor that returned a saturating value on
+        // some sentinel input (breaking the pass-through invariant the
+        // sibling required-scalar accessors carry).
+        for window in [
+            Duration::from_millis(1),
+            POLICY_BREAKER_WINDOW_MAX,
+            Duration::ZERO,
+            Duration::from_secs(86_400),
+        ] {
+            let cb = CircuitBreaker {
+                max_failures: 5,
+                window,
+            };
+            let first = cb.window();
+            let second = cb.window();
+            assert_eq!(
+                first, second,
+                "CircuitBreaker::window must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Duration",
+            );
+            assert_eq!(
+                first, window,
+                "CircuitBreaker::window must return :politicas \
+                 :circuit-breaker :window verbatim by copy — \
+                 got {first:?}, expected {window:?}",
             );
         }
     }
