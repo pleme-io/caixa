@@ -6,3 +6,4 @@ Cargo.lock.bak
 .direnv/
 .envrc.local
 Cargo.build-spec.json
+scratch*
