@@ -2517,6 +2517,75 @@ impl Entrada {
     pub fn hostnames(&self) -> Vec<&str> {
         vec![self.hostname()]
     }
+
+    /// Substrate-canonical per-`:entrada` destination-Servico scalar
+    /// accessor every Gateway-API `HTTPRoute` reader keys off — returns
+    /// the author-declared `:entrada :para` byte-string verbatim as a
+    /// `&str`, borrowed from the typed slot's own [`String`] storage.
+    ///
+    /// The `:entrada :para` slot names the single member Servico the
+    /// external Gateway routes to (validated by
+    /// [`AplicacaoSpec::validate`] to be a
+    /// [`Membro::caixa`] the Aplicacao declares — a stray
+    /// `:para` that doesn't name a member is
+    /// [`AplicacaoError::EntradaParaNotInMembros`], not a silent
+    /// backend-attachment miss at cluster-apply time). Under today's
+    /// single-destination author surface `:entrada :para` is the ingress
+    /// apex Servico's canonical identity; under a hypothetical
+    /// future multi-backend author surface (a `:entrada
+    /// :split :backends` weighted-fan-out overlay for canary /
+    /// blue-green traffic-split rollouts, per-path override for
+    /// path-based per-Servico routing beyond the single-apex model,
+    /// the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-CR admission-webhook that promotes the scalar to a
+    /// weighted list) this accessor is the substrate primitive's typed
+    /// dispatch every downstream `HTTPRoute`-aware consumer routes
+    /// through, so the resolution shape migrates as a unit on one
+    /// caixa-core edit rather than a coordinated rewrite across every
+    /// renderer's inline field-access.
+    ///
+    /// Prior to this lift the `entrada.para` byte-string was accessed
+    /// inline at two `caixa-mesh` sites — the per-Aplicacao HTTPRoute
+    /// `metadata.name` composer's per-destination discriminator arg
+    /// (`gateway_api_http_route_name(&caixa.nome, &entrada.para)`,
+    /// `caixa-mesh/src/lib.rs:2845` prior to this lift) and the
+    /// per-HTTPRoute per-rule `backendRefs[0].name` axis
+    /// (`entrada.para.clone()`,
+    /// `caixa-mesh/src/lib.rs:2975` prior to this lift). Both
+    /// consumers read the same `entrada.para` field but the two-site
+    /// duplication expressed no compile-time contract that the HTTPRoute
+    /// name-discriminator and the per-rule backend name stay in
+    /// lockstep on future extensions of the `:entrada` slot to a
+    /// multi-destination author surface. Any such extension would have
+    /// to be threaded through every renderer's inline copy of the
+    /// destination projection in lockstep or the HTTPRoute
+    /// `metadata.name` would silently reference a different destination
+    /// than its own `backendRefs[]` — an operator-side
+    /// `kubectl get httproute -n tatara-system <aplicacao>-<destination>`
+    /// grep-by-name lookup would land on a route whose `backendRefs[]`
+    /// silently point at a peer Servico, dropping every external
+    /// `:entrada` flow at the gateway with the destination-drift root
+    /// cause invisible in the emitted YAML.
+    ///
+    /// Peer of the sibling per-`:entrada` [`Entrada::hostname`] +
+    /// [`Entrada::hostnames`] (11f3dfe) DNS-hostname resolver pair on
+    /// the per-listener singular / per-HTTPRoute plural filter axes and
+    /// [`Entrada::resolved_paths`] (1449891) per-`:entrada` path-list
+    /// resolver on the per-HTTPRoute per-rule matches axis. Same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline the [`crate::DEFAULT_SERVICO_PORT`] +
+    /// [`AplicacaoSpec::port_for_destination`] (9ca4896) /
+    /// [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] +
+    /// [`Entrada::resolved_paths`] (1449891) lifts apply on the
+    /// sibling per-`:entrada` scalar-value + list-value axes — this
+    /// accessor closes the last unlifted per-`:entrada` scalar axis
+    /// (the destination-Servico byte-string) so every downstream
+    /// per-`:entrada` reader now routes through a typed dispatch on
+    /// the substrate primitive.
+    #[must_use]
+    pub fn destination(&self) -> &str {
+        self.para.as_str()
+    }
 }
 
 /// Canonical default L4 port every typed Servico exposes on its
@@ -12989,6 +13058,88 @@ mod tests {
              length {}: {:?}",
             e.hostnames().len(),
             e.hostnames(),
+        );
+    }
+
+    // ── Entrada::destination — the substrate-canonical per-`:entrada`
+    //    destination-Servico scalar accessor every Gateway-API
+    //    HTTPRoute-aware renderer reaching for a per-CR `metadata.name`
+    //    discriminator arg (HTTPRoute name composer) or a per-rule
+    //    `backendRefs[0].name` axis routes through. The two pin tests
+    //    below fix (:byte-equal-to-para, :borrow-not-copy) — drift on
+    //    either arm surfaces at caixa-core build time rather than at
+    //    cluster-apply time when an HTTPRoute's `metadata.name` and
+    //    `backendRefs[]` silently disagree on which destination Servico
+    //    the ingress fronts. Peer discipline with the sibling
+    //    `resolved_paths` + `hostname` + `hostnames` accept-set pin
+    //    blocks above on the per-`:entrada` path-list / DNS-hostname
+    //    resolver axes.
+
+    #[test]
+    fn destination_returns_entrada_para_byte_equal() {
+        // The canonical destination-scalar pin: [`Entrada::destination`]
+        // must return the `:entrada :para` field byte-for-byte, borrowed
+        // from the typed slot's own [`String`] storage. Pins against a
+        // future silent detour that re-normalized the destination (an
+        // accidental `.to_lowercase()` — the destination Servico is
+        // already validated as a DNS-1123 label upstream, so any
+        // re-normalization is redundant + a drift surface between the
+        // validator and the accessor), a namespace-prefix rewrite (an
+        // accidental `format!("{namespace}/{para}")` per-CR fully-
+        // qualified rewrite that didn't land on the peer axis), or a
+        // per-cluster suffix stamp the operator authors on one
+        // consumer without the other.
+        for para in ["cart", "checkout", "catalog", "orders-v2"] {
+            let e = Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: para.into(),
+                paths: Vec::new(),
+                port: DEFAULT_SERVICO_PORT,
+            };
+            assert_eq!(
+                e.destination(),
+                para,
+                "Entrada::destination must return :entrada :para verbatim \
+                 (got {:?}, expected {para:?})",
+                e.destination(),
+            );
+            assert_eq!(
+                e.destination(),
+                e.para.as_str(),
+                "Entrada::destination must byte-equal the .para field access",
+            );
+        }
+    }
+
+    #[test]
+    fn destination_borrows_from_entrada_para_storage() {
+        // The borrow-not-copy pin: [`Entrada::destination`] must
+        // return a `&str` slice that borrows from the typed slot's
+        // own [`String`] storage — same-address invariant with
+        // `entrada.para.as_str()`. Pins against a future silent detour
+        // that allocated a fresh `String` (`self.para.clone()` in the
+        // body would type-check but silently drop the borrow, and
+        // every downstream consumer that assumed the returned slice
+        // outlives `&self` would break on a stale-reference use-after-
+        // free). Peer with the sibling `hostname_returns_entrada_
+        // host_byte_equal` on the singular-DNS-hostname axis.
+        let e = entrada_with_host("checkout.quero.cloud");
+        let dest = e.destination();
+        let para_slice = e.para.as_str();
+        assert_eq!(
+            dest.as_ptr(),
+            para_slice.as_ptr(),
+            "Entrada::destination must borrow from the .para String's \
+             backing storage — a fresh allocation here means the \
+             accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            dest.len(),
+            para_slice.len(),
+            "Entrada::destination and .para.as_str() must byte-equal in \
+             length as well as in address",
         );
     }
 
