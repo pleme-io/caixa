@@ -822,6 +822,83 @@ pub struct Membro {
     pub versao: String,
 }
 
+impl Membro {
+    /// Substrate-canonical per-`:membros` member-caixa `:nome` scalar
+    /// accessor every consumer that reads the member's Servico identity
+    /// keys off — returns the author-declared `:membros :caixa`
+    /// byte-string verbatim as a `&str`, borrowed from the typed slot's
+    /// own [`String`] storage.
+    ///
+    /// The `:membros :caixa` slot carries the caixa `:nome` of a Servico
+    /// participating in the Aplicacao — validated by
+    /// [`AplicacaoSpec::validate`] to be a non-empty DNS-1123 label
+    /// (via [`validate_membro_caixa`]), unique across the Aplicacao's
+    /// `:membros` list, distinct from the Aplicacao's own `:nome` (via
+    /// [`validate_no_self_membership`]) — and every downstream consumer
+    /// that fans on the member's identity keys off this scalar (the
+    /// [`AplicacaoSpec::validate`] `:contratos`/`:entrada` member-set
+    /// lookup, the per-`:membros` duplicate gate's dedup key, the
+    /// [`AplicacaoSpec::detect_sync_cycles`] adjacency map's node
+    /// identity, the self-membership gate, the
+    /// [`caixa_mesh::fleet_programs`] per-member programs.yaml entry
+    /// `name:` axis, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+    /// CR materializer's per-member resolver).
+    ///
+    /// Prior to this lift the `.caixa` byte-string was read inline at
+    /// five caixa-core sites (the [`AplicacaoSpec::validate`] member-name
+    /// set collector at
+    /// `self.membros.iter().map(|m| m.caixa.as_str())`, the
+    /// [`validate_membros`] validation-side member-caixa gate at
+    /// `validate_membro_caixa(&m.caixa)`, the [`validate_membros`]
+    /// per-member duplicate-gate dedup key at
+    /// `insert_first_seen(&mut seen, m.caixa.as_str(), …)`, the
+    /// [`AplicacaoSpec::detect_sync_cycles`] adjacency-map seed at
+    /// `adj.entry(m.caixa.as_str()).or_default()`, and the
+    /// [`validate_no_self_membership`] self-loop gate at
+    /// `m.caixa == parent_nome`) — five open-coded field-accesses that
+    /// expressed no compile-time link back to the typed slot. Every
+    /// caixa-mesh `metadata.name` derived from a `:membros :caixa`
+    /// value flows through the [`caixa_mesh::fleet_programs`] per-entry
+    /// `name:` axis, so a future extension of the `:membros :caixa`
+    /// axis to a richer author surface — a per-cluster alias table the
+    /// operator pins through a future `:placement`-scoped slot, a
+    /// namespace-qualified rewrite the M4 CR materializer applies
+    /// per-CR, a per-member overlay from the future `:membros
+    /// :nome-suffix` slot the MESH-COMPOSITION §III.2 roadmap
+    /// acknowledges — would have had to be threaded through every
+    /// open-coded copy in lockstep or one consumer would silently
+    /// disagree with the peers on which caixa a given member resolves
+    /// to. A member-set lookup that treated the name as `"cart"` while
+    /// the peer adjacency map treated it as `"tenant-a/cart"` would
+    /// silently split the `:contratos` membership-lookup diagnostic from
+    /// the cycle-detector's node identity — a two-consumer split at the
+    /// validator far from the source `caixa.lisp` with no field naming
+    /// the identity-drift root cause. Lifting the resolution rule to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the Aplicacao's per-`:membros` identity surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:contratos` [`WitContract::source`] /
+    /// [`WitContract::destination`] (7f0fd43) caller/callee-Servico
+    /// scalar-accessor pair and per-`:entrada` [`Entrada::destination`]
+    /// (6db982c) / [`Entrada::hostname`] (11f3dfe) DNS-hostname /
+    /// destination-Servico scalar accessors — same "one typed dispatch
+    /// on the substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the per-`:membros` member-caixa `:nome`
+    /// byte-string axis. Named `nome()` to match the tatara-lisp
+    /// author-surface term the field's docstring already reaches for
+    /// ("Member caixa's `:nome`") and the peer [`crate::Caixa::nome`] /
+    /// [`crate::dep::Dep::nome`] field-name discipline the substrate
+    /// already carries — the accessor's name maps directly onto the
+    /// canonical caixa-identity vocabulary rather than shadowing the
+    /// field's storage-side `caixa` label.
+    #[must_use]
+    pub fn nome(&self) -> &str {
+        self.caixa.as_str()
+    }
+}
+
 // ── mesh-level policies ──────────────────────────────────────────────
 
 /// Mesh policies that apply to every `:contratos` edge unless
@@ -2891,7 +2968,7 @@ impl AplicacaoSpec {
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         self.validate_membros()?;
         let names: std::collections::HashSet<&str> =
-            self.membros.iter().map(|m| m.caixa.as_str()).collect();
+            self.membros.iter().map(Membro::nome).collect();
 
         // Identity key for the typed-edge duplicate gate below: every
         // field that distinguishes one contract from another. Two
@@ -3188,7 +3265,7 @@ impl AplicacaoSpec {
             // (c7d05ec) on the peer axis — every author surface that
             // emits a K8s name now matches the apiserver's accepted set
             // at validate time.
-            validate_membro_caixa(&m.caixa)?;
+            validate_membro_caixa(m.nome())?;
             // The author surface for `:versao` is the same Cargo-shaped
             // semver requirement string (`"^0.1"`, `"~0.1.2"`, `"0.1.0"`,
             // `"*"`) every `:deps` entry carries — and the lacre pipeline
@@ -3214,7 +3291,7 @@ impl AplicacaoSpec {
                     reason,
                 },
             )?;
-            crate::render::insert_first_seen(&mut seen, m.caixa.as_str(), || {
+            crate::render::insert_first_seen(&mut seen, m.nome(), || {
                 AplicacaoError::MembroDuplicate {
                     caixa: m.caixa.clone(),
                 }
@@ -3587,7 +3664,7 @@ impl AplicacaoSpec {
 
         let mut adj: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
         for m in &self.membros {
-            adj.entry(m.caixa.as_str()).or_default();
+            adj.entry(m.nome()).or_default();
         }
         for c in &self.contratos {
             // target() was already called by validate(); re-running here
@@ -3757,7 +3834,7 @@ pub fn validate_no_self_membership(
     parent_nome: &str,
 ) -> Result<(), AplicacaoError> {
     for m in membros {
-        if m.caixa == parent_nome {
+        if m.nome() == parent_nome {
             return Err(AplicacaoError::MembroIsSelfAplicacao {
                 caixa: parent_nome.to_string(),
             });
@@ -13410,6 +13487,94 @@ mod tests {
             para_slice.len(),
             "WitContract::destination and .para.as_str() must byte-equal \
              in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn membro_nome_returns_caixa_byte_equal_across_permutations() {
+        // The canonical per-`:membros` member-caixa `:nome`-scalar pin:
+        // [`Membro::nome`] must return the `:membros :caixa` field
+        // byte-for-byte, borrowed from the typed slot's own [`String`]
+        // storage. Peer of the sibling per-`:contratos` [`WitContract::source`]
+        // / [`WitContract::destination`] (7f0fd43) and per-`:entrada`
+        // [`Entrada::destination`] (6db982c) accessor pins on the mesh-
+        // slot-atom scalar-value axes — same "the substrate-primitive
+        // accessor must byte-equal the raw field access verbatim across
+        // every author-declared value" discipline extended to the
+        // per-`:membros` member-identity arm. Pins against a future
+        // silent detour that re-normalized the member identity (an
+        // accidental `.to_lowercase()` — every `:membros :caixa` is
+        // validated as a DNS-1123 label upstream via
+        // [`validate_membro_caixa`], so any re-normalization is
+        // redundant + a drift surface between the validator and the
+        // accessor), a namespace-prefix rewrite (an accidental
+        // `format!("{namespace}/{caixa}")` per-CR fully-qualified
+        // rewrite that didn't land on the peer axes), or a per-cluster
+        // alias stamp the operator authors on one consumer without the
+        // other. Four values sweep the accept-set the DNS-1123 gate
+        // upstream admits (short single-word / dashed / v-suffixed
+        // member names).
+        for name in ["cart", "checkout", "catalog", "orders-v2"] {
+            let m = Membro {
+                caixa: name.into(),
+                versao: "^0.1".into(),
+            };
+            assert_eq!(
+                m.nome(),
+                name,
+                "Membro::nome must return :membros :caixa verbatim \
+                 (got {:?}, expected {name:?})",
+                m.nome(),
+            );
+            assert_eq!(
+                m.nome(),
+                m.caixa.as_str(),
+                "Membro::nome must byte-equal the .caixa field access",
+            );
+        }
+    }
+
+    #[test]
+    fn membro_nome_borrows_from_caixa_storage() {
+        // The borrow-not-copy pin: [`Membro::nome`] must return a `&str`
+        // slice that borrows from the typed slot's own [`String`]
+        // storage — same-address invariant with `m.caixa.as_str()`. Pins
+        // against a future silent detour that allocated a fresh `String`
+        // (`self.caixa.clone()` in the body would type-check but
+        // silently drop the borrow, and every downstream consumer that
+        // assumed the returned slice outlives `&self` would break on a
+        // stale-reference use-after-free — the `HashSet<&str>` collector
+        // at [`AplicacaoSpec::validate`]'s `names` seed, the
+        // `BTreeMap<&str, BTreeSet<&str>>` adjacency map at
+        // [`AplicacaoSpec::detect_sync_cycles`], the
+        // [`crate::render::insert_first_seen`] dedup key at
+        // [`AplicacaoSpec::validate_membros`] — each borrow from the
+        // Membro's own storage and each would silently misbehave if
+        // this accessor produced a detached copy). Peer of the sibling
+        // per-`:contratos` [`WitContract::source`] /
+        // [`WitContract::destination`] and per-`:entrada`
+        // [`Entrada::destination`] borrow-invariant pins on the mesh-
+        // slot-atom scalar-value axes.
+        let m = Membro {
+            caixa: "checkout".into(),
+            versao: "^0.1".into(),
+        };
+        let name = m.nome();
+        let caixa_slice = m.caixa.as_str();
+        assert_eq!(
+            name.as_ptr(),
+            caixa_slice.as_ptr(),
+            "Membro::nome must borrow from the .caixa String's backing \
+             storage — a fresh allocation here means the accessor no \
+             longer names the substrate-primitive typed dispatch and \
+             every downstream consumer would silently carry a detached \
+             copy",
+        );
+        assert_eq!(
+            name.len(),
+            caixa_slice.len(),
+            "Membro::nome and .caixa.as_str() must byte-equal in length \
+             as well as in address",
         );
     }
 
