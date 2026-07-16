@@ -34,7 +34,7 @@
 use std::collections::BTreeMap;
 
 use caixa_core::{
-    Caixa, CaixaKind, DEFAULT_SERVICO_PORT, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
+    Caixa, CaixaKind, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
     FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
     GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
     GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO, M3_KEY_PLACEMENT, MappingExt,
@@ -2632,29 +2632,36 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             // store get L4-only (Cilium can't introspect those protocols).
             let mut to_port = serde_yaml::Mapping::new();
             let mut port_entry = serde_yaml::Mapping::new();
-            // Fallback to the canonical substrate Servico port
-            // ([`DEFAULT_SERVICO_PORT`], lifted in caixa-core) when the
-            // typed `:entrada` block doesn't name the per-`:contratos`
-            // destination Servico — the typed `:contratos` graph
-            // carries no per-destination port axis (the destination
-            // port is the destination Servico's `lareira-<nome>`
-            // chart's `trigger.service.port`, which the Aplicacao-level
-            // renderer has no visibility into without a resolver
-            // round-trip). The fallback is the substrate's canonical
-            // assumption — by construction the same value the
-            // destination's own `pleme-computeunit` chart emits and the
-            // same value the destination's own typed `:entrada :port`
-            // slot defaults to (via `Entrada`'s `default_port` serde
-            // hook, which now also reads from
-            // [`DEFAULT_SERVICO_PORT`]). The literal `8080` previously
-            // duplicated here is now load-bearing only at the lifted
-            // constant's definition site.
-            let port = spec
-                .entrada
-                .as_ref()
-                .filter(|e| e.para == c.para)
-                .map(|e| e.port)
-                .unwrap_or(DEFAULT_SERVICO_PORT);
+            // The per-destination Servico TCP port every emitted CNP's
+            // ingress[].toPorts[].ports[0].port axis reads now routes
+            // through the canonical [`AplicacaoSpec::port_for_destination`]
+            // typed dispatch (re-exported through the peer `typed_view`
+            // path this call reaches through). Prior to this lift the
+            // "if the typed `:entrada` block names this destination use
+            // its author-declared `:port`, else fall back to the lifted
+            // [`DEFAULT_SERVICO_PORT`] substrate-canonical port floor"
+            // cascade lived inline here — the sole per-Aplicacao L4
+            // fallback site with no typed method on the substrate
+            // primitive that named the rule, so a future per-destination
+            // port axis addition (a per-`:contratos` explicit `:port`
+            // slot the M4 typed-edge registry adds, a per-`:membros`
+            // `:port` overlay once heterogeneous per-Servico listener
+            // ports land, a per-cluster override the operator pins
+            // through a future `:placement :default-port` slot) would
+            // have had to be threaded through this inline cascade and
+            // every future per-Aplicacao renderer's inline copy in
+            // lockstep or one consumer would silently disagree on which
+            // port a given destination Servico's ingress lands at.
+            // Lifting the resolution rule to a typed method on
+            // `AplicacaoSpec` — peer with the sibling
+            // [`AplicacaoSpec::validate`] / `AplicacaoSpec::detect_sync_cycles`
+            // typed dispatches — means the M4
+            // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+            // per-CNP L4 port resolver, the future per-edge policy
+            // resolver's per-destination probe axis, and every
+            // downstream test-fixture navigator asserting the L4
+            // port floor read from one place.
+            let port = spec.port_for_destination(&c.para);
             port_entry.insert_string(KUBE_KEY_PORT, port.to_string());
             port_entry.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
             to_port.insert_singleton_mapping_sequence(CILIUM_KEY_PORTS, port_entry);
@@ -2994,7 +3001,7 @@ pub fn render_all(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 mod tests {
     use super::*;
     use caixa_core::{
-        Caixa, CaixaKind, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
+        Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY,
         M3_PLACEMENT_KEY_CLUSTERS, M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro,
         MeshPolicy, Placement, PlacementStrategy, WitContract, find_by_kind, kube_kind_is,
         kube_metadata_str_field, kube_root_str_field,
@@ -8582,6 +8589,62 @@ mod tests {
             "the L4 fallback must render the lifted DEFAULT_SERVICO_PORT \
              constant verbatim — drift here means the constant lift no \
              longer reaches this consumer"
+        );
+    }
+
+    #[test]
+    fn cnp_l4_port_routes_through_lifted_port_for_destination_resolver() {
+        // Cross-crate drift-detection pin: the CNP L4-fallback port axis
+        // in [`cilium_network_policies`] now routes through the lifted
+        // [`caixa_core::AplicacaoSpec::port_for_destination`] typed
+        // dispatch (peer with the sibling
+        // `cnp_l4_fallback_port_routes_through_lifted_default_servico_port`
+        // pin on the DEFAULT_SERVICO_PORT canonical-constant axis). Pin
+        // the resolver-shaped rule at the emit-side path so a future
+        // renderer-side detour that re-inlined the "if entrada matches
+        // this destination use its :port else fall back to
+        // DEFAULT_SERVICO_PORT" cascade would surface as a caixa-mesh
+        // build-time test failure — the two consumer paths on the
+        // per-Aplicacao L4 port axis (the resolver's own typed dispatch
+        // at caixa-core, this renderer's emit-side reach for it) must
+        // agree at every point on the port scalar the emitted CNP
+        // renders, per the CNP identity rule that the destination
+        // Servico's L4 port is a substrate-canonical scalar the M4 CR
+        // materializer + the future per-edge policy resolver inherit
+        // by construction.
+        let caixa = aplicacao_caixa();
+        let spec = typed_view(&caixa).expect("aplicacao_caixa fixture must be a valid Aplicacao");
+        let policies = cilium_network_policies(&caixa).unwrap();
+
+        // The `checkout-cart-to-catalog` CNP's toPorts[0].ports[0].port
+        // scalar must match the resolver's scalar for the `catalog`
+        // destination (a non-apex destination — the entrada names
+        // `:para "cart"`, so the resolver falls back to the substrate
+        // floor).
+        let cart_to_catalog = policies
+            .iter()
+            .find(|p| kube_metadata_str_field(p, KUBE_KEY_NAME) == Some("checkout-cart-to-catalog"))
+            .expect("cart→catalog CNP present");
+        let port_value = cart_to_catalog
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(CILIUM_KEY_INGRESS))
+            .and_then(|i| i.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|i| i.get(CILIUM_KEY_TO_PORTS))
+            .and_then(|t| t.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|tp| tp.get(CILIUM_KEY_PORTS))
+            .and_then(|p| p.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|p| p.get(KUBE_KEY_PORT))
+            .and_then(|v| v.as_str())
+            .expect("toPorts[0].ports[0].port present");
+        assert_eq!(
+            port_value,
+            spec.port_for_destination("catalog").to_string(),
+            "the per-CNP L4 port must match the port_for_destination \
+             resolver's scalar for the same destination — drift here \
+             means the emit-side path re-inlined the resolution rule"
         );
     }
 

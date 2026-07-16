@@ -3338,6 +3338,54 @@ impl AplicacaoSpec {
         }
         Ok(())
     }
+
+    /// Substrate-canonical destination-facing TCP port every emitted
+    /// per-Aplicacao artifact must key `destination`-shaped port axes
+    /// off. Returns the typed `:entrada :port` scalar when this
+    /// Aplicacao's `:entrada` block names `destination` under its
+    /// `:para` axis (the destination Servico *is* the ingress apex, so
+    /// the substrate honors the author-declared listener port
+    /// verbatim), and the lifted [`DEFAULT_SERVICO_PORT`] canonical
+    /// fallback otherwise (every non-apex destination — the internal
+    /// mesh Servicos `:contratos` reach across, the future per-edge
+    /// policy resolver's per-destination probe targets, the
+    /// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CNP
+    /// L4 port resolver — reads the same substrate-canonical port floor
+    /// by construction).
+    ///
+    /// Prior to this lift the "if :entrada matches this destination use
+    /// its :port, else fall back to `DEFAULT_SERVICO_PORT`" cascade
+    /// lived inline at [`caixa_mesh::cilium_network_policies`]'s per-
+    /// `(:de, :para)` L4-port resolution site (caixa-mesh/src/lib.rs:2652
+    /// prior to this lift), with no typed method on the substrate primitive
+    /// that named the rule. A future per-destination port axis addition
+    /// — a per-`:contratos` explicit `:port` slot the M4 typed-edge
+    /// registry adds, a per-`:membros` `:port` overlay once heterogeneous
+    /// per-Servico listener ports land, a per-cluster override the operator
+    /// pins through a future `:placement :default-port` slot — would have
+    /// to be threaded through every renderer's inline cascade in lockstep
+    /// or one consumer would silently disagree on which port a given
+    /// destination Servico's ingress lands at. Lifting the rule to a
+    /// typed method on the substrate primitive means the M4 CR
+    /// materializer, the future per-edge policy resolver, and every
+    /// downstream test-fixture navigator reach for exactly one typed
+    /// dispatch — the resolver's accept-set moves as a unit on any
+    /// future axis addition.
+    ///
+    /// Peer of the [`WitTarget::payload_pair`] (6788ed6) /
+    /// [`RATE_LIMIT_UNIT_TABLE`] (808017c) canonical "one dispatch on
+    /// the typed primitive, thin projections at each consumer"
+    /// discipline lifts on the sibling `:contratos` payload / `:politicas
+    /// :rate-limit` unit-suffix axes; extends the discipline onto the
+    /// destination-facing port-resolution axis every per-Aplicacao
+    /// L4-fallback renderer consumes.
+    #[must_use]
+    pub fn port_for_destination(&self, destination: &str) -> u16 {
+        self.entrada
+            .as_ref()
+            .filter(|e| e.para == destination)
+            .map_or(DEFAULT_SERVICO_PORT, |e| e.port)
+    }
 }
 
 /// Cross-slot coherence gate on the Aplicacao graph: no `:membros :caixa`
@@ -13285,5 +13333,111 @@ mod tests {
                  no `_` / `-` / `:` / `.` / whitespace (got {key:?})",
             );
         }
+    }
+
+    // ── AplicacaoSpec::port_for_destination — the substrate-canonical
+    //    destination-facing L4 port resolver every per-Aplicacao renderer
+    //    reaching for a per-destination Servico TCP port axis routes
+    //    through. The four pin tests below fix the four-way accept-set
+    //    the resolver must always honor: (:entrada-para-matches,
+    //    :entrada-para-mismatches, :entrada-none-so-fallback,
+    //    :entrada-port-non-default-honored) — drift on any arm surfaces
+    //    at caixa-core build time rather than at cluster-apply time.
+
+    #[test]
+    fn port_for_destination_returns_entrada_port_when_para_matches_destination() {
+        // The typed `:entrada` block's `:para "cart"` matches the
+        // queried destination, so the resolver returns the author-
+        // declared `:port` scalar verbatim — the canonical "the
+        // destination Servico IS the ingress apex, honor the typed
+        // listener port" arm of the port-resolution dispatch.
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.para = "cart".into();
+            e.port = 9090;
+        }
+        assert_eq!(
+            spec.port_for_destination("cart"),
+            9090,
+            "port_for_destination(entrada.para) must return entrada.port \
+             verbatim, not the DEFAULT_SERVICO_PORT fallback"
+        );
+    }
+
+    #[test]
+    fn port_for_destination_falls_back_to_default_servico_port_when_para_mismatches() {
+        // The typed `:entrada` block names `:para "cart"`, but the
+        // queried destination is `"payment"` — a Servico that
+        // participates in the mesh graph but is not the ingress apex.
+        // The resolver falls back to the lifted DEFAULT_SERVICO_PORT
+        // canonical port floor, closing the "non-apex destination reads
+        // the substrate default" arm. Same fixture the peer
+        // `cnp_l4_fallback_port_routes_through_lifted_default_servico_port`
+        // pin at caixa-mesh exercises through the CNP emit-side path;
+        // this pin exercises the shared underlying resolver directly.
+        let spec = three_member_spec();
+        assert_eq!(
+            spec.port_for_destination("payment"),
+            DEFAULT_SERVICO_PORT,
+            "port_for_destination(non-apex-destination) must route \
+             through the lifted DEFAULT_SERVICO_PORT canonical port floor"
+        );
+    }
+
+    #[test]
+    fn port_for_destination_falls_back_to_default_servico_port_when_entrada_none() {
+        // Internal-only Aplicacao — no `:entrada` block declared. Every
+        // per-destination port query falls back to the lifted
+        // DEFAULT_SERVICO_PORT canonical floor. The arm exists because
+        // the Aplicacao surface admits `:entrada None` (internal mesh
+        // with no external gateway); every downstream renderer's per-
+        // destination port axis must still resolve to a well-defined
+        // scalar even without an ingress apex.
+        let mut spec = three_member_spec();
+        spec.entrada = None;
+        assert_eq!(
+            spec.port_for_destination("cart"),
+            DEFAULT_SERVICO_PORT,
+            "port_for_destination on an internal-only Aplicacao must \
+             fall back to the lifted DEFAULT_SERVICO_PORT floor for \
+             every destination"
+        );
+        assert_eq!(
+            spec.port_for_destination("payment"),
+            DEFAULT_SERVICO_PORT,
+            "port_for_destination on an internal-only Aplicacao must \
+             fall back uniformly across every destination — the fallback \
+             is not entrada-shape-conditional"
+        );
+    }
+
+    #[test]
+    fn port_for_destination_honors_non_default_entrada_port_verbatim() {
+        // Structural pin against a hypothetical future refactor that
+        // reconciled `entrada.port` against `DEFAULT_SERVICO_PORT` at
+        // the resolver (a "normalize to the default when the author's
+        // port matches the substrate default" collapse) — that would
+        // break renderer sites that carry meaning on the emitted port
+        // value beyond bare equality (a future per-cluster listener-
+        // audit that keys off the author-declared port, not the
+        // resolved-with-fallback port). Pin that a non-default
+        // entrada.port is returned verbatim so drift here surfaces at
+        // caixa-core build time.
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.para = "cart".into();
+            e.port = 8443;
+        }
+        assert_ne!(
+            8443, DEFAULT_SERVICO_PORT,
+            "test fixture must probe a port distinct from \
+             DEFAULT_SERVICO_PORT to exercise the honor-verbatim arm"
+        );
+        assert_eq!(
+            spec.port_for_destination("cart"),
+            8443,
+            "port_for_destination(entrada.para) must return entrada.port \
+             verbatim, even when the port differs from DEFAULT_SERVICO_PORT"
+        );
     }
 }
