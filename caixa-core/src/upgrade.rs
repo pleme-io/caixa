@@ -5292,6 +5292,83 @@ mod tests {
     }
 
     #[test]
+    fn m2_upgrade_instruction_kind_consts_are_pairwise_distinct() {
+        // Cross-arm drift-detection pin on the M2
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE`] /
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE`] /
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`] /
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE`] /
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART`]
+        // closed-set OTP-appup variant-tag pentad: a future collapse
+        // of two canonical variant byte-strings onto the same value
+        // (an accidental copy-paste flip of
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`]
+        // to also read `":purge"`, a per-arm rebrand that lands one
+        // const without touching its paired peer) would silently
+        // reroute every downstream OTP-appup dispatcher's per-
+        // instruction branch onto the sibling arm's runtime
+        // behavior and pass every propagation-probe test that
+        // expected only the stale arm's tag — a `:soft-purge`
+        // instruction (drain-then-swap: existing callers finish
+        // under the old module, new callers land on the new one)
+        // would come up under the `:purge` reconcile branch
+        // (drop-existing: every in-flight caller terminates
+        // immediately) on every hot-upgrade cycle, so a rolling
+        // module swap would silently downgrade to a hard cutover
+        // against its declared appup discipline, with no field
+        // naming the instruction-tag drift root cause. Every
+        // [`crate::UpgradeError`] diagnostic that surfaces the tag
+        // ([`crate::UpgradeError::ModuleEmpty`] with `kind:` field,
+        // [`crate::UpgradeError::CleanupCollision`] with `kinds:`
+        // slice, [`crate::UpgradeError::CleanupPrecedes`] with
+        // `prior_cleanup_kind:` field, the
+        // [`crate::LayoutError::UpgradeViolation`] `issue:` probe in
+        // `layout.rs`) would emit the sibling arm's stale bytes at
+        // the operator's console, far from the source rebrand
+        // commit. Peer of the sibling
+        // [`crate::supervisor::tests::supervisor_estrategia_consts_are_pairwise_distinct`]
+        // (09ffb2d) /
+        // [`crate::supervisor::tests::supervisor_child_restart_consts_are_pairwise_distinct`]
+        // (ccdf955) /
+        // [`crate::kind::tests::caixa_kind_label_consts_are_pairwise_distinct`]
+        // (d739850) distinctness pins on the sibling OTP-shape /
+        // caixa-kind closed-set typed-enum discriminator axes —
+        // the fifth closed-set OTP-appup / typed-enum axis to
+        // converge on the same
+        // "pairwise-distinct-by-construction" discipline, and the
+        // canonical companion to the peer
+        // [`m2_upgrade_instruction_field_key_consts_are_pairwise_distinct`]
+        // (ff980bb) distinctness pin on the sibling internally-
+        // tagged-JSON per-variant data-field-key axis (the tag axis
+        // this pin covers vs. the data-field-key axis its peer
+        // covers — two paired axes on the same
+        // [`crate::UpgradeInstruction`] typed enum surface).
+        //
+        // Fail-before-pass-after locally verified by mutating
+        // [`crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE`]
+        // to also read `":purge"` — this pin fires as expected;
+        // restoring passes.
+        let all = [
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_LOAD_MODULE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_STATE_CHANGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
+            crate::render::M2_UPGRADE_INSTRUCTION_KIND_RESTART,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "M2_UPGRADE_INSTRUCTION_KIND_* consts must be pairwise \
+                         distinct — got duplicate {a:?} at indices {i} and {j}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn upgrade_instruction_lisp_form_routes_through_lifted_kind_consts() {
         // Production-through-const pin: the five per-variant labels
         // [`UpgradeInstruction::lisp_form`] returns route through the

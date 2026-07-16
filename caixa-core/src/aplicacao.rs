@@ -8732,6 +8732,61 @@ mod tests {
     }
 
     #[test]
+    fn m3_placement_estrategia_consts_are_pairwise_distinct() {
+        // Cross-arm drift-detection pin on the M3
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] closed-set
+        // scalar-value pentad: a future collapse of two canonical
+        // variant byte-strings onto the same value (an accidental
+        // copy-paste flip of
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] to also
+        // read `"SingleNode"`, a per-arm rebrand that lands one const
+        // without touching its paired peer) would silently reroute
+        // every downstream operator's per-strategy dispatch onto the
+        // sibling arm's reconcile branch and pass every
+        // propagation-probe test that expected only the stale arm's
+        // value — a `Replicated`-declared Aplicacao would come up
+        // under the `SingleNode` primary-and-standby reconcile
+        // posture, so every-cluster active-active workload would
+        // silently collapse onto one-cluster-runs-at-a-time takeover
+        // semantics against its declared strategy, with no field
+        // naming the strategy-value drift root cause. Peer of the
+        // sibling
+        // [`crate::supervisor::tests::supervisor_estrategia_consts_are_pairwise_distinct`]
+        // (09ffb2d) /
+        // [`crate::supervisor::tests::supervisor_child_restart_consts_are_pairwise_distinct`]
+        // (ccdf955) /
+        // [`crate::kind::tests::caixa_kind_label_consts_are_pairwise_distinct`]
+        // (d739850) distinctness pins on the sibling OTP-shape /
+        // caixa-kind closed-set typed-enum discriminator axes — the
+        // fourth (and structurally the M3 mesh-primitive-defining)
+        // closed-set typed-enum axis to converge on the same
+        // "pairwise-distinct-by-construction" discipline.
+        //
+        // Fail-before-pass-after locally verified by mutating
+        // [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] to
+        // also read `"SingleNode"` — this pin fires as expected;
+        // restoring passes.
+        let all = [
+            crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+            crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+            crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "M3_PLACEMENT_ESTRATEGIA_* consts must be pairwise \
+                         distinct — got duplicate {a:?} at indices {i} and {j}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn placement_strategy_display_routes_through_as_str_helper() {
         // The fail-before-pass-after pin: pre-lift the sibling
         // OTP-shape typed enums [`crate::supervisor::RestartStrategy`]
