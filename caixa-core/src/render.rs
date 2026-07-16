@@ -15493,6 +15493,94 @@ pub const FLUX_KUSTOMIZATION_PRUNE_DEFAULT: bool = true;
 /// [co]: ../../caixa_flux/struct.ClusterBundleOpts.html
 pub const CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT: bool = true;
 
+/// Canonical substrate-side default for the
+/// `values.<library>.enabled` scalar-value toggle every
+/// [`caixa_helm::render_chart_for_servico`][cs]-emitted standalone
+/// `lareira-<nome>` chart's `values.yaml` document seeds inside its per-caixa
+/// [`DEFAULT_LIBRARY_NAME`] wrap block to leave the paired
+/// [`DEFAULT_LIBRARY_NAME`] child chart opted-out at the per-cluster
+/// `helm template` / `helm install` apply step. Pairs with the sibling
+/// [`HELM_VALUES_KEY_ENABLED`] leaf-scalar-key half of the
+/// `(leaf-key, scalar-value)` per-values-block child-chart-enablement-toggle
+/// declaration pair — the key half names the canonical
+/// `values.<library>.enabled` leaf-scalar-key axis every consumer (this
+/// standalone-path default, [`caixa_flux::cluster_bundle`][cb]'s per-CR
+/// values-overlay) probes on, and this scalar-value half names the
+/// substrate-side default the standalone per-chart path seeds under it.
+/// Semantically distinct from — and inverse of — the peer
+/// [`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`] default that
+/// [`caixa_flux::cluster_bundle`][cb]'s `helmrelease.yaml` values overlay
+/// seeds for the substrate-side composition-path force-on (that path
+/// renders `enabled: true` in the per-cluster `HelmRelease.spec.values.<library>`
+/// overlay so the operator's per-caixa cluster-scoped ownership at bundle
+/// materialization time carries a force-on for the child chart); the
+/// standalone per-chart path is the substrate-side opt-out path where the
+/// operator has not yet asserted per-caixa cluster-scoped ownership by
+/// materializing a per-caixa `GitRepository` + `HelmRelease` +
+/// `Kustomization` trio, so the per-chart `values.yaml` seeds
+/// `enabled: false` under the `values.<library>` wrap and cluster operators
+/// must opt each caixa in per-cluster.
+///
+/// Rendered to canonical YAML `false` verbatim. A future substrate-side
+/// rebrand to `true` (or the M4 typed-slot trajectory adding a per-caixa
+/// `:standalone :enabled` author-side toggle the author flips per caixa) is
+/// a one-line edit on this canonical declaration, not a coordinated rewrite
+/// across the sole production emit site + its paired test-fixture
+/// navigation sites. Peer with the sibling
+/// [`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`] scalar-value default on the
+/// peer canonical-Helm-per-values-block-substrate-default surface — the two
+/// sibling scalar-value defaults name mirror-symmetric per-path
+/// child-chart-enablement-toggle-scalar-value defaults at the exact same
+/// `values.<library>.enabled` sub-block position on the standalone
+/// per-chart-`values.yaml` path (this const) and the composition
+/// per-cluster-`HelmRelease` values-overlay path
+/// ([`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`]) — both are substrate-side
+/// policy choices the operator inherits when the per-caixa
+/// [`caixa_helm::RenderOpts`][cro] / [`caixa_flux::ClusterBundleOpts`][co]
+/// doesn't pin an override.
+///
+/// The single source of truth every rendered `values.yaml` axis that
+/// names the per-values-block child-chart-enablement-toggle scalar on the
+/// standalone per-chart path reaches for:
+///
+///   - the rendered `values.yaml` document's
+///     `<library>.enabled` scalar-value axis
+///     (caixa-helm/src/lib.rs — the [`caixa_helm::build_values_yaml`][cbv]
+///     `serde_yaml::Value::Bool(opts.enabled_default)` block-insertion
+///     under the per-`{library_name}` wrap position, threading the same
+///     `bool` through the [`caixa_helm::RenderOpts::enabled_default`][cro]
+///     default-knob);
+///   - the [`caixa_helm::RenderOpts::default()`][cro] impl-body
+///     `enabled_default: STANDALONE_LAREIRA_ENABLED_DEFAULT` field seed
+///     the standalone per-chart path threads into every per-caixa
+///     `render_chart_for_servico` call site.
+///
+/// Both the production emit site + the default-knob seed now consume the
+/// same `bool` at emit time through the sibling re-export
+/// [`caixa_helm::STANDALONE_LAREIRA_ENABLED_DEFAULT`][ch], so a future
+/// substrate-side toggle migration reaches every consumer through one
+/// `bool` by construction — with no opportunity for per-renderer drift
+/// where a rebrand on one axis without a coordinated edit on the other
+/// would silently disagree on the substrate's chosen
+/// standalone-per-chart-path opt-out semantic. Until this lift landed
+/// the axis carried an inline `enabled_default: false` scalar-value
+/// literal at the sole production-code call site (the
+/// [`caixa_helm::RenderOpts::default()`][cro] impl-body field seed at
+/// `caixa-helm/src/lib.rs:700`) — one occurrence of the same
+/// load-bearing per-values-block child-chart-enablement-toggle-scalar-value
+/// convention as the peer [`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`] on the
+/// composition path, drift-prone by construction ahead of the M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// per-Servico standalone-chart synthesis surfacing the third occurrence.
+///
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+/// [cs]: ../../caixa_helm/fn.render_chart_for_servico.html
+/// [cbv]: ../../caixa_helm/fn.build_values_yaml.html
+/// [ch]: ../../caixa_helm/index.html
+/// [cro]: ../../caixa_helm/struct.RenderOpts.html
+/// [co]: ../../caixa_flux/struct.ClusterBundleOpts.html
+pub const STANDALONE_LAREIRA_ENABLED_DEFAULT: bool = false;
+
 /// Canonical Flux v2 `Kustomization.spec.path` per-CR source-sub-tree
 /// leaf-scalar-key every `caixa-flux`-emitted `kustomization.yaml`
 /// document seeds under its top-level `spec` position to name the sub-
@@ -21325,6 +21413,138 @@ mod tests {
         // substrate-default paired-halves surfaces.
         assert_eq!(HELM_VALUES_KEY_ENABLED, "enabled");
         assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+    }
+
+    #[test]
+    fn standalone_lareira_enabled_default_pins_canonical_value() {
+        // Pin the actual boolean so a rebrand on this lift can't silently
+        // rebrand the substrate-side default for the
+        // `values.<library>.enabled` child-chart-enablement toggle scalar
+        // the substrate's per-caixa `caixa_helm::render_chart_for_servico`
+        // renderer seeds into every emitted per-caixa `values.yaml`
+        // document under the sibling [`HELM_VALUES_KEY_ENABLED`]
+        // leaf-scalar-key axis inside the per-`{library_name}` wrap. The
+        // scalar is the substrate's chosen "leave the child chart opted
+        // out under the standalone per-chart path" default —
+        // semantically distinct from and inverse of the composition
+        // [`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`] seed (which renders
+        // `enabled: true` in the per-cluster `HelmRelease` values-overlay
+        // so the substrate force-ons the child chart at bundle
+        // materialization time); the standalone per-chart path is the
+        // substrate-side opt-out path where the operator has not yet
+        // asserted per-caixa cluster-scoped ownership by materializing a
+        // per-caixa GitRepository + HelmRelease + Kustomization trio, so
+        // the per-chart `values.yaml` seeds `enabled: false` under the
+        // `values.<library>` wrap and cluster operators must opt each
+        // caixa in per-cluster. Drift from the canonical `false` seed to
+        // `true` silently drops the substrate's chosen
+        // opt-out-under-standalone semantic from every emitted per-caixa
+        // `values.yaml` document, force-onning the paired
+        // [`DEFAULT_LIBRARY_NAME`] child chart against the operator's
+        // stated per-cluster opt-in convention — every rendered chart's
+        // library-chart-side workload would come up on `helm template` /
+        // `helm install` with no diagnostic naming the toggle-drift root
+        // cause. Peer to `cluster_bundle_lareira_enabled_default_pins_canonical_value`
+        // on the sibling composition-path `HelmRelease.spec.values.<library>.enabled`
+        // scalar-value default surface — both defaults are substrate-side
+        // policy choices the operator inherits when the per-caixa
+        // `RenderOpts` / `ClusterBundleOpts` doesn't pin an override, and
+        // together they close the mirror-symmetric standalone / composition
+        // per-values-block child-chart-enablement-toggle scalar-value
+        // default pair.
+        assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+    }
+
+    #[test]
+    fn standalone_lareira_enabled_default_pairs_with_lifted_leaf_key() {
+        // Sibling-pair pin: the `(leaf-scalar-key, scalar-value)` per-
+        // values-block child-chart-enablement-toggle declaration on the
+        // standalone per-chart path lives at two lifted `pub const`
+        // declarations — [`HELM_VALUES_KEY_ENABLED`] on the key half and
+        // [`STANDALONE_LAREIRA_ENABLED_DEFAULT`] on the value half. Both
+        // halves must move together on any coordinated Helm 4 migration
+        // (an `on: false` rename that rebrands the leaf axis onto a new
+        // controller-side opt-in vs. the current opt-out default; a leaf
+        // coalesce onto a peer per-values-block toggle that reroutes the
+        // substrate's canonical scalar seed onto an unrelated axis), so a
+        // rebrand on either half without a coordinated edit on the other
+        // would silently split the substrate's canonical
+        // opt-out-under-standalone declaration — the emit-site block
+        // insertion would still thread [`HELM_VALUES_KEY_ENABLED`] as the
+        // key but pair it with a canonical `enabled_default` scalar-value
+        // seed that no longer reflects the substrate-side semantic the
+        // leaf axis names. Pin the pair here so a future edit that
+        // touches only the leaf-scalar-key half or only the scalar-value
+        // default half surfaces at build time rather than at apply time
+        // far from the source edit. Confirms both consts carry their
+        // canonical wire representations (`"enabled"` byte-string on the
+        // leaf-scalar-key half; `false` on the scalar-value default half)
+        // — the pair as-a-unit reads as the substrate's chosen
+        // `enabled: false` per-values-block opt-out. Peer to
+        // `cluster_bundle_lareira_enabled_default_pairs_with_lifted_leaf_key`
+        // on the sibling composition-path
+        // `HelmRelease.spec.values.<library>.enabled` scalar-value default
+        // paired-halves surface — both `(key, value)` pairs share the same
+        // [`HELM_VALUES_KEY_ENABLED`] leaf-scalar-key half but diverge on
+        // the scalar-value half, which is exactly the mirror-symmetric
+        // standalone / composition path-selection the two scalar-value
+        // defaults name.
+        assert_eq!(HELM_VALUES_KEY_ENABLED, "enabled");
+        assert!(!STANDALONE_LAREIRA_ENABLED_DEFAULT);
+    }
+
+    #[test]
+    fn standalone_and_cluster_bundle_lareira_enabled_defaults_are_inverse_by_construction() {
+        // Cross-const coherence pin: the two peer
+        // per-values-block child-chart-enablement-toggle scalar-value
+        // defaults on the standalone per-chart path
+        // ([`STANDALONE_LAREIRA_ENABLED_DEFAULT`]) and the composition
+        // per-cluster-`HelmRelease` values-overlay path
+        // ([`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`]) name mirror-symmetric
+        // inverse defaults on the same underlying
+        // `values.<library>.enabled` sub-block axis: the standalone-path
+        // default is `false` (opt-out — cluster operators must opt each
+        // caixa in per-cluster) while the composition-path default is
+        // `true` (opt-in — the substrate force-ons the child chart once
+        // the operator has asserted per-caixa cluster-scoped ownership by
+        // materializing a per-caixa GitRepository + HelmRelease +
+        // Kustomization trio). The inversion is the substrate's chosen
+        // author-to-live path-selection semantic — every consumer that
+        // reads either default inherits the per-path opt-out / opt-in
+        // decision by construction, so a future edit that accidentally
+        // aligned the two defaults (both `false` on a substrate-wide
+        // opt-out migration, both `true` on a substrate-wide opt-in
+        // migration) would silently collapse the substrate's chosen
+        // standalone-vs-composition path-selection semantic — the
+        // per-chart `values.yaml` default and the per-cluster
+        // `HelmRelease.spec.values.<library>.enabled` overlay default
+        // would agree on the same enablement seed, and either the
+        // standalone path would force-on the child chart against the
+        // operator's per-cluster opt-in convention (both `true`) or the
+        // composition path would leave the child chart opted-out against
+        // the operator's per-caixa cluster-scoped ownership assertion
+        // (both `false`). Pin the structural inversion here so a future
+        // edit that touches only one of the two defaults surfaces at
+        // caixa-core build time rather than at chart-apply time far from
+        // the constant-drift source. Confirms the two `bool`s carry
+        // distinct canonical wire representations — the pair as-a-unit
+        // reads as the substrate's chosen mirror-symmetric author-to-live
+        // path-selection semantic (standalone opt-out, composition
+        // opt-in). Peer to the sibling pairwise-distinctness pins the
+        // `M3_PLACEMENT_ESTRATEGIA_*` /
+        // `M2_UPGRADE_INSTRUCTION_KIND_*` closed-set typed-enum
+        // discriminator axes carry on the peer canonical-typed-enum-
+        // discriminator distinctness surface.
+        assert_ne!(
+            STANDALONE_LAREIRA_ENABLED_DEFAULT, CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT,
+            "STANDALONE_LAREIRA_ENABLED_DEFAULT and CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT \
+             must remain inverse `bool`s — the standalone per-chart path defaults to \
+             opt-out (`false`) and the composition per-cluster-HelmRelease values-overlay \
+             path defaults to opt-in (`true`); collapsing the inversion silently \
+             breaks the substrate's chosen mirror-symmetric author-to-live \
+             path-selection semantic at chart-apply time far from the constant-\
+             drift source."
+        );
     }
 
     #[test]
