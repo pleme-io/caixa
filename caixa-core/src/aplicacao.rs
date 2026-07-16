@@ -1094,10 +1094,86 @@ impl MeshPolicy {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.timeout.is_none()
-            && self.retries.is_none()
+            && self.retries().is_none()
             && self.circuit_breaker.is_none()
             && self.mtls_required().is_none()
             && self.rate_limit.is_none()
+    }
+
+    /// Substrate-canonical per-`:politicas` `:retries` transient-failure-
+    /// retry-budget scalar accessor every consumer of the Aplicacao's
+    /// Gateway API v1.x per-rule retry-cap keys off — returns the
+    /// author-declared `:politicas :retries` typed `u32` verbatim as an
+    /// `Option<u32>`, copied out of the typed slot's own `Option<u32>`
+    /// storage (`Option<u32>` is `Copy`, so the accessor returns by
+    /// value; no borrow of `&self` past the call). `None` when the slot
+    /// is absent (the "cluster default applies — typically 'no retries
+    /// beyond a single dispatch attempt'" arm the caixa-mesh
+    /// `retry_overlay` builder documents at caixa-mesh/src/lib.rs:2985
+    /// — [`MeshPolicy::is_empty`]'s `retries.is_none()` arm reads
+    /// this predicate too, so an authored-but-unset `:politicas
+    /// (:retries ())` round-trips to a rendered `HTTPRoute` structurally
+    /// identical to one that omits the slot).
+    ///
+    /// The `:politicas :retries` slot carries the "transient failure
+    /// retry cap" contract (MESH-COMPOSITION §III.2 #2) — the typed
+    /// slot's `Option<u32>` accept-set (lower-bounded by 1 through
+    /// [`AplicacaoSpec::validate_politicas`], upper-bounded by
+    /// [`POLICY_RETRIES_MAX`]) maps onto the Gateway API v1.x
+    /// `HTTPRoute.spec.rules[].retry.attempts` per-rule retry-attempt-
+    /// count scalar the caixa-mesh `retry_overlay` builder writes.
+    /// Every downstream consumer that reads the retry cap keys off this
+    /// scalar (the [`MeshPolicy::is_empty`] emptiness predicate the
+    /// renderers key off to decide "emit :politicas overlay" vs "skip
+    /// entirely", the caixa-mesh per-`:entrada` `HTTPRoute`
+    /// `retry.attempts` builder at caixa-mesh/src/lib.rs:3007 that fans
+    /// the value into every rule via [`crate::render::single_field_overlay`],
+    /// the future M4 per-Aplicacao Gateway API reconciler
+    /// materialization pass, the future per-`:contratos`-edge retry-
+    /// override overlay the MESH-COMPOSITION §III.2 #2 roadmap
+    /// acknowledges).
+    ///
+    /// Prior to this lift the `.retries` field was accessed inline at
+    /// two sites — [`MeshPolicy::is_empty`]'s `self.retries.is_none()`
+    /// arm and caixa-mesh's `single_field_overlay(spec.politicas.retries,
+    /// …)` call — two open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:politicas :retries` axis to a richer author surface — a
+    /// per-`:contratos`-edge retry override the operator pins through a
+    /// future `:contratos :retries` slot, a per-cluster retry-default
+    /// overlay the M4 CR materializer resolves per-CR, a promotion of
+    /// the plain `u32` attempt-count to a richer `{attempts, codes,
+    /// backoff}` sub-block once the Gateway API grows the peer
+    /// `retry.codes` / `retry.backoff` axes — would have had to be
+    /// threaded through both open-coded copies in lockstep or the
+    /// emptiness predicate and the caixa-mesh emit path would silently
+    /// disagree on which retry budget a given [`MeshPolicy`] resolves to
+    /// (a `:politicas` block whose only axis is a `Some :retries` would
+    /// satisfy `is_empty() == false` while the renderer's overlay-emit
+    /// path silently read a drifted other value, or vice versa: an
+    /// author's `:retries 3` would omit the `HTTPRoute` `retry.attempts`
+    /// block while the emptiness predicate still classified the policy
+    /// as non-empty). Lifting the resolution to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Aplicacao's per-`:politicas` retry surface reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a
+    /// unit on any future axis addition.
+    ///
+    /// Second `Option<Copy-T>`-return accessor on the M3 mesh-slot
+    /// family (sibling of the peer per-`:politicas`
+    /// [`MeshPolicy::mtls_required`] c0110f1 `Option<bool>` accessor —
+    /// same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the
+    /// peer per-`:politicas` typed-`u32` optional-scalar axis; opens
+    /// the "optional per-slot numeric-Copy-T scalar" projection pattern
+    /// the sibling per-`:politicas` `:timeout` (Option<Duration>) /
+    /// per-`CircuitBreaker` `:max-failures` / `:window` future lifts
+    /// fold on). Named `retries()` to match the storage field's name;
+    /// the accessor's identity maps onto the canonical MESH-COMPOSITION
+    /// §III.2 vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn retries(&self) -> Option<u32> {
+        self.retries
     }
 
     /// Substrate-canonical per-`:politicas` `:mtls-required` mTLS-
@@ -14502,6 +14578,171 @@ mod tests {
                 "MeshPolicy::mtls_required must return :politicas \
                  :mtls-required verbatim by copy — got {first:?}, \
                  expected {required:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_retries_returns_retries_option_byte_equal_across_permutations() {
+        // The canonical per-`:politicas` `:retries` transient-failure-
+        // retry-budget scalar pin: [`MeshPolicy::retries`] must return
+        // the `:politicas :retries` typed `u32` verbatim as an
+        // `Option<u32>`, byte-equal to the raw field access across every
+        // representative value in the accept-set — `None` (cluster
+        // default applies — typically "no retries beyond a single
+        // dispatch attempt" the caixa-mesh `retry_overlay` builder
+        // documents), `Some(1)` (the lower boundary of the
+        // `1..=POLICY_RETRIES_MAX` accept-set the surrounding
+        // `AplicacaoSpec::validate_politicas` gate carves out on the
+        // sibling `PolicyRetriesZero` refusal), `Some(POLICY_RETRIES_MAX)`
+        // (the upper boundary the same gate carves out on the sibling
+        // `PolicyRetriesOverMax` refusal), and `Some(u32::MAX)` (a
+        // past-the-guard sentinel that pins the accessor doesn't perform
+        // a silent bounds-collapse at the return path).
+        //
+        // Sibling of the peer per-`:politicas`
+        // [`MeshPolicy::mtls_required`] (c0110f1) accessor pin on the
+        // sibling `Option<Copy-T>` optional-scalar axis, extended to the
+        // peer per-`:politicas` `Option<u32>` shape — second
+        // `Option<Copy-T>`-return accessor on the M3 mesh-slot family.
+        // Pins against a future silent detour that re-derived the retry
+        // cap from a peer axis (an accidental `.circuit_breaker
+        // .as_ref().map(|b| b.max_failures)` collapse that read the
+        // breaker's max-failure count as a retry budget), a
+        // `None → Some(0)` cluster-default projection (which would
+        // silently re-introduce the `PolicyRetriesZero` refusal case at
+        // the emit boundary), or a bounds-collapsing accessor that
+        // clamped the return through `POLICY_RETRIES_MAX` (the
+        // `AplicacaoSpec::validate` gate owns the bounds; the accessor
+        // must ship the raw slot verbatim so a validate-time gate
+        // regression surfaces at the emit boundary rather than being
+        // silently absorbed).
+        for retries in [None, Some(1u32), Some(POLICY_RETRIES_MAX), Some(u32::MAX)] {
+            let p = MeshPolicy {
+                retries,
+                ..MeshPolicy::default()
+            };
+            assert_eq!(
+                p.retries(),
+                retries,
+                "MeshPolicy::retries must return :politicas :retries \
+                 verbatim (got {:?}, expected {retries:?})",
+                p.retries(),
+            );
+            assert_eq!(
+                p.retries(),
+                p.retries,
+                "MeshPolicy::retries must byte-equal the raw .retries \
+                 field access across every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_is_empty_retries_arm_routes_through_accessor() {
+        // Composition pin: [`MeshPolicy::is_empty`]'s `retries` arm
+        // must key off [`MeshPolicy::retries`], not the raw `.retries`
+        // field access. Structurally: toggling ONLY the `retries` slot
+        // on an otherwise-default MeshPolicy must flip `is_empty()`
+        // from `true` (all-`None`) to `false` (one axis carries a
+        // value); the flip must be observed for every value in the
+        // accept-set the surrounding `AplicacaoSpec::validate_politicas`
+        // gate accepts (`Some(1)`, `Some(POLICY_RETRIES_MAX)`), since
+        // the emptiness semantic reads "any axis carries a value" —
+        // not "any axis carries a value the validate gate accepts" —
+        // the same non-collapsing shape the peer M2
+        // [`crate::LimitsSpec::is_empty`] /
+        // [`crate::BehaviorSpec::is_empty`] predicates carry.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.rate_limit.is_none()`-only chain that dropped the
+        // `retries` arm entirely), a `retries == Some(_)` collapse
+        // that key-off a validate-gate-clamped bounds check (which
+        // would silently classify a past-the-guard `Some(u32::MAX)`
+        // as empty because it fails the `1..=POLICY_RETRIES_MAX`
+        // check), or an accessor-side detour that no longer names the
+        // substrate-primitive typed dispatch.
+        //
+        // Sibling of the peer per-`:politicas`
+        // [`MeshPolicy::mtls_required`] (c0110f1) accessor-composition
+        // pin on the sibling `Option<Copy-T>` optional-scalar axis —
+        // same "the emptiness predicate must route through the
+        // substrate-primitive typed dispatch" discipline extended onto
+        // the peer per-`:politicas` `Option<u32>` axis.
+        let empty = MeshPolicy::default();
+        assert!(
+            empty.is_empty(),
+            "MeshPolicy::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for retries in [Some(1u32), Some(POLICY_RETRIES_MAX)] {
+            let p = MeshPolicy {
+                retries,
+                ..MeshPolicy::default()
+            };
+            assert!(
+                !p.is_empty(),
+                "MeshPolicy::is_empty must return false when \
+                 :retries is {retries:?} — the emptiness \
+                 predicate reads \"any axis carries a value\", not \
+                 \"any axis carries a value the validate gate \
+                 accepts\"",
+            );
+            assert_eq!(
+                p.retries().is_none(),
+                p.is_empty(),
+                "when :retries is the only set axis, is_empty() \
+                 must equal retries().is_none() — the accessor and \
+                 the emptiness predicate must route through the same \
+                 substrate-primitive typed dispatch on the :retries \
+                 arm",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_retries_projects_option_u32_by_copy() {
+        // The by-copy pin: [`MeshPolicy::retries`] returns
+        // `Option<u32>` by copy — `Option<u32>` is `Copy` and the
+        // accessor must return by value, not by reference. Sibling of
+        // the peer per-`:politicas` [`MeshPolicy::mtls_required`]
+        // (c0110f1) by-copy pin on the peer `Option<bool>` slot,
+        // extended onto the sibling `Option<u32>` copy-invariant
+        // shape — the accessor's returned `Option<u32>` must outlive
+        // `&self` (multiple calls must return equal values from a
+        // dropped-`&self` copy, since the returned Option carries no
+        // borrow), and calling the accessor twice on the same
+        // MeshPolicy must yield the same `Option<u32>` verbatim
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&u32>` (which would type-check but silently break
+        // every downstream caller — [`crate::render::single_field_overlay`]'s
+        // first parameter is `Option<T: Clone>`, and `&u32` would
+        // fold to a detached copy at the call site), an accidental
+        // `Option::as_ref()` projection (`self.retries.as_ref()` would
+        // also type-check but return `Option<&u32>`), or a one-arm-
+        // only accessor that reads `Some(*n)` in the Some arm but
+        // reads a fresh `Default::default()` (`0_u32`) in the None
+        // arm.
+        for retries in [None, Some(1u32), Some(POLICY_RETRIES_MAX), Some(u32::MAX)] {
+            let p = MeshPolicy {
+                retries,
+                ..MeshPolicy::default()
+            };
+            let first = p.retries();
+            let second = p.retries();
+            assert_eq!(
+                first, second,
+                "MeshPolicy::retries must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<u32>",
+            );
+            assert_eq!(
+                first, retries,
+                "MeshPolicy::retries must return :politicas :retries \
+                 verbatim by copy — got {first:?}, expected {retries:?}",
             );
         }
     }

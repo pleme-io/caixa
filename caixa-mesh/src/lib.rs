@@ -3003,8 +3003,25 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // future `&& self.<axis>.is_none()` arm in
     // [`MeshPolicy::is_empty`] + a parallel arm here, not a
     // coordinated rewrite of this site.
+    //
+    // The retry cap projection routes through the substrate-canonical
+    // per-`:politicas` [`caixa_core::MeshPolicy::retries`] typed
+    // accessor (sibling of the peer per-`:politicas`
+    // [`caixa_core::MeshPolicy::mtls_required`] accessor the CNP
+    // `mtls_overlay` builder above keys off) — every downstream
+    // consumer of the per-Aplicacao `:retries` axis reaches for
+    // exactly one typed dispatch on the substrate primitive rather
+    // than an open-coded `.retries` field access, so a future
+    // extension of the axis (a per-`:contratos`-edge override overlay
+    // the operator pins through a `:contratos :retries` slot the
+    // MESH-COMPOSITION §III.2 #2 roadmap acknowledges, a per-cluster
+    // retry-default overlay the M4 CR materializer resolves per-CR,
+    // a promotion of the plain `u32` attempt-count to a richer
+    // `{attempts, codes, backoff}` sub-block once the Gateway API
+    // grows the peer `retry.codes` / `retry.backoff` axes) reaches
+    // this consumer by construction.
     let retry_overlay = single_field_overlay(
-        spec.politicas.retries,
+        spec.politicas.retries(),
         GATEWAY_API_KEY_ATTEMPTS,
         |attempts| serde_yaml::Value::Number(attempts.into()),
     );
