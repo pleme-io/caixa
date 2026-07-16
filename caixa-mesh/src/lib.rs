@@ -2814,9 +2814,9 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     g_spec.insert_singleton_mapping_sequence(GATEWAY_API_KEY_LISTENERS, listener);
     gateway.insert_mapping(KUBE_KEY_SPEC, g_spec);
 
-    // HTTPRoute — all paths route to the entrada.para Servico. Same
-    // skeleton lift as Gateway above; caller adds spec. Both halves of
-    // the `(apiVersion, kind)` CRD-lookup tuple now thread through
+    // HTTPRoute — all paths route to the entrada.destination() Servico.
+    // Same skeleton lift as Gateway above; caller adds spec. Both halves
+    // of the `(apiVersion, kind)` CRD-lookup tuple now thread through
     // their matching lifted [`GATEWAY_API_API_VERSION`] +
     // [`GATEWAY_API_KIND_HTTP_ROUTE`] re-exports so a future Gateway-API
     // rebrand on either axis lands on the canonical
@@ -2830,19 +2830,30 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // "aplicacao-prefixed sub-identity" discipline) so a future
     // per-Aplicacao Gateway API per-CR name-encoding rebrand lands at
     // one lifted composer and reaches this call site by construction.
-    // Prior to this lift the site inlined a verbatim
-    // `format!("{}-{}", caixa.nome, entrada.para)` with no compile-
-    // time link to the peer CNP-name composer's naming discipline; a
-    // rebrand would have had to be threaded through this site and the
-    // in-file test-side `httproute_carries_canonical_kube_skeleton_
-    // without_labels` probe's `Some("checkout-cart")` byte-shape pin
-    // in lockstep or the HTTPRoute `metadata.name` would have
-    // silently split from the operator-side `kubectl get httproute -n
-    // tatara-system <aplicacao>-<para>` grep-by-name lookup encoding.
+    // The destination-Servico discriminator arg now routes through
+    // the lifted [`caixa_core::Entrada::destination`] typed accessor
+    // on the substrate primitive so the HTTPRoute `metadata.name`
+    // discriminator and the peer per-rule `backendRefs[0].name` (see
+    // the sibling consumer below in this same emitter) both key off
+    // exactly one typed dispatch — a future extension of the `:entrada`
+    // slot to a multi-destination author surface (weighted canary
+    // backends, per-path override, an M4 `mesh.pleme.io/v1alpha1/
+    // Aplicacao` CR materializer's admission-webhook that promotes the
+    // scalar to a weighted list) reaches both consumers by construction
+    // rather than by a coordinated inline-copy rewrite. Prior to this
+    // lift the site inlined a verbatim `format!("{}-{}", caixa.nome,
+    // entrada.para)` with no compile-time link to the peer CNP-name
+    // composer's naming discipline; a rebrand would have had to be
+    // threaded through this site and the in-file test-side
+    // `httproute_carries_canonical_kube_skeleton_without_labels`
+    // probe's `Some("checkout-cart")` byte-shape pin in lockstep or
+    // the HTTPRoute `metadata.name` would have silently split from the
+    // operator-side `kubectl get httproute -n tatara-system
+    // <aplicacao>-<destination>` grep-by-name lookup encoding.
     let mut route = kube_resource_skeleton(
         GATEWAY_API_API_VERSION,
         GATEWAY_API_KIND_HTTP_ROUTE,
-        &gateway_api_http_route_name(&caixa.nome, &entrada.para),
+        &gateway_api_http_route_name(&caixa.nome, entrada.destination()),
         namespace,
         BTreeMap::new(),
     );
@@ -2972,7 +2983,27 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
         let mut match_entry = serde_yaml::Mapping::new();
         match_entry.insert_mapping(GATEWAY_API_KEY_PATH, path_match);
         let mut backend_ref = serde_yaml::Mapping::new();
-        backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.para.clone());
+        // Substrate-canonical per-`:entrada` destination-Servico
+        // scalar — routes through the lifted
+        // [`caixa_core::Entrada::destination`] typed accessor on the
+        // substrate primitive so the per-HTTPRoute per-rule
+        // `backendRefs[0].name` axis and the peer HTTPRoute
+        // `metadata.name` discriminator arg (see the sibling consumer
+        // in the [`kube_resource_skeleton`] call above in this same
+        // emitter) both key off exactly one typed dispatch. A future
+        // extension of the `:entrada` slot to a multi-destination
+        // author surface (weighted canary backends, per-path override,
+        // an M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+        // admission-webhook that promotes the scalar to a weighted list)
+        // reaches both consumers by construction rather than by a
+        // coordinated inline-copy rewrite — Gateway API v1.x
+        // conformance requires the HTTPRoute's `backendRefs[]` to
+        // reach a K8s Service the parent Gateway has permission to
+        // route to; drift between the `metadata.name` grep-by-name
+        // encoding and the `backendRefs[]` service-name reach breaks
+        // the operator-side `kubectl get httproute` lookup encoding
+        // far from any single-site commit.
+        backend_ref.insert_string(GATEWAY_API_KEY_NAME, entrada.destination().to_string());
         backend_ref.insert_number(KUBE_KEY_PORT, entrada.port);
         let mut rule = serde_yaml::Mapping::new();
         rule.insert_singleton_mapping_sequence(GATEWAY_API_KEY_MATCHES, match_entry);
@@ -7700,6 +7731,169 @@ mod tests {
              route_hostnames: {:?}",
             listener_hostname,
             route_hostnames,
+        );
+    }
+
+    #[test]
+    fn httproute_name_composer_destination_arg_routes_through_lifted_entrada_destination() {
+        // Cross-crate pin: the per-Aplicacao HTTPRoute's `metadata.name`
+        // discriminator arg must render exactly
+        // [`caixa_core::Entrada::destination`]'s typed dispatch on the
+        // substrate primitive — not from an open-coded `entrada.para`
+        // field access that could silently disagree with the peer per-
+        // rule `backendRefs[0].name` axis on future extensions of the
+        // `:entrada` slot to a multi-destination author surface. Drift
+        // here would break the operator-side
+        // `kubectl get httproute -n tatara-system <aplicacao>-<destination>`
+        // grep-by-name lookup encoding — a route whose `metadata.name`
+        // names one destination but whose `backendRefs[]` reach a
+        // sibling Servico would silently drop every external
+        // `:entrada` flow at the gateway. Peer with the sibling
+        // [`httproute_backend_ref_name_routes_through_lifted_entrada_destination`]
+        // pin on the per-rule backend-name half of the two-consumer
+        // coherence axis.
+        for para in ["cart", "catalog", "payment"] {
+            let mut caixa = aplicacao_caixa();
+            let (expected_composed_name, expected_destination) = {
+                let entrada = caixa
+                    .entrada
+                    .as_mut()
+                    .expect("aplicacao_caixa carries a typed `:entrada` block");
+                entrada.para = para.into();
+                (
+                    gateway_api_http_route_name(&caixa.nome, entrada.destination()),
+                    entrada.destination().to_string(),
+                )
+            };
+            let docs = gateway_routes(&caixa).unwrap();
+            let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
+                .expect("HTTPRoute present under every :entrada :para permutation");
+            let emitted = kube_metadata_str_field(route, KUBE_KEY_NAME)
+                .expect("HTTPRoute metadata.name scalar present");
+            assert_eq!(
+                emitted, expected_composed_name,
+                "HTTPRoute `metadata.name` must equal \
+                 `gateway_api_http_route_name(caixa.nome, \
+                 entrada.destination())` verbatim — drift means the \
+                 composer no longer routes through the substrate-\
+                 primitive typed dispatch. Input :entrada :para: \
+                 {para:?}, expected destination: {expected_destination:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_backend_ref_name_routes_through_lifted_entrada_destination() {
+        // Cross-crate pin: the per-Aplicacao HTTPRoute's per-rule
+        // `backendRefs[0].name` axis must render exactly
+        // [`caixa_core::Entrada::destination`]'s typed dispatch on the
+        // substrate primitive — not from an open-coded
+        // `entrada.para.clone()` field access. Drift here would break
+        // Gateway API v1.x conformance: the `backendRefs[].name` must
+        // name a K8s Service in the same namespace as the parent
+        // Gateway; a `backendRef` that silently references a peer
+        // Servico's Service (because the emitter re-inlined the field
+        // access) drops every external `:entrada` flow with the
+        // destination-drift root cause invisible in the emitted YAML.
+        // Peer with the sibling
+        // [`httproute_name_composer_destination_arg_routes_through_lifted_entrada_destination`]
+        // pin on the `metadata.name` discriminator half of the
+        // two-consumer coherence axis — the two pin tests together
+        // nail the two-consumer coherence discipline the pair-invariant
+        // `metadata.name == "<caixa.nome>-<destination>"` /
+        // `backendRefs[0].name == destination` encodes.
+        for para in ["cart", "catalog", "payment"] {
+            let mut caixa = aplicacao_caixa();
+            let expected = {
+                let entrada = caixa
+                    .entrada
+                    .as_mut()
+                    .expect("aplicacao_caixa carries a typed `:entrada` block");
+                entrada.para = para.into();
+                entrada.destination().to_string()
+            };
+            let docs = gateway_routes(&caixa).unwrap();
+            let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
+                .expect("HTTPRoute present under every :entrada :para permutation");
+            let backend = route
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(KUBE_KEY_RULES))
+                .and_then(|r| r.as_sequence())
+                .and_then(|s| s.first())
+                .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
+                .and_then(|b| b.as_sequence())
+                .and_then(|s| s.first())
+                .expect("first HTTPRoute rule's first backendRef present");
+            let emitted = backend
+                .get(GATEWAY_API_KEY_NAME)
+                .and_then(|n| n.as_str())
+                .expect("backendRef name scalar present");
+            assert_eq!(
+                emitted, expected,
+                "HTTPRoute per-rule `backendRefs[0].name` must render \
+                 `Entrada::destination()` verbatim — drift here means \
+                 the emitter no longer routes through the substrate-\
+                 primitive typed dispatch and the per-rule backend \
+                 would silently disagree with the `metadata.name` \
+                 discriminator on which destination Servico the \
+                 ingress fronts. Input :entrada :para: {para:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_name_and_backend_ref_name_destination_pair_invariant_at_emit_site() {
+        // The pair-invariant cross-crate pin: the HTTPRoute's
+        // `metadata.name` discriminator and the per-rule
+        // `backendRefs[0].name` axis at the same [`gateway_routes`]
+        // emit site must project as the substrate-canonical pair
+        // `metadata.name == gateway_api_http_route_name(caixa.nome,
+        // backendRefs[0].name)` — the invariant the lifted
+        // [`caixa_core::Entrada::destination`] typed accessor pins at
+        // the substrate-primitive level. Pins that any future
+        // renderer-side detour that broke the two-consumer coherence
+        // (an accidental namespace-prefix rewrite on one axis, a
+        // per-cluster suffix stamp on the peer, a weighted-canary
+        // overlay that authored only one axis) surfaces at caixa-mesh
+        // build time rather than at cluster-apply time — an HTTPRoute
+        // whose `metadata.name` names one Servico but whose
+        // `backendRefs[]` reach a peer silently drops external
+        // `:entrada` flows and the destination-drift root cause is
+        // invisible in the emitted YAML. Peer discipline with the two
+        // singular / plural pin tests immediately above and the
+        // sibling `gateway_listener_hostname_and_httproute_hostnames_
+        // pair_invariant_at_emit_site` pin on the DNS-hostname axis.
+        let caixa = aplicacao_caixa();
+        let docs = gateway_routes(&caixa).unwrap();
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        let route_name = kube_metadata_str_field(route, KUBE_KEY_NAME)
+            .expect("HTTPRoute metadata.name scalar present")
+            .to_string();
+        let backend_name = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(KUBE_KEY_RULES))
+            .and_then(|r| r.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|r| r.get(GATEWAY_API_KEY_BACKEND_REFS))
+            .and_then(|b| b.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|b| b.get(GATEWAY_API_KEY_NAME))
+            .and_then(|n| n.as_str())
+            .expect("first HTTPRoute rule's first backendRef.name scalar present")
+            .to_string();
+        assert_eq!(
+            route_name,
+            gateway_api_http_route_name(&caixa.nome, &backend_name),
+            "The HTTPRoute `metadata.name` discriminator and the per-\
+             rule `backendRefs[0].name` axis must project as the pair \
+             `metadata.name == gateway_api_http_route_name(caixa.nome, \
+             backendRefs[0].name)` at the gateway_routes emit site — \
+             Gateway API v1.x conformance requires the operator-side \
+             `kubectl get httproute -n <namespace> <aplicacao>-<destination>` \
+             grep-by-name lookup and the per-rule backend service reach \
+             to name the same destination Servico; drift breaks that \
+             lookup encoding at cluster-apply time. Emitted route_name: \
+             {route_name:?}, backend_name: {backend_name:?}"
         );
     }
 
