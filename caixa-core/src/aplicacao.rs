@@ -179,6 +179,122 @@ pub fn wit_shape_is_store(wit: &str) -> bool {
 }
 
 impl WitContract {
+    /// Substrate-canonical per-`:contratos` caller-Servico scalar
+    /// accessor every consumer that reads the edge's source endpoint
+    /// keys off — returns the author-declared `:contratos :de`
+    /// byte-string verbatim as a `&str`, borrowed from the typed slot's
+    /// own [`String`] storage.
+    ///
+    /// The `:contratos :de` slot names the caller-side member Servico
+    /// on a typed inter-Servico edge (validated by
+    /// [`AplicacaoSpec::validate`] to be a [`Membro::caixa`] the
+    /// Aplicacao declares — a stray `:de` that doesn't name a member is
+    /// [`AplicacaoError::ContratoMemberMissing`], not a silent
+    /// caller-attachment miss at cluster-apply time). Peer of the
+    /// sibling [`WitContract::destination`] accessor on the same
+    /// per-`:contratos` entry — the pair `( source(), destination() )`
+    /// jointly names the typed edge every renderer that fans on the
+    /// caller-callee identity keys off (the
+    /// [`caixa_mesh::cilium_network_policies`] per-`(:de, :para)`
+    /// grouping, the [`AplicacaoSpec::detect_sync_cycles`] adjacency
+    /// map, the per-edge dedup key, the per-edge membership-lookup
+    /// diagnostic).
+    ///
+    /// Prior to this lift the `.de` byte-string was accessed inline at
+    /// four caixa-core sites (the two validate-side membership lookups
+    /// at `!names.contains(c.de.as_str())`, the per-edge dedup-key
+    /// tuple's caller-arm at
+    /// `(c.de.as_str(), c.para.as_str(), c.wit.as_str(), ...)`, the
+    /// `detect_sync_cycles` adjacency `adj.entry(c.de.as_str())`) and
+    /// one caixa-mesh site (the per-`(:de, :para)` CNP grouping's
+    /// caller-arm at `groups.entry((c.de.as_str(), c.para.as_str()))`)
+    /// — five open-coded `.de.as_str()` field-accesses that expressed
+    /// no compile-time link back to the typed slot. A future extension
+    /// of the `:contratos :de` axis to a richer author surface (a
+    /// multi-caller weighted-fan-in overlay per MESH-COMPOSITION §III.2
+    /// canary flow, a per-cluster caller-alias table the operator pins
+    /// through a future `:placement`-scoped slot, the M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+    /// admission-webhook that promotes the scalar to a caller-set
+    /// projection) would have had to be threaded through every
+    /// open-coded copy in lockstep or one consumer would silently
+    /// disagree with the peers on which caller Servico a given edge
+    /// resolves to. Lifting the resolution rule to a typed method on
+    /// the substrate primitive means every downstream caller-facing
+    /// consumer reaches for one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:entrada` [`Entrada::destination`]
+    /// (6db982c) accessor on the analogous per-ingress-Servico scalar
+    /// axis — same "one typed dispatch on the substrate primitive,
+    /// thin projections at each consumer" discipline extended onto the
+    /// per-`:contratos` caller-Servico byte-string axis.
+    #[must_use]
+    pub fn source(&self) -> &str {
+        self.de.as_str()
+    }
+
+    /// Substrate-canonical per-`:contratos` callee-Servico scalar
+    /// accessor every consumer that reads the edge's destination
+    /// endpoint keys off — returns the author-declared
+    /// `:contratos :para` byte-string verbatim as a `&str`, borrowed
+    /// from the typed slot's own [`String`] storage.
+    ///
+    /// The `:contratos :para` slot names the callee-side member Servico
+    /// on a typed inter-Servico edge (validated by
+    /// [`AplicacaoSpec::validate`] to be a [`Membro::caixa`] the
+    /// Aplicacao declares — a stray `:para` that doesn't name a member
+    /// is [`AplicacaoError::ContratoMemberMissing`], not a silent
+    /// callee-attachment miss at cluster-apply time). Callee-side twin
+    /// of the sibling [`WitContract::source`] accessor — the pair
+    /// jointly names the typed edge every renderer that fans on the
+    /// caller-callee identity keys off, and this accessor is also the
+    /// per-`(:de, :para)` L4 port resolver's canonical destination arg:
+    /// under today's typed surface [`AplicacaoSpec::port_for_destination`]
+    /// composes with `destination()` at every emit site that projects a
+    /// per-edge destination Servico's L4 listener port.
+    ///
+    /// Prior to this lift the `.para` byte-string was accessed inline
+    /// at five sites — four caixa-core (the validate-side membership
+    /// lookup at `!names.contains(c.para.as_str())`, the per-edge
+    /// dedup-key tuple's callee-arm, the `detect_sync_cycles`
+    /// adjacency `.insert(c.para.as_str())`, the CNP grouping's
+    /// callee-arm) and one caixa-mesh (the per-`(:de, :para)` CNP L4
+    /// port resolver's destination arg `spec.port_for_destination(&c.para)`)
+    /// — with no compile-time link back to the typed slot. A future
+    /// extension of the `:contratos :para` axis to a richer author
+    /// surface (a multi-callee weighted-fan-out overlay for canary /
+    /// blue-green routing on typed edges, a per-cluster callee-alias
+    /// table the operator pins through a future `:placement`-scoped
+    /// slot, the M4 CR materializer's per-CR admission-webhook that
+    /// promotes the scalar to a callee-set projection) would have had
+    /// to be threaded through every open-coded copy in lockstep or one
+    /// consumer would silently disagree on which callee Servico a given
+    /// edge resolves to (a per-CNP `endpointSelector` that names a
+    /// different destination than its L4 port resolver reads for, a
+    /// dedup-key that treats `(cart, catalog-v2)` and `(cart, catalog)`
+    /// as distinct while the adjacency map collapses them, or vice
+    /// versa). Lifting to a typed method on the substrate primitive
+    /// means every downstream callee-facing consumer reaches for one
+    /// typed dispatch.
+    ///
+    /// Peer of the sibling per-`:entrada` [`Entrada::destination`]
+    /// (6db982c) accessor — both name the "destination-Servico
+    /// byte-string" concept on their respective mesh-slot atoms (per-
+    /// ingress apex vs. per-typed-edge callee), and both extend the
+    /// substrate-primitive-owns-the-resolver discipline onto the
+    /// per-slot destination-Servico scalar axis. Composes with
+    /// [`AplicacaoSpec::port_for_destination`] (9ca4896) at every
+    /// emit-side per-edge L4 port reader — the composition
+    /// `spec.port_for_destination(c.destination())` pins the CNP per-
+    /// `(:de, :para)` L4 port axis to the same typed dispatch the peer
+    /// `HTTPRoute` `backendRefs[0].port` axis reaches through with
+    /// `spec.port_for_destination(entrada.destination())`.
+    #[must_use]
+    pub fn destination(&self) -> &str {
+        self.para.as_str()
+    }
+
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
@@ -2810,12 +2926,12 @@ impl AplicacaoSpec {
             // and diagnostic strings already use.
             validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, &c.de)?;
             validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, &c.para)?;
-            if !names.contains(c.de.as_str()) {
+            if !names.contains(c.source()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
                     caixa: c.de.clone(),
                 });
             }
-            if !names.contains(c.para.as_str()) {
+            if !names.contains(c.destination()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
                     caixa: c.para.clone(),
                 });
@@ -2877,8 +2993,8 @@ impl AplicacaoSpec {
             // cart→catalog at /products vs /search), which keeps distinct
             // identity keys via the differing endpoint payloads.
             let key = (
-                c.de.as_str(),
-                c.para.as_str(),
+                c.source(),
+                c.destination(),
                 c.wit.as_str(),
                 c.endpoint.as_deref(),
                 c.subject.as_deref(),
@@ -3480,9 +3596,7 @@ impl AplicacaoSpec {
             if matches!(c.target()?, WitTarget::PubSub { .. }) {
                 continue;
             }
-            adj.entry(c.de.as_str())
-                .or_default()
-                .insert(c.para.as_str());
+            adj.entry(c.source()).or_default().insert(c.destination());
         }
 
         let mut color: BTreeMap<&str, Mark> = adj.keys().map(|k| (*k, Mark::White)).collect();
@@ -13140,6 +13254,221 @@ mod tests {
             para_slice.len(),
             "Entrada::destination and .para.as_str() must byte-equal in \
              length as well as in address",
+        );
+    }
+
+    #[test]
+    fn wit_contract_source_returns_de_byte_equal_across_permutations() {
+        // The canonical caller-Servico-scalar pin: [`WitContract::source`]
+        // must return the `:contratos :de` field byte-for-byte, borrowed
+        // from the typed slot's own [`String`] storage. Peer of the
+        // sibling `destination_returns_entrada_para_byte_equal` pin on
+        // the per-`:entrada` axis — same "the substrate-primitive
+        // accessor must byte-equal the raw field access verbatim across
+        // every author-declared value" discipline extended to the
+        // per-`:contratos` caller arm. Pins against a future silent
+        // detour that re-normalized the caller (an accidental
+        // `.to_lowercase()` — every `:contratos :de` is validated as a
+        // DNS-1123 label upstream via `validate_contrato_caixa`, so any
+        // re-normalization is redundant + a drift surface between the
+        // validator and the accessor), a namespace-prefix rewrite (an
+        // accidental `format!("{namespace}/{de}")` per-CR fully-qualified
+        // rewrite that didn't land on the peer axis), or a per-cluster
+        // suffix stamp the operator authors on one consumer without the
+        // other.
+        for de in ["cart", "checkout", "catalog", "orders-v2"] {
+            let c = WitContract {
+                de: de.into(),
+                para: "downstream".into(),
+                wit: "wasi:http/proxy".into(),
+                endpoint: Some("/lookup".into()),
+                subject: None,
+                slot: None,
+            };
+            assert_eq!(
+                c.source(),
+                de,
+                "WitContract::source must return :contratos :de verbatim \
+                 (got {:?}, expected {de:?})",
+                c.source(),
+            );
+            assert_eq!(
+                c.source(),
+                c.de.as_str(),
+                "WitContract::source must byte-equal the .de field access",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_source_borrows_from_de_storage() {
+        // The borrow-not-copy pin: [`WitContract::source`] must return a
+        // `&str` slice that borrows from the typed slot's own [`String`]
+        // storage — same-address invariant with `c.de.as_str()`. Pins
+        // against a future silent detour that allocated a fresh `String`
+        // (`self.de.clone()` in the body would type-check but silently
+        // drop the borrow, and every downstream consumer that assumed
+        // the returned slice outlives `&self` would break on a stale-
+        // reference use-after-free). Peer of the sibling
+        // `destination_borrows_from_entrada_para_storage` on the
+        // per-`:entrada` axis.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        let src = c.source();
+        let de_slice = c.de.as_str();
+        assert_eq!(
+            src.as_ptr(),
+            de_slice.as_ptr(),
+            "WitContract::source must borrow from the .de String's \
+             backing storage — a fresh allocation here means the \
+             accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            src.len(),
+            de_slice.len(),
+            "WitContract::source and .de.as_str() must byte-equal in \
+             length as well as in address",
+        );
+    }
+
+    #[test]
+    fn wit_contract_destination_returns_para_byte_equal_across_permutations() {
+        // The canonical callee-Servico-scalar pin: [`WitContract::destination`]
+        // must return the `:contratos :para` field byte-for-byte,
+        // borrowed from the typed slot's own [`String`] storage. Peer of
+        // the sibling `destination_returns_entrada_para_byte_equal` on
+        // the per-`:entrada` axis — both accessors name "the destination-
+        // Servico byte-string" concept on their respective mesh-slot
+        // atoms (per-ingress apex vs. per-typed-edge callee) and both
+        // must project the underlying `.para` field verbatim so every
+        // downstream renderer that composes them with peer accessors
+        // (e.g. `spec.port_for_destination(c.destination())` at the CNP
+        // per-edge L4 port emit site) reads the same byte-string the
+        // author declared.
+        for para in ["catalog", "payment", "orders", "inventory-v3"] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: para.into(),
+                wit: "wasi:http/proxy".into(),
+                endpoint: Some("/lookup".into()),
+                subject: None,
+                slot: None,
+            };
+            assert_eq!(
+                c.destination(),
+                para,
+                "WitContract::destination must return :contratos :para \
+                 verbatim (got {:?}, expected {para:?})",
+                c.destination(),
+            );
+            assert_eq!(
+                c.destination(),
+                c.para.as_str(),
+                "WitContract::destination must byte-equal the .para \
+                 field access",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_destination_borrows_from_para_storage() {
+        // The borrow-not-copy pin: [`WitContract::destination`] must
+        // return a `&str` slice that borrows from the typed slot's own
+        // [`String`] storage — same-address invariant with
+        // `c.para.as_str()`. Peer of the sibling
+        // `destination_borrows_from_entrada_para_storage` on the
+        // per-`:entrada` axis.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        let dest = c.destination();
+        let para_slice = c.para.as_str();
+        assert_eq!(
+            dest.as_ptr(),
+            para_slice.as_ptr(),
+            "WitContract::destination must borrow from the .para \
+             String's backing storage — a fresh allocation here means \
+             the accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            dest.len(),
+            para_slice.len(),
+            "WitContract::destination and .para.as_str() must byte-equal \
+             in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn port_for_destination_at_contract_destination_returns_entrada_port_when_para_matches() {
+        // Apex-identity pair-invariant pin composing both substrate-
+        // primitive typed dispatches — [`AplicacaoSpec::port_for_destination`]
+        // and [`WitContract::destination`] — at the emit-side call shape
+        // every per-`(:de, :para)` CNP L4 port reader now takes. The
+        // invariant, evaluated per-edge:
+        //
+        //   spec.port_for_destination(c.destination()) == expected_port
+        //
+        // where `expected_port` is `entrada.port` when
+        // `c.destination() == entrada.destination()` and
+        // `DEFAULT_SERVICO_PORT` otherwise. Peer of the sibling
+        // `port_for_destination_at_entrada_destination_returns_entrada_port_across_permutations`
+        // pin on the per-`:entrada` axis — that pin encodes the apex
+        // ingress L4 identity via `entrada.destination()`; this pin
+        // encodes the per-edge L4 identity via `c.destination()`, and
+        // both compose on the same substrate-primitive resolver so a
+        // future refactor that silently split either accessor's apex
+        // behavior surfaces at caixa-core build time.
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.para = "cart".into();
+            e.port = 8443;
+        }
+        let apex_contract = WitContract {
+            de: "checkout".into(),
+            para: "cart".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/hello".into()),
+            subject: None,
+            slot: None,
+        };
+        assert_eq!(
+            spec.port_for_destination(apex_contract.destination()),
+            8443,
+            "`spec.port_for_destination(c.destination())` must equal \
+             `entrada.port` when the contract callee names the ingress \
+             apex — the CNP per-edge L4 port and the HTTPRoute apex \
+             backendRef port share this substrate-primitive resolver.",
+        );
+        let non_apex_contract = WitContract {
+            de: "cart".into(),
+            para: "payment".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/charge".into()),
+            subject: None,
+            slot: None,
+        };
+        assert_eq!(
+            spec.port_for_destination(non_apex_contract.destination()),
+            DEFAULT_SERVICO_PORT,
+            "`spec.port_for_destination(c.destination())` must fall back \
+             to the substrate-canonical port floor when the contract \
+             callee is not the ingress apex — the resolver's non-apex \
+             arm reaches for [`DEFAULT_SERVICO_PORT`] by construction.",
         );
     }
 

@@ -2540,7 +2540,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     let mut groups: BTreeMap<(&str, &str), Vec<&WitContract>> = BTreeMap::new();
     for c in &spec.contratos {
         groups
-            .entry((c.de.as_str(), c.para.as_str()))
+            .entry((c.source(), c.destination()))
             .or_default()
             .push(c);
     }
@@ -2660,7 +2660,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             // resolver's per-destination probe axis, and every
             // downstream test-fixture navigator asserting the L4
             // port floor read from one place.
-            let port = spec.port_for_destination(&c.para);
+            let port = spec.port_for_destination(c.destination());
             port_entry.insert_string(KUBE_KEY_PORT, port.to_string());
             port_entry.insert_string(KUBE_KEY_PROTOCOL, KUBE_PROTOCOL_TCP);
             to_port.insert_singleton_mapping_sequence(CILIUM_KEY_PORTS, port_entry);
