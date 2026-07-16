@@ -2545,10 +2545,21 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     // each ingress rule. Same lifted-typed-primitive shape the
     // gateway_routes overlays (timeout, retry) consume — see
     // [`caixa_core::render::single_field_overlay`].
-    let mtls_overlay =
-        single_field_overlay(spec.politicas.mtls_required, CILIUM_KEY_MODE, |required| {
-            serde_yaml::Value::String(cilium_auth_mode(required).into())
-        });
+    // Route the `:politicas :mtls-required` mTLS-enforcement-toggle
+    // read through the typed [`caixa_core::MeshPolicy::mtls_required`]
+    // accessor rather than the raw `spec.politicas.mtls_required` field
+    // access — one of the two open-coded field-access sites on the
+    // per-`:politicas` `:mtls-required` axis the accessor lift now
+    // owns (peer of the [`caixa_core::MeshPolicy::is_empty`] arm that
+    // already routes through the same dispatch). The accessor returns
+    // `Option<bool>` by copy (bool is `Copy`), so
+    // [`single_field_overlay`]'s first parameter accepts the narrower
+    // owned Option verbatim without a re-allocation or a `.clone()`.
+    let mtls_overlay = single_field_overlay(
+        spec.politicas.mtls_required(),
+        CILIUM_KEY_MODE,
+        |required| serde_yaml::Value::String(cilium_auth_mode(required).into()),
+    );
     // Fan typed edges into per-`(:de, :para)` groups — the policy
     // identity axis. A `BTreeMap` keyed by the pair gives deterministic
     // policy order independent of `:contratos` declaration order
