@@ -295,22 +295,87 @@ impl WitContract {
         self.para.as_str()
     }
 
+    /// Substrate-canonical per-`:contratos` WIT-world-reference scalar
+    /// accessor every consumer that reads the edge's WIT world
+    /// discriminator keys off — returns the author-declared
+    /// `:contratos :wit` byte-string verbatim as a `&str`, borrowed from
+    /// the typed slot's own [`String`] storage.
+    ///
+    /// The `:contratos :wit` slot names the WIT world the typed edge
+    /// carries (e.g. `"wasi:http/proxy"`, `"nats:pub-sub"`,
+    /// `"wasi:keyvalue/store"`); validated by [`WitContract::target`] to
+    /// be a well-shaped WIT world reference via
+    /// [`crate::render::is_wit_world_ref`] and by
+    /// [`AplicacaoSpec::validate`] to be non-empty via the narrower
+    /// [`AplicacaoError::EmptyWit`] variant. Peer of the sibling
+    /// [`WitContract::source`] / [`WitContract::destination`] accessors
+    /// on the same per-`:contratos` entry — the triple
+    /// `( source(), destination(), world_ref() )` jointly names the
+    /// typed edge every renderer that fans on the caller-callee-shape
+    /// identity keys off (the per-edge dedup key at
+    /// [`AplicacaoSpec::validate`]'s duplicate-`:contratos` gate, the
+    /// per-`(:de, :para)` CNP grouping's shape-arm classifier at
+    /// [`caixa_mesh::cilium_network_policies`], the
+    /// [`WitContract::is_http`] / [`is_pubsub`][WitContract::is_pubsub]
+    /// / [`is_store`][WitContract::is_store] shape-dispatch predicates,
+    /// the [`feira app graph`][fag] per-edge printer's WIT-shape label).
+    ///
+    /// Prior to this lift the `.wit` byte-string was accessed inline at
+    /// five sites — three caixa-core (the `WitContract::is_*` shape-
+    /// dispatch predicates' `&self.wit` arg, the validate-side empty
+    /// check at `if c.wit.is_empty()`, the per-edge dedup-key tuple's
+    /// shape arm at `c.wit.as_str()`) and one caixa-feira (the app-graph
+    /// printer's `{}` format-slot at `c.wit`) — five open-coded
+    /// `.wit` field-accesses that expressed no compile-time link back to
+    /// the typed slot. A future extension of the `:contratos :wit` axis
+    /// to a richer author surface (an M4 promotion from `String` to a
+    /// typed WIT-world enum once the WIT registry stabilizes in tatara-
+    /// lisp per this struct's own `:wit` field docstring, a per-cluster
+    /// WIT-alias table the operator pins through a future
+    /// `:placement`-scoped slot, a canonicalization pass that lowercases
+    /// `wasi:*` prefixes) would have had to be threaded through every
+    /// open-coded copy in lockstep or one consumer would silently
+    /// disagree with the peers on which WIT shape a given edge resolves
+    /// to (a per-CNP L7 emission that read `wasi:http/proxy` while the
+    /// dedup key read the pre-canonicalized `WASI:HTTP/proxy`, an
+    /// empty-check that missed a whitespace-only string a peer accessor
+    /// stripped, or vice versa). Lifting to a typed method on the
+    /// substrate primitive means every downstream WIT-shape-facing
+    /// consumer reaches for one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Sibling of the peer per-`:contratos` [`WitContract::source`] /
+    /// [`WitContract::destination`] (7f0fd43), per-`:entrada`
+    /// [`Entrada::hostname`] / [`Entrada::destination`] (11f3dfe /
+    /// 6db982c), per-`:membros` [`Membro::nome`] /
+    /// [`Membro::versao_requirement`] (4a32abf / a40b0e3) accessors on
+    /// the mesh-slot-atom scalar-value axes — same "one typed dispatch
+    /// on the substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the last unlifted per-`:contratos`
+    /// scalar (the WIT-world-reference arm).
+    ///
+    /// [fag]: caixa-feira/src/cmd/app.rs
+    #[must_use]
+    pub fn world_ref(&self) -> &str {
+        self.wit.as_str()
+    }
+
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
-        wit_shape_is_http(&self.wit)
+        wit_shape_is_http(self.world_ref())
     }
 
     /// True when this contract targets a pub-sub-shaped WIT world.
     #[must_use]
     pub fn is_pubsub(&self) -> bool {
-        wit_shape_is_pubsub(&self.wit)
+        wit_shape_is_pubsub(self.world_ref())
     }
 
     /// True when this contract targets a key/value-shaped WIT world.
     #[must_use]
     pub fn is_store(&self) -> bool {
-        wit_shape_is_store(&self.wit)
+        wit_shape_is_store(self.world_ref())
     }
 
     /// Typed view of the contract's payload target. Enforces that the
@@ -3120,7 +3185,7 @@ impl AplicacaoSpec {
                     wit: c.wit.clone(),
                 });
             }
-            if c.wit.is_empty() {
+            if c.world_ref().is_empty() {
                 return Err(AplicacaoError::EmptyWit {
                     de: c.de.clone(),
                     para: c.para.clone(),
@@ -3144,7 +3209,7 @@ impl AplicacaoSpec {
             let key = (
                 c.source(),
                 c.destination(),
-                c.wit.as_str(),
+                c.world_ref(),
                 c.endpoint.as_deref(),
                 c.subject.as_deref(),
                 c.slot.as_deref(),
@@ -13560,6 +13625,197 @@ mod tests {
             "WitContract::destination and .para.as_str() must byte-equal \
              in length as well as in address",
         );
+    }
+
+    #[test]
+    fn wit_contract_world_ref_returns_wit_byte_equal_across_permutations() {
+        // The canonical per-`:contratos` WIT-world-reference scalar pin:
+        // [`WitContract::world_ref`] must return the `:contratos :wit`
+        // field byte-for-byte, borrowed from the typed slot's own
+        // [`String`] storage. Sibling of the peer per-`:contratos`
+        // [`WitContract::source`] / [`WitContract::destination`]
+        // (7f0fd43), per-`:entrada` [`Entrada::hostname`] /
+        // [`Entrada::destination`] (11f3dfe / 6db982c), per-`:membros`
+        // [`Membro::nome`] / [`Membro::versao_requirement`] (4a32abf /
+        // a40b0e3) pins on the mesh-slot-atom scalar-value axes — same
+        // "the substrate-primitive accessor must byte-equal the raw
+        // field access verbatim across every author-declared value"
+        // discipline extended to the per-`:contratos` WIT-world arm.
+        // Pins against a future silent detour that re-canonicalized the
+        // WIT world reference (an accidental `.to_lowercase()` pass that
+        // collapsed `WASI:HTTP/proxy` — every `:contratos :wit` past
+        // [`WitContract::target`]'s [`crate::render::is_wit_world_ref`]
+        // gate is already lowercase-prefixed so any re-normalization is
+        // redundant + a drift surface between the validator and the
+        // accessor), an M4-promotion-shape rewrite that formatted a
+        // typed WIT-world enum through [`Display`] and silently drifted
+        // the printer output from the source `caixa.lisp`, or a per-
+        // cluster WIT-alias rewrite that didn't land on the peer field-
+        // access sites. Five values sweep the shape-dispatch accept-set
+        // the peer [`wit_shape_matches`] combinator admits (HTTP `wasi:`
+        // / HTTP `http:` / PubSub `nats:` / PubSub `kafka:` / Store
+        // `wasi:keyvalue/`).
+        for (wit, endpoint, subject, slot) in [
+            ("wasi:http/proxy", Some("/lookup"), None, None),
+            ("http:proxy", Some("/health"), None, None),
+            ("nats:pub-sub", None, Some("orders.paid"), None),
+            ("kafka:events", None, Some("checkout-events"), None),
+            ("wasi:keyvalue/store", None, None, Some("carts/{cart_id}")),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "downstream".into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert_eq!(
+                c.world_ref(),
+                wit,
+                "WitContract::world_ref must return :contratos :wit \
+                 verbatim (got {:?}, expected {wit:?})",
+                c.world_ref(),
+            );
+            assert_eq!(
+                c.world_ref(),
+                c.wit.as_str(),
+                "WitContract::world_ref must byte-equal the .wit field \
+                 access",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_world_ref_borrows_from_wit_storage() {
+        // The borrow-not-copy pin: [`WitContract::world_ref`] must
+        // return a `&str` slice that borrows from the typed slot's own
+        // [`String`] storage — same-address invariant with
+        // `c.wit.as_str()`. Pins against a future silent detour that
+        // allocated a fresh `String` (`self.wit.clone()` in the body
+        // would type-check but silently drop the borrow, and every
+        // downstream consumer that assumed the returned slice outlives
+        // `&self` would break on a stale-reference use-after-free — the
+        // dedup-key `&str`-tuple at [`AplicacaoSpec::validate`]'s
+        // duplicate-`:contratos` gate, the per-shape `wit_shape_is_*`
+        // predicates' `&str` arg the peer [`is_http`][WitContract::is_http]
+        // / [`is_pubsub`][WitContract::is_pubsub] /
+        // [`is_store`][WitContract::is_store] methods route through —
+        // each borrow from the WitContract's own storage and each would
+        // silently misbehave if this accessor produced a detached copy).
+        // Peer of the sibling per-`:contratos` [`WitContract::source`] /
+        // [`WitContract::destination`] and per-`:entrada`
+        // [`Entrada::destination`] / [`Entrada::hostname`] and
+        // per-`:membros` [`Membro::nome`] / [`Membro::versao_requirement`]
+        // borrow-invariant pins on the mesh-slot-atom scalar-value axes.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        let world = c.world_ref();
+        let wit_slice = c.wit.as_str();
+        assert_eq!(
+            world.as_ptr(),
+            wit_slice.as_ptr(),
+            "WitContract::world_ref must borrow from the .wit String's \
+             backing storage — a fresh allocation here means the \
+             accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently carry \
+             a detached copy",
+        );
+        assert_eq!(
+            world.len(),
+            wit_slice.len(),
+            "WitContract::world_ref and .wit.as_str() must byte-equal in \
+             length as well as in address",
+        );
+    }
+
+    #[test]
+    fn wit_contract_source_destination_world_ref_project_de_para_wit_triple() {
+        // Sibling-triple invariant pin composing all three per-`:contratos`
+        // substrate-primitive typed dispatches — [`WitContract::source`]
+        // (7f0fd43), [`WitContract::destination`] (7f0fd43), and
+        // [`WitContract::world_ref`] — at the joint
+        // `(source(), destination(), world_ref())` call shape every
+        // renderer that fans on per-edge caller-callee-shape identity
+        // keys off. The invariant, evaluated per-contract:
+        //
+        //   (c.source(), c.destination(), c.world_ref())
+        //   == (c.de.as_str(), c.para.as_str(), c.wit.as_str())
+        //
+        // Closes the last unlifted per-`:contratos` scalar axis — every
+        // downstream consumer that reads the triple now routes through
+        // exactly three typed dispatches on the substrate primitive,
+        // not two typed + one open-coded field access. A future refactor
+        // that silently split any one accessor's projection (an
+        // accidental `world_ref()` M4-typed-WIT-enum `Display` re-
+        // canonicalization that didn't reach the peer `source`/
+        // `destination` arms, an accidental `source()` per-cluster
+        // caller-alias rewrite that didn't land on the `world_ref` peer)
+        // surfaces at caixa-core build time. Peer of the sibling per-
+        // `:membros` `(nome(), versao_requirement())` (a40b0e3) and
+        // per-`:entrada` `(hostname(), destination())` (6db982c /
+        // 11f3dfe) pair invariants on the mesh-slot-atom scalar-value
+        // axes, extended to the per-`:contratos` triple.
+        for (de, para, wit, endpoint, subject, slot) in [
+            (
+                "cart",
+                "catalog",
+                "wasi:http/proxy",
+                Some("/lookup"),
+                None,
+                None,
+            ),
+            (
+                "checkout",
+                "orders",
+                "nats:pub-sub",
+                None,
+                Some("orders.paid"),
+                None,
+            ),
+            (
+                "cart",
+                "kv",
+                "wasi:keyvalue/store",
+                None,
+                None,
+                Some("carts/{cart_id}"),
+            ),
+            (
+                "orders-v2",
+                "inventory-v3",
+                "http:proxy",
+                Some("/reserve"),
+                None,
+                None,
+            ),
+        ] {
+            let c = WitContract {
+                de: de.into(),
+                para: para.into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert_eq!(
+                (c.source(), c.destination(), c.world_ref()),
+                (c.de.as_str(), c.para.as_str(), c.wit.as_str()),
+                "(WitContract::source, ::destination, ::world_ref) must \
+                 project (.de, .para, .wit) verbatim across every author-\
+                 declared triple (got ({:?}, {:?}, {:?}), expected \
+                 ({de:?}, {para:?}, {wit:?}))",
+                c.source(),
+                c.destination(),
+                c.world_ref(),
+            );
+        }
     }
 
     #[test]

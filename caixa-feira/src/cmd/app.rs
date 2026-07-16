@@ -99,7 +99,13 @@ impl GraphArgs {
                     }
                     WitTarget::Capability => "(capability-only)".to_string(),
                 };
-                println!("    - {} → {}  via {}  [{}]", c.de, c.para, c.wit, label);
+                println!(
+                    "    - {} → {}  via {}  [{}]",
+                    c.source(),
+                    c.destination(),
+                    c.world_ref(),
+                    label,
+                );
             }
             if let Some(e) = &spec.entrada {
                 println!(
