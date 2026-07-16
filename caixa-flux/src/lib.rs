@@ -411,6 +411,65 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_UPGRADE;
 /// leaf-scalar-key at the same `spec.upgrade.remediation.*` position.
 pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE;
 
+/// Canonical Flux v2 `HelmRelease.spec.upgrade.remediation.remediateLastFailure`
+/// upgrade-path-only per-CR remediation-toggle scalar-value default the
+/// substrate seeds into every per-caixa `helmrelease.yaml` document at the
+/// paired [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] leaf-scalar-key
+/// axis. Re-export of the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`] so the
+/// Flux v2 helm-controller-side per-CR upgrade-path per-CR post-retry-
+/// exhaustion-rollback-toggle scalar-value default lives in exactly one
+/// place across every caixa renderer — [`cluster_bundle`]'s
+/// `helmrelease.yaml` format-string template's per-CR upgrade-path
+/// remediation-toggle scalar under the [`FLUX_HELMRELEASE_KEY_UPGRADE`]-
+/// keyed sub-block (the sole production-code site the prior inline
+/// `remediateLastFailure: true` scalar-value literal sat at, alongside the
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`]-keyed leaf-scalar-key
+/// half of the same `(leaf-key, scalar-value)` pair) now threads the same
+/// `bool` through a `{remediate_last_failure_default}` named-arg
+/// interpolation, so a future substrate-side toggle migration (`true` →
+/// `false` on a per-cluster class where terminally-failed upgrades must
+/// escalate to operator-attention rather than mask under an auto-rollback
+/// pipeline; a per-caixa opt-out slot the ABSORPTION-ROADMAP.md M4 typed-
+/// slot trajectory adds once the substrate grows a `:upgrade
+/// :remediate-last-failure` author-side toggle) is a one-line edit on the
+/// canonical [`caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`]
+/// declaration, not a coordinated rewrite across the emit site + every
+/// future per-target renderer the substrate adds. Pairs with the sibling
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`] re-export on the same
+/// per-CR `spec.upgrade.remediation.remediateLastFailure` scalar-axis —
+/// the key half of the per-CR scalar-key/scalar-value pair lives at
+/// [`FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE`], the value half's
+/// substrate-side default seed lives here. Same shape as the sibling
+/// [`FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] (ea857d8) scalar-value default
+/// re-export on the peer per-CR `Kustomization` garbage-collection-toggle
+/// axis — that default names whether the per-CR `Kustomization` reconcile
+/// loop sweeps orphaned resources at all, and this default names whether
+/// the per-CR `HelmRelease` upgrade-path remediation loop rolls back to
+/// the prior last-known-good release once the retry-cap ceiling is
+/// exhausted. Both are substrate-side policy choices the operator
+/// inherits when the per-caixa [`ClusterBundleOpts`] doesn't pin an
+/// override, and both must move together on any coordinated substrate-
+/// side Flux v2 per-CR tuning-cycle promotion. Until this lift landed the
+/// axis carried an inline `true` scalar-value literal at the sole
+/// production-code call site plus the sibling test-fixture navigation
+/// site ([`cluster_bundle_helmrelease_upgrade_remediation_remediate_last_failure_pins_lifted_true`]
+/// pin's `assert!(remediate_last_failure)` predicate) — two occurrences
+/// of the same load-bearing Flux-v2-per-CR-upgrade-path-remediation-
+/// toggle-scalar-value convention, drift-prone by construction ahead of
+/// the third occurrence the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HelmRelease` synthesis will surface.
+/// Same shape as the sibling [`caixa_core::DEFAULT_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] /
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`caixa_core::DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] /
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] /
+/// [`caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] re-exports on the peer
+/// canonical-substrate-default-load-bearing-scalar surface.
+pub use caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT;
+
 /// Canonical Flux v2 `HelmRelease.spec.install.createNamespace` install-path-
 /// only per-CR namespace-seeder-toggle leaf-scalar-key — re-export of the
 /// canonical [`caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] so the
@@ -457,6 +516,68 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE;
 /// path-only per-CR namespace-seeder-toggle at the `spec.install.*`
 /// position mirroring the peer's `spec.upgrade.remediation.*` position.
 pub use caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE;
+
+/// Canonical Flux v2 `HelmRelease.spec.install.createNamespace` install-path-
+/// only per-CR namespace-seeder-toggle scalar-value default the substrate
+/// seeds into every per-caixa `helmrelease.yaml` document at the paired
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] leaf-scalar-key axis. Re-
+/// export of the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT`] so the Flux
+/// v2 helm-controller-side per-CR install-path per-CR namespace-seeder-
+/// toggle scalar-value default lives in exactly one place across every
+/// caixa renderer — [`cluster_bundle`]'s `helmrelease.yaml` format-
+/// string template's per-CR install-path namespace-seeder-toggle scalar
+/// under the [`FLUX_HELMRELEASE_KEY_INSTALL`]-keyed sub-block (the sole
+/// production-code site the prior inline `createNamespace: true` scalar-
+/// value literal sat at, alongside the [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`]-
+/// keyed leaf-scalar-key half of the same `(leaf-key, scalar-value)`
+/// pair) now threads the same `bool` through a `{create_namespace_default}`
+/// named-arg interpolation, so a future substrate-side toggle migration
+/// (`true` → `false` on hardened per-cluster classes where namespace
+/// provisioning is an out-of-band operator gate; a per-caixa opt-out
+/// slot the ABSORPTION-ROADMAP.md M4 typed-slot trajectory adds once the
+/// substrate grows a `:install :create-namespace` author-side toggle) is
+/// a one-line edit on the canonical
+/// [`caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT`] declaration,
+/// not a coordinated rewrite across the emit site + every future per-
+/// target renderer the substrate adds. Pairs with the sibling
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`] re-export on the same per-CR
+/// `spec.install.createNamespace` scalar-axis — the key half of the
+/// per-CR scalar-key/scalar-value pair lives at
+/// [`FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE`], the value half's substrate-
+/// side default seed lives here. Peer with the sibling
+/// [`FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`] mirror-symmetric
+/// upgrade-path-only scalar-value default + the sibling
+/// [`FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] (ea857d8) scalar-value default
+/// on the peer canonical-Flux-v2-per-CR-substrate-default surface — the
+/// three defaults name the substrate's canonical (install-path
+/// namespace-seeder) / (upgrade-path post-retry-exhaustion rollback) /
+/// (garbage-collection-toggle) toggle triple across the per-caixa
+/// `HelmRelease` and `Kustomization` co-resident CRs. All three are
+/// substrate-side policy choices the operator inherits when the per-
+/// caixa [`ClusterBundleOpts`] doesn't pin an override, and all three
+/// must move together on any coordinated substrate-side Flux v2 per-CR
+/// tuning-cycle promotion. Until this lift landed the axis carried an
+/// inline `true` scalar-value literal at the sole production-code call
+/// site plus the sibling test-fixture navigation site
+/// ([`cluster_bundle_helmrelease_install_create_namespace_pins_lifted_true`]
+/// pin's `assert!(create_namespace)` predicate) — two occurrences of the
+/// same load-bearing Flux-v2-per-CR-install-path-namespace-seeder-
+/// toggle-scalar-value convention, drift-prone by construction ahead of
+/// the third occurrence the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// materializer's per-Aplicacao `HelmRelease` synthesis will surface.
+/// Same shape as the sibling [`caixa_core::DEFAULT_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] /
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`caixa_core::DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] /
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] /
+/// [`caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] /
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`]
+/// re-exports on the peer canonical-substrate-default-load-bearing-
+/// scalar surface.
+pub use caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT;
 
 /// Canonical Flux v2 `Kustomization.spec.prune` per-CR garbage-collection-
 /// toggle leaf-scalar-key — re-export of the canonical
@@ -2007,13 +2128,13 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
                  {name_key}: {name}\n        \
                  {namespace_key}: {namespace}\n  \
            {install_key}:\n    \
-             {create_namespace_key}: true\n    \
+             {create_namespace_key}: {create_namespace_default}\n    \
              {remediation_key}:\n      \
                {retries_key}: {retries_default}\n  \
            {upgrade_key}:\n    \
              {remediation_key}:\n      \
                {retries_key}: {retries_default}\n      \
-               {remediate_last_failure_key}: true\n  \
+               {remediate_last_failure_key}: {remediate_last_failure_default}\n  \
            {values_key}:\n    \
              {library_name}:\n      \
                {enabled_key}: true\n",
@@ -2043,7 +2164,9 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         install_key = FLUX_HELMRELEASE_KEY_INSTALL,
         upgrade_key = FLUX_HELMRELEASE_KEY_UPGRADE,
         remediate_last_failure_key = FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+        remediate_last_failure_default = FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT,
         create_namespace_key = FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+        create_namespace_default = FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT,
     );
 
     // The `spec.path` per-CR source-sub-tree scalar composes through
@@ -2816,16 +2939,20 @@ spec:
                  terminally-failed upgrade in the failed state without \
                  rolling back to the prior last-known-good release",
             );
-        assert!(
-            remediate_last_failure,
+        assert_eq!(
+            remediate_last_failure, FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT,
             "spec.upgrade.remediation.remediateLastFailure must carry the \
-             substrate's canonical `true` seed — drift to `false` silently \
-             drops the post-retry-exhaustion rollback semantic the Flux v2 \
-             helm-controller's per-CR upgrade-path remediation loop keys \
-             off to trigger the prior-release rollback pipeline, and every \
+             lifted `FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT` \
+             scalar — drift silently splits the substrate's canonical \
+             post-retry-exhaustion rollback semantic between the operator-\
+             facing canonical default and the per-caixa `HelmRelease` \
+             document's per-CR upgrade-path remediation-toggle the Flux \
+             v2 helm-controller's per-CR upgrade-path remediation loop \
+             keys off to trigger the prior-release rollback pipeline once \
+             the paired retry-cap ceiling has been exhausted, and every \
              terminally-failed per-caixa upgrade sits in the failed state \
-             indefinitely with no diagnostic naming the remediation-toggle-\
-             drift root cause"
+             indefinitely with no diagnostic naming the remediation-\
+             toggle-drift root cause"
         );
     }
 
@@ -2855,6 +2982,65 @@ spec:
             "FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE",
             FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
             caixa_core::FLUX_HELMRELEASE_KEY_REMEDIATE_LAST_FAILURE,
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_remediate_last_failure_default_re_export_matches_caixa_core_canonical_value()
+     {
+        // The renderer's `FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`
+        // was lifted from the production-code inline `true` scalar-value
+        // literal at the sole `cluster_bundle` `helmrelease.yaml` format-
+        // string template's per-CR upgrade-path remediation-toggle scalar-
+        // value emit site (the `remediateLastFailure: true` leaf inside
+        // the per-CR `spec.upgrade.remediation` sub-block) + the test-
+        // fixture navigation site the sibling
+        // [`cluster_bundle_helmrelease_upgrade_remediation_remediate_last_failure_pins_lifted_true`]
+        // pin's `assert!(remediate_last_failure)` predicate opened onto
+        // the rendered document, to a re-export of
+        // [`caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`]
+        // so the canonical Flux v2 per-CR upgrade-path per-CR remediation-
+        // toggle scalar-value default lives in exactly one place across
+        // every caixa renderer. Pin the value-equality here so any local
+        // re-introduction of a sibling
+        // `pub const FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT: bool = …`
+        // at this crate (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry a drifted value) is a
+        // build-time test failure naming the offending drift. Peer to
+        // [`flux_helmrelease_key_remediate_last_failure_re_export_points_at_caixa_core_canonical`]
+        // on the paired leaf-scalar-key half of the same `(key, value)`
+        // per-CR `spec.upgrade.remediation.remediateLastFailure` pair —
+        // the key half's re-export identity lives at the sibling
+        // `assert_str_reexport_identity` pin, the value half's canonical
+        // `bool` seed lives here. Same shape as the sibling
+        // [`flux_kustomization_prune_default_re_export_matches_caixa_core_canonical_value`]
+        // pin on the peer per-`Kustomization`-CR garbage-collection-
+        // toggle scalar-value default axis.
+        assert_eq!(
+            FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT,
+            caixa_core::FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT,
+            "FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT re-export \
+             must resolve to the canonical caixa_core value — drift \
+             silently splits the substrate's canonical post-retry-\
+             exhaustion rollback default between the two `pub const` \
+             declarations, and every rendered per-caixa `helmrelease.yaml` \
+             would emit a different per-CR upgrade-path remediation-toggle \
+             scalar than every downstream consumer (the future M4 \
+             `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-\
+             Aplicacao `HelmRelease` synthesis, the future admission-\
+             webhook floor) reads at admit / reconcile time"
+        );
+        assert!(
+            FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT,
+            "FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT must remain \
+             `true` — the substrate's canonical \"no chart apply leaves \
+             a per-caixa CR in a stalled, unremediated state\" \
+             (MESH-COMPOSITION.md §V) guarantee requires every emitted \
+             per-caixa `HelmRelease` opt into the helm-controller's per-CR \
+             upgrade-path post-retry-exhaustion rollback pipeline; a drift \
+             to `false` here silently leaves every terminally-failed \
+             upgrade parked at `Ready: False` without rolling back to the \
+             prior last-known-good release"
         );
     }
 
@@ -2914,16 +3100,19 @@ spec:
                  the helm-controller because the target namespace was not \
                  pre-provisioned by an out-of-band pipeline",
             );
-        assert!(
-            create_namespace,
-            "spec.install.createNamespace must carry the substrate's \
-             canonical `true` seed — drift to `false` silently drops the \
-             first-apply namespace-seeder semantic the Flux v2 helm-\
-             controller's per-CR install-path pre-apply loop keys off to \
-             materialize the target namespace before the first chart \
-             apply, and every first-time per-caixa Servico chart apply \
-             against a fresh cluster is refused with no diagnostic naming \
-             the seeder-toggle-drift root cause"
+        assert_eq!(
+            create_namespace, FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT,
+            "spec.install.createNamespace must carry the lifted \
+             `FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT` scalar — drift \
+             silently splits the substrate's canonical first-apply \
+             namespace-seeder semantic between the operator-facing \
+             canonical default and the per-caixa `HelmRelease` document's \
+             per-CR install-path namespace-seeder-toggle the Flux v2 \
+             helm-controller's per-CR install-path pre-apply loop keys \
+             off to materialize the target namespace before the first \
+             chart apply, and every first-time per-caixa Servico chart \
+             apply against a fresh cluster is refused with no diagnostic \
+             naming the seeder-toggle-drift root cause"
         );
     }
 
@@ -2954,6 +3143,65 @@ spec:
             "FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE",
             FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
             caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE,
+        );
+    }
+
+    #[test]
+    fn flux_helmrelease_create_namespace_default_re_export_matches_caixa_core_canonical_value() {
+        // The renderer's `FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT` was
+        // lifted from the production-code inline `true` scalar-value
+        // literal at the sole `cluster_bundle` `helmrelease.yaml` format-
+        // string template's per-CR install-path namespace-seeder-toggle
+        // scalar-value emit site (the `createNamespace: true` leaf inside
+        // the per-CR `spec.install` sub-block) + the test-fixture
+        // navigation site the sibling
+        // [`cluster_bundle_helmrelease_install_create_namespace_pins_lifted_true`]
+        // pin's `assert!(create_namespace)` predicate opened onto the
+        // rendered document, to a re-export of
+        // [`caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT`] so
+        // the canonical Flux v2 per-CR install-path per-CR namespace-
+        // seeder-toggle scalar-value default lives in exactly one place
+        // across every caixa renderer. Pin the value-equality here so any
+        // local re-introduction of a sibling
+        // `pub const FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT: bool = …`
+        // at this crate (the canonical drift footgun where a sibling
+        // local `pub const` could happen to carry a drifted value) is a
+        // build-time test failure naming the offending drift. Peer to
+        // [`flux_helmrelease_key_create_namespace_re_export_points_at_caixa_core_canonical`]
+        // on the paired leaf-scalar-key half of the same `(key, value)`
+        // per-CR `spec.install.createNamespace` pair — the key half's
+        // re-export identity lives at the sibling
+        // `assert_str_reexport_identity` pin, the value half's canonical
+        // `bool` seed lives here. Same shape as the sibling
+        // [`flux_helmrelease_remediate_last_failure_default_re_export_matches_caixa_core_canonical_value`]
+        // pin on the peer mirror-symmetric upgrade-path-only per-CR
+        // remediation-toggle scalar-value default axis.
+        assert_eq!(
+            FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT,
+            caixa_core::FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT,
+            "FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT re-export must \
+             resolve to the canonical caixa_core value — drift silently \
+             splits the substrate's canonical first-apply namespace-\
+             seeder default between the two `pub const` declarations, \
+             and every rendered per-caixa `helmrelease.yaml` would emit a \
+             different per-CR install-path namespace-seeder-toggle scalar \
+             than every downstream consumer (the future M4 \
+             `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-\
+             Aplicacao `HelmRelease` synthesis, the future admission-\
+             webhook floor) reads at admit / reconcile time"
+        );
+        assert!(
+            FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT,
+            "FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT must remain `true` \
+             — the substrate's canonical \"no per-caixa Servico apply is \
+             blocked on manual namespace preprovisioning\" \
+             (MESH-COMPOSITION.md §V install-path-fluency) guarantee \
+             requires every emitted per-caixa `HelmRelease` opt into the \
+             helm-controller's per-CR install-path pre-apply namespace-\
+             seeder pipeline; a drift to `false` here silently refuses \
+             every first-time per-caixa chart apply against a fresh \
+             cluster whose target namespace has not been pre-provisioned \
+             by an out-of-band pipeline"
         );
     }
 
