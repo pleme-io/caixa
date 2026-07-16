@@ -2432,6 +2432,91 @@ impl Entrada {
             self.paths.iter().map(String::as_str).collect()
         }
     }
+
+    /// Substrate-canonical per-`:entrada` DNS-hostname singular
+    /// accessor every Gateway-API `Listener.hostname` reader keys off
+    /// — returns the author-declared `:entrada :host` byte-string
+    /// verbatim as a `&str`, borrowed from the typed slot's own
+    /// [`String`] storage.
+    ///
+    /// Named the "singular" half of the DNS-hostname resolver pair on
+    /// the substrate primitive: the parent-Gateway per-listener
+    /// `hostname:` axis of the K8s Gateway API v1.x is scalar-shaped
+    /// (`Listener.hostname: Option<PreciseHostname>` — at most one
+    /// hostname per listener), and this accessor is the typed dispatch
+    /// the [`caixa_mesh::gateway_routes`] Gateway-listener emit site
+    /// reaches for. Its plural sibling [`Entrada::hostnames`] carries
+    /// the per-HTTPRoute `spec.hostnames[]` list axis the same
+    /// per-Aplicacao ingress-hostname surface projects onto.
+    ///
+    /// Prior to this lift the `entrada.host.clone()` byte-string was
+    /// accessed inline at two `caixa-mesh` sites — the parent-Gateway
+    /// per-listener singular `hostname:` axis
+    /// (`caixa-mesh/src/lib.rs:2775` prior to this lift) and the
+    /// per-HTTPRoute plural `spec.hostnames[]` axis
+    /// (`caixa-mesh/src/lib.rs:2969` prior to this lift). Both
+    /// consumers read the same `entrada.host` field but the two-site
+    /// duplication expressed no compile-time contract that the singular
+    /// Gateway-listener filter and the plural `HTTPRoute` filter list
+    /// stay in lockstep on future extensions of the `:entrada` slot to
+    /// a multi-hostname author surface (an `:entrada :alt-hosts` list
+    /// overlay, a per-cluster SNI fan-out the operator pins through a
+    /// future `:placement :hosts` slot, an M4 `mesh.pleme.io/v1alpha1/
+    /// Aplicacao` CR materializer's per-listener virtual-host filter
+    /// admission-webhook overlay). Any such extension would have to be
+    /// threaded through every renderer's inline copy of the resolution
+    /// in lockstep or the Gateway listener's `hostname:` filter would
+    /// silently disagree with the `HTTPRoute`'s `hostnames[]` filter list
+    /// — a Gateway-API-conformance divergence whose apply-time symptom
+    /// (the `HTTPRoute` `Accepted` condition flips to `False` with reason
+    /// `NoMatchingParent` — the API server rejects the route because
+    /// its `hostnames[]` filter doesn't intersect the parent listener's
+    /// `hostname` filter) is far from the source `caixa.lisp` and never
+    /// surfaces in the emitted YAML. Lifting the singular and plural
+    /// resolvers to typed methods on the substrate primitive means
+    /// every consumer of the Aplicacao's ingress-hostname surface
+    /// reaches for exactly one typed dispatch, and the pair-invariant
+    /// `hostnames() == vec![hostname()]` pinned by the sibling
+    /// [`tests::hostnames_returns_singleton_of_hostname_accessor`] test
+    /// keeps the two axes in lockstep by construction.
+    ///
+    /// Peer of the sibling per-`:entrada` [`Entrada::resolved_paths`]
+    /// (1449891) path-list resolver on the per-HTTPRoute per-rule
+    /// `spec.rules[].matches[].path` axis. Same "one typed dispatch on
+    /// the substrate primitive, thin projections at each consumer"
+    /// discipline the [`crate::DEFAULT_SERVICO_PORT`] +
+    /// [`AplicacaoSpec::port_for_destination`] (9ca4896) /
+    /// [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] +
+    /// [`Entrada::resolved_paths`] lifts apply on the sibling per-
+    /// `:entrada` scalar-value + list-value axes.
+    #[must_use]
+    pub fn hostname(&self) -> &str {
+        self.host.as_str()
+    }
+
+    /// Substrate-canonical per-`:entrada` DNS-hostname plural
+    /// accessor every Gateway-API `HTTPRoute.spec.hostnames[]` reader
+    /// keys off — returns the singleton `[hostname()]` list under
+    /// today's single-hostname-per-Aplicacao author surface, and the
+    /// authoritative multi-hostname list under a future
+    /// `:entrada :alt-hosts` / per-cluster SNI-fan-out extension.
+    ///
+    /// Plural half of the DNS-hostname resolver pair — see the
+    /// companion [`Entrada::hostname`] docstring for the two-consumer
+    /// lift + pair-invariant discipline (`hostnames() ==
+    /// vec![hostname()]`, pinned load-bearing by the sibling
+    /// [`tests::hostnames_returns_singleton_of_hostname_accessor`]
+    /// test).
+    ///
+    /// Peer of the sibling [`Entrada::resolved_paths`] (1449891)
+    /// per-`:entrada` plural-list resolver on the per-HTTPRoute
+    /// per-rule path-list axis — same `Vec<&str>` shape, same
+    /// substrate-primitive-owns-the-resolver discipline extended to
+    /// the per-HTTPRoute virtual-host filter-list axis.
+    #[must_use]
+    pub fn hostnames(&self) -> Vec<&str> {
+        vec![self.hostname()]
+    }
 }
 
 /// Canonical default L4 port every typed Servico exposes on its
@@ -12793,6 +12878,117 @@ mod tests {
             "resolved_paths must preserve author-declared `:entrada \
              :paths` order verbatim — got {:?}",
             e.resolved_paths(),
+        );
+    }
+
+    // ── Entrada::hostname / Entrada::hostnames — the substrate-
+    //    canonical per-`:entrada` DNS-hostname resolver pair every
+    //    Gateway-API-aware renderer reaching for a per-listener
+    //    singular `hostname:` filter (Gateway) or a per-route plural
+    //    `spec.hostnames[]` filter list (HTTPRoute) routes through.
+    //    The three pin tests below fix the two-way accept-set the pair
+    //    must always honor: (:singular-byte-equal-to-host,
+    //    :plural-is-singleton-of-singular, :plural-len-is-one) — drift
+    //    on any arm surfaces at caixa-core build time rather than at
+    //    cluster-apply time when the API server refuses the HTTPRoute
+    //    for non-intersecting hostname filters. Peer discipline with
+    //    the sibling `resolved_paths` accept-set pin block above on the
+    //    per-`:entrada` path-list resolver axis.
+
+    fn entrada_with_host(host: &str) -> Entrada {
+        Entrada {
+            host: host.into(),
+            para: "cart".into(),
+            paths: Vec::new(),
+            port: DEFAULT_SERVICO_PORT,
+        }
+    }
+
+    #[test]
+    fn hostname_returns_entrada_host_byte_equal() {
+        // The canonical singular-axis pin: [`Entrada::hostname`] must
+        // return the `:entrada :host` field byte-for-byte, borrowed
+        // from the typed slot's own [`String`] storage. Pins against a
+        // future silent detour that re-normalized the host (an
+        // accidental `.to_lowercase()` — validate_entrada_host already
+        // enforces lowercase, so any re-normalization is redundant + a
+        // drift surface between the validator and the accessor), a
+        // trailing-`.` fully-qualified DNS shape substitution, or a
+        // Punycode round-trip that lowered a Unicode host through IDNA.
+        let e = entrada_with_host("checkout.quero.cloud");
+        assert_eq!(
+            e.hostname(),
+            "checkout.quero.cloud",
+            "Entrada::hostname must return :entrada :host verbatim \
+             (got {:?})",
+            e.hostname(),
+        );
+        assert_eq!(
+            e.hostname(),
+            e.host.as_str(),
+            "Entrada::hostname must byte-equal the .host field access",
+        );
+    }
+
+    #[test]
+    fn hostnames_returns_singleton_of_hostname_accessor() {
+        // The pair-invariant pin: [`Entrada::hostnames`] must always
+        // return exactly `vec![hostname()]` — the singleton list whose
+        // sole entry is the substrate's canonical per-`:entrada`
+        // singular hostname. Pins the two-consumer coherence axis: the
+        // Gateway listener's singular `hostname:` filter and the
+        // HTTPRoute's plural `spec.hostnames[]` filter list must
+        // agree, else the Gateway API v1.x conformance layer rejects
+        // the HTTPRoute at attach time with
+        // `Accepted:False/NoMatchingParent` (the parent Gateway's
+        // listener hostname doesn't intersect the route's hostname
+        // filter list) — a divergence whose apply-time symptom is far
+        // from any single-site commit and never surfaces in the
+        // emitted YAML. Pinning the pair-invariant here makes any
+        // future accidental split (an accidental `.to_string() + "."`
+        // trailing-`.` on the plural side that didn't land on the
+        // singular side, an accidental prefix stripping on one axis,
+        // an accidental wildcard prepend the SNI fan-out overlay
+        // authors on the plural side without a paired singular
+        // migration) trip at caixa-core build time.
+        let e = entrada_with_host("checkout.quero.cloud");
+        assert_eq!(
+            e.hostnames(),
+            vec![e.hostname()],
+            "Entrada::hostnames must return `vec![hostname()]` under \
+             the pair-invariant — got {:?} vs. singleton {:?}",
+            e.hostnames(),
+            vec![e.hostname()],
+        );
+    }
+
+    #[test]
+    fn hostnames_is_singleton_under_single_host_author_surface() {
+        // The singleton-shape pin: under today's single-hostname-per-
+        // `:entrada` author surface (the `:host` slot is a single
+        // [`String`], not a `Vec<String>`), [`Entrada::hostnames`]
+        // must always return a list of length exactly one. Pins
+        // against a future silent detour that returned an empty list
+        // (which would emit an HTTPRoute with `spec.hostnames: []` —
+        // matching every incoming Host header regardless of the
+        // Aplicacao's declared ingress apex, silently over-matching
+        // every foreign VirtualHost the parent Gateway also fronts) or
+        // a duplicated entry (which the Gateway API v1.x parser
+        // accepts as a `[]-length-2 list of equal hostnames]` but
+        // whose semantics differ from the intended singleton). The
+        // author-surface extension point ("a future `:entrada
+        // :alt-hosts` list overlay" the docstring names) is the sole
+        // future axis that flips this pin — that migration will re-
+        // author this test to pin the new plural cardinality.
+        let e = entrada_with_host("checkout.quero.cloud");
+        assert_eq!(
+            e.hostnames().len(),
+            1,
+            "Entrada::hostnames must be a singleton under today's \
+             single-hostname-per-`:entrada` author surface — got \
+             length {}: {:?}",
+            e.hostnames().len(),
+            e.hostnames(),
         );
     }
 
