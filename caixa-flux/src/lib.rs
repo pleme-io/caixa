@@ -508,6 +508,61 @@ pub use caixa_core::FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE;
 /// `spec.prune` position.
 pub use caixa_core::FLUX_KUSTOMIZATION_KEY_PRUNE;
 
+/// Canonical Flux v2 `Kustomization.spec.prune` per-CR garbage-collection-
+/// toggle scalar-value default the substrate seeds into every per-caixa
+/// `kustomization.yaml` document at the paired
+/// [`FLUX_KUSTOMIZATION_KEY_PRUNE`] leaf-scalar-key axis. Re-export of
+/// the canonical [`caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] so the
+/// Flux v2 kustomize-controller-side per-CR garbage-collection-toggle
+/// scalar-value default lives in exactly one place across every caixa
+/// renderer — [`cluster_bundle`]'s `kustomization.yaml` format-string
+/// template's per-CR garbage-collection-toggle scalar under the top-level
+/// `spec` position (the sole production-code site the prior inline
+/// `prune: true` scalar-value literal sat at, alongside the
+/// [`FLUX_KUSTOMIZATION_KEY_PRUNE`]-keyed leaf-scalar-key half of the
+/// same `(leaf-key, scalar-value)` pair) now threads the same `bool`
+/// through a `{prune_default}` named-arg interpolation, so a future
+/// substrate-side toggle migration (`true` → `false` on a cluster class
+/// where a human is expected to prune orphaned resources by hand once
+/// per-cluster policy grows an "operator-driven cleanup" mode; a per-
+/// caixa opt-out slot the ABSORPTION-ROADMAP.md M4 typed-slot
+/// trajectory adds once the substrate grows a `:kustomization :prune`
+/// author-side toggle) is a one-line edit on the canonical
+/// [`caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] declaration, not a
+/// coordinated rewrite across the emit site + every future per-target
+/// renderer the substrate adds. Pairs with the sibling
+/// [`FLUX_KUSTOMIZATION_KEY_PRUNE`] re-export on the same per-CR
+/// `spec.prune` scalar-axis — the key half of the per-CR scalar-key /
+/// scalar-value pair lives at [`FLUX_KUSTOMIZATION_KEY_PRUNE`], the
+/// value half's substrate-side default seed lives here. Same shape as
+/// the sibling [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae)
+/// scalar-value default re-export on the peer per-CR HelmRelease
+/// remediation retry-cap axis — that default names the per-path per-CR
+/// remediation retry ceiling, and this default names whether the
+/// per-CR reconcile loop sweeps orphaned resources at all. Both are
+/// substrate-side policy choices the operator inherits when the per-
+/// caixa [`ClusterBundleOpts`] doesn't pin an override, and both must
+/// move together on any coordinated substrate-side Flux v2 per-CR
+/// tuning-cycle promotion. Until this lift landed the axis carried an
+/// inline `true` scalar-value literal at the sole production-code call
+/// site plus the sibling test-fixture navigation site
+/// ([`cluster_bundle_kustomization_prune_pins_lifted_true`] pin's
+/// `assert!(prune)` predicate) — two occurrences of the same load-
+/// bearing Flux-v2-per-CR-garbage-collection-toggle-scalar-value
+/// convention, drift-prone by construction ahead of the third
+/// occurrence the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-Aplicacao `Kustomization` synthesis will surface. Same shape as
+/// the sibling [`caixa_core::DEFAULT_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_LIBRARY_NAME`] /
+/// [`caixa_core::DEFAULT_FLUX_SYSTEM_NAMESPACE`] /
+/// [`caixa_core::DEFAULT_FLUX_RECONCILE_INTERVAL`] /
+/// [`caixa_core::DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT`] /
+/// [`caixa_core::DEFAULT_PUBLISH_TAG_PREFIX`] /
+/// [`caixa_core::FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`]
+/// re-exports on the peer canonical-substrate-default-load-bearing-
+/// scalar surface.
+pub use caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT;
+
 /// Canonical Flux v2 `Kustomization.spec.path` per-CR source-sub-tree
 /// leaf-scalar-key — re-export of the canonical
 /// [`caixa_core::FLUX_KUSTOMIZATION_KEY_PATH`] so the Flux v2 kustomize-
@@ -2017,7 +2072,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
            {namespace_key}: {flux_system}\n\
          {spec_key}:\n  \
            {interval_key}: {interval}\n  \
-           {prune_key}: true\n  \
+           {prune_key}: {prune_default}\n  \
            {source_ref_key}:\n    \
              {kind_key}: {source_kind}\n    \
              {name_key}: {flux_system}\n  \
@@ -2048,6 +2103,7 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         source_ref_key = FLUX_KEY_SOURCE_REF,
         health_checks_key = FLUX_KEY_HEALTH_CHECKS,
         prune_key = FLUX_KUSTOMIZATION_KEY_PRUNE,
+        prune_default = FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
         path_key = FLUX_KUSTOMIZATION_KEY_PATH,
         timeout_key = FLUX_KUSTOMIZATION_KEY_TIMEOUT,
         timeout_default = DEFAULT_FLUX_KUSTOMIZATION_TIMEOUT,
@@ -2959,16 +3015,78 @@ spec:
                  the source manifest set previously reconciled but no \
                  longer carries dangling in the cluster",
             );
+        assert_eq!(
+            prune, FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
+            "spec.prune must carry the lifted \
+             `FLUX_KUSTOMIZATION_PRUNE_DEFAULT` scalar — drift silently \
+             splits the substrate's canonical sweep-what-you-removed \
+             semantic between the operator-facing canonical default and \
+             the per-caixa `Kustomization` document's per-CR garbage-\
+             collection-toggle the Flux v2 kustomize-controller's per-CR \
+             reconcile loop keys off to garbage-collect per-caixa resources \
+             removed from the source manifest set between reconciles, and \
+             every per-caixa `Kustomization` reconcile leaves orphaned \
+             resources dangling in the cluster with no diagnostic naming \
+             the toggle-drift root cause"
+        );
+    }
+
+    #[test]
+    fn flux_kustomization_prune_default_re_export_matches_caixa_core_canonical_value() {
+        // The renderer's `FLUX_KUSTOMIZATION_PRUNE_DEFAULT` was lifted
+        // from the production-code inline `true` scalar-value literal at
+        // the sole `cluster_bundle` `kustomization.yaml` format-string
+        // template's per-CR garbage-collection-toggle scalar-value emit
+        // site (the `prune: true` leaf inside the top-level `spec`
+        // position) + the test-fixture navigation site the sibling
+        // [`cluster_bundle_kustomization_prune_pins_lifted_true`] pin's
+        // `assert!(prune)` predicate opened onto the rendered document,
+        // to a re-export of [`caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT`]
+        // so the canonical Flux v2 per-CR garbage-collection-toggle
+        // scalar-value default lives in exactly one place across every
+        // caixa renderer. Pin the value-equality here so any local re-
+        // introduction of a sibling
+        // `pub const FLUX_KUSTOMIZATION_PRUNE_DEFAULT: bool = …` at this
+        // crate (the canonical drift footgun where a sibling local
+        // `pub const` could happen to carry a drifted value) is a build-
+        // time test failure naming the offending drift. Peer to
+        // [`flux_kustomization_key_prune_re_export_points_at_caixa_core_canonical`]
+        // on the paired leaf-scalar-key half of the same `(key, value)`
+        // per-CR `spec.prune` pair — the key half's re-export identity
+        // lives at the sibling `assert_str_reexport_identity` pin, the
+        // value half's canonical `bool` seed lives here. Same shape as
+        // the sibling
+        // [`cluster_bundle_helmrelease_install_remediation_retries_pins_lifted_default`]
+        // / [`cluster_bundle_helmrelease_upgrade_remediation_retries_pins_lifted_default`]
+        // pins on the peer per-CR HelmRelease remediation retry-cap
+        // scalar-value default axis — that default names the per-path
+        // per-CR remediation retry ceiling, and this default names
+        // whether the per-CR reconcile loop sweeps orphaned resources
+        // at all.
+        assert_eq!(
+            FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
+            caixa_core::FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
+            "FLUX_KUSTOMIZATION_PRUNE_DEFAULT re-export must resolve to \
+             the canonical caixa_core value — drift silently splits the \
+             substrate's canonical sweep-what-you-removed default \
+             between the two `pub const` declarations, and every rendered \
+             per-caixa `kustomization.yaml` would emit a different \
+             per-CR garbage-collection-toggle scalar than every downstream \
+             consumer (the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` \
+             CR materializer's per-Aplicacao `Kustomization` synthesis, \
+             the future admission-webhook floor) reads at admit / \
+             reconcile time"
+        );
         assert!(
-            prune,
-            "spec.prune must carry the substrate's canonical `true` seed \
-             — drift to `false` silently drops the sweep-what-you-removed \
-             semantic the Flux v2 kustomize-controller's per-CR reconcile \
-             loop keys off to garbage-collect per-caixa resources removed \
-             from the source manifest set between reconciles, and every \
-             per-caixa `Kustomization` reconcile leaves orphaned resources \
-             dangling in the cluster with no diagnostic naming the toggle-\
-             drift root cause"
+            FLUX_KUSTOMIZATION_PRUNE_DEFAULT,
+            "FLUX_KUSTOMIZATION_PRUNE_DEFAULT must remain `true` — the \
+             substrate's canonical sweep-what-you-removed semantic \
+             (CAIXA-SDLC.md §V author-to-live-convergence guarantee) \
+             requires every emitted per-caixa `Kustomization` opt into \
+             the kustomize-controller's per-CR resource-tracking \
+             garbage-collection loop; a drift to `false` here silently \
+             leaves orphaned resources dangling in every cluster the \
+             substrate reconciles into"
         );
     }
 
