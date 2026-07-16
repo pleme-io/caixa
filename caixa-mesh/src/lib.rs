@@ -2772,7 +2772,26 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // its consumer by construction.
     listener.insert_number(KUBE_KEY_PORT, GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT);
     listener.insert_string(KUBE_KEY_PROTOCOL, GATEWAY_API_PROTOCOL_HTTP);
-    listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.host.clone());
+    // Substrate-canonical per-`:entrada` DNS-hostname singular
+    // resolver — routes through the lifted
+    // [`caixa_core::Entrada::hostname`] typed accessor on the
+    // substrate primitive so the parent-Gateway per-listener
+    // `hostname:` filter and the peer per-HTTPRoute plural
+    // `spec.hostnames[]` filter list (see the sibling
+    // [`caixa_core::Entrada::hostnames`] consumer below in this
+    // same `gateway_routes` emitter) both key off exactly one
+    // typed dispatch on the substrate primitive. Every future
+    // Gateway-API-aware consumer (the M4 `mesh.pleme.io/v1alpha1/
+    // Aplicacao` CR materializer's per-listener SNI fan-out, a
+    // future per-cluster `:entrada :alt-hosts` overlay resolver
+    // the operator pins through a `:placement`-scoped slot,
+    // every future per-Aplicacao snapshot renderer) reads the
+    // same typed dispatch, so a rebrand of the singular-plural
+    // resolution shape lands at exactly one caixa-core edit and
+    // reaches every consumer by construction. Peer of the
+    // sibling [`caixa_core::Entrada::resolved_paths`] (1449891)
+    // path-list resolver on the per-HTTPRoute per-rule path axis.
+    listener.insert_string(GATEWAY_API_KEY_HOSTNAME, entrada.hostname().to_string());
     let mut g_spec = serde_yaml::Mapping::new();
     // `spec.gatewayClassName` binds the emitted `Gateway` to the
     // substrate's chosen K8s Gateway API controller — the same Cilium
@@ -2965,9 +2984,32 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
 
     let mut r_spec = serde_yaml::Mapping::new();
     r_spec.insert_singleton_mapping_sequence(GATEWAY_API_KEY_PARENT_REFS, parent_ref);
+    // Substrate-canonical per-`:entrada` DNS-hostname plural
+    // resolver — routes through the lifted
+    // [`caixa_core::Entrada::hostnames`] typed accessor on the
+    // substrate primitive so the per-HTTPRoute plural
+    // `spec.hostnames[]` filter list and the peer parent-Gateway
+    // per-listener singular `hostname:` filter (see the sibling
+    // [`caixa_core::Entrada::hostname`] consumer above in this
+    // same `gateway_routes` emitter) both key off exactly one
+    // typed dispatch on the substrate primitive. The pair-
+    // invariant `hostnames() == vec![hostname()]` pinned in
+    // [`caixa_core::aplicacao::tests::hostnames_returns_singleton_of_hostname_accessor`]
+    // keeps the two axes in lockstep by construction, so a
+    // Gateway API v1.x `Accepted:False/NoMatchingParent` reject
+    // at HTTPRoute-attach time (the parent Gateway's listener
+    // hostname doesn't intersect the route's hostname filter
+    // list) is a caixa-core-build-time failure rather than a
+    // cluster-apply-time surprise. Peer of the sibling
+    // [`caixa_core::Entrada::resolved_paths`] (1449891) path-list
+    // resolver on the per-HTTPRoute per-rule path axis.
     r_spec.insert_sequence(
         GATEWAY_API_KEY_HOSTNAMES,
-        vec![serde_yaml::Value::String(entrada.host.clone())],
+        entrada
+            .hostnames()
+            .into_iter()
+            .map(|h| serde_yaml::Value::String(h.to_string()))
+            .collect(),
     );
     r_spec.insert_sequence(KUBE_KEY_RULES, rules);
     route.insert_mapping(KUBE_KEY_SPEC, r_spec);
@@ -7478,6 +7520,187 @@ mod tests {
                  block resolves to. Input paths: {paths:?}"
             );
         }
+    }
+
+    #[test]
+    fn gateway_listener_hostname_routes_through_lifted_entrada_hostname() {
+        // Cross-crate pin: the per-Aplicacao `Gateway`'s sole per-
+        // listener singular `hostname:` filter must render exactly
+        // [`caixa_core::Entrada::hostname`]'s typed dispatch on the
+        // substrate primitive — not from an open-coded `entrada.host.
+        // clone()` field access that could silently disagree with the
+        // peer per-HTTPRoute plural `spec.hostnames[]` filter list on
+        // future extensions of the `:entrada` slot to a multi-hostname
+        // author surface. A drift here would surface at cluster-apply
+        // time as an `Accepted:False/NoMatchingParent` reject on the
+        // HTTPRoute (the parent Gateway's listener hostname doesn't
+        // intersect the route's hostname filter list) — far from any
+        // single-site commit and never surfacing in the emitted YAML.
+        // Peer with the sibling
+        // [`httproute_hostnames_routes_through_lifted_entrada_hostnames`]
+        // pin on the plural-axis half of the DNS-hostname resolver
+        // pair — the two pin tests together nail the two-consumer
+        // coherence discipline the pair-invariant `hostnames() ==
+        // vec![hostname()]` (pinned in
+        // [`caixa_core::aplicacao::tests::hostnames_returns_singleton_of_hostname_accessor`])
+        // encodes. Peer discipline with the sibling
+        // [`httproute_path_list_routes_through_lifted_entrada_resolved_paths`]
+        // pin on the sibling per-`:entrada` path-list resolver axis.
+        for host in ["checkout.quero.cloud", "shop.pleme.dev", "app.example.io"] {
+            let mut caixa = aplicacao_caixa();
+            let expected = caixa
+                .entrada
+                .as_mut()
+                .map(|e| {
+                    e.host = host.into();
+                    e.hostname().to_string()
+                })
+                .expect("aplicacao_caixa carries a typed `:entrada` block");
+            let docs = gateway_routes(&caixa).unwrap();
+            let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY)
+                .expect("Gateway present under every :entrada permutation");
+            let listener = gateway
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
+                .and_then(|l| l.as_sequence())
+                .and_then(|s| s.first())
+                .expect("first listener present");
+            let emitted = listener
+                .get(GATEWAY_API_KEY_HOSTNAME)
+                .and_then(|h| h.as_str())
+                .expect("Gateway listener carries a hostname scalar");
+            assert_eq!(
+                emitted, expected,
+                "Gateway per-listener singular `hostname:` scalar must \
+                 render `Entrada::hostname()` verbatim — drift here \
+                 means the emitter no longer routes through the \
+                 substrate-primitive typed dispatch and a future \
+                 hostname-resolution axis (per-cluster :alt-hosts \
+                 overlay, SNI fan-out) would silently disagree with \
+                 the plural sibling. Input host: {host:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn httproute_hostnames_routes_through_lifted_entrada_hostnames() {
+        // Cross-crate pin: the per-Aplicacao HTTPRoute's plural
+        // `spec.hostnames[]` filter list must render exactly
+        // [`caixa_core::Entrada::hostnames`]'s typed dispatch on the
+        // substrate primitive — one entry per resolved hostname, in
+        // the resolver's authored order. Pins that a future renderer-
+        // side detour that re-inlined the `vec![entrada.host.
+        // clone()]` construction (or reordered / deduped / dropped
+        // resolver-declared hostnames) surfaces at caixa-mesh build
+        // time rather than at cluster-apply time as an
+        // `Accepted:False/NoMatchingParent` reject.
+        //
+        // Peer with the sibling
+        // [`gateway_listener_hostname_routes_through_lifted_entrada_hostname`]
+        // pin on the singular-axis half — the two pin tests together
+        // nail the two-consumer coherence discipline the pair-invariant
+        // `hostnames() == vec![hostname()]` (pinned in
+        // [`caixa_core::aplicacao::tests::hostnames_returns_singleton_of_hostname_accessor`])
+        // encodes.
+        for host in ["checkout.quero.cloud", "shop.pleme.dev", "app.example.io"] {
+            let mut caixa = aplicacao_caixa();
+            let expected: Vec<String> = caixa
+                .entrada
+                .as_mut()
+                .map(|e| {
+                    e.host = host.into();
+                    e.hostnames().into_iter().map(String::from).collect()
+                })
+                .expect("aplicacao_caixa carries a typed `:entrada` block");
+            let docs = gateway_routes(&caixa).unwrap();
+            let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
+                .expect("HTTPRoute present under every :entrada permutation");
+            let hostnames = route
+                .get(KUBE_KEY_SPEC)
+                .and_then(|s| s.get(GATEWAY_API_KEY_HOSTNAMES))
+                .and_then(|h| h.as_sequence())
+                .expect("HTTPRoute.spec.hostnames[] present");
+            let emitted: Vec<String> = hostnames
+                .iter()
+                .map(|v| {
+                    v.as_str()
+                        .expect("each HTTPRoute.spec.hostnames[] entry is a scalar string")
+                        .to_string()
+                })
+                .collect();
+            assert_eq!(
+                emitted, expected,
+                "HTTPRoute per-route plural `spec.hostnames[]` list \
+                 must render `Entrada::hostnames()` verbatim — drift \
+                 here means the emitter no longer routes through the \
+                 substrate-primitive typed dispatch and a future \
+                 hostname-resolution axis (per-cluster :alt-hosts \
+                 overlay, SNI fan-out) would silently disagree \
+                 between caixa-core and caixa-mesh on which hostname \
+                 set a given `:entrada` block resolves to. Input \
+                 host: {host:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_listener_hostname_and_httproute_hostnames_pair_invariant_at_emit_site() {
+        // The pair-invariant cross-crate pin: the singular Gateway
+        // listener `hostname:` filter and the plural HTTPRoute
+        // `spec.hostnames[]` filter list at the same [`gateway_routes`]
+        // emit site must project as the substrate-canonical pair
+        // `hostnames == vec![hostname]` — the invariant
+        // [`caixa_core::Entrada`] pins at the typed-primitive level
+        // (see
+        // [`caixa_core::aplicacao::tests::hostnames_returns_singleton_of_hostname_accessor`])
+        // must reach every per-Aplicacao emit site by construction.
+        // Pins that any future renderer-side detour that broke the
+        // singular-plural coherence (an accidental prefix substitution
+        // on one axis, a trailing-`.` FQDN normalization on the peer
+        // that didn't land on the peer axis, a wildcard-prefix SNI
+        // fan-out overlay that authored only one axis) surfaces at
+        // caixa-mesh build time rather than at cluster-apply time as
+        // an `Accepted:False/NoMatchingParent` reject far from any
+        // single-site commit. Peer discipline with the two singular /
+        // plural pin tests immediately above.
+        let docs = gateway_routes(&aplicacao_caixa()).unwrap();
+        let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
+        let listener_hostname = gateway
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(GATEWAY_API_KEY_LISTENERS))
+            .and_then(|l| l.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|l| l.get(GATEWAY_API_KEY_HOSTNAME))
+            .and_then(|h| h.as_str())
+            .expect("Gateway listener carries a hostname scalar")
+            .to_string();
+        let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        let route_hostnames: Vec<String> = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(GATEWAY_API_KEY_HOSTNAMES))
+            .and_then(|h| h.as_sequence())
+            .expect("HTTPRoute.spec.hostnames[] present")
+            .iter()
+            .map(|v| {
+                v.as_str()
+                    .expect("each HTTPRoute.spec.hostnames[] entry is a scalar string")
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(
+            route_hostnames,
+            vec![listener_hostname.clone()],
+            "The Gateway listener singular `hostname:` filter and the \
+             HTTPRoute plural `spec.hostnames[]` filter list must \
+             project as the pair `hostnames == vec![hostname]` at the \
+             gateway_routes emit site — Gateway API v1.x conformance \
+             requires the HTTPRoute's hostname filter to intersect \
+             the parent listener's hostname; drift breaks that at \
+             cluster-apply time. Emitted listener_hostname: {:?}, \
+             route_hostnames: {:?}",
+            listener_hostname,
+            route_hostnames,
+        );
     }
 
     #[test]
