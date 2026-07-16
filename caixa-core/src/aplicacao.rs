@@ -1096,8 +1096,86 @@ impl MeshPolicy {
         self.timeout.is_none()
             && self.retries.is_none()
             && self.circuit_breaker.is_none()
-            && self.mtls_required.is_none()
+            && self.mtls_required().is_none()
             && self.rate_limit.is_none()
+    }
+
+    /// Substrate-canonical per-`:politicas` `:mtls-required` mTLS-
+    /// enforcement-toggle scalar accessor every consumer of the
+    /// Aplicacao's Cilium-mesh L4 mutual-authentication policy keys off
+    /// — returns the author-declared `:politicas :mtls-required` typed
+    /// bool verbatim as an `Option<bool>`, copied out of the typed
+    /// slot's own `Option<bool>` storage (`Option<bool>` is `Copy`, so
+    /// the accessor returns by value; no borrow of `&self` past the
+    /// call). `None` when the slot is absent (the "cluster default
+    /// applies — typically 'disabled' cluster-wide" arm the caixa-mesh
+    /// `mtls_overlay` builder documents at caixa-mesh/src/lib.rs:2540
+    /// — [`MeshPolicy::is_empty`]'s `mtls_required.is_none()` arm reads
+    /// this predicate too, so an authored-but-unset `:politicas
+    /// (:mtls-required ())` round-trips to a rendered
+    /// `CiliumNetworkPolicy` structurally identical to one that omits
+    /// the slot).
+    ///
+    /// The `:politicas :mtls-required` slot carries the "explicit opt-
+    /// out only, sandboxing-by-default" mTLS-enforcement toggle
+    /// (MESH-COMPOSITION §III.2 #3) — the typed slot's three-way
+    /// `{None, Some(true), Some(false)}` accept-set maps onto the
+    /// Cilium `authentication.mode` bijection through
+    /// [`crate::cilium_auth_mode`]: `Some(true) → "required"` (mTLS
+    /// handshake enforced), `Some(false) → "disabled"` (handshake
+    /// skipped — the debug-edge opt-out), `None` → omit the block
+    /// (cluster default applies). Every downstream consumer that
+    /// reads the toggle keys off this scalar (the
+    /// [`MeshPolicy::is_empty`] emptiness predicate the renderers key
+    /// off to decide "emit :politicas overlay" vs "skip entirely", the
+    /// caixa-mesh per-`(:de, :para)` CNP `mtls_overlay` builder at
+    /// caixa-mesh/src/lib.rs:2549 that fans the toggle into every
+    /// ingress rule via [`crate::render::single_field_overlay`], the
+    /// future M4 per-Aplicacao Cilium `authentication.mode` reconciler
+    /// materialization pass, the future per-`:contratos`-edge mTLS
+    /// override MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    ///
+    /// Prior to this lift the `.mtls_required` field was accessed
+    /// inline at two sites — [`MeshPolicy::is_empty`]'s
+    /// `self.mtls_required.is_none()` arm and caixa-mesh's
+    /// `single_field_overlay(spec.politicas.mtls_required, …)` call —
+    /// two open-coded field-accesses that expressed no compile-time
+    /// link back to the typed slot. A future extension of the
+    /// `:politicas :mtls-required` axis to a richer author surface —
+    /// a per-`:contratos`-edge mTLS override the operator pins through
+    /// a future `:contratos :mtls` slot the MESH-COMPOSITION §III.2
+    /// #3 roadmap acknowledges, a per-cluster mTLS-default overlay the
+    /// M4 CR materializer resolves per-CR, a three-valued
+    /// `{None, Some(true), Some(false), Some(Optional)}` promotion
+    /// once Cilium's `authentication.mode` grows an `"optional"` arm —
+    /// would have had to be threaded through both open-coded copies in
+    /// lockstep or the emptiness predicate and the caixa-mesh emit
+    /// path would silently disagree on which toggle a given
+    /// [`MeshPolicy`] resolves to (a `:politicas` block whose only
+    /// axis is a `Some`
+    /// `:mtls-required` would satisfy `is_empty() == false` while the
+    /// renderer's overlay-emit path silently read a drifted other
+    /// value, or vice versa). Lifting the resolution to a typed method
+    /// on the substrate primitive means every downstream consumer of
+    /// the Aplicacao's per-`:politicas` mTLS-toggle surface reaches
+    /// for exactly one typed dispatch — the resolver's accept-set
+    /// migrates as a unit on any future axis addition.
+    ///
+    /// First `Option<Copy-T>`-return accessor on the M3 mesh-slot
+    /// family (peer of the sibling per-`:placement`
+    /// [`Placement::shard_key`] 7cd2a28 `Option<&str>` accessor —
+    /// same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the
+    /// peer per-`:politicas` typed-bool optional-scalar axis; opens
+    /// the "optional per-slot Copy-T scalar" projection pattern the
+    /// sibling per-`:politicas` `:retries` (Option<u32>) /
+    /// `:timeout` (Option<Duration>) future lifts fold on). Named
+    /// `mtls_required()` to match the storage field's name; the
+    /// accessor's identity maps onto the canonical MESH-COMPOSITION
+    /// §III.2 vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn mtls_required(&self) -> Option<bool> {
+        self.mtls_required
     }
 }
 
@@ -14271,6 +14349,161 @@ mod tests {
             "Placement::shard_key and .shard_key.as_deref() must byte-\
              equal in length as well as in address",
         );
+    }
+
+    #[test]
+    fn mesh_policy_mtls_required_returns_mtls_required_option_byte_equal_across_permutations() {
+        // The canonical per-`:politicas` `:mtls-required` mTLS-
+        // enforcement-toggle scalar pin: [`MeshPolicy::mtls_required`]
+        // must return the `:politicas :mtls-required` typed bool
+        // verbatim as an `Option<bool>`, byte-equal to the raw field
+        // access across every value in the three-way accept-set —
+        // `None` (cluster default applies), `Some(true)` (mTLS
+        // handshake enforced — the sandboxing-by-default arm the
+        // MeshPolicy's docstring names), `Some(false)` (handshake
+        // skipped — the explicit debug-edge opt-out).
+        //
+        // Peer of the sibling per-`:placement` [`Placement::shard_key`]
+        // (7cd2a28) accessor pin on the `Option<&str>` optional-scalar
+        // axis, extended to the peer per-`:politicas` `Option<Copy-T>`
+        // shape — first `Option<Copy-T>`-return accessor on the M3
+        // mesh-slot family. Pins against a future silent detour that
+        // re-derived the toggle from a peer axis (an accidental
+        // `.circuit_breaker.is_some()` collapse that assumed mTLS on
+        // whenever a breaker is set), a `None` → `Some(false)` cluster-
+        // default projection (the canonical `Option<bool>` → `bool`
+        // collapse footgun the surrounding `is_empty()` predicate
+        // guards on the peer emptiness axis), or a `Some(true)` /
+        // `Some(false)` variant swap that landed on one consumer
+        // without the other.
+        for required in [None, Some(true), Some(false)] {
+            let p = MeshPolicy {
+                mtls_required: required,
+                ..MeshPolicy::default()
+            };
+            assert_eq!(
+                p.mtls_required(),
+                required,
+                "MeshPolicy::mtls_required must return :politicas \
+                 :mtls-required verbatim (got {:?}, expected {required:?})",
+                p.mtls_required(),
+            );
+            assert_eq!(
+                p.mtls_required(),
+                p.mtls_required,
+                "MeshPolicy::mtls_required must byte-equal the raw \
+                 .mtls_required field access across every value in the \
+                 three-way accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_is_empty_mtls_required_arm_routes_through_accessor() {
+        // Composition pin: [`MeshPolicy::is_empty`]'s `mtls_required`
+        // arm must key off [`MeshPolicy::mtls_required`], not the raw
+        // `.mtls_required` field access. Structurally: toggling ONLY
+        // the `mtls_required` slot on an otherwise-default MeshPolicy
+        // must flip `is_empty()` from `true` (all-`None`) to `false`
+        // (one axis carries a value); the flip must be observed for
+        // both `Some(true)` and `Some(false)` since the emptiness
+        // semantic reads "any axis carries a value" — not "any axis
+        // carries a truthy value" — the same non-collapsing shape the
+        // sibling M2 [`crate::LimitsSpec::is_empty`] /
+        // [`crate::BehaviorSpec::is_empty`] predicates carry on their
+        // peer `Option<T>`-typed slot surfaces.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.rate_limit.is_none()`-only chain that dropped the
+        // `mtls_required` arm entirely), a `mtls_required == Some(_)`
+        // collapse to a truthy-only check (which would silently
+        // classify `Some(false)` as empty), or an accessor-side
+        // detour that no longer names the substrate-primitive typed
+        // dispatch (an accidental `self.mtls_required.unwrap_or(false)
+        // == false` fallback in the accessor that would silently
+        // classify both `None` and `Some(false)` as the same value).
+        //
+        // Peer of the sibling per-`:placement` [`Placement::shard_key`]
+        // (7cd2a28) accessor-composition pin on the sibling optional-
+        // scalar axis — same "the emptiness / shape-gate predicate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer per-`:politicas` emptiness
+        // predicate.
+        let empty = MeshPolicy::default();
+        assert!(
+            empty.is_empty(),
+            "MeshPolicy::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for required in [Some(true), Some(false)] {
+            let p = MeshPolicy {
+                mtls_required: required,
+                ..MeshPolicy::default()
+            };
+            assert!(
+                !p.is_empty(),
+                "MeshPolicy::is_empty must return false when \
+                 :mtls-required is {required:?} — the emptiness \
+                 predicate reads \"any axis carries a value\", not \
+                 \"any axis carries a truthy value\"",
+            );
+            assert_eq!(
+                p.mtls_required().is_none(),
+                p.is_empty(),
+                "when :mtls-required is the only set axis, \
+                 is_empty() must equal mtls_required().is_none() — \
+                 the accessor and the emptiness predicate must \
+                 route through the same substrate-primitive typed \
+                 dispatch on the :mtls-required arm",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_mtls_required_projects_option_bool_by_copy() {
+        // The by-copy pin: [`MeshPolicy::mtls_required`] returns
+        // `Option<bool>` by copy — `Option<bool>` is `Copy` and the
+        // accessor must return by value, not by reference. Peer of the
+        // sibling per-`:placement` [`Placement::shard_key`] (7cd2a28)
+        // borrow-invariant pin on the sibling `Option<String>` slot,
+        // but extended onto the peer `Option<bool>` copy-invariant
+        // shape — the accessor's returned `Option<bool>` must outlive
+        // `&self` (multiple calls must return equal values from a
+        // dropped-`&self` copy, since the returned Option carries no
+        // borrow), and calling the accessor twice on the same
+        // MeshPolicy must yield the same `Option<bool>` verbatim
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&bool>` (which would type-check but silently break
+        // every downstream caller — [`single_field_overlay`]'s first
+        // parameter is `Option<T: Clone>`, and `&bool` would fold to a
+        // detached copy at the call site), an accidental
+        // `Option::as_ref()` projection (`self.mtls_required.as_ref()`
+        // would also type-check but return `Option<&bool>`), or a
+        // one-arm-only accessor that reads `Some(*b)` in the Some arm
+        // but reads a fresh Default::default() in the None arm.
+        for required in [None, Some(true), Some(false)] {
+            let p = MeshPolicy {
+                mtls_required: required,
+                ..MeshPolicy::default()
+            };
+            let first = p.mtls_required();
+            let second = p.mtls_required();
+            assert_eq!(
+                first, second,
+                "MeshPolicy::mtls_required must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<bool>",
+            );
+            assert_eq!(
+                first, required,
+                "MeshPolicy::mtls_required must return :politicas \
+                 :mtls-required verbatim by copy — got {first:?}, \
+                 expected {required:?}",
+            );
+        }
     }
 
     #[test]
