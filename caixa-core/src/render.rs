@@ -15406,6 +15406,93 @@ pub const FLUX_KUSTOMIZATION_KEY_PRUNE: &str = "prune";
 /// [co]: ../../caixa_flux/struct.ClusterBundleOpts.html
 pub const FLUX_KUSTOMIZATION_PRUNE_DEFAULT: bool = true;
 
+/// Canonical substrate-side default for the
+/// `HelmRelease.spec.values.<library>.enabled` scalar-value toggle every
+/// [`caixa_flux::cluster_bundle`][cb]-emitted `helmrelease.yaml` document
+/// seeds inside its per-caixa values overlay to force-on the paired
+/// [`DEFAULT_LIBRARY_NAME`] child chart at the per-cluster
+/// `HelmRelease`-side apply step. Pairs with the sibling
+/// [`HELM_VALUES_KEY_ENABLED`] leaf-scalar-key half of the
+/// `(leaf-key, scalar-value)` per-values-overlay child-chart
+/// enablement-toggle declaration pair — the key half names the
+/// canonical `values.<library>.enabled` leaf-scalar-key axis every
+/// consumer (`caixa-helm`'s `values.yaml` per-chart default, this
+/// crate's `cluster_bundle` overlay) probes on, and this scalar-value
+/// half names the substrate-side default the `cluster_bundle` overlay
+/// path seeds under it. Semantically distinct from — and inverse of —
+/// the `RenderOpts::enabled_default = false` default that
+/// [`caixa_helm::RenderOpts::default`] seeds for the standalone
+/// `lareira-<nome>` chart's own `values.yaml` (that path renders
+/// `enabled: false` so cluster operators must opt each caixa in
+/// per-cluster); the `cluster_bundle` composition path is the
+/// substrate-side opt-in path where the operator has already asserted
+/// per-caixa cluster-scoped ownership by materializing a per-caixa
+/// `GitRepository` + `HelmRelease` + `Kustomization` trio, so the overlay
+/// forces the child chart on by seeding `enabled: true` under the
+/// `values.<library>` wrap.
+///
+/// Rendered to canonical YAML `true` verbatim. A future substrate-side
+/// rebrand to `false` (or the M4 typed-slot trajectory adding a per-caixa
+/// `:cluster-bundle :enabled` author-side toggle the operator flips per
+/// caixa) is a one-line edit on this canonical declaration, not a
+/// coordinated rewrite across the sole production emit site + its
+/// paired test-fixture navigation site. Peer with the sibling
+/// [`FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT`] (be1904b),
+/// [`FLUX_HELMRELEASE_REMEDIATE_LAST_FAILURE_DEFAULT`] (be1904b),
+/// [`FLUX_HELMRELEASE_REMEDIATION_RETRIES_DEFAULT`] (30dcdae), and
+/// [`FLUX_KUSTOMIZATION_PRUNE_DEFAULT`] (ea857d8) scalar-value defaults
+/// on the peer canonical-Flux-v2-per-CR-substrate-default surface — the
+/// four sibling scalar-value defaults name per-CR toggle-shape axes at
+/// the `HelmRelease.spec.install.*` / `HelmRelease.spec.upgrade.*` /
+/// `HelmRelease.spec.upgrade.remediation.retries` /
+/// `Kustomization.spec.prune` sub-block positions, and this
+/// scalar-value default names the child-chart-enablement toggle at the
+/// deeper `HelmRelease.spec.values.<library>.enabled` values-overlay
+/// position — all five are substrate-side policy choices the operator
+/// inherits when the per-caixa [`ClusterBundleOpts`][co] doesn't pin an
+/// override.
+///
+/// The single source of truth every rendered Flux bundle axis that
+/// names the per-CR values-overlay child-chart-enablement-toggle
+/// scalar reaches for:
+///
+///   - the rendered `helmrelease.yaml` document's
+///     `spec.values.<library>.enabled` scalar-value axis
+///     (caixa-flux/src/lib.rs — the [`cluster_bundle`][cb]
+///     `helmrelease.yaml` format-string template's per-CR values-overlay
+///     child-chart-enablement-toggle scalar under the per-`{library_name}`
+///     wrap position, threading the same `bool` through a
+///     `{lareira_enabled_default}` named-arg interpolation);
+///   - the one test-fixture navigation site in caixa-flux's `mod tests`
+///     that probes the rendered document's
+///     `values.<library>.enabled` scalar axis to pin the substrate's
+///     canonical `true` seed against the lifted default (the
+///     `cluster_bundle_helmrelease_wrap_key_pins_canonical_pleme_computeunit_string`
+///     per-CR production-emit pin's `Some(true)` assertion).
+///
+/// Both the production emit site + the test-fixture navigation site now
+/// consume the same `bool` at emit time through the sibling re-export
+/// [`caixa_flux::CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`][cf], so a
+/// future substrate-side toggle migration reaches every consumer through
+/// one `bool` by construction — with no opportunity for per-renderer
+/// drift where a rebrand on one axis without a coordinated edit on the
+/// other would silently disagree on the substrate's chosen child-chart
+/// force-on-under-composition semantic. Until this lift landed the
+/// axis carried an inline `true` scalar-value literal at the sole
+/// production-code call site (the `{enabled_key}: true` leaf inside the
+/// [`cluster_bundle`][cb] `helmrelease.yaml` format-string template's
+/// per-`{library_name}` wrap position) plus the test-fixture
+/// navigation-site `Some(true)` assertion — two occurrences of the same
+/// load-bearing values-overlay child-chart-enablement-toggle-scalar-value
+/// convention, drift-prone by construction ahead of the third occurrence
+/// the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-Aplicacao `HelmRelease` synthesis will surface.
+///
+/// [cb]: ../../caixa_flux/fn.cluster_bundle.html
+/// [cf]: ../../caixa_flux/index.html
+/// [co]: ../../caixa_flux/struct.ClusterBundleOpts.html
+pub const CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT: bool = true;
+
 /// Canonical Flux v2 `Kustomization.spec.path` per-CR source-sub-tree
 /// leaf-scalar-key every `caixa-flux`-emitted `kustomization.yaml`
 /// document seeds under its top-level `spec` position to name the sub-
@@ -21160,6 +21247,84 @@ mod tests {
         // `createNamespace: true` per-CR opt-in.
         assert_eq!(FLUX_HELMRELEASE_KEY_CREATE_NAMESPACE, "createNamespace");
         assert!(FLUX_HELMRELEASE_CREATE_NAMESPACE_DEFAULT);
+    }
+
+    #[test]
+    fn cluster_bundle_lareira_enabled_default_pins_canonical_value() {
+        // Pin the actual boolean so a rebrand on this lift can't silently
+        // rebrand the substrate-side default for the
+        // `HelmRelease.spec.values.<library>.enabled` child-chart-
+        // enablement toggle scalar the substrate's per-caixa
+        // `cluster_bundle` renderer threads into every emitted per-caixa
+        // `helmrelease.yaml` document under the sibling
+        // [`HELM_VALUES_KEY_ENABLED`] leaf-scalar-key axis inside the
+        // per-`{library_name}` values-overlay wrap. The scalar is the
+        // substrate's chosen "force-on the child chart under the
+        // cluster_bundle composition path" default — semantically
+        // distinct from and inverse of the standalone
+        // [`caixa_helm::RenderOpts`]::`enabled_default = false` seed
+        // (which renders `enabled: false` in the per-caixa `values.yaml`
+        // so cluster operators must opt each caixa in per-cluster); the
+        // `cluster_bundle` composition path is the substrate-side
+        // opt-in path where the operator has already asserted per-caixa
+        // cluster-scoped ownership by materializing a per-caixa
+        // GitRepository + HelmRelease + Kustomization trio, so the
+        // overlay forces the child chart on by seeding `enabled: true`
+        // under the `values.<library>` wrap. Drift from the canonical
+        // `true` seed to `false` silently drops the substrate's chosen
+        // force-on-under-composition semantic from every emitted
+        // per-caixa `HelmRelease` document, leaving the paired
+        // [`DEFAULT_LIBRARY_NAME`] child chart's `enabled: false`
+        // per-chart default un-overridden — the Helm rendering pipeline
+        // then no-ops every per-caixa lareira child chart at the
+        // per-cluster `HelmRelease` apply step, with no diagnostic
+        // naming the toggle-drift root cause. Peer to the sibling
+        // `flux_helmrelease_create_namespace_default_pins_canonical_value`
+        // (be1904b) / `flux_helmrelease_remediate_last_failure_default_pins_canonical_value`
+        // (be1904b) / `flux_kustomization_prune_default_pins_canonical_value`
+        // (ea857d8) on the peer canonical-Flux-v2-per-CR-substrate-
+        // default surface — all four defaults are substrate-side policy
+        // choices the operator inherits when the per-caixa
+        // `ClusterBundleOpts` doesn't pin an override.
+        assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
+    }
+
+    #[test]
+    fn cluster_bundle_lareira_enabled_default_pairs_with_lifted_leaf_key() {
+        // Sibling-pair pin: the `(leaf-scalar-key, scalar-value)` per-
+        // values-overlay child-chart-enablement-toggle declaration lives
+        // at two lifted `pub const` declarations —
+        // [`HELM_VALUES_KEY_ENABLED`] on the key half and
+        // [`CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`] on the value half.
+        // Both halves must move together on any coordinated Helm 4
+        // migration (an `on: true` rename that rebrands the leaf axis
+        // onto a new controller-side opt-in vs. the current opt-in
+        // default; a leaf coalesce onto a peer per-values-block toggle
+        // that reroutes the substrate's canonical scalar seed onto an
+        // unrelated axis), so a rebrand on either half without a
+        // coordinated edit on the other would silently split the
+        // substrate's canonical force-on-under-composition declaration —
+        // the emit-site format-string would still thread the
+        // `{enabled_key}` named-arg through the lifted leaf-scalar-key
+        // but pair it with a canonical `{lareira_enabled_default}` that
+        // no longer reflects the substrate-side semantic the leaf axis
+        // names. Pin the pair here so a future edit that touches only
+        // the leaf-scalar-key half or only the scalar-value default
+        // half surfaces at build time rather than at apply time far
+        // from the source edit. Confirms both consts carry their
+        // canonical wire representations (`"enabled"` byte-string on
+        // the leaf-scalar-key half; `true` on the scalar-value default
+        // half) — the pair as-a-unit reads as the substrate's chosen
+        // `enabled: true` per-values-overlay opt-in. Peer to
+        // `flux_kustomization_prune_default_pairs_with_lifted_leaf_key`
+        // (ea857d8) /
+        // `flux_helmrelease_create_namespace_default_pairs_with_lifted_leaf_key`
+        // (be1904b) /
+        // `flux_helmrelease_remediate_last_failure_default_pairs_with_lifted_leaf_key`
+        // (be1904b) on the sibling canonical-Flux-v2-per-CR-
+        // substrate-default paired-halves surfaces.
+        assert_eq!(HELM_VALUES_KEY_ENABLED, "enabled");
+        assert!(CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT);
     }
 
     #[test]
