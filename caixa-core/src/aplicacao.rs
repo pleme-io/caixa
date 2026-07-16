@@ -897,6 +897,78 @@ impl Membro {
     pub fn nome(&self) -> &str {
         self.caixa.as_str()
     }
+
+    /// Substrate-canonical per-`:membros` member-caixa `:versao` semver-
+    /// requirement scalar accessor every consumer that reads the
+    /// member's version pin keys off — returns the author-declared
+    /// `:membros :versao` byte-string verbatim as a `&str`, borrowed
+    /// from the typed slot's own [`String`] storage.
+    ///
+    /// The `:membros :versao` slot carries the Cargo-shaped semver
+    /// requirement string (`"^0.1"`, `"~0.1.2"`, `"0.1.0"`, `"*"`) that
+    /// pins which release of the member-caixa the Aplicacao composes
+    /// against — the same requirement grammar the peer `:deps :versao`
+    /// / `:children :versao` axes carry, resolved through the shared
+    /// [`crate::render::require_valid_versao_requirement`] cascade and
+    /// the shared [`crate::version::parse_requirement`] parser. Every
+    /// downstream consumer that fans on the member's version pin keys
+    /// off this scalar (the [`validate_membros`] per-member requirement
+    /// gate at `require_valid_versao_requirement(m.versao_requirement(),
+    /// …)`, the [`feira app graph`] per-member `println!("    - {} {}",
+    /// m.nome(), m.versao_requirement())` line, every future per-cluster
+    /// version-lock overlay the operator pins through a future
+    /// `:placement`-scoped slot, the future
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-member
+    /// version resolver, the future `feira app deploy` pipeline's
+    /// per-member lacre BLAKE3-closure lookup).
+    ///
+    /// Prior to this lift the `.versao` byte-string was accessed inline
+    /// at two `&str`-shaped sites — the [`validate_membros`]
+    /// requirement-gate call `require_valid_versao_requirement(&m.versao,
+    /// …)` and the `feira app graph` per-member printer's `println!(
+    /// "    - {} {}", m.caixa, m.versao)` (caixa-feira/src/cmd/app.rs:78
+    /// prior to this lift) — two open-coded field-accesses that expressed
+    /// no compile-time link back to the typed slot. A future extension of
+    /// the `:membros :versao` axis to a richer author surface (a
+    /// per-cluster version-pin overlay per MESH-COMPOSITION §III.2 canary
+    /// flow, a lacre-projected concrete-version rewrite the operator
+    /// materializes at CR-admission time, a future `:membros :versao-lock`
+    /// per-cluster override slot) would have had to be threaded through
+    /// every open-coded copy in lockstep or one consumer would silently
+    /// disagree with the peers on which release constraint a given
+    /// member resolves to. Lifting the resolution rule to a typed method
+    /// on the substrate primitive means every downstream requirement-
+    /// facing consumer reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Sibling of the peer per-`:membros` [`Membro::nome`] (4a32abf)
+    /// member-caixa `:nome` scalar accessor — the pair
+    /// `(nome(), versao_requirement())` jointly projects the
+    /// `(caixa, versao)` field pair every renderer that fans on
+    /// per-member identity + version pin keys off, closing the last
+    /// unlifted per-`:membros` scalar axis so every downstream
+    /// per-`:membros` reader now routes through a typed dispatch on the
+    /// substrate primitive. Named `versao_requirement()` rather than
+    /// `versao()` because the field's storage-side `.versao` label is
+    /// already the author-surface term (`:versao`); the accessor's name
+    /// carries the semantic role — the semver *requirement* string the
+    /// shared [`crate::version::parse_requirement`] entry-point consumes
+    /// — so a raw field access and a typed dispatch read differently at
+    /// every consumer site.
+    ///
+    /// Peer of the sibling per-`:contratos` [`WitContract::source`] /
+    /// [`WitContract::destination`] (7f0fd43) caller/callee-Servico
+    /// scalar-accessor pair and per-`:entrada` [`Entrada::destination`]
+    /// (6db982c) / [`Entrada::hostname`] (11f3dfe) DNS-hostname /
+    /// destination-Servico scalar accessors — same "one typed dispatch
+    /// on the substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the per-`:membros` member-`:versao`
+    /// semver-requirement byte-string axis.
+    #[must_use]
+    pub fn versao_requirement(&self) -> &str {
+        self.versao.as_str()
+    }
 }
 
 // ── mesh-level policies ──────────────────────────────────────────────
@@ -3281,7 +3353,7 @@ impl AplicacaoSpec {
             // parse yields an implicit `*`) lives in exactly one
             // predicate.
             crate::render::require_valid_versao_requirement(
-                &m.versao,
+                m.versao_requirement(),
                 || AplicacaoError::MembroVersaoEmpty {
                     caixa: m.caixa.clone(),
                 },
@@ -13576,6 +13648,133 @@ mod tests {
             "Membro::nome and .caixa.as_str() must byte-equal in length \
              as well as in address",
         );
+    }
+
+    #[test]
+    fn membro_versao_requirement_returns_versao_byte_equal_across_permutations() {
+        // The canonical per-`:membros` member-`:versao`-scalar pin:
+        // [`Membro::versao_requirement`] must return the
+        // `:membros :versao` field byte-for-byte, borrowed from the typed
+        // slot's own [`String`] storage. Sibling of the peer
+        // `membro_nome_returns_caixa_byte_equal_across_permutations`
+        // (4a32abf) pin on the per-`:membros` member-caixa `:nome` scalar
+        // — same "the substrate-primitive accessor must byte-equal the
+        // raw field access verbatim across every author-declared value"
+        // discipline extended to the per-`:membros` member-`:versao`
+        // requirement-string arm. Pins against a future silent detour
+        // that re-canonicalized the requirement (an accidental
+        // `.to_string()` via [`parse_requirement`] → [`Display`] round-
+        // trip that collapsed `"^0.1"` to `">=0.1, <0.2"` and silently
+        // drifted the printer output away from the source `caixa.lisp`,
+        // an accidental whitespace trim on `"^ 0.1"` that no consumer
+        // ever produced from the field-access side, an accidental
+        // per-cluster lacre-projected concrete-version rewrite that
+        // didn't land on the peer field-access sites). Five values sweep
+        // the accept-set the shared
+        // [`crate::render::require_valid_versao_requirement`] gate
+        // admits (caret / tilde / exact / wildcard / bare-major).
+        for req in ["^0.1", "~0.1.2", "0.1.0", "*", "^1"] {
+            let m = Membro {
+                caixa: "cart".into(),
+                versao: req.into(),
+            };
+            assert_eq!(
+                m.versao_requirement(),
+                req,
+                "Membro::versao_requirement must return :membros :versao \
+                 verbatim (got {:?}, expected {req:?})",
+                m.versao_requirement(),
+            );
+            assert_eq!(
+                m.versao_requirement(),
+                m.versao.as_str(),
+                "Membro::versao_requirement must byte-equal the .versao \
+                 field access",
+            );
+        }
+    }
+
+    #[test]
+    fn membro_versao_requirement_borrows_from_versao_storage() {
+        // The borrow-not-copy pin: [`Membro::versao_requirement`] must
+        // return a `&str` slice that borrows from the typed slot's own
+        // [`String`] storage — same-address invariant with
+        // `m.versao.as_str()`. Pins against a future silent detour that
+        // allocated a fresh `String` (`self.versao.clone()` in the body
+        // would type-check but silently drop the borrow, and every
+        // downstream consumer that assumed the returned slice outlives
+        // `&self` would break on a stale-reference use-after-free). Peer
+        // of the sibling per-`:membros` [`Membro::nome`] (4a32abf) and
+        // per-`:contratos` [`WitContract::source`] /
+        // [`WitContract::destination`] (7f0fd43) and per-`:entrada`
+        // [`Entrada::destination`] (6db982c) borrow-invariant pins on
+        // the mesh-slot-atom scalar-value axes.
+        let m = Membro {
+            caixa: "checkout".into(),
+            versao: "^0.1".into(),
+        };
+        let req = m.versao_requirement();
+        let versao_slice = m.versao.as_str();
+        assert_eq!(
+            req.as_ptr(),
+            versao_slice.as_ptr(),
+            "Membro::versao_requirement must borrow from the .versao \
+             String's backing storage — a fresh allocation here means \
+             the accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently carry \
+             a detached copy",
+        );
+        assert_eq!(
+            req.len(),
+            versao_slice.len(),
+            "Membro::versao_requirement and .versao.as_str() must byte-\
+             equal in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn membro_nome_and_versao_requirement_project_caixa_and_versao_pair() {
+        // Sibling-pair invariant pin composing both per-`:membros`
+        // substrate-primitive typed dispatches — [`Membro::nome`]
+        // (4a32abf) and [`Membro::versao_requirement`] — at the joint
+        // `(nome(), versao_requirement())` call shape every renderer
+        // that fans on per-member identity + version pin keys off. The
+        // invariant, evaluated per-member:
+        //
+        //   (m.nome(), m.versao_requirement()) == (m.caixa.as_str(), m.versao.as_str())
+        //
+        // Closes the last unlifted per-`:membros` scalar axis — every
+        // downstream consumer that reads the pair now routes through
+        // exactly two typed dispatches on the substrate primitive, not
+        // one typed + one open-coded field access. A future refactor
+        // that silently split either accessor's projection (an
+        // accidental `nome()` namespace-prefix rewrite that didn't
+        // reach the peer, an accidental `versao_requirement()` lacre-
+        // projected concrete-version rewrite that didn't land on the
+        // `nome()` peer) surfaces at caixa-core build time. Peer of the
+        // sibling per-`:entrada` `(hostname(), destination())` and
+        // per-`:contratos` `(source(), destination())` pair invariants
+        // on the mesh-slot-atom scalar-value axes.
+        for (caixa, versao) in [
+            ("cart", "^0.1"),
+            ("checkout", "~0.1.2"),
+            ("catalog", "0.1.0"),
+            ("orders-v2", "*"),
+        ] {
+            let m = Membro {
+                caixa: caixa.into(),
+                versao: versao.into(),
+            };
+            assert_eq!(
+                (m.nome(), m.versao_requirement()),
+                (m.caixa.as_str(), m.versao.as_str()),
+                "(Membro::nome, Membro::versao_requirement) must project \
+                 (.caixa, .versao) verbatim across every author-declared \
+                 pair (got ({:?}, {:?}), expected ({caixa:?}, {versao:?}))",
+                m.nome(),
+                m.versao_requirement(),
+            );
+        }
     }
 
     #[test]
