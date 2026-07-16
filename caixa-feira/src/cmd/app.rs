@@ -75,7 +75,7 @@ impl GraphArgs {
             );
             println!("  membros ({}):", spec.membros.len(),);
             for m in &spec.membros {
-                println!("    - {} {}", m.caixa, m.versao);
+                println!("    - {} {}", m.nome(), m.versao_requirement());
             }
             println!("  contratos ({}):", spec.contratos.len());
             for c in &spec.contratos {
