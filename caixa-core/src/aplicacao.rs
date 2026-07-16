@@ -3420,17 +3420,17 @@ impl AplicacaoSpec {
             crate::render::require_valid_versao_requirement(
                 m.versao_requirement(),
                 || AplicacaoError::MembroVersaoEmpty {
-                    caixa: m.caixa.clone(),
+                    caixa: m.nome().to_string(),
                 },
                 |reason| AplicacaoError::MembroVersaoInvalid {
-                    caixa: m.caixa.clone(),
-                    versao: m.versao.clone(),
+                    caixa: m.nome().to_string(),
+                    versao: m.versao_requirement().to_string(),
                     reason,
                 },
             )?;
             crate::render::insert_first_seen(&mut seen, m.nome(), || {
                 AplicacaoError::MembroDuplicate {
-                    caixa: m.caixa.clone(),
+                    caixa: m.nome().to_string(),
                 }
             })?;
         }

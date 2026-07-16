@@ -146,7 +146,21 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
     let mut out = Vec::with_capacity(spec.membros.len());
     for m in &spec.membros {
         let mut entry = serde_yaml::Mapping::new();
-        entry.insert_string(FLEET_PROGRAMS_KEY_NAME, m.caixa.clone());
+        // Route the per-`:membros` entry-`name:` byte-string through the
+        // typed [`Membro::nome`] accessor rather than the raw `.caixa`
+        // field access — the last un-lifted `.caixa.clone()` copy of the
+        // read path on the per-`:membros` member-caixa `:nome` axis, and
+        // the sibling `String`-carry site to the five `&str`-read sites
+        // the peer 4a32abf lift already routed through the accessor.
+        // Prior to this lift the emit-side `String`-carry path was the
+        // solitary consumer bypassing the typed dispatch, so a future
+        // extension of the `:membros :caixa` axis to a richer author
+        // surface (a per-cluster alias table, an M4 namespace-qualified
+        // rewrite, a `:membros :nome-suffix` overlay) that lands on the
+        // accessor would silently disagree with the emitted programs.yaml
+        // `name:` — the drift-detection pins below key off this equality
+        // to catch the regression at caixa-mesh build time.
+        entry.insert_string(FLEET_PROGRAMS_KEY_NAME, m.nome().to_string());
         // Per-`:membros` version-constraint annotation — flows the
         // Membro's `:versao` (the M3 Aplicacao's per-member semver /
         // range constraint) through the canonical
@@ -157,8 +171,16 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
         // axis-key single-sourcing arc — with this lift landed every
         // per-entry axis (name + versao + aplicacao + placement) lives
         // in exactly one `&'static str` across the emitter here + every
-        // downstream aggregator/resolver call site.
-        entry.insert_string(FLEET_PROGRAMS_KEY_VERSAO, m.versao.clone());
+        // downstream aggregator/resolver call site. Routes through the
+        // typed [`Membro::versao_requirement`] accessor (a40b0e3) rather
+        // than the raw `.versao` field — same converging-`String`-carry-
+        // path discipline the sibling [`FLEET_PROGRAMS_KEY_NAME`] emit
+        // above applies on the peer per-`:membros` member-caixa `:nome`
+        // axis.
+        entry.insert_string(
+            FLEET_PROGRAMS_KEY_VERSAO,
+            m.versao_requirement().to_string(),
+        );
         // Annotate with the parent Aplicacao's nome so the operator
         // knows which graph this member belongs to. Consumes the
         // lifted [`caixa_core::FLEET_PROGRAMS_KEY_APLICACAO`] axis-key
@@ -6269,6 +6291,91 @@ mod tests {
             })
             .collect();
         assert_eq!(versoes, vec!["^0.1", "^0.1", "^0.2"]);
+    }
+
+    #[test]
+    fn programs_for_aplicacao_entry_name_routes_through_membro_nome_accessor() {
+        // Emit-path pin: each `programs[]` entry's `name:` byte-string
+        // must resolve through the typed [`caixa_core::Membro::nome`]
+        // accessor, not the raw `.caixa` field. Pins the
+        // last-`.clone()`-site lift the `m.nome().to_string()` edit at
+        // the per-`:membros` emit call site above landed against a
+        // future silent detour that re-inlined `m.caixa.clone()` — the
+        // regression would round-trip past the sibling
+        // [`programs_for_aplicacao_emits_one_entry_per_member`] fixture-
+        // literal pin (which spells the emitted `name:` byte-string
+        // verbatim) but would silently split the emit-side write from
+        // any future substrate-side rewrite the accessor grows (a
+        // per-cluster alias table, an M4 namespace-qualified rewrite,
+        // the `:membros :nome-suffix` overlay MESH-COMPOSITION §III.2
+        // acknowledges). Asserted against the accessor byte-for-byte,
+        // per-membro, in declaration order — a mutation of the emit
+        // site back to `.caixa.clone()` still passes this pin *today*
+        // (nome() is byte-equal to .caixa on the sibling
+        // [`caixa_core::aplicacao::tests::membro_nome_returns_caixa_byte_equal_across_permutations`]
+        // pin), but any future accessor extension immediately fires the
+        // regression here — the pair `(emit path, accessor path)` moves
+        // as a unit on the substrate primitive.
+        let c = aplicacao_caixa();
+        let membros = &c
+            .aplicacao_view()
+            .expect("Aplicacao view for fixture")
+            .membros;
+        let entries = programs_for_aplicacao(&c).unwrap();
+        assert_eq!(entries.len(), membros.len());
+        for (m, entry) in membros.iter().zip(entries.iter()) {
+            let emitted = entry
+                .get(FLEET_PROGRAMS_KEY_NAME)
+                .and_then(|v| v.as_str())
+                .expect("programs.yaml entry carries name: as a string");
+            assert_eq!(
+                emitted,
+                m.nome(),
+                "programs.yaml entry `name:` must byte-equal Membro::nome() — \
+                 emit path must route through the typed accessor, not the \
+                 raw `.caixa` field"
+            );
+        }
+    }
+
+    #[test]
+    fn programs_for_aplicacao_entry_versao_routes_through_membro_versao_requirement_accessor() {
+        // Emit-path pin: each `programs[]` entry's `versao:` byte-string
+        // must resolve through the typed
+        // [`caixa_core::Membro::versao_requirement`] accessor, not the
+        // raw `.versao` field. Peer of the sibling
+        // [`programs_for_aplicacao_entry_name_routes_through_membro_nome_accessor`]
+        // pin on the per-`:membros` version-constraint axis; together
+        // the two pins pin the last two `.clone()` sites the a40b0e3 /
+        // 4a32abf sibling per-`:membros` accessor lifts left carrying
+        // raw-field-access `String`-carry copies (the sibling `&str`-
+        // read sites already route through the accessors). A future
+        // extension of the version-constraint accessor (a per-cluster
+        // version-pin overlay the operator pins through a future
+        // `:placement`-scoped slot, a lacre-projected concrete-version
+        // rewrite, an M4 canary version-pinning slot) that lands on the
+        // accessor now flows through the emitted programs.yaml `versao:`
+        // by construction.
+        let c = aplicacao_caixa();
+        let membros = &c
+            .aplicacao_view()
+            .expect("Aplicacao view for fixture")
+            .membros;
+        let entries = programs_for_aplicacao(&c).unwrap();
+        assert_eq!(entries.len(), membros.len());
+        for (m, entry) in membros.iter().zip(entries.iter()) {
+            let emitted = entry
+                .get(FLEET_PROGRAMS_KEY_VERSAO)
+                .and_then(|v| v.as_str())
+                .expect("programs.yaml entry carries versao: as a string");
+            assert_eq!(
+                emitted,
+                m.versao_requirement(),
+                "programs.yaml entry `versao:` must byte-equal \
+                 Membro::versao_requirement() — emit path must route \
+                 through the typed accessor, not the raw `.versao` field"
+            );
+        }
     }
 
     #[test]
