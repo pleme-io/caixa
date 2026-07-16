@@ -2976,7 +2976,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // typed-slot value renders to the same `"30s"` string K8s
     // tooling parses — no per-renderer ad-hoc duration formatting.
     let timeout_overlay =
-        single_field_overlay(spec.politicas.timeout, GATEWAY_API_KEY_REQUEST, |d| {
+        single_field_overlay(spec.politicas.timeout(), GATEWAY_API_KEY_REQUEST, |d| {
             serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d))
         });
     // `:politicas :retries` overlay — when the typed slot carries a

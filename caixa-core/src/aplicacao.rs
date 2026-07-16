@@ -1093,11 +1093,97 @@ impl MeshPolicy {
     /// for the emptiness semantic.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.timeout.is_none()
+        self.timeout().is_none()
             && self.retries().is_none()
             && self.circuit_breaker.is_none()
             && self.mtls_required().is_none()
             && self.rate_limit.is_none()
+    }
+
+    /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
+    /// per-call-deadline scalar accessor every consumer of the
+    /// Aplicacao's Gateway API v1.x per-rule request-timeout keys off —
+    /// returns the author-declared `:politicas :timeout` typed
+    /// [`Duration`] verbatim as an `Option<Duration>`, copied out of the
+    /// typed slot's own `Option<Duration>` storage (`Option<Duration>`
+    /// is `Copy`, so the accessor returns by value; no borrow of
+    /// `&self` past the call). `None` when the slot is absent (the
+    /// "cluster default applies — typically the gateway class's
+    /// implementation-side per-request wall-clock cap" arm caixa-mesh's
+    /// `timeout_overlay` builder documents at caixa-mesh/src/lib.rs:2911
+    /// — [`MeshPolicy::is_empty`]'s `timeout.is_none()` arm reads this
+    /// predicate too, so an authored-but-unset `:politicas (:timeout ())`
+    /// round-trips to a rendered `HTTPRoute` structurally identical to
+    /// one that omits the slot).
+    ///
+    /// The `:politicas :timeout` slot carries the "no infinite blocking"
+    /// per-call deadline contract (MESH-COMPOSITION §V CSE invariant) —
+    /// the typed slot's `Option<Duration>` accept-set (zero-floor
+    /// rejected through [`AplicacaoError::PolicyTimeoutZero`], canonical-
+    /// form rejected through [`AplicacaoError::PolicyTimeoutNotCanonical`],
+    /// upper-bounded by [`POLICY_TIMEOUT_MAX`]) maps onto the Gateway API
+    /// v1.x `HTTPRoute.spec.rules[].timeouts.request` per-rule request-
+    /// deadline scalar the caixa-mesh `timeout_overlay` builder writes.
+    /// Every downstream consumer that reads the per-call cap keys off
+    /// this scalar (the [`MeshPolicy::is_empty`] emptiness predicate the
+    /// renderers key off to decide "emit :politicas overlay" vs "skip
+    /// entirely", the caixa-mesh per-`:entrada` `HTTPRoute`
+    /// `timeouts.request` builder at caixa-mesh/src/lib.rs:2979 that
+    /// fans the deadline into every rule via
+    /// [`crate::render::single_field_overlay`], the future M4 per-
+    /// Aplicacao Gateway API reconciler materialization pass, the
+    /// future per-`:contratos`-edge timeout-override overlay the
+    /// MESH-COMPOSITION §III.2 roadmap acknowledges).
+    ///
+    /// Prior to this lift the `.timeout` field was accessed inline at
+    /// two sites — [`MeshPolicy::is_empty`]'s `self.timeout.is_none()`
+    /// arm and caixa-mesh's `single_field_overlay(spec.politicas.timeout,
+    /// …)` call — two open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:politicas :timeout` axis to a richer author surface — a
+    /// per-`:contratos`-edge timeout override the operator pins through
+    /// a future `:contratos :timeout` slot the MESH-COMPOSITION §III.2
+    /// roadmap acknowledges, a per-cluster timeout-default overlay the
+    /// M4 CR materializer resolves per-CR, a split of the single
+    /// per-call `Duration` into a richer `{request, backendRequest}`
+    /// pair once the Gateway API's per-rule `timeouts` block grows the
+    /// upstream-facing backendRequest arm alongside the client-facing
+    /// request arm — would have had to be threaded through both open-
+    /// coded copies in lockstep or the emptiness predicate and the
+    /// caixa-mesh emit path would silently disagree on which per-call
+    /// deadline a given [`MeshPolicy`] resolves to (a `:politicas` block
+    /// whose only axis is a `Some :timeout` would satisfy `is_empty()
+    /// == false` while the renderer's overlay-emit path silently read
+    /// a drifted other value, or vice versa: an author's `:timeout
+    /// "30s"` would omit the `HTTPRoute` `timeouts.request` block while
+    /// the emptiness predicate still classified the policy as non-
+    /// empty, and every `kubectl -n tatara-system get httproute -o yaml
+    /// | grep -A2 timeouts` audit would land on a route whose author's
+    /// typed slot value silently vanished at the renderer layer).
+    /// Lifting the resolution to a typed method on the substrate
+    /// primitive means every downstream consumer of the Aplicacao's
+    /// per-`:politicas` deadline surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// Third `Option<Copy-T>`-return accessor on the M3 mesh-slot
+    /// family (sibling of the peer per-`:politicas`
+    /// [`MeshPolicy::retries`] bdfb399 `Option<u32>` accessor and the
+    /// per-`:politicas` [`MeshPolicy::mtls_required`] c0110f1
+    /// `Option<bool>` accessor — same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the peer per-`:politicas` typed-
+    /// [`Duration`] optional-scalar axis; closes the "optional per-slot
+    /// numeric-Copy-T scalar" projection pattern the sibling
+    /// `Option<u32>` / `Option<bool>` lifts opened, since every
+    /// remaining `MeshPolicy` axis (`circuit_breaker: Option<CircuitBreaker>`,
+    /// `rate_limit: Option<RateLimit>`) carries a struct payload rather
+    /// than a scalar). Named `timeout()` to match the storage field's
+    /// name; the accessor's identity maps onto the canonical MESH-
+    /// COMPOSITION §III.2 vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn timeout(&self) -> Option<Duration> {
+        self.timeout
     }
 
     /// Substrate-canonical per-`:politicas` `:retries` transient-failure-
@@ -14743,6 +14829,201 @@ mod tests {
                 first, retries,
                 "MeshPolicy::retries must return :politicas :retries \
                  verbatim by copy — got {first:?}, expected {retries:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_timeout_returns_timeout_option_byte_equal_across_permutations() {
+        // The canonical per-`:politicas` `:timeout` Gateway-API-mesh
+        // per-call-deadline scalar pin: [`MeshPolicy::timeout`] must
+        // return the `:politicas :timeout` typed [`Duration`] verbatim
+        // as an `Option<Duration>`, byte-equal to the raw field access
+        // across every representative value in the accept-set — `None`
+        // (cluster default applies — typically the gateway class's
+        // implementation-side per-request wall-clock cap the caixa-mesh
+        // `timeout_overlay` builder documents), `Some(Duration::from_millis(1))`
+        // (the lower boundary of the `1ms..=POLICY_TIMEOUT_MAX` accept-
+        // set the surrounding `AplicacaoSpec::validate_politicas` gate
+        // carves out on the sibling `PolicyTimeoutZero` /
+        // `PolicyTimeoutNotCanonical` refusals), `Some(POLICY_TIMEOUT_MAX)`
+        // (the upper boundary the same gate carves out on the sibling
+        // `PolicyTimeoutExceedsCap` refusal), `Some(Duration::ZERO)`
+        // (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse into `None` on the zero-
+        // Duration arm — validate rejects zero but the accessor must
+        // ship the raw slot verbatim), and `Some(Duration::MAX)` (a
+        // past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse at the return path).
+        //
+        // Sibling of the peer per-`:politicas`
+        // [`MeshPolicy::retries`] (bdfb399) accessor pin on the sibling
+        // `Option<u32>` optional-scalar axis and the peer per-
+        // `:politicas` [`MeshPolicy::mtls_required`] (c0110f1) accessor
+        // pin on the sibling `Option<bool>` optional-scalar axis,
+        // extended onto the peer per-`:politicas` `Option<Duration>`
+        // shape — third `Option<Copy-T>`-return accessor on the M3
+        // mesh-slot family. Pins against a future silent detour that
+        // re-derived the per-call cap from a peer axis (an accidental
+        // `.circuit_breaker.as_ref().map(|b| b.window)` collapse that
+        // read the breaker's rolling-window duration as a per-call
+        // deadline), a `None → Some(Duration::MAX)` cluster-default
+        // projection (which would silently re-introduce the
+        // MESH-COMPOSITION §V CSE-invariant-violating "no infinite
+        // blocking" arm at the emit boundary), or a bounds-collapsing
+        // accessor that clamped the return through `POLICY_TIMEOUT_MAX`
+        // (the `AplicacaoSpec::validate` gate owns the bounds; the
+        // accessor must ship the raw slot verbatim so a validate-time
+        // gate regression surfaces at the emit boundary rather than
+        // being silently absorbed).
+        for timeout in [
+            None,
+            Some(Duration::from_millis(1)),
+            Some(POLICY_TIMEOUT_MAX),
+            Some(Duration::ZERO),
+            Some(Duration::MAX),
+        ] {
+            let p = MeshPolicy {
+                timeout,
+                ..MeshPolicy::default()
+            };
+            assert_eq!(
+                p.timeout(),
+                timeout,
+                "MeshPolicy::timeout must return :politicas :timeout \
+                 verbatim (got {:?}, expected {timeout:?})",
+                p.timeout(),
+            );
+            assert_eq!(
+                p.timeout(),
+                p.timeout,
+                "MeshPolicy::timeout must byte-equal the raw .timeout \
+                 field access across every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_is_empty_timeout_arm_routes_through_accessor() {
+        // Composition pin: [`MeshPolicy::is_empty`]'s `timeout` arm
+        // must key off [`MeshPolicy::timeout`], not the raw `.timeout`
+        // field access. Structurally: toggling ONLY the `timeout` slot
+        // on an otherwise-default MeshPolicy must flip `is_empty()`
+        // from `true` (all-`None`) to `false` (one axis carries a
+        // value); the flip must be observed for every value in the
+        // accept-set the surrounding `AplicacaoSpec::validate_politicas`
+        // gate accepts (`Some(Duration::from_millis(1))`,
+        // `Some(POLICY_TIMEOUT_MAX)`), since the emptiness semantic
+        // reads "any axis carries a value" — not "any axis carries a
+        // value the validate gate accepts" — the same non-collapsing
+        // shape the peer M2 [`crate::LimitsSpec::is_empty`] /
+        // [`crate::BehaviorSpec::is_empty`] predicates carry.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.rate_limit.is_none()`-only chain that dropped the
+        // `timeout` arm entirely), a `timeout == Some(_)` collapse
+        // that key-off a validate-gate-clamped bounds check (which
+        // would silently classify a past-the-guard `Some(Duration::MAX)`
+        // as empty because it fails the `1ms..=POLICY_TIMEOUT_MAX`
+        // check), or an accessor-side detour that no longer names the
+        // substrate-primitive typed dispatch.
+        //
+        // Sibling of the peer per-`:politicas`
+        // [`MeshPolicy::retries`] (bdfb399) accessor-composition pin on
+        // the sibling `Option<u32>` optional-scalar axis and the peer
+        // per-`:politicas` [`MeshPolicy::mtls_required`] (c0110f1)
+        // accessor-composition pin on the sibling `Option<bool>`
+        // optional-scalar axis — same "the emptiness predicate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer per-`:politicas`
+        // `Option<Duration>` axis.
+        let empty = MeshPolicy::default();
+        assert!(
+            empty.is_empty(),
+            "MeshPolicy::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for timeout in [Some(Duration::from_millis(1)), Some(POLICY_TIMEOUT_MAX)] {
+            let p = MeshPolicy {
+                timeout,
+                ..MeshPolicy::default()
+            };
+            assert!(
+                !p.is_empty(),
+                "MeshPolicy::is_empty must return false when \
+                 :timeout is {timeout:?} — the emptiness \
+                 predicate reads \"any axis carries a value\", not \
+                 \"any axis carries a value the validate gate \
+                 accepts\"",
+            );
+            assert_eq!(
+                p.timeout().is_none(),
+                p.is_empty(),
+                "when :timeout is the only set axis, is_empty() \
+                 must equal timeout().is_none() — the accessor and \
+                 the emptiness predicate must route through the same \
+                 substrate-primitive typed dispatch on the :timeout \
+                 arm",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_timeout_projects_option_duration_by_copy() {
+        // The by-copy pin: [`MeshPolicy::timeout`] returns
+        // `Option<Duration>` by copy — `Option<Duration>` is `Copy`
+        // and the accessor must return by value, not by reference.
+        // Sibling of the peer per-`:politicas`
+        // [`MeshPolicy::retries`] (bdfb399) by-copy pin on the
+        // sibling `Option<u32>` optional-scalar axis and the peer
+        // per-`:politicas` [`MeshPolicy::mtls_required`] (c0110f1)
+        // by-copy pin on the sibling `Option<bool>` optional-scalar
+        // axis, extended onto the peer per-`:politicas`
+        // `Option<Duration>` copy-invariant shape — the accessor's
+        // returned `Option<Duration>` must outlive `&self` (multiple
+        // calls must return equal values from a dropped-`&self`
+        // copy, since the returned Option carries no borrow), and
+        // calling the accessor twice on the same MeshPolicy must
+        // yield the same `Option<Duration>` verbatim (idempotent, no
+        // side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&Duration>` (which would type-check but silently
+        // break every downstream caller — [`crate::render::single_field_overlay`]'s
+        // first parameter is `Option<T: Clone>`, and `&Duration`
+        // would fold to a detached copy at the call site), an
+        // accidental `Option::as_ref()` projection
+        // (`self.timeout.as_ref()` would also type-check but return
+        // `Option<&Duration>`), or a one-arm-only accessor that
+        // reads `Some(*d)` in the Some arm but reads a fresh
+        // `Default::default()` (`Duration::ZERO`) in the None arm
+        // (which would silently re-classify every unset `:timeout`
+        // as the `PolicyTimeoutZero`-refused zero-Duration value at
+        // the accessor boundary).
+        for timeout in [
+            None,
+            Some(Duration::from_millis(1)),
+            Some(POLICY_TIMEOUT_MAX),
+            Some(Duration::ZERO),
+            Some(Duration::MAX),
+        ] {
+            let p = MeshPolicy {
+                timeout,
+                ..MeshPolicy::default()
+            };
+            let first = p.timeout();
+            let second = p.timeout();
+            assert_eq!(
+                first, second,
+                "MeshPolicy::timeout must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<Duration>",
+            );
+            assert_eq!(
+                first, timeout,
+                "MeshPolicy::timeout must return :politicas :timeout \
+                 verbatim by copy — got {first:?}, expected {timeout:?}",
             );
         }
     }
