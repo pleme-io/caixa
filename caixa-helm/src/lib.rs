@@ -603,6 +603,41 @@ pub use caixa_core::KUBE_KEY_SPEC;
 /// key / canonical-Helm-chart-schema-apiVersion axes.
 pub use caixa_core::HELM_VALUES_KEY_ENABLED;
 
+/// Canonical substrate-side default for the
+/// `values.<library>.enabled` scalar-value toggle every
+/// [`render_chart_for_servico`]-emitted standalone `lareira-<nome>`
+/// chart's `values.yaml` document seeds inside its per-caixa
+/// [`DEFAULT_LIBRARY_NAME`] wrap block to leave the paired
+/// [`DEFAULT_LIBRARY_NAME`] child chart opted-out at the per-cluster
+/// `helm template` / `helm install` apply step. Re-export of the
+/// canonical [`caixa_core::STANDALONE_LAREIRA_ENABLED_DEFAULT`] so the
+/// substrate-side default the standalone per-chart path seeds under
+/// the sibling [`HELM_VALUES_KEY_ENABLED`] leaf-scalar-key lives in
+/// exactly one place across every caixa renderer. Consumed by
+/// [`RenderOpts::default`]'s `enabled_default` field seed (formerly
+/// an inline `false` scalar-value literal at
+/// `caixa-helm/src/lib.rs:700`); the peer test-fixture navigators
+/// pinning the default-off round-trip also consult the re-export so a
+/// rebrand of the per-values-block child-chart-enablement-toggle scalar
+/// on the standalone per-chart path lands at one const and reaches
+/// every consumer by construction. Semantically distinct from — and
+/// inverse of — the peer
+/// [`caixa_flux::CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`] on the
+/// composition per-cluster-`HelmRelease` values-overlay path (which
+/// force-ons the child chart under the substrate-side composition
+/// path); the two peer scalar-value defaults name mirror-symmetric
+/// per-path child-chart-enablement-toggle-scalar-value defaults at the
+/// exact same `values.<library>.enabled` sub-block position on the
+/// standalone per-chart-`values.yaml` path (this re-export) and the
+/// composition per-cluster-`HelmRelease` values-overlay path (the peer
+/// re-export). Same shape as the [`DEFAULT_LIBRARY_NAME`] /
+/// [`KUBE_KEY_SPEC`] / [`HELM_VALUES_KEY_ENABLED`] re-exports on the
+/// sibling canonical-Helm-load-bearing-string / canonical-K8s-CR-body-
+/// key / canonical-Helm-per-values-block-enable-toggle-key axes. See
+/// [`caixa_core::STANDALONE_LAREIRA_ENABLED_DEFAULT`] for the full lift
+/// rationale.
+pub use caixa_core::STANDALONE_LAREIRA_ENABLED_DEFAULT;
+
 /// Local re-export of the canonical
 /// [`caixa_core::COMPUTEUNIT_SPEC_KEY_MODULE`] — the
 /// `wasm.pleme.io/v1alpha1/ComputeUnit` CRD per-CR wasm-module-reference
@@ -687,7 +722,11 @@ pub struct RenderOpts {
     pub library_name: String,
     /// Whether the rendered values block is `enabled: false` by default
     /// (matching `lareira-hello-world` so cluster operators flip it on
-    /// per-cluster). Default: `false` (i.e. enabled-flag set to false).
+    /// per-cluster). Default: [`STANDALONE_LAREIRA_ENABLED_DEFAULT`]
+    /// (`false` — the substrate's chosen standalone per-chart
+    /// opt-out seed, inverse of the composition per-cluster-`HelmRelease`
+    /// values-overlay path's [`caixa_flux::CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`]
+    /// force-on).
     pub enabled_default: bool,
 }
 
@@ -697,7 +736,7 @@ impl Default for RenderOpts {
             library_repo: DEFAULT_LIBRARY_REPO.into(),
             library_version: DEFAULT_LIBRARY_VERSION.into(),
             library_name: DEFAULT_LIBRARY_NAME.into(),
-            enabled_default: false,
+            enabled_default: STANDALONE_LAREIRA_ENABLED_DEFAULT,
         }
     }
 }
@@ -2471,6 +2510,89 @@ spec:
         let opts = RenderOpts::default();
         assert_eq!(opts.library_version, DEFAULT_LIBRARY_VERSION);
         assert_eq!(opts.library_version, "~0.1.0");
+    }
+
+    #[test]
+    fn render_opts_default_enabled_default_follows_lifted_constant() {
+        // Peer of [`render_opts_default_library_name_follows_lifted_constant`]
+        // /
+        // [`render_opts_default_library_version_follows_lifted_constant`]
+        // / [`render_opts_default_library_repo_follows_lifted_constant`] —
+        // the fourth leg of the [`RenderOpts::default()`]-body
+        // default-knob-follows-lifted-constant quartet. The
+        // [`RenderOpts::default()`] impl seeds `enabled_default` from
+        // [`STANDALONE_LAREIRA_ENABLED_DEFAULT`]; every rendered
+        // `lareira-<nome>` chart's `values.yaml` under-`<library>.enabled`
+        // scalar reads through this knob, so a future refactor that
+        // detached the default-knob from the lifted constant —
+        // accidentally re-inlining `false` in the impl body — would
+        // silently split the `bool` the default seed writes from the
+        // const the drift-detection pin
+        // [`standalone_lareira_enabled_default_pins_canonical_value`]
+        // (in caixa-core) reads. The rendered values block would then
+        // carry one `bool` at the emit site while the const-consuming
+        // sibling test-fixture navigators (this crate's future per-
+        // `STANDALONE_LAREIRA_ENABLED_DEFAULT` drift pins) read another,
+        // and the substrate's chosen mirror-symmetric standalone /
+        // composition per-values-block child-chart-enablement-toggle-
+        // scalar-value default pair would silently disagree on the
+        // standalone-path half. Peer with the sibling
+        // `caixa_flux::tests::cluster_bundle_lareira_enabled_default_re_export_matches_caixa_core_canonical_value`
+        // pin on the composition-path half of the same
+        // [`HELM_VALUES_KEY_ENABLED`] scalar-axis pair.
+        let opts = RenderOpts::default();
+        assert_eq!(opts.enabled_default, STANDALONE_LAREIRA_ENABLED_DEFAULT);
+        assert!(!opts.enabled_default);
+    }
+
+    #[test]
+    fn standalone_lareira_enabled_default_re_export_matches_caixa_core_canonical_value() {
+        // The renderer's `STANDALONE_LAREIRA_ENABLED_DEFAULT` was lifted
+        // from the [`RenderOpts::default()`] impl-body inline `false`
+        // scalar-value literal at `caixa-helm/src/lib.rs:700` to a
+        // re-export of [`caixa_core::STANDALONE_LAREIRA_ENABLED_DEFAULT`]
+        // so the substrate-side default the standalone per-chart path
+        // seeds under the sibling [`HELM_VALUES_KEY_ENABLED`]
+        // leaf-scalar-key lives in exactly one place across every caixa
+        // renderer (this crate's standalone per-chart path + the peer
+        // `caixa_flux::cluster_bundle`'s composition per-cluster-
+        // `HelmRelease` values-overlay path, which reads through the
+        // inverse [`caixa_flux::CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT`]
+        // re-export). Pin the equality here so any local re-introduction
+        // of a sibling `pub const STANDALONE_LAREIRA_ENABLED_DEFAULT:
+        // bool = …` at this crate (the canonical drift footgun the peer
+        // `CLUSTER_BUNDLE_LAREIRA_ENABLED_DEFAULT` re-export identity
+        // pin's rationale names as the recurring shape) is a build-time
+        // test failure naming the offending drift, not a silent
+        // apply-time toggle-mismatch routing the standalone per-chart
+        // `values.<library>.enabled` seed onto one substrate-side
+        // opt-out convention while the peer composition-path override
+        // routes onto another. Peer to the sibling
+        // `caixa_flux::tests::cluster_bundle_lareira_enabled_default_re_export_matches_caixa_core_canonical_value`
+        // on the composition-path half of the same
+        // [`HELM_VALUES_KEY_ENABLED`] scalar-axis pair — the two
+        // per-path re-export identity pins together lock the two peer
+        // scalar-value defaults' per-crate re-exports onto their shared
+        // caixa-core canonical.
+        assert_eq!(
+            STANDALONE_LAREIRA_ENABLED_DEFAULT,
+            caixa_core::STANDALONE_LAREIRA_ENABLED_DEFAULT,
+            "STANDALONE_LAREIRA_ENABLED_DEFAULT re-export must remain the \
+             same `bool` as its caixa-core canonical — a drifted local \
+             `pub const STANDALONE_LAREIRA_ENABLED_DEFAULT: bool = …` at \
+             caixa-helm would silently split the substrate's chosen \
+             standalone per-chart opt-out seed from the peer \
+             composition-path force-on inversion the caixa-core canonical \
+             encodes."
+        );
+        assert!(
+            !STANDALONE_LAREIRA_ENABLED_DEFAULT,
+            "STANDALONE_LAREIRA_ENABLED_DEFAULT must remain `false` — the \
+             standalone per-chart path is the substrate-side opt-out path \
+             where cluster operators must opt each caixa in per-cluster, \
+             inverse of the composition per-cluster-HelmRelease values-\
+             overlay path's opt-in force-on."
+        );
     }
 
     #[test]
