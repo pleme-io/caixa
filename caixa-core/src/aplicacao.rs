@@ -2674,6 +2674,84 @@ pub struct Placement {
     pub shard_key: Option<String>,
 }
 
+impl Placement {
+    /// Substrate-canonical per-`:placement` Akka-cluster-sharding
+    /// `:shard-key` extractor-expression scalar accessor every consumer
+    /// of the Aplicacao's hash-keyed distribution routing keys off —
+    /// returns the author-declared `:placement :shard-key` byte-string
+    /// verbatim as an `Option<&str>`, borrowed from the typed slot's
+    /// own `Option<String>` storage; `None` when the slot is absent
+    /// (the canonical shape under `:estrategia Replicated` /
+    /// `SingleNode` per the [`AplicacaoSpec::validate_placement`]-
+    /// enforced `shard_key.is_some() == matches!(estrategia, Sharded)`
+    /// partition — `validate` refuses any `Placement` past this call
+    /// that lands `Some` on a non-`Sharded` strategy or `None` on
+    /// `Sharded`).
+    ///
+    /// The `:placement :shard-key` slot carries the Akka-style
+    /// cluster-sharding entity-id extractor expression
+    /// (MESH-COMPOSITION §II.4) — validated by
+    /// [`validate_placement_shard_key`] to be a non-empty printable-
+    /// ASCII single-token reference (`tenantId`, `$tenantId`,
+    /// `metadata.tenantId`, `${tenant}` — the canonical shapes the
+    /// future M4 Akka-style cluster-sharding reconciler hashes without
+    /// re-validating at the runtime layer), and every downstream
+    /// consumer that reads the key keys off this scalar (the
+    /// [`AplicacaoSpec::validate_placement`] `Sharded`-arm shape gate,
+    /// the [`AplicacaoSpec::validate_placement`] non-`Sharded`-arm
+    /// declared-but-inert refusal diagnostic, the caixa-mesh
+    /// per-Aplicacao `placement.shardKey` emit path the substrate
+    /// operator's per-entity hash-routing reader consumes, the future
+    /// M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-shard-key resolver).
+    ///
+    /// Prior to this lift the `.shard_key` field was accessed inline at
+    /// two caixa-core sites — the [`AplicacaoSpec::validate_placement`]
+    /// `Sharded` arm's `match &self.placement.shard_key { None => …,
+    /// Some(k) if k.is_empty() => …, Some(k) => … }` cascade and the
+    /// non-`Sharded` arm's `if let Some(k) = &self.placement.shard_key
+    /// { … ShardKeyOnNonSharded { shard_key: k.clone() } … }` refusal
+    /// — two open-coded field-accesses that expressed no compile-time
+    /// link back to the typed slot. A future extension of the
+    /// `:placement :shard-key` axis to a richer author surface — a
+    /// per-cluster override the operator pins through a future
+    /// `:placement :shard-key-overrides` slot the MESH-COMPOSITION
+    /// §II.4 roadmap acknowledges, a per-tenant extractor-expression
+    /// alias table the M4 CR materializer resolves per-CR, a
+    /// per-Aplicacao dynamic `:shard-key` derivation the future
+    /// adaptive placement engine computes from `:affinity` weights —
+    /// would have had to be threaded through both open-coded copies in
+    /// lockstep or the `Sharded`-arm shape gate and the non-`Sharded`-
+    /// arm refusal would silently disagree on which extractor
+    /// expression a given Placement resolves to. Lifting the resolution
+    /// rule to a typed method on the substrate primitive means every
+    /// downstream consumer of the Aplicacao's per-`:placement`
+    /// hash-key surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Peer of the sibling per-`:contratos` [`WitContract::source`] /
+    /// [`WitContract::destination`] / [`WitContract::world_ref`]
+    /// (7f0fd43, 0804823) scalar accessors, per-`:membros`
+    /// [`Membro::nome`] / [`Membro::versao_requirement`] (4a32abf,
+    /// a40b0e3), and per-`:entrada` [`Entrada::destination`] /
+    /// [`Entrada::hostname`] (6db982c, 11f3dfe) accessors — same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline extended onto the per-`:placement`
+    /// Akka-cluster-sharding-key `Option<String>` optional-scalar axis.
+    /// First `Option<&str>`-return accessor on the M3 mesh-slot family
+    /// — opens the "optional per-slot scalar" projection pattern the
+    /// sibling per-`:placement` `:affinity`, per-`:politicas`
+    /// `:rate-limit` future lifts fold on. Named `shard_key()` to
+    /// match the storage field's name; the accessor's identity name
+    /// maps onto the canonical MESH-COMPOSITION §II.4 vocabulary the
+    /// slot's docstring already carries.
+    #[must_use]
+    pub fn shard_key(&self) -> Option<&str> {
+        self.shard_key.as_deref()
+    }
+}
+
 impl Default for Placement {
     fn default() -> Self {
         Self {
@@ -3510,7 +3588,17 @@ impl AplicacaoSpec {
             validate_placement_affinity(a)?;
         }
         match self.placement.estrategia {
-            PlacementStrategy::Sharded => match &self.placement.shard_key {
+            // Route the `Sharded`-arm shape-gate cascade through the
+            // typed [`Placement::shard_key`] accessor rather than the
+            // raw `&self.placement.shard_key` field access — one of the
+            // two open-coded field-access sites on the per-`:placement`
+            // Akka-cluster-sharding-key axis the accessor lift now
+            // owns. The `Some(k)`-bound `k` narrows from `&String` to
+            // `&str` under the accessor's `Option<&str>` return type;
+            // `str::is_empty` and [`validate_placement_shard_key`]'s
+            // `&str` parameter both accept the narrower borrow without
+            // a re-allocation.
+            PlacementStrategy::Sharded => match self.placement.shard_key() {
                 None => return Err(AplicacaoError::ShardedWithoutKey),
                 Some(k) if k.is_empty() => return Err(AplicacaoError::ShardedKeyEmpty),
                 // Per-axis value-shape gate on the Akka-cluster-sharding
@@ -3556,10 +3644,23 @@ impl AplicacaoSpec {
             // when the strategy consumes it, without re-deriving the
             // partition from inline strategy probes.
             PlacementStrategy::Replicated | PlacementStrategy::SingleNode => {
-                if let Some(k) = &self.placement.shard_key {
+                // Route the non-`Sharded`-arm declared-but-inert refusal
+                // through the typed [`Placement::shard_key`] accessor —
+                // the second of the two open-coded field-access sites the
+                // accessor lift now owns. The `Some(k)`-bound `k` narrows
+                // from `&String` to `&str`; the `AplicacaoError::
+                // ShardKeyOnNonSharded { shard_key: String }` diagnostic
+                // materializes the owned `String` via `k.to_string()`
+                // (peer to the sibling per-Membro `String`-carry sites
+                // 4127bb6 routed through `m.nome().to_string()` /
+                // `m.versao_requirement().to_string()`), so the whole
+                // `Sharded` ↔ non-`Sharded` partition on the
+                // `:shard-key` axis now flows through the same typed
+                // dispatch as the sibling `Sharded`-arm shape gate.
+                if let Some(k) = self.placement.shard_key() {
                     return Err(AplicacaoError::ShardKeyOnNonSharded {
                         estrategia: self.placement.estrategia,
-                        shard_key: k.clone(),
+                        shard_key: k.to_string(),
                     });
                 }
             }
@@ -14031,6 +14132,145 @@ mod tests {
                 m.versao_requirement(),
             );
         }
+    }
+
+    #[test]
+    fn placement_shard_key_returns_shard_key_option_byte_equal_across_permutations() {
+        // The canonical per-`:placement` Akka-cluster-sharding
+        // `:shard-key`-scalar pin: [`Placement::shard_key`] must return
+        // the `:placement :shard-key` field byte-for-byte, borrowed
+        // from the typed slot's own `Option<String>` storage. Peer of
+        // the sibling per-`:membros` [`Membro::nome`] (4a32abf) and
+        // per-`:contratos` [`WitContract::source`] /
+        // [`WitContract::destination`] (7f0fd43) and per-`:entrada`
+        // [`Entrada::destination`] (6db982c) accessor pins on the mesh-
+        // slot-atom scalar-value axes — same "the substrate-primitive
+        // accessor must byte-equal the raw field access verbatim across
+        // every author-declared value" discipline extended to the
+        // per-`:placement` Akka-cluster-sharding key extractor arm.
+        // Pins against a future silent detour that re-normalized the
+        // key (an accidental `.to_lowercase()` — every non-empty
+        // `:shard-key` is validated as a printable-ASCII single-token
+        // reference upstream via [`validate_placement_shard_key`], so
+        // any re-normalization is redundant + a drift surface between
+        // the validator and the accessor), a per-cluster alias rewrite
+        // the operator authors on one consumer without the other, or an
+        // accidental variable-prefix strip (`$tenantId` → `tenantId`)
+        // that didn't land on the peer field-access sites. Four values
+        // sweep the accept-set the shape gate admits — bare identifier,
+        // `$`-prefixed variable, dotted path, `${}`-quoted variable —
+        // the four canonical Akka-style entity-id extractor shapes the
+        // future M4 cluster-sharding reconciler hashes.
+        for key in ["tenantId", "$tenantId", "metadata.tenantId", "${tenant}"] {
+            let p = Placement {
+                estrategia: PlacementStrategy::Sharded,
+                clusters: vec!["rio".into()],
+                affinity: None,
+                shard_key: Some(key.into()),
+            };
+            assert_eq!(
+                p.shard_key(),
+                Some(key),
+                "Placement::shard_key must return :placement :shard-key \
+                 verbatim (got {:?}, expected Some({key:?}))",
+                p.shard_key(),
+            );
+            assert_eq!(
+                p.shard_key(),
+                p.shard_key.as_deref(),
+                "Placement::shard_key must byte-equal the .shard_key \
+                 field's `.as_deref()` projection",
+            );
+        }
+    }
+
+    #[test]
+    fn placement_shard_key_none_when_field_is_none() {
+        // The absent-`:shard-key` arm of the per-`:placement`
+        // Akka-cluster-sharding accessor pin: when the typed slot is
+        // absent — the canonical shape under `:estrategia Replicated` /
+        // `SingleNode` per the [`AplicacaoSpec::validate_placement`]-
+        // enforced `shard_key.is_some() == matches!(estrategia,
+        // Sharded)` partition — [`Placement::shard_key`] must return
+        // `None`. Pins against a future silent detour that projected
+        // the absent slot to a `Some("")` empty-string default (the
+        // canonical `Option<String>` → `String` collapse footgun the
+        // sibling M2 [`crate::LimitsSpec::is_empty`] /
+        // [`crate::BehaviorSpec::is_empty`] emptiness predicates
+        // already guard on the peer M2 typed-slot surfaces), a
+        // `Some("None")` stringified-None round-trip, or a `Some` arm
+        // whose contents were derived from a sibling slot (an
+        // accidental fallback to `estrategia.as_str()` that read the
+        // strategy discriminator into the key axis). Two placements
+        // sweep the accept-set every `validate`-passing non-`Sharded`
+        // shape lands on — `Replicated` (Erlang/OTP distributed-app
+        // takeover) and `SingleNode` (single-node hosting).
+        for estrategia in [PlacementStrategy::Replicated, PlacementStrategy::SingleNode] {
+            let p = Placement {
+                estrategia,
+                clusters: vec!["rio".into()],
+                affinity: None,
+                shard_key: None,
+            };
+            assert!(
+                p.shard_key().is_none(),
+                "Placement::shard_key must return None when the typed \
+                 slot is absent under :estrategia {estrategia:?} (got {:?})",
+                p.shard_key(),
+            );
+            assert_eq!(
+                p.shard_key(),
+                p.shard_key.as_deref(),
+                "Placement::shard_key must byte-equal the .shard_key \
+                 field's `.as_deref()` projection in the absent arm",
+            );
+        }
+    }
+
+    #[test]
+    fn placement_shard_key_borrows_from_shard_key_storage() {
+        // The borrow-not-copy pin: [`Placement::shard_key`] must return
+        // an `Option<&str>` whose `Some` arm borrows from the typed
+        // slot's own [`String`] storage — same-address invariant with
+        // `p.shard_key.as_deref().unwrap()`. Pins against a future
+        // silent detour that allocated a fresh `String`
+        // (`self.shard_key.clone().map(...)` in the body would type-
+        // check but silently drop the borrow, and every downstream
+        // consumer that assumed the returned slice outlives `&self`
+        // would break on a stale-reference use-after-free — the
+        // [`AplicacaoSpec::validate_placement`] `Sharded`-arm shape
+        // gate's `Some(k)`-bound match arm reads `k: &str` under the
+        // accessor's return type and would silently misbehave if this
+        // accessor produced a detached copy). Peer of the sibling
+        // per-`:membros` [`Membro::nome`] (4a32abf), per-`:contratos`
+        // [`WitContract::source`] / [`WitContract::destination`]
+        // (7f0fd43), and per-`:entrada` [`Entrada::destination`]
+        // (6db982c) borrow-invariant pins on the mesh-slot-atom
+        // scalar-value axes — first extension of the discipline onto
+        // an `Option<String>`-shaped optional-scalar axis.
+        let p = Placement {
+            estrategia: PlacementStrategy::Sharded,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: Some("tenantId".into()),
+        };
+        let key = p.shard_key().expect("Some arm");
+        let storage_slice = p.shard_key.as_deref().expect("Some arm — storage side");
+        assert_eq!(
+            key.as_ptr(),
+            storage_slice.as_ptr(),
+            "Placement::shard_key must borrow from the .shard_key \
+             String's backing storage — a fresh allocation here means \
+             the accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            key.len(),
+            storage_slice.len(),
+            "Placement::shard_key and .shard_key.as_deref() must byte-\
+             equal in length as well as in address",
+        );
     }
 
     #[test]
