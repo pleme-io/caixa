@@ -1349,6 +1349,89 @@ pub struct CircuitBreaker {
     pub window: Duration,
 }
 
+impl CircuitBreaker {
+    /// Substrate-canonical per-`:politicas :circuit-breaker`
+    /// `:max-failures` Envoy-outlier-detection trip-threshold scalar
+    /// accessor every consumer of the Aplicacao's per-`:contratos`-edge
+    /// breaker trip-count keys off — returns the author-declared
+    /// `:politicas :circuit-breaker :max-failures` typed `u32` verbatim,
+    /// copied out of the typed slot's own `u32` storage (`u32` is `Copy`,
+    /// so the accessor returns by value; no borrow of `&self` past the
+    /// call). Non-optional (the surrounding `Option<CircuitBreaker>` is
+    /// the "slot present?" projection at the parent [`MeshPolicy::circuit_breaker`]
+    /// axis; a `CircuitBreaker` past pattern-match is definitionally
+    /// present, and its `:max-failures` field carries the trip count as a
+    /// required-axis scalar).
+    ///
+    /// The `:politicas :circuit-breaker :max-failures` axis carries the
+    /// "consecutive-transient-failure trip threshold" contract
+    /// (MESH-COMPOSITION §III.2 #3) — the typed slot's `u32` accept-set
+    /// (zero-floor rejected through
+    /// [`AplicacaoError::PolicyBreakerZeroFailures`], upper-bounded by
+    /// [`POLICY_BREAKER_MAX_FAILURES_MAX`]) maps onto the Envoy
+    /// `outlier_detection.consecutive_5xx` per-cluster ejection-threshold
+    /// scalar (equivalently the future `CiliumClusterwideEnvoyConfig`
+    /// per-`:politicas` overlay MESH-COMPOSITION §III.2 #3 acknowledges).
+    /// Every downstream consumer that reads the trip threshold keys off
+    /// this scalar (the [`AplicacaoSpec::validate_politicas`] zero-floor +
+    /// cap bracket at caixa-core/src/aplicacao.rs:4022 that gates on the
+    /// canonical `require_positive_bounded_u32` helper, the future M4
+    /// per-Aplicacao Envoy config reconciler materialization pass, the
+    /// future per-`:contratos`-edge breaker-override overlay the
+    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    ///
+    /// Prior to this lift the `.max_failures` field was accessed inline
+    /// at one production site — [`AplicacaoSpec::validate_politicas`]'s
+    /// `require_positive_bounded_u32(cb.max_failures, …)` call — one
+    /// open-coded field-access that expressed no compile-time link back
+    /// to the typed sub-struct axis. A future extension of the
+    /// `:max-failures` axis to a richer author surface — a
+    /// per-`:contratos`-edge breaker override the operator pins through a
+    /// future `:contratos :max-failures` slot the MESH-COMPOSITION §III.2
+    /// #3 roadmap acknowledges, a per-cluster max-failures-default
+    /// overlay the M4 CR materializer resolves per-CR, a promotion of the
+    /// plain `u32` trip count to a richer
+    /// `{consecutive_5xx, consecutive_gateway_failure, consecutive_local_origin_failure}`
+    /// tuple once Envoy's `outlier_detection` block's peer axes come into
+    /// scope, a per-Envoy-cluster minimum-request-volume gate before the
+    /// count arms — would have had to be threaded through every open-
+    /// coded copy in lockstep or the validate gate and the future M4
+    /// emit path would silently disagree on which trip threshold a given
+    /// [`CircuitBreaker`] resolves to (an author's `:max-failures 5`
+    /// would satisfy validate while the emit path silently read a drifted
+    /// other value, or vice versa: a validated typed slot would land at
+    /// the emit boundary as a no-op breaker whose trip threshold is
+    /// structurally never reached). Lifting the resolution to a typed
+    /// method on the substrate primitive means every downstream consumer
+    /// of the Aplicacao's per-`:politicas :circuit-breaker`
+    /// trip-threshold surface reaches for exactly one typed dispatch —
+    /// the resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// First sub-struct scalar accessor on the M3 mesh-slot family
+    /// (opens the "per-`CircuitBreaker` / per-`RateLimit` required-axis
+    /// scalar" projection pattern the sibling `CircuitBreaker::window` /
+    /// `RateLimit::rate` / `RateLimit::window` future lifts fold on —
+    /// closes the last unlifted per-`:politicas` scalar-value axis after
+    /// the c0110f1 / bdfb399 / 7073d0f trajectory closed every scalar-
+    /// shaped axis on the parent [`MeshPolicy`] optional-slot surface).
+    /// Same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline the peer
+    /// [`WitContract::source`] / [`WitContract::destination`] (7f0fd43),
+    /// [`WitContract::world_ref`] (0804823), [`Membro::nome`] (4a32abf),
+    /// [`Membro::versao_requirement`] (a40b0e3),
+    /// [`Entrada::destination`] (6db982c) accessors carry on their
+    /// respective per-mesh-slot-atom scalar-value axes, extended onto the
+    /// per-sub-struct required-`u32` axis. Named `max_failures()` to
+    /// match the storage field's name; the accessor's identity maps onto
+    /// the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub const fn max_failures(&self) -> u32 {
+        self.max_failures
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RateLimit {
     /// Requests per window.
@@ -4020,7 +4103,7 @@ impl AplicacaoSpec {
             // peer with `retries` and `rate_limit.rate` on the same
             // helper.
             crate::render::require_positive_bounded_u32(
-                cb.max_failures,
+                cb.max_failures(),
                 POLICY_BREAKER_MAX_FAILURES_MAX,
                 || AplicacaoError::PolicyBreakerZeroFailures,
                 |max_failures| AplicacaoError::PolicyBreakerMaxFailuresExceedsCap { max_failures },
@@ -15024,6 +15107,177 @@ mod tests {
                 first, timeout,
                 "MeshPolicy::timeout must return :politicas :timeout \
                  verbatim by copy — got {first:?}, expected {timeout:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn circuit_breaker_max_failures_returns_max_failures_u32_byte_equal_across_permutations() {
+        // The canonical per-`:politicas :circuit-breaker` `:max-failures`
+        // Envoy-outlier-detection trip-threshold scalar pin:
+        // [`CircuitBreaker::max_failures`] must return the
+        // `:politicas :circuit-breaker :max-failures` typed `u32`
+        // verbatim, byte-equal to the raw field access across every
+        // representative value in the accept-set — `1` (the lower
+        // boundary of the `1..=POLICY_BREAKER_MAX_FAILURES_MAX` accept-
+        // set the surrounding [`AplicacaoSpec::validate_politicas`] gate
+        // carves out on the sibling `PolicyBreakerZeroFailures` refusal),
+        // `POLICY_BREAKER_MAX_FAILURES_MAX` (the upper boundary the same
+        // gate carves out on the sibling `PolicyBreakerMaxFailuresExceedsCap`
+        // refusal), `0` (a past-the-guard sentinel that pins the accessor
+        // doesn't perform a silent bounds-collapse into `1` on the zero
+        // arm — validate rejects zero but the accessor must ship the
+        // raw slot verbatim so a validate-time gate regression surfaces
+        // at the emit boundary rather than being silently absorbed),
+        // `u32::MAX` (a past-the-guard sentinel that pins the accessor
+        // doesn't perform a silent bounds-collapse through
+        // `POLICY_BREAKER_MAX_FAILURES_MAX` at the return path).
+        //
+        // First sub-struct required-scalar accessor pin on the M3
+        // mesh-slot family — sibling in shape to the peer per-`:membros`
+        // [`Membro::nome`] (4a32abf) / [`Membro::versao_requirement`]
+        // (a40b0e3) required-`String`-carry accessor pins and the peer
+        // per-`:contratos` [`WitContract::source`] /
+        // [`WitContract::destination`] (7f0fd43) required-`String`-carry
+        // accessor pins, extended onto the peer per-`CircuitBreaker`
+        // required-`u32` scalar-value axis. Pins against a future silent
+        // detour that re-derived the trip threshold from a peer axis (an
+        // accidental `self.window.as_secs() as u32` collapse that read
+        // the breaker's rolling-window duration as a failure count), a
+        // `0 → 1` cluster-default projection (which would silently absorb
+        // the `PolicyBreakerZeroFailures` refusal case at the accessor
+        // boundary), or a bounds-collapsing accessor that clamped the
+        // return through `POLICY_BREAKER_MAX_FAILURES_MAX` (the
+        // `AplicacaoSpec::validate` gate owns the bounds; the accessor
+        // must ship the raw slot verbatim).
+        for max_failures in [1u32, POLICY_BREAKER_MAX_FAILURES_MAX, 0, u32::MAX] {
+            let cb = CircuitBreaker {
+                max_failures,
+                window: Duration::from_secs(60),
+            };
+            assert_eq!(
+                cb.max_failures(),
+                max_failures,
+                "CircuitBreaker::max_failures must return :politicas \
+                 :circuit-breaker :max-failures verbatim (got {}, \
+                 expected {max_failures})",
+                cb.max_failures(),
+            );
+            assert_eq!(
+                cb.max_failures(),
+                cb.max_failures,
+                "CircuitBreaker::max_failures must byte-equal the raw \
+                 .max_failures field access across every value in the \
+                 u32 accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_max_failures_zero_floor_arm_routes_through_accessor() {
+        // Composition pin: [`AplicacaoSpec::validate_politicas`]'s
+        // `:circuit-breaker :max-failures` zero-floor arm must key off
+        // [`CircuitBreaker::max_failures`], not the raw `.max_failures`
+        // field access. Structurally: a `CircuitBreaker { max_failures:
+        // 0, .. }` embedded in a `:politicas :circuit-breaker` slot must
+        // surface the `PolicyBreakerZeroFailures` refusal exactly, and a
+        // `CircuitBreaker { max_failures: 1, .. }` (the lower boundary
+        // of the `1..=POLICY_BREAKER_MAX_FAILURES_MAX` accept-set) must
+        // pass validate. The pair jointly pins the accessor +
+        // validate-gate composition: any future silent detour that had
+        // the accessor return a fresh `1` on the zero arm (a
+        // `.max_failures().max(1)` collapse) would silently absorb the
+        // `PolicyBreakerZeroFailures` refusal at the accessor boundary
+        // and the validate gate would accept a struct-literal
+        // `CircuitBreaker { max_failures: 0, .. }` — the composition pin
+        // catches that at caixa-core build time.
+        //
+        // Peer of the sibling per-`:politicas`
+        // [`MeshPolicy::mtls_required`] (c0110f1) /
+        // [`MeshPolicy::retries`] (bdfb399) / [`MeshPolicy::timeout`]
+        // (7073d0f) accessor-composition pins on the sibling optional-
+        // scalar axes — same "the validate / shape-gate predicate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer per-`CircuitBreaker`
+        // required-scalar composition axis.
+        let mut spec = three_member_spec();
+        spec.politicas = MeshPolicy {
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 0,
+                window: Duration::from_secs(60),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            matches!(
+                spec.validate(),
+                Err(AplicacaoError::PolicyBreakerZeroFailures)
+            ),
+            "validate_politicas must reject max_failures == 0 with \
+             PolicyBreakerZeroFailures — the accessor and the validate \
+             gate must route through the same substrate-primitive typed \
+             dispatch on the :max-failures zero-floor arm",
+        );
+        spec.politicas = MeshPolicy {
+            circuit_breaker: Some(CircuitBreaker {
+                max_failures: 1,
+                window: Duration::from_secs(60),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            spec.validate().is_ok(),
+            "validate_politicas must accept max_failures == 1 (the \
+             lower boundary of the 1..=POLICY_BREAKER_MAX_FAILURES_MAX \
+             accept-set)",
+        );
+    }
+
+    #[test]
+    fn circuit_breaker_max_failures_projects_u32_by_copy() {
+        // The by-copy pin: [`CircuitBreaker::max_failures`] returns
+        // `u32` by copy — `u32` is `Copy` and the accessor must return
+        // by value, not by reference. Peer of the sibling
+        // per-`:politicas` [`MeshPolicy::mtls_required`] (c0110f1) /
+        // [`MeshPolicy::retries`] (bdfb399) / [`MeshPolicy::timeout`]
+        // (7073d0f) by-copy pins on the sibling `Option<Copy-T>`
+        // optional-scalar axes, extended onto the peer
+        // per-`CircuitBreaker` required-`u32` copy-invariant shape —
+        // the accessor's returned `u32` must outlive `&self` (multiple
+        // calls must return equal values from a dropped-`&self` copy,
+        // since the returned scalar carries no borrow), and calling
+        // the accessor twice on the same CircuitBreaker must yield the
+        // same `u32` verbatim (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned `&u32`
+        // (which would type-check but silently break every downstream
+        // arithmetic consumer — [`crate::render::require_positive_bounded_u32`]'s
+        // first parameter is `u32`, and `&u32` would fold to a detached
+        // copy at the call site with a `*` deref the sibling accessors
+        // don't need), an accidental `.max_failures.wrapping_add(0)`
+        // detour that returned a fresh copy through an arithmetic
+        // no-op (breaking a future `const fn` regression), or a
+        // one-arm-only accessor that returned a saturating value on
+        // some sentinel input (breaking the pass-through invariant the
+        // sibling required-scalar accessors carry).
+        for max_failures in [1u32, POLICY_BREAKER_MAX_FAILURES_MAX, 0, u32::MAX] {
+            let cb = CircuitBreaker {
+                max_failures,
+                window: Duration::from_secs(60),
+            };
+            let first = cb.max_failures();
+            let second = cb.max_failures();
+            assert_eq!(
+                first, second,
+                "CircuitBreaker::max_failures must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same u32",
+            );
+            assert_eq!(
+                first, max_failures,
+                "CircuitBreaker::max_failures must return :politicas \
+                 :circuit-breaker :max-failures verbatim by copy — \
+                 got {first}, expected {max_failures}",
             );
         }
     }
