@@ -579,6 +579,17 @@ impl<'a> WitTarget<'a> {
     /// its two consumer axes (human-readable label, wrong-target
     /// diagnostic)" pipeline route through peer consts declared next
     /// to the variant.
+    ///
+    /// Pairwise-distinctness against the three payload-arm scalars
+    /// ([`Self::HTTP_FIELD_NAME`] / [`Self::PUBSUB_FIELD_NAME`] /
+    /// [`Self::STORE_FIELD_NAME`]) is pinned by the sibling
+    /// `wit_target_expected_scalars_are_pairwise_distinct_across_all_four_arms`
+    /// test — the 4-way closure of the 3-way
+    /// `wit_target_field_names_are_pairwise_distinct` sibling pin onto
+    /// the `ContratoWrongTarget::expected` axis, matching the peer
+    /// `m3_placement_estrategia_consts_are_pairwise_distinct` closed-set
+    /// scalar-value distinctness discipline the sibling M3 typed-enum
+    /// discriminator axis already carries.
     pub const CAPABILITY_EXPECTED: &'static str = "none";
 
     /// The `(author-facing field name, payload)` pair this typed target
@@ -7678,6 +7689,72 @@ mod tests {
         assert_ne!(WitTarget::HTTP_FIELD_NAME, WitTarget::PUBSUB_FIELD_NAME);
         assert_ne!(WitTarget::HTTP_FIELD_NAME, WitTarget::STORE_FIELD_NAME);
         assert_ne!(WitTarget::PUBSUB_FIELD_NAME, WitTarget::STORE_FIELD_NAME);
+    }
+
+    #[test]
+    fn wit_target_expected_scalars_are_pairwise_distinct_across_all_four_arms() {
+        // 4-way distinctness pin extending the sibling
+        // [`wit_target_field_names_are_pairwise_distinct`] 3-way pin
+        // (which covers only the HTTP / PubSub / Store payload arms)
+        // onto the fourth scalar the shared
+        // [`AplicacaoError::ContratoWrongTarget`] `expected: &'static
+        // str` axis threads through — [`WitTarget::CAPABILITY_EXPECTED`]
+        // (`"none"`), the payload-less Capability-arm rejection scalar.
+        //
+        // All four [`WitTarget::HTTP_FIELD_NAME`] /
+        // [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+        // / [`WitTarget::CAPABILITY_EXPECTED`] consts are the closed-set
+        // dispatch surface [`WitContract::target`] writes onto the
+        // `ContratoWrongTarget::expected` field — the same `&'static
+        // str` axis authors read as "this WIT world's shape admits
+        // (only|not) `:<field>`". Pairwise-distinctness is the invariant
+        // downstream consumers rely on: an `expected: "endpoint"`
+        // diagnostic on a Capability-shaped edge tells the author to
+        // add a `:endpoint "…"` slot to a WIT world that admits none,
+        // silently misrouting the fix. Until this pin landed the three
+        // payload-arm consts were distinctness-guarded by the sibling
+        // 3-way pin (a4a5d09 / 4a1e490) while the fourth Capability-arm
+        // scalar (d4f54f2) sat unguarded — a rebrand collision (the
+        // author-facing vocabulary shift from `"none"` to `"endpoint"`
+        // / `"subject"` / `"slot"` as M4 splits [`WitTarget::Capability`]
+        // into per-shape peers) would have silently landed one
+        // Capability-arm rejection on a payload-arm's `expected:` byte-
+        // string and desynchronized the diagnostic from the author's
+        // typed shape.
+        //
+        // Same 4-way pairwise-distinctness pin discipline as the peer
+        // [`m3_placement_estrategia_consts_are_pairwise_distinct`]
+        // (cc8f749) applies on the sibling M3 closed-set typed-enum
+        // scalar-value dispatch axis; extends the pin trajectory the
+        // sibling `wit_target_field_names_are_pairwise_distinct`
+        // 3-way pin opened to cover the last unguarded corner on the
+        // `ContratoWrongTarget::expected` scalar-value axis.
+        //
+        // Fail-before-pass-after locally verified by mutating
+        // [`WitTarget::CAPABILITY_EXPECTED`] to also read `"endpoint"`
+        // — this pin fires as expected; restoring passes.
+        let all = [
+            WitTarget::HTTP_FIELD_NAME,
+            WitTarget::PUBSUB_FIELD_NAME,
+            WitTarget::STORE_FIELD_NAME,
+            WitTarget::CAPABILITY_EXPECTED,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "WitTarget::{{HTTP_FIELD_NAME, PUBSUB_FIELD_NAME, \
+                         STORE_FIELD_NAME, CAPABILITY_EXPECTED}} consts must be \
+                         pairwise distinct — got duplicate {a:?} at indices \
+                         {i} and {j}; all four scalars thread through the \
+                         shared `AplicacaoError::ContratoWrongTarget::expected` \
+                         &'static str axis, so a collapse silently misdirects \
+                         the diagnostic on which typed shape the WIT world admits",
+                    );
+                }
+            }
+        }
     }
 
     #[test]
