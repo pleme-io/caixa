@@ -2435,6 +2435,69 @@ pub struct Entrada {
 /// [cm]: ../../caixa_mesh/fn.cilium_network_policies.html
 pub const DEFAULT_SERVICO_PORT: u16 = 8080;
 
+/// Structural floor for the typed `:entrada :port` axis — every
+/// validated [`Entrada::port`] past [`AplicacaoSpec::validate`] lies in
+/// `SERVICO_PORT_MIN..=u16::MAX` (inclusive on both ends).
+///
+/// The IANA-registered TCP/UDP port space is `1..=65535` — port `0` is
+/// the "any ephemeral" sentinel that the Berkeley-sockets `bind(0)` call
+/// interprets as "let the kernel pick a free port at bind time", not a
+/// well-defined destination the substrate's per-`:entrada` Gateway API
+/// v1 `HTTPRoute.backendRefs[].port` axis can honor. A typed slot
+/// carrying `port: 0` degenerates to a nominal-only routing target: the
+/// K8s Gateway API v1 apiserver-side webhook rejects `port: 0` outright
+/// (`spec.rules[].backendRefs[].port: Invalid value: 0` — the same
+/// admission floor the peer `PolicyRetriesExceedsCap` cap-arm surfaces
+/// at build time rather than at `kubectl apply` time), and the
+/// substrate's per-`Entrada` `CiliumNetworkPolicy` L4-fallback resolver
+/// (caixa-mesh/src/lib.rs:2657 through
+/// [`DEFAULT_SERVICO_PORT`]) — the sole downstream reader of the
+/// [`Entrada::port`] typed value — silently emits a policy whose
+/// `toPorts[].ports[].port` scalar drifts off the destination Servico's
+/// actual listener, dropping every L4 flow at the eBPF data plane far
+/// from the source caixa.lisp with no field naming the port-zero-drift
+/// root cause.
+///
+/// The typed field is `u16`, so `u16::MAX` (=65535) is the natural
+/// structural ceiling — no `SERVICO_PORT_MAX` companion const is needed
+/// on the top edge (unlike the peer capped-`u32` `:politicas` /
+/// `:supervisor` / `:limits` axes where `POLICY_RETRIES_MAX` /
+/// `SUPERVISOR_MAX_RESTARTS_MAX` / `LIMITS_CPU_MILLICORES_MAX` all sit
+/// well below `u32::MAX` and therefore need explicit typed caps).
+///
+/// Pairs with [`DEFAULT_SERVICO_PORT`] on the same typed-port axis:
+/// [`DEFAULT_SERVICO_PORT`] names the substrate's chosen default port
+/// scalar every `(:entrada (:host … :para …))` slot without an explicit
+/// `:port` inherits through the serde default hook; this constant names
+/// the accept-set floor every declared port must satisfy. The pair is
+/// invariantly ordered `SERVICO_PORT_MIN <= DEFAULT_SERVICO_PORT` (the
+/// substrate's default must satisfy its own accept-set floor by
+/// construction) — a future rebrand that accidentally moved
+/// [`DEFAULT_SERVICO_PORT`] below the floor (a hypothetical `0` /
+/// negative-cast typo, a per-cluster override the operator pins through
+/// a future `:placement :default-port` slot that lands out-of-range)
+/// would silently invalidate the serde-default emission at every
+/// author-side `(:entrada (:host … :para …))` slot — the compile-time
+/// invariant pin
+/// (`default_servico_port_satisfies_lifted_servico_port_min_floor`)
+/// closes the drift footgun at caixa-core build time.
+///
+/// Lifted as a typed `pub const` (rather than an inline `0` literal at
+/// the [`AplicacaoSpec::validate`] call site) so the accept-set floor
+/// has exactly one source of truth — the future M4
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-Aplicacao
+/// gateway resolver, the future per-Servico
+/// `computeunit.trigger.service.port` renderer's per-CR port-value
+/// validator, and every downstream test-fixture navigator asserting
+/// the accept-set floor all read from one place. Same shape every
+/// other typed bracket-floor / bracket-ceiling in this crate carries
+/// ([`LIMITS_MEMORY_WASM32_PAGE_BYTES`], [`LIMITS_MEMORY_WASM32_MAX_BYTES`],
+/// [`LIMITS_WALL_CLOCK_MAX`], [`LIMITS_CPU_MILLICORES_MAX`],
+/// [`LIMITS_FUEL_MAX`], [`POLICY_TIMEOUT_MAX`], [`POLICY_RETRIES_MAX`],
+/// [`POLICY_BREAKER_MAX_FAILURES_MAX`], [`POLICY_BREAKER_WINDOW_MAX`],
+/// [`POLICY_RATE_LIMIT_MAX`]).
+pub const SERVICO_PORT_MIN: u16 = 1;
+
 const fn default_port() -> u16 {
     DEFAULT_SERVICO_PORT
 }
@@ -2660,7 +2723,28 @@ impl AplicacaoSpec {
             // `:entrada :paths` value-shape trajectory (eb3456d) and
             // closes the last unstructured `:entrada` axis.
             validate_entrada_host(&e.host)?;
-            if e.port == 0 {
+            // Structural-floor gate on `:entrada :port`: every
+            // validated `Entrada::port` past this gate lies in
+            // `SERVICO_PORT_MIN..=u16::MAX` (the `u16` field's natural
+            // type-inferred ceiling closes the top edge, so no companion
+            // upper-cap arm is needed here — unlike the peer capped-
+            // `u32` `:politicas` / `:supervisor` / `:limits` axes whose
+            // `require_positive_bounded_u32` bracket covers both edges).
+            // Routes through the lifted [`SERVICO_PORT_MIN`] canonical
+            // accept-set-floor const rather than the prior inline
+            // `if e.port == 0` byte-check so a future rebrand of the
+            // accept-set floor (a hypothetical unprivileged-only
+            // migration lifting the floor to `1024`, a per-cluster
+            // scoping the operator pins through a future
+            // `:placement :port-floor` slot as the M4 typed-slot
+            // trajectory adds it, the future
+            // `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+            // per-Aplicacao gateway resolver reaching for the same
+            // floor) is a one-line edit on the canonical
+            // [`SERVICO_PORT_MIN`] declaration, not a coordinated
+            // rewrite across the emit site + the pin test + every
+            // future per-target renderer the substrate adds.
+            if e.port < SERVICO_PORT_MIN {
                 return Err(AplicacaoError::EntradaPortZero);
             }
             // Each `:entrada :paths` entry becomes a K8s Gateway API
@@ -12284,6 +12368,94 @@ mod tests {
             entrada.port, DEFAULT_SERVICO_PORT,
             "the serde default must materialize as the lifted canonical Servico port"
         );
+    }
+
+    #[test]
+    fn servico_port_min_pins_canonical_accept_set_floor() {
+        // The canonical-constant arm — pins [`SERVICO_PORT_MIN`] at the
+        // verbatim `1` literal every typed `:entrada :port` acceptance
+        // gate keys off. Peer with the
+        // [`default_servico_port_constant_pins_canonical_8080_literal`]
+        // discipline on the canonical-Servico-port-constant axis: a
+        // future refactor that drifts the accept-set floor out from
+        // under the sole consumer at [`AplicacaoSpec::validate`]'s
+        // `if e.port < SERVICO_PORT_MIN` gate surfaces here ahead of
+        // every per-`:entrada` `EntradaPortZero` diagnostic. The
+        // literal value matches the IANA-registered TCP/UDP port
+        // space floor (`1..=65535` — port `0` is the "any ephemeral"
+        // sentinel, not a well-defined destination the substrate's
+        // per-`Entrada` Gateway API v1 `HTTPRoute.backendRefs[].port`
+        // axis can honor).
+        assert_eq!(
+            SERVICO_PORT_MIN, 1,
+            "canonical Servico port accept-set floor must remain `1` verbatim — \
+             this is the value the `AplicacaoSpec::validate` gate at \
+             `if e.port < SERVICO_PORT_MIN` rejects `port: 0` against"
+        );
+    }
+
+    #[test]
+    fn default_servico_port_satisfies_lifted_servico_port_min_floor() {
+        // The cross-const invariant pin — the substrate's canonical
+        // default port must satisfy its own accept-set floor by
+        // construction: `SERVICO_PORT_MIN <= DEFAULT_SERVICO_PORT`.
+        // A future rebrand that moved [`DEFAULT_SERVICO_PORT`] below
+        // [`SERVICO_PORT_MIN`] — a hypothetical `0` typo, a per-cluster
+        // override the operator pins through a future
+        // `:placement :default-port` slot that lands out-of-range, a
+        // per-edition Servico-port migration that lifted the floor
+        // above the previous default without coordinating the pair —
+        // would silently invalidate the serde-default emission at
+        // every author-side `(:entrada (:host … :para …))` slot
+        // without an explicit `:port`: the default port would fall
+        // below the accept-set floor, the `AplicacaoSpec::validate`
+        // gate would reject every default-carrying Aplicacao as
+        // `EntradaPortZero`, and the substrate's typed
+        // `(defcaixa … :kind Aplicacao)` surface would fail validate
+        // on every Aplicacao whose author omitted `:entrada :port`
+        // for the substrate's chosen default — a class of authoring-
+        // surface footguns the compile-time pin structurally closes.
+        // Peer with the
+        // [`standalone_and_cluster_bundle_lareira_enabled_defaults_are_inverse_by_construction`]
+        // (27f9b34) cross-const invariant pin discipline on the peer
+        // canonical-Helm-per-values-block child-chart-enablement-toggle
+        // axis pair.
+        assert!(
+            SERVICO_PORT_MIN <= DEFAULT_SERVICO_PORT,
+            "the substrate's canonical default port ({DEFAULT_SERVICO_PORT}) must \
+             satisfy its own accept-set floor (SERVICO_PORT_MIN = {SERVICO_PORT_MIN}) — \
+             every default-carrying `(:entrada (:host … :para …))` slot without an \
+             explicit `:port` inherits `DEFAULT_SERVICO_PORT` through the serde default \
+             hook and must pass the `AplicacaoSpec::validate` floor gate by construction"
+        );
+    }
+
+    #[test]
+    fn entrada_port_zero_gate_routes_through_lifted_servico_port_min_floor() {
+        // The gate-site pin — asserts the `AplicacaoSpec::validate`
+        // floor gate at `if e.port < SERVICO_PORT_MIN` fires the
+        // `EntradaPortZero` diagnostic on the below-floor input
+        // `port: 0` (the only below-floor value the `u16` field can
+        // carry — `SERVICO_PORT_MIN` is `1`, so the below-floor set
+        // is the singleton `{0}`). A future refactor that drifts the
+        // gate off the lifted const (silently re-introducing an
+        // inline `if e.port == 0` byte-check) surfaces here — the
+        // pin cannot distinguish `< 1` from `== 0` on the current
+        // floor, but it *does* pin that the diagnostic fires on `0`
+        // through whichever gate is wired, so any future accept-set
+        // floor migration (a hypothetical unprivileged-only
+        // migration lifting `SERVICO_PORT_MIN` to `1024`) must
+        // update this test alongside the const declaration —
+        // structurally guaranteeing the gate + accept-set + pin
+        // trio move together. Peer with the
+        // [`rejects_zero_entrada_port`] behavioral pin on the same
+        // per-`:entrada :port` axis — that pin asserts the pre-lift
+        // behavioral contract (`port: 0` → `EntradaPortZero`); this
+        // pin adds the structural link to the lifted floor const.
+        assert_eq!(SERVICO_PORT_MIN, 1, "current floor pinned above");
+        let mut s = three_member_spec();
+        s.entrada.as_mut().unwrap().port = 0;
+        assert_eq!(s.validate().unwrap_err(), AplicacaoError::EntradaPortZero);
     }
 
     // ── drift-detection: serde-derive-to-MEMBRO_KEY_* identity ────────────
