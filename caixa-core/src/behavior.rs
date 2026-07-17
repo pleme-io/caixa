@@ -467,6 +467,104 @@ impl BehaviorSpec {
         self.on_cast.as_deref()
     }
 
+    /// Substrate-canonical per-`:behavior` `:on-info`
+    /// OTP-`gen_server:handle_info/2`-shaped system / out-of-band
+    /// message-handler callback-path scalar accessor every consumer of
+    /// the Servico's out-of-band-dispatch callback path keys off —
+    /// returns the author-declared `:behavior :on-info` typed callback
+    /// path verbatim as an `Option<&Path>`, borrowed from the typed
+    /// slot's own `Option<PathBuf>` storage. `None` when the slot is
+    /// absent (the canonical "no out-of-band-info callback declared —
+    /// the runtime silently drops every non-`:on-call` / non-`:on-cast`
+    /// mailbox message the wasm-engine's `gen_server`-shaped dispatcher
+    /// classifies as system / out-of-band (timeouts, downstream
+    /// `nodedown`, monitor `DOWN` signals, scheduler ticks, wasm-engine
+    /// `wasi:clocks` timer fires, adaptive-dispatch backpressure
+    /// notifications the M2.5 wasm-engine callback-dispatch wire emits
+    /// on peer-Servico circuit-open transitions) without any
+    /// author-supplied side-effect interposed" arm the M2.5 wasm-engine
+    /// callback-dispatch wire consults at every out-of-band mailbox
+    /// turn; peer of the sibling [`BehaviorSpec::on_init`] /
+    /// [`BehaviorSpec::on_call`] / [`BehaviorSpec::on_cast`] /
+    /// [`BehaviorSpec::on_state_change`] `None`-arm's "no
+    /// instance-start / synchronous-call / asynchronous-cast /
+    /// state-migration callback" semantic on the sibling axes).
+    ///
+    /// The `:behavior :on-info` slot carries the OTP
+    /// `gen_server:handle_info/2` callback contract (the module-level
+    /// [`BehaviorSpec::on_info`] docstring pins the analog verbatim:
+    /// "System / out-of-band message handler. Analog of
+    /// `gen_server:handle_info/2` — timeouts, downstream `nodedown`,
+    /// monitor signals, scheduler ticks."). Its position in the OTP
+    /// dispatch triad is the out-of-band half sibling to the
+    /// synchronous request/response `:on-call` and asynchronous
+    /// fire-and-forget `:on-cast` halves: the runtime routes every
+    /// mailbox message the `gen_server`-shaped dispatcher classifies as
+    /// neither a `:on-call` synchronous request (no reply-awaiting
+    /// caller) nor a `:on-cast` asynchronous WIT-typed edge (no peer
+    /// Servico originated the message via a declared `:contratos`
+    /// entry) through the callback; the callback runs to completion on
+    /// the actor's own mailbox turn with no reply-shape awaiting caller
+    /// and no peer-Servico dispatch semantics, and the runtime returns
+    /// to the mailbox-drain state as soon as the callback returns
+    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// six-callback lifecycle, translated onto pleme-io's typed
+    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// author-surface pins `:on-info` as the fourth arm of the
+    /// `:behavior` overlay every Servico may declare, sibling to
+    /// `:on-cast` on the peer asynchronous-dispatch axis and
+    /// `:on-terminate` on the peer lifecycle-tail axis;
+    /// `theory/RUNTIME-PATTERNS.md` §II — the out-of-band-info pattern
+    /// the runtime realizes through this callback).
+    ///
+    /// Prior to this lift the `.on_info` field was accessed inline at
+    /// one production site — [`BehaviorSpec::declared_slots`]'s
+    /// `:on-info` arm's `self.on_info.as_ref()` map into the six-tuple
+    /// iterator that both the layout checker (existence sweep at
+    /// `layout.rs:900`) and the sibling `BehaviorSpec::validate`
+    /// value-shape gate consume — an open-coded field-access that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:behavior :on-info` axis to a richer author
+    /// surface — a per-tenant info-callback override the M4 CR
+    /// materializer resolves per-CR, a per-cluster
+    /// out-of-band-dispatch callback overlay the
+    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+    /// callback-dispatch wire acknowledges, a per-monitor-signal
+    /// callback derivation the future adaptive-dispatch engine
+    /// computes from the sibling `:politicas :circuit-breaker` axis
+    /// (routing peer-Servico circuit-open notifications through the
+    /// info-callback the way Erlang routes `DOWN` messages through
+    /// `handle_info/2`) — would have had to be threaded through the
+    /// open-coded field-access in `declared_slots` (the tag surface
+    /// every per-slot diagnostic reads) or the `declared_slots`
+    /// iterator would silently disagree on which callback a given
+    /// [`BehaviorSpec`] resolves to. Lifting the resolution to a typed
+    /// method on the substrate primitive means every downstream
+    /// consumer of the Servico's per-`:behavior` out-of-band-info
+    /// callback surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Fifth `Option<&Path>`-return accessor on the M2 `:behavior` slot
+    /// family (sibling of the prior [`BehaviorSpec::on_state_change`]
+    /// 9b4ecde, [`BehaviorSpec::on_init`] d66c702,
+    /// [`BehaviorSpec::on_call`] 156ddbe, and [`BehaviorSpec::on_cast`]
+    /// 99616ac `Option<&Path>` accessors on the peer per-`:behavior`
+    /// `:on-state-change` / `:on-init` / `:on-call` / `:on-cast` axes —
+    /// same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the peer
+    /// per-`:behavior` `Option<PathBuf>` optional-scalar axis;
+    /// continues the "optional per-slot `Option<&Path>` scalar"
+    /// projection pattern the last-remaining sibling per-`:behavior`
+    /// `:on-terminate` future lift folds on). Named `on_info()` to
+    /// match the storage field's name; the accessor's identity name
+    /// maps onto the canonical `theory/INSPIRATIONS.md` §II.3
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub fn on_info(&self) -> Option<&Path> {
+        self.on_info.as_deref()
+    }
+
     /// Reject operationally-meaningless callback path values on every
     /// declared slot. Each slot remains optional — omitting a field
     /// expresses "fall back to the runtime default callback"; the bug
@@ -1758,6 +1856,123 @@ mod tests {
              :on-cast axis independently of every peer :on-* \
              axis (got {:?})",
             with.on_cast(),
+        );
+    }
+
+    // ── per-`:behavior :on-info` accessor pins ─────────────────────
+
+    #[test]
+    fn behavior_on_info_returns_option_path_verbatim_across_permutations() {
+        // Canonical per-`:behavior` `:on-info`
+        // OTP-`gen_server:handle_info/2`-shaped system / out-of-band
+        // message-handler callback-path scalar pin:
+        // [`BehaviorSpec::on_info`] must return the `:behavior :on-info`
+        // typed `PathBuf` verbatim as an `Option<&Path>`, borrowed from
+        // the raw `Option<PathBuf>` field access across the three
+        // canonical shape-arms — `None` (no callback declared — the
+        // runtime silently drops every out-of-band mailbox message),
+        // `Some("lib/handlers.lisp")` (the canonical single-file shape
+        // the module-doc example uses, shared with `:on-call` /
+        // `:on-cast` on the pattern that the tatara-lisp dispatch
+        // inside the file discriminates on the callback-kind atom),
+        // `Some("lib/rpc/info.lisp")` (the per-dispatch sub-directory
+        // shape the `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // callback-dispatch wire acknowledges).
+        //
+        // Peer of the sibling per-`:behavior`
+        // [`BehaviorSpec::on_state_change`] (9b4ecde) /
+        // [`BehaviorSpec::on_init`] (d66c702) /
+        // [`BehaviorSpec::on_call`] (156ddbe) /
+        // [`BehaviorSpec::on_cast`] (99616ac) `Option<&Path>` accessor
+        // pins on the sibling `Option<PathBuf>`-return axes — fifth
+        // `Option<&Path>`-return accessor on the M2 `:behavior` slot
+        // family. Pins against a future silent detour that re-derived
+        // the callback path from a peer axis (an accidental
+        // `.on_cast`-collapse that assumed the two `Option<PathBuf>`
+        // axes carry the same value — a plausible slip because the
+        // module-doc example shares one `lib/handlers.lisp` file
+        // between `:on-call` / `:on-cast` / `:on-info` on the pattern
+        // that the tatara-lisp dispatch inside the file discriminates
+        // on the callback-kind atom), a `None` → `Some(empty)` collapse
+        // (the canonical `Option<PathBuf>` → `PathBuf::new()` footgun
+        // the [`BehaviorError::EmptyPath`] validate arm guards on the
+        // peer path-shape axis), or a per-arm variant swap that landed
+        // on one consumer without the other.
+        for path in [
+            None,
+            Some(PathBuf::from("lib/handlers.lisp")),
+            Some(PathBuf::from("lib/rpc/info.lisp")),
+        ] {
+            let b = BehaviorSpec {
+                on_info: path.clone(),
+                ..BehaviorSpec::default()
+            };
+            assert_eq!(
+                b.on_info(),
+                path.as_deref(),
+                "BehaviorSpec::on_info must return the \
+                 :behavior :on-info PathBuf verbatim as \
+                 Option<&Path> (got {:?}, expected {:?})",
+                b.on_info(),
+                path.as_deref(),
+            );
+            assert_eq!(
+                b.on_info(),
+                b.on_info.as_deref(),
+                "BehaviorSpec::on_info must byte-equal the \
+                 raw .on_info.as_deref() field access across \
+                 every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn behavior_on_info_is_independent_of_peer_on_star_axes() {
+        // Cross-axis independence pin: flipping only the `:on-info`
+        // axis flips [`BehaviorSpec::on_info`] independently of every
+        // peer `:on-*` axis (`:on-init` / `:on-call` / `:on-cast` /
+        // `:on-state-change` / `:on-terminate`). A future silent detour
+        // that re-derived the callback path from a peer axis (an
+        // accidental `.on_cast`-collapse — the sibling asynchronous
+        // fire-and-forget arm on the peer OTP dispatch triad, a
+        // plausible confusion because the module-doc example shares one
+        // `lib/handlers.lisp` file between `:on-call` / `:on-cast` /
+        // `:on-info` — that would silently rebind the out-of-band-info
+        // dispatch to the sibling asynchronous fire-and-forget slot's
+        // callback) surfaces here as a build-time test failure.
+        //
+        // Peer of the sibling
+        // `behavior_on_state_change_is_independent_of_peer_on_star_axes`
+        // (9b4ecde) /
+        // `behavior_on_init_is_independent_of_peer_on_star_axes`
+        // (d66c702) /
+        // `behavior_on_call_is_independent_of_peer_on_star_axes`
+        // (156ddbe) /
+        // `behavior_on_cast_is_independent_of_peer_on_star_axes`
+        // (99616ac) cross-axis pins on the sibling `:on-state-change` /
+        // `:on-init` / `:on-call` / `:on-cast` axes — each
+        // accessor-lift closes exactly one axis and leaves every peer
+        // axis unshifted.
+        let base = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            ..BehaviorSpec::default()
+        };
+        assert_eq!(base.on_info(), None);
+        let with = BehaviorSpec {
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            ..base.clone()
+        };
+        assert_eq!(
+            with.on_info(),
+            Some(PathBuf::from("lib/handlers.lisp").as_path()),
+            "BehaviorSpec::on_info must project the \
+             :on-info axis independently of every peer :on-* \
+             axis (got {:?})",
+            with.on_info(),
         );
     }
 }
