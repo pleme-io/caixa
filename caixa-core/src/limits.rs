@@ -378,7 +378,7 @@ impl LimitsSpec {
     pub const fn is_empty(&self) -> bool {
         self.memory().is_none()
             && self.fuel().is_none()
-            && self.wall_clock.is_none()
+            && self.wall_clock().is_none()
             && self.cpu.is_none()
     }
 
@@ -536,6 +536,93 @@ impl LimitsSpec {
     #[must_use]
     pub const fn fuel(&self) -> Option<u64> {
         self.fuel
+    }
+
+    /// Substrate-canonical per-`:limits` `:wall-clock` wasmtime-per-call
+    /// wall-clock deadline scalar accessor every consumer of the
+    /// Servico's `wasmtime::Store::epoch_deadline_*` / `wasi:clocks`
+    /// propagation keys off — returns the author-declared `:limits
+    /// :wall-clock` typed `Duration` verbatim as an `Option<Duration>`,
+    /// copied out of the typed slot's own `Option<Duration>` storage
+    /// (`Duration` is `Copy`, so `Option<Duration>` is `Copy` and the
+    /// accessor returns by value; no borrow of `&self` past the call).
+    /// `None` when the slot is absent (the "no wall-clock deadline
+    /// declared — engine-default applies, today the pre-M2
+    /// unbounded-wall-clock shape" arm the module-level docstring names
+    /// on [`LimitsSpec::wall_clock`] itself — [`LimitsSpec::is_empty`]'s
+    /// `wall_clock().is_none()` arm reads this predicate too, so an
+    /// authored-but-unset `:limits (:wall-clock ())` round-trips to a
+    /// `servico_m2_overlay` emission structurally identical to one that
+    /// omits the slot entirely).
+    ///
+    /// The `:limits :wall-clock` slot carries the "per-outermost-call
+    /// wall-clock deadline" wasmtime-shaped sandboxing contract
+    /// (`theory/INSPIRATIONS.md` §III.1 — Lunatic's supervised
+    /// wasm-`Store`-per-process epoch-deadline accounting, translated
+    /// onto pleme-io's typed `:limits` slot) — the typed slot's
+    /// `Option<Duration>` accept-set (zero-floor rejected through
+    /// [`LimitsError::WallClockZero`] because a zero deadline traps the
+    /// first instruction; integer-millisecond granularity enforced
+    /// through [`LimitsError::WallClockNotCanonical`] because the
+    /// duration codec's canonical form emits `"1500ms"` not `"1.5s"`
+    /// and the operator's wall-clock scheduler quantizes at
+    /// milliseconds; upper-bounded by [`LIMITS_WALL_CLOCK_MAX`] (1h —
+    /// the coarsest per-call deadline any operationally-reachable
+    /// Servico can honor without spanning multiple scheduler epochs))
+    /// maps onto the wasmtime `Store::epoch_deadline_*` call the M2.5
+    /// wasm-engine wires per outermost call and, via
+    /// [`crate::render::servico_m2_overlay`], onto the
+    /// `pleme-computeunit` Helm-library-chart values sub-block's
+    /// `limits.wallClock` key that lands as the `ComputeUnit` CR's
+    /// `spec.limits.wallClock` field.
+    ///
+    /// Prior to this lift the `.wall_clock` field was accessed inline at
+    /// two sites inside `impl LimitsSpec` — [`LimitsSpec::is_empty`]'s
+    /// `self.wall_clock.is_none()` arm and [`LimitsSpec::validate`]'s
+    /// `if let Some(w) = self.wall_clock { … }` zero-floor +
+    /// canonical-form + upper-cap bracket arm — two open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:limits :wall-clock` axis
+    /// to a richer author surface — a per-instance `ComputeUnit`
+    /// CR-side `spec.limits.wallClock` overlay the operator pins
+    /// per-cluster, a wall-clock-vs-monotonic-clock discriminator once
+    /// the wasm-engine grows a `:limits (:wall-clock (:kind monotonic
+    /// …))` axis, a split of the single per-outermost-call `Duration`
+    /// budget into a `{deadline, warn_at}` pair once the wasm-engine
+    /// grows a soft-deadline warning surface — would have had to be
+    /// threaded through every open-coded copy in lockstep or the
+    /// emptiness predicate and the validate call would silently
+    /// disagree on which deadline a given [`LimitsSpec`] resolves to.
+    /// Lifting the resolution to a typed method on the substrate
+    /// primitive means every downstream consumer of the Servico's
+    /// per-`:limits` wall-clock-deadline surface reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a
+    /// unit on any future axis addition.
+    ///
+    /// Third `Option<Copy-T>`-return accessor on the M2 slot family
+    /// (peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+    /// (620c067) `Option<u64>` accessor and per-`:limits`
+    /// [`LimitsSpec::fuel`] (795dee7) `Option<u64>` accessor — same
+    /// typed-optional-scalar shape extended to the peer per-`:limits`
+    /// wall-clock-deadline axis; sibling to [`crate::MeshPolicy::timeout`]
+    /// (7073d0f) on the closed M3 mesh-slot `Option<Duration>` accessor
+    /// axis — same typed-`Duration` shape extended from the M3
+    /// per-call-timeout to the M2 per-outermost-call deadline). The
+    /// triple `(memory(), fuel(), wall_clock())` jointly projects three
+    /// of the four `Option<Copy-T>` axes every M2 `:limits` consumer
+    /// that fans on wasm-linear-memory-cap + wasm-fuel-budget +
+    /// wall-clock-deadline keys off. Three of the four `:limits` axes
+    /// now route through a typed dispatch on the substrate primitive;
+    /// the one remaining (`cpu: Option<u32>`) folds on the same
+    /// one-line accessor + is_empty-arm-route + validate-arm-route +
+    /// three-test pattern in the next run, closing the M2 `:limits`
+    /// slot family's `Option<Copy-T>` accessor axis. Named `wall_clock()`
+    /// to match the storage field's name; the accessor's identity maps
+    /// onto the canonical wasmtime-`Store::epoch_deadline_*`-shaped
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn wall_clock(&self) -> Option<Duration> {
+        self.wall_clock
     }
 
     /// Reject operationally-meaningless zero values on every declared
@@ -711,7 +798,7 @@ impl LimitsSpec {
                 |fuel| LimitsError::FuelExceedsCap { fuel },
             )?;
         }
-        if let Some(w) = self.wall_clock {
+        if let Some(w) = self.wall_clock() {
             // Zero-floor + integer-millisecond canonical-form +
             // upper-cap bracket on the typed `:wall-clock` axis. See
             // [`crate::render::require_positive_canonical_bounded_duration`]
@@ -5681,6 +5768,195 @@ mod tests {
                 first, fuel,
                 "LimitsSpec::fuel must return :limits :fuel \
                  verbatim by copy — got {first:?}, expected {fuel:?}",
+            );
+        }
+    }
+
+    // ── per-`:limits :wall-clock` accessor pins (LimitsSpec::wall_clock) ─
+
+    #[test]
+    fn limits_wall_clock_returns_option_duration_byte_equal_across_permutations() {
+        // The canonical per-`:limits` `:wall-clock` wasmtime-per-call
+        // wall-clock deadline scalar pin: [`LimitsSpec::wall_clock`]
+        // must return the `:limits :wall-clock` typed `Duration`
+        // verbatim as an `Option<Duration>`, byte-equal to the raw
+        // field access across the three canonical shape-arms — `None`
+        // (no wall-clock deadline declared — engine-default applies),
+        // `Some(Duration::from_millis(1))` (the structural minimum a
+        // validated `:limits :wall-clock` may carry, the
+        // integer-millisecond floor
+        // [`LimitsError::WallClockNotCanonical`] rejects everything
+        // sub-ms; `Duration::ZERO` is separately rejected by
+        // [`LimitsError::WallClockZero`]), `Some(Duration::from_secs(30))`
+        // (the canonical 30s deadline the module-level docstring
+        // names).
+        //
+        // Peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) / [`LimitsSpec::fuel`] (795dee7) accessor
+        // byte-equality pins on the peer typed-`u64` optional-scalar
+        // axes, extended to the wall-clock-deadline `Option<Duration>`
+        // shape — third `Option<Copy-T>`-return accessor on the M2 slot
+        // family. Sibling to [`crate::MeshPolicy::timeout`] (7073d0f) on
+        // the M3 mesh-slot family's peer `Option<Duration>` accessor
+        // axis — same typed-`Duration` shape extended from the M3
+        // per-call-timeout axis to the M2 per-outermost-call-deadline
+        // axis. Pins against a future silent detour that re-derived the
+        // wall-clock deadline from a peer axis (an accidental
+        // `.fuel`-collapse that assumed the wall-clock deadline and
+        // the fuel budget carry the same value — the two axes serve
+        // different sandboxing purposes, wall-clock tracks scheduler
+        // real time and fuel tracks wasm instructions), a `None` →
+        // `Some(Duration::ZERO)` "zero means unbounded" collapse (the
+        // canonical `Option<Duration>` → `Duration` collapse footgun
+        // the [`LimitsError::WallClockZero`] validate arm guards on the
+        // peer zero-floor axis; a zero deadline traps the first
+        // instruction), or a per-arm variant swap that landed on one
+        // consumer without the other.
+        for wall_clock in [
+            None,
+            Some(Duration::from_millis(1)),
+            Some(Duration::from_secs(30)),
+        ] {
+            let l = LimitsSpec {
+                wall_clock,
+                ..LimitsSpec::default()
+            };
+            assert_eq!(
+                l.wall_clock(),
+                wall_clock,
+                "LimitsSpec::wall_clock must return :limits :wall-clock verbatim \
+                 (got {:?}, expected {wall_clock:?})",
+                l.wall_clock(),
+            );
+            assert_eq!(
+                l.wall_clock(),
+                l.wall_clock,
+                "LimitsSpec::wall_clock must byte-equal the raw .wall_clock \
+                 field access across every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_is_empty_wall_clock_arm_routes_through_accessor() {
+        // Composition pin: [`LimitsSpec::is_empty`]'s `wall_clock` arm
+        // must key off [`LimitsSpec::wall_clock`], not the raw
+        // `.wall_clock` field access. Structurally: setting ONLY the
+        // `wall_clock` slot on an otherwise-default LimitsSpec must
+        // flip `is_empty()` from `true` (all-`None`) to `false` (one
+        // axis carries a value); the flip must be observed across every
+        // value in the accept-set since the emptiness semantic reads
+        // "any axis carries a value" — not "any axis carries a value
+        // above a threshold" — the same non-collapsing shape the
+        // sibling M3 [`crate::MeshPolicy::is_empty`] predicate carries
+        // on its peer `Option<Copy-T>`-typed slot surfaces and the
+        // sibling per-`:limits` [`LimitsSpec::memory`] (620c067) /
+        // [`LimitsSpec::fuel`] (795dee7) `is_empty()` accessor-
+        // composition pins carry on the peer `Option<u64>` axes.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.memory.is_none()`-only chain that dropped the `wall_clock`
+        // arm entirely), an accessor-side detour that no longer names
+        // the substrate-primitive typed dispatch (an accidental
+        // `self.wall_clock.unwrap_or(Duration::ZERO).is_zero()` fallback
+        // in the accessor that would silently classify both `None` and
+        // `Some(Duration::ZERO)` as the same value — a footgun the
+        // [`LimitsError::WallClockZero`] validate arm explicitly closes
+        // since a zero deadline traps rather than expresses
+        // "unbounded"), or a threshold collapse (a
+        // `self.wall_clock().is_some_and(|w| !w.is_zero())` that would
+        // silently classify `Some(Duration::ZERO)` as unset).
+        //
+        // Peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) / [`LimitsSpec::fuel`] (795dee7) `is_empty`
+        // composition pins on the peer `Option<u64>` axes — same "the
+        // emptiness predicate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the peer
+        // per-`:limits` `:wall-clock` arm.
+        let empty = LimitsSpec::default();
+        assert!(
+            empty.is_empty(),
+            "LimitsSpec::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for wall_clock in [
+            Some(Duration::from_millis(1)),
+            Some(Duration::from_secs(30)),
+            Some(LIMITS_WALL_CLOCK_MAX),
+        ] {
+            let l = LimitsSpec {
+                wall_clock,
+                ..LimitsSpec::default()
+            };
+            assert!(
+                !l.is_empty(),
+                "LimitsSpec::is_empty must return false when :wall-clock \
+                 is {wall_clock:?} — the emptiness predicate reads \"any \
+                 axis carries a value\", not \"any axis carries a \
+                 value above a threshold\"",
+            );
+            assert_eq!(
+                l.wall_clock().is_none(),
+                l.is_empty(),
+                "when :wall-clock is the only set axis, is_empty() must \
+                 equal wall_clock().is_none() — the accessor and the \
+                 emptiness predicate must route through the same \
+                 substrate-primitive typed dispatch on the :wall-clock \
+                 arm",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_wall_clock_projects_option_duration_by_copy() {
+        // The by-copy pin: [`LimitsSpec::wall_clock`] returns
+        // `Option<Duration>` by copy — `Duration` is `Copy` (so
+        // `Option<Duration>` is `Copy`) and the accessor must return by
+        // value, not by reference. Peer of the sibling per-`:limits`
+        // [`LimitsSpec::memory`] (620c067) / [`LimitsSpec::fuel`]
+        // (795dee7) copy-invariant pins on the peer `Option<u64>`
+        // shape, extended onto the peer `Option<Duration>` shape — the
+        // accessor's returned `Option<Duration>` must outlive `&self`
+        // (multiple calls must return equal values from a dropped-
+        // `&self` copy, since the returned Option carries no borrow),
+        // and calling the accessor twice on the same LimitsSpec must
+        // yield the same `Option<Duration>` verbatim (idempotent, no
+        // side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&Duration>` (which would type-check but silently
+        // break every downstream caller — the future
+        // `wasmtime::Store::epoch_deadline_*` wire path consumes
+        // `Duration` by value and `&Duration` would fold to a detached
+        // copy at the call site), an accidental `Option::as_ref()`
+        // projection (`self.wall_clock.as_ref()` would also type-check
+        // but return `Option<&Duration>`), or a one-arm-only accessor
+        // that reads `Some(*w)` in the Some arm but reads a fresh
+        // `Default::default()` (which would collapse to
+        // `Duration::ZERO`, not `None`) in the None arm.
+        for wall_clock in [
+            None,
+            Some(Duration::from_millis(1)),
+            Some(Duration::from_secs(30)),
+            Some(LIMITS_WALL_CLOCK_MAX),
+        ] {
+            let l = LimitsSpec {
+                wall_clock,
+                ..LimitsSpec::default()
+            };
+            let first = l.wall_clock();
+            let second = l.wall_clock();
+            assert_eq!(
+                first, second,
+                "LimitsSpec::wall_clock must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<Duration>",
+            );
+            assert_eq!(
+                first, wall_clock,
+                "LimitsSpec::wall_clock must return :limits :wall-clock \
+                 verbatim by copy — got {first:?}, expected {wall_clock:?}",
             );
         }
     }
