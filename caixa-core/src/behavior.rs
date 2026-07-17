@@ -129,6 +129,98 @@ impl BehaviorSpec {
         self.declared_paths().next().is_none()
     }
 
+    /// Substrate-canonical per-`:behavior` `:on-state-change`
+    /// OTP-`gen_server:code_change/3`-shaped state-migration callback
+    /// path scalar accessor every consumer of the Servico's hot-upgrade
+    /// dispatch keys off — returns the author-declared
+    /// `:behavior :on-state-change` typed callback path verbatim as an
+    /// `Option<&Path>`, borrowed from the typed slot's own
+    /// `Option<PathBuf>` storage. `None` when the slot is absent (the
+    /// canonical "no state-migration callback declared — the caixa
+    /// exposes no hot-upgrade state-fold path, so any `:upgrade-from`
+    /// entry carrying a `(:state-change …)` instruction is structurally
+    /// half a composition" arm the peer
+    /// [`crate::validate_upgrade_from_against_behavior`] cross-slot gate
+    /// keys off through this accessor).
+    ///
+    /// The `:behavior :on-state-change` slot carries the OTP
+    /// `gen_server:code_change/3` callback contract (the module-level
+    /// [`BehaviorSpec::on_state_change`] docstring pins the analog verbatim:
+    /// "State migration callback for hot-upgrades. Analog of
+    /// `gen_server:code_change/3` — receives old state + version, returns
+    /// new state. Composes with the `:upgrade-from` slot declared at the
+    /// Caixa root."). The composition it half-forms is realized in OTP by
+    /// `release_handler:install_release/1`, which invokes the running
+    /// `gen_server`'s `code_change/3` during the appup's `code_change` /
+    /// `update, m, soft` step — the appup's instruction triggers the
+    /// callback, the callback folds the prior-version state shape into
+    /// the current-version shape, and the operator advances to the next
+    /// instruction only after the callback returns successfully
+    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` +
+    /// `release_handler` state-migration wire, translated onto pleme-io's
+    /// typed `:behavior` + `:upgrade-from` slot pair). caixa decomposes
+    /// the same composition into two typed slots: the per-version
+    /// migration logic lives in the `(:state-change "lib/migrations/…lisp")`
+    /// instruction's `:script` (the `:upgrade-from` author surface,
+    /// resolved through [`crate::UpgradeInstruction::StateChange`]), and
+    /// the runtime hook the operator dispatches the migration through
+    /// lives in the `:behavior :on-state-change` callback (the
+    /// `:behavior` author surface, resolved through this accessor). The
+    /// [`crate::validate_upgrade_from_against_behavior`] cross-slot gate
+    /// closes the composition at validate time by refusing a Caixa that
+    /// carries a `:state-change` instruction without declaring
+    /// `:on-state-change` — the sole caixa-core consumer that reads the
+    /// callback's `Option<&Path>` presence rather than the callback path
+    /// itself.
+    ///
+    /// Prior to this lift the `.on_state_change` field was accessed
+    /// inline at two sites — [`BehaviorSpec::declared_slots`]'s
+    /// `:on-state-change` arm's `self.on_state_change.as_ref()` map into
+    /// the six-tuple iterator, and the sibling
+    /// [`crate::validate_upgrade_from_against_behavior`] cross-slot gate's
+    /// `behavior.and_then(|b| b.on_state_change.as_ref()).is_some()`
+    /// short-circuit — two open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:behavior :on-state-change` axis to a richer author surface —
+    /// a per-prior-`:versao` state-migration callback the operator pins
+    /// through a future `:behavior :on-state-change-overrides` slot the
+    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine callback-dispatch
+    /// wire acknowledges, a per-tenant migration alias table the M4 CR
+    /// materializer resolves per-CR, a per-Aplicacao dynamic
+    /// state-change derivation the future adaptive hot-upgrade engine
+    /// computes from the sibling `:upgrade-from` instruction chain —
+    /// would have had to be threaded through both open-coded copies in
+    /// lockstep or the `declared_slots` iterator (the tag surface every
+    /// per-slot diagnostic reads) and the
+    /// `validate_upgrade_from_against_behavior` gate (the composition
+    /// closure every hot-upgrade admission reads) would silently
+    /// disagree on which callback a given [`BehaviorSpec`] resolves to.
+    /// Lifting the resolution to a typed method on the substrate
+    /// primitive means every downstream consumer of the Servico's
+    /// per-`:behavior` state-migration callback surface reaches for
+    /// exactly one typed dispatch — the resolver's accept-set migrates
+    /// as a unit on any future axis addition.
+    ///
+    /// First `Option<&Path>`-return accessor on the M2 `:behavior` slot
+    /// family (peer of the sibling per-`:placement`
+    /// [`crate::Placement::shard_key`] 7cd2a28 /
+    /// [`crate::Placement::affinity`] 74ec2d3 `Option<&str>` accessors
+    /// on the M3 mesh-slot family — same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the peer per-`:behavior`
+    /// `Option<PathBuf>` optional-scalar axis; opens the "optional
+    /// per-slot `Option<&Path>` scalar" projection pattern the sibling
+    /// per-`:behavior` `:on-init` / `:on-call` / `:on-cast` / `:on-info`
+    /// / `:on-terminate` future lifts fold on). Named
+    /// `on_state_change()` to match the storage field's name; the
+    /// accessor's identity name maps onto the canonical
+    /// `theory/INSPIRATIONS.md` §II.3 vocabulary the slot's docstring
+    /// already carries.
+    #[must_use]
+    pub fn on_state_change(&self) -> Option<&Path> {
+        self.on_state_change.as_deref()
+    }
+
     /// Reject operationally-meaningless callback path values on every
     /// declared slot. Each slot remains optional — omitting a field
     /// expresses "fall back to the runtime default callback"; the bug
@@ -939,5 +1031,168 @@ mod tests {
                 M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
             ]
         );
+    }
+
+    // ── per-`:behavior :on-state-change` accessor pins ─────────────────────
+
+    #[test]
+    fn behavior_on_state_change_returns_option_path_verbatim_across_permutations() {
+        // Canonical per-`:behavior` `:on-state-change` OTP-`code_change/3`-
+        // shaped callback-path scalar pin: [`BehaviorSpec::on_state_change`]
+        // must return the `:behavior :on-state-change` typed `PathBuf`
+        // verbatim as an `Option<&Path>`, borrowed from the raw
+        // `Option<PathBuf>` field access across the three canonical
+        // shape-arms — `None` (no callback declared — the caixa exposes
+        // no hot-upgrade state-fold path), `Some("lib/migrations.lisp")`
+        // (the canonical single-file shape the module-doc example uses),
+        // `Some("lib/migrations/v01-to-v02.lisp")` (the per-version
+        // sub-directory shape the `theory/ABSORPTION-ROADMAP.md` M2.5
+        // wasm-engine callback-dispatch wire acknowledges).
+        //
+        // Peer of the sibling per-`:placement` [`crate::Placement::shard_key`]
+        // (7cd2a28) / [`crate::Placement::affinity`] (74ec2d3)
+        // `Option<&str>` accessor pin on the sibling `Option<Str>`-return
+        // axis, extended to the peer per-`:behavior` typed-`PathBuf`
+        // optional-scalar shape — first `Option<&Path>`-return accessor
+        // on the M2 `:behavior` slot family. Pins against a future silent
+        // detour that re-derived the callback path from a peer axis (an
+        // accidental `.on_call`-collapse that assumed the two
+        // `Option<PathBuf>` axes carry the same value), a `None` →
+        // `Some(empty)` collapse (the canonical
+        // `Option<PathBuf>` → `PathBuf::new()` footgun the
+        // [`BehaviorError::EmptyPath`] validate arm guards on the peer
+        // path-shape axis), or a per-arm variant swap that landed on one
+        // consumer without the other.
+        for path in [
+            None,
+            Some(PathBuf::from("lib/migrations.lisp")),
+            Some(PathBuf::from("lib/migrations/v01-to-v02.lisp")),
+        ] {
+            let b = BehaviorSpec {
+                on_state_change: path.clone(),
+                ..BehaviorSpec::default()
+            };
+            assert_eq!(
+                b.on_state_change(),
+                path.as_deref(),
+                "BehaviorSpec::on_state_change must return the \
+                 :behavior :on-state-change PathBuf verbatim as \
+                 Option<&Path> (got {:?}, expected {:?})",
+                b.on_state_change(),
+                path.as_deref(),
+            );
+            assert_eq!(
+                b.on_state_change(),
+                b.on_state_change.as_deref(),
+                "BehaviorSpec::on_state_change must byte-equal the \
+                 raw .on_state_change.as_deref() field access across \
+                 every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn behavior_on_state_change_is_independent_of_peer_on_star_axes() {
+        // Cross-axis independence pin: flipping only the
+        // `:on-state-change` axis flips [`BehaviorSpec::on_state_change`]
+        // independently of every peer `:on-*` axis
+        // (`:on-init` / `:on-call` / `:on-cast` / `:on-info` /
+        // `:on-terminate`). A future silent detour that re-derived the
+        // callback path from a peer axis (an accidental `.on_call`-
+        // collapse, a "state-change falls back to on-info" default that
+        // would silently rebind the callback dispatch to the wrong
+        // slot) surfaces here as a build-time test failure.
+        //
+        // Mirrors the sibling `limits_is_empty_memory_arm_routes_through_accessor`
+        // (620c067) cross-axis pin on the peer M2 `:limits` slot
+        // family — each accessor-lift closes exactly one axis and
+        // leaves every peer axis unshifted.
+        let base = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            ..BehaviorSpec::default()
+        };
+        assert_eq!(base.on_state_change(), None);
+        let with = BehaviorSpec {
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..base.clone()
+        };
+        assert_eq!(
+            with.on_state_change(),
+            Some(PathBuf::from("lib/migrations.lisp").as_path()),
+            "BehaviorSpec::on_state_change must project the \
+             :on-state-change axis independently of every peer :on-* \
+             axis (got {:?})",
+            with.on_state_change(),
+        );
+    }
+
+    #[test]
+    fn validate_upgrade_from_against_behavior_routes_through_on_state_change_accessor() {
+        // Production-through-const pin: the sole caixa-core consumer of
+        // the accessor's `Option<&Path>` presence — the
+        // [`crate::validate_upgrade_from_against_behavior`] cross-slot
+        // composition gate — must route through
+        // [`BehaviorSpec::on_state_change`] rather than the raw
+        // `.on_state_change` field, so the gate's short-circuit and
+        // every future accessor-side extension (a per-prior-`:versao`
+        // callback override, a per-tenant migration alias table) land
+        // as one edit at the accessor rather than as a coordinated
+        // two-site rewrite of the gate + accessor.
+        //
+        // Peer of the sibling `declared_slots_labels_route_through_
+        // lifted_author_key_consts` (production-through-const pin on
+        // the label surface) and the sibling
+        // `limits_is_empty_memory_arm_routes_through_accessor`
+        // (620c067) pin on the peer M2 `:limits` slot family.
+        //
+        // Positive control: a `:behavior :on-state-change` callback
+        // declared + a `:upgrade-from` entry carrying a
+        // `(:state-change …)` instruction admits, because the accessor
+        // returns `Some(&Path)` and the gate's short-circuit fires.
+        let entries = vec![crate::UpgradeFromEntry {
+            from: "0.1.0".to_string(),
+            instructions: vec![
+                crate::UpgradeInstruction::LoadModule {
+                    module: "codec".to_string(),
+                },
+                crate::UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+            ],
+        }];
+        let b = BehaviorSpec {
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..BehaviorSpec::default()
+        };
+        assert!(b.on_state_change().is_some());
+        crate::validate_upgrade_from_against_behavior(&entries, Some(&b))
+            .expect("callback declared → gate admits");
+
+        // Negative control: dropping only the accessor's slot to `None`
+        // (with the same `:upgrade-from` entry) flips the gate to
+        // refusal — the accessor's `None` return is the sole predicate
+        // the short-circuit reads.
+        let b_no_cb = BehaviorSpec::default();
+        assert_eq!(b_no_cb.on_state_change(), None);
+        let err = crate::validate_upgrade_from_against_behavior(&entries, Some(&b_no_cb))
+            .expect_err(":state-change instruction without callback → refuse");
+        assert!(matches!(
+            err,
+            crate::UpgradeError::StateChangeWithoutOnStateChangeCallback { .. }
+        ));
+
+        // `behavior: None` is the same refusal shape — the accessor
+        // isn't reached, but `Option::and_then` on `None` short-circuits
+        // to `None`, so the diagnostic is identical.
+        let err = crate::validate_upgrade_from_against_behavior(&entries, None)
+            .expect_err("behavior absent + :state-change instruction → refuse");
+        assert!(matches!(
+            err,
+            crate::UpgradeError::StateChangeWithoutOnStateChangeCallback { .. }
+        ));
     }
 }
