@@ -1097,7 +1097,7 @@ impl MeshPolicy {
             && self.retries().is_none()
             && self.circuit_breaker.is_none()
             && self.mtls_required().is_none()
-            && self.rate_limit.is_none()
+            && self.rate_limit().is_none()
     }
 
     /// Substrate-canonical per-`:politicas` `:timeout` Gateway-API-mesh
@@ -1338,6 +1338,95 @@ impl MeshPolicy {
     #[must_use]
     pub const fn mtls_required(&self) -> Option<bool> {
         self.mtls_required
+    }
+
+    /// Substrate-canonical per-`:politicas` `:rate-limit` Envoy-
+    /// `local_rate_limit`-mesh token-bucket-declaration scalar
+    /// accessor every consumer of the Aplicacao's per-`:politicas`
+    /// per-`(rate, window)` rate-limit surface keys off — returns the
+    /// author-declared `:politicas :rate-limit` typed [`RateLimit`]
+    /// verbatim as an `Option<RateLimit>`, copied out of the typed
+    /// slot's own `Option<RateLimit>` storage ([`RateLimit`] is
+    /// `Copy`, so the accessor returns by value; no borrow of `&self`
+    /// past the call). `None` when the slot is absent (the "cluster
+    /// default applies — typically 'no per-Aplicacao rate declaration,
+    /// gateway-class per-listener default applies'" arm the future
+    /// caixa-mesh `local_rate_limit_overlay` emitter MESH-COMPOSITION
+    /// §III.2 #3 names — [`MeshPolicy::is_empty`]'s
+    /// `rate_limit().is_none()` arm reads this predicate too, so an
+    /// authored-but-unset `:politicas (:rate-limit ())` round-trips
+    /// to a rendered `CiliumClusterwideEnvoyConfig` structurally
+    /// identical to one that omits the slot).
+    ///
+    /// The `:politicas :rate-limit` slot carries the "per-Aplicacao
+    /// token-bucket rate declaration" contract (MESH-COMPOSITION
+    /// §III.2 #3) — the typed slot's `Option<RateLimit>` accept-set
+    /// (rate lower-bounded by 1 through
+    /// [`AplicacaoSpec::validate_politicas`], upper-bounded by
+    /// [`POLICY_RATE_LIMIT_MAX`], window canonically bijected to the
+    /// three-unit `{"s", "m", "h"}` [`rate_limit_codec`] table through
+    /// [`is_canonical_rate_limit_window`]) maps onto the Envoy
+    /// `local_rate_limit.token_bucket.{max_tokens, fill_interval}`
+    /// bijection the future `CiliumClusterwideEnvoyConfig` per-
+    /// `:politicas` overlay emits. Every downstream consumer that
+    /// reads the rate declaration keys off this scalar (the
+    /// [`MeshPolicy::is_empty`] emptiness predicate the renderers key
+    /// off to decide "emit :politicas overlay" vs "skip entirely", the
+    /// [`AplicacaoSpec::validate_politicas`] per-value-shape gate that
+    /// brackets `rl.rate` against [`POLICY_RATE_LIMIT_MAX`] and pins
+    /// `rl.window` against [`is_canonical_rate_limit_window`], the
+    /// future M4 per-Aplicacao Envoy reconciler materialization pass,
+    /// the future per-`:contratos`-edge rate-limit override the
+    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    ///
+    /// Prior to this lift the `.rate_limit` field was accessed inline
+    /// at two sites — [`MeshPolicy::is_empty`]'s
+    /// `self.rate_limit.is_none()` arm and the `validate_politicas`
+    /// gate's `if let Some(rl) = &p.rate_limit` bind — two open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:politicas :rate-limit`
+    /// axis to a richer author surface — a per-`:contratos`-edge
+    /// rate-limit override the operator pins through a future
+    /// `:contratos :rate-limit` slot the MESH-COMPOSITION §III.2 #3
+    /// roadmap acknowledges, a per-cluster rate-limit-default overlay
+    /// the M4 CR materializer resolves per-CR, a promotion of the
+    /// plain `(rate, window)` scalar pair to a richer
+    /// `{rate, window, burst, key}` sub-block once Envoy's
+    /// `local_rate_limit` grows the peer `burst_size` /
+    /// `descriptor_key` axes — would have had to be threaded through
+    /// both open-coded copies in lockstep or the emptiness predicate
+    /// and the validate gate would silently disagree on which rate
+    /// declaration a given [`MeshPolicy`] resolves to (a `:politicas`
+    /// block whose only axis is a `Some :rate-limit` would satisfy
+    /// `is_empty() == false` while the validate path silently read a
+    /// drifted other value, or vice versa: an author's
+    /// `:rate-limit "100/s"` would omit the value-shape gate while the
+    /// emptiness predicate still classified the policy as non-empty).
+    /// Lifting the resolution to a typed method on the substrate
+    /// primitive means every downstream consumer of the Aplicacao's
+    /// per-`:politicas` rate-limit surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit
+    /// on any future axis addition.
+    ///
+    /// First `Option<Copy-composite-T>`-return accessor on the M3
+    /// mesh-slot family — closes the last un-lifted per-`:politicas`
+    /// scalar-value axis. Peer of the sibling per-`:politicas`
+    /// [`MeshPolicy::timeout`] (7073d0f) / [`MeshPolicy::retries`]
+    /// (bdfb399) / [`MeshPolicy::mtls_required`] (c0110f1)
+    /// `Option<Copy-T>` accessors on the primitive-Copy axes — same
+    /// "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the
+    /// peer per-`:politicas` composite-Copy shape (`RateLimit` is
+    /// `#[derive(Copy)]`; peer of [`CircuitBreaker`] which lives
+    /// behind [`CircuitBreaker::max_failures`] / [`CircuitBreaker::window`]
+    /// sub-accessors rather than a top-level accessor because
+    /// consumers reach for the axes not the aggregate). Named
+    /// `rate_limit()` to match the storage field's name; the
+    /// accessor's identity maps onto the canonical MESH-COMPOSITION
+    /// §III.2 vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn rate_limit(&self) -> Option<RateLimit> {
+        self.rate_limit
     }
 }
 
@@ -4298,7 +4387,7 @@ impl AplicacaoSpec {
                 |window| AplicacaoError::PolicyBreakerWindowExceedsCap { window },
             )?;
         }
-        if let Some(rl) = &p.rate_limit {
+        if let Some(rl) = p.rate_limit() {
             // Zero-floor + upper-cap bracket on the typed
             // `:rate-limit` rate axis. See
             // [`crate::render::require_positive_bounded_u32`] for the
@@ -15427,6 +15516,238 @@ mod tests {
                  verbatim by copy — got {first:?}, expected {timeout:?}",
             );
         }
+    }
+
+    #[test]
+    fn mesh_policy_rate_limit_returns_rate_limit_option_byte_equal_across_permutations() {
+        // The canonical per-`:politicas` `:rate-limit` Envoy-
+        // `local_rate_limit`-mesh token-bucket-declaration scalar pin:
+        // [`MeshPolicy::rate_limit`] must return the `:politicas
+        // :rate-limit` typed [`RateLimit`] verbatim as an
+        // `Option<RateLimit>`, byte-equal to the raw field access
+        // across every representative value in the accept-set — `None`
+        // (cluster default applies — no per-Aplicacao rate declaration,
+        // the gateway-class per-listener default arm the future caixa-
+        // mesh `local_rate_limit_overlay` emitter documents),
+        // `Some(RateLimit { rate: 1, window: Duration::from_secs(1) })`
+        // (the lower boundary of the `1..=POLICY_RATE_LIMIT_MAX` rate
+        // accept-set the surrounding
+        // [`AplicacaoSpec::validate_politicas`] gate carves out on the
+        // sibling `PolicyRateLimitZero` refusal, paired with the
+        // canonical-window "1 second" arm of the three-unit
+        // `{"s", "m", "h"}` [`is_canonical_rate_limit_window`] bijection),
+        // `Some(RateLimit { rate: POLICY_RATE_LIMIT_MAX, window: Duration::from_secs(3600) })`
+        // (the upper boundary the same gate carves out on the sibling
+        // `PolicyRateLimitExceedsCap` refusal, paired with the
+        // canonical-window "1 hour" arm), `Some(RateLimit { rate: 0, window: Duration::ZERO })`
+        // (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse into `None` on the
+        // zero-rate/zero-window arm — validate rejects zero but the
+        // accessor must ship the raw slot verbatim so a validate-time
+        // gate regression surfaces at the emit boundary rather than
+        // being silently absorbed), and
+        // `Some(RateLimit { rate: u32::MAX, window: Duration::MAX })`
+        // (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse at the return path).
+        //
+        // First `Option<Copy-composite-T>`-return accessor pin on the
+        // M3 mesh-slot family (peer of the sibling per-`:politicas`
+        // [`MeshPolicy::mtls_required`] c0110f1 `Option<bool>` /
+        // [`MeshPolicy::retries`] bdfb399 `Option<u32>` /
+        // [`MeshPolicy::timeout`] 7073d0f `Option<Duration>` primitive-
+        // Copy accessor pins, extended onto the peer per-`:politicas`
+        // composite-`Copy` shape — [`RateLimit`] is `#[derive(Copy)]`
+        // and the accessor returns by value). Pins against a future
+        // silent detour that re-derived the rate declaration from a
+        // peer axis (an accidental
+        // `.circuit_breaker.as_ref().map(|b| RateLimit { rate: b.max_failures, window: b.window })`
+        // collapse that read the breaker's trip threshold + rolling
+        // window as a rate declaration), a `None → Some(default())`
+        // cluster-default projection (which would silently re-
+        // introduce a "cluster default is 0/s" arm the emit boundary
+        // would take as "declared but inert" — the canonical
+        // declared-but-inert footgun the sibling
+        // [`POLICY_RATE_LIMIT_MAX`] cap arm closes on the peer
+        // amplification-shape axis), a bounds-collapsing accessor
+        // that clamped `rl.rate` through [`POLICY_RATE_LIMIT_MAX`] or
+        // clamped `rl.window` through [`is_canonical_rate_limit_window`]
+        // (the [`AplicacaoSpec::validate`] gate owns the bounds; the
+        // accessor must ship the raw slot verbatim), or a
+        // by-reference detour (`Option<&RateLimit>`) that broke every
+        // downstream consumer keying off `Option<RateLimit>` by-copy.
+        for rl in [
+            None,
+            Some(RateLimit {
+                rate: 1,
+                window: Duration::from_secs(1),
+            }),
+            Some(RateLimit {
+                rate: POLICY_RATE_LIMIT_MAX,
+                window: Duration::from_secs(3600),
+            }),
+            Some(RateLimit {
+                rate: 0,
+                window: Duration::ZERO,
+            }),
+            Some(RateLimit {
+                rate: u32::MAX,
+                window: Duration::MAX,
+            }),
+        ] {
+            let p = MeshPolicy {
+                rate_limit: rl,
+                ..MeshPolicy::default()
+            };
+            assert_eq!(
+                p.rate_limit(),
+                rl,
+                "MeshPolicy::rate_limit must return :politicas :rate-limit \
+                 verbatim (got {:?}, expected {rl:?})",
+                p.rate_limit(),
+            );
+            assert_eq!(
+                p.rate_limit(),
+                p.rate_limit,
+                "MeshPolicy::rate_limit must byte-equal the raw \
+                 .rate_limit field access across every value in the \
+                 accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn mesh_policy_is_empty_rate_limit_arm_routes_through_accessor() {
+        // Composition pin: [`MeshPolicy::is_empty`]'s `rate_limit` arm
+        // must key off [`MeshPolicy::rate_limit`], not the raw
+        // `.rate_limit` field access. Structurally: toggling ONLY the
+        // `rate_limit` slot on an otherwise-default MeshPolicy must
+        // flip `is_empty()` from `true` (all-`None`) to `false` (one
+        // axis carries a value); the flip must be observed for every
+        // representative value in the accept-set the surrounding
+        // [`AplicacaoSpec::validate_politicas`] gate accepts
+        // (`Some(RateLimit { rate: 1, window: 1s })`,
+        // `Some(RateLimit { rate: POLICY_RATE_LIMIT_MAX, window: 1h })`),
+        // since the emptiness semantic reads "any axis carries a
+        // value" — not "any axis carries a value the validate gate
+        // accepts" — the same non-collapsing shape the peer M2
+        // [`crate::LimitsSpec::is_empty`] /
+        // [`crate::BehaviorSpec::is_empty`] predicates carry.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.timeout.is_none()`-only chain that dropped the
+        // `rate_limit` arm entirely — the last unlifted inline field
+        // access on `is_empty` before this lift), a `rate_limit ==
+        // Some(_)` collapse that key-off a validate-gate-clamped
+        // bounds check (which would silently classify a past-the-
+        // guard `Some(RateLimit { rate: 0, window: 0s })` as empty
+        // because it fails the value-shape gate), or an accessor-
+        // side detour that no longer names the substrate-primitive
+        // typed dispatch.
+        //
+        // Fourth "the emptiness predicate must route through the
+        // substrate-primitive typed dispatch" composition pin on the
+        // M3 mesh-slot family — closes the last unlifted composition
+        // arm on [`MeshPolicy::is_empty`] (peer of the sibling
+        // per-`:politicas` [`MeshPolicy::mtls_required`] c0110f1 /
+        // [`MeshPolicy::retries`] bdfb399 / [`MeshPolicy::timeout`]
+        // 7073d0f is_empty-composition pins on the sibling primitive-
+        // Copy axes, extended onto the peer per-`:politicas`
+        // composite-Copy `Option<RateLimit>` axis).
+        let empty = MeshPolicy::default();
+        assert!(
+            empty.is_empty(),
+            "MeshPolicy::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for rl in [
+            RateLimit {
+                rate: 1,
+                window: Duration::from_secs(1),
+            },
+            RateLimit {
+                rate: POLICY_RATE_LIMIT_MAX,
+                window: Duration::from_secs(3600),
+            },
+        ] {
+            let p = MeshPolicy {
+                rate_limit: Some(rl),
+                ..MeshPolicy::default()
+            };
+            assert!(
+                !p.is_empty(),
+                "MeshPolicy::is_empty must return false when \
+                 :rate-limit is {rl:?} — the emptiness predicate \
+                 reads \"any axis carries a value\", not \"any axis \
+                 carries a value the validate gate accepts\"",
+            );
+            assert_eq!(
+                p.rate_limit().is_none(),
+                p.is_empty(),
+                "when :rate-limit is the only set axis, is_empty() \
+                 must equal rate_limit().is_none() — the accessor \
+                 and the emptiness predicate must route through the \
+                 same substrate-primitive typed dispatch on the \
+                 :rate-limit arm",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_rate_limit_zero_rate_arm_routes_through_accessor() {
+        // Composition pin: [`AplicacaoSpec::validate_politicas`]'s
+        // `:rate-limit` value-shape gate must key off
+        // [`MeshPolicy::rate_limit`], not the raw `&p.rate_limit`
+        // field bind. Structurally: a `MeshPolicy` whose only set
+        // axis is a `Some(RateLimit { rate: 0, .. })` must surface
+        // the `PolicyRateLimitZero` refusal exactly, and the same
+        // MeshPolicy with the rate at the canonical lower boundary
+        // `Some(RateLimit { rate: 1, window: 1s })` must pass validate.
+        // The pair jointly pins the accessor + validate-gate
+        // composition: any future silent detour that had the accessor
+        // omit the `Some(RateLimit { rate: 0, .. })` arm (a
+        // `.rate_limit().filter(|rl| rl.rate > 0)` collapse) would
+        // silently absorb the `PolicyRateLimitZero` refusal at the
+        // accessor boundary — the composition pin catches that at
+        // caixa-core build time.
+        //
+        // Sibling of the peer [`validate_politicas`]
+        // `:mtls-required` / `:retries` / `:timeout` composition pins
+        // on the sibling primitive-Copy optional-scalar axes — same
+        // "the validate / shape-gate predicate must route through the
+        // substrate-primitive typed dispatch" discipline extended
+        // onto the peer per-`:politicas` composite-Copy
+        // `Option<RateLimit>` axis. Second composition-with-accessor
+        // pin on the M3 mesh-slot `Option<RateLimit>` arm alongside
+        // the [`MeshPolicy::is_empty`] rate-limit-arm pin above.
+        let mut spec = three_member_spec();
+        spec.politicas = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 0,
+                window: Duration::from_secs(1),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            matches!(spec.validate(), Err(AplicacaoError::PolicyRateLimitZero)),
+            "validate_politicas must reject rate == 0 with \
+             PolicyRateLimitZero — the accessor and the validate gate \
+             must route through the same substrate-primitive typed \
+             dispatch on the :rate-limit zero-floor arm",
+        );
+        spec.politicas = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 1,
+                window: Duration::from_secs(1),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            spec.validate().is_ok(),
+            "validate_politicas must accept rate == 1 (the canonical \
+             lower boundary of the 1..=POLICY_RATE_LIMIT_MAX accept-\
+             set) with a canonical 1s window",
+        );
     }
 
     #[test]
