@@ -1615,6 +1615,95 @@ pub struct RateLimit {
     pub window: Duration,
 }
 
+impl RateLimit {
+    /// Substrate-canonical per-`:politicas :rate-limit` `:rate`
+    /// Envoy-local-rate-limit-mesh token-bucket capacity scalar accessor
+    /// every consumer of the Aplicacao's per-`:contratos`-edge
+    /// rate-limit-bucket capacity keys off — returns the author-declared
+    /// `:politicas :rate-limit` typed `u32` verbatim, copied out of the
+    /// typed slot's own `u32` storage (`u32` is `Copy`, so the accessor
+    /// returns by value; no borrow of `&self` past the call). Non-optional
+    /// (the surrounding `Option<RateLimit>` is the "slot present?"
+    /// projection at the parent [`MeshPolicy::rate_limit`] axis; a
+    /// `RateLimit` past pattern-match is definitionally present, and its
+    /// `:rate` field carries the token-bucket capacity as a required-axis
+    /// scalar).
+    ///
+    /// The `:politicas :rate-limit` `:rate` axis carries the
+    /// "token-bucket capacity" contract (MESH-COMPOSITION §III.2 #3) —
+    /// the typed slot's `u32` accept-set (zero-floor rejected through
+    /// [`AplicacaoError::PolicyRateLimitZero`], upper-bounded by
+    /// [`POLICY_RATE_LIMIT_MAX`]) maps onto the Envoy
+    /// `local_rate_limit.token_bucket.max_tokens` per-cluster
+    /// token-bucket-capacity scalar (equivalently the future
+    /// `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+    /// MESH-COMPOSITION §III.2 #3 acknowledges). Every downstream
+    /// consumer that reads the token-bucket capacity keys off this
+    /// scalar (the [`AplicacaoSpec::validate_politicas`] zero-floor +
+    /// cap bracket that gates on the canonical
+    /// [`crate::render::require_positive_bounded_u32`] helper, the
+    /// [`rate_limit_codec::render`] `Duration → unit` projection that
+    /// emits the `<n>/<s|m|h>` author surface, the future M4
+    /// per-Aplicacao Envoy config reconciler materialization pass, the
+    /// future per-`:contratos`-edge rate-limit-override overlay the
+    /// MESH-COMPOSITION §III.2 #3 roadmap acknowledges).
+    ///
+    /// Prior to this lift the `.rate` field was accessed inline at three
+    /// production sites — [`AplicacaoSpec::validate_politicas`]'s
+    /// `require_positive_bounded_u32(rl.rate, …)` call, and the two
+    /// [`rate_limit_codec::render`] format-arm arms (canonical-window
+    /// `format!("{}/{unit}", rl.rate)` and non-canonical-window
+    /// `format!("{}/{}s", rl.rate, …)` fallback). Three open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed sub-struct axis. A future extension of the `:rate` axis
+    /// to a richer author surface — a per-`:contratos`-edge rate
+    /// override the operator pins through a future `:contratos :rate`
+    /// slot the MESH-COMPOSITION §III.2 #3 roadmap acknowledges, a
+    /// per-cluster rate-default overlay the M4 CR materializer resolves
+    /// per-CR, a promotion of the plain `u32` token capacity to a
+    /// richer `{max_tokens, tokens_per_fill}` tuple once Envoy's
+    /// `local_rate_limit.token_bucket` block's peer `tokens_per_fill`
+    /// axis comes into scope, a per-Envoy-cluster descriptor-key gate
+    /// before the token arms — would have had to be threaded through
+    /// every open-coded copy in lockstep or the validate gate, the
+    /// codec's render path, and the future M4 emit path would silently
+    /// disagree on which token capacity a given [`RateLimit`] resolves
+    /// to (an author's `:rate-limit "100/s"` would satisfy validate
+    /// while the render / emit paths silently read a drifted other
+    /// value, or vice versa: a validated typed slot would land at the
+    /// emit boundary as a no-op limiter whose token capacity is
+    /// structurally so high that no realistic per-edge traffic shape
+    /// can drain it). Lifting the resolution to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Aplicacao's per-`:politicas :rate-limit` token-capacity surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// First sub-struct scalar accessor on the `RateLimit` axis — sibling
+    /// in shape to the peer per-`CircuitBreaker`
+    /// [`CircuitBreaker::max_failures`] (3a74062) required-`u32` accessor
+    /// on the peer per-sub-struct required-axis, extended onto the
+    /// per-`RateLimit` required-`u32` axis; opens the "per-`RateLimit`
+    /// required-axis scalar" projection pattern the sibling
+    /// [`RateLimit::window`] future lift folds on. Same "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline the peer [`WitContract::source`] /
+    /// [`WitContract::destination`] (7f0fd43), [`WitContract::world_ref`]
+    /// (0804823), [`Membro::nome`] (4a32abf),
+    /// [`Membro::versao_requirement`] (a40b0e3),
+    /// [`Entrada::destination`] (6db982c),
+    /// [`CircuitBreaker::max_failures`] (3a74062),
+    /// [`CircuitBreaker::window`] (373957f) accessors carry on their
+    /// respective per-mesh-slot-atom scalar-value axes. Named `rate()`
+    /// to match the storage field's name; the accessor's identity maps
+    /// onto the canonical MESH-COMPOSITION §III.2 vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub const fn rate(&self) -> u32 {
+        self.rate
+    }
+}
+
 /// Canonical `(unit-suffix, seconds-per-window)` bijection every
 /// consumer of the `:politicas :rate-limit` unit table reads from —
 /// [`rate_limit_codec::parse`]'s `unit → Duration` dispatch,
@@ -3033,7 +3122,7 @@ mod rate_limit_codec {
         // daily-bucket support) is one row appended to the table and
         // both consumers pick it up by construction.
         if let Some(unit) = super::rate_limit_window_unit(rl.window) {
-            format!("{}/{unit}", rl.rate)
+            format!("{}/{unit}", rl.rate())
         } else {
             // Defensive fallback for non-canonical windows. Note:
             // [`AplicacaoSpec::validate_politicas`] rejects any
@@ -3046,7 +3135,7 @@ mod rate_limit_codec {
             // validate gate is what makes the round-trip a structural
             // property; this branch exists only so a programmatic
             // non-validated serialize doesn't panic.
-            format!("{}/{}s", rl.rate, rl.window.as_secs())
+            format!("{}/{}s", rl.rate(), rl.window.as_secs())
         }
     }
 }
@@ -4422,7 +4511,7 @@ impl AplicacaoSpec {
             // fundamental amplification-shape diagnostic before the
             // narrower codec-round-trip-shape diagnostic on `:window`.
             crate::render::require_positive_bounded_u32(
-                rl.rate,
+                rl.rate(),
                 POLICY_RATE_LIMIT_MAX,
                 || AplicacaoError::PolicyRateLimitZero,
                 |rate| AplicacaoError::PolicyRateLimitExceedsCap { rate },
@@ -17103,6 +17192,162 @@ mod tests {
                  `:entrada` slot — this is the apex-identity contract \
                  every downstream ingress-apex L4 port reader relies on. \
                  Input :entrada :para: {para:?}, :entrada :port: {port}"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_rate_returns_rate_u32_byte_equal_across_permutations() {
+        // The canonical per-`:politicas :rate-limit` `:rate`
+        // Envoy-local-rate-limit-mesh token-bucket-capacity scalar pin:
+        // [`RateLimit::rate`] must return the `:politicas :rate-limit`
+        // typed `u32` verbatim, byte-equal to the raw field access
+        // across every representative value in the accept-set — `1` (the
+        // lower boundary of the `1..=POLICY_RATE_LIMIT_MAX` accept-set
+        // the surrounding [`AplicacaoSpec::validate_politicas`] gate
+        // carves out on the sibling `PolicyRateLimitZero` refusal),
+        // `POLICY_RATE_LIMIT_MAX` (the upper boundary the same gate
+        // carves out on the sibling `PolicyRateLimitExceedsCap` refusal),
+        // `0` (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse into `1` on the zero arm —
+        // validate rejects zero but the accessor must ship the raw slot
+        // verbatim so a validate-time gate regression surfaces at the
+        // emit boundary rather than being silently absorbed), `u32::MAX`
+        // (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse through
+        // `POLICY_RATE_LIMIT_MAX` at the return path).
+        //
+        // First sub-struct required-scalar accessor pin on the
+        // `RateLimit` axis — sibling in shape to the peer
+        // per-`CircuitBreaker` [`CircuitBreaker::max_failures`] (3a74062)
+        // required-`u32` accessor pin on the peer per-sub-struct
+        // required-axis. Pins against a future silent detour that
+        // re-derived the token capacity from a peer axis (an accidental
+        // `self.window.as_secs() as u32` collapse that read the
+        // rate-limit window duration as a token count), a `0 → 1`
+        // cluster-default projection (which would silently absorb the
+        // `PolicyRateLimitZero` refusal case at the accessor boundary),
+        // or a bounds-collapsing accessor that clamped the return
+        // through `POLICY_RATE_LIMIT_MAX` (the `AplicacaoSpec::validate`
+        // gate owns the bounds; the accessor must ship the raw slot
+        // verbatim).
+        for rate in [1u32, POLICY_RATE_LIMIT_MAX, 0, u32::MAX] {
+            let rl = RateLimit {
+                rate,
+                window: Duration::from_secs(1),
+            };
+            assert_eq!(
+                rl.rate(),
+                rate,
+                "RateLimit::rate must return :politicas :rate-limit :rate \
+                 verbatim (got {}, expected {rate})",
+                rl.rate(),
+            );
+            assert_eq!(
+                rl.rate(),
+                rl.rate,
+                "RateLimit::rate must byte-equal the raw .rate field \
+                 access across every value in the u32 accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_rate_zero_floor_arm_routes_through_accessor() {
+        // Composition pin: [`AplicacaoSpec::validate_politicas`]'s
+        // `:rate-limit :rate` zero-floor arm must key off
+        // [`RateLimit::rate`], not the raw `.rate` field access.
+        // Structurally: a `RateLimit { rate: 0, window:
+        // Duration::from_secs(1) }` embedded in a `:politicas
+        // :rate-limit` slot must surface the `PolicyRateLimitZero`
+        // refusal exactly, and a `RateLimit { rate: 1, window:
+        // Duration::from_secs(1) }` (the lower boundary of the
+        // `1..=POLICY_RATE_LIMIT_MAX` accept-set) must pass validate.
+        // The pair jointly pins the accessor + validate-gate composition:
+        // any future silent detour that had the accessor return a fresh
+        // `1` on the zero arm (a `.rate().max(1)` collapse) would
+        // silently absorb the `PolicyRateLimitZero` refusal at the
+        // accessor boundary and the validate gate would accept a
+        // struct-literal `RateLimit { rate: 0, .. }` — the composition
+        // pin catches that at caixa-core build time.
+        //
+        // Peer of the sibling per-`CircuitBreaker`
+        // [`CircuitBreaker::max_failures`] (3a74062) /
+        // [`CircuitBreaker::window`] (373957f) accessor-composition
+        // pins on the peer required-scalar axes — same "the validate /
+        // shape-gate predicate must route through the substrate-primitive
+        // typed dispatch" discipline extended onto the peer
+        // per-`RateLimit` required-`u32` composition axis.
+        let mut spec = three_member_spec();
+        spec.politicas = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 0,
+                window: Duration::from_secs(1),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            matches!(spec.validate(), Err(AplicacaoError::PolicyRateLimitZero)),
+            "validate_politicas must reject rate == 0 with \
+             PolicyRateLimitZero — the accessor and the validate gate \
+             must route through the same substrate-primitive typed \
+             dispatch on the :rate zero-floor arm",
+        );
+        spec.politicas = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 1,
+                window: Duration::from_secs(1),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            spec.validate().is_ok(),
+            "validate_politicas must accept rate == 1 (the lower \
+             boundary of the 1..=POLICY_RATE_LIMIT_MAX accept-set)",
+        );
+    }
+
+    #[test]
+    fn rate_limit_rate_projects_u32_by_copy() {
+        // The by-copy pin: [`RateLimit::rate`] returns `u32` by copy —
+        // `u32` is `Copy` and the accessor must return by value, not by
+        // reference. Peer of the sibling per-`CircuitBreaker`
+        // [`CircuitBreaker::max_failures`] (3a74062) by-copy pin on the
+        // peer required-scalar `:max-failures` axis, extended onto the
+        // peer per-`RateLimit` required-`u32` copy-invariant shape —
+        // the accessor's returned `u32` must outlive `&self` (multiple
+        // calls must return equal values from a dropped-`&self` copy,
+        // since the returned scalar carries no borrow), and calling the
+        // accessor twice on the same RateLimit must yield the same
+        // `u32` verbatim (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned `&u32`
+        // (which would type-check but silently break every downstream
+        // arithmetic consumer — [`crate::render::require_positive_bounded_u32`]'s
+        // first parameter is `u32`, and `&u32` would fold to a detached
+        // copy at the call site with a `*` deref the sibling accessors
+        // don't need), an accidental `.rate.wrapping_add(0)` detour that
+        // returned a fresh copy through an arithmetic no-op (breaking a
+        // future `const fn` regression), or a one-arm-only accessor
+        // that returned a saturating value on some sentinel input
+        // (breaking the pass-through invariant the sibling required-
+        // scalar accessors carry).
+        for rate in [1u32, POLICY_RATE_LIMIT_MAX, 0, u32::MAX] {
+            let rl = RateLimit {
+                rate,
+                window: Duration::from_secs(1),
+            };
+            let first = rl.rate();
+            let second = rl.rate();
+            assert_eq!(
+                first, second,
+                "RateLimit::rate must be idempotent — two successive \
+                 calls on the same &self must return the same u32",
+            );
+            assert_eq!(
+                first, rate,
+                "RateLimit::rate must return :politicas :rate-limit :rate \
+                 verbatim by copy — got {first}, expected {rate}",
             );
         }
     }
