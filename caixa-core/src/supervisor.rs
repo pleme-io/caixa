@@ -418,6 +418,85 @@ impl ChildSpec {
     pub fn nome(&self) -> &str {
         self.caixa.as_str()
     }
+
+    /// Substrate-canonical per-`:children` child-caixa `:versao` semver-
+    /// requirement scalar accessor every consumer that reads the OTP-shape
+    /// supervised child's version pin keys off — returns the author-declared
+    /// `:children :versao` byte-string verbatim as a `&str`, borrowed from
+    /// the typed slot's own [`String`] storage.
+    ///
+    /// The `:children :versao` slot carries the Cargo-shaped semver
+    /// requirement string (`"^0.1"`, `"~0.1.2"`, `"0.1.0"`, `"*"`) that pins
+    /// which release of the supervised child caixa the OTP-shape supervisor
+    /// tree materializes against — the same requirement grammar the peer
+    /// `:deps :versao` / `:membros :versao` axes carry, resolved through the
+    /// shared [`crate::render::require_valid_versao_requirement`] cascade
+    /// and the shared [`crate::version::parse_requirement`] parser. Every
+    /// downstream consumer that fans on the child's version pin keys off
+    /// this scalar (the [`SupervisorSpec::validate`] per-child requirement
+    /// gate at `require_valid_versao_requirement(child.versao_requirement(),
+    /// …)`, the [`SupervisorError::ChildVersaoInvalid`] variant's carrier
+    /// for `feira lint` rendering, every future per-cluster version-lock
+    /// overlay the caixa-operator's hierarchical reconciliation scheduler
+    /// pins through a future `:placement`-scoped supervisor-tree slot, the
+    /// future M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+    /// per-child version resolver, the future wasm-operator's per-child
+    /// lacre BLAKE3-closure lookup at `ComputeUnit` materialization time).
+    ///
+    /// Prior to this lift the `.versao` byte-string was accessed inline at
+    /// two `&str`-shaped sites in `caixa-core/src/supervisor.rs` — the
+    /// [`SupervisorSpec::validate`] requirement-gate call
+    /// `require_valid_versao_requirement(&child.versao, …)` and the
+    /// [`SupervisorError::ChildVersaoInvalid`] carrier at
+    /// `versao: child.versao.clone()` — two open-coded field-accesses that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:children :versao` axis to a richer author surface
+    /// (a per-cluster version-pin overlay per MESH-COMPOSITION §III.2 canary
+    /// flow, a lacre-projected concrete-version rewrite the operator
+    /// materializes at CR-admission time, a future `:children :versao-lock`
+    /// per-cluster override slot the wasm-operator's hierarchical
+    /// reconciliation scheduler authors per-CR) would have had to be
+    /// threaded through both open-coded copies in lockstep or one consumer
+    /// would silently disagree with the peer on which release constraint a
+    /// given child resolves to — the requirement-gate call reading
+    /// `"^0.1"` while the error-body carrier read `"tenant-a-pin/^0.1"`
+    /// would silently split the `ChildVersaoInvalid` diagnostic quote from
+    /// the actual gate rejection input, a two-consumer split at the
+    /// validator far from the source `caixa.lisp` with no field naming the
+    /// version-pin drift root cause. Lifting the resolution rule to a typed
+    /// method on the substrate primitive means every downstream
+    /// requirement-facing consumer of the Supervisor's per-`:children`
+    /// version-pin surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Sibling of the peer per-`:membros` [`crate::Membro::versao_requirement`]
+    /// (a40b0e3) member-caixa `:versao` scalar accessor on the M3 mesh-slot
+    /// surface — same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the M2
+    /// supervisor-tree per-`:children` child-version-pin axis. The two typed
+    /// axes (`Membro::versao_requirement` on the M3 Aplicacao side,
+    /// `ChildSpec::versao_requirement` on the M2 Supervisor side) now share
+    /// one accessor discipline for the shared substrate concept "another
+    /// caixa referenced by a Cargo-shaped semver requirement". Peer of the
+    /// sibling per-`:children` [`ChildSpec::nome`] (57c61d0) child-caixa
+    /// `:nome` scalar accessor — the pair
+    /// `(nome(), versao_requirement())` jointly projects the
+    /// `(caixa, versao)` field pair every OTP-shape supervisor-tree consumer
+    /// that fans on per-child identity + version pin keys off, closing the
+    /// last unlifted per-`:children` `String`-carry axis so every downstream
+    /// per-`:children` reader now routes through a typed dispatch on the
+    /// substrate primitive. Named `versao_requirement()` rather than
+    /// `versao()` because the field's storage-side `.versao` label is
+    /// already the author-surface term (`:versao`); the accessor's name
+    /// carries the semantic role — the semver *requirement* string the
+    /// shared [`crate::version::parse_requirement`] entry-point consumes —
+    /// so a raw field access and a typed dispatch read differently at every
+    /// consumer site. Matches the peer [`crate::Membro::versao_requirement`]
+    /// naming discipline verbatim.
+    #[must_use]
+    pub fn versao_requirement(&self) -> &str {
+        self.versao.as_str()
+    }
 }
 
 /// Supervisor-typed slots that live alongside the standard Caixa
@@ -791,13 +870,13 @@ impl SupervisorSpec {
             // `:versao` typed surfaces (`:deps`, `:membros`, `:children`)
             // are now structurally equivalent by construction.
             crate::render::require_valid_versao_requirement(
-                &child.versao,
+                child.versao_requirement(),
                 || SupervisorError::EmptyChildVersion {
                     caixa: child.nome().to_string(),
                 },
                 |reason| SupervisorError::ChildVersaoInvalid {
                     caixa: child.nome().to_string(),
-                    versao: child.versao.clone(),
+                    versao: child.versao_requirement().to_string(),
                     reason,
                 },
             )?;
@@ -4256,6 +4335,220 @@ mod tests {
                     .is_err(),
                 "require_valid_dns_1123_label must reject the accessor-projected \
                  :children :caixa {bad_name:?}",
+            );
+        }
+    }
+
+    // ── drift-detection: ChildSpec::versao_requirement accessor pins ──────
+    //
+    // Sibling of the peer per-`:membros` `membro_versao_requirement_*`
+    // (a40b0e3) pin pair on the M3 mesh-slot surface — extended here to the
+    // M2 supervisor-tree per-`:children` child-`:versao` axis, sibling to
+    // the just-landed [`ChildSpec::nome`] (57c61d0) child-`:nome` pin
+    // trio on the peer per-`:children` `String`-carry axis. The three pins
+    // jointly brace the accessor against every future silent detour that
+    // would desynchronize it from the raw `.versao` field access the
+    // requirement gate + error carrier previously open-coded.
+    //
+    // Closes the last unlifted per-`:children` `String`-carry axis: the
+    // pair (`nome`, `versao_requirement`) now jointly projects the
+    // (`.caixa`, `.versao`) field pair every OTP-shape supervisor-tree
+    // consumer that fans on per-child identity + version pin reads,
+    // matching the peer M3 (`Membro::nome`, `Membro::versao_requirement`)
+    // pair discipline verbatim.
+    #[test]
+    fn child_spec_versao_requirement_returns_versao_byte_equal_across_permutations() {
+        // The canonical per-`:children` child-`:versao`-scalar pin:
+        // [`ChildSpec::versao_requirement`] must return the `:children
+        // :versao` field byte-for-byte across every Cargo-shaped semver
+        // requirement value the upstream
+        // [`crate::render::require_valid_versao_requirement`] gate admits.
+        // Peer of the sibling
+        // `membro_versao_requirement_returns_versao_byte_equal_across_permutations`
+        // (a40b0e3) pin on the M3 per-`:membros` axis — same "the
+        // substrate-primitive accessor must byte-equal the raw field
+        // access verbatim across every author-declared value" discipline
+        // extended to the M2 supervisor-tree per-`:children` arm. Pins
+        // against a future silent detour that re-canonicalized the
+        // requirement (an accidental `.to_string()` via
+        // [`crate::version::parse_requirement`] → [`std::fmt::Display`]
+        // round-trip that collapsed `"^0.1"` to `">=0.1, <0.2"` and
+        // silently drifted the error carrier's quoted requirement away
+        // from the source `caixa.lisp`, an accidental whitespace trim on
+        // `"^ 0.1"` that no consumer ever produced from the field-access
+        // side, an accidental per-cluster lacre-projected concrete-version
+        // rewrite that didn't land on the peer requirement-gate call).
+        // Five values sweep the accept-set the shared
+        // [`crate::render::require_valid_versao_requirement`] gate admits
+        // (caret / tilde / exact / wildcard / bare-major).
+        for req in ["^0.1", "~0.1.2", "0.1.0", "*", "^1"] {
+            let c = ChildSpec {
+                caixa: "worker".into(),
+                versao: req.into(),
+                restart: RestartPolicy::Permanent,
+            };
+            assert_eq!(
+                c.versao_requirement(),
+                req,
+                "ChildSpec::versao_requirement must return :children :versao \
+                 verbatim (got {:?}, expected {req:?})",
+                c.versao_requirement(),
+            );
+            assert_eq!(
+                c.versao_requirement(),
+                c.versao.as_str(),
+                "ChildSpec::versao_requirement must byte-equal the .versao \
+                 field access",
+            );
+        }
+    }
+
+    #[test]
+    fn child_spec_versao_requirement_borrows_from_versao_storage() {
+        // The borrow-not-copy pin: [`ChildSpec::versao_requirement`] must
+        // return a `&str` slice that borrows from the typed slot's own
+        // [`String`] storage — same-address invariant with
+        // `c.versao.as_str()`. Pins against a future silent detour that
+        // allocated a fresh `String` (`self.versao.clone()` in the body
+        // would type-check but silently drop the borrow, and every
+        // downstream consumer that assumed the returned slice outlives
+        // `&self` — the [`crate::render::require_valid_versao_requirement`]
+        // gate's `&str` borrow, the [`SupervisorError::ChildVersaoInvalid`]
+        // `.to_string()` carrier's byte-length assumption — would silently
+        // misbehave if this accessor produced a detached copy). Peer of
+        // the sibling `child_spec_nome_borrows_from_caixa_storage`
+        // (57c61d0) pin on the per-`:children` `:nome` axis and the M3
+        // `membro_versao_requirement_borrows_from_versao_storage` (a40b0e3)
+        // pin on the peer per-`:membros` `:versao` axis.
+        let c = ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        };
+        let req = c.versao_requirement();
+        let versao_slice = c.versao.as_str();
+        assert_eq!(
+            req.as_ptr(),
+            versao_slice.as_ptr(),
+            "ChildSpec::versao_requirement must borrow from the .versao \
+             String's backing storage — a fresh allocation here means the \
+             accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently carry \
+             a detached copy",
+        );
+        assert_eq!(
+            req.len(),
+            versao_slice.len(),
+            "ChildSpec::versao_requirement and .versao.as_str() must \
+             byte-equal in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn validate_gates_child_versao_through_lifted_accessor() {
+        // Bilateral coherence pin: every `:children :versao` that
+        // [`SupervisorSpec::validate`] accepts is one
+        // [`crate::render::require_valid_versao_requirement`] accepts on
+        // the accessor-projected value, and vice versa on the reject side.
+        // This closes the "the validator reads through the accessor"
+        // contract structurally — a future silent detour that made the
+        // accessor return a different byte-string than the validator gates
+        // against would surface here as a coverage mismatch, not as a
+        // resolver-time semver-parse rejection at lacre-closure time far
+        // from the caixa.lisp source. Peer of the sibling
+        // `validate_gates_child_nome_through_lifted_accessor` (57c61d0) on
+        // the per-`:children :caixa` axis and the M2
+        // `validate_parses_prior_versao_through_lifted_accessor` (75d27a8)
+        // on the peer per-`:upgrade-from :from` axis.
+        //
+        // Accept-set sweep: five Cargo-shaped semver requirement values
+        // the upstream gate admits (caret / tilde / exact / wildcard /
+        // bare-major).
+        for ok_req in ["^0.1", "~0.1.2", "0.1.0", "*", "^1"] {
+            let s = SupervisorSpec {
+                children: vec![ChildSpec {
+                    caixa: "worker".into(),
+                    versao: ok_req.into(),
+                    restart: RestartPolicy::Permanent,
+                }],
+                ..SupervisorSpec::default()
+            };
+            s.validate().unwrap_or_else(|e| {
+                panic!(
+                    "SupervisorSpec::validate must accept :children :versao {ok_req:?} \
+                     (upstream versao-requirement gate accepts it): got {e:?}",
+                );
+            });
+            let c = ChildSpec {
+                caixa: "worker".into(),
+                versao: ok_req.into(),
+                restart: RestartPolicy::Permanent,
+            };
+            crate::render::require_valid_versao_requirement(
+                c.versao_requirement(),
+                || (),
+                |_reason| (),
+            )
+            .unwrap_or_else(|()| {
+                panic!(
+                    "require_valid_versao_requirement must accept the accessor-projected \
+                     :children :versao {ok_req:?}",
+                );
+            });
+        }
+        // Reject-set sweep: five requirement-violating shapes the upstream
+        // gate refuses. The empty string closes the empty-first arm of the
+        // shared [`crate::render::require_valid_versao_requirement`]
+        // cascade; the four non-empty arms exercise distinct semver-parse
+        // failure modes the M3 peer per-`:membros` reject-set already pins
+        // (`rejects_invalid_membro_versao_requirement` on `^bad-version`,
+        // `rejects_membro_versao_with_double_caret_typo` on `^^0.1`,
+        // `rejects_membro_versao_with_v_prefixed_tag` on `v0.1`) — the
+        // shared parser routing means the same reject-set must fail
+        // identically at the M2 supervisor-tree per-`:children` accessor
+        // arm here. Every rejection at the validator must correspond to a
+        // rejection when the accessor's projected value is fed back
+        // through the shared gate.
+        //
+        // (Bare partial magnitudes like `"0.1"` and bare identifiers like
+        // `"not-a-semver"` are intentionally *not* in the reject-set: the
+        // semver crate accepts `"0.1"` as an implicit `^0.1` requirement,
+        // and the identifier-tail arm's grammar admits some non-canonical
+        // shapes — matching what the M3 peer test suite already documents
+        // as the shared parser's accept-set edges.)
+        for bad_req in ["", "v0.1.0", "^bad-version", "^^0.1", "v0.1"] {
+            let s = SupervisorSpec {
+                children: vec![ChildSpec {
+                    caixa: "worker".into(),
+                    versao: bad_req.into(),
+                    restart: RestartPolicy::Permanent,
+                }],
+                ..SupervisorSpec::default()
+            };
+            let err = s.validate().unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    SupervisorError::EmptyChildVersion { .. }
+                        | SupervisorError::ChildVersaoInvalid { .. }
+                ),
+                "SupervisorSpec::validate must reject :children :versao {bad_req:?} \
+                 via the versao-requirement gate: got {err:?}",
+            );
+            let c = ChildSpec {
+                caixa: "worker".into(),
+                versao: bad_req.into(),
+                restart: RestartPolicy::Permanent,
+            };
+            assert!(
+                crate::render::require_valid_versao_requirement(
+                    c.versao_requirement(),
+                    || (),
+                    |_reason| (),
+                )
+                .is_err(),
+                "require_valid_versao_requirement must reject the accessor-projected \
+                 :children :versao {bad_req:?}",
             );
         }
     }
