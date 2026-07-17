@@ -3742,6 +3742,70 @@ impl Entrada {
     pub fn destination(&self) -> &str {
         self.para.as_str()
     }
+
+    /// Substrate-canonical per-`:entrada` L4-port scalar accessor every
+    /// Gateway-API `HTTPRoute.backendRefs[0].port` / Cilium
+    /// `CiliumNetworkPolicy.spec.ingress[].toPorts[0].ports[0].port`
+    /// reader keys off — returns the author-declared `:entrada :port`
+    /// value verbatim as a `u16`, `Copy`-projected from the typed slot's
+    /// own `u16` storage (validated by [`AplicacaoSpec::validate`] to lie
+    /// in [`SERVICO_PORT_MIN`]`..=u16::MAX` — a stray `:port 0` is
+    /// [`AplicacaoError::EntradaPortZero`], not a silent
+    /// admission-webhook rejection at cluster-apply time).
+    ///
+    /// The `:entrada :port` slot carries the destination Servico's
+    /// canonical in-cluster L4 listener port (`trigger.service.port` on
+    /// the `pleme-computeunit` library chart), and every downstream
+    /// consumer that reads the port keys off this scalar (the
+    /// [`AplicacaoSpec::validate`] entrada-block structural-floor gate,
+    /// the [`AplicacaoSpec::port_for_destination`] typed-dispatch
+    /// resolver `caixa-mesh` HTTPRoute / CNP L4-fallback renderers
+    /// route through, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+    /// CR materializer's per-Aplicacao gateway port resolver).
+    ///
+    /// Prior to this lift the `.port` field was accessed inline at two
+    /// caixa-core sites — the [`AplicacaoSpec::validate`] entrada-block
+    /// structural-floor gate's `if e.port < SERVICO_PORT_MIN` check and
+    /// the [`AplicacaoSpec::port_for_destination`] resolver's
+    /// `.map_or(DEFAULT_SERVICO_PORT, |e| e.port)` cascade — two
+    /// open-coded field-accesses that expressed no compile-time link
+    /// back to the typed slot. A future extension of the `:entrada :port`
+    /// axis to a richer author surface — a per-cluster override the
+    /// operator pins through a future `:placement :default-port` slot the
+    /// [`DEFAULT_SERVICO_PORT`] docstring acknowledges, an
+    /// `Option<u16>`-shape migration once the substrate grows per-`:membros`
+    /// heterogeneous listener ports, an M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-CR
+    /// admission-webhook floor that promotes the scalar to a
+    /// per-destination map — would have had to be threaded through both
+    /// open-coded copies in lockstep or the structural-floor validator
+    /// and the [`AplicacaoSpec::port_for_destination`] resolver would
+    /// silently disagree on which port a given [`Entrada`] resolves to.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the Aplicacao's
+    /// per-`:entrada` L4-port surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// Peer of the sibling per-`:entrada` [`Entrada::hostname`] /
+    /// [`Entrada::destination`] (11f3dfe, 6db982c) `&str` scalar
+    /// accessors on the per-`:entrada` scalar-value axis — same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline extended onto the per-`:entrada`
+    /// L4-port `u16` `Copy`-scalar axis. First `Copy`-return accessor on
+    /// the M3 mesh-slot `Entrada` type — closes the last unlifted
+    /// per-`:entrada` scalar-value axis (the `u16` L4 port); companion
+    /// to the sibling per-`:politicas` `Option<Copy-T>` accessor family
+    /// [`MeshPolicy::mtls_required`] / [`MeshPolicy::retries`] /
+    /// [`MeshPolicy::timeout`] (c0110f1, bdfb399, 7073d0f) on the peer
+    /// M3 mesh-slot Copy-scalar axis. Named `port()` to match the
+    /// storage field's name; the accessor's identity name maps onto the
+    /// canonical MESH-COMPOSITION §II.5 vocabulary the slot's docstring
+    /// already carries.
+    #[must_use]
+    pub fn port(&self) -> u16 {
+        self.port
+    }
 }
 
 /// Canonical default L4 port every typed Servico exposes on its
@@ -4121,7 +4185,7 @@ impl AplicacaoSpec {
             // [`SERVICO_PORT_MIN`] declaration, not a coordinated
             // rewrite across the emit site + the pin test + every
             // future per-target renderer the substrate adds.
-            if e.port < SERVICO_PORT_MIN {
+            if e.port() < SERVICO_PORT_MIN {
                 return Err(AplicacaoError::EntradaPortZero);
             }
             // Each `:entrada :paths` entry becomes a K8s Gateway API
@@ -4803,7 +4867,7 @@ impl AplicacaoSpec {
         self.entrada
             .as_ref()
             .filter(|e| e.para == destination)
-            .map_or(DEFAULT_SERVICO_PORT, |e| e.port)
+            .map_or(DEFAULT_SERVICO_PORT, Entrada::port)
     }
 }
 
@@ -14339,6 +14403,105 @@ mod tests {
             "Entrada::destination and .para.as_str() must byte-equal in \
              length as well as in address",
         );
+    }
+
+    #[test]
+    fn port_returns_entrada_port_verbatim_across_permutations() {
+        // The canonical L4-port-scalar pin: [`Entrada::port`] must
+        // return the `:entrada :port` field verbatim as a `u16` across
+        // every author-declared value in the validated accept-set
+        // ([`SERVICO_PORT_MIN`]`..=u16::MAX`). Pins against a future
+        // silent detour that clamped the port (an accidental
+        // `.min(HTTPS_STANDARD_PORT)` per-cluster ceiling that didn't
+        // land on the peer [`AplicacaoSpec::port_for_destination`]
+        // resolver), rewrote it through a per-cluster port-remap table
+        // the operator authors on one consumer without the other, or
+        // substituted [`DEFAULT_SERVICO_PORT`] when the field held its
+        // serde-default value (which would silently collapse the
+        // distinction between "author explicitly declared `:port 8080`"
+        // and "author omitted the slot and inherited the default" the
+        // future per-cluster override slot depends on). Peer with the
+        // sibling `destination_returns_entrada_para_byte_equal` +
+        // `hostname_returns_entrada_host_byte_equal` pins on the
+        // per-`:entrada` `&str` scalar axes.
+        for port in [
+            SERVICO_PORT_MIN,
+            DEFAULT_SERVICO_PORT,
+            8443u16,
+            9090u16,
+            u16::MAX,
+        ] {
+            let e = Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: "cart".into(),
+                paths: Vec::new(),
+                port,
+            };
+            assert_eq!(
+                e.port(),
+                port,
+                "Entrada::port must return :entrada :port verbatim \
+                 (got {}, expected {port})",
+                e.port(),
+            );
+            assert_eq!(
+                e.port(),
+                e.port,
+                "Entrada::port accessor and .port field access must \
+                 byte-equal — the accessor is the substrate-primitive \
+                 typed dispatch every downstream L4-port consumer must \
+                 route through",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_entrada_port_floor_gate_reads_through_lifted_port_accessor() {
+        // Two-consumer coherence pin: the
+        // [`AplicacaoSpec::validate`] entrada-block structural-floor gate
+        // (which reads through [`Entrada::port`] to compare against
+        // [`SERVICO_PORT_MIN`]) and the
+        // [`AplicacaoSpec::port_for_destination`] resolver (which reads
+        // through [`Entrada::port`] to emit the per-destination
+        // `HTTPRoute.backendRefs[0].port` scalar) must both key off the
+        // lifted accessor, so any future rebrand on the typed slot's
+        // reader shape lands at exactly one place. Pins the two-site
+        // coherence by exercising a below-floor port through validate
+        // (which must reject) and a validated in-accept-set port through
+        // port_for_destination (which must emit the same value the
+        // accessor returns).
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.port = 0;
+        }
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::EntradaPortZero,
+            "validate must reject `:entrada :port 0` through the lifted \
+             Entrada::port accessor — port zero lies below \
+             SERVICO_PORT_MIN and the validator routes through port() \
+             to name the floor",
+        );
+
+        for port in [SERVICO_PORT_MIN, DEFAULT_SERVICO_PORT, 8443u16] {
+            let mut spec = three_member_spec();
+            if let Some(e) = spec.entrada.as_mut() {
+                e.port = port;
+            }
+            spec.validate().expect(
+                "entrada with in-accept-set :port must validate — the \
+                 structural-floor gate reads through Entrada::port",
+            );
+            let entrada_ref = spec.entrada.as_ref().expect(":entrada present");
+            assert_eq!(
+                spec.port_for_destination(entrada_ref.destination()),
+                entrada_ref.port(),
+                "port_for_destination(entrada.destination()) must equal \
+                 entrada.port() — the two consumers of the per-:entrada \
+                 L4-port axis (validator, per-destination resolver) both \
+                 route through Entrada::port",
+            );
+        }
     }
 
     #[test]
