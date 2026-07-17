@@ -1182,114 +1182,200 @@ impl UpgradeInstruction {
 
     /// Validate the instruction's typed shape. Path existence is
     /// checked separately by [`crate::layout::StandardLayout`].
+    ///
+    /// The per-variant scalar the value-shape gates fire against is
+    /// read through this method's two sibling accessors — the
+    /// `String`-carrying axis via [`Self::declared_module`] (the
+    /// `LoadModule` / `SoftPurge` / `Purge` variants unifying on their
+    /// K8s DNS-1123-label `:module` reference) and the `PathBuf`-
+    /// carrying axis via [`Self::declared_path`] (the `StateChange`
+    /// variant's tatara-lisp `:script`) — rather than the per-arm
+    /// `Self::LoadModule { module } | Self::SoftPurge { module } |
+    /// Self::Purge { module }` pattern the module-axis previously
+    /// open-coded and the per-arm `Self::StateChange { script }` the
+    /// script-axis previously open-coded. Every scalar this enum
+    /// carries now flows through one of the two `Option<&…>`
+    /// accessors, so a future extension of either axis (a fifth
+    /// module-bearing variant, an operator-side pre-parsed scalar
+    /// cache the accessors materialize behind the same return
+    /// contract, an M4 typed sub-slot the accessors could route
+    /// alongside the existing scalar) migrates as a single edit on
+    /// the accessor rather than a coordinated rewrite of every
+    /// downstream value-shape gate. `Restart` (the only variant that
+    /// carries neither scalar) falls through both `Option` checks and
+    /// returns `Ok(())` — the terminal-fallback shape the
+    /// [`Self::Restart`] variant doc pins.
     pub fn validate(&self) -> Result<(), UpgradeError> {
-        match self {
-            Self::LoadModule { module } | Self::SoftPurge { module } | Self::Purge { module } => {
-                validate_module(self.lisp_form(), module)
-            }
-            Self::StateChange { script } => {
-                // Delegate the three structural checks (non-empty /
-                // relative / no-parent-escape) to the lifted
-                // [`crate::render::is_sandboxed_relative_path`]
-                // predicate — same Empty → Absolute → ParentEscape
-                // arm-ordering this method previously inlined verbatim,
-                // now shared with [`crate::BehaviorSpec::validate`]'s
-                // per-`:on-*`-callback gate so every author-supplied path
-                // on every M2 typed slot consults one gate, not two-and-
-                // counting verbatim copies. Each arm wraps the tag in
-                // the same `*Script` variant the original inline code
-                // raised, so the diagnostic shape every caller depends
-                // on (the `:state-change :script` self-locating error)
-                // is preserved by construction.
-                match crate::render::is_sandboxed_relative_path(script) {
-                    Ok(()) => {}
-                    Err(crate::render::PathShapeViolation::Empty) => {
-                        return Err(UpgradeError::EmptyScript);
-                    }
-                    Err(crate::render::PathShapeViolation::Absolute) => {
-                        return Err(UpgradeError::AbsoluteScript {
-                            script: script.clone(),
-                        });
-                    }
-                    Err(crate::render::PathShapeViolation::ParentEscape) => {
-                        return Err(UpgradeError::ParentEscapeScript {
-                            script: script.clone(),
-                        });
-                    }
+        if let Some(module) = self.declared_module() {
+            return validate_module(self.lisp_form(), module);
+        }
+        if let Some(script) = self.declared_path() {
+            // Delegate the three structural checks (non-empty /
+            // relative / no-parent-escape) to the lifted
+            // [`crate::render::is_sandboxed_relative_path`]
+            // predicate — same Empty → Absolute → ParentEscape
+            // arm-ordering this method previously inlined verbatim,
+            // now shared with [`crate::BehaviorSpec::validate`]'s
+            // per-`:on-*`-callback gate so every author-supplied path
+            // on every M2 typed slot consults one gate, not two-and-
+            // counting verbatim copies. Each arm wraps the tag in
+            // the same `*Script` variant the original inline code
+            // raised, so the diagnostic shape every caller depends
+            // on (the `:state-change :script` self-locating error)
+            // is preserved by construction.
+            match crate::render::is_sandboxed_relative_path(script) {
+                Ok(()) => {}
+                Err(crate::render::PathShapeViolation::Empty) => {
+                    return Err(UpgradeError::EmptyScript);
                 }
-                // File-type contract on the `:upgrade-from :state-change
-                // :script` axis: every typed migration script is
-                // consumed by the M2.5 wasm-engine instantiator (the
-                // `ABSORPTION-ROADMAP` names the runtime substrate that
-                // executes appup hot-upgrades) as a tatara-lisp source
-                // file the engine reads through `tatara_lisp::read` at
-                // hot-upgrade migration time — the same downstream
-                // consumer the peer `:behavior :on-*` axis routes
-                // through at instance-start time (c97815a). The author
-                // surface already documents the `.lisp` extension as
-                // the canonical shape (the in-module example
-                // `(:state-change "lib/migrations/v01-to-v02.lisp")`
-                // and every in-tree test fixture use `lib/<name>.lisp`)
-                // and the per-`UpgradeFromEntry` `:from`-keyed migration
-                // directory invariant assumes the same `.lisp`
-                // extension verbatim; until this gate landed the typed
-                // slot accepted any path that passed the structural-shape
-                // checks (empty / absolute / parent-escape), so a
-                // programmatic struct literal
-                // (`UpgradeInstruction::StateChange { script:
-                // PathBuf::from("lib/migrations.txt") }` /
-                // `PathBuf::from("lib/migrations.rs")` / the equivalent
-                // author-surface `(:state-change "lib/migrations.lisp.bak")`
-                // / `(:state-change "lib/migrations")` / any "I dragged
-                // the wrong file from the workspace tree" typo landing
-                // in the slot) round-tripped cleanly through serde and
-                // the per-script CSE invariant (no value the wasm-engine
-                // can't honor as tatara-lisp source) was a runtime, not
-                // build-time, contract. The wasm-engine's
-                // `tatara_lisp::read` failed at hot-upgrade migration
-                // time with a parser-shaped diagnostic far from the
-                // source caixa.lisp, with no field naming the offending
-                // `(:state-change …)` instruction — the canonical
-                // "declared-but-unloadable migration" footgun the
-                // sibling `:upgrade-from` path-shape arms close on the
-                // peer "sandbox-escaping" / "empty" / "parent-escape"
-                // shapes, and the peer `BehaviorError::NonLispExtension`
-                // (c97815a) closes on the `:behavior :on-*` axis's
-                // identical "tatara-lisp source file the engine reads
-                // through `tatara_lisp::read`" file-type contract: both
-                // are "the consumer substrate's accepted set is
-                // narrower than the structural-shape gate alone" lifts,
-                // surfacing the engine's load-bearing type-contract at
-                // validate time rather than at apply time.
-                //
-                // The path-shape arms strictly precede this extension
-                // arm so a path that is *both* sandbox-escaping and
-                // non-`.lisp` surfaces the more fundamental sandbox-shape
-                // diagnostic first (the `.lisp` remediation would be
-                // misleading when the offending path can never resolve
-                // under the caixa root anyway — the canonical fix
-                // collapses both into "pin a relative `.lisp` path
-                // under the caixa root"). Same posture every peer
-                // zero-then-shape-then-cap chain uses on this surface
-                // (`MemoryZero` → `MemoryBelowWasm32Page` →
-                // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`,
-                // the smallest-scope arm fires last) and the same
-                // posture the sibling `BehaviorError` chain follows
-                // (`EmptyPath` → `AbsolutePath` → `ParentEscape` →
-                // `NonLispExtension`).
-                if !crate::render::is_lisp_extension(script) {
-                    return Err(UpgradeError::NonLispExtensionScript {
+                Err(crate::render::PathShapeViolation::Absolute) => {
+                    return Err(UpgradeError::AbsoluteScript {
                         script: script.clone(),
                     });
                 }
-                Ok(())
+                Err(crate::render::PathShapeViolation::ParentEscape) => {
+                    return Err(UpgradeError::ParentEscapeScript {
+                        script: script.clone(),
+                    });
+                }
             }
-            Self::Restart => Ok(()),
+            // File-type contract on the `:upgrade-from :state-change
+            // :script` axis: every typed migration script is
+            // consumed by the M2.5 wasm-engine instantiator (the
+            // `ABSORPTION-ROADMAP` names the runtime substrate that
+            // executes appup hot-upgrades) as a tatara-lisp source
+            // file the engine reads through `tatara_lisp::read` at
+            // hot-upgrade migration time — the same downstream
+            // consumer the peer `:behavior :on-*` axis routes
+            // through at instance-start time (c97815a). The author
+            // surface already documents the `.lisp` extension as
+            // the canonical shape (the in-module example
+            // `(:state-change "lib/migrations/v01-to-v02.lisp")`
+            // and every in-tree test fixture use `lib/<name>.lisp`)
+            // and the per-`UpgradeFromEntry` `:from`-keyed migration
+            // directory invariant assumes the same `.lisp`
+            // extension verbatim; until this gate landed the typed
+            // slot accepted any path that passed the structural-shape
+            // checks (empty / absolute / parent-escape), so a
+            // programmatic struct literal
+            // (`UpgradeInstruction::StateChange { script:
+            // PathBuf::from("lib/migrations.txt") }` /
+            // `PathBuf::from("lib/migrations.rs")` / the equivalent
+            // author-surface `(:state-change "lib/migrations.lisp.bak")`
+            // / `(:state-change "lib/migrations")` / any "I dragged
+            // the wrong file from the workspace tree" typo landing
+            // in the slot) round-tripped cleanly through serde and
+            // the per-script CSE invariant (no value the wasm-engine
+            // can't honor as tatara-lisp source) was a runtime, not
+            // build-time, contract. The wasm-engine's
+            // `tatara_lisp::read` failed at hot-upgrade migration
+            // time with a parser-shaped diagnostic far from the
+            // source caixa.lisp, with no field naming the offending
+            // `(:state-change …)` instruction — the canonical
+            // "declared-but-unloadable migration" footgun the
+            // sibling `:upgrade-from` path-shape arms close on the
+            // peer "sandbox-escaping" / "empty" / "parent-escape"
+            // shapes, and the peer `BehaviorError::NonLispExtension`
+            // (c97815a) closes on the `:behavior :on-*` axis's
+            // identical "tatara-lisp source file the engine reads
+            // through `tatara_lisp::read`" file-type contract: both
+            // are "the consumer substrate's accepted set is
+            // narrower than the structural-shape gate alone" lifts,
+            // surfacing the engine's load-bearing type-contract at
+            // validate time rather than at apply time.
+            //
+            // The path-shape arms strictly precede this extension
+            // arm so a path that is *both* sandbox-escaping and
+            // non-`.lisp` surfaces the more fundamental sandbox-shape
+            // diagnostic first (the `.lisp` remediation would be
+            // misleading when the offending path can never resolve
+            // under the caixa root anyway — the canonical fix
+            // collapses both into "pin a relative `.lisp` path
+            // under the caixa root"). Same posture every peer
+            // zero-then-shape-then-cap chain uses on this surface
+            // (`MemoryZero` → `MemoryBelowWasm32Page` →
+            // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`,
+            // the smallest-scope arm fires last) and the same
+            // posture the sibling `BehaviorError` chain follows
+            // (`EmptyPath` → `AbsolutePath` → `ParentEscape` →
+            // `NonLispExtension`).
+            if !crate::render::is_lisp_extension(script) {
+                return Err(UpgradeError::NonLispExtensionScript {
+                    script: script.clone(),
+                });
+            }
+        }
+        // `Restart` (the only variant with no `Option<&…>`-carrying
+        // scalar) falls through both accessor gates and returns
+        // `Ok(())` — the terminal-fallback shape.
+        Ok(())
+    }
+
+    /// The `:module` scalar carried by this instruction — the
+    /// K8s DNS-1123-label OTP-appup caixa-name reference every
+    /// [`Self::LoadModule`] / [`Self::SoftPurge`] / [`Self::Purge`]
+    /// variant declares against, and every author expects `feira lint`
+    /// to name verbatim in per-instruction diagnostics. Returns `None`
+    /// on [`Self::StateChange`] (which carries a `:script` — closed by
+    /// the sibling [`Self::declared_path`]) and on [`Self::Restart`]
+    /// (which carries no data at all, the OTP terminal-fallback
+    /// shape).
+    ///
+    /// Sibling in shape to [`Self::declared_path`] on the second and
+    /// final scalar-carrying axis of [`UpgradeInstruction`]:
+    /// `declared_path` closes the `PathBuf`-carrying arm
+    /// (`StateChange`); `declared_module` closes the `String`-carrying
+    /// arms (`LoadModule` / `SoftPurge` / `Purge`). Every scalar the
+    /// enum carries now routes through one of the two `Option<&…>`
+    /// accessors — a caller that doesn't care which variant declared
+    /// the scalar reads through one `if let Some(…)` rather than a
+    /// per-variant pattern match. The pair is the enum-variant-
+    /// unifying peer of the per-mesh-slot-atom scalar-accessor family
+    /// on the M3 side ([`crate::WitContract::source`] /
+    /// [`crate::WitContract::destination`] /
+    /// [`crate::WitContract::world_ref`] closing `:contratos`;
+    /// [`crate::Entrada::hostname`] / [`crate::Entrada::destination`]
+    /// closing `:entrada`; [`crate::Membro::nome`] /
+    /// [`crate::Membro::versao_requirement`] closing `:membros`) and
+    /// on the M2 side ([`crate::UpgradeFromEntry::prior_versao`]
+    /// closing per-entry `:from`; the [`crate::LimitsSpec`] /
+    /// [`crate::BehaviorSpec`] closed families; the [`crate::ChildSpec`]
+    /// closed OTP-shape supervisor family) — those peer accessors
+    /// return a struct field verbatim; this pair unifies enum-
+    /// variant-carried scalars into one accessor per typed axis.
+    ///
+    /// Byte-for-byte from the typed variant's own `String` storage;
+    /// no cloning, no re-parsing. A future extension of the axis (an
+    /// M4 typed sub-slot the module string is derived from, an
+    /// operator-side pre-parsed caixa-name cache the accessor could
+    /// materialize behind the same `&str` return contract, a fifth
+    /// module-bearing OTP-appup variant the enum grows) migrates as
+    /// a single caixa-core edit rather than a coordinated rewrite
+    /// of every downstream module-axis consumer (currently
+    /// [`Self::validate`]'s DNS-1123-label gate through
+    /// [`validate_module`]; extensible to future consumers on the
+    /// same axis without further per-variant match sites).
+    #[must_use]
+    pub fn declared_module(&self) -> Option<&str> {
+        match self {
+            Self::LoadModule { module } | Self::SoftPurge { module } | Self::Purge { module } => {
+                Some(module.as_str())
+            }
+            Self::StateChange { .. } | Self::Restart => None,
         }
     }
 
     /// If the instruction references an on-disk path, return it —
     /// used by the layout checker to verify the path resolves.
+    ///
+    /// Sibling on the `PathBuf`-carrying axis to [`Self::declared_module`]
+    /// on the `String`-carrying axis: `declared_path` closes the
+    /// `StateChange` arm's `:script`; `declared_module` closes the
+    /// `LoadModule` / `SoftPurge` / `Purge` arms' `:module`. Together
+    /// they route every scalar this enum carries through one of two
+    /// `Option<&…>` accessors, so [`Self::validate`]'s value-shape
+    /// gates dispatch on the accessor return rather than a per-variant
+    /// pattern match on the enum shape itself.
     #[must_use]
     pub fn declared_path(&self) -> Option<&PathBuf> {
         match self {
@@ -2231,6 +2317,84 @@ mod tests {
             script: PathBuf::from("lib/m.lisp"),
         };
         assert_eq!(mig.declared_path(), Some(&PathBuf::from("lib/m.lisp")));
+    }
+
+    #[test]
+    fn declared_module_only_for_module_bearing_variants() {
+        // Pinned partition of the `UpgradeInstruction` closed-set
+        // variant space against the sibling of the peer
+        // `declared_path` accessor: every OTP-appup module-bearing
+        // variant (`LoadModule` / `SoftPurge` / `Purge`) surfaces its
+        // `:module` string byte-for-byte through the lifted
+        // `declared_module` accessor; every non-module-bearing variant
+        // (`StateChange` on the peer `:script`-carrying axis;
+        // `Restart` on the OTP terminal-fallback data-less axis)
+        // returns `None`. Mirrors the peer
+        // `declared_path_only_for_state_change` pin — the pair now
+        // closes both scalar-carrying axes on the enum on one lifted
+        // `Option<&…>` accessor apiece.
+        let load = UpgradeInstruction::LoadModule {
+            module: "hello-rio".into(),
+        };
+        assert_eq!(load.declared_module(), Some("hello-rio"));
+        let soft = UpgradeInstruction::SoftPurge {
+            module: "hello-rio-old".into(),
+        };
+        assert_eq!(soft.declared_module(), Some("hello-rio-old"));
+        let hard = UpgradeInstruction::Purge {
+            module: "hello-rio-ancient".into(),
+        };
+        assert_eq!(hard.declared_module(), Some("hello-rio-ancient"));
+        let mig = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/m.lisp"),
+        };
+        assert!(mig.declared_module().is_none());
+        assert!(UpgradeInstruction::Restart.declared_module().is_none());
+    }
+
+    #[test]
+    fn declared_module_and_declared_path_partition_the_enum_variant_space() {
+        // Byte-identity pin on the two-accessor partition: every
+        // `UpgradeInstruction` variant returns `Some` from *exactly
+        // one* of {`declared_module`, `declared_path`} (the two
+        // module-bearing / script-carrying axes) or from *neither*
+        // (the OTP terminal-fallback `Restart` shape). No variant
+        // returns `Some` from both — the two axes are disjoint by
+        // construction, and this pin closes the disjointness at the
+        // test surface so a future variant that leaks a scalar across
+        // both axes fails at build time. Mirrors the peer
+        // `declared_paths_iter_covers_each_declared_slot_exactly_once`
+        // discipline on the `BehaviorSpec` per-slot family.
+        let cases: Vec<UpgradeInstruction> = vec![
+            UpgradeInstruction::LoadModule { module: "a".into() },
+            UpgradeInstruction::SoftPurge { module: "b".into() },
+            UpgradeInstruction::Purge { module: "c".into() },
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            UpgradeInstruction::Restart,
+        ];
+        for instr in &cases {
+            let has_module = instr.declared_module().is_some();
+            let has_path = instr.declared_path().is_some();
+            assert!(
+                !(has_module && has_path),
+                "no variant may declare both a module and a path — offending: {instr:?}"
+            );
+            match instr {
+                UpgradeInstruction::LoadModule { .. }
+                | UpgradeInstruction::SoftPurge { .. }
+                | UpgradeInstruction::Purge { .. } => {
+                    assert!(has_module && !has_path, "module axis: {instr:?}");
+                }
+                UpgradeInstruction::StateChange { .. } => {
+                    assert!(!has_module && has_path, "script axis: {instr:?}");
+                }
+                UpgradeInstruction::Restart => {
+                    assert!(!has_module && !has_path, "data-less axis: {instr:?}");
+                }
+            }
+        }
     }
 
     #[test]
