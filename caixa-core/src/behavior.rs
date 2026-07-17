@@ -565,6 +565,127 @@ impl BehaviorSpec {
         self.on_info.as_deref()
     }
 
+    /// Substrate-canonical per-`:behavior` `:on-terminate`
+    /// OTP-`gen_server:terminate/2`-shaped graceful-shutdown cleanup
+    /// callback-path scalar accessor every consumer of the Servico's
+    /// lifecycle-tail dispatch keys off — returns the author-declared
+    /// `:behavior :on-terminate` typed callback path verbatim as an
+    /// `Option<&Path>`, borrowed from the typed slot's own
+    /// `Option<PathBuf>` storage. `None` when the slot is absent (the
+    /// canonical "no terminate callback declared — the runtime tears
+    /// down the wasm instance without dispatching any author-supplied
+    /// cleanup side-effect, the Lunatic-per-process sandbox reclaims
+    /// every wasm32 linear-memory page + fuel budget the sibling
+    /// `:limits` axes accept-set caps, and every outstanding
+    /// `wasi:http/incoming-handler` / `wasi:keyvalue/store` / NATS
+    /// `nats:pub-sub` open handle the WIT-component-model closes the
+    /// wasm process's export-side at process-tear-down time is dropped
+    /// on the floor without any author-visible flush" arm the M2.5
+    /// wasm-engine callback-dispatch wire consults at every graceful
+    /// tear-down turn; peer of the sibling [`BehaviorSpec::on_init`] /
+    /// [`BehaviorSpec::on_call`] / [`BehaviorSpec::on_cast`] /
+    /// [`BehaviorSpec::on_info`] / [`BehaviorSpec::on_state_change`]
+    /// `None`-arm's "no instance-start / synchronous-call /
+    /// asynchronous-cast / out-of-band-info / state-migration
+    /// callback" semantic on the sibling axes).
+    ///
+    /// The `:behavior :on-terminate` slot carries the OTP
+    /// `gen_server:terminate/2` callback contract (the module-level
+    /// [`BehaviorSpec::on_terminate`] docstring pins the analog verbatim:
+    /// "Cleanup callback before the instance shuts down. Analog of
+    /// `gen_server:terminate/2`. Best-effort — runs only when the
+    /// instance terminates gracefully (not on hard kill)."). Its position
+    /// in the OTP lifecycle is the lifecycle-tail complement of the
+    /// `:on-init` head — the runtime instantiates the wasm process,
+    /// dispatches `:on-init`, dispatches every `:on-call` / `:on-cast`
+    /// / `:on-info` mailbox turn the instance accepts across its
+    /// lifetime, and only at graceful tear-down time (a supervisor's
+    /// `RestForOne` restart pass, a rolling wasm-engine hot-upgrade the
+    /// sibling `:upgrade-from` axis's appup instructions describe, an
+    /// operator-driven Aplicacao teardown the M4 CR materializer emits
+    /// as a Kubernetes deletion event, a per-tenant per-`:placement`
+    /// evict the future adaptive-placement engine computes on
+    /// per-cluster capacity pressure) dispatches the terminate callback
+    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// six-callback lifecycle, translated onto pleme-io's typed
+    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// author-surface pins `:on-terminate` as the sixth and final arm
+    /// of the `:behavior` overlay every Servico may declare, sibling to
+    /// `:on-init` on the peer lifecycle-head axis and `:on-state-change`
+    /// on the peer hot-upgrade-composition axis;
+    /// `theory/RUNTIME-PATTERNS.md` §II — the graceful-tear-down cleanup
+    /// pattern the runtime realizes through this callback). The
+    /// callback runs to completion on the actor's own mailbox turn
+    /// before the runtime returns the wasm process's resources to the
+    /// wasm-engine pool; the Lunatic-per-process sandbox guarantees the
+    /// callback cannot exceed the sibling `:limits :wall-clock` axis's
+    /// per-call cap, so a runaway cleanup path cannot wedge the
+    /// tear-down (the caller receives the same
+    /// `LimitsError::WallClockExceeded`-shaped runtime diagnostic the
+    /// sibling `:on-*` dispatch arms surface on the peer cap-exceed
+    /// path). The "best-effort — runs only when the instance terminates
+    /// gracefully (not on hard kill)" clause of the module-level
+    /// docstring is the OTP `terminate/2` clause verbatim: the runtime
+    /// dispatches the callback on every controlled tear-down but never
+    /// on `EXIT`-kill / `SIGKILL` / wasm-engine OOM eviction / fuel
+    /// starvation cap-exceed.
+    ///
+    /// Prior to this lift the `.on_terminate` field was accessed inline
+    /// at one production site — [`BehaviorSpec::declared_slots`]'s
+    /// `:on-terminate` arm's `self.on_terminate.as_ref()` map into the
+    /// six-tuple iterator that both the layout checker (existence sweep
+    /// at `layout.rs:900`) and the sibling `BehaviorSpec::validate`
+    /// value-shape gate consume — an open-coded field-access that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:behavior :on-terminate` axis to a richer
+    /// author surface — a per-tenant terminate-callback override the
+    /// M4 CR materializer resolves per-CR, a per-cluster
+    /// graceful-tear-down callback overlay the
+    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+    /// callback-dispatch wire acknowledges, a per-supervisor
+    /// terminate-callback derivation the future adaptive-supervision
+    /// engine computes from the sibling `:estrategia` restart-strategy
+    /// axis (routing a `RestForOne` cascade's per-child terminate
+    /// through the callback the way Erlang routes `terminate/2` before
+    /// each `restart_child/2` retry), a per-`:upgrade-from` version
+    /// migration terminate-callback the future rolling hot-upgrade
+    /// engine computes from the sibling `:upgrade-from` instruction
+    /// chain (dispatching the terminate callback with the outgoing
+    /// version's state before the sibling `:on-state-change` callback
+    /// folds it into the incoming version's shape) — would have had to
+    /// be threaded through the open-coded field-access in
+    /// `declared_slots` (the tag surface every per-slot diagnostic
+    /// reads) or the `declared_slots` iterator would silently disagree
+    /// on which callback a given [`BehaviorSpec`] resolves to. Lifting
+    /// the resolution to a typed method on the substrate primitive
+    /// means every downstream consumer of the Servico's per-`:behavior`
+    /// graceful-tear-down callback surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit on
+    /// any future axis addition.
+    ///
+    /// Sixth and final `Option<&Path>`-return accessor on the M2
+    /// `:behavior` slot family (sibling of the prior
+    /// [`BehaviorSpec::on_state_change`] 9b4ecde,
+    /// [`BehaviorSpec::on_init`] d66c702, [`BehaviorSpec::on_call`]
+    /// 156ddbe, [`BehaviorSpec::on_cast`] 99616ac, and
+    /// [`BehaviorSpec::on_info`] 4846cef `Option<&Path>` accessors on
+    /// the peer per-`:behavior` `:on-state-change` / `:on-init` /
+    /// `:on-call` / `:on-cast` / `:on-info` axes — same "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline extended onto the peer per-`:behavior`
+    /// `Option<PathBuf>` optional-scalar axis; closes the last
+    /// unlifted per-`:behavior` `Option<&Path>` scalar-value axis, so
+    /// every arm of the six-callback OTP `gen_server` lifecycle the
+    /// slot family models now routes through one typed dispatch on the
+    /// substrate primitive). Named `on_terminate()` to match the
+    /// storage field's name; the accessor's identity name maps onto the
+    /// canonical `theory/INSPIRATIONS.md` §II.3 vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub fn on_terminate(&self) -> Option<&Path> {
+        self.on_terminate.as_deref()
+    }
+
     /// Reject operationally-meaningless callback path values on every
     /// declared slot. Each slot remains optional — omitting a field
     /// expresses "fall back to the runtime default callback"; the bug
@@ -1973,6 +2094,129 @@ mod tests {
              :on-info axis independently of every peer :on-* \
              axis (got {:?})",
             with.on_info(),
+        );
+    }
+
+    // ── per-`:behavior :on-terminate` accessor pins ────────────────
+
+    #[test]
+    fn behavior_on_terminate_returns_option_path_verbatim_across_permutations() {
+        // Canonical per-`:behavior` `:on-terminate`
+        // OTP-`gen_server:terminate/2`-shaped graceful-shutdown cleanup
+        // callback-path scalar pin: [`BehaviorSpec::on_terminate`] must
+        // return the `:behavior :on-terminate` typed `PathBuf` verbatim
+        // as an `Option<&Path>`, borrowed from the raw `Option<PathBuf>`
+        // field access across the three canonical shape-arms — `None`
+        // (no callback declared — the runtime tears down the wasm
+        // instance without dispatching any author-supplied cleanup
+        // side-effect), `Some("lib/cleanup.lisp")` (the canonical
+        // single-file shape the module-doc example uses, the
+        // author-surface pins `lib/cleanup.lisp` as the reference
+        // `:on-terminate` value), `Some("lib/lifecycle/terminate.lisp")`
+        // (the per-lifecycle-arm sub-directory shape the
+        // `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // callback-dispatch wire acknowledges).
+        //
+        // Peer of the sibling per-`:behavior`
+        // [`BehaviorSpec::on_state_change`] (9b4ecde) /
+        // [`BehaviorSpec::on_init`] (d66c702) /
+        // [`BehaviorSpec::on_call`] (156ddbe) /
+        // [`BehaviorSpec::on_cast`] (99616ac) /
+        // [`BehaviorSpec::on_info`] (4846cef) `Option<&Path>` accessor
+        // pins on the sibling `Option<PathBuf>`-return axes — sixth and
+        // final `Option<&Path>`-return accessor on the M2 `:behavior`
+        // slot family, closes the last unlifted per-`:behavior`
+        // `Option<&Path>` scalar-value axis. Pins against a future
+        // silent detour that re-derived the callback path from a peer
+        // axis (an accidental `.on_init`-collapse that assumed the two
+        // lifecycle-arm `Option<PathBuf>` axes carry the same value —
+        // a plausible slip because both are the lifecycle-head /
+        // lifecycle-tail bookends of the OTP `gen_server` lifecycle, so
+        // the "run once per instance" semantics rhyme across the two
+        // arms), a `None` → `Some(empty)` collapse (the canonical
+        // `Option<PathBuf>` → `PathBuf::new()` footgun the
+        // [`BehaviorError::EmptyPath`] validate arm guards on the peer
+        // path-shape axis), or a per-arm variant swap that landed on
+        // one consumer without the other.
+        for path in [
+            None,
+            Some(PathBuf::from("lib/cleanup.lisp")),
+            Some(PathBuf::from("lib/lifecycle/terminate.lisp")),
+        ] {
+            let b = BehaviorSpec {
+                on_terminate: path.clone(),
+                ..BehaviorSpec::default()
+            };
+            assert_eq!(
+                b.on_terminate(),
+                path.as_deref(),
+                "BehaviorSpec::on_terminate must return the \
+                 :behavior :on-terminate PathBuf verbatim as \
+                 Option<&Path> (got {:?}, expected {:?})",
+                b.on_terminate(),
+                path.as_deref(),
+            );
+            assert_eq!(
+                b.on_terminate(),
+                b.on_terminate.as_deref(),
+                "BehaviorSpec::on_terminate must byte-equal the \
+                 raw .on_terminate.as_deref() field access across \
+                 every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn behavior_on_terminate_is_independent_of_peer_on_star_axes() {
+        // Cross-axis independence pin: flipping only the `:on-terminate`
+        // axis flips [`BehaviorSpec::on_terminate`] independently of
+        // every peer `:on-*` axis (`:on-init` / `:on-call` / `:on-cast`
+        // / `:on-info` / `:on-state-change`). A future silent detour
+        // that re-derived the callback path from a peer axis (an
+        // accidental `.on_init`-collapse — the sibling lifecycle-head
+        // arm on the peer OTP dispatch lifecycle, a plausible confusion
+        // because both are the lifecycle-bookend arms that run
+        // once-per-instance rather than per-mailbox-turn — that would
+        // silently rebind the graceful-tear-down dispatch to the
+        // sibling instance-start slot's callback) surfaces here as a
+        // build-time test failure.
+        //
+        // Peer of the sibling
+        // `behavior_on_state_change_is_independent_of_peer_on_star_axes`
+        // (9b4ecde) /
+        // `behavior_on_init_is_independent_of_peer_on_star_axes`
+        // (d66c702) /
+        // `behavior_on_call_is_independent_of_peer_on_star_axes`
+        // (156ddbe) /
+        // `behavior_on_cast_is_independent_of_peer_on_star_axes`
+        // (99616ac) /
+        // `behavior_on_info_is_independent_of_peer_on_star_axes`
+        // (4846cef) cross-axis pins on the sibling `:on-state-change` /
+        // `:on-init` / `:on-call` / `:on-cast` / `:on-info` axes —
+        // each accessor-lift closes exactly one axis and leaves every
+        // peer axis unshifted, so the six-callback OTP `gen_server`
+        // lifecycle the slot family models routes through one typed
+        // dispatch per arm on the substrate primitive.
+        let base = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..BehaviorSpec::default()
+        };
+        assert_eq!(base.on_terminate(), None);
+        let with = BehaviorSpec {
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            ..base.clone()
+        };
+        assert_eq!(
+            with.on_terminate(),
+            Some(PathBuf::from("lib/cleanup.lisp").as_path()),
+            "BehaviorSpec::on_terminate must project the \
+             :on-terminate axis independently of every peer :on-* \
+             axis (got {:?})",
+            with.on_terminate(),
         );
     }
 }
