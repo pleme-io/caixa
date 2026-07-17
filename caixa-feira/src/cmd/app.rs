@@ -71,7 +71,8 @@ impl GraphArgs {
             println!("Aplicacao {} v{}", caixa.nome, caixa.versao);
             println!(
                 "  placement: {:?} on clusters {:?}",
-                spec.placement.estrategia, spec.placement.clusters
+                spec.placement.estrategia(),
+                spec.placement.clusters
             );
             println!("  membros ({}):", spec.membros.len(),);
             for m in &spec.membros {

@@ -3498,6 +3498,92 @@ impl Placement {
     pub fn affinity(&self) -> Option<&str> {
         self.affinity.as_deref()
     }
+
+    /// Substrate-canonical per-`:placement` `:estrategia` distribution-
+    /// strategy scalar accessor every consumer that dispatches on the
+    /// Aplicacao's per-cluster distribution shape keys off — returns the
+    /// author-declared `:placement :estrategia` variant verbatim as a
+    /// [`PlacementStrategy`], `Copy`-projected from the typed slot's own
+    /// `PlacementStrategy` storage.
+    ///
+    /// The `:placement :estrategia` slot carries the closed-set
+    /// distribution-strategy discriminator (`SingleNode` — Erlang/OTP
+    /// distributed-app takeover semantics per MESH-COMPOSITION §II.1;
+    /// `Replicated` — active-active across every named cluster; `Sharded`
+    /// — Akka-style hash-keyed entity distribution across the cluster pool
+    /// per §II.4) that every downstream consumer of the Aplicacao's
+    /// per-cluster fan-out shape keys off. Validated by
+    /// [`AplicacaoSpec::validate_placement`] to be paired coherently with
+    /// the sibling `:shard-key` axis (`shard_key.is_some() ==
+    /// matches!(estrategia, Sharded)` — the cross-slot partition the
+    /// [`Placement::shard_key`] accessor's docstring pins), and every
+    /// downstream consumer that reads the strategy keys off this scalar
+    /// (the [`AplicacaoSpec::validate_placement`]
+    /// [`AplicacaoError::PlacementWithoutClusters`] error carrier's
+    /// `estrategia:` field, the [`AplicacaoSpec::validate_placement`]
+    /// `Sharded ↔ non-Sharded` partition-dispatch `match` arm, the
+    /// [`AplicacaoSpec::validate_placement`] non-`Sharded`-arm
+    /// declared-but-inert refusal's
+    /// [`AplicacaoError::ShardKeyOnNonSharded`] error carrier's
+    /// `estrategia:` field, the `feira app graph` per-Aplicacao strategy
+    /// print line, the caixa-mesh per-Aplicacao `placement.estrategia`
+    /// emit path the substrate operator's per-strategy fan-out reader
+    /// consumes, the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's per-strategy admission-webhook resolver).
+    ///
+    /// Prior to this lift the `.estrategia` field was accessed inline at
+    /// four sites — the [`AplicacaoSpec::validate_placement`]
+    /// [`AplicacaoError::PlacementWithoutClusters`] error carrier at
+    /// `estrategia: self.placement.estrategia`, the same method's
+    /// `Sharded ↔ non-Sharded` `match self.placement.estrategia { … }`
+    /// partition dispatch, the non-`Sharded`-arm
+    /// [`AplicacaoError::ShardKeyOnNonSharded`] error carrier at
+    /// `estrategia: self.placement.estrategia`, and the `feira app graph`
+    /// per-Aplicacao strategy print line at
+    /// `println!("… {} …", spec.placement.estrategia, …)`
+    /// (caixa-feira/src/cmd/app.rs) — four open-coded field-accesses that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:placement :estrategia` axis to a richer author
+    /// surface (a per-cluster override the operator pins through a future
+    /// `:placement :estrategia-overrides` slot the MESH-COMPOSITION §II.4
+    /// roadmap acknowledges, a per-tenant strategy-alias table the M4 CR
+    /// materializer resolves per-CR, a per-Aplicacao dynamic strategy
+    /// derivation the future adaptive placement engine computes from
+    /// `:affinity` + `:clusters` topology) would have had to be threaded
+    /// through every open-coded copy in lockstep — one consumer reading
+    /// the raw variant while a peer read the operator-resolved variant
+    /// would silently split the `PlacementWithoutClusters` /
+    /// `ShardKeyOnNonSharded` diagnostic quotes from the actual
+    /// partition-dispatch input, a two-consumer split at the validator
+    /// far from the source `caixa.lisp` with no field naming the
+    /// strategy-drift root cause. Lifting the resolution rule to a typed
+    /// method on the substrate primitive means every downstream consumer
+    /// of the Aplicacao's per-`:placement` distribution-strategy surface
+    /// reaches for exactly one typed dispatch — the resolver's accept-set
+    /// migrates as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:entrada` [`Entrada::port`] (9f9becd)
+    /// `Copy`-return `u16` scalar accessor on the M3 mesh-slot family —
+    /// same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the
+    /// per-`:placement` distribution-strategy `Copy`-composite-enum
+    /// scalar axis. Second `Copy`-return accessor on the M3 mesh-slot
+    /// family; first `Copy`-return accessor on the M3 mesh-slot
+    /// `Placement` type — companion to the sibling per-`:placement`
+    /// [`Placement::shard_key`] (7cd2a28) / [`Placement::affinity`]
+    /// (74ec2d3) `Option<&str>` accessors on the sibling `Option<String>`
+    /// optional-scalar axes, closing the last unlifted per-`:placement`
+    /// scalar-value axis (the closed-set `PlacementStrategy`
+    /// distribution-strategy discriminator) so every downstream
+    /// per-`:placement` reader now routes through a typed dispatch on
+    /// the substrate primitive. Named `estrategia()` to match the storage
+    /// field's name; the accessor's identity name maps onto the
+    /// canonical MESH-COMPOSITION §II.4 vocabulary the slot's docstring
+    /// already carries.
+    #[must_use]
+    pub fn estrategia(&self) -> PlacementStrategy {
+        self.estrategia
+    }
 }
 
 impl Default for Placement {
@@ -4363,7 +4449,7 @@ impl AplicacaoSpec {
         // meaningless under any of the three.
         if self.placement.clusters.is_empty() {
             return Err(AplicacaoError::PlacementWithoutClusters {
-                estrategia: self.placement.estrategia,
+                estrategia: self.placement.estrategia(),
             });
         }
         let mut seen = std::collections::HashSet::new();
@@ -4420,7 +4506,7 @@ impl AplicacaoSpec {
         if let Some(a) = self.placement.affinity() {
             validate_placement_affinity(a)?;
         }
-        match self.placement.estrategia {
+        match self.placement.estrategia() {
             // Route the `Sharded`-arm shape-gate cascade through the
             // typed [`Placement::shard_key`] accessor rather than the
             // raw `&self.placement.shard_key` field access — one of the
@@ -4492,7 +4578,7 @@ impl AplicacaoSpec {
                 // dispatch as the sibling `Sharded`-arm shape gate.
                 if let Some(k) = self.placement.shard_key() {
                     return Err(AplicacaoError::ShardKeyOnNonSharded {
-                        estrategia: self.placement.estrategia,
+                        estrategia: self.placement.estrategia(),
                         shard_key: k.to_string(),
                     });
                 }
@@ -15349,6 +15435,145 @@ mod tests {
             "Placement::affinity and .affinity.as_deref() must byte-\
              equal in length as well as in address",
         );
+    }
+
+    #[test]
+    fn placement_estrategia_returns_estrategia_verbatim_across_permutations() {
+        // The canonical per-`:placement` distribution-strategy-scalar
+        // pin: [`Placement::estrategia`] must return the `:placement
+        // :estrategia` field verbatim as a [`PlacementStrategy`],
+        // `Copy`-projected from the typed slot's own `PlacementStrategy`
+        // storage across every variant in the closed accept-set
+        // (`SingleNode` — Erlang/OTP distributed-app takeover;
+        // `Replicated` — active-active across every named cluster;
+        // `Sharded` — Akka-style hash-keyed entity distribution). Pins
+        // against a future silent detour that re-derived the strategy
+        // from a peer axis (an accidental fallback to
+        // `if shard_key.is_some() { Sharded } else { Replicated }`
+        // collapse that read the shard-key axis into the strategy
+        // discriminator), a variant remap the operator authors on one
+        // consumer without the other, or a stale-derive detour that
+        // substituted [`PlacementStrategy::default`] when the field
+        // held any explicit variant (which would silently collapse the
+        // distinction between "author explicitly declared `:estrategia
+        // Replicated`" and "author omitted the slot and inherited the
+        // default" the future per-cluster override slot depends on).
+        // Peer of the sibling per-`:entrada` `port_returns_entrada_port_verbatim_across_permutations`
+        // pin on the `Copy`-return `u16` scalar axis — same "the
+        // substrate-primitive accessor must byte-equal the raw field
+        // access verbatim across every author-declared value" discipline
+        // extended onto the per-`:placement` distribution-strategy
+        // `Copy`-composite-enum scalar axis.
+        for estrategia in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            let shard_key =
+                matches!(estrategia, PlacementStrategy::Sharded).then(|| "tenantId".to_string());
+            let p = Placement {
+                estrategia,
+                clusters: vec!["rio".into()],
+                affinity: None,
+                shard_key,
+            };
+            assert_eq!(
+                p.estrategia(),
+                estrategia,
+                "Placement::estrategia must return :placement :estrategia \
+                 verbatim (got {:?}, expected {estrategia:?})",
+                p.estrategia(),
+            );
+            assert_eq!(
+                p.estrategia(),
+                p.estrategia,
+                "Placement::estrategia accessor and .estrategia field \
+                 access must byte-equal — the accessor is the substrate-\
+                 primitive typed dispatch every downstream distribution-\
+                 strategy consumer must route through",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_placement_reads_through_lifted_estrategia_accessor() {
+        // Three-consumer coherence pin: the
+        // [`AplicacaoSpec::validate_placement`]
+        // [`AplicacaoError::PlacementWithoutClusters`] error carrier's
+        // `estrategia:` field (which reads through
+        // [`Placement::estrategia`] to name the strategy the empty
+        // `:clusters` list was declared against), the same method's
+        // `Sharded ↔ non-Sharded` `match` partition dispatch (which
+        // reads through [`Placement::estrategia`] to fan across the
+        // shape-gate cascades), and the non-`Sharded`-arm
+        // [`AplicacaoError::ShardKeyOnNonSharded`] error carrier's
+        // `estrategia:` field (which reads through
+        // [`Placement::estrategia`] to name the strategy the declared-
+        // but-inert `:shard-key` was authored under) must all key off
+        // the lifted accessor, so any future rebrand on the typed
+        // slot's reader shape lands at exactly one place. Pins the
+        // three-site coherence by exercising each error surface end-
+        // to-end and asserting the surfaced `estrategia:` field byte-
+        // equals the accessor's return. Peer of the sibling per-
+        // `:entrada` `validate_entrada_port_floor_gate_reads_through_lifted_port_accessor`
+        // pin on the M3 mesh-slot `Copy`-return scalar axis.
+
+        // Arm 1: empty `:clusters` list surfaces `PlacementWithoutClusters`,
+        // whose `estrategia:` field must byte-equal the accessor's return
+        // for every variant in the closed accept-set.
+        for estrategia in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            let mut spec = three_member_spec();
+            spec.placement.estrategia = estrategia;
+            spec.placement.clusters = Vec::new();
+            spec.placement.shard_key =
+                matches!(estrategia, PlacementStrategy::Sharded).then(|| "tenantId".to_string());
+            let err = spec.validate().unwrap_err();
+            match err {
+                AplicacaoError::PlacementWithoutClusters { estrategia: e } => {
+                    assert_eq!(
+                        e,
+                        spec.placement.estrategia(),
+                        "PlacementWithoutClusters.estrategia must byte-equal \
+                         Placement::estrategia() — the error carrier reads \
+                         through the lifted accessor",
+                    );
+                }
+                other => panic!(
+                    "expected PlacementWithoutClusters, got {other:?} for \
+                     estrategia={estrategia:?}"
+                ),
+            }
+        }
+
+        // Arm 2: `:shard-key` authored on a non-`Sharded` strategy
+        // surfaces `ShardKeyOnNonSharded`, whose `estrategia:` field
+        // must byte-equal the accessor's return for both non-`Sharded`
+        // strategies.
+        for estrategia in [PlacementStrategy::SingleNode, PlacementStrategy::Replicated] {
+            let mut spec = three_member_spec();
+            spec.placement.estrategia = estrategia;
+            spec.placement.shard_key = Some("tenantId".into());
+            let err = spec.validate().unwrap_err();
+            match err {
+                AplicacaoError::ShardKeyOnNonSharded { estrategia: e, .. } => {
+                    assert_eq!(
+                        e,
+                        spec.placement.estrategia(),
+                        "ShardKeyOnNonSharded.estrategia must byte-equal \
+                         Placement::estrategia() — the non-Sharded-arm \
+                         refusal reads through the lifted accessor",
+                    );
+                }
+                other => panic!(
+                    "expected ShardKeyOnNonSharded, got {other:?} for \
+                     estrategia={estrategia:?}"
+                ),
+            }
+        }
     }
 
     #[test]
