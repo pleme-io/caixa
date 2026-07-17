@@ -337,6 +337,89 @@ pub struct ChildSpec {
     pub restart: RestartPolicy,
 }
 
+impl ChildSpec {
+    /// Substrate-canonical per-`:children` child-caixa `:nome` scalar
+    /// accessor every consumer that reads the OTP-shape supervised
+    /// child's identity keys off — returns the author-declared
+    /// `:children :caixa` byte-string verbatim as a `&str`, borrowed
+    /// from the typed slot's own [`String`] storage.
+    ///
+    /// The `:children :caixa` slot carries the DNS-1123 label — the
+    /// child caixa's `:nome` — that every emitted cluster artifact
+    /// derives its `metadata.name` from verbatim: the rendered
+    /// `wasm.pleme.io/v1alpha1/ComputeUnit.metadata.name` per child, the
+    /// [`crate::LABEL_PROGRAM`] label value on every child's pod
+    /// identity, and the per-child K8s Service `metadata.name` the
+    /// future wasm-operator (M3) provisions for inter-child supervision-
+    /// tree wiring. Every downstream consumer that fans on the child's
+    /// caixa-name keys off this scalar (the [`SupervisorSpec::validate`]
+    /// per-child DNS-1123 gate at
+    /// `require_valid_dns_1123_label(child.nome(), …)`, the per-child
+    /// duplicate-detection [`crate::render::insert_first_seen`] key, the
+    /// [`validate_no_self_supervision`] cross-slot equality check
+    /// against the parent's `:nome`, every `SupervisorError` variant
+    /// carrying the offending child caixa verbatim for `feira lint`
+    /// rendering, the future wasm-operator's hierarchical reconciliation
+    /// scheduler's per-child ComputeUnit-name projection, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's per-child
+    /// admission webhook).
+    ///
+    /// Prior to this lift the `.caixa` byte-string was accessed inline
+    /// at seven sites in `supervisor.rs` — the DNS-1123 gate's
+    /// `&child.caixa`, the four `SupervisorError::{ChildCaixaInvalid,
+    /// EmptyChildVersion, ChildVersaoInvalid, DuplicateChildCaixa}`
+    /// carriers' `child.caixa.clone()`, the dedup key's
+    /// `child.caixa.as_str()`, and the [`validate_no_self_supervision`]
+    /// `child.caixa == parent_nome` cross-slot check — seven open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:children :caixa` axis to
+    /// a richer author surface (a per-cluster alias table the operator
+    /// pins through a future `:placement`-scoped slot on the supervisor
+    /// tree, a namespace-qualified rewrite the M4 CR materializer
+    /// applies per-CR, a per-child overlay from the future `:children
+    /// :nome-suffix` slot the MESH-COMPOSITION §III.2 roadmap
+    /// acknowledges) would have had to be threaded through every
+    /// open-coded copy in lockstep or one consumer would silently
+    /// disagree with the peers on which caixa a given child resolves to
+    /// — a child-set lookup that treated the name as `"cart-worker"`
+    /// while the peer duplicate-detector treated it as
+    /// `"tenant-a/cart-worker"` would silently split the
+    /// `DuplicateChildCaixa` membership-lookup diagnostic from the
+    /// self-supervision detector's parent-equality check, a two-consumer
+    /// split at the validator far from the source `caixa.lisp` with no
+    /// field naming the identity-drift root cause. Lifting the resolution
+    /// rule to a typed method on the substrate primitive means every
+    /// downstream consumer of the Supervisor's per-`:children` identity
+    /// surface reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Sibling of the peer per-`:membros` [`crate::Membro::nome`]
+    /// (4a32abf) member-caixa `:nome` scalar accessor on the M3
+    /// mesh-slot surface — same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline extended
+    /// onto the M2 supervisor-tree per-`:children` child-identity axis.
+    /// The two typed axes (`Membro::nome` on the M3 Aplicacao side,
+    /// `ChildSpec::nome` on the M2 Supervisor side) now share one
+    /// accessor discipline for the shared substrate concept "another
+    /// caixa referenced by `:nome`". Peer of the second M2 slot scalar
+    /// accessor [`crate::UpgradeFromEntry::prior_versao`] (75d27a8) on
+    /// the sibling per-`:upgrade-from :from` OTP-appup axis — the M2
+    /// slot family's typed-accessor discipline now spans both the
+    /// upgrade axis (`:upgrade-from`) and the supervision axis
+    /// (`:children`), matching the closed M3 mesh-slot accessor family's
+    /// shape. Named `nome()` to match the tatara-lisp author-surface
+    /// term the field's docstring already reaches for ("The child
+    /// caixa's `:nome`") and the peer [`crate::Membro::nome`] /
+    /// [`crate::Caixa::nome`] / [`crate::dep::Dep::nome`] field-name
+    /// discipline the substrate already carries — the accessor's name
+    /// maps directly onto the canonical caixa-identity vocabulary rather
+    /// than shadowing the field's storage-side `caixa` label.
+    #[must_use]
+    pub fn nome(&self) -> &str {
+        self.caixa.as_str()
+    }
+}
+
 /// Supervisor-typed slots that live alongside the standard Caixa
 /// fields when `:kind Supervisor`. Held flat in [`crate::Caixa`] so
 /// the manifest stays a single typed form; this struct exists for
@@ -682,10 +765,10 @@ impl SupervisorSpec {
             //
             // [svc]: https://kubernetes.io/docs/concepts/services-networking/service/
             crate::render::require_valid_dns_1123_label(
-                &child.caixa,
+                child.nome(),
                 || SupervisorError::EmptyChildName,
                 |reason| SupervisorError::ChildCaixaInvalid {
-                    caixa: child.caixa.clone(),
+                    caixa: child.nome().to_string(),
                     reason,
                 },
             )?;
@@ -710,17 +793,17 @@ impl SupervisorSpec {
             crate::render::require_valid_versao_requirement(
                 &child.versao,
                 || SupervisorError::EmptyChildVersion {
-                    caixa: child.caixa.clone(),
+                    caixa: child.nome().to_string(),
                 },
                 |reason| SupervisorError::ChildVersaoInvalid {
-                    caixa: child.caixa.clone(),
+                    caixa: child.nome().to_string(),
                     versao: child.versao.clone(),
                     reason,
                 },
             )?;
-            crate::render::insert_first_seen(&mut seen, child.caixa.as_str(), || {
+            crate::render::insert_first_seen(&mut seen, child.nome(), || {
                 SupervisorError::DuplicateChildCaixa {
-                    caixa: child.caixa.clone(),
+                    caixa: child.nome().to_string(),
                 }
             })?;
         }
@@ -754,7 +837,7 @@ pub fn validate_no_self_supervision(
     parent_nome: &str,
 ) -> Result<(), SupervisorError> {
     for child in children {
-        if child.caixa == parent_nome {
+        if child.nome() == parent_nome {
             return Err(SupervisorError::ChildSupervisesSelf {
                 caixa: parent_nome.to_string(),
             });
@@ -3983,6 +4066,196 @@ mod tests {
                  Serialize derive's wire byte-string (three-path convergence: \
                  Display + as_str + Serialize all resolve to the same \
                  SUPERVISOR_CHILD_RESTART_* const)"
+            );
+        }
+    }
+
+    // ── drift-detection: ChildSpec::nome accessor pins ────────────────────
+    //
+    // The M2 supervisor-tree sibling of the M3 `Membro::nome` (4a32abf) pin
+    // pair (`membro_nome_returns_caixa_byte_equal_across_permutations` +
+    // `membro_nome_borrows_from_caixa_storage`) — extended here to the M2
+    // per-`:children` child-caixa `:nome` axis, sibling to the first M2
+    // slot scalar accessor `UpgradeFromEntry::prior_versao` (75d27a8) on
+    // the peer per-`:upgrade-from :from` axis. The three pins jointly
+    // brace the accessor against every future silent detour that would
+    // desynchronize it from the raw `.caixa` field access every consumer
+    // previously open-coded.
+
+    #[test]
+    fn child_spec_nome_returns_caixa_byte_equal_across_permutations() {
+        // The canonical per-`:children` child-caixa `:nome`-scalar pin:
+        // [`ChildSpec::nome`] must return the `:children :caixa` field
+        // byte-for-byte across every DNS-1123-label value the upstream
+        // [`crate::render::require_valid_dns_1123_label`] gate at
+        // `SupervisorSpec::validate` admits. Peer of the sibling
+        // `membro_nome_returns_caixa_byte_equal_across_permutations`
+        // (4a32abf) pin on the M3 per-`:membros` axis — same "the
+        // substrate-primitive accessor must byte-equal the raw field
+        // access verbatim across every author-declared value" discipline
+        // extended to the M2 supervisor-tree per-`:children` arm. Pins
+        // against a future silent detour that re-normalized the child
+        // identity (an accidental `.to_lowercase()` — every `:children
+        // :caixa` is validated as a DNS-1123 label upstream, so any
+        // re-normalization is redundant + a drift surface between the
+        // validator and the accessor), a namespace-prefix rewrite (an
+        // accidental `format!("{namespace}/{caixa}")` per-CR
+        // fully-qualified rewrite that didn't land on the peer axes), or
+        // a per-cluster alias stamp the future wasm-operator's
+        // hierarchical reconciliation scheduler authors on one consumer
+        // without the others. Five values sweep the accept-set the
+        // DNS-1123 gate upstream admits (short single-word / dashed /
+        // v-suffixed / mixed-digit child names).
+        for name in [
+            "worker",
+            "cache-server",
+            "scratch-job",
+            "orders-v2",
+            "session-8080",
+        ] {
+            let c = ChildSpec {
+                caixa: name.into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            };
+            assert_eq!(
+                c.nome(),
+                name,
+                "ChildSpec::nome must return :children :caixa verbatim \
+                 (got {:?}, expected {name:?})",
+                c.nome(),
+            );
+            assert_eq!(
+                c.nome(),
+                c.caixa.as_str(),
+                "ChildSpec::nome must byte-equal the .caixa field access",
+            );
+        }
+    }
+
+    #[test]
+    fn child_spec_nome_borrows_from_caixa_storage() {
+        // The borrow-not-copy pin: [`ChildSpec::nome`] must return a
+        // `&str` slice that borrows from the typed slot's own [`String`]
+        // storage — same-address invariant with `c.caixa.as_str()`. Pins
+        // against a future silent detour that allocated a fresh `String`
+        // (`self.caixa.clone()` in the body would type-check but silently
+        // drop the borrow, and every downstream consumer that assumed
+        // the returned slice outlives `&self` would break on a stale-
+        // reference use-after-free — the [`crate::render::insert_first_seen`]
+        // dedup key at [`SupervisorSpec::validate`], the
+        // [`validate_no_self_supervision`] equality check against the
+        // parent's `:nome` string slice, the DNS-1123 gate's `&str`
+        // borrow — each would silently misbehave if this accessor
+        // produced a detached copy). Peer of the sibling
+        // `membro_nome_borrows_from_caixa_storage` (4a32abf) pin on the
+        // M3 per-`:membros` axis and the
+        // `prior_versao_borrows_from_from_storage` (75d27a8) pin on the
+        // first M2 slot scalar accessor.
+        let c = ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        };
+        let name = c.nome();
+        let caixa_slice = c.caixa.as_str();
+        assert_eq!(
+            name.as_ptr(),
+            caixa_slice.as_ptr(),
+            "ChildSpec::nome must borrow from the .caixa String's backing \
+             storage — a fresh allocation here means the accessor no \
+             longer names the substrate-primitive typed dispatch and \
+             every downstream consumer would silently carry a detached \
+             copy",
+        );
+        assert_eq!(
+            name.len(),
+            caixa_slice.len(),
+            "ChildSpec::nome and .caixa.as_str() must byte-equal in length \
+             as well as in address",
+        );
+    }
+
+    #[test]
+    fn validate_gates_child_nome_through_lifted_accessor() {
+        // Bilateral coherence pin: every `:children :caixa` that
+        // [`SupervisorSpec::validate`] accepts is one
+        // [`crate::render::require_valid_dns_1123_label`] accepts on the
+        // accessor-projected value, and vice versa on the reject side.
+        // This closes the "the validator reads through the accessor"
+        // contract structurally — a future silent detour that made the
+        // accessor return a different byte-string than the validator
+        // gates against would surface here as a coverage mismatch, not
+        // as an apply-time DNS-1123 rejection at
+        // `metadata.name: Invalid value` far from the caixa.lisp source.
+        // Peer of the M2 sibling
+        // `validate_parses_prior_versao_through_lifted_accessor`
+        // (75d27a8) on the per-`:upgrade-from :from` axis and the M3
+        // `validate_membros` peer discipline.
+        //
+        // Accept-set sweep: five DNS-1123-label values the upstream gate
+        // admits.
+        for ok_name in ["a", "worker", "cache-server", "orders-v2", "svc-8080"] {
+            let s = SupervisorSpec {
+                children: vec![ChildSpec {
+                    caixa: ok_name.into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                }],
+                ..SupervisorSpec::default()
+            };
+            s.validate().unwrap_or_else(|e| {
+                panic!(
+                    "SupervisorSpec::validate must accept :children :caixa {ok_name:?} \
+                     (upstream DNS-1123 gate accepts it): got {e:?}",
+                );
+            });
+            let c = ChildSpec {
+                caixa: ok_name.into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            };
+            crate::render::require_valid_dns_1123_label(c.nome(), || (), |_reason| ())
+                .unwrap_or_else(|()| {
+                    panic!(
+                        "require_valid_dns_1123_label must accept the accessor-projected \
+                     :children :caixa {ok_name:?}",
+                    );
+                });
+        }
+        // Reject-set sweep: five DNS-1123-label-violating shapes the
+        // upstream gate refuses (empty / uppercase / underscore / dot /
+        // leading-hyphen). Every rejection at the validator must
+        // correspond to a rejection when the accessor's projected value
+        // is fed back through the shared gate.
+        for bad_name in ["", "Worker", "my_worker", "team.worker", "-worker"] {
+            let s = SupervisorSpec {
+                children: vec![ChildSpec {
+                    caixa: bad_name.into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                }],
+                ..SupervisorSpec::default()
+            };
+            let err = s.validate().unwrap_err();
+            assert!(
+                matches!(
+                    err,
+                    SupervisorError::EmptyChildName | SupervisorError::ChildCaixaInvalid { .. }
+                ),
+                "SupervisorSpec::validate must reject :children :caixa {bad_name:?} \
+                 via the DNS-1123 gate: got {err:?}",
+            );
+            let c = ChildSpec {
+                caixa: bad_name.into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            };
+            assert!(
+                crate::render::require_valid_dns_1123_label(c.nome(), || (), |_reason| (),)
+                    .is_err(),
+                "require_valid_dns_1123_label must reject the accessor-projected \
+                 :children :caixa {bad_name:?}",
             );
         }
     }
