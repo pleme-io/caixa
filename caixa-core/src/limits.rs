@@ -376,10 +376,86 @@ impl LimitsSpec {
     /// True when no axis is bounded.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        self.memory.is_none()
+        self.memory().is_none()
             && self.fuel.is_none()
             && self.wall_clock.is_none()
             && self.cpu.is_none()
+    }
+
+    /// Substrate-canonical per-`:limits` `:memory` Lunatic-per-process
+    /// wasm32-linear-memory byte-cap scalar accessor every consumer of
+    /// the Servico's `wasmtime::StoreLimits::memory_size` propagation
+    /// keys off — returns the author-declared `:limits :memory` typed
+    /// byte-cap verbatim as an `Option<u64>`, copied out of the typed
+    /// slot's own `Option<u64>` storage (`Option<u64>` is `Copy`, so
+    /// the accessor returns by value; no borrow of `&self` past the
+    /// call). `None` when the slot is absent (the "no memory cap
+    /// declared — engine-default applies, today the pre-M2 unbounded-
+    /// linear-memory shape" arm the module-level docstring names on
+    /// [`LimitsSpec::memory`] itself — [`LimitsSpec::is_empty`]'s
+    /// `memory().is_none()` arm reads this predicate too, so an
+    /// authored-but-unset `:limits (:memory ())` round-trips to a
+    /// `servico_m2_overlay` emission structurally identical to one
+    /// that omits the slot entirely).
+    ///
+    /// The `:limits :memory` slot carries the "per-process wasm32
+    /// linear-memory byte-cap" Lunatic-shaped sandboxing contract
+    /// (`theory/INSPIRATIONS.md` §III.1) — the typed slot's
+    /// `Option<u64>` accept-set (zero-floor rejected through
+    /// [`LimitsError::MemoryZero`], wasm32-page-floor rejected through
+    /// [`LimitsError::MemoryBelowWasm32Page`], upper-bounded by
+    /// [`LIMITS_MEMORY_WASM32_MAX_BYTES`], authored as a byte-size
+    /// string that round-trips back to the canonical form through
+    /// [`ser_byte_size`] / [`de_byte_size`]) maps onto the wasmtime
+    /// `Store::limiter`-side `memory_size` projection the wasm-engine
+    /// M2 wires and, via [`crate::render::servico_m2_overlay`], onto
+    /// the `pleme-computeunit` Helm-library-chart values sub-block's
+    /// `limits.memory` key that lands as the ComputeUnit CR's
+    /// `spec.limits.memory` field.
+    ///
+    /// Prior to this lift the `.memory` field was accessed inline at
+    /// four sites inside `impl LimitsSpec` — [`LimitsSpec::is_empty`]'s
+    /// `self.memory.is_none()` arm and three [`LimitsSpec::validate`]
+    /// arms (the numeric zero-floor arm at line 397, the wasm32-page
+    /// structural floor arm at line 427, and the wasm32 upper-cap
+    /// arm at line 449) — four open-coded field-accesses that
+    /// expressed no compile-time link back to the typed slot. A
+    /// future extension of the `:limits :memory` axis to a richer
+    /// author surface — a per-instance memory-declaration override
+    /// the operator pins through a future ComputeUnit CR-side
+    /// `spec.limits.memory` overlay, a split of the single `u64`
+    /// byte-cap into a `{min, max}` pair once wasm32's `(memory M N)`
+    /// two-arg form promotes past its current single-`max` typed
+    /// bound, a wasm64 promotion once the wasm-engine grows past the
+    /// wasm32 4 GiB structural ceiling — would have had to be
+    /// threaded through every open-coded copy in lockstep or the
+    /// emptiness predicate and the validate call would silently
+    /// disagree on which cap a given [`LimitsSpec`] resolves to.
+    /// Lifting the resolution to a typed method on the substrate
+    /// primitive means every downstream consumer of the Servico's
+    /// per-`:limits` byte-cap surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// First `Option<Copy-T>`-return accessor on the M2 slot family
+    /// (peer of the sibling per-`:politicas` [`crate::MeshPolicy::mtls_required`]
+    /// c0110f1 `Option<bool>` accessor, per-`:politicas`
+    /// [`crate::MeshPolicy::retries`] bdfb399 `Option<u32>` accessor,
+    /// and per-`:politicas` [`crate::MeshPolicy::timeout`] 7073d0f
+    /// `Option<Duration>` accessor on the M3 mesh-slot family — same
+    /// "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the
+    /// peer per-`:limits` typed-`u64` optional-scalar axis; opens the
+    /// "optional per-slot Copy-T scalar" projection pattern the
+    /// sibling per-`:limits` `:fuel` (Option<u64>) / `:wall-clock`
+    /// (Option<Duration>) / `:cpu` (Option<u32>) future lifts fold
+    /// on). Named `memory()` to match the storage field's name; the
+    /// accessor's identity maps onto the canonical Lunatic-shaped
+    /// `theory/INSPIRATIONS.md` §III.1 vocabulary the slot's docstring
+    /// already carries.
+    #[must_use]
+    pub const fn memory(&self) -> Option<u64> {
+        self.memory
     }
 
     /// Reject operationally-meaningless zero values on every declared
@@ -5187,5 +5263,175 @@ mod tests {
         assert_eq!(back.fuel, Some(LIMITS_FUEL_MAX));
         l.validate()
             .expect("LIMITS_FUEL_MAX itself must pass validate");
+    }
+
+    // ── per-`:limits :memory` accessor pins (LimitsSpec::memory) ─────────
+
+    #[test]
+    fn limits_memory_returns_option_u64_byte_equal_across_permutations() {
+        // The canonical per-`:limits` `:memory` Lunatic-per-process
+        // wasm32-linear-memory byte-cap scalar pin: [`LimitsSpec::memory`]
+        // must return the `:limits :memory` typed `u64` verbatim as an
+        // `Option<u64>`, byte-equal to the raw field access across the
+        // three canonical shape-arms — `None` (no cap declared —
+        // engine-default applies), `Some(LIMITS_MEMORY_WASM32_PAGE_BYTES)`
+        // (the structural minimum a validated `:limits :memory` may
+        // carry, one wasm32 linear-memory page), `Some(64 * 1024 *
+        // 1024)` (the canonical 64 MiB byte-cap the module-level
+        // docstring names).
+        //
+        // Peer of the sibling per-`:politicas` [`crate::MeshPolicy::mtls_required`]
+        // (c0110f1) / [`crate::MeshPolicy::retries`] (bdfb399) /
+        // [`crate::MeshPolicy::timeout`] (7073d0f) accessor pin trio on
+        // the sibling `Option<Copy-T>`-return axis, extended to the
+        // peer per-`:limits` typed-`u64` optional-scalar shape —
+        // first `Option<Copy-T>`-return accessor on the M2 slot family.
+        // Pins against a future silent detour that re-derived the cap
+        // from a peer axis (an accidental `.fuel`-collapse that
+        // assumed the two `Option<u64>` axes carry the same value), a
+        // `None` → `Some(0)` "zero means unbounded" collapse (the
+        // canonical `Option<u64>` → `u64` collapse footgun the
+        // [`LimitsError::MemoryZero`] validate arm guards on the peer
+        // zero-floor axis), or a per-arm variant swap that landed on
+        // one consumer without the other.
+        for memory in [
+            None,
+            Some(LIMITS_MEMORY_WASM32_PAGE_BYTES),
+            Some(64 * 1024 * 1024),
+        ] {
+            let l = LimitsSpec {
+                memory,
+                ..LimitsSpec::default()
+            };
+            assert_eq!(
+                l.memory(),
+                memory,
+                "LimitsSpec::memory must return :limits :memory verbatim \
+                 (got {:?}, expected {memory:?})",
+                l.memory(),
+            );
+            assert_eq!(
+                l.memory(),
+                l.memory,
+                "LimitsSpec::memory must byte-equal the raw .memory \
+                 field access across every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_is_empty_memory_arm_routes_through_accessor() {
+        // Composition pin: [`LimitsSpec::is_empty`]'s `memory` arm
+        // must key off [`LimitsSpec::memory`], not the raw `.memory`
+        // field access. Structurally: setting ONLY the `memory` slot
+        // on an otherwise-default LimitsSpec must flip `is_empty()`
+        // from `true` (all-`None`) to `false` (one axis carries a
+        // value); the flip must be observed across every value in the
+        // accept-set since the emptiness semantic reads "any axis
+        // carries a value" — not "any axis carries a value above a
+        // threshold" — the same non-collapsing shape the sibling M3
+        // [`crate::MeshPolicy::is_empty`] predicate carries on its
+        // peer `Option<Copy-T>`-typed slot surfaces.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.fuel.is_none()`-only chain that dropped the `memory` arm
+        // entirely), an accessor-side detour that no longer names the
+        // substrate-primitive typed dispatch (an accidental
+        // `self.memory.unwrap_or(0) == 0` fallback in the accessor
+        // that would silently classify both `None` and `Some(0)` as
+        // the same value), or a threshold collapse (a
+        // `self.memory().is_some_and(|m| m > 0)` that would silently
+        // classify `Some(0)` as unset).
+        //
+        // Peer of the sibling per-`:politicas`
+        // [`crate::MeshPolicy::is_empty`] `mtls_required` arm
+        // accessor-composition pin (c0110f1) on the sibling optional-
+        // scalar axis — same "the emptiness / shape-gate predicate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer per-`:limits` emptiness
+        // predicate.
+        let empty = LimitsSpec::default();
+        assert!(
+            empty.is_empty(),
+            "LimitsSpec::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for memory in [
+            Some(LIMITS_MEMORY_WASM32_PAGE_BYTES),
+            Some(64 * 1024 * 1024),
+            Some(LIMITS_MEMORY_WASM32_MAX_BYTES),
+        ] {
+            let l = LimitsSpec {
+                memory,
+                ..LimitsSpec::default()
+            };
+            assert!(
+                !l.is_empty(),
+                "LimitsSpec::is_empty must return false when :memory \
+                 is {memory:?} — the emptiness predicate reads \"any \
+                 axis carries a value\", not \"any axis carries a \
+                 value above a threshold\"",
+            );
+            assert_eq!(
+                l.memory().is_none(),
+                l.is_empty(),
+                "when :memory is the only set axis, is_empty() must \
+                 equal memory().is_none() — the accessor and the \
+                 emptiness predicate must route through the same \
+                 substrate-primitive typed dispatch on the :memory \
+                 arm",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_memory_projects_option_u64_by_copy() {
+        // The by-copy pin: [`LimitsSpec::memory`] returns `Option<u64>`
+        // by copy — `Option<u64>` is `Copy` and the accessor must
+        // return by value, not by reference. Peer of the sibling per-
+        // `:politicas` [`crate::MeshPolicy::mtls_required`] (c0110f1)
+        // borrow-invariant pin on the peer `Option<bool>` shape,
+        // extended onto the peer `Option<u64>` copy-invariant shape —
+        // the accessor's returned `Option<u64>` must outlive `&self`
+        // (multiple calls must return equal values from a dropped-
+        // `&self` copy, since the returned Option carries no borrow),
+        // and calling the accessor twice on the same LimitsSpec must
+        // yield the same `Option<u64>` verbatim (idempotent, no side
+        // effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&u64>` (which would type-check but silently break
+        // every downstream caller — the future `wasmtime::Store::limiter`
+        // wire path consumes `Option<u64>` by value and `&u64` would
+        // fold to a detached copy at the call site), an accidental
+        // `Option::as_ref()` projection (`self.memory.as_ref()` would
+        // also type-check but return `Option<&u64>`), or a one-arm-
+        // only accessor that reads `Some(*m)` in the Some arm but
+        // reads a fresh `Default::default()` in the None arm.
+        for memory in [
+            None,
+            Some(LIMITS_MEMORY_WASM32_PAGE_BYTES),
+            Some(64 * 1024 * 1024),
+            Some(LIMITS_MEMORY_WASM32_MAX_BYTES),
+        ] {
+            let l = LimitsSpec {
+                memory,
+                ..LimitsSpec::default()
+            };
+            let first = l.memory();
+            let second = l.memory();
+            assert_eq!(
+                first, second,
+                "LimitsSpec::memory must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<u64>",
+            );
+            assert_eq!(
+                first, memory,
+                "LimitsSpec::memory must return :limits :memory \
+                 verbatim by copy — got {first:?}, expected {memory:?}",
+            );
+        }
     }
 }
