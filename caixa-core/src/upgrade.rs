@@ -103,6 +103,47 @@ pub struct UpgradeFromEntry {
 }
 
 impl UpgradeFromEntry {
+    /// Prior-versao semver-2 literal this entry declares an upgrade
+    /// path *from* — the string the OTP-shape `release_handler:install_release/1`
+    /// analog matches the running caixa's `:versao` against at hot-
+    /// upgrade dispatch time to pick this entry's `:instructions`
+    /// sequence. Returned byte-for-byte from the typed slot's own
+    /// `String` storage; no cloning, no re-parsing.
+    ///
+    /// The M2 companion of the closed M3 mesh-slot scalar-accessor
+    /// family — sibling in shape to [`crate::Membro::versao_requirement`]
+    /// (a40b0e3), [`crate::Membro::nome`] (4a32abf), and the
+    /// [`crate::WitContract::{source, destination, world_ref}`]
+    /// (7f0fd43 / 0804823) / [`crate::Entrada::{hostname, destination}`]
+    /// (11f3dfe / 6db982c) `&str` accessors already routing every
+    /// per-mesh-slot-atom scalar-value axis through one typed dispatch
+    /// on the substrate primitive — extended here onto the first per-
+    /// M2-slot scalar-value axis. Every downstream consumer of the
+    /// M2 `:upgrade-from :from` axis (the [`UpgradeFromEntry::validate`]
+    /// SemVer-2 parse gate, the [`validate_upgrade_from`] cross-entry
+    /// duplicate-detection re-parse assertion, the
+    /// [`validate_upgrade_from_against_versao`] precedence gate,
+    /// the [`validate_upgrade_from_against_behavior`] state-change-
+    /// callback coherence gate, every per-arm error variant carrying
+    /// the offending `:from` verbatim for `feira lint` rendering)
+    /// now reads through this one accessor rather than open-coding
+    /// `&self.from` / `&entry.from` / `self.from.clone()` /
+    /// `entry.from.clone()`.
+    ///
+    /// A future extension of the axis (an M4 typed `:from`-range slot
+    /// composing multiple prior versions into one entry, an operator-
+    /// side pre-parsed [`semver::Version`] cache the accessor could
+    /// materialize behind the same `&str` return contract, a per-
+    /// cluster `:placement`-scoped prior-versao overlay the
+    /// `caixa-operator` reconciles ahead of dispatch) migrates as a
+    /// single caixa-core edit rather than a coordinated rewrite of
+    /// the four validate-side call sites + every downstream error-
+    /// variant carrying `:from`.
+    #[must_use]
+    pub fn prior_versao(&self) -> &str {
+        &self.from
+    }
+
     /// Verify the `:from` field is a valid semver, every instruction's
     /// typed shape, the within-entry `(:restart)`-exclusivity invariant
     /// (an entry containing `(:restart)` must contain exactly one
@@ -129,8 +170,8 @@ impl UpgradeFromEntry {
     /// total — see [`Self::validate_cleanup_singularity`]).
     pub fn validate(&self) -> Result<(), UpgradeError> {
         use semver::Version;
-        Version::parse(&self.from).map_err(|e| UpgradeError::FromInvalid {
-            from: self.from.clone(),
+        Version::parse(self.prior_versao()).map_err(|e| UpgradeError::FromInvalid {
+            from: self.prior_versao().to_string(),
             reason: e.to_string(),
         })?;
         // Per-instruction typed shape: kind-tagged `:module` /
@@ -223,7 +264,7 @@ impl UpgradeFromEntry {
             .map(UpgradeInstruction::lisp_form)
             .collect();
         Err(UpgradeError::RestartNotExclusive {
-            from: self.from.clone(),
+            from: self.prior_versao().to_string(),
             restart_count,
             other_kinds,
         })
@@ -281,7 +322,7 @@ impl UpgradeFromEntry {
                 UpgradeInstruction::LoadModule { .. } => loaded = true,
                 UpgradeInstruction::StateChange { script } if !loaded => {
                     return Err(UpgradeError::StateChangeWithoutPriorLoad {
-                        from: self.from.clone(),
+                        from: self.prior_versao().to_string(),
                         script: script.clone(),
                     });
                 }
@@ -348,7 +389,7 @@ impl UpgradeFromEntry {
                     if !loaded =>
                 {
                     return Err(UpgradeError::PurgeWithoutPriorLoad {
-                        from: self.from.clone(),
+                        from: self.prior_versao().to_string(),
                         kind: instr.lisp_form(),
                         module: module.clone(),
                     });
@@ -471,7 +512,7 @@ impl UpgradeFromEntry {
                 UpgradeInstruction::StateChange { script } => {
                     if let Some((prior_module, prior_kind)) = prior_cleanup {
                         return Err(UpgradeError::StateChangeAfterCleanup {
-                            from: self.from.clone(),
+                            from: self.prior_versao().to_string(),
                             script: script.clone(),
                             prior_cleanup_kind: prior_kind,
                             prior_cleanup_module: prior_module.to_string(),
@@ -587,7 +628,7 @@ impl UpgradeFromEntry {
             if let Some(prior_idx) = seen.iter().position(|(m, _)| *m == module) {
                 let prior_kind = seen[prior_idx].1;
                 return Err(UpgradeError::DuplicateCleanup {
-                    from: self.from.clone(),
+                    from: self.prior_versao().to_string(),
                     module: module.to_string(),
                     kinds: vec![prior_kind, kind],
                 });
@@ -690,7 +731,7 @@ impl UpgradeFromEntry {
             };
             if seen.contains(&module) {
                 return Err(UpgradeError::DuplicateLoadModule {
-                    from: self.from.clone(),
+                    from: self.prior_versao().to_string(),
                     module: module.to_string(),
                 });
             }
@@ -806,7 +847,7 @@ impl UpgradeFromEntry {
             };
             if seen.contains(&script) {
                 return Err(UpgradeError::DuplicateStateChange {
-                    from: self.from.clone(),
+                    from: self.prior_versao().to_string(),
                     script: script.to_path_buf(),
                 });
             }
@@ -870,14 +911,14 @@ pub fn validate_upgrade_from(entries: &[UpgradeFromEntry]) -> Result<(), Upgrade
         entry.validate()?;
         // `entry.validate()` accepted this `:from`, so parse cannot
         // fail here — the FromInvalid arm above is the only gate
-        // and both call `Version::parse(&self.from)`.
-        let parsed = Version::parse(&entry.from).expect(
+        // and both call `Version::parse(entry.prior_versao())`.
+        let parsed = Version::parse(entry.prior_versao()).expect(
             "UpgradeFromEntry::validate must accept `:from` iff Version::parse does — keep the \
              two gates aligned",
         );
         if seen.contains(&parsed) {
             return Err(UpgradeError::DuplicateFrom {
-                from: entry.from.clone(),
+                from: entry.prior_versao().to_string(),
             });
         }
         seen.push(parsed);
@@ -970,12 +1011,12 @@ pub fn validate_upgrade_from_against_versao(
         // `:from` here falls through silently to keep the
         // FromInvalid diagnostic load-bearing. Same fall-through
         // posture as the `versao` arm above.
-        let Ok(prior) = Version::parse(&entry.from) else {
+        let Ok(prior) = Version::parse(entry.prior_versao()) else {
             continue;
         };
         if prior >= current {
             return Err(UpgradeError::FromNotBeforeVersao {
-                from: entry.from.clone(),
+                from: entry.prior_versao().to_string(),
                 versao: versao.to_string(),
             });
         }
@@ -1108,7 +1149,7 @@ pub fn validate_upgrade_from_against_behavior(
         for instr in &entry.instructions {
             if let UpgradeInstruction::StateChange { script } = instr {
                 return Err(UpgradeError::StateChangeWithoutOnStateChangeCallback {
-                    from: entry.from.clone(),
+                    from: entry.prior_versao().to_string(),
                     script: script.clone(),
                 });
             }
@@ -1656,6 +1697,103 @@ mod tests {
             !reason.is_empty(),
             "FromInvalid `reason` must carry the parser's wording verbatim"
         );
+    }
+
+    #[test]
+    fn prior_versao_returns_from_byte_equal_across_permutations() {
+        // Byte-identity pin on the lifted `UpgradeFromEntry::prior_versao`
+        // accessor across the SemVer-2 shape lattice every consumer
+        // reaches through it — the numeric-triad canonical shape, a
+        // pre-release build with a dotted identifier chain, a full-
+        // metadata build, a large-magnitude triad, and the empty
+        // string (which reaches this accessor unchanged before any
+        // validate gate rejects it). Sibling to the peer
+        // `membro_versao_requirement_returns_versao_byte_equal_across_permutations`
+        // (a40b0e3) / `membro_nome_returns_caixa_byte_equal_across_permutations`
+        // (4a32abf) pins on the sibling M3 mesh-slot scalar-accessor
+        // family — extended here onto the first M2 slot scalar-value
+        // axis. Any silent detour on the accessor (a `.to_string()`
+        // + retained ownership shape, a canonicalization pass, a
+        // trim-whitespace on the return path) surfaces as a byte-
+        // inequality failure here rather than as a downstream error-
+        // diagnostic drift.
+        let cases = ["0.1.0", "0.2.0-rc.1", "1.0.0+build.42", "10.20.30", ""];
+        for from in cases {
+            let e = entry(from, vec![]);
+            assert_eq!(
+                e.prior_versao(),
+                from,
+                "prior_versao() must return the `:from` field byte-for-byte for {from:?}",
+            );
+            assert_eq!(
+                e.prior_versao().len(),
+                from.len(),
+                "prior_versao() byte-length must equal the `:from` field's for {from:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn prior_versao_borrows_from_from_storage() {
+        // Same-address pin: `UpgradeFromEntry::prior_versao` returns
+        // a borrow into `self.from`'s heap allocation, never a fresh
+        // owned copy. Guards against a future silent detour where
+        // the accessor materializes a `Cow<'_, str>` / `String` /
+        // `Rc<str>` intermediate — the return path stays zero-cost
+        // even under a refactor that reshapes the storage. Sibling
+        // to the peer `membro_versao_requirement_borrows_from_versao_storage`
+        // (a40b0e3) / `membro_nome_borrows_from_caixa_storage`
+        // (4a32abf) pins — extended onto the M2 slot's first
+        // scalar-value axis.
+        let e = entry("0.1.0", vec![]);
+        assert!(
+            std::ptr::eq(e.prior_versao().as_ptr(), e.from.as_ptr()),
+            "prior_versao() must borrow from `self.from`'s storage, not allocate a fresh copy",
+        );
+    }
+
+    #[test]
+    fn validate_parses_prior_versao_through_lifted_accessor() {
+        // Coherence pin between the accessor and the SemVer-2 parse
+        // gate: every `:upgrade-from :from` value the validator
+        // accepts (resp. rejects) must be identical to what
+        // `Version::parse(entry.prior_versao())` accepts (resp.
+        // rejects) — the two must remain in lockstep across the
+        // shape lattice so `validate_upgrade_from`'s
+        // `Version::parse(entry.prior_versao()).expect(...)` re-parse
+        // assertion holds by construction. If a future extension of
+        // `prior_versao` reshapes the return (a canonicalization
+        // pass, a leading/trailing whitespace trim, an empty-to-
+        // "0.0.0" fallback) it would either loosen the validator
+        // (silently accepting shapes the parser rejects) or
+        // tighten the parser's re-parse (silently panicking on
+        // shapes the validator accepts) — this pin catches either
+        // shift at caixa-core build time.
+        let accepted = ["0.1.0", "0.2.0-rc.1", "1.0.0+build.42", "10.20.30"];
+        for from in accepted {
+            let e = entry(from, vec![]);
+            e.validate().unwrap_or_else(|err| {
+                panic!("validate() must accept {from:?} that Version::parse accepts, got {err:?}");
+            });
+            semver::Version::parse(e.prior_versao()).unwrap_or_else(|err| {
+                panic!(
+                    "Version::parse(prior_versao()) must accept {from:?} that validate() accepts, \
+                     got {err:?}",
+                );
+            });
+        }
+        let rejected = ["", "v0.1.0", "0.1", "not-a-semver", "0.1.0.0"];
+        for from in rejected {
+            let e = entry(from, vec![]);
+            assert!(
+                matches!(e.validate(), Err(UpgradeError::FromInvalid { .. })),
+                "validate() must reject {from:?} that Version::parse rejects",
+            );
+            assert!(
+                semver::Version::parse(e.prior_versao()).is_err(),
+                "Version::parse(prior_versao()) must reject {from:?} that validate() rejects",
+            );
+        }
     }
 
     #[test]
