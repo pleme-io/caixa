@@ -445,6 +445,84 @@ impl WitContract {
         self.endpoint.as_deref()
     }
 
+    /// Substrate-canonical per-`:contratos` `:subject` pub-sub-shaped
+    /// payload-target scalar accessor every consumer that reads the
+    /// edge's NATS / Kafka publish subject payload keys off — returns
+    /// the author-declared `:contratos :subject` byte-string verbatim
+    /// as an `Option<&str>`, borrowed from the typed slot's own
+    /// `Option<String>` storage; `None` when the slot is absent (the
+    /// canonical shape of a non-pub-sub-`:wit`-world edge — HTTP
+    /// `wasi:http/*`/`http:*` carries `:endpoint` instead, key/value
+    /// `wasi:keyvalue/*`/`kv:*` carries `:slot` instead, and a plain
+    /// [`WitTarget::Capability`] edge carries none of the three).
+    ///
+    /// The `:contratos :subject` slot carries the NATS / Kafka publish
+    /// subject payload (the [`WIT_PUBSUB_SHAPE_PREFIXES`] dispatch arm's
+    /// per-edge target selector — `orders.paid`, `events.>`, whatever
+    /// subject namespace the author names on the pub-sub edge) that
+    /// [`WitContract::target`] projects onto the [`WitTarget::PubSub`]
+    /// arm's `subject: &'a str` payload when the edge's `:wit` world
+    /// matches the [`WIT_PUBSUB_SHAPE_PREFIXES`] accept-set. Every
+    /// downstream consumer that reads the payload keys off this scalar
+    /// (the [`WitContract::target`] PubSub-arm payload extraction that
+    /// materializes [`WitTarget::PubSub { subject }`] under the paired
+    /// [`WitTarget::PUBSUB_FIELD_NAME`] label, the
+    /// [`AplicacaoSpec::validate`] duplicate-`:contratos` [`ContratoIdentity`]
+    /// key's subject arm that pins the payload as part of the six-tuple
+    /// dedup key alongside the sibling `:endpoint`/`:slot` arms, the
+    /// future M4 per-edge WIT registry resolver's pub-sub-arm
+    /// materializer, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's per-edge NATS admission webhook, the future
+    /// caixa-mesh L4 CNP emission path that lands the payload verbatim
+    /// as a NATS subject the operator pins per-CR).
+    ///
+    /// Prior to this lift the `.subject` field was accessed inline at
+    /// two production sites in `caixa-core/src/aplicacao.rs` — the
+    /// [`WitContract::target`] payload-shape dispatch's `let subject =
+    /// self.subject.as_deref();` binding at the top of the method, and
+    /// the [`AplicacaoSpec::validate`] duplicate-`:contratos` dedup-key
+    /// tuple's `c.subject.as_deref()` pub-sub-arm slot — two open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:contratos :subject` axis
+    /// to a richer author surface (an M4 promotion from `Option<String>`
+    /// to a typed NATS-subject-template enum once the WIT registry
+    /// stabilizes wildcard / hierarchy shapes in tatara-lisp per this
+    /// struct's own `:wit` field docstring, a per-cluster subject-alias
+    /// table the operator pins through a future `:placement`-scoped
+    /// slot, a canonicalization pass that lowercases / dedupes wildcard
+    /// segments, a per-CR fully-qualified rewrite the M4 CR materializer
+    /// applies per-tenant) would have had to be threaded through both
+    /// open-coded copies in lockstep or the two consumers would silently
+    /// disagree on which NATS subject a given edge resolves to — the
+    /// [`WitContract::target`] payload-extraction reading `"orders.paid"`
+    /// while the [`AplicacaoSpec::validate`] dedup key read the operator-
+    /// resolved `"tenant-a.orders.paid"` would silently split the
+    /// [`WitTarget::PubSub`]-arm rendered payload from the actual dedup-
+    /// key uniqueness axis, a two-consumer split at the validator far
+    /// from the source `caixa.lisp` with no field naming the payload-
+    /// drift root cause. Lifting the resolution rule to a typed method
+    /// on the substrate primitive means every downstream pub-sub-payload-
+    /// facing consumer of the Aplicacao's per-`:contratos` L4-payload
+    /// surface reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:contratos` [`WitContract::endpoint`]
+    /// (7020470) `Option<&str>` accessor on the M3 mesh-slot payload-
+    /// carrier axis — second `Option<&str>`-return accessor on the
+    /// per-`:contratos` mesh-slot atom, extending the "optional per-slot
+    /// payload-carrier scalar" projection pattern the [`WitContract::endpoint`]
+    /// HTTP-arm lift opened onto the pub-sub arm; leaves the [`WitContract::slot`]
+    /// key/value-store arm as the last unlifted per-`:contratos`
+    /// `Option<String>` axis. Named `subject()` to match the storage
+    /// field's name and the paired [`WitTarget::PUBSUB_FIELD_NAME`]
+    /// author-facing label const; the accessor's identity name maps
+    /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub fn subject(&self) -> Option<&str> {
+        self.subject.as_deref()
+    }
+
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
@@ -511,7 +589,7 @@ impl WitContract {
         // (74ec2d3) `Option<&str>` typed-dispatch discipline extended
         // onto the per-`:contratos` HTTP-shaped payload-carrier axis.
         let endpoint = self.endpoint();
-        let subject = self.subject.as_deref();
+        let subject = self.subject();
         let slot = self.slot.as_deref();
         let edge = || (self.de.clone(), self.para.clone(), self.wit.clone());
 
@@ -4401,7 +4479,22 @@ impl AplicacaoSpec {
                 // [`WitContract::destination`] / [`WitContract::world_ref`])
                 // onto the first per-`:contratos` payload-carrier arm.
                 c.endpoint(),
-                c.subject.as_deref(),
+                // Route the pub-sub-arm payload-carrier scalar through
+                // the lifted [`WitContract::subject`] accessor rather
+                // than the raw `c.subject.as_deref()` field access —
+                // the two production consumers of the per-`:contratos
+                // :subject` pub-sub-shaped payload-carrier scalar (the
+                // peer [`WitContract::target`] PubSub-arm payload
+                // extraction, this [`ContratoIdentity`] dedup-key
+                // pub-sub arm) now key off exactly one typed dispatch
+                // on the substrate primitive, closing the third of six
+                // unlifted per-`:contratos` `Option<String>`-carry
+                // sites and extending the peer per-`:contratos`
+                // HTTP-arm [`WitContract::endpoint`] (7020470) lift
+                // onto the pub-sub arm. Leaves the [`WitContract::slot`]
+                // key/value-store arm as the last unlifted per-
+                // `:contratos` `Option<String>` axis.
+                c.subject(),
                 c.slot.as_deref(),
             );
             crate::render::insert_first_seen(&mut seen_contracts, key, || {
@@ -15294,6 +15387,152 @@ mod tests {
             ep.len(),
             storage_slice.len(),
             "WitContract::endpoint and .endpoint.as_deref() must byte-\
+             equal in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn wit_contract_subject_returns_subject_option_byte_equal_across_permutations() {
+        // The canonical per-`:contratos` pub-sub-shaped `:subject`-scalar
+        // pin: [`WitContract::subject`] must return the `:contratos
+        // :subject` field byte-for-byte, borrowed from the typed slot's
+        // own `Option<String>` storage. Peer of the sibling per-`:contratos`
+        // [`WitContract::endpoint`] (7020470) accessor pin on the M3
+        // mesh-slot per-`:contratos` payload-carrier `Option<String>`
+        // optional-scalar axis — same "the substrate-primitive accessor
+        // must byte-equal the raw field access verbatim across every
+        // author-declared value" discipline extended to the pub-sub arm.
+        // Pins against a future silent detour that re-canonicalized the
+        // subject (an accidental `.to_lowercase()` normalization that
+        // didn't reach the peer field-access site at the dedup key, a
+        // per-CR fully-qualified prefix rewrite the operator authors on
+        // one consumer without the other, or an M4 typed-subject-template
+        // `Display` re-canonicalization that silently drifted the printer
+        // output from the source `caixa.lisp`). Four values sweep the
+        // NATS accept-set every pub-sub author-declared subject lands on
+        // (flat token, dotted hierarchy, per-tenant prefix, wildcard).
+        for subject in ["events", "orders.paid", "tenant-a.orders", "orders.>"] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "notifier".into(),
+                wit: "nats:pub-sub".into(),
+                endpoint: None,
+                subject: Some(subject.into()),
+                slot: None,
+            };
+            assert_eq!(
+                c.subject(),
+                Some(subject),
+                "WitContract::subject must return :contratos :subject \
+                 verbatim (got {:?}, expected Some({subject:?}))",
+                c.subject(),
+            );
+            assert_eq!(
+                c.subject(),
+                c.subject.as_deref(),
+                "WitContract::subject must byte-equal the .subject \
+                 field's `.as_deref()` projection",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_subject_none_when_field_is_none() {
+        // The absent-`:subject` arm of the per-`:contratos` pub-sub-
+        // shaped payload-carrier accessor pin: when the typed slot is
+        // absent — the canonical shape under a non-pub-sub `:wit` world
+        // per the [`WitContract::target`]-enforced shape ↔ target
+        // partition ([`WitTarget::Http`] carries `:endpoint`,
+        // [`WitTarget::Store`] carries `:slot`, [`WitTarget::Capability`]
+        // carries none) — [`WitContract::subject`] must return `None`.
+        // Pins against a future silent detour that projected the absent
+        // slot to a `Some("")` empty-string default (the canonical
+        // `Option<String>` → `String` collapse footgun the sibling M2
+        // [`crate::LimitsSpec::is_empty`] / [`crate::BehaviorSpec::is_empty`]
+        // emptiness predicates already guard on the peer M2 typed-slot
+        // surfaces), a `Some("None")` stringified-None round-trip, or a
+        // `Some` arm whose contents were derived from a sibling slot (an
+        // accidental fallback to the `:endpoint` / `:slot` payload that
+        // read the HTTP / store payload into the subject axis). Three
+        // contracts sweep the accept-set every non-pub-sub `:wit` world
+        // lands on — HTTP proxy, key/value store, and payload-less
+        // capability.
+        for (wit, endpoint, slot) in [
+            ("wasi:http/proxy", Some("/lookup"), None),
+            ("wasi:keyvalue/store", None, Some("carts/{cart_id}")),
+            ("wasi:cli/environment", None, None),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "downstream".into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: None,
+                slot: slot.map(str::to_string),
+            };
+            assert!(
+                c.subject().is_none(),
+                "WitContract::subject must return None when the typed \
+                 slot is absent under :wit {wit:?} (got {:?})",
+                c.subject(),
+            );
+            assert_eq!(
+                c.subject(),
+                c.subject.as_deref(),
+                "WitContract::subject must byte-equal the .subject \
+                 field's `.as_deref()` projection in the absent arm",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_subject_borrows_from_subject_storage() {
+        // The borrow-not-copy pin: [`WitContract::subject`] must return
+        // an `Option<&str>` whose `Some` arm borrows from the typed
+        // slot's own [`String`] storage — same-address invariant with
+        // `c.subject.as_deref().unwrap()`. Pins against a future silent
+        // detour that allocated a fresh `String`
+        // (`self.subject.clone().map(...)` in the body would type-check
+        // but silently drop the borrow, and every downstream consumer
+        // that assumed the returned slice outlives `&self` would break
+        // on a stale-reference use-after-free — the [`WitContract::target`]
+        // PubSub-arm payload extraction rebinds the returned
+        // `Option<&str>` through `.ok_or_else(...)` and threads the
+        // `&str` payload into [`WitTarget::PubSub { subject: &'a str }`],
+        // the [`AplicacaoSpec::validate`] duplicate-`:contratos`
+        // [`ContratoIdentity`] dedup key threads the returned
+        // `Option<&str>` into the six-tuple's pub-sub arm — each borrow
+        // from the WitContract's own storage and each would silently
+        // misbehave if this accessor produced a detached copy). Peer of
+        // the sibling per-`:contratos` [`WitContract::endpoint`] (7020470)
+        // borrow-invariant pin on the M3 mesh-slot `Option<String>`-
+        // shaped optional-scalar axis — second extension of the
+        // `Option<&str>` borrow-not-copy discipline onto the
+        // per-`:contratos` payload-carrier family, this time on the
+        // pub-sub arm.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "notifier".into(),
+            wit: "nats:pub-sub".into(),
+            endpoint: None,
+            subject: Some("orders.paid".into()),
+            slot: None,
+        };
+        let sub = c.subject().expect("Some arm");
+        let storage_slice = c.subject.as_deref().expect("Some arm — storage side");
+        assert_eq!(
+            sub.as_ptr(),
+            storage_slice.as_ptr(),
+            "WitContract::subject must borrow from the .subject \
+             String's backing storage — a fresh allocation here means \
+             the accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            sub.len(),
+            storage_slice.len(),
+            "WitContract::subject and .subject.as_deref() must byte-\
              equal in length as well as in address",
         );
     }
