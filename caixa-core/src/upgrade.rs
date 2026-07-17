@@ -1136,13 +1136,16 @@ pub fn validate_upgrade_from_against_versao(
 ///   - `behavior: None` is *not* a free pass when a `:state-change`
 ///     instruction is present — the same missing-callback shape as
 ///     `behavior: Some(_)` with `on_state_change: None`. The gate reads
-///     `behavior.and_then(|b| b.on_state_change.as_ref())` so both shapes
+///     `behavior.and_then(BehaviorSpec::on_state_change)` so both shapes
 ///     surface the same diagnostic.
 pub fn validate_upgrade_from_against_behavior(
     entries: &[UpgradeFromEntry],
     behavior: Option<&crate::BehaviorSpec>,
 ) -> Result<(), UpgradeError> {
-    if behavior.and_then(|b| b.on_state_change.as_ref()).is_some() {
+    if behavior
+        .and_then(crate::BehaviorSpec::on_state_change)
+        .is_some()
+    {
         return Ok(());
     }
     for entry in entries {
