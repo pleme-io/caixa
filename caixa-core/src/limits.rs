@@ -379,7 +379,7 @@ impl LimitsSpec {
         self.memory().is_none()
             && self.fuel().is_none()
             && self.wall_clock().is_none()
-            && self.cpu.is_none()
+            && self.cpu().is_none()
     }
 
     /// Substrate-canonical per-`:limits` `:memory` Lunatic-per-process
@@ -625,6 +625,91 @@ impl LimitsSpec {
         self.wall_clock
     }
 
+    /// Substrate-canonical per-`:limits` `:cpu` Kubernetes-millicore
+    /// soft cgroup-share scalar accessor every consumer of the Servico's
+    /// pod-spec `resources.requests.cpu` propagation keys off — returns
+    /// the author-declared `:limits :cpu` typed millicore magnitude
+    /// verbatim as an `Option<u32>`, copied out of the typed slot's own
+    /// `Option<u32>` storage (`Option<u32>` is `Copy`, so the accessor
+    /// returns by value; no borrow of `&self` past the call). `None`
+    /// when the slot is absent (the "no cpu share declared —
+    /// scheduler-default applies, today the pre-M2 unbounded-cpu-share
+    /// shape" arm the module-level docstring names on
+    /// [`LimitsSpec::cpu`] itself — [`LimitsSpec::is_empty`]'s
+    /// `cpu().is_none()` arm reads this predicate too, so an
+    /// authored-but-unset `:limits (:cpu ())` round-trips to a
+    /// `servico_m2_overlay` emission structurally identical to one that
+    /// omits the slot entirely).
+    ///
+    /// The `:limits :cpu` slot carries the "per-process soft cgroup-v2
+    /// CPU share" Kubernetes-scheduler-shaped sandboxing hint
+    /// (`theory/INSPIRATIONS.md` §III.1 — Lunatic's supervised
+    /// wasm-`Store`-per-process host-runtime CPU accounting, translated
+    /// onto pleme-io's typed `:limits` slot as a scheduler-facing
+    /// millicore request the pod's kubelet propagates to the container's
+    /// cgroup) — the typed slot's `Option<u32>` accept-set (zero-floor
+    /// rejected through [`LimitsError::CpuZero`] because a zero cgroup
+    /// share starves the process; upper-bounded by
+    /// [`LIMITS_CPU_MILLICORES_MAX`] (128 cores — the largest commercially-
+    /// common non-metal cloud Kubernetes node vCPU count on managed GKE
+    /// / EKS / AKS general-purpose SKUs)) maps onto the K8s pod spec's
+    /// `spec.containers[].resources.requests.cpu` field the
+    /// M2.5 `wasm-engine` host-runtime lands on the `ComputeUnit` CR-side
+    /// pod template and, via [`crate::render::servico_m2_overlay`], onto
+    /// the `pleme-computeunit` Helm-library-chart values sub-block's
+    /// `limits.cpu` key that lands as the `ComputeUnit` CR's
+    /// `spec.limits.cpu` field.
+    ///
+    /// Prior to this lift the `.cpu` field was accessed inline at two
+    /// sites inside `impl LimitsSpec` — [`LimitsSpec::is_empty`]'s
+    /// `self.cpu.is_none()` arm and [`LimitsSpec::validate`]'s
+    /// `if let Some(m) = self.cpu { … }` zero-floor + upper-cap bracket
+    /// arm — two open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:limits :cpu` axis to a richer author surface — a
+    /// per-instance `ComputeUnit` CR-side `spec.limits.cpu` overlay the
+    /// operator pins per-cluster, a split of the single `u32` millicore
+    /// request into a `{request, limit}` pair once the pod spec's
+    /// `resources.requests.cpu` / `resources.limits.cpu` distinction
+    /// promotes past its current single-request author surface, a
+    /// millicore → cgroup-v2 `cpu.weight` rescale once the operator's
+    /// scheduler-facing translation lands past its current kubelet
+    /// passthrough — would have had to be threaded through every
+    /// open-coded copy in lockstep or the emptiness predicate and the
+    /// validate call would silently disagree on which cgroup share a
+    /// given [`LimitsSpec`] resolves to. Lifting the resolution to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the Servico's per-`:limits` cpu-share surface reaches
+    /// for exactly one typed dispatch — the resolver's accept-set
+    /// migrates as a unit on any future axis addition.
+    ///
+    /// Fourth and final `Option<Copy-T>`-return accessor on the M2 slot
+    /// family (peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+    /// (620c067) `Option<u64>` accessor, per-`:limits`
+    /// [`LimitsSpec::fuel`] (795dee7) `Option<u64>` accessor, and
+    /// per-`:limits` [`LimitsSpec::wall_clock`] (8cb717b)
+    /// `Option<Duration>` accessor — same typed-optional-scalar shape
+    /// extended to the peer per-`:limits` cgroup-cpu-share axis; sibling
+    /// to [`crate::MeshPolicy::mtls_required`] (c0110f1) /
+    /// [`crate::MeshPolicy::retries`] (bdfb399) /
+    /// [`crate::MeshPolicy::timeout`] (7073d0f) on the closed M3
+    /// mesh-slot `Option<Copy-T>` accessor family). The four-tuple
+    /// `(memory(), fuel(), wall_clock(), cpu())` jointly projects every
+    /// `Option<Copy-T>` axis on the M2 `:limits` slot every consumer
+    /// that fans on wasm-linear-memory-cap + wasm-fuel-budget +
+    /// wall-clock-deadline + cgroup-cpu-share keys off — closes the M2
+    /// `:limits` slot family's `Option<Copy-T>` accessor axis (the
+    /// last unlifted `:limits` field-access site on the M2 slot family;
+    /// every axis now routes through a typed dispatch on the substrate
+    /// primitive, with no open-coded field access anywhere on the impl).
+    /// Named `cpu()` to match the storage field's name; the accessor's
+    /// identity maps onto the canonical Kubernetes-`resources.requests.cpu`-
+    /// shaped vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn cpu(&self) -> Option<u32> {
+        self.cpu
+    }
+
     /// Reject operationally-meaningless zero values on every declared
     /// axis. Each axis remains optional — omitting a field expresses
     /// "no bound on this axis"; the bug being closed is *carrying* a
@@ -852,7 +937,7 @@ impl LimitsSpec {
         // [`crate::AplicacaoError::PolicyBreakerWindowExceedsCap`],
         // [`crate::AplicacaoError::PolicyRateLimitExceedsCap`],
         // [`crate::SupervisorError::MaxRestartsExceedsCap`]).
-        if let Some(m) = self.cpu {
+        if let Some(m) = self.cpu() {
             crate::render::require_positive_bounded_u32(
                 m,
                 LIMITS_CPU_MILLICORES_MAX,
@@ -5957,6 +6042,193 @@ mod tests {
                 first, wall_clock,
                 "LimitsSpec::wall_clock must return :limits :wall-clock \
                  verbatim by copy — got {first:?}, expected {wall_clock:?}",
+            );
+        }
+    }
+
+    // ── per-`:limits :cpu` accessor pins (LimitsSpec::cpu) ───────────
+
+    #[test]
+    fn limits_cpu_returns_option_u32_byte_equal_across_permutations() {
+        // The canonical per-`:limits` `:cpu` Kubernetes-millicore
+        // soft cgroup-share scalar pin: [`LimitsSpec::cpu`] must return
+        // the `:limits :cpu` typed `u32` verbatim as an `Option<u32>`,
+        // byte-equal to the raw field access across the three canonical
+        // shape-arms — `None` (no cgroup share declared —
+        // scheduler-default applies), `Some(1)` (the structural minimum
+        // a validated `:limits :cpu` may carry, one millicore; a zero
+        // cgroup share is separately rejected by
+        // [`LimitsError::CpuZero`]), `Some(500)` (the canonical 500m
+        // half-a-core share the in-tree
+        // `limits_slot_propagates_into_values_block` smoke test carries
+        // as the load-bearing example, peer to the `caixa-flux`
+        // projector's identical 500m default).
+        //
+        // Peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) / [`LimitsSpec::fuel`] (795dee7) /
+        // [`LimitsSpec::wall_clock`] (8cb717b) accessor byte-equality
+        // pins on the peer typed-`u64` / `u64` / `Duration`
+        // optional-scalar axes, extended to the cgroup-cpu-share
+        // `Option<u32>` shape — fourth and final `Option<Copy-T>`-return
+        // accessor on the M2 slot family, closing the M2 `:limits`
+        // `Option<Copy-T>` accessor axis. Sibling to
+        // [`crate::MeshPolicy::retries`] (bdfb399) on the M3 mesh-slot
+        // family's peer `Option<u32>` accessor axis — same typed-`u32`
+        // shape extended from the M3 per-edge-transient-failure-retry-
+        // budget axis to the M2 per-process-cgroup-cpu-share axis.
+        // Pins against a future silent detour that re-derived the cpu
+        // share from a peer axis (an accidental `.retries`-collapse that
+        // assumed the two `Option<u32>` axes carry the same value — the
+        // two axes share a shape but not a semantic, M2 `:cpu` counts
+        // millicores of soft cgroup share and M3 `:retries` counts
+        // per-edge transient-failure retry budget), a `None` → `Some(0)`
+        // "zero means unbounded" collapse (the canonical `Option<u32>` →
+        // `u32` collapse footgun the [`LimitsError::CpuZero`] validate
+        // arm guards on the peer zero-floor axis; a zero cgroup share
+        // starves the process rather than expressing "unbounded"), or a
+        // per-arm variant swap that landed on one consumer without the
+        // other.
+        for cpu in [None, Some(1_u32), Some(500_u32)] {
+            let l = LimitsSpec {
+                cpu,
+                ..LimitsSpec::default()
+            };
+            assert_eq!(
+                l.cpu(),
+                cpu,
+                "LimitsSpec::cpu must return :limits :cpu verbatim \
+                 (got {:?}, expected {cpu:?})",
+                l.cpu(),
+            );
+            assert_eq!(
+                l.cpu(),
+                l.cpu,
+                "LimitsSpec::cpu must byte-equal the raw .cpu \
+                 field access across every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_is_empty_cpu_arm_routes_through_accessor() {
+        // Composition pin: [`LimitsSpec::is_empty`]'s `cpu` arm must key
+        // off [`LimitsSpec::cpu`], not the raw `.cpu` field access.
+        // Structurally: setting ONLY the `cpu` slot on an
+        // otherwise-default LimitsSpec must flip `is_empty()` from
+        // `true` (all-`None`) to `false` (one axis carries a value);
+        // the flip must be observed across every value in the
+        // accept-set since the emptiness semantic reads "any axis
+        // carries a value" — not "any axis carries a value above a
+        // threshold" — the same non-collapsing shape the sibling M3
+        // [`crate::MeshPolicy::is_empty`] predicate carries on its
+        // peer `Option<Copy-T>`-typed slot surfaces and the sibling
+        // per-`:limits` [`LimitsSpec::memory`] (620c067) /
+        // [`LimitsSpec::fuel`] (795dee7) / [`LimitsSpec::wall_clock`]
+        // (8cb717b) `is_empty()` accessor-composition pins carry on the
+        // peer `Option<u64>` / `Option<u64>` / `Option<Duration>` axes.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.memory.is_none()`-only chain that dropped the `cpu` arm
+        // entirely), an accessor-side detour that no longer names the
+        // substrate-primitive typed dispatch (an accidental
+        // `self.cpu.unwrap_or(0) == 0` fallback in the accessor that
+        // would silently classify both `None` and `Some(0)` as the same
+        // value — a footgun the [`LimitsError::CpuZero`] validate arm
+        // explicitly closes since a zero cgroup share starves the
+        // process rather than expressing "unbounded"), or a threshold
+        // collapse (a `self.cpu().is_some_and(|m| m > 0)` that would
+        // silently classify `Some(0)` as unset).
+        //
+        // Peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) / [`LimitsSpec::fuel`] (795dee7) /
+        // [`LimitsSpec::wall_clock`] (8cb717b) `is_empty` composition
+        // pins on the peer `Option<u64>` / `Option<u64>` /
+        // `Option<Duration>` axes — same "the emptiness predicate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer per-`:limits` `:cpu` arm.
+        // Closes the M2 `:limits` `is_empty`-composition family — every
+        // arm now routes through its typed accessor, no open-coded
+        // field access remains.
+        let empty = LimitsSpec::default();
+        assert!(
+            empty.is_empty(),
+            "LimitsSpec::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for cpu in [Some(1_u32), Some(500_u32), Some(LIMITS_CPU_MILLICORES_MAX)] {
+            let l = LimitsSpec {
+                cpu,
+                ..LimitsSpec::default()
+            };
+            assert!(
+                !l.is_empty(),
+                "LimitsSpec::is_empty must return false when :cpu \
+                 is {cpu:?} — the emptiness predicate reads \"any \
+                 axis carries a value\", not \"any axis carries a \
+                 value above a threshold\"",
+            );
+            assert_eq!(
+                l.cpu().is_none(),
+                l.is_empty(),
+                "when :cpu is the only set axis, is_empty() must \
+                 equal cpu().is_none() — the accessor and the \
+                 emptiness predicate must route through the same \
+                 substrate-primitive typed dispatch on the :cpu \
+                 arm",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_cpu_projects_option_u32_by_copy() {
+        // The by-copy pin: [`LimitsSpec::cpu`] returns `Option<u32>` by
+        // copy — `Option<u32>` is `Copy` and the accessor must return
+        // by value, not by reference. Peer of the sibling per-`:limits`
+        // [`LimitsSpec::memory`] (620c067) / [`LimitsSpec::fuel`]
+        // (795dee7) / [`LimitsSpec::wall_clock`] (8cb717b)
+        // copy-invariant pins on the peer `Option<u64>` / `Option<u64>`
+        // / `Option<Duration>` shapes, extended onto the peer
+        // `Option<u32>` copy-invariant shape — the accessor's returned
+        // `Option<u32>` must outlive `&self` (multiple calls must
+        // return equal values from a dropped-`&self` copy, since the
+        // returned Option carries no borrow), and calling the accessor
+        // twice on the same LimitsSpec must yield the same
+        // `Option<u32>` verbatim (idempotent, no side effects on
+        // `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&u32>` (which would type-check but silently break
+        // every downstream caller — the future K8s pod-spec
+        // `resources.requests.cpu` wire path consumes `u32` by value
+        // and `&u32` would fold to a detached copy at the call site),
+        // an accidental `Option::as_ref()` projection
+        // (`self.cpu.as_ref()` would also type-check but return
+        // `Option<&u32>`), or a one-arm-only accessor that reads
+        // `Some(*m)` in the Some arm but reads a fresh
+        // `Default::default()` in the None arm.
+        for cpu in [
+            None,
+            Some(1_u32),
+            Some(500_u32),
+            Some(LIMITS_CPU_MILLICORES_MAX),
+        ] {
+            let l = LimitsSpec {
+                cpu,
+                ..LimitsSpec::default()
+            };
+            let first = l.cpu();
+            let second = l.cpu();
+            assert_eq!(
+                first, second,
+                "LimitsSpec::cpu must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<u32>",
+            );
+            assert_eq!(
+                first, cpu,
+                "LimitsSpec::cpu must return :limits :cpu \
+                 verbatim by copy — got {first:?}, expected {cpu:?}",
             );
         }
     }
