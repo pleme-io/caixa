@@ -377,7 +377,7 @@ impl LimitsSpec {
     #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.memory().is_none()
-            && self.fuel.is_none()
+            && self.fuel().is_none()
             && self.wall_clock.is_none()
             && self.cpu.is_none()
     }
@@ -456,6 +456,86 @@ impl LimitsSpec {
     #[must_use]
     pub const fn memory(&self) -> Option<u64> {
         self.memory
+    }
+
+    /// Substrate-canonical per-`:limits` `:fuel` wasmtime-per-call
+    /// wasm-instruction budget scalar accessor every consumer of the
+    /// Servico's `wasmtime::Store::set_fuel` propagation keys off —
+    /// returns the author-declared `:limits :fuel` typed
+    /// wasm-instruction budget verbatim as an `Option<u64>`, copied
+    /// out of the typed slot's own `Option<u64>` storage
+    /// (`Option<u64>` is `Copy`, so the accessor returns by value; no
+    /// borrow of `&self` past the call). `None` when the slot is
+    /// absent (the "no fuel budget declared — engine-default applies,
+    /// today the pre-M2 unbounded-fuel-counter shape" arm the
+    /// module-level docstring names on [`LimitsSpec::fuel`] itself —
+    /// [`LimitsSpec::is_empty`]'s `fuel().is_none()` arm reads this
+    /// predicate too, so an authored-but-unset `:limits (:fuel ())`
+    /// round-trips to a `servico_m2_overlay` emission structurally
+    /// identical to one that omits the slot entirely).
+    ///
+    /// The `:limits :fuel` slot carries the "per-call wasm-instruction
+    /// budget" wasmtime-shaped sandboxing contract
+    /// (`theory/INSPIRATIONS.md` §III.1 — Lunatic's supervised
+    /// wasm-`Store`-per-process fuel accounting, translated onto
+    /// pleme-io's typed `:limits` slot) — the typed slot's
+    /// `Option<u64>` accept-set (zero-floor rejected through
+    /// [`LimitsError::FuelZero`] because wasmtime traps the first
+    /// instruction at `fuel=0`, upper-bounded by [`LIMITS_FUEL_MAX`]
+    /// (10¹² wasm instructions — the operationally-reachable
+    /// per-call budget within the sibling [`LIMITS_WALL_CLOCK_MAX`]
+    /// 1h ceiling)) maps onto the wasmtime `Store::set_fuel` call
+    /// the M2.5 wasm-engine wires per outermost call and, via
+    /// [`crate::render::servico_m2_overlay`], onto the
+    /// `pleme-computeunit` Helm-library-chart values sub-block's
+    /// `limits.fuel` key that lands as the `ComputeUnit` CR's
+    /// `spec.limits.fuel` field.
+    ///
+    /// Prior to this lift the `.fuel` field was accessed inline at
+    /// two sites inside `impl LimitsSpec` — [`LimitsSpec::is_empty`]'s
+    /// `self.fuel.is_none()` arm and [`LimitsSpec::validate`]'s
+    /// `if let Some(f) = self.fuel { … }` zero-floor + upper-cap
+    /// bracket arm — two open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension
+    /// of the `:limits :fuel` axis to a richer author surface — a
+    /// per-instance `ComputeUnit` CR-side `spec.limits.fuel` overlay
+    /// the operator pins per-cluster, a wasm-instruction-count →
+    /// wasmtime-fuel-unit rescale once the fuel-tracking backend
+    /// switches from Cranelift's implicit 1:1 count to a
+    /// per-opcode-weighted budget, a split of the single
+    /// per-outermost-call `u64` budget into a `{per_call, per_second}`
+    /// pair once the wasm-engine grows a sustained-throughput cap —
+    /// would have had to be threaded through every open-coded copy in
+    /// lockstep or the emptiness predicate and the validate call
+    /// would silently disagree on which fuel budget a given
+    /// [`LimitsSpec`] resolves to. Lifting the resolution to a typed
+    /// method on the substrate primitive means every downstream
+    /// consumer of the Servico's per-`:limits` fuel-budget surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Second `Option<Copy-T>`-return accessor on the M2 slot family
+    /// (peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+    /// (620c067) `Option<u64>` accessor — same typed-`u64`
+    /// optional-scalar shape, extended to the peer per-`:limits`
+    /// wasm-instruction-budget axis; sibling to
+    /// [`crate::MeshPolicy::mtls_required`] (c0110f1) / [`crate::MeshPolicy::retries`]
+    /// (bdfb399) / [`crate::MeshPolicy::timeout`] (7073d0f) on the
+    /// closed M3 mesh-slot `Option<Copy-T>` accessor family). The
+    /// pair `(memory(), fuel())` jointly projects the two `Option<u64>`
+    /// axes every M2 `:limits` consumer that fans on
+    /// wasm-linear-memory-cap + wasm-fuel-budget keys off. Two of the
+    /// four `:limits` axes now route through a typed dispatch on the
+    /// substrate primitive; the two remaining (`wall_clock:
+    /// Option<Duration>`, `cpu: Option<u32>`) fold on the same
+    /// one-line accessor + is_empty-arm-route + validate-arm-route +
+    /// three-test pattern. Named `fuel()` to match the storage field's
+    /// name; the accessor's identity maps onto the canonical
+    /// wasmtime-`Store::set_fuel`-shaped vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub const fn fuel(&self) -> Option<u64> {
+        self.fuel
     }
 
     /// Reject operationally-meaningless zero values on every declared
@@ -623,7 +703,7 @@ impl LimitsSpec {
         // `:fuel` in `1..=LIMITS_FUEL_MAX`, `:wall-clock` in
         // `1ms..=LIMITS_WALL_CLOCK_MAX`, `:cpu` in
         // `1..=LIMITS_CPU_MILLICORES_MAX`).
-        if let Some(f) = self.fuel {
+        if let Some(f) = self.fuel() {
             crate::render::require_positive_bounded_u64(
                 f,
                 LIMITS_FUEL_MAX,
@@ -5431,6 +5511,176 @@ mod tests {
                 first, memory,
                 "LimitsSpec::memory must return :limits :memory \
                  verbatim by copy — got {first:?}, expected {memory:?}",
+            );
+        }
+    }
+
+    // ── per-`:limits :fuel` accessor pins (LimitsSpec::fuel) ─────────
+
+    #[test]
+    fn limits_fuel_returns_option_u64_byte_equal_across_permutations() {
+        // The canonical per-`:limits` `:fuel` wasmtime-per-call
+        // wasm-instruction budget scalar pin: [`LimitsSpec::fuel`]
+        // must return the `:limits :fuel` typed `u64` verbatim as an
+        // `Option<u64>`, byte-equal to the raw field access across
+        // the three canonical shape-arms — `None` (no fuel budget
+        // declared — engine-default applies), `Some(1)` (the
+        // structural minimum a validated `:limits :fuel` may carry,
+        // one wasm instruction; wasmtime traps the first instruction
+        // at `fuel=0`, so `Some(1)` is the smallest budget that
+        // executes any code), `Some(1_000_000)` (the canonical 10⁶
+        // fuel-unit budget the in-tree `Caixa::template` and the
+        // wasmtime book's `Store::set_fuel(1_000_000)` example both
+        // carry).
+        //
+        // Peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) accessor byte-equality pin on the peer typed-`u64`
+        // optional-scalar axis, extended to the wasm-instruction-budget
+        // shape — second `Option<Copy-T>`-return accessor on the M2
+        // slot family. Pins against a future silent detour that
+        // re-derived the fuel budget from a peer axis (an accidental
+        // `.memory`-collapse that assumed the two `Option<u64>` axes
+        // carry the same value — the two axes share a shape but not
+        // a semantic, `:memory` counts linear-memory bytes and `:fuel`
+        // counts wasm instructions), a `None` → `Some(0)` "zero means
+        // unbounded" collapse (the canonical `Option<u64>` → `u64`
+        // collapse footgun the [`LimitsError::FuelZero`] validate arm
+        // guards on the peer zero-floor axis; wasmtime interprets
+        // `fuel=0` as "trap the first instruction" not "no bound"), or
+        // a per-arm variant swap that landed on one consumer without
+        // the other.
+        for fuel in [None, Some(1_u64), Some(1_000_000_u64)] {
+            let l = LimitsSpec {
+                fuel,
+                ..LimitsSpec::default()
+            };
+            assert_eq!(
+                l.fuel(),
+                fuel,
+                "LimitsSpec::fuel must return :limits :fuel verbatim \
+                 (got {:?}, expected {fuel:?})",
+                l.fuel(),
+            );
+            assert_eq!(
+                l.fuel(),
+                l.fuel,
+                "LimitsSpec::fuel must byte-equal the raw .fuel \
+                 field access across every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_is_empty_fuel_arm_routes_through_accessor() {
+        // Composition pin: [`LimitsSpec::is_empty`]'s `fuel` arm
+        // must key off [`LimitsSpec::fuel`], not the raw `.fuel`
+        // field access. Structurally: setting ONLY the `fuel` slot
+        // on an otherwise-default LimitsSpec must flip `is_empty()`
+        // from `true` (all-`None`) to `false` (one axis carries a
+        // value); the flip must be observed across every value in
+        // the accept-set since the emptiness semantic reads "any
+        // axis carries a value" — not "any axis carries a value
+        // above a threshold" — the same non-collapsing shape the
+        // sibling M3 [`crate::MeshPolicy::is_empty`] predicate
+        // carries on its peer `Option<Copy-T>`-typed slot surfaces
+        // and the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) `is_empty()` accessor-composition pin carries on
+        // the peer `Option<u64>` axis.
+        //
+        // Pins against a future silent detour that re-derived the
+        // emptiness predicate off a peer axis (an accidental
+        // `.memory.is_none()`-only chain that dropped the `fuel` arm
+        // entirely), an accessor-side detour that no longer names the
+        // substrate-primitive typed dispatch (an accidental
+        // `self.fuel.unwrap_or(0) == 0` fallback in the accessor
+        // that would silently classify both `None` and `Some(0)` as
+        // the same value — a footgun the [`LimitsError::FuelZero`]
+        // validate arm explicitly closes since `fuel=0` traps rather
+        // than expresses "unbounded"), or a threshold collapse (a
+        // `self.fuel().is_some_and(|f| f > 0)` that would silently
+        // classify `Some(0)` as unset).
+        //
+        // Peer of the sibling per-`:limits` [`LimitsSpec::memory`]
+        // (620c067) `is_empty` composition pin on the peer
+        // `Option<u64>` axis — same "the emptiness predicate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer per-`:limits` `:fuel`
+        // arm.
+        let empty = LimitsSpec::default();
+        assert!(
+            empty.is_empty(),
+            "LimitsSpec::default() must be is_empty() — every axis \
+             defaults to None",
+        );
+        for fuel in [Some(1_u64), Some(1_000_000_u64), Some(LIMITS_FUEL_MAX)] {
+            let l = LimitsSpec {
+                fuel,
+                ..LimitsSpec::default()
+            };
+            assert!(
+                !l.is_empty(),
+                "LimitsSpec::is_empty must return false when :fuel \
+                 is {fuel:?} — the emptiness predicate reads \"any \
+                 axis carries a value\", not \"any axis carries a \
+                 value above a threshold\"",
+            );
+            assert_eq!(
+                l.fuel().is_none(),
+                l.is_empty(),
+                "when :fuel is the only set axis, is_empty() must \
+                 equal fuel().is_none() — the accessor and the \
+                 emptiness predicate must route through the same \
+                 substrate-primitive typed dispatch on the :fuel \
+                 arm",
+            );
+        }
+    }
+
+    #[test]
+    fn limits_fuel_projects_option_u64_by_copy() {
+        // The by-copy pin: [`LimitsSpec::fuel`] returns `Option<u64>`
+        // by copy — `Option<u64>` is `Copy` and the accessor must
+        // return by value, not by reference. Peer of the sibling per-
+        // `:limits` [`LimitsSpec::memory`] (620c067) copy-invariant
+        // pin on the peer `Option<u64>` shape — the accessor's
+        // returned `Option<u64>` must outlive `&self` (multiple calls
+        // must return equal values from a dropped-`&self` copy, since
+        // the returned Option carries no borrow), and calling the
+        // accessor twice on the same LimitsSpec must yield the same
+        // `Option<u64>` verbatim (idempotent, no side effects on
+        // `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `Option<&u64>` (which would type-check but silently break
+        // every downstream caller — the future `wasmtime::Store::set_fuel`
+        // wire path consumes `u64` by value and `&u64` would fold to
+        // a detached copy at the call site), an accidental
+        // `Option::as_ref()` projection (`self.fuel.as_ref()` would
+        // also type-check but return `Option<&u64>`), or a one-arm-
+        // only accessor that reads `Some(*f)` in the Some arm but
+        // reads a fresh `Default::default()` in the None arm.
+        for fuel in [
+            None,
+            Some(1_u64),
+            Some(1_000_000_u64),
+            Some(LIMITS_FUEL_MAX),
+        ] {
+            let l = LimitsSpec {
+                fuel,
+                ..LimitsSpec::default()
+            };
+            let first = l.fuel();
+            let second = l.fuel();
+            assert_eq!(
+                first, second,
+                "LimitsSpec::fuel must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<u64>",
+            );
+            assert_eq!(
+                first, fuel,
+                "LimitsSpec::fuel must return :limits :fuel \
+                 verbatim by copy — got {first:?}, expected {fuel:?}",
             );
         }
     }
