@@ -3159,6 +3159,71 @@ impl Placement {
     pub fn shard_key(&self) -> Option<&str> {
         self.shard_key.as_deref()
     }
+
+    /// Substrate-canonical per-`:placement` `:affinity` M3-Adaptive-
+    /// compression-hint scalar accessor every weighting-consumer of the
+    /// Aplicacao's per-hint routing surface keys off — returns the
+    /// author-declared `:placement :affinity` byte-string verbatim as
+    /// an `Option<&str>`, borrowed from the typed slot's own
+    /// `Option<String>` storage; `None` when the slot is absent (the
+    /// canonical shape of an Aplicacao that leaves the compression
+    /// weighting up to the placement engine's cluster-default arm — no
+    /// author-authored `data-locality` / `low-latency` / etc. hint
+    /// biases the routing).
+    ///
+    /// The `:placement :affinity` slot carries the M3 Adaptive-
+    /// compression-weight bias hint (MESH-COMPOSITION §II.4) — validated
+    /// by [`validate_placement_affinity`] to be a DNS-1123 label
+    /// (`[a-z0-9]([-a-z0-9]*[a-z0-9])?`, 1..=63 bytes — the
+    /// K8s-conformant label-selector shape every apiserver-side pod-
+    /// affinity / node-affinity materializer already gates on
+    /// admission), and every downstream consumer that reads the hint
+    /// keys off this scalar (the [`AplicacaoSpec::validate_placement`]
+    /// per-hint value-shape gate, the caixa-mesh per-Aplicacao
+    /// `placement.affinity` overlay emit path the substrate operator's
+    /// per-hint weighting-consumer reads, the future M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-hint
+    /// pod-affinity / node-affinity selector resolver).
+    ///
+    /// Prior to this lift the `.affinity` field was accessed inline at
+    /// the sole caixa-core site — the
+    /// [`AplicacaoSpec::validate_placement`] per-hint value-shape gate's
+    /// `if let Some(a) = &self.placement.affinity { …
+    /// validate_placement_affinity(a)? … }` cascade — one open-coded
+    /// field-access that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:placement :affinity`
+    /// axis to a richer author surface — a per-cluster override the
+    /// operator pins through a future `:placement :affinity-overrides`
+    /// slot the MESH-COMPOSITION §II.4 roadmap acknowledges, a per-
+    /// tenant hint alias table the M4 CR materializer resolves per-CR,
+    /// a per-Aplicacao dynamic `:affinity` derivation the future
+    /// adaptive placement engine computes from `:clusters` topology —
+    /// would have had to be threaded through the open-coded copy in
+    /// lockstep with any future caixa-mesh / caixa-flux / M4 CR
+    /// materializer reader that landed on the axis, or the per-hint
+    /// value-shape gate and its downstream weighting consumers would
+    /// silently disagree on which hint a given Placement resolves to.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the Aplicacao's
+    /// per-`:placement` compression-hint surface reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a
+    /// unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:placement` [`Placement::shard_key`]
+    /// (7cd2a28) `Option<&str>` accessor on the sibling per-`:placement`
+    /// optional-scalar axis — same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline extended
+    /// onto the per-`:placement` M3-Adaptive-compression-hint
+    /// `Option<String>` optional-scalar axis. Second `Option<&str>`-
+    /// return accessor on the M3 mesh-slot family; closes the last
+    /// un-lifted per-`:placement` `Option<String>` axis. Named
+    /// `affinity()` to match the storage field's name; the accessor's
+    /// identity name maps onto the canonical MESH-COMPOSITION §II.4
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub fn affinity(&self) -> Option<&str> {
+        self.affinity.as_deref()
+    }
 }
 
 impl Default for Placement {
@@ -3980,20 +4045,41 @@ impl AplicacaoSpec {
                 AplicacaoError::PlacementClusterDuplicate { cluster: c.clone() }
             })?;
         }
-        if let Some(a) = &self.placement.affinity {
-            // Per-hint value-shape gate: the `:affinity` value lands
-            // verbatim in the M3 Adaptive compression overlay
-            // (caixa-mesh's `placement.affinity` emission) and every
-            // future M4 placement-engine routing axis keying off the
-            // hint as a K8s `app.pleme.io/affinity-hint=<value>` label
-            // selector — each enforces the DNS-1123 label rule on
-            // admission. Same typed-shape trajectory as `:placement
-            // :clusters` (6c8c00b) on the sibling slot and the four
-            // Servico-name reference axes (`:membros :caixa` 3f9d7a0,
-            // `:placement :clusters` 6c8c00b, `:contratos :de`/`:para`
-            // 8d5af6b, `:entrada :para` b0e8748) — the fifth typed slot
-            // on the Aplicacao surface to land on the canonical
-            // [`crate::render::is_dns_1123_label`] floor.
+        // Route the per-`:placement :affinity` per-hint value-shape
+        // gate through the typed [`Placement::affinity`] accessor rather
+        // than the raw `&self.placement.affinity` field access — the
+        // sole open-coded field-access site on the per-`:placement`
+        // M3-Adaptive-compression-hint axis the accessor lift now owns.
+        // The `Some(a)`-bound `a` narrows from `&String` to `&str` under
+        // the accessor's `Option<&str>` return type;
+        // [`validate_placement_affinity`]'s `&str` parameter accepts
+        // the narrower borrow without a re-allocation, so the routing
+        // change is byte-for-byte in the pass arm and remains
+        // byte-for-byte in every failure diagnostic
+        // ([`AplicacaoError::PlacementAffinityInvalid`]'s `affinity:
+        // String` field is populated inside
+        // [`validate_placement_affinity`] via the peer `.to_string()`
+        // path on the same borrowed slice). Peer of the sibling
+        // `PlacementStrategy::Sharded`-arm `:shard-key` shape-gate
+        // routing through [`Placement::shard_key`] at the caixa-core
+        // site above — extends the "read `:placement` optional-scalars
+        // through the typed accessor" discipline to the second
+        // `Option<String>`-shape slot on the M3 mesh-slot family.
+        //
+        // Per-hint value-shape gate: the `:affinity` value lands
+        // verbatim in the M3 Adaptive compression overlay
+        // (caixa-mesh's `placement.affinity` emission) and every
+        // future M4 placement-engine routing axis keying off the
+        // hint as a K8s `app.pleme.io/affinity-hint=<value>` label
+        // selector — each enforces the DNS-1123 label rule on
+        // admission. Same typed-shape trajectory as `:placement
+        // :clusters` (6c8c00b) on the sibling slot and the four
+        // Servico-name reference axes (`:membros :caixa` 3f9d7a0,
+        // `:placement :clusters` 6c8c00b, `:contratos :de`/`:para`
+        // 8d5af6b, `:entrada :para` b0e8748) — the fifth typed slot
+        // on the Aplicacao surface to land on the canonical
+        // [`crate::render::is_dns_1123_label`] floor.
+        if let Some(a) = self.placement.affinity() {
             validate_placement_affinity(a)?;
         }
         match self.placement.estrategia {
@@ -14678,6 +14764,152 @@ mod tests {
             key.len(),
             storage_slice.len(),
             "Placement::shard_key and .shard_key.as_deref() must byte-\
+             equal in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn placement_affinity_returns_affinity_option_byte_equal_across_permutations() {
+        // The canonical per-`:placement` M3-Adaptive-compression-hint
+        // scalar pin: [`Placement::affinity`] must return the
+        // `:placement :affinity` field byte-for-byte, borrowed from the
+        // typed slot's own `Option<String>` storage. Peer of the sibling
+        // per-`:placement` [`Placement::shard_key`] (7cd2a28) accessor
+        // pin on the sibling `Option<&str>` optional-scalar axis — same
+        // "the substrate-primitive accessor must byte-equal the raw
+        // field access verbatim across every author-declared value"
+        // discipline extended to the peer per-`:placement` M3-Adaptive-
+        // compression-hint arm. Pins against a future silent detour
+        // that re-normalized the hint (an accidental `.to_lowercase()`
+        // — every `:affinity` is already validated as a DNS-1123 label
+        // upstream via [`validate_placement_affinity`], so any re-
+        // normalization is redundant + a drift surface between the
+        // validator and the accessor), a per-cluster alias rewrite the
+        // operator authors on one consumer without the other, or an
+        // accidental hint-family collapse (`low-latency` → `latency`
+        // that dropped the qualifier prefix). Four values sweep the
+        // MESH-COMPOSITION §II.4 vocabulary the accept-set names — the
+        // canonical adaptive-compression-weight biases the future M4
+        // placement engine reads.
+        for hint in [
+            "data-locality",
+            "low-latency",
+            "high-throughput",
+            "cost-optimized",
+        ] {
+            let p = Placement {
+                estrategia: PlacementStrategy::Replicated,
+                clusters: vec!["rio".into()],
+                affinity: Some(hint.into()),
+                shard_key: None,
+            };
+            assert_eq!(
+                p.affinity(),
+                Some(hint),
+                "Placement::affinity must return :placement :affinity \
+                 verbatim (got {:?}, expected Some({hint:?}))",
+                p.affinity(),
+            );
+            assert_eq!(
+                p.affinity(),
+                p.affinity.as_deref(),
+                "Placement::affinity must byte-equal the .affinity \
+                 field's `.as_deref()` projection",
+            );
+        }
+    }
+
+    #[test]
+    fn placement_affinity_none_when_field_is_none() {
+        // The absent-`:affinity` arm of the per-`:placement`
+        // M3-Adaptive-compression-hint accessor pin: when the typed
+        // slot is absent — the canonical shape of an Aplicacao that
+        // leaves the compression weighting up to the placement engine's
+        // cluster-default arm — [`Placement::affinity`] must return
+        // `None`. Pins against a future silent detour that projected
+        // the absent slot to a `Some("")` empty-string default (the
+        // canonical `Option<String>` → `String` collapse footgun the
+        // sibling M2 [`crate::LimitsSpec::is_empty`] /
+        // [`crate::BehaviorSpec::is_empty`] emptiness predicates
+        // already guard on the peer M2 typed-slot surfaces), a
+        // `Some("None")` stringified-None round-trip, a `Some` arm
+        // whose contents were derived from a sibling slot (an
+        // accidental fallback to `estrategia.as_str()` that read the
+        // strategy discriminator into the hint axis), or a
+        // `Some("default")` implicit-default that would silently biases
+        // the routing without the author having written one. Three
+        // placements sweep the accept-set every `validate`-passing
+        // `:affinity None` shape lands on — one per PlacementStrategy
+        // discriminator arm (`SingleNode`, `Replicated`, `Sharded`
+        // with a shard-key), since `:affinity` is orthogonal to
+        // `:estrategia` in the typed grammar.
+        for (estrategia, shard_key) in [
+            (PlacementStrategy::SingleNode, None),
+            (PlacementStrategy::Replicated, None),
+            (PlacementStrategy::Sharded, Some("tenantId".to_string())),
+        ] {
+            let p = Placement {
+                estrategia,
+                clusters: vec!["rio".into()],
+                affinity: None,
+                shard_key,
+            };
+            assert!(
+                p.affinity().is_none(),
+                "Placement::affinity must return None when the typed \
+                 slot is absent under :estrategia {estrategia:?} (got {:?})",
+                p.affinity(),
+            );
+            assert_eq!(
+                p.affinity(),
+                p.affinity.as_deref(),
+                "Placement::affinity must byte-equal the .affinity \
+                 field's `.as_deref()` projection in the absent arm",
+            );
+        }
+    }
+
+    #[test]
+    fn placement_affinity_borrows_from_affinity_storage() {
+        // The borrow-not-copy pin: [`Placement::affinity`] must return
+        // an `Option<&str>` whose `Some` arm borrows from the typed
+        // slot's own [`String`] storage — same-address invariant with
+        // `p.affinity.as_deref().unwrap()`. Pins against a future
+        // silent detour that allocated a fresh `String`
+        // (`self.affinity.clone().map(...)` in the body would type-
+        // check but silently drop the borrow, and every downstream
+        // consumer that assumed the returned slice outlives `&self`
+        // would break on a stale-reference use-after-free — the
+        // [`AplicacaoSpec::validate_placement`] per-hint value-shape
+        // gate reads the accessor's `&str` return through the
+        // [`validate_placement_affinity`] `&str` parameter and would
+        // silently misbehave if this accessor produced a detached
+        // copy). Peer of the sibling per-`:placement`
+        // [`Placement::shard_key`] (7cd2a28) borrow-invariant pin on
+        // the M3 mesh-slot-atom `Option<String>` optional-scalar axis —
+        // extends the discipline onto the sibling per-`:placement`
+        // M3-Adaptive-compression-hint arm.
+        let p = Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: Some("data-locality".into()),
+            shard_key: None,
+        };
+        let hint = p.affinity().expect("Some arm");
+        let storage_slice = p.affinity.as_deref().expect("Some arm — storage side");
+        assert_eq!(
+            hint.as_ptr(),
+            storage_slice.as_ptr(),
+            "Placement::affinity must borrow from the .affinity \
+             String's backing storage — a fresh allocation here means \
+             the accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            hint.len(),
+            storage_slice.len(),
+            "Placement::affinity and .affinity.as_deref() must byte-\
              equal in length as well as in address",
         );
     }
