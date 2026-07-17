@@ -523,6 +523,86 @@ impl WitContract {
         self.subject.as_deref()
     }
 
+    /// Substrate-canonical per-`:contratos` `:slot` key/value-store-
+    /// shaped payload-target scalar accessor every consumer that reads
+    /// the edge's `wasi:keyvalue/*` / `kv:*` key-template payload keys
+    /// off — returns the author-declared `:contratos :slot` byte-string
+    /// verbatim as an `Option<&str>`, borrowed from the typed slot's
+    /// own `Option<String>` storage; `None` when the slot is absent
+    /// (the canonical shape of a non-store-`:wit`-world edge — HTTP
+    /// `wasi:http/*`/`http:*` carries `:endpoint` instead, pub-sub
+    /// `nats:*`/`kafka:*` carries `:subject` instead, and a plain
+    /// [`WitTarget::Capability`] edge carries none of the three).
+    ///
+    /// The `:contratos :slot` slot carries the key/value store
+    /// key-template payload (the [`WIT_STORE_SHAPE_PREFIXES`] dispatch
+    /// arm's per-edge target selector — `carts/{cart_id}`,
+    /// `sessions/{tenant}/{sid}`, whatever key-template the author
+    /// names on the store edge) that [`WitContract::target`] projects
+    /// onto the [`WitTarget::Store`] arm's `slot: &'a str` payload when
+    /// the edge's `:wit` world matches the [`WIT_STORE_SHAPE_PREFIXES`]
+    /// accept-set. Every downstream consumer that reads the payload
+    /// keys off this scalar (the [`WitContract::target`] Store-arm
+    /// payload extraction that materializes [`WitTarget::Store { slot }`]
+    /// under the paired [`WitTarget::STORE_FIELD_NAME`] label, the
+    /// [`AplicacaoSpec::validate`] duplicate-`:contratos` [`ContratoIdentity`]
+    /// key's store arm that pins the payload as part of the six-tuple
+    /// dedup key alongside the sibling `:endpoint`/`:subject` arms,
+    /// the future M4 per-edge WIT registry resolver's store-arm
+    /// materializer, the future `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's per-edge key/value admission webhook, the future
+    /// caixa-mesh L4 CNP emission path that lands the payload verbatim
+    /// as a key-template the operator pins per-CR).
+    ///
+    /// Prior to this lift the `.slot` field was accessed inline at two
+    /// production sites in `caixa-core/src/aplicacao.rs` — the
+    /// [`WitContract::target`] payload-shape dispatch's `let slot =
+    /// self.slot.as_deref();` binding at the top of the method, and
+    /// the [`AplicacaoSpec::validate`] duplicate-`:contratos` dedup-key
+    /// tuple's `c.slot.as_deref()` store-arm slot — two open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:contratos :slot` axis
+    /// to a richer author surface (an M4 promotion from `Option<String>`
+    /// to a typed key-template enum once the WIT registry stabilizes
+    /// key-template parameter shapes in tatara-lisp per this struct's
+    /// own `:wit` field docstring, a per-cluster slot-alias table the
+    /// operator pins through a future `:placement`-scoped slot, a
+    /// canonicalization pass that lowercases the bucket prefix, a
+    /// per-CR fully-qualified rewrite the M4 CR materializer applies
+    /// per-tenant) would have had to be threaded through both
+    /// open-coded copies in lockstep or the two consumers would
+    /// silently disagree on which key-template a given edge resolves
+    /// to — the [`WitContract::target`] payload-extraction reading
+    /// `"carts/{cart_id}"` while the [`AplicacaoSpec::validate`] dedup
+    /// key read the operator-resolved `"tenant-a/carts/{cart_id}"`
+    /// would silently split the [`WitTarget::Store`]-arm rendered
+    /// payload from the actual dedup-key uniqueness axis, a
+    /// two-consumer split at the validator far from the source
+    /// `caixa.lisp` with no field naming the payload-drift root cause.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream store-payload-facing consumer
+    /// of the Aplicacao's per-`:contratos` payload surface reaches for
+    /// exactly one typed dispatch — the resolver's accept-set migrates
+    /// as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:contratos` [`WitContract::endpoint`]
+    /// (7020470) / [`WitContract::subject`] (90de675) `Option<&str>`
+    /// accessors on the M3 mesh-slot payload-carrier axis — third and
+    /// final `Option<&str>`-return accessor on the per-`:contratos`
+    /// mesh-slot atom, closes the last unlifted per-`:contratos`
+    /// `Option<String>` axis and completes the "optional per-slot
+    /// payload-carrier scalar" projection pattern the peer HTTP /
+    /// pub-sub arms established across the three payload-shape
+    /// dispatch arms. Named `slot()` to match the storage field's
+    /// name and the paired [`WitTarget::STORE_FIELD_NAME`]
+    /// author-facing label const; the accessor's identity name maps
+    /// onto the canonical MESH-COMPOSITION §II.3 vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub fn slot(&self) -> Option<&str> {
+        self.slot.as_deref()
+    }
+
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
@@ -590,7 +670,20 @@ impl WitContract {
         // onto the per-`:contratos` HTTP-shaped payload-carrier axis.
         let endpoint = self.endpoint();
         let subject = self.subject();
-        let slot = self.slot.as_deref();
+        // Route the store-arm payload-carrier scalar through the
+        // lifted [`WitContract::slot`] accessor rather than the raw
+        // `self.slot.as_deref()` field access — the two production
+        // consumers of the per-`:contratos :slot` key/value-store-
+        // shaped payload-carrier scalar (this method's Store-arm
+        // payload extraction, the [`AplicacaoSpec::validate`]
+        // duplicate-`:contratos` [`ContratoIdentity`] dedup-key store
+        // arm) now key off exactly one typed dispatch on the substrate
+        // primitive. Closes the last unlifted per-`:contratos`
+        // `Option<String>` axis, completing the payload-carrier
+        // accessor family peer of the sibling per-`:contratos`
+        // [`WitContract::endpoint`] (7020470) / [`WitContract::subject`]
+        // (90de675) lifts across the HTTP / pub-sub arms.
+        let slot = self.slot();
         let edge = || (self.de.clone(), self.para.clone(), self.wit.clone());
 
         // The `:wit` value drives every downstream dispatch — the
@@ -4495,7 +4588,21 @@ impl AplicacaoSpec {
                 // key/value-store arm as the last unlifted per-
                 // `:contratos` `Option<String>` axis.
                 c.subject(),
-                c.slot.as_deref(),
+                // Route the store-arm payload-carrier scalar through
+                // the lifted [`WitContract::slot`] accessor rather
+                // than the raw `c.slot.as_deref()` field access — the
+                // two production consumers of the per-`:contratos
+                // :slot` key/value-store-shaped payload-carrier scalar
+                // (the peer [`WitContract::target`] Store-arm payload
+                // extraction, this [`ContratoIdentity`] dedup-key
+                // store arm) now key off exactly one typed dispatch
+                // on the substrate primitive, closing the last of six
+                // unlifted per-`:contratos` `Option<String>`-carry
+                // sites and completing the peer per-`:contratos`
+                // HTTP-arm [`WitContract::endpoint`] (7020470) /
+                // pub-sub-arm [`WitContract::subject`] (90de675) lift
+                // family onto the store arm.
+                c.slot(),
             );
             crate::render::insert_first_seen(&mut seen_contracts, key, || {
                 AplicacaoError::ContratoDuplicate {
@@ -15534,6 +15641,161 @@ mod tests {
             storage_slice.len(),
             "WitContract::subject and .subject.as_deref() must byte-\
              equal in length as well as in address",
+        );
+    }
+
+    #[test]
+    fn wit_contract_slot_returns_slot_option_byte_equal_across_permutations() {
+        // The canonical per-`:contratos` key/value-store-shaped
+        // `:slot`-scalar pin: [`WitContract::slot`] must return the
+        // `:contratos :slot` field byte-for-byte, borrowed from the
+        // typed slot's own `Option<String>` storage. Peer of the
+        // sibling per-`:contratos` [`WitContract::endpoint`] (7020470) /
+        // [`WitContract::subject`] (90de675) accessor pins on the M3
+        // mesh-slot per-`:contratos` payload-carrier `Option<String>`
+        // optional-scalar axis — same "the substrate-primitive
+        // accessor must byte-equal the raw field access verbatim
+        // across every author-declared value" discipline extended to
+        // the store arm. Pins against a future silent detour that
+        // re-canonicalized the slot template (an accidental
+        // `.to_lowercase()` bucket-prefix normalization that didn't
+        // reach the peer field-access site at the dedup key, a per-CR
+        // fully-qualified prefix rewrite the operator authors on one
+        // consumer without the other, or an M4 typed-key-template
+        // `Display` re-canonicalization that silently drifted the
+        // printer output from the source `caixa.lisp`). Four values
+        // sweep the wasi:keyvalue accept-set every store-shaped
+        // author-declared slot lands on (flat bucket, single-param
+        // template, multi-param template, nested-hierarchy template).
+        for slot in [
+            "sessions",
+            "carts/{cart_id}",
+            "orders/{tenant}/{order_id}",
+            "cache/tenant-a/orders/{id}",
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "kv".into(),
+                wit: "wasi:keyvalue/store".into(),
+                endpoint: None,
+                subject: None,
+                slot: Some(slot.into()),
+            };
+            assert_eq!(
+                c.slot(),
+                Some(slot),
+                "WitContract::slot must return :contratos :slot \
+                 verbatim (got {:?}, expected Some({slot:?}))",
+                c.slot(),
+            );
+            assert_eq!(
+                c.slot(),
+                c.slot.as_deref(),
+                "WitContract::slot must byte-equal the .slot field's \
+                 `.as_deref()` projection",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_slot_none_when_field_is_none() {
+        // The absent-`:slot` arm of the per-`:contratos` store-shaped
+        // payload-carrier accessor pin: when the typed slot is absent —
+        // the canonical shape under a non-store `:wit` world per the
+        // [`WitContract::target`]-enforced shape ↔ target partition
+        // ([`WitTarget::Http`] carries `:endpoint`, [`WitTarget::PubSub`]
+        // carries `:subject`, [`WitTarget::Capability`] carries none) —
+        // [`WitContract::slot`] must return `None`. Pins against a
+        // future silent detour that projected the absent slot to a
+        // `Some("")` empty-string default (the canonical
+        // `Option<String>` → `String` collapse footgun the sibling M2
+        // [`crate::LimitsSpec::is_empty`] / [`crate::BehaviorSpec::is_empty`]
+        // emptiness predicates already guard on the peer M2 typed-slot
+        // surfaces), a `Some("None")` stringified-None round-trip, or
+        // a `Some` arm whose contents were derived from a sibling
+        // slot (an accidental fallback to the `:endpoint` / `:subject`
+        // payload that read the HTTP / pub-sub payload into the store
+        // axis). Three contracts sweep the accept-set every non-store
+        // `:wit` world lands on — HTTP proxy, pub-sub NATS, and
+        // payload-less capability.
+        for (wit, endpoint, subject) in [
+            ("wasi:http/proxy", Some("/lookup"), None),
+            ("nats:pub-sub", None, Some("orders.paid")),
+            ("wasi:cli/environment", None, None),
+        ] {
+            let c = WitContract {
+                de: "cart".into(),
+                para: "downstream".into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: None,
+            };
+            assert!(
+                c.slot().is_none(),
+                "WitContract::slot must return None when the typed \
+                 slot is absent under :wit {wit:?} (got {:?})",
+                c.slot(),
+            );
+            assert_eq!(
+                c.slot(),
+                c.slot.as_deref(),
+                "WitContract::slot must byte-equal the .slot field's \
+                 `.as_deref()` projection in the absent arm",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_slot_borrows_from_slot_storage() {
+        // The borrow-not-copy pin: [`WitContract::slot`] must return
+        // an `Option<&str>` whose `Some` arm borrows from the typed
+        // slot's own [`String`] storage — same-address invariant with
+        // `c.slot.as_deref().unwrap()`. Pins against a future silent
+        // detour that allocated a fresh `String`
+        // (`self.slot.clone().map(...)` in the body would type-check
+        // but silently drop the borrow, and every downstream consumer
+        // that assumed the returned slice outlives `&self` would
+        // break on a stale-reference use-after-free — the
+        // [`WitContract::target`] Store-arm payload extraction rebinds
+        // the returned `Option<&str>` through `.ok_or_else(...)` and
+        // threads the `&str` payload into [`WitTarget::Store { slot: &'a str }`],
+        // the [`AplicacaoSpec::validate`] duplicate-`:contratos`
+        // [`ContratoIdentity`] dedup key threads the returned
+        // `Option<&str>` into the six-tuple's store arm — each borrow
+        // from the WitContract's own storage and each would silently
+        // misbehave if this accessor produced a detached copy). Peer
+        // of the sibling per-`:contratos` [`WitContract::endpoint`]
+        // (7020470) / [`WitContract::subject`] (90de675)
+        // borrow-invariant pins on the M3 mesh-slot `Option<String>`-
+        // shaped optional-scalar axis — third and final extension of
+        // the `Option<&str>` borrow-not-copy discipline onto the
+        // per-`:contratos` payload-carrier family, this time on the
+        // store arm.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "kv".into(),
+            wit: "wasi:keyvalue/store".into(),
+            endpoint: None,
+            subject: None,
+            slot: Some("carts/{cart_id}".into()),
+        };
+        let slot = c.slot().expect("Some arm");
+        let storage_slice = c.slot.as_deref().expect("Some arm — storage side");
+        assert_eq!(
+            slot.as_ptr(),
+            storage_slice.as_ptr(),
+            "WitContract::slot must borrow from the .slot String's \
+             backing storage — a fresh allocation here means the \
+             accessor no longer names the substrate-primitive typed \
+             dispatch and every downstream consumer would silently \
+             carry a detached copy",
+        );
+        assert_eq!(
+            slot.len(),
+            storage_slice.len(),
+            "WitContract::slot and .slot.as_deref() must byte-equal \
+             in length as well as in address",
         );
     }
 
