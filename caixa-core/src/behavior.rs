@@ -221,6 +221,75 @@ impl BehaviorSpec {
         self.on_state_change.as_deref()
     }
 
+    /// Substrate-canonical per-`:behavior` `:on-init` OTP-`gen_server:init/1`-
+    /// shaped once-per-instance-start callback-path scalar accessor every
+    /// consumer of the Servico's instance-start dispatch keys off — returns
+    /// the author-declared `:behavior :on-init` typed callback path
+    /// verbatim as an `Option<&Path>`, borrowed from the typed slot's own
+    /// `Option<PathBuf>` storage. `None` when the slot is absent (the
+    /// canonical "no init callback declared — the runtime falls back to
+    /// the wasm-engine's no-op instance-start default" arm the runtime's
+    /// callback-lookup consults at instance-start time; peer of the
+    /// sibling [`BehaviorSpec::on_state_change`] `None`-arm's
+    /// "no state-migration callback" semantic on the sibling axis).
+    ///
+    /// The `:behavior :on-init` slot carries the OTP
+    /// `gen_server:init/1` callback contract (the module-level
+    /// [`BehaviorSpec::on_init`] docstring pins the analog verbatim:
+    /// "Called once before the instance accepts traffic. Analog of
+    /// `gen_server:init/1`. Runs to completion or the instance fails to
+    /// start."). Its position in the OTP lifecycle is first — the
+    /// runtime instantiates the wasm process, dispatches the init
+    /// callback, and only then flips the instance's readiness state so
+    /// downstream traffic (`:on-call` / `:on-cast`) is accepted
+    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// six-callback lifecycle, translated onto pleme-io's typed
+    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// author-surface pins `:on-init` as the first arm of the
+    /// `:behavior` overlay every Servico may declare).
+    ///
+    /// Prior to this lift the `.on_init` field was accessed inline at
+    /// one production site — [`BehaviorSpec::declared_slots`]'s
+    /// `:on-init` arm's `self.on_init.as_ref()` map into the six-tuple
+    /// iterator that both the layout checker (existence sweep at
+    /// `layout.rs:900`) and the sibling `BehaviorSpec::validate`
+    /// value-shape gate consume — an open-coded field-access that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:behavior :on-init` axis to a richer author
+    /// surface — a per-tenant init-callback override the M4 CR
+    /// materializer resolves per-CR, a per-cluster instance-start
+    /// callback overlay the `theory/ABSORPTION-ROADMAP.md` M2.5
+    /// wasm-engine callback-dispatch wire acknowledges, a per-Aplicacao
+    /// dynamic init-callback derivation the future adaptive
+    /// hot-instantiation engine computes from the sibling `:limits`
+    /// wasm-engine sandbox — would have had to be threaded through the
+    /// open-coded field-access in `declared_slots` (the tag surface every
+    /// per-slot diagnostic reads) or the `declared_slots` iterator would
+    /// silently disagree on which callback a given [`BehaviorSpec`]
+    /// resolves to. Lifting the resolution to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Servico's per-`:behavior` init-callback surface reaches for
+    /// exactly one typed dispatch — the resolver's accept-set migrates
+    /// as a unit on any future axis addition.
+    ///
+    /// Second `Option<&Path>`-return accessor on the M2 `:behavior` slot
+    /// family (sibling of the prior [`BehaviorSpec::on_state_change`]
+    /// 9b4ecde `Option<&Path>` accessor on the peer per-`:behavior`
+    /// `:on-state-change` axis — same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the peer per-`:behavior`
+    /// `Option<PathBuf>` optional-scalar axis; continues the "optional
+    /// per-slot `Option<&Path>` scalar" projection pattern the sibling
+    /// per-`:behavior` `:on-call` / `:on-cast` / `:on-info` /
+    /// `:on-terminate` future lifts fold on). Named `on_init()` to match
+    /// the storage field's name; the accessor's identity name maps onto
+    /// the canonical `theory/INSPIRATIONS.md` §II.3 vocabulary the
+    /// slot's docstring already carries.
+    #[must_use]
+    pub fn on_init(&self) -> Option<&Path> {
+        self.on_init.as_deref()
+    }
+
     /// Reject operationally-meaningless callback path values on every
     /// declared slot. Each slot remains optional — omitting a field
     /// expresses "fall back to the runtime default callback"; the bug
@@ -1194,5 +1263,101 @@ mod tests {
             err,
             crate::UpgradeError::StateChangeWithoutOnStateChangeCallback { .. }
         ));
+    }
+
+    // ── per-`:behavior :on-init` accessor pins ─────────────────────
+
+    #[test]
+    fn behavior_on_init_returns_option_path_verbatim_across_permutations() {
+        // Canonical per-`:behavior` `:on-init` OTP-`init/1`-shaped
+        // callback-path scalar pin: [`BehaviorSpec::on_init`] must
+        // return the `:behavior :on-init` typed `PathBuf` verbatim as
+        // an `Option<&Path>`, borrowed from the raw `Option<PathBuf>`
+        // field access across the three canonical shape-arms — `None`
+        // (no callback declared — the runtime falls back to the
+        // wasm-engine's no-op instance-start default), `Some("lib/init.lisp")`
+        // (the canonical single-file shape the module-doc example
+        // uses), `Some("lib/lifecycle/init.lisp")` (the per-lifecycle
+        // sub-directory shape the `theory/ABSORPTION-ROADMAP.md` M2.5
+        // wasm-engine callback-dispatch wire acknowledges).
+        //
+        // Peer of the sibling per-`:behavior` [`BehaviorSpec::on_state_change`]
+        // (9b4ecde) `Option<&Path>` accessor pin on the sibling
+        // `Option<PathBuf>`-return axis — second `Option<&Path>`-return
+        // accessor on the M2 `:behavior` slot family. Pins against a
+        // future silent detour that re-derived the callback path from a
+        // peer axis (an accidental `.on_call`-collapse that assumed the
+        // two `Option<PathBuf>` axes carry the same value), a `None` →
+        // `Some(empty)` collapse (the canonical
+        // `Option<PathBuf>` → `PathBuf::new()` footgun the
+        // [`BehaviorError::EmptyPath`] validate arm guards on the peer
+        // path-shape axis), or a per-arm variant swap that landed on
+        // one consumer without the other.
+        for path in [
+            None,
+            Some(PathBuf::from("lib/init.lisp")),
+            Some(PathBuf::from("lib/lifecycle/init.lisp")),
+        ] {
+            let b = BehaviorSpec {
+                on_init: path.clone(),
+                ..BehaviorSpec::default()
+            };
+            assert_eq!(
+                b.on_init(),
+                path.as_deref(),
+                "BehaviorSpec::on_init must return the \
+                 :behavior :on-init PathBuf verbatim as \
+                 Option<&Path> (got {:?}, expected {:?})",
+                b.on_init(),
+                path.as_deref(),
+            );
+            assert_eq!(
+                b.on_init(),
+                b.on_init.as_deref(),
+                "BehaviorSpec::on_init must byte-equal the \
+                 raw .on_init.as_deref() field access across \
+                 every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn behavior_on_init_is_independent_of_peer_on_star_axes() {
+        // Cross-axis independence pin: flipping only the `:on-init`
+        // axis flips [`BehaviorSpec::on_init`] independently of every
+        // peer `:on-*` axis (`:on-call` / `:on-cast` / `:on-info` /
+        // `:on-state-change` / `:on-terminate`). A future silent detour
+        // that re-derived the callback path from a peer axis (an
+        // accidental `.on_call`-collapse, a "init falls back to
+        // state-change" default that would silently rebind the callback
+        // dispatch to the wrong slot) surfaces here as a build-time
+        // test failure.
+        //
+        // Peer of the sibling
+        // `behavior_on_state_change_is_independent_of_peer_on_star_axes`
+        // (9b4ecde) cross-axis pin on the sibling
+        // `:on-state-change` axis — each accessor-lift closes exactly
+        // one axis and leaves every peer axis unshifted.
+        let base = BehaviorSpec {
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            ..BehaviorSpec::default()
+        };
+        assert_eq!(base.on_init(), None);
+        let with = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            ..base.clone()
+        };
+        assert_eq!(
+            with.on_init(),
+            Some(PathBuf::from("lib/init.lisp").as_path()),
+            "BehaviorSpec::on_init must project the \
+             :on-init axis independently of every peer :on-* \
+             axis (got {:?})",
+            with.on_init(),
+        );
     }
 }
