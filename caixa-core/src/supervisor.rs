@@ -700,6 +700,96 @@ impl Default for SupervisorSpec {
 }
 
 impl SupervisorSpec {
+    /// Substrate-canonical per-`:supervisor` `:estrategia` OTP-shaped
+    /// sibling-restart-strategy scalar accessor every consumer that
+    /// dispatches on the supervisor's per-sibling restart-decision shape
+    /// keys off — returns the author-declared `:supervisor :estrategia`
+    /// variant verbatim as a [`RestartStrategy`], `Copy`-projected from
+    /// the typed slot's own [`RestartStrategy`] storage.
+    ///
+    /// The `:supervisor :estrategia` slot carries the closed-set
+    /// OTP-shaped sibling-restart-strategy discriminator ([`RestartStrategy::OneForOne`]
+    /// — restart only the failed child, the Erlang/OTP `one_for_one` default;
+    /// [`RestartStrategy::OneForAll`] — restart every child on any child
+    /// failure, the Erlang/OTP `one_for_all` shared-state cohort default;
+    /// [`RestartStrategy::RestForOne`] — restart the failed child and
+    /// every child started after it, the Erlang/OTP `rest_for_one`
+    /// startup-order default; [`RestartStrategy::SimpleOneForOne`] —
+    /// dynamic children of the same shape, the Erlang/OTP
+    /// `simple_one_for_one` per-session default) that every downstream
+    /// consumer of the Supervisor's per-sibling restart-decision fan-out
+    /// shape keys off. Validated by [`SupervisorSpec::validate`] to be
+    /// paired coherently with the sibling `:children` axis
+    /// (`SimpleOneForOne ↔ children.is_empty()` — the cross-slot
+    /// partition the strategy-arm's [`SupervisorError::SimpleOneForOneWithStaticChildren`]
+    /// / [`SupervisorError::NoChildren`] refusal cascade pins), and every
+    /// downstream consumer that reads the strategy keys off this scalar
+    /// (the [`SupervisorSpec::validate`] `SimpleOneForOne ↔ non-SimpleOneForOne`
+    /// partition-dispatch `match` arm, the non-`SimpleOneForOne`-arm
+    /// declared-but-empty [`SupervisorError::NoChildren`] error carrier's
+    /// `estrategia:` field, the future `feira app graph` per-Supervisor
+    /// strategy print line, the future wasm-operator's per-supervisor
+    /// sibling-restart-strategy branch, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's per-strategy
+    /// admission-webhook resolver, the `caixa-operator`'s hierarchical
+    /// reconciliation scheduler's per-strategy fan-out).
+    ///
+    /// Prior to this lift the `.estrategia` field was accessed inline at
+    /// two production sites in `caixa-core/src/supervisor.rs` — the
+    /// [`SupervisorSpec::validate`] `SimpleOneForOne ↔ non-SimpleOneForOne`
+    /// `match self.estrategia { … }` partition dispatch, and the
+    /// non-`SimpleOneForOne`-arm [`SupervisorError::NoChildren`] error
+    /// carrier at `estrategia: self.estrategia` — two open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:supervisor :estrategia`
+    /// axis to a richer author surface (a per-cluster strategy override
+    /// the operator pins through a future `:supervisor :estrategia-overrides`
+    /// slot the MESH-COMPOSITION §III.2 supervision-canary roadmap
+    /// acknowledges, a per-tenant strategy-alias table the M4 CR
+    /// materializer resolves per-CR, a per-Supervisor dynamic strategy
+    /// derivation the future adaptive-supervision engine computes from
+    /// child-failure-history topology, a per-child-cohort strategy split
+    /// the future `RestForCohort` extension acknowledged by the
+    /// INSPIRATIONS.md §II.2 Erlang/OTP absorption roadmap acknowledges)
+    /// would have had to be threaded through every open-coded copy in
+    /// lockstep — one consumer reading the raw variant while a peer read
+    /// the operator-resolved variant would silently split the
+    /// [`SupervisorError::NoChildren`] diagnostic's quoted strategy from
+    /// the actual partition-dispatch input the empty-children refusal
+    /// arm reached under, a two-consumer split at the validator far from
+    /// the source `caixa.lisp` with no field naming the strategy-drift
+    /// root cause. Lifting the resolution rule to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Supervisor's per-`:supervisor` sibling-restart-strategy surface
+    /// reaches for exactly one typed dispatch — the resolver's accept-set
+    /// migrates as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling M3 mesh-slot [`crate::Placement::estrategia`]
+    /// (921fe1b) `Copy`-return `PlacementStrategy` scalar accessor on the
+    /// per-`:placement` distribution-strategy axis — same "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline extended onto the M2 supervisor-slot
+    /// per-`:supervisor` sibling-restart-strategy `Copy`-composite-enum
+    /// scalar axis. The two typed axes (`Placement::estrategia` on the
+    /// M3 Aplicacao side, `SupervisorSpec::estrategia` on the M2
+    /// Supervisor side) now share one accessor discipline for the shared
+    /// substrate concept "a `Copy`-projected closed-set enum-arm
+    /// discriminator that partitions the downstream renderer's per-arm
+    /// fan-out". First `Copy`-return accessor on the M2 supervisor-slot
+    /// `SupervisorSpec` type — companion to the sibling per-`:children`
+    /// [`crate::ChildSpec::nome`] (57c61d0) /
+    /// [`crate::ChildSpec::versao_requirement`] (2c053c8) child-caixa
+    /// scalar accessors on the sibling per-`:children` `String`-carry
+    /// axes. Named `estrategia()` to match the storage field's name and
+    /// the peer [`crate::Placement::estrategia`] method-name discipline
+    /// verbatim; the accessor's identity name maps onto the canonical
+    /// OTP-shape supervision vocabulary the [`RestartStrategy`] enum's
+    /// docstring already carries.
+    #[must_use]
+    pub fn estrategia(&self) -> RestartStrategy {
+        self.estrategia
+    }
+
     /// Validate the supervisor's typed shape — strategy ↔ children
     /// invariants, max_restarts > 0, restart_window > 0 when set,
     /// per-child non-empty + duplicate-free names.
@@ -729,7 +819,22 @@ impl SupervisorSpec {
     ///     pleme-io enforces the same set-not-multiset shape on
     ///     `:caixa` (the load-bearing identity in our renderer).
     pub fn validate(&self) -> Result<(), SupervisorError> {
-        match self.estrategia {
+        // Route the `SimpleOneForOne ↔ non-SimpleOneForOne` partition
+        // dispatch and the non-`SimpleOneForOne`-arm [`SupervisorError::NoChildren`]
+        // error carrier's `estrategia:` field through the lifted
+        // [`SupervisorSpec::estrategia`] accessor rather than the raw
+        // `self.estrategia` field access — the two production consumers
+        // of the per-`:supervisor` sibling-restart-strategy scalar now
+        // key off exactly one typed dispatch on the substrate primitive,
+        // so any future rebrand on the axis (a per-cluster strategy
+        // override the operator pins through a future `:supervisor
+        // :estrategia-overrides` slot, a per-tenant strategy-alias table
+        // the M4 CR materializer resolves per-CR) migrates as a single
+        // caixa-core edit rather than a coordinated rewrite of the two
+        // call sites — sibling of the peer M3 [`crate::Placement::estrategia`]
+        // (921fe1b) four-consumer migration on the per-`:placement`
+        // distribution-strategy axis.
+        match self.estrategia() {
             RestartStrategy::SimpleOneForOne => {
                 // SimpleOneForOne: children added at runtime. Static
                 // list must be empty (one shape declared elsewhere).
@@ -740,7 +845,7 @@ impl SupervisorSpec {
             _ => {
                 if self.children.is_empty() {
                     return Err(SupervisorError::NoChildren {
-                        estrategia: self.estrategia,
+                        estrategia: self.estrategia(),
                     });
                 }
             }
@@ -4550,6 +4655,147 @@ mod tests {
                 "require_valid_versao_requirement must reject the accessor-projected \
                  :children :versao {bad_req:?}",
             );
+        }
+    }
+
+    // ── per-`:supervisor` `:estrategia` typed-accessor coherence pins ─────
+    //
+    // The [`SupervisorSpec::estrategia`] accessor lift extends the peer M3
+    // [`crate::Placement::estrategia`] (921fe1b) `Copy`-return
+    // distribution-strategy accessor discipline onto the M2 supervisor-slot
+    // per-`:supervisor` sibling-restart-strategy `Copy`-composite-enum
+    // scalar axis. The two pins below cover (1) the accessor's byte-equal
+    // projection against the raw field access across every variant in the
+    // closed accept-set, and (2) the two-consumer coherence between the
+    // [`SupervisorSpec::validate`] partition-dispatch `match` arm and the
+    // non-`SimpleOneForOne`-arm [`SupervisorError::NoChildren`] error
+    // carrier's `estrategia:` field — peer of the sibling M3
+    // `placement_estrategia_returns_estrategia_verbatim_across_permutations`
+    // / `validate_placement_reads_through_lifted_estrategia_accessor` pin
+    // pair on the per-`:placement` distribution-strategy axis.
+
+    #[test]
+    fn supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations() {
+        // The canonical per-`:supervisor` sibling-restart-strategy-scalar
+        // pin: [`SupervisorSpec::estrategia`] must return the
+        // `:supervisor :estrategia` field verbatim as a
+        // [`RestartStrategy`], `Copy`-projected from the typed slot's own
+        // [`RestartStrategy`] storage across every variant in the closed
+        // accept-set (`OneForOne`, `OneForAll`, `RestForOne`,
+        // `SimpleOneForOne`). Pins against a future silent detour that
+        // re-derived the strategy from a peer axis (an accidental
+        // fallback to `if children.is_empty() { SimpleOneForOne } else {
+        // OneForOne }` collapse that read the children-count axis into
+        // the strategy discriminator), a variant remap the operator
+        // authors on one consumer without the other, or a stale-derive
+        // detour that substituted [`RestartStrategy::default`] when the
+        // field held any explicit variant (which would silently collapse
+        // the distinction between "author explicitly declared
+        // `:estrategia OneForOne`" and "author omitted the slot and
+        // inherited the default" the future per-cluster strategy override
+        // slot depends on). Peer of the sibling M3
+        // `placement_estrategia_returns_estrategia_verbatim_across_permutations`
+        // (921fe1b) pin on the M3 mesh-slot `Copy`-composite-enum scalar
+        // axis — same "the substrate-primitive accessor must byte-equal
+        // the raw field access verbatim across every author-declared
+        // value" discipline extended onto the M2 supervisor-slot
+        // per-`:supervisor` sibling-restart-strategy axis.
+        for estrategia in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ] {
+            // `SimpleOneForOne` requires `children.is_empty()`; the peer
+            // three strategies require a non-empty static children list.
+            // Build each shape coherently so the pin's fixture would
+            // itself pass [`SupervisorSpec::validate`] once fed through
+            // the sibling coherence pin below — the byte-equal projection
+            // asserted here is a strictly weaker property (a `Copy` field
+            // read) that does not depend on `validate` running, but
+            // keeping the fixture validate-clean means a future extension
+            // of the pin to exercise `validate` end-to-end does not have
+            // to re-author the children shape.
+            let children = if matches!(estrategia, RestartStrategy::SimpleOneForOne) {
+                Vec::new()
+            } else {
+                vec![ChildSpec {
+                    caixa: "worker".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                }]
+            };
+            let s = SupervisorSpec {
+                estrategia,
+                children,
+                ..SupervisorSpec::default()
+            };
+            assert_eq!(
+                s.estrategia(),
+                estrategia,
+                "SupervisorSpec::estrategia must return :supervisor :estrategia \
+                 verbatim (got {:?}, expected {estrategia:?})",
+                s.estrategia(),
+            );
+            assert_eq!(
+                s.estrategia(),
+                s.estrategia,
+                "SupervisorSpec::estrategia accessor and .estrategia field \
+                 access must byte-equal — the accessor is the substrate-\
+                 primitive typed dispatch every downstream sibling-restart-\
+                 strategy consumer must route through",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_estrategia_accessor() {
+        // Two-consumer coherence pin: the [`SupervisorSpec::validate`]
+        // `SimpleOneForOne ↔ non-SimpleOneForOne` `match` partition
+        // dispatch (which reads through [`SupervisorSpec::estrategia`]
+        // to fan across the strategy-arm shape-gate cascades) and the
+        // non-`SimpleOneForOne`-arm [`SupervisorError::NoChildren`]
+        // error carrier's `estrategia:` field (which reads through
+        // [`SupervisorSpec::estrategia`] to name the strategy the empty
+        // `:children` list was declared against) must both key off the
+        // lifted accessor, so any future rebrand on the typed slot's
+        // reader shape lands at exactly one place. Pins the two-site
+        // coherence by exercising the `NoChildren` error surface end-to-
+        // end across every non-`SimpleOneForOne` variant and asserting
+        // the surfaced `estrategia:` field byte-equals the accessor's
+        // return. Peer of the sibling M3
+        // `validate_placement_reads_through_lifted_estrategia_accessor`
+        // (921fe1b) three-consumer coherence pin on the per-`:placement`
+        // distribution-strategy axis.
+        for estrategia in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+        ] {
+            let s = SupervisorSpec {
+                estrategia,
+                children: Vec::new(),
+                ..SupervisorSpec::default()
+            };
+            let err = s.validate().unwrap_err();
+            match err {
+                SupervisorError::NoChildren { estrategia: e } => {
+                    assert_eq!(
+                        e,
+                        s.estrategia(),
+                        "NoChildren.estrategia must byte-equal \
+                         SupervisorSpec::estrategia() — the empty-`:children` \
+                         refusal reads through the lifted accessor",
+                    );
+                    assert_eq!(
+                        e, estrategia,
+                        "NoChildren.estrategia must carry the author-declared \
+                         :supervisor :estrategia variant verbatim (got {e:?}, \
+                         expected {estrategia:?})",
+                    );
+                }
+                other => panic!("expected NoChildren, got {other:?} for estrategia={estrategia:?}"),
+            }
         }
     }
 }
