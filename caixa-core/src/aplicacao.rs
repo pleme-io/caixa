@@ -1702,6 +1702,102 @@ impl RateLimit {
     pub const fn rate(&self) -> u32 {
         self.rate
     }
+
+    /// Substrate-canonical per-`:politicas :rate-limit` `:window`
+    /// Envoy-local-rate-limit-mesh token-bucket refill-period scalar
+    /// accessor every consumer of the Aplicacao's per-`:contratos`-edge
+    /// rate-limit-bucket refill period keys off — returns the
+    /// author-declared `:politicas :rate-limit` typed `Duration`
+    /// verbatim, copied out of the typed slot's own `Duration` storage
+    /// (`Duration` is `Copy`, so the accessor returns by value; no
+    /// borrow of `&self` past the call). Non-optional (the surrounding
+    /// `Option<RateLimit>` is the "slot present?" projection at the
+    /// parent [`MeshPolicy::rate_limit`] axis; a `RateLimit` past
+    /// pattern-match is definitionally present, and its `:window`
+    /// field carries the token-bucket refill period as a required-axis
+    /// scalar).
+    ///
+    /// The `:politicas :rate-limit` `:window` axis carries the
+    /// "token-bucket refill period" contract (MESH-COMPOSITION §III.2 #3)
+    /// — the typed slot's `Duration` accept-set (constrained to the
+    /// three canonical windows `{1s, 60s, 3600s}` the
+    /// [`RATE_LIMIT_UNIT_TABLE`] lifts, rejected off-set through
+    /// [`AplicacaoError::PolicyRateLimitWindowNotCanonical`]) maps
+    /// onto the Envoy `local_rate_limit.token_bucket.fill_interval`
+    /// per-cluster token-bucket-refill-period scalar (equivalently the
+    /// future `CiliumClusterwideEnvoyConfig` per-`:politicas` overlay
+    /// MESH-COMPOSITION §III.2 #3 acknowledges). Every downstream
+    /// consumer that reads the token-bucket refill period keys off
+    /// this scalar (the [`AplicacaoSpec::validate_politicas`]
+    /// canonical-window gate that keys off
+    /// [`is_canonical_rate_limit_window`], the
+    /// [`rate_limit_codec::render`] `Duration → unit` projection that
+    /// emits the `<n>/<s|m|h>` author surface — canonical arm via
+    /// [`rate_limit_window_unit`] and non-canonical fallback via
+    /// `.as_secs()`, the future M4 per-Aplicacao Envoy config
+    /// reconciler materialization pass, the future per-`:contratos`-
+    /// edge rate-limit-override overlay the MESH-COMPOSITION §III.2 #3
+    /// roadmap acknowledges).
+    ///
+    /// Prior to this lift the `.window` field was accessed inline at
+    /// three production sites — [`AplicacaoSpec::validate_politicas`]'s
+    /// `is_canonical_rate_limit_window(rl.window)` shape-gate call
+    /// plus the sibling [`AplicacaoError::PolicyRateLimitWindowNotCanonical`]
+    /// error-payload construction on refusal, and the two
+    /// [`rate_limit_codec::render`] arms
+    /// (canonical-window `rate_limit_window_unit(rl.window)` dispatch
+    /// and non-canonical-window `rl.window.as_secs()` fallback). Three
+    /// open-coded field-accesses that expressed no compile-time link
+    /// back to the typed sub-struct axis. A future extension of the
+    /// `:window` axis to a richer author surface — a per-`:contratos`-
+    /// edge window override the operator pins through a future
+    /// `:contratos :window` slot the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges, a per-cluster window-default overlay the M4 CR
+    /// materializer resolves per-CR, a promotion of the plain
+    /// `Duration` refill period to a richer
+    /// `{fill_interval, tokens_per_fill}` tuple once Envoy's
+    /// `local_rate_limit.token_bucket` block's peer `tokens_per_fill`
+    /// axis comes into scope, an addition of a `"d"` day suffix once
+    /// Envoy's `rate_limit_action` grows daily-bucket support — would
+    /// have had to be threaded through every open-coded copy in
+    /// lockstep or the validate gate, the codec's render path, and
+    /// the future M4 emit path would silently disagree on which
+    /// refill period a given [`RateLimit`] resolves to (an author's
+    /// `:rate-limit "100/s"` would satisfy validate while the render
+    /// / emit paths silently read a drifted other value, or vice
+    /// versa: a validated typed slot would land at the emit boundary
+    /// as a limiter whose refill period is structurally so long that
+    /// no realistic per-edge traffic shape stays inside the token
+    /// budget). Lifting the resolution to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Aplicacao's per-`:politicas :rate-limit` refill-period surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Second sub-struct scalar accessor on the `RateLimit` axis —
+    /// sibling in shape to the just-landed [`RateLimit::rate`]
+    /// (7f81a60) required-`u32` accessor on the peer per-`RateLimit`
+    /// required-axis, extended onto the per-sub-struct
+    /// required-`Duration` axis; closes the last unlifted
+    /// per-`RateLimit` scalar-value axis (the M3 mesh-slot family's
+    /// per-sub-struct accessor coverage is now complete across both
+    /// `CircuitBreaker` and `RateLimit`). Same "one typed dispatch on
+    /// the substrate primitive, thin projections at each consumer"
+    /// discipline the peer [`CircuitBreaker::max_failures`] (3a74062),
+    /// [`CircuitBreaker::window`] (373957f), [`RateLimit::rate`]
+    /// (7f81a60), [`WitContract::source`] / [`WitContract::destination`]
+    /// (7f0fd43), [`WitContract::world_ref`] (0804823),
+    /// [`Membro::nome`] (4a32abf),
+    /// [`Membro::versao_requirement`] (a40b0e3),
+    /// [`Entrada::destination`] (6db982c) accessors carry on their
+    /// respective per-mesh-slot-atom scalar-value axes. Named
+    /// `window()` to match the storage field's name; the accessor's
+    /// identity maps onto the canonical MESH-COMPOSITION §III.2
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub const fn window(&self) -> Duration {
+        self.window
+    }
 }
 
 /// Canonical `(unit-suffix, seconds-per-window)` bijection every
@@ -3121,7 +3217,7 @@ mod rate_limit_codec {
         // (a `"d"` day suffix once Envoy's `rate_limit_action` grows
         // daily-bucket support) is one row appended to the table and
         // both consumers pick it up by construction.
-        if let Some(unit) = super::rate_limit_window_unit(rl.window) {
+        if let Some(unit) = super::rate_limit_window_unit(rl.window()) {
             format!("{}/{unit}", rl.rate())
         } else {
             // Defensive fallback for non-canonical windows. Note:
@@ -3135,7 +3231,7 @@ mod rate_limit_codec {
             // validate gate is what makes the round-trip a structural
             // property; this branch exists only so a programmatic
             // non-validated serialize doesn't panic.
-            format!("{}/{}s", rl.rate(), rl.window.as_secs())
+            format!("{}/{}s", rl.rate(), rl.window().as_secs())
         }
     }
 }
@@ -4542,9 +4638,9 @@ impl AplicacaoSpec {
             // the b0c8389 :behavior + :upgrade-from script-path lifts:
             // the typed slot's valid set matches its codec's accepted
             // set, structurally.
-            if !is_canonical_rate_limit_window(rl.window) {
+            if !is_canonical_rate_limit_window(rl.window()) {
                 return Err(AplicacaoError::PolicyRateLimitWindowNotCanonical {
-                    window: rl.window,
+                    window: rl.window(),
                 });
             }
         }
@@ -17348,6 +17444,195 @@ mod tests {
                 first, rate,
                 "RateLimit::rate must return :politicas :rate-limit :rate \
                  verbatim by copy — got {first}, expected {rate}",
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_window_returns_window_duration_byte_equal_across_permutations() {
+        // The canonical per-`:politicas :rate-limit` `:window`
+        // Envoy-local-rate-limit-mesh token-bucket-refill-period scalar
+        // pin: [`RateLimit::window`] must return the
+        // `:politicas :rate-limit :window` typed `Duration` verbatim,
+        // byte-equal to the raw field access across every
+        // representative value in the accept-set — `Duration::from_secs(1)`
+        // (the `"s"` canonical window, the lower row of
+        // [`RATE_LIMIT_UNIT_TABLE`] the surrounding
+        // [`AplicacaoSpec::validate_politicas`] gate accepts via
+        // [`is_canonical_rate_limit_window`]),
+        // `Duration::from_secs(60)` (the `"m"` canonical window, the
+        // middle row), `Duration::from_secs(3600)` (the `"h"` canonical
+        // window, the upper row), `Duration::ZERO` (a past-the-guard
+        // sentinel that pins the accessor doesn't perform a silent
+        // bounds-collapse into `Duration::from_secs(1)` on the zero
+        // arm — validate rejects an off-set window through
+        // `PolicyRateLimitWindowNotCanonical` but the accessor must
+        // ship the raw slot verbatim so a validate-time gate
+        // regression surfaces at the emit boundary rather than being
+        // silently absorbed), `Duration::from_millis(500)` (a
+        // sub-canonical past-the-guard sentinel that pins the accessor
+        // doesn't silently normalize a non-canonical fractional
+        // magnitude onto the nearest canonical row).
+        //
+        // Second sub-struct required-scalar accessor pin on the
+        // `RateLimit` axis — sibling in shape to the just-landed
+        // per-`RateLimit` [`RateLimit::rate`] (7f81a60) required-`u32`
+        // accessor pin on the peer per-sub-struct required-axis,
+        // extended onto the per-`RateLimit` required-`Duration` axis.
+        // Pins against a future silent detour that re-derived the
+        // refill period from a peer axis (an accidental
+        // `Duration::from_secs(self.rate as u64)` collapse that read
+        // the rate-limit token capacity as a refill-interval
+        // duration), a `Duration::ZERO → Duration::from_secs(1)`
+        // canonical-default projection (which would silently absorb
+        // the `PolicyRateLimitWindowNotCanonical` refusal case at the
+        // accessor boundary), or a canonical-set-collapsing accessor
+        // that clamped the return through [`rate_limit_window_unit`]
+        // (the `AplicacaoSpec::validate` gate owns the canonical-set
+        // membership; the accessor must ship the raw slot verbatim).
+        for window in [
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+            Duration::from_secs(3600),
+            Duration::ZERO,
+            Duration::from_millis(500),
+        ] {
+            let rl = RateLimit { rate: 100, window };
+            assert_eq!(
+                rl.window(),
+                window,
+                "RateLimit::window must return :politicas :rate-limit :window \
+                 verbatim (got {:?}, expected {window:?})",
+                rl.window(),
+            );
+            assert_eq!(
+                rl.window(),
+                rl.window,
+                "RateLimit::window must byte-equal the raw .window field \
+                 access across every value in the Duration accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_rate_limit_window_canonical_arm_routes_through_accessor() {
+        // Composition pin: [`AplicacaoSpec::validate_politicas`]'s
+        // `:rate-limit :window` canonical-set arm must key off
+        // [`RateLimit::window`], not the raw `.window` field access.
+        // Structurally: a `RateLimit { window: Duration::from_millis(500),
+        // .. }` embedded in a `:politicas :rate-limit` slot must
+        // surface the `PolicyRateLimitWindowNotCanonical` refusal
+        // exactly (with the sub-canonical `Duration::from_millis(500)`
+        // magnitude carried through verbatim), and a `RateLimit
+        // { window: Duration::from_secs(1), .. }` (the lower row of
+        // the `RATE_LIMIT_UNIT_TABLE` accept-set) must pass validate.
+        // The pair jointly pins the accessor + validate-gate
+        // composition: any future silent detour that had the accessor
+        // normalize the off-set window to the nearest canonical row
+        // (a `.window().max(Duration::from_secs(1))` collapse, or a
+        // `rate_limit_window_unit(.window()).map_or(Duration::from_secs(1), …)`
+        // collapse) would silently absorb the
+        // `PolicyRateLimitWindowNotCanonical` refusal at the accessor
+        // boundary — including a drift in the error's `window` payload
+        // (the emit-side diagnostic reader keys off the offending
+        // magnitude verbatim, so a normalization at the accessor
+        // boundary would silently pin the wrong magnitude in the
+        // refusal). The composition pin catches that at caixa-core
+        // build time.
+        //
+        // Peer of the sibling per-`RateLimit` [`RateLimit::rate`]
+        // (7f81a60) accessor-composition pin on the peer required-
+        // scalar `:rate` axis — same "the validate / shape-gate
+        // predicate must route through the substrate-primitive typed
+        // dispatch, and the error payload must project through the
+        // same accessor" discipline extended onto the peer
+        // per-`RateLimit` required-`Duration` composition axis.
+        let mut spec = three_member_spec();
+        spec.politicas = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 100,
+                window: Duration::from_millis(500),
+            }),
+            ..MeshPolicy::default()
+        };
+        match spec.validate() {
+            Err(AplicacaoError::PolicyRateLimitWindowNotCanonical { window }) => {
+                assert_eq!(
+                    window,
+                    Duration::from_millis(500),
+                    "PolicyRateLimitWindowNotCanonical must carry the \
+                     offending :window magnitude verbatim through the \
+                     accessor — got {window:?}, expected 500ms",
+                );
+            }
+            other => panic!(
+                "validate_politicas must reject non-canonical :window \
+                 with PolicyRateLimitWindowNotCanonical — the accessor \
+                 and the validate gate must route through the same \
+                 substrate-primitive typed dispatch on the :window \
+                 canonical-set arm; got {other:?}",
+            ),
+        }
+        spec.politicas = MeshPolicy {
+            rate_limit: Some(RateLimit {
+                rate: 100,
+                window: Duration::from_secs(1),
+            }),
+            ..MeshPolicy::default()
+        };
+        assert!(
+            spec.validate().is_ok(),
+            "validate_politicas must accept window == Duration::from_secs(1) \
+             (the lower row of the RATE_LIMIT_UNIT_TABLE accept-set)",
+        );
+    }
+
+    #[test]
+    fn rate_limit_window_projects_duration_by_copy() {
+        // The by-copy pin: [`RateLimit::window`] returns `Duration`
+        // by copy — `Duration` is `Copy` and the accessor must return
+        // by value, not by reference. Peer of the sibling per-`RateLimit`
+        // [`RateLimit::rate`] (7f81a60) by-copy pin on the peer
+        // required-scalar `:rate` axis, extended onto the peer
+        // per-`RateLimit` required-`Duration` copy-invariant shape —
+        // the accessor's returned `Duration` must outlive `&self`
+        // (multiple calls must return equal values from a
+        // dropped-`&self` copy, since the returned scalar carries no
+        // borrow), and calling the accessor twice on the same
+        // RateLimit must yield the same `Duration` verbatim
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned
+        // `&Duration` (which would type-check but silently break every
+        // downstream `Duration`-by-value consumer —
+        // [`is_canonical_rate_limit_window`]'s first parameter is
+        // `Duration`, and `&Duration` would fold to a detached copy at
+        // the call site with a `*` deref the sibling accessors don't
+        // need), an accidental `.window + Duration::ZERO` detour that
+        // returned a fresh copy through an arithmetic no-op (breaking
+        // a future `const fn` regression), or a one-arm-only accessor
+        // that returned a canonical fallback on some sentinel input
+        // (breaking the pass-through invariant the sibling required-
+        // scalar accessors carry).
+        for window in [
+            Duration::from_secs(1),
+            Duration::from_secs(60),
+            Duration::from_secs(3600),
+            Duration::ZERO,
+            Duration::from_millis(500),
+        ] {
+            let rl = RateLimit { rate: 100, window };
+            let first = rl.window();
+            let second = rl.window();
+            assert_eq!(
+                first, second,
+                "RateLimit::window must be idempotent — two successive \
+                 calls on the same &self must return the same Duration",
+            );
+            assert_eq!(
+                first, window,
+                "RateLimit::window must return :politicas :rate-limit :window \
+                 verbatim by copy — got {first:?}, expected {window:?}",
             );
         }
     }
