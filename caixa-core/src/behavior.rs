@@ -375,6 +375,98 @@ impl BehaviorSpec {
         self.on_call.as_deref()
     }
 
+    /// Substrate-canonical per-`:behavior` `:on-cast`
+    /// OTP-`gen_server:handle_cast/2`-shaped asynchronous
+    /// fire-and-forget callback-path scalar accessor every consumer of
+    /// the Servico's asynchronous-dispatch callback path keys off —
+    /// returns the author-declared `:behavior :on-cast` typed callback
+    /// path verbatim as an `Option<&Path>`, borrowed from the typed
+    /// slot's own `Option<PathBuf>` storage. `None` when the slot is
+    /// absent (the canonical "no asynchronous-cast callback declared —
+    /// the runtime falls back to the wasm-engine's default `Accepted:
+    /// 202` fire-and-forget response shape that surfaces the request to
+    /// the underlying HTTP proxy world verbatim without any
+    /// author-supplied post-accept-side-effect interposed" arm the M2.5
+    /// wasm-engine callback-dispatch wire consults at every asynchronous
+    /// incoming call; peer of the sibling [`BehaviorSpec::on_init`] /
+    /// [`BehaviorSpec::on_call`] / [`BehaviorSpec::on_state_change`]
+    /// `None`-arm's "no instance-start / synchronous-call /
+    /// state-migration callback" semantic on the sibling axes).
+    ///
+    /// The `:behavior :on-cast` slot carries the OTP
+    /// `gen_server:handle_cast/2` callback contract (the module-level
+    /// [`BehaviorSpec::on_cast`] docstring pins the analog verbatim:
+    /// "Asynchronous fire-and-forget handler. Analog of
+    /// `gen_server:handle_cast/2` — caller does not wait. For HTTP
+    /// servicos this maps onto `Accepted: 202` shapes."). Its position
+    /// in the OTP dispatch triad is the fire-and-forget half sibling to
+    /// the synchronous request/response `:on-call` half: the runtime
+    /// routes every asynchronous incoming message (every
+    /// `wasi:http/incoming-handler` invocation whose caller does not
+    /// await a reply and whose runtime response the wasm-engine
+    /// short-circuits into an `Accepted: 202` shape at accept time,
+    /// every asynchronous WIT-typed peer edge whose contract carries no
+    /// reply payload, every NATS `nats:pub-sub` subscriber the future
+    /// M3 mesh-slot NATS bridge dispatches through the `:on-cast`
+    /// callback the way the sibling `wasi:http/proxy` HTTP bridge
+    /// dispatches through `:on-call`) through the callback; the callback
+    /// runs to completion on the actor's own mailbox turn without any
+    /// reply-shape awaiting caller, and the runtime returns to the
+    /// mailbox-drain state as soon as the callback returns
+    /// (`theory/INSPIRATIONS.md` §II.3 — OTP `gen_server` behavior's
+    /// six-callback lifecycle, translated onto pleme-io's typed
+    /// `:behavior` slot family; `theory/CAIXA-SDLC.md` §I — the
+    /// author-surface pins `:on-cast` as the third arm of the
+    /// `:behavior` overlay every Servico may declare, sibling to
+    /// `:on-call` on the peer synchronous-dispatch axis and `:on-info`
+    /// on the peer out-of-band-dispatch axis; `theory/RUNTIME-PATTERNS.md`
+    /// §II — the asynchronous-fire-and-forget pattern the runtime
+    /// realizes through this callback).
+    ///
+    /// Prior to this lift the `.on_cast` field was accessed inline at
+    /// one production site — [`BehaviorSpec::declared_slots`]'s
+    /// `:on-cast` arm's `self.on_cast.as_ref()` map into the six-tuple
+    /// iterator that both the layout checker (existence sweep at
+    /// `layout.rs:900`) and the sibling `BehaviorSpec::validate`
+    /// value-shape gate consume — an open-coded field-access that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:behavior :on-cast` axis to a richer author
+    /// surface — a per-tenant cast-callback override the M4 CR
+    /// materializer resolves per-CR, a per-cluster asynchronous-dispatch
+    /// callback overlay the `theory/ABSORPTION-ROADMAP.md` M2.5
+    /// wasm-engine callback-dispatch wire acknowledges, a
+    /// per-`nats:pub-sub`-subject cast-callback derivation the future
+    /// M3 mesh-slot NATS bridge computes from the sibling `:contratos`
+    /// M3 mesh-slot edges' `:subject` axis — would have had to be
+    /// threaded through the open-coded field-access in `declared_slots`
+    /// (the tag surface every per-slot diagnostic reads) or the
+    /// `declared_slots` iterator would silently disagree on which
+    /// callback a given [`BehaviorSpec`] resolves to. Lifting the
+    /// resolution to a typed method on the substrate primitive means
+    /// every downstream consumer of the Servico's per-`:behavior`
+    /// asynchronous-cast callback surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// Fourth `Option<&Path>`-return accessor on the M2 `:behavior` slot
+    /// family (sibling of the prior [`BehaviorSpec::on_state_change`]
+    /// 9b4ecde, [`BehaviorSpec::on_init`] d66c702, and
+    /// [`BehaviorSpec::on_call`] 156ddbe `Option<&Path>` accessors on
+    /// the peer per-`:behavior` `:on-state-change` / `:on-init` /
+    /// `:on-call` axes — same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline extended
+    /// onto the peer per-`:behavior` `Option<PathBuf>` optional-scalar
+    /// axis; continues the "optional per-slot `Option<&Path>` scalar"
+    /// projection pattern the sibling per-`:behavior` `:on-info` /
+    /// `:on-terminate` future lifts fold on). Named `on_cast()` to match
+    /// the storage field's name; the accessor's identity name maps onto
+    /// the canonical `theory/INSPIRATIONS.md` §II.3 vocabulary the
+    /// slot's docstring already carries.
+    #[must_use]
+    pub fn on_cast(&self) -> Option<&Path> {
+        self.on_cast.as_deref()
+    }
+
     /// Reject operationally-meaningless callback path values on every
     /// declared slot. Each slot remains optional — omitting a field
     /// expresses "fall back to the runtime default callback"; the bug
@@ -1551,6 +1643,121 @@ mod tests {
              :on-call axis independently of every peer :on-* \
              axis (got {:?})",
             with.on_call(),
+        );
+    }
+
+    // ── per-`:behavior :on-cast` accessor pins ─────────────────────
+
+    #[test]
+    fn behavior_on_cast_returns_option_path_verbatim_across_permutations() {
+        // Canonical per-`:behavior` `:on-cast`
+        // OTP-`gen_server:handle_cast/2`-shaped asynchronous
+        // fire-and-forget callback-path scalar pin:
+        // [`BehaviorSpec::on_cast`] must return the `:behavior :on-cast`
+        // typed `PathBuf` verbatim as an `Option<&Path>`, borrowed from
+        // the raw `Option<PathBuf>` field access across the three
+        // canonical shape-arms — `None` (no callback declared — the
+        // runtime falls back to the wasm-engine's default `Accepted:
+        // 202` fire-and-forget shape), `Some("lib/handlers.lisp")` (the
+        // canonical single-file shape the module-doc example uses,
+        // shared with `:on-call` / `:on-info` on the pattern that the
+        // tatara-lisp dispatch inside the file discriminates on the
+        // callback-kind atom), `Some("lib/rpc/cast.lisp")` (the
+        // per-dispatch sub-directory shape the
+        // `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // callback-dispatch wire acknowledges).
+        //
+        // Peer of the sibling per-`:behavior`
+        // [`BehaviorSpec::on_state_change`] (9b4ecde) /
+        // [`BehaviorSpec::on_init`] (d66c702) /
+        // [`BehaviorSpec::on_call`] (156ddbe) `Option<&Path>` accessor
+        // pins on the sibling `Option<PathBuf>`-return axes — fourth
+        // `Option<&Path>`-return accessor on the M2 `:behavior` slot
+        // family. Pins against a future silent detour that re-derived
+        // the callback path from a peer axis (an accidental
+        // `.on_call`-collapse that assumed the two `Option<PathBuf>`
+        // axes carry the same value — a plausible slip because both
+        // callbacks share the `handle_*/2|3` OTP shape and the
+        // module-doc example shares one `lib/handlers.lisp` file
+        // between `:on-call` / `:on-cast` / `:on-info`), a `None` →
+        // `Some(empty)` collapse (the canonical `Option<PathBuf>` →
+        // `PathBuf::new()` footgun the [`BehaviorError::EmptyPath`]
+        // validate arm guards on the peer path-shape axis), or a
+        // per-arm variant swap that landed on one consumer without the
+        // other.
+        for path in [
+            None,
+            Some(PathBuf::from("lib/handlers.lisp")),
+            Some(PathBuf::from("lib/rpc/cast.lisp")),
+        ] {
+            let b = BehaviorSpec {
+                on_cast: path.clone(),
+                ..BehaviorSpec::default()
+            };
+            assert_eq!(
+                b.on_cast(),
+                path.as_deref(),
+                "BehaviorSpec::on_cast must return the \
+                 :behavior :on-cast PathBuf verbatim as \
+                 Option<&Path> (got {:?}, expected {:?})",
+                b.on_cast(),
+                path.as_deref(),
+            );
+            assert_eq!(
+                b.on_cast(),
+                b.on_cast.as_deref(),
+                "BehaviorSpec::on_cast must byte-equal the \
+                 raw .on_cast.as_deref() field access across \
+                 every value in the accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn behavior_on_cast_is_independent_of_peer_on_star_axes() {
+        // Cross-axis independence pin: flipping only the `:on-cast`
+        // axis flips [`BehaviorSpec::on_cast`] independently of every
+        // peer `:on-*` axis (`:on-init` / `:on-call` / `:on-info` /
+        // `:on-state-change` / `:on-terminate`). A future silent detour
+        // that re-derived the callback path from a peer axis (an
+        // accidental `.on_call`-collapse — the sibling synchronous
+        // request/response arm on the peer OTP dispatch triad, a
+        // plausible confusion because both callbacks share the
+        // `handle_*/2|3` OTP shape and the module-doc example shares
+        // one `lib/handlers.lisp` file between the two — that would
+        // silently rebind the asynchronous fire-and-forget dispatch to
+        // the sibling synchronous request/response slot's callback)
+        // surfaces here as a build-time test failure.
+        //
+        // Peer of the sibling
+        // `behavior_on_state_change_is_independent_of_peer_on_star_axes`
+        // (9b4ecde) /
+        // `behavior_on_init_is_independent_of_peer_on_star_axes`
+        // (d66c702) /
+        // `behavior_on_call_is_independent_of_peer_on_star_axes`
+        // (156ddbe) cross-axis pins on the sibling `:on-state-change` /
+        // `:on-init` / `:on-call` axes — each accessor-lift closes
+        // exactly one axis and leaves every peer axis unshifted.
+        let base = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/handlers.lisp")),
+            on_info: Some(PathBuf::from("lib/handlers.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            ..BehaviorSpec::default()
+        };
+        assert_eq!(base.on_cast(), None);
+        let with = BehaviorSpec {
+            on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+            ..base.clone()
+        };
+        assert_eq!(
+            with.on_cast(),
+            Some(PathBuf::from("lib/handlers.lisp").as_path()),
+            "BehaviorSpec::on_cast must project the \
+             :on-cast axis independently of every peer :on-* \
+             axis (got {:?})",
+            with.on_cast(),
         );
     }
 }
