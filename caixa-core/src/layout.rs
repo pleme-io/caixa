@@ -653,10 +653,10 @@ impl LayoutInvariants for StandardLayout {
         // "missing entry" error first).
         let has_code =
             !caixa.bibliotecas.is_empty() || !caixa.exe.is_empty() || !caixa.servicos.is_empty();
-        if caixa.kind == CaixaKind::Supervisor && has_code {
+        if caixa.kind() == CaixaKind::Supervisor && has_code {
             return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
         }
-        if caixa.kind == CaixaKind::Aplicacao && has_code {
+        if caixa.kind() == CaixaKind::Aplicacao && has_code {
             return Err(LayoutError::AplicacaoOwnsCode(caixa.nome.clone()));
         }
 
@@ -675,12 +675,12 @@ impl LayoutInvariants for StandardLayout {
         // above: a slot foreign to the kind is a build error, not a
         // silent drop. `declared_mesh_slots` is the single typed source
         // of the mesh-slot set + its canonical diagnostic order.
-        if caixa.kind != CaixaKind::Aplicacao {
+        if caixa.kind() != CaixaKind::Aplicacao {
             let mesh_slots = caixa.declared_mesh_slots();
             if !mesh_slots.is_empty() {
                 return Err(LayoutError::MeshSlotsOnNonAplicacao {
                     caixa: caixa.nome.clone(),
-                    kind: caixa.kind,
+                    kind: caixa.kind(),
                     slots: mesh_slots.join(" "),
                 });
             }
@@ -701,12 +701,12 @@ impl LayoutInvariants for StandardLayout {
         // loops — naming the offending kind + slot(s). `declared_
         // supervisor_slots` is the single typed source of the
         // supervisor-slot set + its canonical diagnostic order.
-        if caixa.kind != CaixaKind::Supervisor {
+        if caixa.kind() != CaixaKind::Supervisor {
             let supervisor_slots = caixa.declared_supervisor_slots();
             if !supervisor_slots.is_empty() {
                 return Err(LayoutError::SupervisorSlotsOnNonSupervisor {
                     caixa: caixa.nome.clone(),
-                    kind: caixa.kind,
+                    kind: caixa.kind(),
                     slots: supervisor_slots.join(" "),
                 });
             }
@@ -731,12 +731,12 @@ impl LayoutInvariants for StandardLayout {
         // the offending kind + slot(s). `declared_servico_slots` is the
         // single typed source of the M2-slot set + its canonical
         // diagnostic order.
-        if caixa.kind != CaixaKind::Servico {
+        if caixa.kind() != CaixaKind::Servico {
             let servico_slots = caixa.declared_servico_slots();
             if !servico_slots.is_empty() {
                 return Err(LayoutError::ServicoSlotsOnNonServico {
                     caixa: caixa.nome.clone(),
-                    kind: caixa.kind,
+                    kind: caixa.kind(),
                     slots: servico_slots.join(" "),
                 });
             }
@@ -786,7 +786,7 @@ impl LayoutInvariants for StandardLayout {
         if !foreign_code_slots.is_empty() {
             return Err(LayoutError::ForeignCodeSlot {
                 caixa: caixa.nome.clone(),
-                kind: caixa.kind,
+                kind: caixa.kind(),
                 slots: foreign_code_slots.join(" "),
             });
         }
@@ -812,7 +812,7 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
-        if caixa.kind == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
+        if caixa.kind() == CaixaKind::Biblioteca && caixa.bibliotecas.is_empty() {
             let expected = root
                 .join(crate::render::LAYOUT_DIR_LIB)
                 .join(format!("{}.lisp", caixa.nome));
@@ -824,11 +824,11 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        if caixa.kind.requires_exe() && caixa.exe.is_empty() {
+        if caixa.kind().requires_exe() && caixa.exe.is_empty() {
             return Err(LayoutError::BinarioWithoutExe(caixa.nome.clone()));
         }
 
-        if caixa.kind.requires_servicos() && caixa.servicos.is_empty() {
+        if caixa.kind().requires_servicos() && caixa.servicos.is_empty() {
             return Err(LayoutError::ServicoWithoutServicos(caixa.nome.clone()));
         }
 
@@ -1027,7 +1027,7 @@ impl LayoutInvariants for StandardLayout {
         // Supervisor invariants (typed shape — children, restart strategy).
         // The "supervisor doesn't own code" check is at the top of verify()
         // so it fires before the existence-check loops.
-        if caixa.kind == CaixaKind::Supervisor {
+        if caixa.kind() == CaixaKind::Supervisor {
             // Raw `:restart-window` parse gate on the flat
             // `Caixa::restart_window: Option<String>` axis — the last
             // orphan-validator on the typed Caixa surface flagged by the
@@ -1122,7 +1122,7 @@ impl LayoutInvariants for StandardLayout {
 
         // Aplicacao invariants — typed graph composition. Like
         // Supervisor, an Aplicacao runs no code itself.
-        if caixa.kind == CaixaKind::Aplicacao {
+        if caixa.kind() == CaixaKind::Aplicacao {
             let view = caixa
                 .aplicacao_view()
                 .expect("Aplicacao kind must have an aplicacao_view");

@@ -768,13 +768,107 @@ impl Caixa {
         &self.versao
     }
 
+    /// Substrate-canonical per-`Caixa` `:kind` universal-axis
+    /// closed-set-enum discriminant accessor every consumer of the top-
+    /// level manifest's kind axis keys off — returns the author-declared
+    /// `:kind` variant verbatim as a [`CaixaKind`], `Copy`-projected
+    /// from the typed slot's own [`CaixaKind`] storage. Non-optional
+    /// (`:kind` is a required-axis discriminant every `defcaixa` form
+    /// must supply alongside `:nome` / `:versao`; the [`Self::from_lisp`]
+    /// derive rejects an omitted / non-symbol `:kind` at parse time, so
+    /// a `Caixa` past parse definitionally carries a valid [`CaixaKind`]
+    /// variant).
+    ///
+    /// The `:kind` slot carries the universal-axis closed-set typed-
+    /// discriminant every substrate-side dispatch keys off (CAIXA-SDLC
+    /// §I — the primary shape gate every renderer / verifier /
+    /// operator branches on; the five variants `Biblioteca` /
+    /// `Binario` / `Servico` / `Supervisor` / `Aplicacao` partition
+    /// the caixa surface into disjoint runtime contracts) — the typed
+    /// slot's [`CaixaKind`] accept-set (parse-time-rejected non-symbol
+    /// values through the derive-macro's symbol-arm gate, exhaustively
+    /// matched at every downstream dispatch site) maps onto every
+    /// load-bearing downstream consumer the substrate carries:
+    ///
+    ///   - [`crate::render::require_kind`]'s per-renderer entry-gate
+    ///     predicate — the canonical two-line
+    ///     `require_kind(caixa, Servico)?` prelude every per-Servico
+    ///     renderer (`caixa-helm`, `caixa-flux`, the future `caixa-otel`
+    ///     / per-Servico OCI packager / M4 `wasm.pleme.io/v1alpha1/
+    ///     ComputeUnit` CR materializer) runs at its entry-point,
+    ///     alongside the [`crate::render::KindMismatch`] error carrier's
+    ///     `actual:` field the diagnostic surfaces to name the offending
+    ///     caixa's variant.
+    ///   - [`Self::aplicacao_view`]'s + [`Self::supervisor_view`]'s
+    ///     per-view kind-gate binding — the two `Option<TypedSpec>`
+    ///     `_view` composers that fold the flat mesh-slot / supervisor-
+    ///     slot columns into their typed sub-spec only when the kind
+    ///     matches (returns `None` otherwise); the future per-Servico
+    ///     M2-view composer (`servico_view`) will follow the same shape.
+    ///   - [`Self::declared_foreign_code_slots`]'s per-slot kind-
+    ///     coherence gate — the `!self.kind.requires_exe()` /
+    ///     `!self.kind.requires_servicos()` predicates that fence
+    ///     each code-surface slot from the wrong owning kind.
+    ///   - [`crate::LayoutInvariants::verify`]'s kind ↔ code-surface
+    ///     coherence gates — the six `caixa.kind == CaixaKind::X` /
+    ///     `caixa.kind != CaixaKind::X` predicates and the four kind-
+    ///     coherence error carriers (`SupervisorOwnsCode` /
+    ///     `AplicacaoOwnsCode` / `MeshSlotsOnNonAplicacao` /
+    ///     `SupervisorSlotsOnNonSupervisor` / `ServicoSlotsOnNonServico`
+    ///     / `ForeignCodeSlot`) which each name the offending caixa's
+    ///     variant in their `kind:` field.
+    ///
+    /// Prior to this lift the `.kind` field was accessed inline at
+    /// twenty-plus production sites across `caixa-core` (the
+    /// [`crate::render::require_kind`] entry-gate predicate + the
+    /// [`crate::render::KindMismatch`] `actual:` field, the two `_view`
+    /// composers, the `declared_foreign_code_slots` per-slot kind-
+    /// coherence gate, and the six [`crate::LayoutInvariants::verify`]
+    /// kind ↔ code-surface predicates + four error carriers) — a score
+    /// of open-coded field-accesses that expressed no compile-time link
+    /// back to the typed slot. A future extension of the `:kind` axis
+    /// to a richer author surface — a per-`:kind` sub-variant discriminant
+    /// (e.g. `Servico(ServicoRuntime)` splitting the current single
+    /// variant across the wasm-component / legacy-container / native-
+    /// binary runtime axes the M5 roadmap acknowledges), a per-cluster
+    /// kind-overlay the M4 CR materializer resolves per-CR (the
+    /// "cluster policy demotes `Aplicacao` to `Servico` on a single-
+    /// tenant cluster" arm), a promotion of the plain [`CaixaKind`]
+    /// enum to a richer `KindWithRuntime` discriminated on the
+    /// component-model world axis — would have had to be threaded
+    /// through every open-coded copy in lockstep or the entry gate,
+    /// the view composers, and the layout invariants would silently
+    /// disagree on which kind a given [`Caixa`] resolves to. Lifting
+    /// the resolution to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa`
+    /// kind surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// First outer top-level [`Caixa`] `Copy`-return required-enum-
+    /// discriminant accessor — opens the "outer [`Caixa`] `Copy`-return
+    /// required-discriminant" projection pattern. Sibling in shape to
+    /// the peer per-`:supervisor` [`crate::supervisor::SupervisorSpec::estrategia`]
+    /// (eafb619), per-`:placement` [`crate::aplicacao::Placement::estrategia`]
+    /// (921fe1b), and per-`:children` [`crate::supervisor::ChildSpec::restart`]
+    /// (dfb4a81) `Copy`-return closed-set-enum discriminant accessors
+    /// on the sibling nested-spec typed-slot discriminator axes,
+    /// extended here to the outer top-level [`Caixa`] universal-axis
+    /// surface. Named `kind()` to match the storage field's name;
+    /// the accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub fn kind(&self) -> CaixaKind {
+        self.kind
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
     /// caixa isn't a `:kind Aplicacao`.
     #[must_use]
     pub fn aplicacao_view(&self) -> Option<crate::aplicacao::AplicacaoSpec> {
-        if self.kind != CaixaKind::Aplicacao {
+        if self.kind() != CaixaKind::Aplicacao {
             return None;
         }
         Some(crate::aplicacao::AplicacaoSpec {
@@ -1004,10 +1098,10 @@ impl Caixa {
     #[must_use]
     pub fn declared_foreign_code_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
-        if !self.exe.is_empty() && !self.kind.requires_exe() {
+        if !self.exe.is_empty() && !self.kind().requires_exe() {
             slots.push(":exe");
         }
-        if !self.servicos.is_empty() && !self.kind.requires_servicos() {
+        if !self.servicos.is_empty() && !self.kind().requires_servicos() {
             slots.push(":servicos");
         }
         slots
@@ -2258,7 +2352,7 @@ impl Caixa {
     /// consume.
     #[must_use]
     pub fn supervisor_view(&self) -> Option<SupervisorSpec> {
-        if self.kind != CaixaKind::Supervisor {
+        if self.kind() != CaixaKind::Supervisor {
             return None;
         }
         // Fold through the shared `supervisor::duration_codec::parse`
@@ -8281,6 +8375,278 @@ mod tests {
                 first, versao,
                 "Caixa::versao must return :versao verbatim by borrow \
                  — got {first}, expected {versao}",
+            );
+        }
+    }
+
+    fn caixa_with_kind(kind: CaixaKind) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = kind;
+        c
+    }
+
+    #[test]
+    fn kind_returns_kind_variant_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:kind` universal-axis closed-set-
+        // enum discriminant pin: [`Caixa::kind`] must return the `:kind`
+        // typed [`CaixaKind`] variant verbatim by `Copy`, byte-equal to
+        // the raw `.kind` field access across every variant in the
+        // closed accept-set (`Biblioteca` — the library kind that
+        // exports lisp forms; `Binario` — the nix-built executable kind
+        // under `exe/`; `Servico` — the wasm-component daemon kind
+        // under `servicos/`; `Supervisor` — the OTP-shaped hierarchical
+        // reconciliation kind; `Aplicacao` — the M3 typed-mesh
+        // composition kind).
+        //
+        // Pins against a future silent detour that re-derived the kind
+        // from a peer axis (an accidental fallback to
+        // `if !servicos.is_empty() { Servico } else if
+        // !membros.is_empty() { Aplicacao } else { Biblioteca }`
+        // collapse that read the code-surface / mesh-slot columns into
+        // the kind discriminator), a variant remap the operator
+        // authors on one consumer without the other, or a stale-derive
+        // detour that substituted [`CaixaKind::Biblioteca`] as the
+        // default when the field held any other variant (which would
+        // silently collapse the distinction between "author explicitly
+        // declared `:kind Servico`" and "author declared any other
+        // kind" every downstream renderer-dispatch site depends on).
+        //
+        // First outer top-level [`Caixa`] `Copy`-return required-enum-
+        // discriminant accessor pin — opens the "outer [`Caixa`]
+        // `Copy`-return required-discriminant" projection pattern.
+        // Sibling in shape to the peer per-`:supervisor`
+        // [`crate::supervisor::SupervisorSpec::estrategia`] (eafb619),
+        // per-`:placement` [`crate::aplicacao::Placement::estrategia`]
+        // (921fe1b), and per-`:children`
+        // [`crate::supervisor::ChildSpec::restart`] (dfb4a81)
+        // `Copy`-return closed-set-enum discriminant accessor pins on
+        // the sibling nested-spec typed-slot discriminator axes,
+        // extended here to the outer top-level [`Caixa`] universal-
+        // axis surface.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+        ] {
+            let c = caixa_with_kind(kind);
+            assert_eq!(
+                c.kind(),
+                kind,
+                "Caixa::kind must return :kind verbatim (got {:?}, \
+                 expected {kind:?})",
+                c.kind(),
+            );
+            assert_eq!(
+                c.kind(),
+                c.kind,
+                "Caixa::kind accessor and .kind field access must \
+                 byte-equal — the accessor is the substrate-primitive \
+                 typed dispatch every downstream kind-gate consumer \
+                 must route through",
+            );
+        }
+    }
+
+    #[test]
+    fn require_kind_reads_through_lifted_kind_accessor() {
+        // Two-consumer coherence pin: the [`crate::render::require_kind`]
+        // entry-gate predicate (the canonical two-line
+        // `require_kind(caixa, Servico)?` prelude every per-Servico /
+        // per-Aplicacao renderer runs at its entry-point) and the
+        // sibling [`crate::render::KindMismatch`] error carrier's
+        // `actual:` field (which names the offending caixa's variant
+        // in the diagnostic) must both key off the lifted accessor, so
+        // any future rebrand on the typed slot's reader shape lands at
+        // exactly one place. Pins the two-site coherence by exercising
+        // every off-diagonal `(actual, expected)` pair across the
+        // closed accept-set — the `KindMismatch { actual, expected }`
+        // surfaced on the mismatch arm must byte-equal the pair the
+        // accessor returns for each side.
+        //
+        // Peer of the sibling per-`:placement`
+        // `validate_placement_reads_through_lifted_estrategia_accessor`
+        // (921fe1b) two-arm consumer-coherence pin on the M3 mesh-slot
+        // `Copy`-return discriminant axis — same "the entry-gate
+        // predicate and the error carrier's `actual:` field must route
+        // through the substrate-primitive typed dispatch" discipline
+        // extended onto the outer top-level [`Caixa`] universal-axis
+        // discriminant surface.
+        for expected in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+        ] {
+            for actual in [
+                CaixaKind::Biblioteca,
+                CaixaKind::Binario,
+                CaixaKind::Servico,
+                CaixaKind::Supervisor,
+                CaixaKind::Aplicacao,
+            ] {
+                let c = caixa_with_kind(actual);
+                let result = crate::render::require_kind(&c, expected);
+                if expected == actual {
+                    assert!(
+                        result.is_ok(),
+                        "require_kind must accept when actual == expected \
+                         (actual={actual:?}, expected={expected:?})",
+                    );
+                } else {
+                    let err = result.expect_err("require_kind must reject when actual != expected");
+                    assert_eq!(
+                        err.actual,
+                        c.kind(),
+                        "KindMismatch.actual must byte-equal Caixa::kind() \
+                         — the error carrier's `actual:` field reads \
+                         through the lifted accessor",
+                    );
+                    assert_eq!(
+                        err.expected, expected,
+                        "KindMismatch.expected must byte-equal the \
+                         expected variant passed to require_kind",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn aplicacao_view_kind_gate_routes_through_accessor() {
+        // Composition pin: [`Caixa::aplicacao_view`]'s kind-gate arm
+        // must key off [`Caixa::kind`], not the raw `.kind` field
+        // access. Structurally: a `Caixa { kind: X, .. }` for any
+        // non-`Aplicacao` variant must fold to `None` on the
+        // `aplicacao_view` composer (the "kind mismatch → no typed
+        // view" contract every downstream Aplicacao consumer keys off
+        // via `?`), and a `Caixa { kind: Aplicacao, .. }` must fold to
+        // `Some(_)`. The pair jointly pins the accessor + view-gate
+        // composition: any future silent detour that had the accessor
+        // return a fresh [`CaixaKind::Aplicacao`] on some sentinel
+        // input would silently absorb the kind-mismatch case at the
+        // accessor boundary and every per-Aplicacao renderer would
+        // silently render a non-Aplicacao caixa's mesh slots — the
+        // composition pin catches that at caixa-core build time.
+        //
+        // Peer of the sibling per-`Caixa`
+        // `validate_nome_empty_arm_routes_through_accessor` (e6b7d97) /
+        // `validate_versao_empty_arm_routes_through_accessor` (20c0539)
+        // composition pins on the sibling outer top-level [`Caixa`]
+        // required-`&str` universal-axis surfaces — same "the
+        // composer / validate gate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the
+        // outer top-level [`Caixa`] `Copy`-return required-
+        // discriminant composition axis.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+        ] {
+            let c = caixa_with_kind(kind);
+            assert!(
+                c.aplicacao_view().is_none(),
+                "aplicacao_view must return None on non-Aplicacao \
+                 kind {kind:?} — the composer's kind-gate must route \
+                 through Caixa::kind()",
+            );
+        }
+        let c = caixa_with_kind(CaixaKind::Aplicacao);
+        assert!(
+            c.aplicacao_view().is_some(),
+            "aplicacao_view must return Some on kind Aplicacao — \
+             the composer's kind-gate must accept the matching arm \
+             through Caixa::kind()",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_kind_gate_routes_through_accessor() {
+        // Composition pin (mirror of the sibling
+        // `aplicacao_view_kind_gate_routes_through_accessor` on the
+        // second `_view` composer): [`Caixa::supervisor_view`]'s kind-
+        // gate arm must key off [`Caixa::kind`], not the raw `.kind`
+        // field access. A `Caixa { kind: X, .. }` for any non-
+        // `Supervisor` variant must fold to `None` on the
+        // `supervisor_view` composer, and a `Caixa { kind:
+        // Supervisor, .. }` must fold to `Some(_)`. Same peer
+        // composition pin discipline on the second `_view` composer
+        // axis.
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Aplicacao,
+        ] {
+            let c = caixa_with_kind(kind);
+            assert!(
+                c.supervisor_view().is_none(),
+                "supervisor_view must return None on non-Supervisor \
+                 kind {kind:?} — the composer's kind-gate must route \
+                 through Caixa::kind()",
+            );
+        }
+        let mut c = caixa_with_kind(CaixaKind::Supervisor);
+        // A Supervisor caixa needs a strategy + at least one child to
+        // fold to a Some(_) that also validates; the composer itself
+        // requires only the kind arm, so bare kind flip is enough to
+        // pin the `Some(_)` return, but we populate the minimum
+        // supervisor shape so a future strengthening of the composer
+        // to reject an empty spec doesn't false-positive this pin.
+        c.estrategia = Some(crate::supervisor::RestartStrategy::OneForOne);
+        c.children = vec![crate::supervisor::ChildSpec {
+            caixa: "child".into(),
+            versao: "^0.1".into(),
+            restart: crate::supervisor::RestartPolicy::Permanent,
+        }];
+        assert!(
+            c.supervisor_view().is_some(),
+            "supervisor_view must return Some on kind Supervisor — \
+             the composer's kind-gate must accept the matching arm \
+             through Caixa::kind()",
+        );
+    }
+
+    #[test]
+    fn kind_projects_by_copy() {
+        // The by-`Copy` pin: [`Caixa::kind`] returns a fresh
+        // [`CaixaKind`] by `Copy` — the accessor must not borrow from
+        // `&self` (the returned value is owned, `Copy`-projected from
+        // the underlying [`CaixaKind`] storage; two calls on the same
+        // [`Caixa`] must yield byte-equal values). Peer of the peer
+        // per-`:placement` `Placement::estrategia` / per-`:supervisor`
+        // `SupervisorSpec::estrategia` / per-`:children`
+        // `ChildSpec::restart` `Copy`-return discriminant accessor
+        // pins on the sibling nested-spec typed-slot discriminator
+        // axes, extended onto the first outer top-level [`Caixa`]
+        // required-`Copy`-return axis — pins against a future silent
+        // detour that returned `&CaixaKind` (which would type-check
+        // but silently constrain every consumer's callsite to a
+        // borrow-shaped dispatch, breaking the zero-cost `Copy`
+        // projection every peer sibling accessor carries).
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+        ] {
+            let c = caixa_with_kind(kind);
+            let first: CaixaKind = c.kind();
+            let second: CaixaKind = c.kind();
+            assert_eq!(
+                first, second,
+                "Caixa::kind must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 CaixaKind variant",
+            );
+            assert_eq!(
+                first, kind,
+                "Caixa::kind must return :kind verbatim by Copy — \
+                 got {first:?}, expected {kind:?}",
             );
         }
     }
