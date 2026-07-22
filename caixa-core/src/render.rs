@@ -116,13 +116,13 @@ pub struct KindMismatch {
 /// `caixa.lisp` — same shape every renderer's `Error::From<KindMismatch>`
 /// converts into the renderer's local error type.
 pub fn require_kind(caixa: &Caixa, expected: CaixaKind) -> Result<(), KindMismatch> {
-    if caixa.kind == expected {
+    if caixa.kind() == expected {
         Ok(())
     } else {
         Err(KindMismatch {
             nome: caixa.nome.clone(),
             expected,
-            actual: caixa.kind,
+            actual: caixa.kind(),
         })
     }
 }
