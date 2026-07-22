@@ -790,6 +790,96 @@ impl SupervisorSpec {
         self.estrategia
     }
 
+    /// Substrate-canonical per-`:supervisor` `:max-restarts` OTP-shaped
+    /// `MaxIntensity` restart-budget scalar accessor every consumer that
+    /// reads the supervisor's per-`:restart-window` restart-budget count
+    /// keys off — returns the author-declared `:supervisor :max-restarts`
+    /// typed `u32` verbatim, `Copy`-projected from the typed slot's own
+    /// `u32` storage (`u32` is `Copy`, so the accessor returns by value; no
+    /// borrow of `&self` past the call). Non-optional (the `u32` field
+    /// carries the restart-budget count as a required axis with a
+    /// [`default_max_restarts`]-supplied default; the zero-floor arm
+    /// [`SupervisorError::ZeroMaxRestarts`] and the cap arm
+    /// [`SupervisorError::MaxRestartsExceedsCap`] jointly bracket the
+    /// accept-set to `1..=SUPERVISOR_MAX_RESTARTS_MAX`).
+    ///
+    /// The `:supervisor :max-restarts` slot carries the Erlang/OTP
+    /// `MaxIntensity` restart-budget count that pairs with the sibling
+    /// `:restart-window` `Period` to form the `MaxIntensity / Period`
+    /// restart-intensity ratio the supervisor trips its own escalation on
+    /// (`theory/RUNTIME-PATTERNS.md` §II.2, Learn You Some Erlang's
+    /// `{intensity, 5, 60}` worker-supervisor default). Every downstream
+    /// consumer of the Supervisor's per-`:supervisor` restart-budget count
+    /// keys off this scalar (the [`SupervisorSpec::validate`] zero-floor +
+    /// upper-cap bracket at
+    /// `require_positive_bounded_u32(self.max_restarts(), …)`, the future
+    /// wasm-operator's per-supervisor restart-intensity counter's
+    /// budget-vs-count comparator, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+    /// webhook, the `caixa-operator`'s hierarchical reconciliation
+    /// scheduler's per-supervisor escalation-decision branch, every
+    /// `SupervisorError::MaxRestartsExceedsCap` variant carrying the
+    /// offending count verbatim for `feira lint` rendering).
+    ///
+    /// Prior to this lift the `.max_restarts` field was accessed inline at
+    /// one production site in `caixa-core/src/supervisor.rs` — the
+    /// [`SupervisorSpec::validate`] `require_positive_bounded_u32(self
+    /// .max_restarts, …)` bracket-gate call — one open-coded field-access
+    /// that expressed no compile-time link back to the typed slot. A
+    /// future extension of the `:max-restarts` axis to a richer author
+    /// surface (a per-cluster restart-budget override the operator pins
+    /// through a future `:supervisor :max-restarts-overrides` slot the
+    /// MESH-COMPOSITION §III.2 supervision-canary roadmap acknowledges,
+    /// a per-tenant restart-budget-alias table the M4 CR materializer
+    /// resolves per-CR, a per-supervisor dynamic restart-budget derivation
+    /// the future adaptive-supervision engine computes from child-failure-
+    /// history topology, a promotion of the plain `u32` count to a richer
+    /// `{MaxR, MaxT}` tuple once Erlang/OTP's per-child-cohort restart-
+    /// budget-partition slot comes into scope) would have had to be
+    /// threaded through every open-coded copy in lockstep or the validate
+    /// gate and the future M4 emit path would silently disagree on which
+    /// restart-budget count a given supervisor resolves to — an author's
+    /// `:max-restarts 5` would satisfy validate while the emit path
+    /// silently read a drifted other value (a `:max-restarts 10000`
+    /// no-op supervisor at the emit boundary would carry the author's
+    /// declared `5` verbatim in `feira lint` output while the future
+    /// wasm-operator's restart-intensity counter operated under the
+    /// drifted count), a two-consumer split at the validator far from the
+    /// source `caixa.lisp` with no field naming the restart-budget-drift
+    /// root cause. Lifting the resolution rule to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Supervisor's per-`:supervisor` restart-budget-count surface reaches
+    /// for exactly one typed dispatch — the resolver's accept-set migrates
+    /// as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling M3 mesh-slot [`crate::CircuitBreaker::max_failures`]
+    /// (3a74062) `Copy`-return `u32` sub-struct required-scalar accessor
+    /// on the per-`:politicas :circuit-breaker :max-failures` Envoy-
+    /// outlier-detection trip-threshold axis — same "one typed dispatch on
+    /// the substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the M2 supervisor-slot per-`:supervisor`
+    /// restart-budget-count `Copy`-`u32` scalar axis. The two typed axes
+    /// (`CircuitBreaker::max_failures` on the M3 Aplicacao side,
+    /// `SupervisorSpec::max_restarts` on the M2 Supervisor side) now share
+    /// one accessor discipline for the shared substrate concept "a
+    /// `Copy`-projected required `u32` count that trips the next-higher
+    /// protection layer after N events in a rolling window" — both are
+    /// counters with identical degenerate-at-the-high-end shape and share
+    /// the paired [`crate::POLICY_BREAKER_MAX_FAILURES_MAX`] /
+    /// [`SUPERVISOR_MAX_RESTARTS_MAX`] `1000` cap. Second `Copy`-return
+    /// accessor on the M2 supervisor-slot `SupervisorSpec` type, sibling
+    /// to the [`SupervisorSpec::estrategia`] (eafb619) `Copy`-composite-
+    /// enum `RestartStrategy` accessor. Named `max_restarts()` to match
+    /// the storage field's name verbatim and the peer
+    /// [`crate::CircuitBreaker::max_failures`] method-name discipline; the
+    /// accessor's identity maps onto the canonical OTP-shape supervision
+    /// vocabulary the [`SupervisorSpec::max_restarts`] field's docstring
+    /// already carries.
+    #[must_use]
+    pub const fn max_restarts(&self) -> u32 {
+        self.max_restarts
+    }
+
     /// Validate the supervisor's typed shape — strategy ↔ children
     /// invariants, max_restarts > 0, restart_window > 0 when set,
     /// per-child non-empty + duplicate-free names.
@@ -886,8 +976,21 @@ impl SupervisorSpec {
         // window surfaces the bracket diagnostic first, mirroring the
         // `PolicyBreakerMaxFailuresExceedsCap` / window-axis cross-arm
         // ordering on the peer `:politicas :circuit-breaker` slot.
+        // Route the [`SupervisorSpec::validate`] `:max-restarts` zero-floor +
+        // upper-cap bracket-gate through the lifted [`SupervisorSpec::max_restarts`]
+        // accessor rather than the raw `self.max_restarts` field access —
+        // the one production consumer of the per-`:supervisor`
+        // restart-budget-count scalar now keys off exactly one typed
+        // dispatch on the substrate primitive, so any future rebrand on
+        // the axis (a per-cluster restart-budget override the operator
+        // pins through a future `:supervisor :max-restarts-overrides`
+        // slot, a per-tenant restart-budget-alias table the M4 CR
+        // materializer resolves per-CR) migrates as a single caixa-core
+        // edit rather than a coordinated rewrite — sibling of the peer M3
+        // [`crate::CircuitBreaker::max_failures`] (3a74062) migration on
+        // the per-`:politicas :circuit-breaker :max-failures` axis.
         crate::render::require_positive_bounded_u32(
-            self.max_restarts,
+            self.max_restarts(),
             SUPERVISOR_MAX_RESTARTS_MAX,
             || SupervisorError::ZeroMaxRestarts,
             |max_restarts| SupervisorError::MaxRestartsExceedsCap { max_restarts },
@@ -4796,6 +4899,166 @@ mod tests {
                 }
                 other => panic!("expected NoChildren, got {other:?} for estrategia={estrategia:?}"),
             }
+        }
+    }
+
+    // ── per-`:supervisor` `:max-restarts` typed-accessor coherence pins ────
+    //
+    // The [`SupervisorSpec::max_restarts`] accessor lift extends the peer M3
+    // [`crate::CircuitBreaker::max_failures`] (3a74062) `Copy`-return
+    // required-`u32` scalar accessor discipline onto the M2 supervisor-slot
+    // per-`:supervisor` restart-budget-count `Copy`-`u32` scalar axis.
+    // The two pins below cover (1) the accessor's byte-equal projection
+    // against the raw field access across every representative value in
+    // the `u32` accept-set (`1` lower boundary, `SUPERVISOR_MAX_RESTARTS_MAX`
+    // upper boundary, `0` past-the-guard zero sentinel, `u32::MAX`
+    // past-the-guard cap sentinel), and (2) the [`SupervisorSpec::validate`]
+    // zero-floor / cap composition — the validate gate and the accessor
+    // must route through the same substrate-primitive typed dispatch, so
+    // any future silent detour that had the accessor perform a
+    // bounds-collapsing clamp would fail here at caixa-core build time.
+    // Peer of the sibling M3
+    // `circuit_breaker_max_failures_returns_max_failures_u32_byte_equal_across_permutations`
+    // (3a74062) pin on the per-`CircuitBreaker :max-failures` axis.
+
+    #[test]
+    fn supervisor_spec_max_restarts_returns_max_restarts_u32_byte_equal_across_permutations() {
+        // The canonical per-`:supervisor` restart-budget-count scalar pin:
+        // [`SupervisorSpec::max_restarts`] must return the `:supervisor
+        // :max-restarts` typed `u32` verbatim, `Copy`-projected from the
+        // typed slot's own `u32` storage, byte-equal to the raw field
+        // access across every representative value in the accept-set —
+        // `1` (the lower boundary of the `1..=SUPERVISOR_MAX_RESTARTS_MAX`
+        // accept-set the surrounding [`SupervisorSpec::validate`] gate
+        // carves out on the sibling `ZeroMaxRestarts` refusal),
+        // `SUPERVISOR_MAX_RESTARTS_MAX` (the upper boundary the same gate
+        // carves out on the sibling `MaxRestartsExceedsCap` refusal), `0`
+        // (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse into `1` on the zero arm —
+        // validate rejects zero but the accessor must ship the raw slot
+        // verbatim so a validate-time gate regression surfaces at the
+        // emit boundary rather than being silently absorbed), `u32::MAX`
+        // (a past-the-guard sentinel that pins the accessor doesn't
+        // perform a silent bounds-collapse through
+        // `SUPERVISOR_MAX_RESTARTS_MAX` at the return path).
+        //
+        // Peer of the sibling M3
+        // `circuit_breaker_max_failures_returns_max_failures_u32_byte_equal_across_permutations`
+        // (3a74062) pin on the M3 mesh-slot `Copy`-`u32` sub-struct
+        // required-scalar axis — same "the substrate-primitive accessor
+        // must byte-equal the raw field access verbatim across every
+        // value in the `u32` accept-set" discipline extended onto the M2
+        // supervisor-slot per-`:supervisor` restart-budget-count axis.
+        for max_restarts in [1u32, SUPERVISOR_MAX_RESTARTS_MAX, 0, u32::MAX] {
+            let s = SupervisorSpec {
+                max_restarts,
+                ..SupervisorSpec::default()
+            };
+            assert_eq!(
+                s.max_restarts(),
+                max_restarts,
+                "SupervisorSpec::max_restarts must return :supervisor \
+                 :max-restarts verbatim (got {}, expected {max_restarts})",
+                s.max_restarts(),
+            );
+            assert_eq!(
+                s.max_restarts(),
+                s.max_restarts,
+                "SupervisorSpec::max_restarts accessor and .max_restarts \
+                 field access must byte-equal — the accessor is the \
+                 substrate-primitive typed dispatch every downstream \
+                 restart-budget-count consumer must route through",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_max_restarts_zero_floor_and_cap_arms_route_through_accessor() {
+        // Composition pin: [`SupervisorSpec::validate`]'s `:max-restarts`
+        // zero-floor + upper-cap bracket must key off
+        // [`SupervisorSpec::max_restarts`], not the raw `.max_restarts`
+        // field access. Structurally: a `SupervisorSpec { max_restarts:
+        // 0, .. }` must surface the `ZeroMaxRestarts` refusal exactly, a
+        // `SupervisorSpec { max_restarts: SUPERVISOR_MAX_RESTARTS_MAX + 1,
+        // .. }` must surface the `MaxRestartsExceedsCap` refusal exactly
+        // (with the offending count carried verbatim from the accessor
+        // return), and a `SupervisorSpec { max_restarts: 1, .. }` (the
+        // lower boundary of the accept-set) plus a `SupervisorSpec {
+        // max_restarts: SUPERVISOR_MAX_RESTARTS_MAX, .. }` (the upper
+        // boundary) must pass validate. The four together jointly pin the
+        // accessor + validate-gate composition: any future silent detour
+        // that had the accessor return a fresh `1` on the zero arm (a
+        // `.max_restarts().max(1)` collapse) would silently absorb the
+        // `ZeroMaxRestarts` refusal at the accessor boundary and the
+        // validate gate would accept a struct-literal `SupervisorSpec {
+        // max_restarts: 0, .. }` — the composition pin catches that at
+        // caixa-core build time.
+        //
+        // Peer of the sibling M3
+        // `validate_politicas_max_failures_zero_floor_arm_routes_through_accessor`
+        // (3a74062) pin on the sibling per-`CircuitBreaker :max-failures`
+        // composition axis — same "the validate / shape-gate predicate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the peer M2 supervisor-slot
+        // required-`u32` composition axis.
+        let child = ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        };
+        // Zero-floor arm.
+        let s = SupervisorSpec {
+            max_restarts: 0,
+            children: vec![child.clone()],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::ZeroMaxRestarts,
+            "validate must reject max_restarts == 0 with ZeroMaxRestarts \
+             — the accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the zero-floor arm",
+        );
+        // Cap arm — the surfaced `max_restarts:` field must byte-equal
+        // the accessor's return so a future rebrand on the accessor
+        // lands in the diagnostic without a coordinated rewrite.
+        let over_cap = SUPERVISOR_MAX_RESTARTS_MAX + 1;
+        let s = SupervisorSpec {
+            max_restarts: over_cap,
+            children: vec![child.clone()],
+            ..SupervisorSpec::default()
+        };
+        match s.validate().unwrap_err() {
+            SupervisorError::MaxRestartsExceedsCap { max_restarts } => {
+                assert_eq!(
+                    max_restarts,
+                    s.max_restarts(),
+                    "MaxRestartsExceedsCap.max_restarts must byte-equal \
+                     SupervisorSpec::max_restarts() — the cap-arm refusal \
+                     reads through the lifted accessor",
+                );
+                assert_eq!(
+                    max_restarts, over_cap,
+                    "MaxRestartsExceedsCap.max_restarts must carry the \
+                     author-declared :supervisor :max-restarts value \
+                     verbatim (got {max_restarts}, expected {over_cap})",
+                );
+            }
+            other => panic!("expected MaxRestartsExceedsCap, got {other:?}"),
+        }
+        // Lower + upper accept-set boundaries.
+        for max_restarts in [1u32, SUPERVISOR_MAX_RESTARTS_MAX] {
+            let s = SupervisorSpec {
+                max_restarts,
+                children: vec![child.clone()],
+                ..SupervisorSpec::default()
+            };
+            assert!(
+                s.validate().is_ok(),
+                "validate must accept max_restarts == {max_restarts} \
+                 (an accept-set boundary of \
+                 1..=SUPERVISOR_MAX_RESTARTS_MAX)",
+            );
         }
     }
 }
