@@ -2760,7 +2760,17 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
 ///     pointing at the destination Servico.
 pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     let spec = typed_view(caixa)?;
-    let entrada = match spec.entrada.as_ref() {
+    // Route the per-`:entrada` composite-reference read through the
+    // lifted [`caixa_core::AplicacaoSpec::entrada`] accessor rather
+    // than the raw `spec.entrada.as_ref()` field access — the
+    // per-Aplicacao K8s Gateway API v1 Gateway + HTTPRoute emitter's
+    // early-return partition now keys off the canonical read-side
+    // surface every per-Aplicacao entrada consumer routes through,
+    // peer of the sibling per-`:politicas` and per-`:placement`
+    // outer-composite-reference migrations already routed through
+    // [`caixa_core::AplicacaoSpec::politicas`] and
+    // [`caixa_core::AplicacaoSpec::placement`].
+    let entrada = match spec.entrada() {
         Some(e) => e,
         None => return Ok(Vec::new()),
     };

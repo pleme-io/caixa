@@ -118,7 +118,14 @@ impl GraphArgs {
                     label,
                 );
             }
-            if let Some(e) = &spec.entrada {
+            // Route the per-`:entrada` composite-reference read
+            // through the lifted [`caixa_core::AplicacaoSpec::entrada`]
+            // accessor rather than the raw `&spec.entrada` field
+            // access — the `feira app graph` per-Aplicacao external-
+            // gateway summary line now keys off the canonical read-
+            // side surface every per-Aplicacao entrada consumer
+            // routes through.
+            if let Some(e) = spec.entrada() {
                 println!(
                     "  entrada: {} → {} (paths={:?}, port={})",
                     e.host, e.para, e.paths, e.port
