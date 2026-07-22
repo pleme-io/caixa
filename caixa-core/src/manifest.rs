@@ -581,6 +581,101 @@ impl Caixa {
         self.edicao.as_deref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:nome` universal-axis DNS-1123-
+    /// label caixa-identity scalar accessor every consumer of the top-
+    /// level manifest's identity axis keys off — returns the author-
+    /// declared `:nome` byte-string verbatim as an `&str`, borrowed from
+    /// the typed slot's own `String` storage. Non-optional (`:nome` is
+    /// a required-axis scalar every `defcaixa` form must supply; the
+    /// [`Self::from_lisp`] derive rejects an omitted / non-string
+    /// `:nome` at parse time, so a `Caixa` past parse definitionally
+    /// carries a non-`None` `:nome`).
+    ///
+    /// The `:nome` slot carries the universal-axis DNS-1123-label
+    /// caixa-identity every kind of caixa emits under (CAIXA-SDLC §I —
+    /// the primary identity axis every `defcaixa` form supplies
+    /// alongside `:versao` / `:kind`; the substrate-wide identity every
+    /// other typed surface that names a caixa reaches through — `:deps`
+    /// entries, `:membros` entries, `:children` entries, the
+    /// `lareira-<nome>` Helm chart name every per-Servico renderer
+    /// derives, the `pleme-program-<nome>` label every per-Aplicacao
+    /// renderer emits) — the typed slot's `String` accept-set (empty
+    /// rejected through [`ManifestError::NomeEmpty`], DNS-1123-shape-
+    /// invalid rejected through [`ManifestError::NomeInvalid`] past
+    /// the shared [`crate::render::require_valid_dns_1123_label`] gate
+    /// the peer name axes each land on, joint-length-with-`lareira-`-
+    /// prefix rejected through
+    /// [`ManifestError::NomeChartNameBudgetExceeded`] past
+    /// [`crate::render::is_lareira_chart_name_shape`]) maps onto every
+    /// load-bearing downstream consumer the substrate carries — the
+    /// two universal-axis validate gates at caixa-build time
+    /// ([`Self::validate_nome`] + [`Self::validate_nome_chart_name_budget`]),
+    /// [`crate::lareira_chart_name`]'s `lareira-<nome>` Helm chart-name
+    /// derivation every per-Servico renderer keys off, the caixa-helm
+    /// `Chart.yaml`'s `name:` axis, caixa-flux's `programs.yaml` entry
+    /// `name:` axis, caixa-mesh's Cilium `CiliumNetworkPolicy` /
+    /// `HTTPRoute` per-Aplicacao name axes at
+    /// caixa-mesh/src/lib.rs:{2650, 2797, 2919, 2925},
+    /// [`crate::pleme_program_selector`] /
+    /// [`crate::pleme_program_in_aplicacao_selector`] label-selector
+    /// derivations, and every future substrate renderer that emits an
+    /// artifact keyed by the caixa's identity.
+    ///
+    /// Prior to this lift the `.nome` field was accessed inline at a
+    /// dozen production sites across `caixa-core` (the two universal-
+    /// axis validate gates + [`Dep::validate`]-adjacent duplicate
+    /// tracking), `caixa-helm` (the `lareira_chart_name` fold, the
+    /// `ChartYaml.name` / `ChartYaml.description` / `Chart.yaml`
+    /// `keywords` fallback), `caixa-flux` (the `programs.yaml`
+    /// entry `name:` fold, the `flux_kustomization_source_subtree`
+    /// per-cluster subpath derivation), and `caixa-mesh` (the
+    /// `pleme_program_in_aplicacao_selector` label-selector fold, the
+    /// `cilium_network_policy_name` / `gateway_api_http_route_name`
+    /// per-CR name derivations, the `LABEL_APLICACAO` labels-map
+    /// insert) — a dozen open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:nome` axis to a richer author surface — a per-`:nome`
+    /// structured `CaixaIdentity` newtype that carries the joint-
+    /// length-with-prefix invariant [`Self::validate_nome_chart_name_budget`]
+    /// enforces at the type level (rather than as a validate-time
+    /// gate), a per-registry `:nome` namespacing overlay the M4 CR
+    /// materializer resolves per-CR (the "`pleme-io/checkout` vs
+    /// `partner-org/checkout` collision" arm the multi-tenant-registry
+    /// story acknowledges), a promotion of the plain `String` byte-
+    /// string to a richer `CaixaNome` newtype discriminated on
+    /// namespace prefix — would have had to be threaded through every
+    /// open-coded copy in lockstep or the two validate gates and the
+    /// dozen emit paths would silently disagree on which identity a
+    /// given [`Caixa`] resolves to (an author's `:nome "checkout"`
+    /// would satisfy validate while one of the emit paths silently
+    /// rendered a drifted other identity, or vice versa). Lifting the
+    /// resolution to a typed method on the substrate primitive means
+    /// every downstream consumer of the caixa's per-`Caixa` identity
+    /// surface reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// First outer top-level [`Caixa`] `&str`-return required-scalar
+    /// accessor — opens the "outer [`Caixa`] `&str` required-scalar"
+    /// projection pattern the sibling per-`Caixa` `:versao` future lift
+    /// folds on. Sibling in shape to the peer per-`:membros`
+    /// [`crate::aplicacao::Membro::nome`] (4a32abf) / per-`:contratos`
+    /// [`crate::aplicacao::WitContract::source`] /
+    /// [`crate::aplicacao::WitContract::destination`] (7f0fd43),
+    /// [`crate::aplicacao::WitContract::world_ref`] (0804823),
+    /// [`crate::aplicacao::Membro::versao_requirement`] (a40b0e3),
+    /// [`crate::aplicacao::Entrada::destination`] (6db982c),
+    /// [`crate::aplicacao::CircuitBreaker::max_failures`] (3a74062),
+    /// per-sub-struct required-axis accessors carry on the sibling M3
+    /// mesh-slot-atom scalar-value axes, extended here to open the
+    /// outer top-level [`Caixa`] `&str`-return required-scalar surface.
+    /// Named `nome()` to match the storage field's name; the accessor's
+    /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
+    /// slot's docstring already carries.
+    #[must_use]
+    pub fn nome(&self) -> &str {
+        &self.nome
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -962,11 +1057,12 @@ impl Caixa {
         // [`crate::render::require_valid_dns_1123_label`] gate the peer
         // name axes each land on so drift between the eight axes'
         // accepted DNS-1123-label sets is structurally impossible.
+        let nome = self.nome();
         crate::render::require_valid_dns_1123_label(
-            &self.nome,
+            nome,
             || ManifestError::NomeEmpty,
             |reason| ManifestError::NomeInvalid {
-                nome: self.nome.clone(),
+                nome: nome.to_string(),
                 reason,
             },
         )
@@ -1033,9 +1129,10 @@ impl Caixa {
     /// preserving the legitimate "well-shaped `:nome` that happens to
     /// overflow the joint cap" arm for this gate.
     pub fn validate_nome_chart_name_budget(&self) -> Result<(), ManifestError> {
-        crate::render::is_lareira_chart_name_shape(&self.nome).map_err(|reason| {
+        let nome = self.nome();
+        crate::render::is_lareira_chart_name_shape(nome).map_err(|reason| {
             ManifestError::NomeChartNameBudgetExceeded {
-                nome: self.nome.clone(),
+                nome: nome.to_string(),
                 reason,
             }
         })
@@ -7773,6 +7870,158 @@ mod tests {
                 first, edicao,
                 "Caixa::edicao must return :edicao verbatim by \
                  borrow — got {first:?}, expected {edicao:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn nome_returns_nome_byte_string_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:nome` universal-axis DNS-1123-
+        // label caixa-identity scalar pin: [`Caixa::nome`] must return
+        // the `:nome` typed `String` verbatim as `&str`, byte-equal to
+        // the raw field access across every representative value in
+        // the accept-set — the canonical `"demo"` template baseline
+        // (the same `feira init`-scaffolded default the sibling
+        // `validate_nome_accepts_canonical_template` positive-control
+        // gate pins), plus every sibling per-typed-slot atom accessor's
+        // canonical positive-arm byte-string (`"catalog"` per
+        // [`crate::aplicacao::Membro::nome`], `"cart"` per the peer
+        // per-`:contratos` `:de`, `"hello-rio"` per the canonical
+        // `caixa-helm`/`caixa-flux` cross-crate integration-test
+        // fixture, `"checkout"` per the M3 mesh-slot Aplicacao
+        // canonical example), plus every past-the-guard sentinel for
+        // the `NomeEmpty` / `NomeInvalid` / `NomeChartNameBudgetExceeded`
+        // refusal cases (`""`, `"Bad_Name"`, `"a"` × 56 — 56 bytes fits
+        // the bare DNS-1123 63-byte cap but overflows the joint
+        // `lareira-<nome>` chart-name budget the sibling
+        // [`Caixa::validate_nome_chart_name_budget`] gate closes on).
+        //
+        // The past-the-guard sentinels pin the accessor doesn't
+        // silently absorb the refusal cases into a template-derived
+        // fallback (a future `.nome().is_empty().then(|| "demo")`
+        // collapse would silently absorb the `NomeEmpty` refusal at
+        // the accessor boundary and the validate gate would accept a
+        // struct-literal `Caixa { nome: "".into(), .. }` — the pin
+        // catches that at caixa-core build time).
+        //
+        // First outer top-level [`Caixa`] `&str`-return required-
+        // scalar accessor pin — opens the "outer [`Caixa`] `&str`
+        // required-scalar" projection pattern the sibling per-`Caixa`
+        // `:versao` future lift folds on. Sibling in shape to the peer
+        // per-`:membros` [`crate::aplicacao::Membro::nome`] (4a32abf)
+        // required-`String`-carry accessor pin on the sibling per-
+        // sub-struct required-axis, extended onto the outer top-level
+        // [`Caixa`] universal-axis required-`String`-carry axis.
+        for nome in [
+            "demo",
+            "catalog",
+            "cart",
+            "hello-rio",
+            "checkout",
+            "",
+            "Bad_Name",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ] {
+            let c = caixa_with_nome(nome);
+            assert_eq!(
+                c.nome(),
+                nome,
+                "Caixa::nome must return :nome verbatim (got {}, \
+                 expected {nome})",
+                c.nome(),
+            );
+            assert_eq!(
+                c.nome(),
+                c.nome.as_str(),
+                "Caixa::nome must byte-equal the raw .nome field \
+                 access across every value in the String accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_nome_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_nome`]'s empty-arm must
+        // key off [`Caixa::nome`], not the raw `.nome` field access.
+        // Structurally: a `Caixa { nome: "".into(), .. }` must surface
+        // the `NomeEmpty` refusal exactly, and the canonical `"demo"`
+        // template baseline (the peer positive-arm the sibling
+        // `validate_nome_accepts_canonical_template` gate carves out)
+        // must pass validate. The pair jointly pins the accessor +
+        // validate-gate composition: any future silent detour that
+        // had the accessor return a fresh `"demo"` on the empty arm
+        // (a `.nome().is_empty().then(|| "demo")` fallback collapse)
+        // would silently absorb the `NomeEmpty` refusal at the
+        // accessor boundary and the validate gate would accept a
+        // struct-literal `Caixa { nome: "".into(), .. }` — the
+        // composition pin catches that at caixa-core build time.
+        //
+        // Peer of the sibling per-`Caixa`
+        // `validate_licenca_empty_arm_routes_through_accessor` (6d5bc28)
+        // / `validate_repositorio_empty_arm_routes_through_accessor`
+        // (cc7332d) / `validate_descricao_empty_arm_routes_through_accessor`
+        // (3f16e2f) / `validate_edicao_empty_arm_routes_through_accessor`
+        // (2641cbd) composition pins on the sibling outer top-level
+        // [`Caixa`] `Option<&str>` axes — same "the validate /
+        // shape-gate predicate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the peer
+        // outer top-level [`Caixa`] required-`&str` composition axis.
+        let c = caixa_with_nome("");
+        assert!(
+            matches!(c.validate_nome(), Err(ManifestError::NomeEmpty)),
+            "validate_nome must reject nome == \"\" with NomeEmpty — \
+             the accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the :nome \
+             empty-arm",
+        );
+        let c = caixa_with_nome("demo");
+        assert!(
+            c.validate_nome().is_ok(),
+            "validate_nome must accept nome == \"demo\" (the canonical \
+             DNS-1123-label template baseline)",
+        );
+    }
+
+    #[test]
+    fn nome_projects_str_by_borrow() {
+        // The by-borrow pin: [`Caixa::nome`] returns `&str` by borrow
+        // — the `&str` borrows the underlying `String` storage of the
+        // required `nome` slot and the accessor must not allocate a
+        // fresh `String` on every call. Peer of the [`Caixa::licenca`]
+        // (6d5bc28) / [`Caixa::repositorio`] (cc7332d) /
+        // [`Caixa::descricao`] (3f16e2f) / [`Caixa::edicao`] (2641cbd)
+        // by-borrow pins on the peer outer top-level [`Caixa`]
+        // `Option<&str>`-return axes, extended onto the first outer
+        // top-level [`Caixa`] required-`&str`-return axis — the
+        // accessor's returned `&str` must borrow from `&self` (the
+        // returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // the same `&str` verbatim (idempotent, no side effects on
+        // `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `String` (which would type-check but silently allocate on
+        // every call, breaking the zero-cost projection every peer
+        // sibling accessor carries), an accidental
+        // `.nome.to_lowercase()` detour that returned a fresh
+        // allocation through an already-DNS-1123-lowercase-only
+        // string (breaking a future `const fn` regression), or a
+        // one-arm-only accessor that returned a canonicalized value
+        // on some sentinel input (breaking the pass-through invariant
+        // the sibling required-scalar accessors carry).
+        for nome in ["demo", "catalog", "hello-rio", "checkout"] {
+            let c = caixa_with_nome(nome);
+            let first = c.nome();
+            let second = c.nome();
+            assert_eq!(
+                first, second,
+                "Caixa::nome must be idempotent — two successive calls \
+                 on the same &self must return the same &str",
+            );
+            assert_eq!(
+                first, nome,
+                "Caixa::nome must return :nome verbatim by borrow — \
+                 got {first}, expected {nome}",
             );
         }
     }
