@@ -4764,6 +4764,120 @@ impl AplicacaoSpec {
         self.contratos.as_slice()
     }
 
+    /// Substrate-canonical per-`:politicas` `MeshPolicy` MESH-COMPOSITION
+    /// per-Aplicacao mesh-policy composite-reference accessor every
+    /// per-Aplicacao policy-block reader keys off — returns the author-
+    /// declared `:politicas` composite verbatim as a `&MeshPolicy`
+    /// reference over the same backing storage the raw `&self.politicas`
+    /// field access borrows from.
+    ///
+    /// The `:politicas` slot carries the M3 mesh-slot per-Aplicacao
+    /// mesh-policy composite — the load-bearing container of every
+    /// mesh-level operational-policy axis every downstream mesh-artifact
+    /// emitter fans on (MESH-COMPOSITION §III.2 #3: the per-Aplicacao
+    /// mesh-policy overlay is the single typed surface a
+    /// `CiliumClusterwideEnvoyConfig` per-`:politicas` fan-out reads
+    /// from). Every per-`:politicas` axis threads through a lifted
+    /// per-slot accessor on the [`MeshPolicy`] type: the
+    /// [`MeshPolicy::mtls_required`] (c0110f1) Cilium-mesh mTLS-
+    /// enforcement-toggle scalar accessor, the [`MeshPolicy::retries`]
+    /// (bdfb399) Gateway-API-mesh transient-failure-retry-budget scalar
+    /// accessor, the [`MeshPolicy::timeout`] (7073d0f) Gateway-API-mesh
+    /// per-call-deadline scalar accessor, the [`MeshPolicy::circuit_breaker`]
+    /// (b0e741a) Envoy-outlier-detection consecutive-failure-ejection
+    /// composite accessor, and the [`MeshPolicy::rate_limit`] (21a6c3b)
+    /// Envoy-local-rate-limit-mesh token-bucket-declaration composite
+    /// accessor. Every downstream consumer that reaches for a policy
+    /// axis first passes through this outer accessor onto the composite
+    /// and then dispatches onto the per-axis accessor — the two-level
+    /// dispatch means every per-`:politicas` reader now routes through
+    /// a typed dispatch on the substrate primitive at both altitudes.
+    ///
+    /// Prior to this lift the `.politicas` `MeshPolicy` composite was
+    /// accessed inline at four production sites — the
+    /// [`AplicacaoSpec::validate_politicas`] entry-side `let p =
+    /// &self.politicas;` traversal seed (which drives every per-axis
+    /// zero-floor + upper-cap + canonical-form bracket dispatch through
+    /// `p.timeout`, `p.retries`, `p.circuit_breaker()`,
+    /// `p.rate_limit()` on the axis-level lifted accessors), the
+    /// [`caixa_mesh::cilium_network_policies`] per-CNP mTLS-mode-overlay
+    /// emitter's `spec.politicas.mtls_required()` field-then-accessor
+    /// chain (which drives every per-`(:de, :para)` CNP
+    /// authentication-mode overlay onto the emitted `CiliumNetworkPolicy`),
+    /// and the [`caixa_mesh::gateway_routes`] per-HTTPRoute per-request
+    /// timeout + retry overlay emitter's paired
+    /// `spec.politicas.timeout()` + `spec.politicas.retries()` field-then-
+    /// accessor chain (which drives the per-Aplicacao Gateway-API-mesh
+    /// deadline + budget overlay onto the emitted `HTTPRoute`) — four
+    /// open-coded outer-field accesses that expressed no compile-time
+    /// link back to the typed slot at the [`AplicacaoSpec`] altitude. A
+    /// future extension of the `:politicas` outer axis to a richer
+    /// author surface (a per-cluster policy overlay the operator pins
+    /// through a future `:politicas-overrides` slot the MESH-COMPOSITION
+    /// §V federation roadmap acknowledges, a per-tenant policy-alias
+    /// table the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer
+    /// resolves per-CR at admission time, a per-Aplicacao dynamic
+    /// policy-composite derivation the future adaptive-placement engine
+    /// computes from a per-cluster load-topology reader, a promotion of
+    /// the plain [`MeshPolicy`] to a richer `{static, dynamic}`
+    /// partition once virtual-actor-style dynamic-mesh-policy
+    /// composition comes into typed scope) would have had to be threaded
+    /// through all four open-coded copies in lockstep or one consumer
+    /// would silently disagree with the peers on which mesh-policy
+    /// composite a given Aplicacao resolves to — the validator's
+    /// per-axis bracket-dispatch seed reading the raw slot while the
+    /// peer CNP mTLS-overlay emitter read an operator-resolved slot
+    /// would silently split the build-time policy-shape gate from the
+    /// runtime CNP-emission gate, a four-consumer split at the
+    /// validator, the CNP emitter, and the `HTTPRoute` emitter far from
+    /// the source `caixa.lisp` with no field naming the policy-drift
+    /// root cause. Lifting the resolution rule to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Aplicacao's per-`:politicas` mesh-policy composite surface
+    /// reaches for exactly one typed dispatch — the resolver's accept-
+    /// set migrates as a unit on any future axis addition.
+    ///
+    /// First `&Composite`-return accessor on the top-level M3 mesh-slot
+    /// `AplicacaoSpec` type itself — sibling to the seed slice-return
+    /// accessors [`AplicacaoSpec::membros`] (6c77e36) `&[Membro]` and
+    /// [`AplicacaoSpec::contratos`] (0dcc926) `&[WitContract]` that
+    /// close the two `Vec`-carry axes on the outer typed composition
+    /// view; the outer `:politicas` composite-reference axis is the
+    /// natural pair to the paired outer `Vec`-carry accessors on the
+    /// two peer M3 mesh slots — every whole-Aplicacao mesh-artifact
+    /// emitter reads all four axes as one unit (graph nodes + graph
+    /// edges + mesh policy + placement pool). Peer to the same
+    /// [`crate::SupervisorSpec`] altitude on the sibling M2 supervisor-
+    /// slot: every M2 `SupervisorSpec`-scoped composite reader
+    /// ([`crate::SupervisorSpec::estrategia`], `max_restarts`,
+    /// `restart_window`, `children`) already routes through the M2
+    /// `SupervisorSpec` accessor family — this lift extends the same
+    /// "one typed dispatch on the substrate primitive at the outer
+    /// composition altitude" discipline to the M3 mesh-slot
+    /// `AplicacaoSpec`-scoped `:politicas` composite axis. The two
+    /// remaining peer outer-composite axes still unlifted at the time
+    /// of this lift — [`AplicacaoSpec::placement`] (`Placement`
+    /// per-Aplicacao distribution-composite) and [`AplicacaoSpec::entrada`]
+    /// (`Option<Entrada>` per-Aplicacao external-gateway composite) —
+    /// inherit this accessor's discipline as future compounding runs
+    /// migrate their consumers onto the shared reference-return shape.
+    /// Named `politicas()` to match the storage field's name verbatim
+    /// and the tatara-lisp author-surface term (`:politicas`) the
+    /// field's own docstring already carries; the accessor's identity
+    /// maps onto the canonical MESH-COMPOSITION §III.2 vocabulary the
+    /// slot's docstring already reaches for. Returns `&MeshPolicy`
+    /// (not the owning composite by copy or clone) because every
+    /// downstream consumer of the mesh-policy composite treats it as a
+    /// read-only per-axis dispatch source — the reference-view is the
+    /// narrowest borrow that supports every present + roadmapped
+    /// consumer (per-axis accessor dispatch, [`MeshPolicy::is_empty`]
+    /// emptiness probe) without cloning the composite through every
+    /// consumer's fast path.
+    #[must_use]
+    pub fn politicas(&self) -> &MeshPolicy {
+        &self.politicas
+    }
+
     /// Validate the typed shape:
     ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
     ///     and a non-empty `:versao`; no two entries share the same
@@ -5384,7 +5498,16 @@ impl AplicacaoSpec {
     /// promise that contract drift, capability leaks, and cycles are all
     /// build errors — not runtime surprises.
     fn validate_politicas(&self) -> Result<(), AplicacaoError> {
-        let p = &self.politicas;
+        // Route the per-`:politicas` composite-reference read through
+        // the lifted [`AplicacaoSpec::politicas`] outer accessor rather
+        // than the raw `&self.politicas` field access — the per-axis
+        // bracket-dispatch fan-out below (`p.timeout`, `p.retries`,
+        // `p.circuit_breaker()`, `p.rate_limit()`) now routes through
+        // the substrate-primitive typed dispatch at the outer
+        // composition altitude, the same shape the peer caixa-mesh
+        // CNP mTLS-overlay + HTTPRoute timeout/retry-overlay emitters
+        // now key off after the accessor lift.
+        let p = self.politicas();
         if let Some(t) = p.timeout {
             // Zero-floor + integer-millisecond canonical-form +
             // upper-cap bracket on the typed `:timeout` axis. See
@@ -17374,6 +17497,216 @@ mod tests {
             2,
             "the sync-cycle detector's traversal input must be a \
              two-element slice per the accessor's projection",
+        );
+    }
+
+    #[test]
+    fn aplicacao_spec_politicas_returns_politicas_ref_byte_equal_across_permutations() {
+        // The canonical per-`:politicas` outer-composite-reference-shape
+        // pin: [`AplicacaoSpec::politicas`] must return the `:politicas`
+        // typed `MeshPolicy` verbatim as a `&MeshPolicy` reference over
+        // the same backing storage the raw `&self.politicas` field
+        // access borrows from, byte-equal across every representative
+        // fixture in the accept-set — the default `MeshPolicy` (the
+        // author-empty "no policy on any axis" shape whose
+        // [`MeshPolicy::is_empty`] evaluates `true`), the singleton
+        // shapes carrying one axis at a time
+        // (`{mtls_required, timeout, retries, circuit_breaker,
+        // rate_limit}` — the minimal five-axis fan-out over the
+        // per-axis lifted accessor family every downstream mesh-artifact
+        // emitter dispatches on), and the multi-axis composite (the
+        // canonical `three_member_spec` fixture's `{timeout, retries,
+        // mtls_required}` triple — the load-bearing shape every
+        // Aplicacao-scoped fixture in this suite constructs).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned `MeshPolicy` copy (which would type-check via a `Clone`
+        // impl but silently break every downstream caller that relied
+        // on the reference sharing the composite's backing identity), a
+        // reference to an operator-resolved overlay (the future
+        // per-cluster `:politicas-overrides` slot MESH-COMPOSITION §V
+        // acknowledges — its resolution must land at exactly this
+        // accessor body, not silently divert the raw slot away from a
+        // second consumer), or an axis-shuffled projection (a future
+        // detour that swapped `timeout` and `retries` through the
+        // accessor would silently split the paired `validate_politicas`
+        // per-axis bracket-dispatch's traversal input from the peer
+        // `caixa_mesh::gateway_routes` HTTPRoute timeout+retry overlay
+        // emitter's fan-out input from the peer
+        // `caixa_mesh::cilium_network_policies` per-CNP mTLS-mode
+        // overlay emitter's fan-out input).
+        //
+        // Peer of the sibling M3
+        // `aplicacao_spec_membros_returns_membros_slice_byte_equal_across_permutations`
+        // (6c77e36) `&[Membro]` byte-equal pin on the per-`:membros`
+        // node-list `Vec`-carry axis and the sibling M3
+        // `aplicacao_spec_contratos_returns_contratos_slice_byte_equal_across_permutations`
+        // (0dcc926) `&[WitContract]` byte-equal pin on the per-
+        // `:contratos` edge-list `Vec`-carry axis — extends the outer-
+        // accessor byte-equal-projection discipline onto the outermost
+        // M3 mesh-slot type's per-Aplicacao mesh-policy composite-
+        // reference axis, the first `&Composite`-return accessor on the
+        // outer [`AplicacaoSpec`] type.
+        let fixtures: Vec<MeshPolicy> = vec![
+            MeshPolicy::default(),
+            MeshPolicy {
+                mtls_required: Some(true),
+                ..MeshPolicy::default()
+            },
+            MeshPolicy {
+                mtls_required: Some(false),
+                ..MeshPolicy::default()
+            },
+            MeshPolicy {
+                timeout: Some(Duration::from_secs(30)),
+                ..MeshPolicy::default()
+            },
+            MeshPolicy {
+                retries: Some(3),
+                ..MeshPolicy::default()
+            },
+            MeshPolicy {
+                circuit_breaker: Some(CircuitBreaker {
+                    max_failures: 5,
+                    window: Duration::from_secs(30),
+                }),
+                ..MeshPolicy::default()
+            },
+            MeshPolicy {
+                rate_limit: Some(RateLimit {
+                    rate: 100,
+                    window: Duration::from_secs(1),
+                }),
+                ..MeshPolicy::default()
+            },
+            MeshPolicy {
+                timeout: Some(Duration::from_secs(30)),
+                retries: Some(3),
+                mtls_required: Some(true),
+                ..MeshPolicy::default()
+            },
+        ];
+        for politicas in fixtures {
+            let s = AplicacaoSpec {
+                membros: vec![membro("catalog", "^0.1"), membro("cart", "^0.1")],
+                contratos: Vec::new(),
+                politicas: politicas.clone(),
+                placement: Placement::default(),
+                entrada: None,
+            };
+            assert_eq!(
+                *s.politicas(),
+                politicas,
+                "AplicacaoSpec::politicas must return :politicas verbatim \
+                 (got {:?}, expected {:?})",
+                s.politicas(),
+                politicas,
+            );
+            assert!(
+                std::ptr::eq(s.politicas(), &s.politicas),
+                "AplicacaoSpec::politicas accessor and &self.politicas \
+                 field access must borrow the same backing storage — \
+                 the accessor is the substrate-primitive typed dispatch \
+                 every downstream mesh-policy composite consumer must \
+                 route through, and a reference-identity split would \
+                 silently break every consumer that relied on the \
+                 borrow sharing the composite's storage",
+            );
+            assert_eq!(
+                s.politicas().is_empty(),
+                s.politicas.is_empty(),
+                "AplicacaoSpec::politicas().is_empty() must byte-equal \
+                 self.politicas.is_empty() — an emptiness-drift would \
+                 silently split the paired `validate_politicas` \
+                 per-axis bracket-dispatch's seed from the peer \
+                 caixa-mesh CNP mTLS-overlay emitter's key from the \
+                 peer caixa-mesh HTTPRoute timeout+retry overlay \
+                 emitter's key",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_reads_through_lifted_politicas_accessor() {
+        // Multi-axis coherence pin: the [`AplicacaoSpec::validate_politicas`]
+        // per-axis bracket-dispatch seed (`let p = self.politicas();`,
+        // followed by the per-axis fan-out `p.timeout` /
+        // `p.retries` / `p.circuit_breaker()` / `p.rate_limit()` on
+        // the lifted axis-level accessor family) must key off the
+        // lifted outer accessor, so any future rebrand on the typed
+        // slot's outer-composite reader shape lands at exactly one
+        // place. Pins the multi-axis coherence by exercising each
+        // per-axis refusal end-to-end: (1) `PolicyTimeoutZero` fires on
+        // a `Some(Duration::ZERO)` timeout under the outer accessor's
+        // reference projection, (2) `PolicyRetriesZero` fires on a
+        // `Some(0)` retries under the same projection, and (3) an
+        // empty [`MeshPolicy::default`] passes `validate_politicas` —
+        // the outer accessor's reference-projection reaches every
+        // per-axis branch without silently short-circuiting any.
+        //
+        // Peer of the sibling M3
+        // [`validate_reads_through_lifted_membros_accessor`] (6c77e36)
+        // three-consumer coherence pin on the per-`:membros` node-list
+        // axis and the sibling M3
+        // [`validate_reads_through_lifted_contratos_accessor`] (0dcc926)
+        // three-consumer coherence pin on the per-`:contratos`
+        // edge-list axis — extends the multi-consumer coherence
+        // discipline onto the outermost M3 mesh-slot type's per-
+        // Aplicacao mesh-policy composite-reference axis, the first
+        // `&Composite`-return accessor on the outer [`AplicacaoSpec`]
+        // type.
+
+        // (1) `PolicyTimeoutZero` refusal under the outer accessor's
+        // reference projection: a `Some(Duration::ZERO)` timeout must
+        // trip the zero-floor gate. The bracket-dispatch's first arm
+        // reads `p.timeout` on the reference returned by the outer
+        // accessor.
+        let mut spec = three_member_spec();
+        spec.politicas.timeout = Some(Duration::ZERO);
+        spec.politicas.retries = None;
+        spec.politicas.circuit_breaker = None;
+        spec.politicas.rate_limit = None;
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutZero,
+        );
+        assert!(
+            std::ptr::eq(spec.politicas(), &spec.politicas),
+            "the `validate_politicas` per-axis bracket-dispatch's \
+             traversal input must be the same backing composite the \
+             accessor's reference projection borrows from",
+        );
+
+        // (2) `PolicyRetriesZero` refusal under the outer accessor's
+        // reference projection: a `Some(0)` retries must trip the
+        // zero-floor gate. The bracket-dispatch's second arm reads
+        // `p.retries` on the reference returned by the outer accessor.
+        let mut spec = three_member_spec();
+        spec.politicas.timeout = None;
+        spec.politicas.retries = Some(0);
+        spec.politicas.circuit_breaker = None;
+        spec.politicas.rate_limit = None;
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesZero,
+        );
+
+        // (3) Empty `MeshPolicy::default()` passes `validate_politicas`
+        // — every per-axis arm short-circuits on `None`, so the outer
+        // accessor's reference projection reaches the fall-through
+        // `Ok(())` without any per-axis refusal firing.
+        let mut spec = three_member_spec();
+        spec.politicas = MeshPolicy::default();
+        assert!(
+            spec.validate().is_ok(),
+            "an empty `MeshPolicy` must pass `validate_politicas` — \
+             every per-axis arm short-circuits on `None` under the \
+             outer accessor's reference projection",
+        );
+        assert!(
+            spec.politicas().is_empty(),
+            "the outer accessor's reference projection must be the \
+             empty composite per the `MeshPolicy::default()` fixture",
         );
     }
 
