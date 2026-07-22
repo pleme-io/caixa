@@ -494,6 +494,93 @@ impl Caixa {
         self.descricao.as_deref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:edicao` language-edition scalar
+    /// accessor every consumer of the top-level manifest's tatara-lisp
+    /// edition-selector axis keys off — returns the author-declared
+    /// `:edicao` byte-string verbatim as an `Option<&str>`, borrowed from
+    /// the typed slot's own `Option<String>` storage. `None` when the
+    /// slot is absent (the canonical "omit the slot to defer to the
+    /// substrate's default edition" shape every existing
+    /// [`caixa-resolver`] integration test fixture carries via
+    /// `edicao: None` — see `caixa-resolver/tests/git_integration.rs`;
+    /// the peer [`Self::validate_edicao`] gate is a no-op on the omitted
+    /// arm by construction, so an author-omitted `:edicao` round-trips
+    /// to a build without triggering the year-shape predicate).
+    ///
+    /// The `:edicao` slot carries the universal-axis 4-digit-ASCII-
+    /// decimal-year language-edition identifier every kind of caixa
+    /// emits under (CAIXA-SDLC §I — the author-facing surface every
+    /// `defcaixa` form supplies) — the typed slot's `Option<String>`
+    /// accept-set (empty-string rejected through
+    /// [`ManifestError::EdicaoEmpty`], year-shape-invalid rejected
+    /// through [`ManifestError::EdicaoInvalid`] past the 4-digit-ASCII-
+    /// decimal-year predicate [`Self::validate_edicao`] enforces) maps
+    /// onto one load-bearing downstream consumer today
+    /// ([`Self::validate_edicao`]'s empty-arm + year-shape-predicate
+    /// gate binding at caixa-core/src/manifest.rs:1959) plus every
+    /// future edition-aware substrate consumer the CAIXA-SDLC §I
+    /// roadmap anticipates (the tatara-lisp compiler's macro-surface
+    /// selector every edition-aware build step keys off, the future
+    /// per-edition compatibility-flag overlay the M4 CR materializer
+    /// resolves per-CR, the peer [`Caixa::template`] canonical
+    /// `:edicao "2026"` scaffold every `feira init` emits verbatim,
+    /// and the renderer-side fixtures at `caixa-helm/src/lib.rs:978` /
+    /// `caixa-flux/src/lib.rs:2319` / `caixa-mesh/src/lib.rs:3208` that
+    /// carry `edicao: Some("2026".into())` by construction).
+    ///
+    /// Prior to this lift the `.edicao` field was accessed inline at
+    /// one production site — [`Self::validate_edicao`]'s
+    /// `self.edicao.as_deref()` empty-and-shape gate binding — one
+    /// open-coded field-access that expressed no compile-time link
+    /// back to the typed slot. A future extension of the `:edicao`
+    /// axis to a richer author surface — a per-`:edicao` known-
+    /// edition allowlist (the future tightening
+    /// [`Self::validate_edicao`]'s docstring acknowledges past the
+    /// structural year-shape floor, rejecting year-shaped values that
+    /// don't name a tatara-lisp edition the substrate actually
+    /// understands — `"1999"` is year-shaped but no `1999` edition
+    /// exists), a per-edition compatibility-flag overlay the M4 CR
+    /// materializer resolves per-CR (the "edition `"2026"` enables
+    /// macro-surface features the sibling `"2018"` gates behind a
+    /// feature flag" arm the edition-selector story anticipates), a
+    /// promotion of the plain `Option<String>` byte-string to a
+    /// richer `CaixaEdition` enum discriminated on year once a sibling
+    /// edition to `"2026"` lands — would have had to be threaded
+    /// through the open-coded copy in lockstep with every future
+    /// edition-aware consumer, or the validate gate and the future
+    /// edition-aware consumer path would silently disagree on which
+    /// edition a given [`Caixa`] resolves to (an author's
+    /// `:edicao "2026"` would satisfy validate while a future
+    /// edition-aware consumer silently defaulted to a stale edition,
+    /// or vice versa). Lifting the resolution to a typed method on
+    /// the substrate primitive means every downstream consumer of the
+    /// caixa's per-`Caixa` edition surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit
+    /// on any future axis addition.
+    ///
+    /// Fourth and final outer top-level [`Caixa`] `Option<&str>`-return
+    /// scalar accessor — sibling of [`Self::licenca`] (6d5bc28),
+    /// [`Self::repositorio`] (cc7332d), and [`Self::descricao`]
+    /// (3f16e2f), the accessors that opened the "outer [`Caixa`]
+    /// `Option<&str>` scalar" projection pattern this lift folds on.
+    /// Same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline the peer per-`:placement`
+    /// [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+    /// [`crate::aplicacao::Placement::affinity`] (74ec2d3) /
+    /// per-`:contratos` [`crate::aplicacao::WitContract::endpoint`]
+    /// (7020470) / [`crate::aplicacao::WitContract::subject`] (90de675)
+    /// / [`crate::aplicacao::WitContract::slot`] (ed22b66)
+    /// `Option<&str>`-return accessors carry on the sibling M2 / M3
+    /// typed-slot atom axes, extended here to close the outer top-level
+    /// `Caixa` universal-axis surface's last unlifted `Option<String>`
+    /// slot. Named `edicao()` to match the storage field's name; the
+    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub fn edicao(&self) -> Option<&str> {
+        self.edicao.as_deref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1956,7 +2043,7 @@ impl Caixa {
     /// floor by refusing every non-year-shaped value at validate
     /// time.
     pub fn validate_edicao(&self) -> Result<(), ManifestError> {
-        let Some(s) = self.edicao.as_deref() else {
+        let Some(s) = self.edicao() else {
             return Ok(());
         };
         if s.is_empty() {
@@ -7501,6 +7588,193 @@ mod tests {
             rendered.contains("v2026"),
             "diagnostic must quote the offending value: {rendered}",
         );
+    }
+
+    // ── Caixa::edicao — outer top-level Option<&str> scalar accessor ──
+
+    #[test]
+    fn edicao_returns_edicao_byte_string_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:edicao` language-edition scalar
+        // pin: [`Caixa::edicao`] must return the `:edicao` typed
+        // byte-string verbatim as an `Option<&str>`, byte-equal to the
+        // raw `self.edicao.as_deref()` access across every representative
+        // value in the accept-set — `None` (the "omit the slot to defer
+        // to the substrate's default edition" arm every existing
+        // [`caixa-resolver`] fixture without an `:edicao` line carries),
+        // `Some("")` (a past-the-guard sentinel that pins the accessor
+        // doesn't perform a silent `Some("") → None` collapse on the
+        // empty arm — validate rejects `Some("")` through `EdicaoEmpty`
+        // but the accessor must ship the raw slot verbatim so a
+        // validate-time gate regression surfaces at any future edition-
+        // aware consumer's boundary rather than being silently absorbed
+        // into the substrate's default edition), `Some("2026")` (the
+        // canonical 4-digit-ASCII-decimal-year shape every `feira init`
+        // template scaffolds via [`Caixa::template`] and every
+        // renderer-side fixture at `caixa-helm/src/lib.rs:978` /
+        // `caixa-flux/src/lib.rs:2319` / `caixa-mesh/src/lib.rs:3208`
+        // carries by construction), `Some("2018")` / `Some("2021")` /
+        // `Some("2024")` (canonical 4-digit-ASCII-decimal-year shapes
+        // peer with Cargo's `[package] edition` grammar every future-
+        // introduced sibling to `"2026"` will follow), and eight
+        // past-the-guard sentinels for the `EdicaoInvalid` refusal cases
+        // (`Some("2026 ")` trailing-whitespace, `Some(" 2026")` leading-
+        // whitespace, `Some("2026\n")` embedded-LF, `Some("２０２６")`
+        // fullwidth-non-ASCII-lookalike, `Some("v2026")` version-tag-
+        // prefix, `Some("2026.1")` decimal-shape, `Some("26")` wrong-
+        // length-numeric, `Some("latest")` free-form-non-year — the
+        // sentinels pin the accessor doesn't silently absorb the
+        // refusal cases into a substrate-default-edition fallback).
+        //
+        // Fourth and final outer top-level [`Caixa`] `Option<&str>`-
+        // return scalar accessor pin on the substrate primitive —
+        // sibling of the peer [`Caixa::licenca`] (6d5bc28),
+        // [`Caixa::repositorio`] (cc7332d), and [`Caixa::descricao`]
+        // (3f16e2f) pins that opened the "outer [`Caixa`]
+        // `Option<&str>` scalar" projection pin pattern this pin folds
+        // on. Sibling in shape to the peer per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+        // [`crate::aplicacao::Placement::affinity`] (74ec2d3) accessor
+        // pins on the sibling per-M3-mesh-slot `Option<&str>`-return
+        // axes, extended onto the outer top-level [`Caixa`] universal-
+        // axis surface's last unlifted `Option<String>` slot. Pins
+        // against a future silent detour that returned an owned
+        // `Option<String>` (which would type-check but silently
+        // allocate on every accessor call, breaking the zero-cost
+        // projection every peer sibling accessor carries), a
+        // `Some("") → None` collapse (which would silently absorb the
+        // `EdicaoEmpty` refusal case at the accessor boundary and any
+        // future edition-aware consumer would silently fall back to
+        // the substrate's default edition on a struct-literal
+        // `Caixa { edicao: Some(""), .. }`), or a
+        // `None → Some("2026")` collapse (which would silently reify
+        // the substrate's default edition at the accessor boundary
+        // and every downstream consumer keying off the
+        // `Option::is_none()` discriminator would lose the "author
+        // omitted the slot" signal).
+        for edicao in [
+            None,
+            Some(""),
+            Some("2026"),
+            Some("2018"),
+            Some("2021"),
+            Some("2024"),
+            Some("2026 "),
+            Some(" 2026"),
+            Some("2026\n"),
+            Some("２０２６"),
+            Some("v2026"),
+            Some("2026.1"),
+            Some("26"),
+            Some("latest"),
+        ] {
+            let c = caixa_with_edicao(edicao);
+            assert_eq!(
+                c.edicao(),
+                edicao,
+                "Caixa::edicao must return :edicao verbatim (got {:?}, \
+                 expected {edicao:?})",
+                c.edicao(),
+            );
+            assert_eq!(
+                c.edicao(),
+                c.edicao.as_deref(),
+                "Caixa::edicao must byte-equal the raw \
+                 `self.edicao.as_deref()` field access across every \
+                 value in the Option<&str> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_edicao_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_edicao`]'s empty-arm gate
+        // must key off [`Caixa::edicao`], not the raw
+        // `self.edicao.as_deref()` field access. Structurally: a
+        // `Caixa { edicao: Some(""), .. }` must surface the
+        // `EdicaoEmpty` refusal exactly, and a
+        // `Caixa { edicao: Some("2026"), .. }` (the canonical
+        // 4-digit-ASCII-decimal-year form) must pass validate. The
+        // pair jointly pins the accessor + validate-gate composition:
+        // any future silent detour that had the accessor return `None`
+        // on the empty arm (a `.filter(|s| !s.is_empty())` collapse)
+        // would silently absorb the `EdicaoEmpty` refusal at the
+        // accessor boundary and the validate gate would accept a
+        // struct-literal `Caixa { edicao: Some(""), .. }` — the
+        // composition pin catches that at caixa-core build time.
+        //
+        // Peer of the [`Caixa::licenca`] (6d5bc28)
+        // `validate_licenca_empty_arm_routes_through_accessor`,
+        // [`Caixa::repositorio`] (cc7332d)
+        // `validate_repositorio_empty_arm_routes_through_accessor`,
+        // and [`Caixa::descricao`] (3f16e2f)
+        // `validate_descricao_empty_arm_routes_through_accessor`
+        // composition pins on the sibling outer top-level [`Caixa`]
+        // `Option<&str>` universal-axis surface — same "the validate /
+        // shape-gate predicate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the
+        // fourth and final outer top-level [`Caixa`] universal-axis
+        // `Option<&str>`-composition surface, closing the accessor-
+        // composition family.
+        let c = caixa_with_edicao(Some(""));
+        assert!(
+            matches!(c.validate_edicao(), Err(ManifestError::EdicaoEmpty)),
+            "validate_edicao must reject edicao == Some(\"\") with \
+             EdicaoEmpty — the accessor and the validate gate must \
+             route through the same substrate-primitive typed dispatch \
+             on the :edicao empty arm",
+        );
+        let c = caixa_with_edicao(Some("2026"));
+        assert!(
+            c.validate_edicao().is_ok(),
+            "validate_edicao must accept edicao == Some(\"2026\") \
+             (the canonical 4-digit-ASCII-decimal-year shape)",
+        );
+    }
+
+    #[test]
+    fn edicao_projects_option_str_by_borrow() {
+        // The by-borrow pin: [`Caixa::edicao`] returns
+        // `Option<&str>` by borrow — the `&str` borrows the underlying
+        // `String` storage of the `Option<String>` slot and the
+        // accessor must not allocate a fresh `String` on every call.
+        // Peer of the [`Caixa::licenca`] (6d5bc28),
+        // [`Caixa::repositorio`] (cc7332d), and [`Caixa::descricao`]
+        // (3f16e2f) by-borrow pins on the peer outer top-level
+        // [`Caixa`] `Option<&str>`-return axes, and of the
+        // per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) by-
+        // borrow pin on the peer per-M3-mesh-slot `Option<&str>`-
+        // return axis, extended onto the fourth and final outer top-
+        // level [`Caixa`] universal-axis `Option<&str>` shape — the
+        // accessor's returned `&str` must borrow from `&self` (the
+        // returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // the same `Option<&str>` verbatim (idempotent, no side
+        // effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Option<String>` (which would type-check but silently
+        // allocate on every call, breaking the zero-cost projection
+        // every peer sibling accessor carries), or a one-arm-only
+        // accessor that returned a saturating value on some sentinel
+        // input (breaking the pass-through invariant the sibling
+        // required-scalar accessors carry).
+        for edicao in [None, Some(""), Some("2026"), Some("2018")] {
+            let c = caixa_with_edicao(edicao);
+            let first = c.edicao();
+            let second = c.edicao();
+            assert_eq!(
+                first, second,
+                "Caixa::edicao must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 Option<&str>",
+            );
+            assert_eq!(
+                first, edicao,
+                "Caixa::edicao must return :edicao verbatim by \
+                 borrow — got {first:?}, expected {edicao:?}",
+            );
+        }
     }
 
     // ── drift-detection: Caixa top-level multi-word serde-derive-to-const identity ──
