@@ -2571,7 +2571,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     // the per-edge `toPorts[]` entries appear in the author's declared
     // order.
     let mut groups: BTreeMap<(&str, &str), Vec<&WitContract>> = BTreeMap::new();
-    for c in &spec.contratos {
+    for c in spec.contratos() {
         groups
             .entry((c.source(), c.destination()))
             .or_default()

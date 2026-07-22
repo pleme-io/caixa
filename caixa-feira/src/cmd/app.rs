@@ -78,8 +78,8 @@ impl GraphArgs {
             for m in spec.membros() {
                 println!("    - {} {}", m.nome(), m.versao_requirement());
             }
-            println!("  contratos ({}):", spec.contratos.len());
-            for c in &spec.contratos {
+            println!("  contratos ({}):", spec.contratos().len());
+            for c in spec.contratos() {
                 // Typed view: each WIT shape has exactly one payload
                 // field (validated upstream). The label tells the
                 // reader *what* field they're looking at, not just
