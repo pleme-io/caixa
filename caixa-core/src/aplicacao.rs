@@ -4878,6 +4878,121 @@ impl AplicacaoSpec {
         &self.politicas
     }
 
+    /// Substrate-canonical per-`:placement` `Placement` MESH-COMPOSITION
+    /// per-Aplicacao distribution-composite composite-reference accessor
+    /// every per-Aplicacao placement-block reader keys off — returns the
+    /// author-declared `:placement` composite verbatim as a `&Placement`
+    /// reference over the same backing storage the raw `&self.placement`
+    /// field access borrows from.
+    ///
+    /// The `:placement` slot carries the M3 mesh-slot per-Aplicacao
+    /// distribution composite — the load-bearing container of every
+    /// where-does-this-Aplicacao-run axis every downstream cluster-artifact
+    /// emitter fans on (MESH-COMPOSITION §II.1 for the `SingleNode` /
+    /// `Replicated` Erlang/OTP distributed-app takeover axes, §II.4 for the
+    /// `Sharded` Akka-cluster-sharding axis, §III.1 for the `:clusters`
+    /// hosting-pool identity, §V for the `M3-Adaptive`-compression
+    /// `:affinity` hint). Every per-`:placement` axis threads through a
+    /// lifted per-slot accessor on the [`Placement`] type: the
+    /// [`Placement::estrategia`] (921fe1b) MESH-COMPOSITION distribution-
+    /// strategy scalar accessor, the [`Placement::clusters`] (a6e18d7)
+    /// per-cluster distribution-target slice-return accessor, the
+    /// [`Placement::affinity`] (74ec2d3) M3-Adaptive-compression-hint
+    /// optional-scalar accessor, and the [`Placement::shard_key`]
+    /// (7cd2a28) Akka-cluster-sharding-key optional-scalar accessor. Every
+    /// downstream consumer that reaches for a placement axis first passes
+    /// through this outer accessor onto the composite and then dispatches
+    /// onto the per-axis accessor — the two-level dispatch means every
+    /// per-`:placement` reader now routes through a typed dispatch on the
+    /// substrate primitive at both altitudes.
+    ///
+    /// Prior to this lift the `.placement` `Placement` composite was
+    /// accessed inline at three production sites — the
+    /// [`AplicacaoSpec::validate_placement`] per-axis bracket-dispatch
+    /// seed (six `self.placement.<axis>()` field-then-inner-accessor
+    /// chains: the pre-flight `.clusters().is_empty()` refusal probe
+    /// paired with the `.estrategia()` diagnostic-carry copy, the per-
+    /// cluster `.clusters()` validate-loop traversal head, the per-
+    /// hint `.affinity()` optional-scalar shape gate, and the `Sharded` ↔
+    /// non-`Sharded` partition's `.estrategia()` match arm scrutinee
+    /// paired with the shape-gate cascade's `.shard_key()` /
+    /// `.estrategia()` diagnostic-carry pair), the
+    /// [`caixa_mesh::programs_for_aplicacao`] per-Aplicacao programs.yaml
+    /// per-entry placement-block emitter's outer
+    /// `serde_yaml::to_value(&spec.placement)` composite-serialization
+    /// seed (which fans onto every per-cluster `programs[]` entry as a
+    /// self-describing distribution overlay the aggregator filters by),
+    /// and the `feira app graph` per-Aplicacao print line's paired
+    /// `spec.placement.estrategia()` + `spec.placement.clusters()` field-
+    /// then-inner-accessor chains (which drive the human-readable
+    /// distribution summary of the typed Aplicacao view) — three open-
+    /// coded outer-field accesses that expressed no compile-time link
+    /// back to the typed slot at the [`AplicacaoSpec`] altitude. A future
+    /// extension of the `:placement` outer axis to a richer author surface
+    /// (a per-cluster placement overlay the operator pins through a
+    /// future `:placement-overrides` slot the MESH-COMPOSITION §V
+    /// federation roadmap acknowledges, a per-tenant placement-alias
+    /// table the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer
+    /// resolves per-CR at admission time, a per-Aplicacao dynamic
+    /// placement-composite derivation the future M5 adaptive-placement
+    /// engine computes from a per-cluster load-topology reader, a
+    /// promotion of the plain [`Placement`] to a richer `{static, dynamic}`
+    /// partition once Orleans-style virtual-actor dynamic-placement comes
+    /// into typed scope) would have had to be threaded through all three
+    /// open-coded copies in lockstep or one consumer would silently
+    /// disagree with the peers on which placement composite a given
+    /// Aplicacao resolves to — the validator's per-axis bracket-dispatch
+    /// seed reading the raw slot while the peer
+    /// `programs_for_aplicacao` emitter read an operator-resolved slot
+    /// would silently split the build-time distribution-shape gate from
+    /// the runtime programs.yaml distribution-annotation gate, a three-
+    /// consumer split at the validator, the programs.yaml emitter, and
+    /// the `feira app graph` printer far from the source `caixa.lisp`
+    /// with no field naming the placement-drift root cause. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the Aplicacao's per-
+    /// `:placement` distribution composite surface reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a unit
+    /// on any future axis addition.
+    ///
+    /// Second `&Composite`-return accessor on the top-level M3 mesh-slot
+    /// `AplicacaoSpec` type itself — sibling to the seed
+    /// [`AplicacaoSpec::politicas`] (534dc21) `&MeshPolicy` mesh-policy
+    /// composite-reference accessor on the peer per-`:politicas` outer-
+    /// composite axis, and to the paired slice-return accessors
+    /// [`AplicacaoSpec::membros`] (6c77e36) `&[Membro]` and
+    /// [`AplicacaoSpec::contratos`] (0dcc926) `&[WitContract]` that close
+    /// the two `Vec`-carry axes on the outer typed composition view; the
+    /// outer `:placement` composite-reference axis is the natural pair
+    /// to the peer `:politicas` composite-reference axis on the two
+    /// operationally-symmetric M3 mesh slots (`:politicas` carries the
+    /// how-to-run policy overlay, `:placement` carries the where-to-run
+    /// distribution composite — every whole-Aplicacao mesh-artifact
+    /// emitter reads both as one unit). Same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline the peer per-`:politicas` composite-reference axis
+    /// already routes through. The one remaining outer-composite axis
+    /// still unlifted at the time of this lift —
+    /// [`AplicacaoSpec::entrada`] (`Option<Entrada>` per-Aplicacao
+    /// external-gateway composite) — inherits this accessor's discipline
+    /// as the next compounding run migrates its consumers onto the shared
+    /// reference-return shape, closing the outer-composite altitude on
+    /// every M3 mesh-slot axis. Named `placement()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:placement`) the field's own docstring already carries; the
+    /// accessor's identity maps onto the canonical MESH-COMPOSITION §II
+    /// vocabulary the slot's docstring already reaches for. Returns
+    /// `&Placement` (not the owning composite by copy or clone) because
+    /// every downstream consumer of the placement composite treats it as
+    /// a read-only per-axis dispatch source — the reference-view is the
+    /// narrowest borrow that supports every present + roadmapped consumer
+    /// (per-axis accessor dispatch, serde composite-serialization) without
+    /// cloning the composite through every consumer's fast path.
+    #[must_use]
+    pub fn placement(&self) -> &Placement {
+        &self.placement
+    }
+
     /// Validate the typed shape:
     ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
     ///     and a non-empty `:versao`; no two entries share the same
@@ -5340,13 +5455,26 @@ impl AplicacaoSpec {
         // peer M2 [`crate::SupervisorSpec::children`] (bc92bce) two-
         // arm migration on the per-`:supervisor` static-child-list
         // `Vec`-carry axis.
-        if self.placement.clusters().is_empty() {
+        //
+        // Route the per-`:placement` outer-composite reference read
+        // through the lifted [`AplicacaoSpec::placement`] outer accessor
+        // rather than the raw `&self.placement` field access — the
+        // per-axis bracket-dispatch fan-out below (`p.clusters()`,
+        // `p.estrategia()`, `p.affinity()`, `p.shard_key()` on the
+        // axis-level lifted accessor family) now routes through the
+        // substrate-primitive typed dispatch at the outer composition
+        // altitude, the same shape the peer caixa-mesh
+        // `programs_for_aplicacao` per-Aplicacao programs.yaml emitter
+        // and the sibling `feira app graph` per-Aplicacao print line
+        // now key off after this accessor lift.
+        let p = self.placement();
+        if p.clusters().is_empty() {
             return Err(AplicacaoError::PlacementWithoutClusters {
-                estrategia: self.placement.estrategia(),
+                estrategia: p.estrategia(),
             });
         }
         let mut seen = std::collections::HashSet::new();
-        for c in self.placement.clusters() {
+        for c in p.clusters() {
             // Per-entry value-shape gate: the cluster name lands in
             // every K8s context / `lareira-fleet-programs` aggregator
             // filter / future M4 CR materializer's per-cluster axis
@@ -5396,10 +5524,10 @@ impl AplicacaoSpec {
         // 8d5af6b, `:entrada :para` b0e8748) — the fifth typed slot
         // on the Aplicacao surface to land on the canonical
         // [`crate::render::is_dns_1123_label`] floor.
-        if let Some(a) = self.placement.affinity() {
+        if let Some(a) = p.affinity() {
             validate_placement_affinity(a)?;
         }
-        match self.placement.estrategia() {
+        match p.estrategia() {
             // Route the `Sharded`-arm shape-gate cascade through the
             // typed [`Placement::shard_key`] accessor rather than the
             // raw `&self.placement.shard_key` field access — one of the
@@ -5410,7 +5538,7 @@ impl AplicacaoSpec {
             // `str::is_empty` and [`validate_placement_shard_key`]'s
             // `&str` parameter both accept the narrower borrow without
             // a re-allocation.
-            PlacementStrategy::Sharded => match self.placement.shard_key() {
+            PlacementStrategy::Sharded => match p.shard_key() {
                 None => return Err(AplicacaoError::ShardedWithoutKey),
                 Some(k) if k.is_empty() => return Err(AplicacaoError::ShardedKeyEmpty),
                 // Per-axis value-shape gate on the Akka-cluster-sharding
@@ -5469,9 +5597,9 @@ impl AplicacaoSpec {
                 // `Sharded` ↔ non-`Sharded` partition on the
                 // `:shard-key` axis now flows through the same typed
                 // dispatch as the sibling `Sharded`-arm shape gate.
-                if let Some(k) = self.placement.shard_key() {
+                if let Some(k) = p.shard_key() {
                     return Err(AplicacaoError::ShardKeyOnNonSharded {
-                        estrategia: self.placement.estrategia(),
+                        estrategia: p.estrategia(),
                         shard_key: k.to_string(),
                     });
                 }
@@ -17707,6 +17835,248 @@ mod tests {
             spec.politicas().is_empty(),
             "the outer accessor's reference projection must be the \
              empty composite per the `MeshPolicy::default()` fixture",
+        );
+    }
+
+    #[test]
+    fn aplicacao_spec_placement_returns_placement_ref_byte_equal_across_permutations() {
+        // The canonical per-`:placement` outer-composite-reference-shape
+        // pin: [`AplicacaoSpec::placement`] must return the `:placement`
+        // typed `Placement` verbatim as a `&Placement` reference over the
+        // same backing storage the raw `&self.placement` field access
+        // borrows from, byte-equal across every representative fixture in
+        // the accept-set — the default `Placement` (the substrate seed
+        // shape whose [`PlacementStrategy::default`] evaluates to
+        // `SingleNode` with an empty `:clusters` pool and both
+        // optional-scalar axes `None`), and every canonical strategy /
+        // cluster-pool / optional-scalar combination the
+        // [`AplicacaoSpec::validate_placement`] gate accepts (each of the
+        // three [`PlacementStrategy`] variants — `SingleNode`,
+        // `Replicated`, `Sharded` — cross-projected with a non-empty
+        // `:clusters` pool and, on the `Sharded` arm, a non-empty
+        // `:shard-key`; a `:affinity`-carrying `Replicated` fixture; the
+        // canonical `three_member_spec` `Replicated` fixture's
+        // `{Replicated, ["rio", "mar"], "data-locality", None}` composite).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned `Placement` copy (which would type-check via a `Clone`
+        // impl but silently break every downstream caller that relied on
+        // the reference sharing the composite's backing identity), a
+        // reference to an operator-resolved overlay (the future per-
+        // cluster `:placement-overrides` slot MESH-COMPOSITION §V
+        // acknowledges — its resolution must land at exactly this
+        // accessor body, not silently divert the raw slot away from a
+        // second consumer), or an axis-shuffled projection (a future
+        // detour that swapped `clusters` and `affinity` through the
+        // accessor would silently split the paired `validate_placement`
+        // per-axis bracket-dispatch's traversal input from the peer
+        // `caixa_mesh::programs_for_aplicacao` per-Aplicacao
+        // programs.yaml distribution-annotation emitter's fan-out input
+        // from the peer `feira app graph` per-Aplicacao print line's
+        // input).
+        //
+        // Peer of the sibling M3
+        // `aplicacao_spec_politicas_returns_politicas_ref_byte_equal_across_permutations`
+        // (534dc21) `&MeshPolicy` byte-equal pin on the per-`:politicas`
+        // outer mesh-policy composite-reference axis, and of the sibling
+        // slice-return `aplicacao_spec_membros_returns_membros_slice_
+        // byte_equal_across_permutations` (6c77e36) `&[Membro]` +
+        // `aplicacao_spec_contratos_returns_contratos_slice_byte_equal_
+        // across_permutations` (0dcc926) `&[WitContract]` pins — extends
+        // the outer-accessor byte-equal-projection discipline onto the
+        // outermost M3 mesh-slot type's per-Aplicacao distribution
+        // composite-reference axis, the second `&Composite`-return
+        // accessor on the outer [`AplicacaoSpec`] type.
+        let fixtures: Vec<Placement> = vec![
+            Placement::default(),
+            Placement {
+                estrategia: PlacementStrategy::SingleNode,
+                clusters: vec!["rio".into()],
+                affinity: None,
+                shard_key: None,
+            },
+            Placement {
+                estrategia: PlacementStrategy::Replicated,
+                clusters: vec!["rio".into(), "mar".into()],
+                affinity: None,
+                shard_key: None,
+            },
+            Placement {
+                estrategia: PlacementStrategy::Replicated,
+                clusters: vec!["rio".into(), "mar".into()],
+                affinity: Some("data-locality".into()),
+                shard_key: None,
+            },
+            Placement {
+                estrategia: PlacementStrategy::Sharded,
+                clusters: vec!["rio".into(), "mar".into()],
+                affinity: None,
+                shard_key: Some("tenantId".into()),
+            },
+            Placement {
+                estrategia: PlacementStrategy::Sharded,
+                clusters: vec!["rio".into(), "mar".into(), "sol".into()],
+                affinity: Some("low-latency".into()),
+                shard_key: Some("metadata.tenantId".into()),
+            },
+        ];
+        for placement in fixtures {
+            let s = AplicacaoSpec {
+                membros: vec![membro("catalog", "^0.1"), membro("cart", "^0.1")],
+                contratos: Vec::new(),
+                politicas: MeshPolicy::default(),
+                placement: placement.clone(),
+                entrada: None,
+            };
+            assert_eq!(
+                *s.placement(),
+                placement,
+                "AplicacaoSpec::placement must return :placement verbatim \
+                 (got {:?}, expected {:?})",
+                s.placement(),
+                placement,
+            );
+            assert!(
+                std::ptr::eq(s.placement(), &s.placement),
+                "AplicacaoSpec::placement accessor and &self.placement \
+                 field access must borrow the same backing storage — the \
+                 accessor is the substrate-primitive typed dispatch every \
+                 downstream distribution-composite consumer must route \
+                 through, and a reference-identity split would silently \
+                 break every consumer that relied on the borrow sharing \
+                 the composite's storage",
+            );
+            assert_eq!(
+                s.placement().estrategia(),
+                s.placement.estrategia,
+                "AplicacaoSpec::placement().estrategia() must byte-equal \
+                 self.placement.estrategia — a strategy-drift would \
+                 silently split the paired `validate_placement` \
+                 `Sharded` ↔ non-`Sharded` partition scrutinee from the \
+                 peer caixa-mesh programs.yaml `placement.estrategia` \
+                 emitter's key from the peer `feira app graph` printer's \
+                 strategy label",
+            );
+            assert_eq!(
+                s.placement().clusters(),
+                s.placement.clusters.as_slice(),
+                "AplicacaoSpec::placement().clusters() must byte-equal \
+                 self.placement.clusters — a cluster-pool drift would \
+                 silently split the paired `validate_placement` \
+                 pre-flight `.is_empty()` refusal probe's traversal from \
+                 the peer caixa-mesh programs.yaml `placement.clusters` \
+                 emitter's fan-out from the peer `feira app graph` \
+                 printer's cluster list",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_placement_reads_through_lifted_placement_accessor() {
+        // Multi-axis coherence pin: the [`AplicacaoSpec::validate_placement`]
+        // per-axis bracket-dispatch seed (`let p = self.placement();`,
+        // followed by the per-axis fan-out `p.clusters()` /
+        // `p.estrategia()` / `p.affinity()` / `p.shard_key()` on the
+        // lifted axis-level accessor family) must key off the lifted
+        // outer accessor, so any future rebrand on the typed slot's
+        // outer-composite reader shape lands at exactly one place. Pins
+        // the multi-axis coherence by exercising each per-axis refusal
+        // end-to-end: (1) `PlacementWithoutClusters` fires on an empty
+        // `:clusters` pool under the outer accessor's reference
+        // projection, (2) `ShardedWithoutKey` fires on a `Sharded`
+        // strategy with a `None` `:shard-key` under the same projection,
+        // (3) `ShardKeyOnNonSharded` fires on a non-`Sharded` strategy
+        // with a `Some` `:shard-key` under the same projection, and
+        // (4) the canonical `three_member_spec` `Replicated` fixture
+        // passes `validate_placement` under the outer accessor's
+        // reference projection — the accessor's reference-projection
+        // reaches every per-axis branch (cluster-pool refusal, `Sharded`
+        // ↔ non-`Sharded` partition scrutinee, `:shard-key` shape gate)
+        // without silently short-circuiting any.
+        //
+        // Peer of the sibling M3
+        // [`validate_politicas_reads_through_lifted_politicas_accessor`]
+        // (534dc21) multi-axis coherence pin on the per-`:politicas`
+        // outer mesh-policy composite-reference axis — extends the
+        // multi-consumer coherence discipline onto the outermost M3
+        // mesh-slot type's per-Aplicacao distribution composite-
+        // reference axis, the second `&Composite`-return accessor on
+        // the outer [`AplicacaoSpec`] type.
+
+        // (1) `PlacementWithoutClusters` refusal under the outer
+        // accessor's reference projection: an empty `:clusters` pool
+        // must trip the pre-flight refusal probe. The bracket-dispatch's
+        // first arm reads `p.clusters()` on the reference returned by
+        // the outer accessor.
+        let mut spec = three_member_spec();
+        spec.placement.clusters = Vec::new();
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::PlacementWithoutClusters {
+                estrategia: PlacementStrategy::Replicated,
+            },
+        );
+        assert!(
+            std::ptr::eq(spec.placement(), &spec.placement),
+            "the `validate_placement` per-axis bracket-dispatch's \
+             traversal input must be the same backing composite the \
+             accessor's reference projection borrows from",
+        );
+
+        // (2) `ShardedWithoutKey` refusal under the outer accessor's
+        // reference projection: a `Sharded` strategy with a `None`
+        // `:shard-key` must trip the `Sharded`-arm shape-gate cascade.
+        // The bracket-dispatch's third arm reads `p.estrategia()` for
+        // the match scrutinee then `p.shard_key()` for the cascade
+        // scrutinee, both on the reference returned by the outer
+        // accessor.
+        let mut spec = three_member_spec();
+        spec.placement.estrategia = PlacementStrategy::Sharded;
+        spec.placement.shard_key = None;
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::ShardedWithoutKey,
+        );
+
+        // (3) `ShardKeyOnNonSharded` refusal under the outer accessor's
+        // reference projection: a non-`Sharded` strategy with a `Some`
+        // `:shard-key` must trip the declared-but-inert refusal. The
+        // bracket-dispatch's non-`Sharded` arm reads `p.shard_key()`
+        // + `p.estrategia()` for the diagnostic on the reference
+        // returned by the outer accessor.
+        let mut spec = three_member_spec();
+        spec.placement.estrategia = PlacementStrategy::Replicated;
+        spec.placement.shard_key = Some("tenantId".into());
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::ShardKeyOnNonSharded {
+                estrategia: PlacementStrategy::Replicated,
+                shard_key: "tenantId".into(),
+            },
+        );
+
+        // (4) Canonical `three_member_spec` `Replicated` fixture passes
+        // `validate_placement` — every per-axis arm reaches the fall-
+        // through `Ok(())` without any per-axis refusal firing under the
+        // outer accessor's reference projection.
+        let spec = three_member_spec();
+        assert!(
+            spec.validate().is_ok(),
+            "the canonical Replicated placement fixture must pass \
+             `validate_placement` — every per-axis arm short-circuits on \
+             valid input under the outer accessor's reference projection",
+        );
+        assert_eq!(
+            spec.placement().estrategia(),
+            PlacementStrategy::Replicated,
+            "the outer accessor's reference projection must be the \
+             canonical Replicated fixture's strategy",
+        );
+        assert_eq!(
+            spec.placement().clusters(),
+            &["rio", "mar"],
+            "the outer accessor's reference projection must be the \
+             canonical Replicated fixture's cluster pool",
         );
     }
 

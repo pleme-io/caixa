@@ -141,7 +141,21 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
     // the aggregator (which has no Aplicacao-level context),
     // mirroring the existing `aplicacao:` annotation's per-entry
     // emission.
-    let placement_value = serde_yaml::to_value(&spec.placement)?;
+    // Route the per-Aplicacao `:placement` composite-serialization seed
+    // through the lifted [`caixa_core::AplicacaoSpec::placement`] outer
+    // accessor rather than the raw `&spec.placement` field access — every
+    // downstream per-`programs[]` entry's placement-block annotation now
+    // keys off the substrate-primitive typed dispatch on the outer
+    // composition altitude, sibling to the paired peer
+    // [`caixa_core::AplicacaoSpec::politicas`] (534dc21) outer-composite-
+    // reference accessor the per-CNP mTLS-overlay + HTTPRoute
+    // timeout/retry-overlay emitters below already route through. The
+    // accessor's `&Placement` return borrows the same backing composite
+    // the raw field access borrows from, so the serialization byte-string
+    // is byte-for-byte identical (validated by the peer
+    // `aplicacao_spec_placement_returns_placement_ref_byte_equal_across_permutations`
+    // reference-identity pin).
+    let placement_value = serde_yaml::to_value(spec.placement())?;
 
     let mut out = Vec::with_capacity(spec.membros().len());
     for m in spec.membros() {
