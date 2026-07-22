@@ -211,6 +211,85 @@ impl Caixa {
         tatara_lisp::domain::register::<Self>();
     }
 
+    /// Substrate-canonical per-`Caixa` `:licenca` SPDX-expression scalar
+    /// accessor every consumer of the top-level manifest's license axis
+    /// keys off — returns the author-declared `:licenca` byte-string
+    /// verbatim as an `Option<&str>`, borrowed from the typed slot's own
+    /// `Option<String>` storage. `None` when the slot is absent (the
+    /// canonical "omit to defer to the caixa-helm renderer's `MIT`
+    /// fallback" shape [`Self::validate_licenca`] documents at
+    /// caixa-core/src/manifest.rs:1560; the peer [`caixa-helm`]
+    /// `build_readme` fold at caixa-helm/src/lib.rs:962 reads this
+    /// predicate too, so an authored-but-unset `:licenca` round-trips to
+    /// a rendered `lareira-<nome>` chart's `README.md` `## License`
+    /// section structurally identical to one that omits the slot).
+    ///
+    /// The `:licenca` slot carries the universal-axis SPDX-expression
+    /// license identifier every kind of caixa emits under (CAIXA-SDLC
+    /// §I — the author-facing surface every `defcaixa` form supplies) —
+    /// the typed slot's `Option<String>` accept-set (empty-string
+    /// rejected through [`ManifestError::LicencaEmpty`], SPDX-alphabet-
+    /// invalid rejected through [`ManifestError::LicencaInvalid`]) maps
+    /// onto the `lareira-<nome>` Helm chart's `README.md` `## License`
+    /// section (caixa-helm/src/lib.rs:962) and (through future
+    /// tightening documented at [`Self::validate_licenca`]) the
+    /// Chart.yaml `annotations["artifacthub.io/license"]` axis every
+    /// registry-facing chart carries. Every downstream consumer that
+    /// reads the license byte-string keys off this scalar (the
+    /// [`Self::validate_licenca`] empty-arm + SPDX-shape gate that
+    /// routes through `self.licenca.as_deref()`, the caixa-helm
+    /// `build_readme` `unwrap_or_else(|| "MIT".into())` fold that keys
+    /// the fallback off the `Option::is_none()` arm, every future
+    /// per-`Caixa` registry-facing renderer the CAIXA-SDLC §I roadmap
+    /// acknowledges).
+    ///
+    /// Prior to this lift the `.licenca` field was accessed inline at
+    /// two production sites — [`Self::validate_licenca`]'s
+    /// `self.licenca.as_deref()` empty-and-shape gate binding and the
+    /// caixa-helm `build_readme` `caixa.licenca.clone().unwrap_or_else(||
+    /// "MIT".into())` `README.md` `## License` fold — two open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:licenca` axis to a
+    /// richer author surface — a per-`:licenca` structured SPDX
+    /// expression parser + license-id allowlist (the future tightening
+    /// [`Self::validate_licenca`]'s docstring acknowledges), a
+    /// per-cluster license-default overlay the M4 CR materializer
+    /// resolves per-CR (the "cluster policy pins `Apache-2.0` for every
+    /// unlisted caixa" arm), a promotion of the plain
+    /// `Option<String>` byte-string to a richer `SpdxExpression` enum
+    /// once the SPDX-expression parser lands — would have had to be
+    /// threaded through both open-coded copies in lockstep or the
+    /// validate gate and the caixa-helm emit path would silently
+    /// disagree on which license a given [`Caixa`] resolves to (an
+    /// author's `:licenca "MIT OR Apache-2.0"` would satisfy validate
+    /// while the emit path silently rendered a stale `MIT` fallback,
+    /// or vice versa). Lifting the resolution to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// caixa's per-`Caixa` license surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit
+    /// on any future axis addition.
+    ///
+    /// First `Option<&str>`-return top-level [`Caixa`] scalar accessor —
+    /// opens the "outer [`Caixa`] `Option<&str>` scalar" projection
+    /// pattern the sibling per-`Caixa` `:descricao` / `:repositorio` /
+    /// `:edicao` future lifts fold on. Same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline the peer per-`:placement` [`crate::aplicacao::Placement::shard_key`]
+    /// (7cd2a28) / [`crate::aplicacao::Placement::affinity`] (74ec2d3)
+    /// / per-`:contratos` [`crate::aplicacao::WitContract::endpoint`]
+    /// (7020470) / [`crate::aplicacao::WitContract::subject`] (90de675)
+    /// / [`crate::aplicacao::WitContract::slot`] (ed22b66)
+    /// `Option<&str>`-return accessors carry on the sibling M2 / M3
+    /// typed-slot atom axes, extended here to the outer top-level
+    /// `Caixa` universal-axis surface. Named `licenca()` to match the
+    /// storage field's name; the accessor's identity maps onto the
+    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// carries.
+    #[must_use]
+    pub fn licenca(&self) -> Option<&str> {
+        self.licenca.as_deref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1558,7 +1637,7 @@ impl Caixa {
     /// dependency; this gate establishes the structural floor by
     /// refusing every non-SPDX-alphabet value at validate time.
     pub fn validate_licenca(&self) -> Result<(), ManifestError> {
-        let Some(s) = self.licenca.as_deref() else {
+        let Some(s) = self.licenca() else {
             return Ok(());
         };
         if s.is_empty() {
@@ -6431,6 +6510,172 @@ mod tests {
             rendered.contains(":licenca"),
             "diagnostic must name the offending slot: {rendered}",
         );
+    }
+
+    // ── Caixa::licenca — outer top-level Option<&str> scalar accessor ──
+
+    #[test]
+    fn licenca_returns_licenca_byte_string_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:licenca` SPDX-expression scalar
+        // pin: [`Caixa::licenca`] must return the `:licenca` typed
+        // byte-string verbatim as an `Option<&str>`, byte-equal to the
+        // raw `self.licenca.as_deref()` access across every
+        // representative value in the accept-set — `None` (the "omit
+        // the slot to defer to the caixa-helm renderer's `MIT`
+        // fallback" arm every existing fixture without a `:licenca`
+        // line carries), `Some("")` (a past-the-guard sentinel that
+        // pins the accessor doesn't perform a silent
+        // `Some("") → None` collapse on the empty arm — validate
+        // rejects `Some("")` through `LicencaEmpty` but the accessor
+        // must ship the raw slot verbatim so a validate-time gate
+        // regression surfaces at the caixa-helm emit boundary rather
+        // than being silently absorbed into the fallback), `Some("MIT")`
+        // (the canonical single-license shape every `feira init`
+        // template scaffolds), `Some("Apache-2.0 OR MIT")` (the
+        // canonical `OR`-compound shape the peer
+        // `validate_licenca_accepts_canonical_expressions` positive
+        // sweep exercises), `Some("(MIT OR Apache-2.0) AND
+        // BSD-3-Clause")` (the canonical parenthesis-grouped shape),
+        // `Some("MIT ")` / `Some(" MIT")` / `Some("MIT\n")` /
+        // `Some("Apache_2.0")` / `Some("MIT,Apache-2.0")` (past-the-
+        // guard sentinels — validate rejects each through
+        // `LicencaInvalid` but the accessor must ship the raw slot
+        // verbatim).
+        //
+        // First outer top-level [`Caixa`] `Option<&str>`-return scalar
+        // accessor pin on the substrate primitive — opens the "outer
+        // [`Caixa`] `Option<&str>` scalar" projection pattern the
+        // sibling per-`Caixa` `:descricao` / `:repositorio` / `:edicao`
+        // future lifts fold on. Sibling in shape to the peer per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+        // [`crate::aplicacao::Placement::affinity`] (74ec2d3) accessor
+        // pins on the sibling per-M3-mesh-slot `Option<&str>`-return
+        // axes, extended onto the outer top-level [`Caixa`] universal-
+        // axis surface. Pins against a future silent detour that
+        // returned an owned `Option<String>` (which would type-check
+        // but silently allocate on every accessor call, breaking the
+        // zero-cost projection every peer sibling accessor carries), a
+        // `Some("") → None` collapse (which would silently absorb the
+        // `LicencaEmpty` refusal case at the accessor boundary and the
+        // caixa-helm emit path would silently fall back to `"MIT"` on
+        // a struct-literal `Caixa { licenca: Some(""), .. }`), or a
+        // `None → Some("MIT")` collapse (which would silently reify
+        // the caixa-helm renderer's `"MIT"` fallback at the accessor
+        // boundary and every downstream consumer keying off the
+        // `Option::is_none()` discriminator would lose the "author
+        // omitted the slot" signal).
+        for licenca in [
+            None,
+            Some(""),
+            Some("MIT"),
+            Some("Apache-2.0 OR MIT"),
+            Some("(MIT OR Apache-2.0) AND BSD-3-Clause"),
+            Some("MIT "),
+            Some(" MIT"),
+            Some("MIT\n"),
+            Some("Apache_2.0"),
+            Some("MIT,Apache-2.0"),
+        ] {
+            let c = caixa_with_licenca(licenca);
+            assert_eq!(
+                c.licenca(),
+                licenca,
+                "Caixa::licenca must return :licenca verbatim (got {:?}, \
+                 expected {licenca:?})",
+                c.licenca(),
+            );
+            assert_eq!(
+                c.licenca(),
+                c.licenca.as_deref(),
+                "Caixa::licenca must byte-equal the raw \
+                 `self.licenca.as_deref()` field access across every \
+                 value in the Option<&str> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_licenca_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_licenca`]'s empty-arm gate
+        // must key off [`Caixa::licenca`], not the raw
+        // `self.licenca.as_deref()` field access. Structurally: a
+        // `Caixa { licenca: Some(""), .. }` must surface the
+        // `LicencaEmpty` refusal exactly, and a
+        // `Caixa { licenca: Some("MIT"), .. }` (the canonical
+        // single-license form) must pass validate. The pair jointly
+        // pins the accessor + validate-gate composition: any future
+        // silent detour that had the accessor return `None` on the
+        // empty arm (a `.filter(|s| !s.is_empty())` collapse) would
+        // silently absorb the `LicencaEmpty` refusal at the accessor
+        // boundary and the validate gate would accept a struct-literal
+        // `Caixa { licenca: Some(""), .. }` — the composition pin
+        // catches that at caixa-core build time.
+        //
+        // Peer of the per-`:politicas :circuit-breaker`
+        // [`crate::aplicacao::CircuitBreaker::max_failures`] (3a74062)
+        // accessor-composition pin
+        // (`validate_politicas_max_failures_zero_floor_arm_routes_through_accessor`)
+        // on the sibling per-M3-mesh-slot required-`u32` axis — same
+        // "the validate / shape-gate predicate must route through the
+        // substrate-primitive typed dispatch" discipline extended onto
+        // the outer top-level [`Caixa`] universal-axis
+        // `Option<&str>`-composition surface.
+        let c = caixa_with_licenca(Some(""));
+        assert!(
+            matches!(c.validate_licenca(), Err(ManifestError::LicencaEmpty)),
+            "validate_licenca must reject licenca == Some(\"\") with \
+             LicencaEmpty — the accessor and the validate gate must \
+             route through the same substrate-primitive typed dispatch \
+             on the :licenca empty arm",
+        );
+        let c = caixa_with_licenca(Some("MIT"));
+        assert!(
+            c.validate_licenca().is_ok(),
+            "validate_licenca must accept licenca == Some(\"MIT\") \
+             (the canonical single-license SPDX shape)",
+        );
+    }
+
+    #[test]
+    fn licenca_projects_option_str_by_borrow() {
+        // The by-borrow pin: [`Caixa::licenca`] returns
+        // `Option<&str>` by borrow — the `&str` borrows the underlying
+        // `String` storage of the `Option<String>` slot and the
+        // accessor must not allocate a fresh `String` on every call.
+        // Peer of the per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) by-
+        // borrow pin on the peer per-M3-mesh-slot
+        // `Option<&str>`-return axis, extended onto the outer top-
+        // level [`Caixa`] universal-axis `Option<&str>` shape — the
+        // accessor's returned `&str` must borrow from `&self` (the
+        // returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // the same `Option<&str>` verbatim (idempotent, no side
+        // effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Option<String>` (which would type-check but silently
+        // allocate on every call, breaking the zero-cost projection
+        // every peer sibling accessor carries), or a one-arm-only
+        // accessor that returned a saturating value on some sentinel
+        // input (breaking the pass-through invariant the sibling
+        // required-scalar accessors carry).
+        for licenca in [None, Some(""), Some("MIT"), Some("Apache-2.0 OR MIT")] {
+            let c = caixa_with_licenca(licenca);
+            let first = c.licenca();
+            let second = c.licenca();
+            assert_eq!(
+                first, second,
+                "Caixa::licenca must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 Option<&str>",
+            );
+            assert_eq!(
+                first, licenca,
+                "Caixa::licenca must return :licenca verbatim by \
+                 borrow — got {first:?}, expected {licenca:?}",
+            );
+        }
     }
 
     // ── validate_edicao — universal-axis language-edition shape ──

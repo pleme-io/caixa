@@ -959,7 +959,7 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
             .clone()
             .unwrap_or_else(|| caixa.nome.clone()),
         versao = caixa.versao,
-        license = caixa.licenca.clone().unwrap_or_else(|| "MIT".into()),
+        license = caixa.licenca().unwrap_or("MIT"),
     )
 }
 
