@@ -2003,7 +2003,7 @@ impl ClusterBundleOpts {
             namespace: DEFAULT_NAMESPACE.into(),
             interval: DEFAULT_FLUX_RECONCILE_INTERVAL.into(),
             chart_path: DEFAULT_FLUX_CHART_SOURCE_SUBPATH.into(),
-            git_url: caixa.repositorio.clone().unwrap_or_else(|| {
+            git_url: caixa.repositorio().map(str::to_owned).unwrap_or_else(|| {
                 format!(
                     "https://github.com/{org}/{nome}",
                     org = caixa_core::DEFAULT_PLEME_GIT_ORG,
