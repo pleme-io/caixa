@@ -802,8 +802,8 @@ pub fn render_chart_for_servico_with(
 
 fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> ChartYaml {
     let description = caixa
-        .descricao
-        .clone()
+        .descricao()
+        .map(str::to_owned)
         .unwrap_or_else(|| format!("Generated chart for caixa Servico {}", caixa.nome));
     let keywords: Vec<String> = caixa
         .etiquetas
@@ -929,8 +929,8 @@ fn build_values_yaml(
 
 fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
     let descricao = caixa
-        .descricao
-        .clone()
+        .descricao()
+        .map(str::to_owned)
         .unwrap_or_else(|| format!("caixa Servico {}", caixa.nome));
     format!(
         "# {chart_name}\n\

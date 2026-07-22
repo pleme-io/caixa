@@ -389,6 +389,111 @@ impl Caixa {
         self.repositorio.as_deref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:descricao` free-form-prose
+    /// chart-description scalar accessor every consumer of the top-level
+    /// manifest's Chart.yaml `description:` axis keys off — returns the
+    /// author-declared `:descricao` byte-string verbatim as an
+    /// `Option<&str>`, borrowed from the typed slot's own
+    /// `Option<String>` storage. `None` when the slot is absent (the
+    /// canonical "omit to defer to the per-renderer `caixa.nome`-derived
+    /// fallback" shape — [`caixa-helm`]'s `build_chart_yaml` folds the
+    /// omitted slot through a `format!("Generated chart for caixa Servico
+    /// {}", caixa.nome)` fallback, [`caixa-helm`]'s `build_readme` folds
+    /// it through a `format!("caixa Servico {}", caixa.nome)` fallback,
+    /// and [`caixa-feira`]'s `render_flake` folds it through a
+    /// `format!("caixa {}", c.nome)` `flake.nix` `description = ""`
+    /// fallback — each derived from `caixa.nome` on the null-carrier arm).
+    ///
+    /// The `:descricao` slot carries the universal-axis free-form-prose
+    /// chart-description identifier every kind of caixa emits under
+    /// (CAIXA-SDLC §I — the author-facing surface every `defcaixa` form
+    /// supplies) — the typed slot's `Option<String>` accept-set
+    /// (empty-string rejected through [`ManifestError::DescricaoEmpty`],
+    /// chart-description-shape-invalid rejected through
+    /// [`ManifestError::DescricaoInvalid`] past the shared
+    /// [`crate::render::is_chart_description_shape`] predicate the peer
+    /// per-`Caixa` `:descricao` axis also routes through) maps onto four
+    /// load-bearing downstream consumers:
+    ///
+    ///   - [`Self::validate_descricao`]'s empty-arm + shape-predicate
+    ///     gate binding — the universal-axis identity gate wired at
+    ///     caixa-build time.
+    ///   - [`caixa-helm`]'s `build_chart_yaml` `ChartYaml.description`
+    ///     `Chart.yaml` field fold — the rendered `lareira-<nome>` Helm
+    ///     chart's `Chart.yaml` `description:` field, which
+    ///     `apiVersion: v2` charts require non-empty (`helm lint` fires
+    ///     `WARNING [chart.metadata.description]: description is required`
+    ///     when absent) and which every registry that ingests the chart
+    ///     (ArtifactHub, chartmuseum, `helm search repo`) surfaces as the
+    ///     chart's canonical one-line prose descriptor.
+    ///   - [`caixa-helm`]'s `build_readme` chart-`README.md` header fold
+    ///     — the rendered `lareira-<nome>` chart's `README.md` prose
+    ///     header directly beneath the `# <chart-name>` title, which
+    ///     every author who inspects the rendered chart bundle lands at.
+    ///   - [`caixa-feira`]'s `render_flake` `flake.nix` `description = ""`
+    ///     top-level fold — the emitted `flake.nix`'s `description`
+    ///     field, which every Nix consumer (`nix flake show`,
+    ///     `nix flake metadata`, downstream flake-registry ingestors)
+    ///     surfaces as the flake's canonical descriptor.
+    ///
+    /// Prior to this lift the `.descricao` field was accessed inline at
+    /// four production sites — [`Self::validate_descricao`]'s
+    /// `self.descricao.as_deref()` empty-and-shape gate binding, the
+    /// caixa-helm `build_chart_yaml`
+    /// `caixa.descricao.clone().unwrap_or_else(|| format!(...))`
+    /// `Chart.yaml` `description:` fold, the caixa-helm `build_readme`
+    /// `caixa.descricao.clone().unwrap_or_else(|| format!(...))`
+    /// `README.md` header fold, and the caixa-feira `render_flake`
+    /// `c.descricao.clone().unwrap_or_else(|| format!(...))` `flake.nix`
+    /// `description = ""` fold — four open-coded field-accesses that
+    /// expressed no compile-time link back to the typed slot. A future
+    /// extension of the `:descricao` axis to a richer author surface —
+    /// a per-`:descricao` locale-tagged multi-language descriptor map
+    /// (the "one caixa, N language-tagged prose descriptions" arm
+    /// author-tooling internationalization anticipates), a
+    /// per-registry-target length-and-shape overlay the M4 CR
+    /// materializer resolves per-CR (the "ArtifactHub caps description
+    /// at 512 bytes but the internal registry caps at 256" arm), a
+    /// promotion of the plain `Option<String>` byte-string to a richer
+    /// `ChartDescription` newtype guaranteeing the
+    /// `is_chart_description_shape` predicate at the type level — would
+    /// have had to be threaded through all four open-coded copies in
+    /// lockstep or the validate gate and the three emit paths would
+    /// silently disagree on which prose string a given [`Caixa`]
+    /// resolves to (an author's
+    /// `:descricao "Checkout flow orchestration."` would satisfy
+    /// validate while one of the emit paths silently rendered a stale
+    /// `caixa.nome`-derived fallback, or vice versa). Lifting the
+    /// resolution to a typed method on the substrate primitive means
+    /// every downstream consumer of the caixa's per-`Caixa`
+    /// chart-description surface reaches for exactly one typed dispatch
+    /// — the resolver's accept-set migrates as a unit on any future
+    /// axis addition.
+    ///
+    /// Third outer top-level [`Caixa`] `Option<&str>`-return scalar
+    /// accessor — sibling of [`Self::licenca`] (6d5bc28) and
+    /// [`Self::repositorio`] (cc7332d), the accessors that opened the
+    /// "outer [`Caixa`] `Option<&str>` scalar" projection pattern this
+    /// lift folds on. Same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline the
+    /// peer per-`:placement`
+    /// [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+    /// [`crate::aplicacao::Placement::affinity`] (74ec2d3) /
+    /// per-`:contratos` [`crate::aplicacao::WitContract::endpoint`]
+    /// (7020470) / [`crate::aplicacao::WitContract::subject`] (90de675)
+    /// / [`crate::aplicacao::WitContract::slot`] (ed22b66)
+    /// `Option<&str>`-return accessors carry on the sibling M2 / M3
+    /// typed-slot atom axes, extended here to the third outer top-level
+    /// `Caixa` universal-axis surface. Named `descricao()` to match the
+    /// storage field's name; the accessor's identity maps onto the
+    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// carries. The one remaining universal `Option<String>` slot
+    /// (`:edicao`) folds on this pattern next.
+    #[must_use]
+    pub fn descricao(&self) -> Option<&str> {
+        self.descricao.as_deref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1644,7 +1749,7 @@ impl Caixa {
     /// [`ManifestError::RepositorioEmpty`] runs before
     /// [`ManifestError::RepositorioInvalid`].
     pub fn validate_descricao(&self) -> Result<(), ManifestError> {
-        let Some(s) = self.descricao.as_deref() else {
+        let Some(s) = self.descricao() else {
             return Ok(());
         };
         if s.is_empty() {
@@ -6960,6 +7065,189 @@ mod tests {
                 first, repositorio,
                 "Caixa::repositorio must return :repositorio verbatim by \
                  borrow — got {first:?}, expected {repositorio:?}",
+            );
+        }
+    }
+
+    // ── Caixa::descricao — outer top-level Option<&str> scalar accessor ──
+
+    #[test]
+    fn descricao_returns_descricao_byte_string_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:descricao` free-form-prose scalar
+        // pin: [`Caixa::descricao`] must return the `:descricao` typed
+        // byte-string verbatim as an `Option<&str>`, byte-equal to the
+        // raw `self.descricao.as_deref()` access across every
+        // representative value in the accept-set — `None` (the "omit
+        // the slot to defer to the per-renderer `caixa.nome`-derived
+        // fallback" arm every existing fixture without a `:descricao`
+        // line carries), `Some("")` (a past-the-guard sentinel that
+        // pins the accessor doesn't perform a silent `Some("") → None`
+        // collapse on the empty arm — validate rejects `Some("")`
+        // through `DescricaoEmpty` but the accessor must ship the raw
+        // slot verbatim so a validate-time gate regression surfaces at
+        // the caixa-helm / caixa-feira emit boundary rather than being
+        // silently absorbed into the per-renderer `caixa.nome`-derived
+        // fallback), `Some("Checkout flow.")` (the canonical one-line
+        // prose descriptor the peer
+        // `validate_descricao_accepts_canonical_value` positive sweep
+        // exercises), `Some("Canonical Rust→wasm32-wasip2 caixa
+        // Servico.")` (the multi-byte Unicode continuation-byte shape
+        // the `hello-rio` fixture carries), `Some("→ — · ✓")` (a
+        // multi-glyph Unicode shape the peer
+        // `is_chart_description_shape` predicate accepts), and five
+        // past-the-guard sentinels for the `DescricaoInvalid` refusal
+        // cases (`Some(" Checkout flow.")` leading-whitespace,
+        // `Some("Checkout flow. ")` trailing-whitespace,
+        // `Some("Checkout\nflow.")` embedded-LF,
+        // `Some("Checkout\tflow.")` embedded-TAB, and
+        // `Some("Checkout\x00flow.")` embedded-NUL — the sentinels pin
+        // the accessor doesn't silently absorb the refusal cases into
+        // a fallback).
+        //
+        // Third outer top-level [`Caixa`] `Option<&str>`-return scalar
+        // accessor pin on the substrate primitive — sibling of the peer
+        // [`Caixa::licenca`] (6d5bc28) and [`Caixa::repositorio`]
+        // (cc7332d) pins that opened the "outer [`Caixa`]
+        // `Option<&str>` scalar" projection pin pattern this pin folds
+        // on. Sibling in shape to the peer per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+        // [`crate::aplicacao::Placement::affinity`] (74ec2d3) accessor
+        // pins on the sibling per-M3-mesh-slot `Option<&str>`-return
+        // axes, extended onto the outer top-level [`Caixa`] universal-
+        // axis surface. Pins against a future silent detour that
+        // returned an owned `Option<String>` (which would type-check
+        // but silently allocate on every accessor call, breaking the
+        // zero-cost projection every peer sibling accessor carries), a
+        // `Some("") → None` collapse (which would silently absorb the
+        // `DescricaoEmpty` refusal case at the accessor boundary and
+        // the caixa-helm `Chart.yaml` `description:` fold would
+        // silently render a `caixa.nome`-derived fallback on a
+        // struct-literal `Caixa { descricao: Some(""), .. }`), or a
+        // `None → Some(<default>)` collapse (which would silently
+        // reify the per-renderer `caixa.nome`-derived fallback at the
+        // accessor boundary and every downstream consumer keying off
+        // the `Option::is_none()` discriminator would lose the "author
+        // omitted the slot" signal).
+        for descricao in [
+            None,
+            Some(""),
+            Some("Checkout flow."),
+            Some("Canonical Rust→wasm32-wasip2 caixa Servico."),
+            Some("→ — · ✓"),
+            Some(" Checkout flow."),
+            Some("Checkout flow. "),
+            Some("Checkout\nflow."),
+            Some("Checkout\tflow."),
+            Some("Checkout\x00flow."),
+        ] {
+            let c = caixa_with_descricao(descricao);
+            assert_eq!(
+                c.descricao(),
+                descricao,
+                "Caixa::descricao must return :descricao verbatim (got \
+                 {:?}, expected {descricao:?})",
+                c.descricao(),
+            );
+            assert_eq!(
+                c.descricao(),
+                c.descricao.as_deref(),
+                "Caixa::descricao must byte-equal the raw \
+                 `self.descricao.as_deref()` field access across every \
+                 value in the Option<&str> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_descricao_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_descricao`]'s empty-arm
+        // gate must key off [`Caixa::descricao`], not the raw
+        // `self.descricao.as_deref()` field access. Structurally: a
+        // `Caixa { descricao: Some(""), .. }` must surface the
+        // `DescricaoEmpty` refusal exactly, and a
+        // `Caixa { descricao: Some("Checkout flow."), .. }` (the
+        // canonical one-line-prose form) must pass validate. The pair
+        // jointly pins the accessor + validate-gate composition: any
+        // future silent detour that had the accessor return `None` on
+        // the empty arm (a `.filter(|s| !s.is_empty())` collapse) would
+        // silently absorb the `DescricaoEmpty` refusal at the accessor
+        // boundary and the validate gate would accept a struct-literal
+        // `Caixa { descricao: Some(""), .. }` — the composition pin
+        // catches that at caixa-core build time.
+        //
+        // Peer of the [`Caixa::licenca`] (6d5bc28)
+        // `validate_licenca_empty_arm_routes_through_accessor` and
+        // [`Caixa::repositorio`] (cc7332d)
+        // `validate_repositorio_empty_arm_routes_through_accessor`
+        // composition pins on the sibling outer top-level [`Caixa`]
+        // `Option<&str>` universal-axis surface — same "the validate /
+        // shape-gate predicate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the third
+        // outer top-level [`Caixa`] universal-axis `Option<&str>`-
+        // composition surface.
+        let c = caixa_with_descricao(Some(""));
+        assert!(
+            matches!(c.validate_descricao(), Err(ManifestError::DescricaoEmpty),),
+            "validate_descricao must reject descricao == Some(\"\") \
+             with DescricaoEmpty — the accessor and the validate gate \
+             must route through the same substrate-primitive typed \
+             dispatch on the :descricao empty arm",
+        );
+        let c = caixa_with_descricao(Some("Checkout flow."));
+        assert!(
+            c.validate_descricao().is_ok(),
+            "validate_descricao must accept descricao == \
+             Some(\"Checkout flow.\") (the canonical one-line-prose \
+             chart-description shape)",
+        );
+    }
+
+    #[test]
+    fn descricao_projects_option_str_by_borrow() {
+        // The by-borrow pin: [`Caixa::descricao`] returns
+        // `Option<&str>` by borrow — the `&str` borrows the underlying
+        // `String` storage of the `Option<String>` slot and the
+        // accessor must not allocate a fresh `String` on every call.
+        // Peer of the [`Caixa::licenca`] (6d5bc28) and
+        // [`Caixa::repositorio`] (cc7332d) by-borrow pins on the peer
+        // outer top-level [`Caixa`] `Option<&str>`-return axes, and of
+        // the per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) by-
+        // borrow pin on the peer per-M3-mesh-slot `Option<&str>`-
+        // return axis, extended onto the third outer top-level
+        // [`Caixa`] universal-axis `Option<&str>` shape — the
+        // accessor's returned `&str` must borrow from `&self` (the
+        // returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // the same `Option<&str>` verbatim (idempotent, no side
+        // effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Option<String>` (which would type-check but silently
+        // allocate on every call, breaking the zero-cost projection
+        // every peer sibling accessor carries), or a one-arm-only
+        // accessor that returned a saturating value on some sentinel
+        // input (breaking the pass-through invariant the sibling
+        // required-scalar accessors carry).
+        for descricao in [
+            None,
+            Some(""),
+            Some("Checkout flow."),
+            Some("Canonical Rust→wasm32-wasip2 caixa Servico."),
+        ] {
+            let c = caixa_with_descricao(descricao);
+            let first = c.descricao();
+            let second = c.descricao();
+            assert_eq!(
+                first, second,
+                "Caixa::descricao must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 Option<&str>",
+            );
+            assert_eq!(
+                first, descricao,
+                "Caixa::descricao must return :descricao verbatim by \
+                 borrow — got {first:?}, expected {descricao:?}",
             );
         }
     }

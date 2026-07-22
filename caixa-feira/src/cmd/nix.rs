@@ -38,8 +38,8 @@ impl Nix {
 
 fn render_flake(c: &Caixa) -> String {
     let description = c
-        .descricao
-        .clone()
+        .descricao()
+        .map(str::to_owned)
         .unwrap_or_else(|| format!("caixa {}", c.nome));
     let kind_comment = match c.kind {
         CaixaKind::Biblioteca => "library (loaded via tatara-lisp importar)",
