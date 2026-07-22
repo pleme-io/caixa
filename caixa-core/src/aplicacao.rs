@@ -4641,6 +4641,129 @@ impl AplicacaoSpec {
         self.membros.as_slice()
     }
 
+    /// Substrate-canonical per-`:contratos` `Vec<WitContract>`
+    /// MESH-COMPOSITION per-Aplicacao WIT-typed-edge-list slice-return
+    /// accessor every per-Aplicacao contract-list reader keys off —
+    /// returns the author-declared `:contratos` list verbatim as a
+    /// `&[WitContract]` slice-view over the same backing buffer the raw
+    /// `self.contratos.as_slice()` field access borrows from.
+    ///
+    /// The `:contratos` slot carries the M3 mesh-slot per-Aplicacao
+    /// WIT-typed edge list — the load-bearing set of directed edges
+    /// on the application graph whose nodes are the `:membros` entries
+    /// (MESH-COMPOSITION §III.1: the graph edges are a set, not a
+    /// multiset; the `(:de, :para, :wit, :endpoint, :subject, :slot)`
+    /// six-tuple is the edge identity every downstream duplicate gate
+    /// keys off). Every per-`:contratos` entry pairs a `:de` source-
+    /// Servico caller name + a `:para` destination-Servico callee name
+    /// (through the lifted [`WitContract::source`] +
+    /// [`WitContract::destination`] (7f0fd43) accessor pair on the
+    /// caller/callee-Servico axis) with a `:wit` world-reference
+    /// (through the lifted [`WitContract::world_ref`] (0804823)
+    /// accessor) and the target-shape-appropriate payload-carrier
+    /// scalar (through the lifted [`WitContract::endpoint`] (7020470),
+    /// [`WitContract::subject`] (90de675), or [`WitContract::slot`]
+    /// (ed22b66) accessor on the per-target-shape payload-carrier
+    /// axis). Every downstream consumer that fans on the edge-set
+    /// keys off this slice (the [`AplicacaoSpec::validate`] per-edge
+    /// name-set / self-edge / target-shape / dedup fan-out loop, the
+    /// [`AplicacaoSpec::detect_sync_cycles`] per-edge sync-subgraph
+    /// adjacency-list seed, the [`caixa_mesh::cilium_network_policies`]
+    /// per-`(:de, :para)` `BTreeMap` group fan-out emitter's per-entry
+    /// grouping loop, the `feira app graph` per-Aplicacao contract-
+    /// count print line and per-contract tree traversal, every future
+    /// wasm-operator (M4) per-Aplicacao CR materializer's per-edge
+    /// `CiliumNetworkPolicy` fan-out, the future M5 per-edge
+    /// mesh-policy overlay resolver's per-contract typed-edge weight
+    /// reader).
+    ///
+    /// Prior to this lift the `.contratos` `Vec<WitContract>` was
+    /// accessed inline at four production sites — the
+    /// [`AplicacaoSpec::validate`]'s `for c in &self.contratos`
+    /// per-edge validate-loop traversal head (which drives every
+    /// per-edge name-set membership lookup, self-edge check,
+    /// target-shape dispatch, and dedup `HashSet` insert), the
+    /// [`AplicacaoSpec::detect_sync_cycles`]'s
+    /// `for c in &self.contratos` adjacency-list seed head (which
+    /// drives every per-edge sync-vs-pub-sub partition and per-edge
+    /// adjacency insert), the [`caixa_mesh::cilium_network_policies`]
+    /// emitter's `for c in &spec.contratos` per-`(:de, :para)`
+    /// `BTreeMap` grouping loop head (which drives every per-CNP
+    /// fan-out emit), and the `feira app graph` per-Aplicacao print
+    /// line's `spec.contratos.len()` count formatter argument paired
+    /// with the peer `for c in &spec.contratos` per-contract tree
+    /// traversal — four open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension
+    /// of the `:contratos` axis to a richer author surface (a
+    /// per-cluster contract overlay the operator pins through a
+    /// future `:contratos-overrides` slot the MESH-COMPOSITION §V
+    /// federation roadmap acknowledges, a per-tenant edge-policy
+    /// table the M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer resolves per-CR at admission time, a per-edge
+    /// weight scalar the future adaptive-placement engine reads to
+    /// bias sync-subgraph routing, a promotion of the plain
+    /// `Vec<WitContract>` to a richer `{static, dynamic}` partition
+    /// once virtual-actor-style dynamic-edge composition comes into
+    /// typed scope) would have had to be threaded through all four
+    /// open-coded copies in lockstep or one consumer would silently
+    /// disagree with the peers on which edge-set a given Aplicacao
+    /// resolves to — the validator's per-edge dedup `HashSet` seed
+    /// reading the raw slot while the peer sync-cycle adjacency-list
+    /// seed read an operator-resolved slot would silently split the
+    /// build-time edge-set gate from the runtime deadlock-detection
+    /// gate, a four-consumer split at the validator, the cycle
+    /// detector, the CNP emitter, and the graph printer far from
+    /// the source `caixa.lisp` with no field naming the edge-set-
+    /// drift root cause. Lifting the resolution rule to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// Aplicacao's per-`:contratos` edge-list surface reaches for
+    /// exactly one typed dispatch — the resolver's accept-set
+    /// migrates as a unit on any future axis addition.
+    ///
+    /// Fourth slice-return (`&[T]`) accessor on any M2 or M3 typed
+    /// slot — sibling to the seed M2 [`crate::SupervisorSpec::children`]
+    /// (bc92bce) `&[ChildSpec]` accessor on the peer per-`:supervisor`
+    /// static-child-list `Vec`-carry axis, to the M3
+    /// [`crate::Placement::clusters`] (a6e18d7) `&[String]` accessor
+    /// on the peer per-`:placement` distribution-target-list `Vec`-
+    /// carry axis, and to the immediately-adjacent sibling M3
+    /// [`AplicacaoSpec::membros`] (6c77e36) `&[Membro]` accessor on
+    /// the peer per-`:membros` node-list `Vec`-carry axis — the
+    /// per-`:contratos` edge-list accessor is the natural pair of
+    /// the per-`:membros` node-list accessor (graph edges over graph
+    /// nodes; every graph-shaped consumer reads both). Same "one
+    /// typed dispatch on the substrate primitive, thin projections
+    /// at each consumer" discipline. The last remaining `Vec`-carry
+    /// axis still unlifted at the time of this lift —
+    /// [`crate::UpgradeFromEntry::instructions`]
+    /// (`Vec<UpgradeInstruction>` per-appup migration-instruction
+    /// list) — inherits this accessor's discipline as future
+    /// compounding runs migrate its consumers onto the shared slice-
+    /// return shape. Second `&[T]`-return accessor on the top-level
+    /// M3 mesh-slot `AplicacaoSpec` type itself, closing the last
+    /// unlifted per-`AplicacaoSpec` `Vec`-carry axis (`:membros` +
+    /// `:contratos` are the two `Vec` fields on the outer typed
+    /// composition view — `:politicas`, `:placement`, `:entrada` are
+    /// scalar/option-shaped and already route through their per-slot
+    /// accessor families). Named `contratos()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:contratos`) the field's own docstring already carries; the
+    /// accessor's identity maps onto the canonical MESH-COMPOSITION
+    /// §III.1 vocabulary the slot's docstring already reaches for.
+    /// Returns `&[WitContract]` (not `&Vec<WitContract>`) because
+    /// every downstream consumer of the contract list treats it as a
+    /// read-only sequence — the slice-view is the narrowest borrow
+    /// that supports every present + roadmapped consumer
+    /// (`.is_empty()`, `.iter()`, `.len()`) without leaking the
+    /// backing `Vec`'s grow/push/reserve surface that no consumer of
+    /// the typed view reaches for (the storage-side `Vec` remains
+    /// reachable through the `pub contratos` field for the mutation-
+    /// carrying serde round-trip and per-test fixture-mutation paths).
+    #[must_use]
+    pub fn contratos(&self) -> &[WitContract] {
+        self.contratos.as_slice()
+    }
+
     /// Validate the typed shape:
     ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
     ///     and a non-empty `:versao`; no two entries share the same
@@ -4693,7 +4816,7 @@ impl AplicacaoSpec {
         // time far from the source caixa.lisp.
         let mut seen_contracts: std::collections::HashSet<ContratoIdentity<'_>> =
             std::collections::HashSet::new();
-        for c in &self.contratos {
+        for c in self.contratos() {
             // Per-axis value-shape gate on every `:contratos` name
             // reference, before any graph-membership lookup. Empty +
             // DNS-1123-malformed `:de`/`:para` values silently fell
@@ -5479,7 +5602,7 @@ impl AplicacaoSpec {
         for m in self.membros() {
             adj.entry(m.nome()).or_default();
         }
-        for c in &self.contratos {
+        for c in self.contratos() {
             // target() was already called by validate(); re-running here
             // keeps detect_sync_cycles self-contained for callers that
             // reuse it (M4 per-edge policy resolver) without revalidating.
@@ -17032,6 +17155,225 @@ mod tests {
             2,
             "the per-member validate loop's traversal input must be \
              a two-element slice per the accessor's projection",
+        );
+    }
+
+    #[test]
+    fn aplicacao_spec_contratos_returns_contratos_slice_byte_equal_across_permutations() {
+        // The canonical per-`:contratos` contract-list-slice-shape pin:
+        // [`AplicacaoSpec::contratos`] must return the `:contratos`
+        // typed `Vec<WitContract>` verbatim as a `&[WitContract]`
+        // slice-view over the same backing buffer the raw
+        // `self.contratos.as_slice()` field access borrows from, byte-
+        // equal across every representative fixture in the accept-set —
+        // the empty slice (the pre-validation "internal-only mesh" shape
+        // an Aplicacao whose members exchange no typed edges renders
+        // through), the singleton slice (the minimal one-edge Aplicacao
+        // shape), and multi-entry cohorts (the peer multi-edge shapes
+        // MESH-COMPOSITION §III.1 declares as the load-bearing edge-set
+        // of the application graph).
+        //
+        // Pins against a future silent detour that returned
+        // `&Vec<WitContract>` (which would type-check but leak the
+        // storage-side `Vec`'s grow/push/reserve surface no consumer of
+        // the typed view reaches for), a fresh-allocated
+        // `Vec<WitContract>` copy (which would type-check via a coercion
+        // but silently break every downstream caller that relied on the
+        // slice sharing the backing buffer's identity), or an out-of-
+        // order or length-drifted projection (which would silently split
+        // the paired `AplicacaoSpec::validate` per-edge dedup HashSet
+        // seed's traversal input from the `detect_sync_cycles` per-edge
+        // adjacency-list seed's traversal input from the
+        // `caixa_mesh::cilium_network_policies` per-`(:de, :para)`
+        // BTreeMap grouping loop's traversal input from the
+        // `feira app graph` per-contract print traversal's input).
+        //
+        // Peer of the immediately-adjacent sibling M3
+        // `aplicacao_spec_membros_returns_membros_slice_byte_equal_across_permutations`
+        // (6c77e36) `&[Membro]` byte-equal pin on the per-`:membros`
+        // node-list axis, the sibling M3
+        // `placement_clusters_returns_clusters_slice_byte_equal_across_permutations`
+        // (a6e18d7) `&[String]` byte-equal pin on the per-`:placement`
+        // distribution-target-list axis, and the sibling M2
+        // `supervisor_spec_children_returns_children_slice_byte_equal_across_permutations`
+        // (bc92bce) `&[ChildSpec]` byte-equal pin on the per-
+        // `:supervisor` static-child-list axis — extends the slice-
+        // return-accessor byte-equal-projection discipline onto the
+        // outermost M3 mesh-slot type's per-Aplicacao contract-list
+        // `Vec`-carry axis, closing the last unlifted per-
+        // `AplicacaoSpec` `Vec`-carry axis.
+        let fixtures: Vec<Vec<WitContract>> = vec![
+            Vec::new(),
+            vec![contract_http("cart", "catalog", "/products/:id")],
+            vec![
+                contract_http("cart", "catalog", "/products/:id"),
+                contract_http("cart", "payment", "/charge"),
+            ],
+            vec![
+                contract_http("cart", "catalog", "/products/:id"),
+                contract_http("cart", "payment", "/charge"),
+                contract_http("payment", "catalog", "/audit"),
+            ],
+        ];
+        for contratos in fixtures {
+            let s = AplicacaoSpec {
+                membros: vec![
+                    membro("catalog", "^0.1"),
+                    membro("cart", "^0.1"),
+                    membro("payment", "^0.2"),
+                ],
+                contratos: contratos.clone(),
+                politicas: MeshPolicy::default(),
+                placement: Placement::default(),
+                entrada: None,
+            };
+            assert_eq!(
+                s.contratos(),
+                contratos.as_slice(),
+                "AplicacaoSpec::contratos must return :contratos verbatim \
+                 (got {:?}, expected {:?})",
+                s.contratos(),
+                contratos.as_slice(),
+            );
+            assert_eq!(
+                s.contratos(),
+                s.contratos.as_slice(),
+                "AplicacaoSpec::contratos accessor and \
+                 .contratos.as_slice() field access must byte-equal — \
+                 the accessor is the substrate-primitive typed dispatch \
+                 every downstream contract-list consumer must route \
+                 through",
+            );
+            assert_eq!(
+                s.contratos().len(),
+                s.contratos.len(),
+                "AplicacaoSpec::contratos().len() must byte-equal \
+                 self.contratos.len() — a length-drift would silently \
+                 split the paired per-edge validate-loop's traversal \
+                 input from the sync-cycle adjacency-list seed's \
+                 traversal input from the cilium_network_policies \
+                 per-`(:de, :para)` BTreeMap grouping loop's traversal \
+                 input from the `feira app graph` per-contract print \
+                 traversal's input",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_contratos_accessor() {
+        // Three-consumer coherence pin: the [`AplicacaoSpec::validate`]
+        // per-`:contratos` validate-loop's `for c in self.contratos()`
+        // traversal (which must reach every entry in the same order the
+        // accessor projects, so both the per-entry
+        // [`AplicacaoError::ContratoMemberMissing`] membership-lookup
+        // gate and the per-entry [`AplicacaoError::ContratoDuplicate`]
+        // dedup `HashSet` insert key off the accessor's projection),
+        // the peer [`AplicacaoSpec::detect_sync_cycles`]'s
+        // `for c in self.contratos()` adjacency-list seed (which drives
+        // the sync-subgraph deadlock-detection gate via
+        // [`AplicacaoError::SyncCycle`]), and the peer
+        // [`caixa_mesh::cilium_network_policies`]'s
+        // `for c in spec.contratos()` per-`(:de, :para)` BTreeMap
+        // grouping loop (which drives the per-CNP fan-out) must all
+        // three key off the lifted accessor, so any future rebrand on
+        // the typed slot's reader shape lands at exactly one place. Pins
+        // the three-site coherence by exercising the two caixa-core
+        // production consumers end-to-end: (1) the empty-`:contratos`
+        // slice must validate without a per-edge diagnostic (the
+        // per-edge loop is a no-op under the empty projection), (2) the
+        // `ContratoMemberMissing` refusal fires on the second entry of a
+        // two-edge cohort whose head references a valid member but tail
+        // references a phantom name (which requires the loop to reach
+        // the second entry through the accessor), and (3) the
+        // `SyncCycle` refusal fires on a self-referential two-edge
+        // cohort through the sync-cycle detector's peer projection
+        // (which requires the detector to iterate the accessor's
+        // projection to add the back-edge to its adjacency list).
+        //
+        // Peer of the sibling M3
+        // [`validate_reads_through_lifted_membros_accessor`] (6c77e36)
+        // three-consumer coherence pin on the per-`:membros` node-list
+        // axis and the sibling M3
+        // `validate_placement_reads_through_lifted_clusters_accessor`
+        // (a6e18d7) coherence pin on the per-`:placement` distribution-
+        // target-list axis — extends the slice-return-accessor multi-
+        // consumer coherence discipline onto the outermost M3 mesh-slot
+        // type's per-Aplicacao contract-list `Vec`-carry axis.
+
+        // (1) Empty-`:contratos` slice: the per-edge loop is a no-op
+        // and no per-edge diagnostic surfaces. Validate succeeds on
+        // the well-formed `:membros` head.
+        let mut spec = three_member_spec();
+        spec.contratos = Vec::new();
+        assert!(
+            spec.validate().is_ok(),
+            "empty :contratos must validate — the per-edge loop is a \
+             no-op under the accessor's empty projection",
+        );
+        assert!(
+            spec.contratos().is_empty(),
+            "the per-edge validate loop's traversal input must be the \
+             empty slice per the accessor's projection",
+        );
+
+        // (2) Per-edge validate loop: a two-edge cohort whose tail
+        // references a phantom `:para` member must trip
+        // `ContratoMemberMissing` on the tail — the loop must reach
+        // the second entry through the accessor for the membership
+        // lookup to fail on the phantom name.
+        let mut spec = three_member_spec();
+        spec.contratos = vec![
+            contract_http("cart", "catalog", "/products/:id"),
+            contract_http("cart", "phantom", "/x"),
+        ];
+        let err = spec.validate().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AplicacaoError::ContratoMemberMissing { ref caixa }
+                    if caixa == "phantom"
+            ),
+            "expected ContratoMemberMissing{{caixa:\"phantom\"}}, got {err:?}",
+        );
+        assert_eq!(
+            spec.contratos().len(),
+            2,
+            "the per-edge validate loop's traversal input must be \
+             a two-element slice per the accessor's projection",
+        );
+
+        // (3) Sync-cycle detector: a two-edge synchronous cohort
+        // whose second edge closes the sync-subgraph back onto the
+        // first must trip [`AplicacaoError::ContratoCycle`] — the
+        // detector must iterate the accessor's projection to add
+        // both edges to its adjacency list, so a length-drift on
+        // the accessor's projection would silently disagree with
+        // the sync-cycle detector on which edge closes the loop.
+        // Peer projection to the `validate` per-edge loop above:
+        // the sync-cycle detector routes through the same lifted
+        // accessor, so a rebrand of the reader shape lands at one
+        // place. Uses a two-edge cohort (cart → catalog → cart)
+        // because the per-edge `ContratoSelfLoop` gate fires before
+        // the sync-cycle detector on a single self-referential edge
+        // (`cart → cart`) — the cycle-detector's input must be a
+        // multi-edge cohort for its per-edge traversal input to be
+        // observably wider than the per-edge validate loop's input.
+        let mut spec = three_member_spec();
+        spec.contratos = vec![
+            contract_http("cart", "catalog", "/products/:id"),
+            contract_http("catalog", "cart", "/callback"),
+        ];
+        let err = spec.validate().unwrap_err();
+        assert!(
+            matches!(err, AplicacaoError::ContratoCycle { .. }),
+            "expected ContratoCycle from the sync-cycle detector on a \
+             two-edge back-edge cohort, got {err:?}",
+        );
+        assert_eq!(
+            spec.contratos().len(),
+            2,
+            "the sync-cycle detector's traversal input must be a \
+             two-element slice per the accessor's projection",
         );
     }
 
