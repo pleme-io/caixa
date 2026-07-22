@@ -3955,6 +3955,122 @@ impl Placement {
     pub fn estrategia(&self) -> PlacementStrategy {
         self.estrategia
     }
+
+    /// Substrate-canonical per-`:placement` `:clusters` MESH-COMPOSITION
+    /// per-cluster distribution-target slice accessor every consumer that
+    /// walks the Aplicacao's declared cluster-pool keys off — returns the
+    /// author-declared `:placement :clusters` `Vec<String>` verbatim as a
+    /// `&[String]` slice-view, borrowed from the typed slot's own
+    /// `Vec<String>` storage (a zero-copy slice-view over the same
+    /// backing buffer the `Serialize`/`Deserialize` derives round-trip
+    /// through). Non-optional: the empty slice is the load-bearing
+    /// pre-validation sentinel every downstream consumer of the paired
+    /// [`AplicacaoError::PlacementWithoutClusters`] refusal cascade keys
+    /// off — every strategy in the closed
+    /// [`PlacementStrategy::{SingleNode, Replicated, Sharded}`] accept-set
+    /// requires a non-empty list (`SingleNode` / `Replicated` use the
+    /// list as hosting / takeover candidates per Erlang/OTP distributed-
+    /// app convention, MESH-COMPOSITION §II.1; `Sharded` uses it as the
+    /// shard pool per Akka cluster-sharding convention, §II.4), so the
+    /// `.is_empty()` probe is the shared pre-condition every
+    /// [`AplicacaoSpec::validate_placement`] arm heads on.
+    ///
+    /// The `:placement :clusters` slot carries the K8s-conformant DNS-
+    /// 1123-label per-cluster distribution-target list — the same
+    /// set-not-multiset shape the sibling `:membros :caixa` /
+    /// `:children :caixa` axes carry (`validate_placement`'s per-entry
+    /// [`validate_placement_cluster`] + [`insert_first_seen`] fan-out
+    /// pins the shape). Every downstream consumer that fans on the list
+    /// keys off this slice (the [`AplicacaoSpec::validate_placement`]
+    /// pre-flight `.is_empty()` probe that trips
+    /// [`AplicacaoError::PlacementWithoutClusters`], the same method's
+    /// per-cluster value-shape + duplicate-detection fan-out loop, the
+    /// caixa-mesh per-Aplicacao `placement.clusters` overlay emit path
+    /// that materializes the list verbatim onto every
+    /// programs.yaml entry the substrate operator's per-cluster
+    /// `placement.clusters | contains .Values.cluster` filter reads,
+    /// the `feira app graph` per-Aplicacao cluster print line, the
+    /// future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-cluster admission-webhook fan-out, the future M5 adaptive-
+    /// placement engine's cluster-topology reader).
+    ///
+    /// Prior to this lift the `.clusters` `Vec<String>` was accessed
+    /// inline at three production sites — the
+    /// [`AplicacaoSpec::validate_placement`] pre-flight
+    /// `self.placement.clusters.is_empty()` refusal probe, the same
+    /// method's per-cluster validate loop's
+    /// `for c in &self.placement.clusters` traversal head, and the
+    /// `feira app graph` per-Aplicacao print line's
+    /// `spec.placement.clusters` `{:?}` formatter argument
+    /// (caixa-feira/src/cmd/app.rs) — three open-coded field-accesses
+    /// that expressed no compile-time link back to the typed slot. A
+    /// future extension of the `:placement :clusters` axis to a richer
+    /// author surface (a per-tenant cluster-pool overlay the operator
+    /// pins through a future `:placement :clusters-overrides` slot the
+    /// MESH-COMPOSITION §V cross-cluster-federation roadmap
+    /// acknowledges, a per-Aplicacao dynamic cluster-pool derivation
+    /// the future M5 adaptive-placement engine computes from
+    /// `:affinity` weights + live cluster-topology probes, a promotion
+    /// of the plain `Vec<String>` to a richer `{static, dynamic}`
+    /// partition once the substrate operator's cluster-membership
+    /// reconciler comes into typed scope) would have had to be threaded
+    /// through all three open-coded copies in lockstep or one consumer
+    /// would silently disagree with the peers on which cluster-pool a
+    /// given Aplicacao resolves to — the pre-flight `.is_empty()` probe
+    /// reading the raw slot while the peer per-cluster validate loop
+    /// read an operator-resolved slot would silently split the paired
+    /// `PlacementWithoutClusters` / `PlacementClusterInvalid` /
+    /// `PlacementClusterDuplicate` refusal cascade's actual traversal
+    /// input from the pre-flight input, a three-consumer split at the
+    /// validator and formatter far from the source `caixa.lisp` with
+    /// no field naming the cluster-pool-drift root cause. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the Aplicacao's
+    /// per-`:placement` cluster-pool surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit
+    /// on any future axis addition.
+    ///
+    /// Second slice-return (`&[T]`) accessor on any M2 or M3 typed
+    /// slot — sibling to the seed M2
+    /// [`crate::SupervisorSpec::children`] (bc92bce) `&[ChildSpec]`
+    /// slice-return accessor on the peer per-`:supervisor` static-
+    /// child-list `Vec`-carry axis, extended onto the first M3 mesh-
+    /// slot `Vec`-carry axis. Same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline. The
+    /// three peer `Vec`-carry axes still unlifted at the time of this
+    /// lift — [`crate::AplicacaoSpec::membros`] (`Vec<Membro>`
+    /// per-Aplicacao member list), [`crate::AplicacaoSpec::contratos`]
+    /// (`Vec<WitContract>` per-Aplicacao WIT-typed edge list),
+    /// [`crate::UpgradeFromEntry::instructions`]
+    /// (`Vec<UpgradeInstruction>` per-appup migration-instruction list)
+    /// — inherit this accessor's discipline as future compounding runs
+    /// migrate their consumers onto the shared slice-return shape.
+    /// Fourth (and final) accessor on the M3 mesh-slot `Placement`
+    /// type, sibling to the two `Option<&str>`-return
+    /// [`Placement::shard_key`] (7cd2a28) / [`Placement::affinity`]
+    /// (74ec2d3) accessors and the `Copy`-return
+    /// [`Placement::estrategia`] (921fe1b) accessor — closes the last
+    /// unlifted per-`:placement` field axis (the `Vec<String>`
+    /// distribution-target-list carrier) so every downstream
+    /// per-`:placement` reader now routes through a typed dispatch on
+    /// the substrate primitive. Named `clusters()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:clusters`) the field's own docstring already carries; the
+    /// accessor's identity maps onto the canonical MESH-COMPOSITION
+    /// §II.1 / §II.4 vocabulary the slot's docstring already reaches
+    /// for. Returns `&[String]` (not `&Vec<String>`) because every
+    /// downstream consumer of the cluster list treats it as a read-only
+    /// sequence — the slice-view is the narrowest borrow that supports
+    /// every present + roadmapped consumer (`.is_empty()`, `.iter()`,
+    /// `.len()`) without leaking the backing `Vec`'s
+    /// grow/push/reserve surface that no consumer of the typed view
+    /// reaches for (the storage-side `Vec` remains reachable through
+    /// the `pub clusters` field for the mutation-carrying serde
+    /// round-trip and per-test fixture-mutation paths).
+    #[must_use]
+    pub fn clusters(&self) -> &[String] {
+        self.clusters.as_slice()
+    }
 }
 
 impl Default for Placement {
@@ -4861,13 +4977,30 @@ impl AplicacaoSpec {
         // §II.1), while `Sharded` uses it as the shard pool
         // (Akka cluster-sharding convention — §II.4). An empty list is
         // meaningless under any of the three.
-        if self.placement.clusters.is_empty() {
+        //
+        // Route the paired pre-flight `.is_empty()` refusal probe and
+        // the per-cluster validate loop's traversal head through the
+        // lifted [`Placement::clusters`] slice-return accessor rather
+        // than the raw `self.placement.clusters` field access — the
+        // two production consumers of the per-`:placement` cluster-
+        // pool `Vec`-carry now key off exactly one typed dispatch on
+        // the substrate primitive, so any future rebrand on the axis
+        // (a per-tenant cluster-pool overlay the operator pins through
+        // a future `:placement :clusters-overrides` slot, a per-
+        // Aplicacao dynamic cluster-pool derivation the future M5
+        // adaptive-placement engine computes from `:affinity` weights)
+        // migrates as a single caixa-core edit rather than a
+        // coordinated rewrite of the paired arms — sibling of the
+        // peer M2 [`crate::SupervisorSpec::children`] (bc92bce) two-
+        // arm migration on the per-`:supervisor` static-child-list
+        // `Vec`-carry axis.
+        if self.placement.clusters().is_empty() {
             return Err(AplicacaoError::PlacementWithoutClusters {
                 estrategia: self.placement.estrategia(),
             });
         }
         let mut seen = std::collections::HashSet::new();
-        for c in &self.placement.clusters {
+        for c in self.placement.clusters() {
             // Per-entry value-shape gate: the cluster name lands in
             // every K8s context / `lareira-fleet-programs` aggregator
             // filter / future M4 CR materializer's per-cluster axis
@@ -16436,6 +16569,183 @@ mod tests {
                 ),
             }
         }
+    }
+
+    // ── per-`:placement` `:clusters` typed-accessor coherence pins ──────────
+    //
+    // The [`Placement::clusters`] accessor lift is the second slice-return
+    // (`&[T]`) accessor on any typed slot — sibling to the seed M2
+    // [`crate::SupervisorSpec::children`] (bc92bce) accessor on the peer
+    // per-`:supervisor` static-child-list `Vec`-carry axis. The two pins
+    // below cover (1) the accessor's byte-equal projection against the raw
+    // field access across the empty / singleton / cohort fixtures the
+    // [`AplicacaoSpec::validate_placement`] pre-flight `.is_empty()` probe
+    // and the per-cluster validate loop fan between, and (2) the two-
+    // consumer coherence of the paired pre-flight refusal probe and the
+    // per-cluster validate loop routing through the accessor on both arms.
+
+    #[test]
+    fn placement_clusters_returns_clusters_slice_byte_equal_across_permutations() {
+        // The canonical per-`:placement` cluster-pool-scalar-shape pin:
+        // [`Placement::clusters`] must return the `:placement :clusters`
+        // typed `Vec<String>` verbatim as a `&[String]` slice-view over
+        // the same backing buffer the raw `self.clusters.as_slice()`
+        // field access borrows from, byte-equal across every
+        // representative fixture in the accept-set — the empty slice
+        // (the pre-validation sentinel every
+        // [`AplicacaoError::PlacementWithoutClusters`] refusal keys off),
+        // the singleton slice (the minimal `SingleNode`-shape cohort),
+        // and multi-entry cohorts (the peer `Replicated` / `Sharded`
+        // multi-cluster shapes MESH-COMPOSITION §II.1 / §II.4 declare).
+        //
+        // Pins against a future silent detour that returned
+        // `&Vec<String>` (which would type-check but leak the storage-
+        // side `Vec`'s grow/push/reserve surface no consumer of the
+        // typed view reaches for), a fresh-allocated `Vec<String>` copy
+        // (which would type-check via a coercion but silently break
+        // every downstream caller that relied on the slice sharing the
+        // backing buffer's identity), or an out-of-order or length-
+        // drifted projection (which would silently split the paired
+        // pre-flight `.is_empty()` refusal probe's input from the per-
+        // cluster validate loop's traversal input).
+        //
+        // Peer of the sibling M2
+        // `supervisor_spec_children_returns_children_slice_byte_equal_across_permutations`
+        // (bc92bce) `&[ChildSpec]` byte-equal pin on the per-
+        // `:supervisor` static-child-list axis, extended onto the M3
+        // per-`:placement` distribution-target-list `Vec`-carry axis.
+        let fixtures: Vec<Vec<String>> = vec![
+            Vec::new(),
+            vec!["rio".into()],
+            vec!["rio".into(), "mar".into()],
+            vec!["rio".into(), "mar".into(), "plo".into()],
+        ];
+        for clusters in fixtures {
+            let p = Placement {
+                clusters: clusters.clone(),
+                ..Placement::default()
+            };
+            assert_eq!(
+                p.clusters(),
+                clusters.as_slice(),
+                "Placement::clusters must return :placement :clusters \
+                 verbatim (got {:?}, expected {:?})",
+                p.clusters(),
+                clusters.as_slice(),
+            );
+            assert_eq!(
+                p.clusters(),
+                p.clusters.as_slice(),
+                "Placement::clusters accessor and .clusters.as_slice() \
+                 field access must byte-equal — the accessor is the \
+                 substrate-primitive typed dispatch every downstream \
+                 cluster-pool consumer must route through",
+            );
+            assert_eq!(
+                p.clusters().len(),
+                p.clusters.len(),
+                "Placement::clusters().len() must byte-equal \
+                 self.clusters.len() — a length-drift would silently \
+                 split the paired pre-flight `.is_empty()` refusal \
+                 probe input from the per-cluster validate loop's \
+                 traversal input",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_placement_reads_through_lifted_clusters_accessor() {
+        // Two-consumer coherence pin: the
+        // [`AplicacaoSpec::validate_placement`] pre-flight
+        // `self.placement.clusters().is_empty()` refusal probe (which
+        // must trip [`AplicacaoError::PlacementWithoutClusters`] when
+        // the accessor projects the empty slice) and the per-cluster
+        // validate loop's `for c in self.placement.clusters()`
+        // traversal (which must reach every entry in the same order
+        // the accessor projects, so both the per-entry value-shape
+        // gate that trips [`AplicacaoError::PlacementClusterInvalid`]
+        // and the duplicate-detection HashSet insert that trips
+        // [`AplicacaoError::PlacementClusterDuplicate`] key off the
+        // accessor's projection) must both key off the lifted
+        // accessor, so any future rebrand on the typed slot's reader
+        // shape lands at exactly one place. Pins the two-site
+        // coherence by exercising each production consumer end-to-end:
+        // (1) the `PlacementWithoutClusters` refusal under the empty
+        // slice, (2) the `PlacementClusterInvalid` refusal fires on
+        // the second entry of a two-cluster cohort whose head is
+        // valid but tail is not (which requires the loop to reach the
+        // second entry through the accessor), and (3) the
+        // `PlacementClusterDuplicate` refusal fires on the second
+        // entry of a two-cluster cohort that shares a name (which
+        // requires the loop to reach both entries — a first-entry-only
+        // projection would silently pass since the dedup HashSet has
+        // room for the first insert).
+        //
+        // Peer of the sibling M2
+        // [`crate::supervisor::tests::validate_reads_through_lifted_children_accessor`]
+        // (bc92bce) coherence pin on the per-`:supervisor` static-
+        // child-list axis, extended onto the M3 per-`:placement`
+        // distribution-target-list `Vec`-carry axis.
+
+        // (1) Pre-flight `.is_empty()` probe: the empty slice must
+        // trip `PlacementWithoutClusters`.
+        let mut spec = three_member_spec();
+        spec.placement.clusters = Vec::new();
+        match spec.validate().unwrap_err() {
+            AplicacaoError::PlacementWithoutClusters { .. } => {}
+            other => panic!("expected PlacementWithoutClusters, got {other:?}"),
+        }
+        assert!(
+            spec.placement.clusters().is_empty(),
+            "the pre-flight refusal input must be the empty slice per \
+             the accessor's projection",
+        );
+
+        // (2) Per-cluster validate loop: a two-cluster cohort with an
+        // invalid tail entry must trip `PlacementClusterInvalid` on
+        // the tail — the loop must reach the second entry through
+        // the accessor.
+        let mut spec = three_member_spec();
+        spec.placement.clusters = vec!["rio".into(), "BAD_CLUSTER".into()];
+        match spec.validate().unwrap_err() {
+            AplicacaoError::PlacementClusterInvalid { cluster, .. } => {
+                assert_eq!(
+                    cluster, "BAD_CLUSTER",
+                    "PlacementClusterInvalid.cluster must carry the \
+                     tail entry the loop reached through the accessor",
+                );
+            }
+            other => panic!("expected PlacementClusterInvalid, got {other:?}"),
+        }
+        assert_eq!(
+            spec.placement.clusters().len(),
+            2,
+            "the per-cluster validate loop's traversal input must be \
+             a two-element slice per the accessor's projection",
+        );
+
+        // (3) Per-cluster validate loop: a two-cluster cohort that
+        // shares a name must trip `PlacementClusterDuplicate` on the
+        // second entry — the loop must reach both entries through the
+        // accessor for the dedup HashSet's second insert to collide.
+        let mut spec = three_member_spec();
+        spec.placement.clusters = vec!["rio".into(), "rio".into()];
+        match spec.validate().unwrap_err() {
+            AplicacaoError::PlacementClusterDuplicate { cluster } => {
+                assert_eq!(
+                    cluster, "rio",
+                    "PlacementClusterDuplicate.cluster must carry the \
+                     shared cluster name verbatim",
+                );
+            }
+            other => panic!("expected PlacementClusterDuplicate, got {other:?}"),
+        }
+        assert_eq!(
+            spec.placement.clusters().len(),
+            2,
+            "the per-cluster validate loop's traversal input must be \
+             a two-element slice per the accessor's projection",
+        );
     }
 
     #[test]

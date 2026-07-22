@@ -72,7 +72,7 @@ impl GraphArgs {
             println!(
                 "  placement: {:?} on clusters {:?}",
                 spec.placement.estrategia(),
-                spec.placement.clusters
+                spec.placement.clusters()
             );
             println!("  membros ({}):", spec.membros.len(),);
             for m in &spec.membros {
