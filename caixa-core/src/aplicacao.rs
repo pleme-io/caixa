@@ -4993,6 +4993,140 @@ impl AplicacaoSpec {
         &self.placement
     }
 
+    /// Substrate-canonical per-`:entrada` `Entrada` MESH-COMPOSITION
+    /// per-Aplicacao external-gateway composite optional-composite-
+    /// reference accessor every per-Aplicacao gateway-block reader
+    /// keys off — returns the author-declared `:entrada` composite
+    /// verbatim as an `Option<&Entrada>` reference over the same
+    /// backing storage the raw `self.entrada.as_ref()` field access
+    /// borrows from, with `None` naming the internal-only mesh shape
+    /// (the author-omitted `:entrada` slot the K8s Gateway API v1
+    /// gateway_routes emitter treats as "emit nothing" and the peer
+    /// `feira app graph` printer treats as "internal-only mesh").
+    ///
+    /// The `:entrada` slot carries the M3 mesh-slot per-Aplicacao
+    /// external-gateway composite — the load-bearing container of
+    /// every does-this-Aplicacao-expose-a-public-endpoint axis every
+    /// downstream cluster-artifact emitter fans on (MESH-COMPOSITION
+    /// §III.4 for the `:host` K8s Gateway API v1 apiserver-validated
+    /// hostname axis, §III.4 for the `:para` destination-Servico
+    /// axis, §III.4 for the `:paths` HTTPRoute path-list axis, §III.4
+    /// for the `:port` L4 backendRefs port axis). Every per-`:entrada`
+    /// axis threads through a lifted per-slot accessor on the
+    /// [`Entrada`] type: the [`Entrada::hostname`] (6db982c) K8s
+    /// Gateway-API `Listener.hostname` scalar accessor, the paired
+    /// [`Entrada::hostnames`] (`&HTTPRoute.spec.hostnames`)
+    /// singleton-list resolver, the [`Entrada::destination`] (821a80e)
+    /// backendRefs destination-Servico scalar accessor, the
+    /// [`Entrada::resolved_paths`] path-fallback resolver, and the
+    /// [`Entrada::port`] (9f9becd) Gateway-API-mesh L4 listener-port
+    /// scalar accessor. Every downstream consumer that reaches for
+    /// an entrada axis first passes through this outer accessor onto
+    /// the composite and then dispatches onto the per-axis accessor
+    /// — the two-level dispatch means every per-`:entrada` reader
+    /// now routes through a typed dispatch on the substrate primitive
+    /// at both altitudes.
+    ///
+    /// Prior to this lift the `.entrada` `Option<Entrada>` composite
+    /// was accessed inline at four production sites — the
+    /// [`AplicacaoSpec::validate`] per-`:entrada` shape-and-membership
+    /// gate's `if let Some(e) = &self.entrada { … }` traversal head
+    /// (which drives every per-axis refusal on the composite: the
+    /// `validate_entrada_para` DNS-1123 shape gate on `e.para`, the
+    /// `EntradaMemberMissing` membership lookup against the
+    /// `:membros` accept-set, the `EmptyEntradaHost` refusal, the
+    /// `validate_entrada_host` K8s Gateway API v1 apiserver-shape
+    /// gate on `e.host`, and the `validate_entrada_path` HTTPRoute
+    /// per-path shape gate on each entry of `e.paths`), the
+    /// [`AplicacaoSpec::port_for_destination`] per-Aplicacao L4-port
+    /// fallback resolver's `self.entrada.as_ref().filter(…).map_or(…)`
+    /// composite-projection seed (which drives the destination-
+    /// facing `Entrada::port` lookup every per-Aplicacao HTTPRoute
+    /// backendRefs port emitter fans on), the
+    /// [`caixa_mesh::gateway_routes`] per-Aplicacao K8s Gateway API
+    /// v1 Gateway + HTTPRoute emitter's `spec.entrada.as_ref()`
+    /// early-return seed (which drives the "no `:entrada` ⇒ no
+    /// external artifacts" partition on the whole-Aplicacao Gateway-
+    /// API emitter's fan-out), and the `feira app graph` per-
+    /// Aplicacao print line's `if let Some(e) = &spec.entrada`
+    /// external-gateway summary emitter (which drives the human-
+    /// readable `entrada: host → para (paths=…, port=…)` /
+    /// `entrada: (internal-only mesh)` partition on the typed
+    /// Aplicacao view) — four open-coded outer-field accesses that
+    /// expressed no compile-time link back to the typed slot at the
+    /// [`AplicacaoSpec`] altitude. A future extension of the
+    /// `:entrada` outer axis to a richer author surface (a
+    /// multi-`:entrada` list the M4 CR materializer resolves per-CR
+    /// at admission time so an Aplicacao can expose a public-web +
+    /// admin-web pair, a per-cluster `:entrada-overrides` slot the
+    /// MESH-COMPOSITION §V federation roadmap acknowledges so an
+    /// operator can pin a per-cluster hostname override without
+    /// re-authoring the `caixa.lisp`, a promotion of the plain
+    /// `Option<Entrada>` to a richer `{single, multi}` partition once
+    /// the multi-`:entrada` roadmap lands) would have had to be
+    /// threaded through all four open-coded copies in lockstep or one
+    /// consumer would silently disagree with the peers on which
+    /// entrada composite a given Aplicacao resolves to — the
+    /// validator's per-axis bracket-dispatch seed reading the raw
+    /// slot while the peer `gateway_routes` emitter read an
+    /// operator-resolved slot would silently split the build-time
+    /// gateway-shape gate from the runtime Gateway + HTTPRoute
+    /// emission gate, a four-consumer split at the validator, the
+    /// `port_for_destination` L4-port resolver, the `gateway_routes`
+    /// emitter, and the `feira app graph` printer far from the
+    /// source `caixa.lisp` with no field naming the entrada-drift
+    /// root cause. Lifting the resolution rule to a typed method on
+    /// the substrate primitive means every downstream consumer of
+    /// the Aplicacao's per-`:entrada` external-gateway composite
+    /// surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Third and final `&Composite`-return accessor on the top-level
+    /// M3 mesh-slot `AplicacaoSpec` type itself — closes the last
+    /// unlifted outer-composite axis on the outer typed composition
+    /// view, sibling to the seed [`AplicacaoSpec::politicas`]
+    /// (534dc21) `&MeshPolicy` mesh-policy composite-reference
+    /// accessor on the per-`:politicas` outer-composite axis and to
+    /// the [`AplicacaoSpec::placement`] (9abb8f0) `&Placement`
+    /// distribution-composite composite-reference accessor on the
+    /// per-`:placement` outer-composite axis; extends the outer-
+    /// composite reference-return discipline the two peers already
+    /// route through onto the last unlifted per-`AplicacaoSpec`
+    /// outer-composite axis. The `:entrada` outer-composite axis is
+    /// the natural pair to the two peer outer-composite axes on the
+    /// three operationally-symmetric M3 mesh-slot outer composites
+    /// (`:politicas` carries the how-to-run policy overlay,
+    /// `:placement` carries the where-to-run distribution composite,
+    /// `:entrada` carries the who-can-reach-it external-gateway
+    /// composite — every whole-Aplicacao mesh-artifact emitter reads
+    /// all three as one unit). Same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline the peer outer-composite axes already route through.
+    /// Named `entrada()` to match the storage field's name verbatim
+    /// and the tatara-lisp author-surface term (`:entrada`) the
+    /// field's own docstring already carries; the accessor's
+    /// identity maps onto the canonical MESH-COMPOSITION §III.4
+    /// vocabulary the slot's docstring already reaches for. Returns
+    /// `Option<&Entrada>` (not the owning composite by copy or
+    /// clone) because every downstream consumer of the entrada
+    /// composite treats it as a read-only per-axis dispatch source
+    /// — the reference-view is the narrowest borrow that supports
+    /// every present + roadmapped consumer (per-axis accessor
+    /// dispatch, `.as_ref().filter(…).map_or(…)` per-destination
+    /// port-fallback projection, early-return partition on the
+    /// `None` arm) without cloning the composite through every
+    /// consumer's fast path. The `Option` half of the return-type
+    /// preserves the load-bearing "author-omitted `:entrada` ⇒
+    /// internal-only mesh" partition (not a default composite the
+    /// downstream must reject on emptiness) — the accessor projects
+    /// the raw `Option<Entrada>` slot's presence bit through the
+    /// reference-return unchanged.
+    #[must_use]
+    pub fn entrada(&self) -> Option<&Entrada> {
+        self.entrada.as_ref()
+    }
+
     /// Validate the typed shape:
     ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
     ///     and a non-empty `:versao`; no two entries share the same
@@ -5198,7 +5332,16 @@ impl AplicacaoSpec {
         // back to it.
         self.detect_sync_cycles()?;
 
-        if let Some(e) = &self.entrada {
+        if let Some(e) = self.entrada() {
+            // Route the per-`:entrada` composite-reference read
+            // through the lifted [`AplicacaoSpec::entrada`] accessor
+            // rather than the raw `&self.entrada` field access — the
+            // shape-and-membership gate's traversal head is now the
+            // canonical read-side surface every per-Aplicacao entrada
+            // consumer routes through, closing the fourth of four
+            // open-coded outer-field accesses on the per-`:entrada`
+            // outer-composite axis.
+            //
             // Shape gate on `:entrada :para` runs ahead of the
             // membership lookup. Every `:membros :caixa` past
             // `validate_membro_caixa` is a valid DNS-1123 label
@@ -5980,8 +6123,16 @@ impl AplicacaoSpec {
     /// L4-fallback renderer consumes.
     #[must_use]
     pub fn port_for_destination(&self, destination: &str) -> u16 {
-        self.entrada
-            .as_ref()
+        // Route the per-`:entrada` composite-reference read through
+        // the lifted [`AplicacaoSpec::entrada`] accessor rather than
+        // the raw `self.entrada.as_ref()` field access — the
+        // per-destination L4-port fallback resolver's composite-
+        // projection seed is now the canonical read-side surface
+        // every per-Aplicacao entrada consumer routes through, peer
+        // of the sibling `validate` per-`:entrada` shape-and-
+        // membership gate migration on the same outer-composite
+        // axis.
+        self.entrada()
             .filter(|e| e.para == destination)
             .map_or(DEFAULT_SERVICO_PORT, Entrada::port)
     }
@@ -18077,6 +18228,299 @@ mod tests {
             &["rio", "mar"],
             "the outer accessor's reference projection must be the \
              canonical Replicated fixture's cluster pool",
+        );
+    }
+
+    #[test]
+    fn aplicacao_spec_entrada_returns_entrada_option_ref_byte_equal_across_permutations() {
+        // The canonical per-`:entrada` outer-composite-optional-
+        // reference-shape pin: [`AplicacaoSpec::entrada`] must return
+        // the `:entrada` typed `Option<Entrada>` verbatim as an
+        // `Option<&Entrada>` reference over the same backing storage
+        // the raw `self.entrada.as_ref()` field access borrows from,
+        // byte-equal across every representative fixture in the
+        // accept-set — the author-omitted `None` shape (the
+        // "internal-only mesh" partition every downstream external-
+        // gateway emitter treats as "emit nothing"), the minimal
+        // singleton `:entrada` composite (host + destination + empty
+        // paths + default port), the paths-carrying composite (the
+        // canonical `three_member_spec` fixture's ["/api" "/health"]
+        // path-list shape every HTTPRoute per-rule fan-out emitter
+        // reads), and the non-default port composite (the canonical
+        // custom-port shape the port-fallback resolver reads).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned `Entrada` copy (which would type-check via a `Clone`
+        // impl but silently break every downstream caller that
+        // relied on the reference sharing the composite's backing
+        // identity), a reference to an operator-resolved overlay
+        // (the future per-cluster `:entrada-overrides` slot the
+        // MESH-COMPOSITION §V federation roadmap acknowledges — its
+        // resolution must land at exactly this accessor body, not
+        // silently divert the raw slot away from a second consumer),
+        // a `None` → `Some(Entrada::default)` cluster-default
+        // projection (which would collapse the load-bearing
+        // "author-omitted `:entrada` ⇒ internal-only mesh" partition
+        // the peer `gateway_routes` early-return + `feira app graph`
+        // internal-only-mesh partition both read), or an axis-
+        // shuffled projection (a future detour that swapped
+        // `host` and `para` through the accessor would silently
+        // split the paired `validate` per-`:entrada` shape-and-
+        // membership gate's traversal input from the peer
+        // `caixa_mesh::gateway_routes` Gateway + HTTPRoute emitter's
+        // fan-out input from the peer `feira app graph` external-
+        // gateway summary line).
+        //
+        // Peer of the sibling M3
+        // `aplicacao_spec_politicas_returns_politicas_ref_byte_equal_across_permutations`
+        // (534dc21) `&MeshPolicy` byte-equal pin on the per-
+        // `:politicas` outer mesh-policy composite-reference axis
+        // and of the sibling M3
+        // `aplicacao_spec_placement_returns_placement_ref_byte_equal_across_permutations`
+        // (9abb8f0) `&Placement` byte-equal pin on the per-
+        // `:placement` outer distribution-composite composite-
+        // reference axis — extends the outer-accessor byte-equal-
+        // projection discipline onto the last unlifted outermost M3
+        // mesh-slot type's per-Aplicacao external-gateway composite-
+        // reference axis, the third and final `&Composite`-return
+        // accessor on the outer [`AplicacaoSpec`] type.
+        let fixtures: Vec<Option<Entrada>> = vec![
+            None,
+            Some(Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: "cart".into(),
+                paths: Vec::new(),
+                port: DEFAULT_SERVICO_PORT,
+            }),
+            Some(Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: "cart".into(),
+                paths: vec!["/api".into(), "/health".into()],
+                port: DEFAULT_SERVICO_PORT,
+            }),
+            Some(Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: "cart".into(),
+                paths: vec!["/api".into()],
+                port: 9443,
+            }),
+        ];
+        for entrada in fixtures {
+            let s = AplicacaoSpec {
+                membros: vec![membro("catalog", "^0.1"), membro("cart", "^0.1")],
+                contratos: Vec::new(),
+                politicas: MeshPolicy::default(),
+                placement: Placement::default(),
+                entrada: entrada.clone(),
+            };
+            assert_eq!(
+                s.entrada(),
+                entrada.as_ref(),
+                "AplicacaoSpec::entrada must return :entrada verbatim \
+                 (got {:?}, expected {:?})",
+                s.entrada(),
+                entrada.as_ref(),
+            );
+            match (s.entrada(), s.entrada.as_ref()) {
+                (Some(a), Some(b)) => assert!(
+                    std::ptr::eq(a, b),
+                    "AplicacaoSpec::entrada accessor and \
+                     self.entrada.as_ref() field access must borrow \
+                     the same backing storage — the accessor is the \
+                     substrate-primitive typed dispatch every \
+                     downstream external-gateway composite consumer \
+                     must route through, and a reference-identity \
+                     split would silently break every consumer that \
+                     relied on the borrow sharing the composite's \
+                     storage",
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "AplicacaoSpec::entrada presence bit must byte-\
+                     equal self.entrada.is_some() — a presence-bit \
+                     drift would silently split the paired `validate` \
+                     per-`:entrada` shape-and-membership gate's \
+                     traversal head from the peer \
+                     caixa-mesh gateway_routes early-return partition \
+                     from the peer `feira app graph` internal-only-\
+                     mesh partition",
+                ),
+            }
+            assert_eq!(
+                s.entrada().is_some(),
+                s.entrada.is_some(),
+                "AplicacaoSpec::entrada().is_some() must byte-equal \
+                 self.entrada.is_some() — a presence-bit drift would \
+                 silently split every downstream `Option<&Entrada>` \
+                 consumer's partition on the internal-only-mesh arm",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_entrada_accessor() {
+        // Multi-consumer coherence pin: the [`AplicacaoSpec::validate`]
+        // per-`:entrada` shape-and-membership gate (`if let Some(e) =
+        // self.entrada() { … }`, followed by the per-axis fan-out
+        // `validate_entrada_para(&e.para)` /
+        // `EntradaMemberMissing` membership lookup /
+        // `EmptyEntradaHost` / `validate_entrada_host(&e.host)` /
+        // per-`e.paths` `validate_entrada_path` traversal) must key
+        // off the lifted outer accessor, so any future rebrand on
+        // the typed slot's outer-composite reader shape lands at
+        // exactly one place. Pins the multi-axis coherence by
+        // exercising each per-axis refusal end-to-end: (1) the
+        // author-omitted `None` shape short-circuits past every
+        // per-`:entrada` refusal (the internal-only mesh partition
+        // the accessor's `None` arm names), (2) `EntradaMemberMissing`
+        // fires on a well-shaped but phantom `:para` under the outer
+        // accessor's reference projection, and (3) the canonical
+        // `three_member_spec` `:entrada` fixture passes `validate`
+        // under the outer accessor's reference projection.
+        //
+        // Peer of the sibling M3
+        // [`validate_politicas_reads_through_lifted_politicas_accessor`]
+        // (534dc21) multi-axis coherence pin on the per-`:politicas`
+        // outer mesh-policy composite-reference axis and the sibling
+        // M3
+        // [`validate_placement_reads_through_lifted_placement_accessor`]
+        // (9abb8f0) multi-axis coherence pin on the per-`:placement`
+        // outer distribution-composite composite-reference axis —
+        // extends the multi-consumer coherence discipline onto the
+        // last unlifted outermost M3 mesh-slot type's per-Aplicacao
+        // external-gateway composite-reference axis, the third and
+        // final `&Composite`-return accessor on the outer
+        // [`AplicacaoSpec`] type.
+
+        // (1) `None` :entrada — the internal-only-mesh partition
+        // short-circuits past every per-`:entrada` refusal. The outer
+        // accessor's reference projection reaches the fall-through
+        // `Ok(())` on the `None` arm without any per-axis refusal
+        // firing.
+        let mut spec = three_member_spec();
+        spec.entrada = None;
+        assert!(
+            spec.validate().is_ok(),
+            "an author-omitted `:entrada` must pass `validate` — the \
+             internal-only-mesh partition short-circuits past every \
+             per-`:entrada` refusal under the outer accessor's \
+             reference projection",
+        );
+        assert!(
+            spec.entrada().is_none(),
+            "the outer accessor's reference projection must name the \
+             internal-only-mesh partition per the `None` fixture",
+        );
+
+        // (2) `EntradaMemberMissing` refusal under the outer accessor's
+        // reference projection: a well-shaped but phantom `:para` must
+        // trip the membership-lookup refusal. The gate's second arm
+        // reads `e.para` on the reference returned by the outer
+        // accessor.
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.para = "phantom".into();
+        }
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::EntradaMemberMissing {
+                para: "phantom".into(),
+            },
+        );
+        match (spec.entrada(), spec.entrada.as_ref()) {
+            (Some(a), Some(b)) => assert!(
+                std::ptr::eq(a, b),
+                "the `validate` per-`:entrada` gate's traversal head \
+                 must be the same backing composite the accessor's \
+                 reference projection borrows from",
+            ),
+            _ => panic!("fixture must carry Some(:entrada)"),
+        }
+
+        // (3) Canonical `three_member_spec` `:entrada` fixture passes
+        // `validate` — every per-axis arm reaches the fall-through
+        // `Ok(())` without any per-axis refusal firing under the
+        // outer accessor's reference projection.
+        let spec = three_member_spec();
+        assert!(
+            spec.validate().is_ok(),
+            "the canonical `:entrada` fixture must pass `validate` — \
+             every per-axis arm short-circuits on valid input under \
+             the outer accessor's reference projection",
+        );
+        assert!(
+            spec.entrada().is_some(),
+            "the outer accessor's reference projection must be the \
+             canonical `:entrada` fixture's composite",
+        );
+    }
+
+    #[test]
+    fn port_for_destination_reads_through_lifted_entrada_accessor() {
+        // Peer coherence pin: the
+        // [`AplicacaoSpec::port_for_destination`] per-destination
+        // L4-port fallback resolver's composite-projection seed
+        // (`self.entrada().filter(…).map_or(…)`) must key off the
+        // lifted outer accessor. Pins the coherence by exercising
+        // the resolver end-to-end: (1) the `None` `:entrada` shape
+        // falls through to `DEFAULT_SERVICO_PORT` under the outer
+        // accessor's reference projection, (2) a non-matching
+        // destination falls through to `DEFAULT_SERVICO_PORT` under
+        // the outer accessor's reference projection, and (3) the
+        // matching destination resolves to the `:entrada :port`
+        // value under the outer accessor's reference projection.
+        //
+        // Peer of the sibling
+        // [`validate_reads_through_lifted_entrada_accessor`] multi-
+        // consumer coherence pin on the same per-`:entrada` outer-
+        // composite axis — extends the multi-consumer coherence
+        // discipline onto the second per-`:entrada` production
+        // consumer, the L4-port fallback resolver.
+
+        // (1) `None` :entrada — the resolver's `filter(…).map_or(…)`
+        // seed falls through to `DEFAULT_SERVICO_PORT` on the `None`
+        // arm under the outer accessor's reference projection.
+        let mut spec = three_member_spec();
+        spec.entrada = None;
+        assert_eq!(
+            spec.port_for_destination("cart"),
+            DEFAULT_SERVICO_PORT,
+            "the port-fallback resolver must fall through to \
+             DEFAULT_SERVICO_PORT on an author-omitted `:entrada` \
+             under the outer accessor's reference projection",
+        );
+
+        // (2) Non-matching destination — the resolver's `filter(…)`
+        // arm rejects a mismatched destination and falls through
+        // to `DEFAULT_SERVICO_PORT` under the outer accessor's
+        // reference projection.
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.para = "cart".into();
+            e.port = 9443;
+        }
+        assert_eq!(
+            spec.port_for_destination("catalog"),
+            DEFAULT_SERVICO_PORT,
+            "the port-fallback resolver must fall through to \
+             DEFAULT_SERVICO_PORT on a non-matching destination \
+             under the outer accessor's reference projection",
+        );
+
+        // (3) Matching destination — the resolver's `map_or(…)` arm
+        // returns the `:entrada :port` value under the outer
+        // accessor's reference projection.
+        let mut spec = three_member_spec();
+        if let Some(e) = spec.entrada.as_mut() {
+            e.para = "cart".into();
+            e.port = 9443;
+        }
+        assert_eq!(
+            spec.port_for_destination("cart"),
+            9443,
+            "the port-fallback resolver must return the \
+             `:entrada :port` value on a matching destination \
+             under the outer accessor's reference projection",
         );
     }
 
