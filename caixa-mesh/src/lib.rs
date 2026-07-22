@@ -2555,8 +2555,14 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
     // `Option<bool>` by copy (bool is `Copy`), so
     // [`single_field_overlay`]'s first parameter accepts the narrower
     // owned Option verbatim without a re-allocation or a `.clone()`.
+    // Route the outer `:politicas` composite-reference read through
+    // the lifted [`caixa_core::AplicacaoSpec::politicas`] outer accessor
+    // rather than the raw `spec.politicas` field access — the outer
+    // composite-reference axis now dispatches on the substrate
+    // primitive, and the per-axis `mtls_required()` inner-accessor
+    // dispatch chains onto the returned `&MeshPolicy` reference verbatim.
     let mtls_overlay = single_field_overlay(
-        spec.politicas.mtls_required(),
+        spec.politicas().mtls_required(),
         CILIUM_KEY_MODE,
         |required| serde_yaml::Value::String(cilium_auth_mode(required).into()),
     );
@@ -2976,7 +2982,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // typed-slot value renders to the same `"30s"` string K8s
     // tooling parses — no per-renderer ad-hoc duration formatting.
     let timeout_overlay =
-        single_field_overlay(spec.politicas.timeout(), GATEWAY_API_KEY_REQUEST, |d| {
+        single_field_overlay(spec.politicas().timeout(), GATEWAY_API_KEY_REQUEST, |d| {
             serde_yaml::Value::String(caixa_core::supervisor::duration_codec::render(d))
         });
     // `:politicas :retries` overlay — when the typed slot carries a
@@ -3021,7 +3027,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     // grows the peer `retry.codes` / `retry.backoff` axes) reaches
     // this consumer by construction.
     let retry_overlay = single_field_overlay(
-        spec.politicas.retries(),
+        spec.politicas().retries(),
         GATEWAY_API_KEY_ATTEMPTS,
         |attempts| serde_yaml::Value::Number(attempts.into()),
     );
