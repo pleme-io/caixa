@@ -806,7 +806,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
         .map(str::to_owned)
         .unwrap_or_else(|| format!("Generated chart for caixa Servico {}", caixa.nome));
     let keywords: Vec<String> = caixa
-        .etiquetas
+        .etiquetas()
         .iter()
         .cloned()
         .chain(
