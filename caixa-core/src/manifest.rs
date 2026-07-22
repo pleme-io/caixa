@@ -290,6 +290,105 @@ impl Caixa {
         self.licenca.as_deref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:repositorio` git-repo-URL scalar
+    /// accessor every consumer of the top-level manifest's homepage /
+    /// source-of-truth axis keys off — returns the author-declared
+    /// `:repositorio` byte-string verbatim as an `Option<&str>`, borrowed
+    /// from the typed slot's own `Option<String>` storage. `None` when
+    /// the slot is absent (the canonical "omit to defer to the renderer's
+    /// per-target placeholder" shape — [`caixa-helm`]'s `ChartYaml.home`
+    /// carries the `Option<String>` through verbatim so an author-omitted
+    /// `:repositorio` renders a `Chart.yaml` without a `home:` field
+    /// (`skip_serializing_if = "Option::is_none"`), while [`caixa-flux`]'s
+    /// `ClusterBundleOpts::for_caixa` folds the omitted slot through a
+    /// `format!("https://github.com/{DEFAULT_PLEME_GIT_ORG}/{nome}")`
+    /// fallback derived from `caixa.nome`).
+    ///
+    /// The `:repositorio` slot carries the universal-axis git-repo-URL
+    /// homepage identifier every kind of caixa emits under (CAIXA-SDLC
+    /// §I — the author-facing surface every `defcaixa` form supplies) —
+    /// the typed slot's `Option<String>` accept-set (empty-string
+    /// rejected through [`ManifestError::RepositorioEmpty`], git-repo-URL-
+    /// shape-invalid rejected through [`ManifestError::RepositorioInvalid`]
+    /// past the shared [`crate::render::is_git_repo_url`] predicate the
+    /// peer per-`:deps :fonte :repo` axis also routes through) maps onto
+    /// four load-bearing downstream consumers:
+    ///
+    ///   - [`Self::validate_repositorio`]'s empty-arm + shape-predicate
+    ///     gate binding at caixa-core/src/manifest.rs:1456 — the
+    ///     universal-axis identity gate wired at caixa-build time.
+    ///   - [`caixa-helm`]'s `build_chart_yaml` `ChartYaml.home` fold at
+    ///     caixa-helm/src/lib.rs:840 — the rendered `lareira-<nome>`
+    ///     Helm chart's `Chart.yaml` `home:` field, which every registry
+    ///     that ingests the chart (ArtifactHub, chartmuseum,
+    ///     `helm search repo`) surfaces as the chart's canonical source-
+    ///     of-truth link.
+    ///   - [`caixa-helm`]'s `build_readme` `## Source` fold at
+    ///     caixa-helm/src/lib.rs:957 — the rendered `lareira-<nome>`
+    ///     chart's `README.md` header link back to the source repo,
+    ///     which every author who inspects the rendered chart bundle
+    ///     lands at.
+    ///   - [`caixa-flux`]'s `ClusterBundleOpts::for_caixa`
+    ///     `GitRepository.spec.url` fold at caixa-flux/src/lib.rs:2006 —
+    ///     the rendered `GitRepository` CR's `spec.url` field, which
+    ///     FluxCD's `source-controller` polls to reconcile the caixa's
+    ///     manifest bundle from git.
+    ///
+    /// Prior to this lift the `.repositorio` field was accessed inline
+    /// at four production sites — [`Self::validate_repositorio`]'s
+    /// `self.repositorio.as_deref()` empty-and-shape gate binding, the
+    /// caixa-helm `build_chart_yaml` `caixa.repositorio.clone()`
+    /// `Chart.yaml` `home:` field fold, the caixa-helm `build_readme`
+    /// `caixa.repositorio.clone().unwrap_or_else(|| caixa.nome.clone())`
+    /// `README.md` `## Source` fold, and the caixa-flux
+    /// `ClusterBundleOpts::for_caixa`
+    /// `caixa.repositorio.clone().unwrap_or_else(|| format!(...))`
+    /// `GitRepository.spec.url` fold — four open-coded field-accesses
+    /// that expressed no compile-time link back to the typed slot. A
+    /// future extension of the `:repositorio` axis to a richer author
+    /// surface — a per-`:repositorio` structured
+    /// [`crate::render::GitRepoUrl`]-shaped scheme+host+path parse
+    /// (the future tightening [`Self::validate_repositorio`]'s
+    /// docstring anticipates alongside the peer per-`:deps :fonte
+    /// :repo` axis), a per-cluster repo-mirror overlay the M4 CR
+    /// materializer resolves per-CR (the "cluster policy rewrites
+    /// `github:pleme-io/...` to `git.internal/mirror/pleme-io/...`"
+    /// arm the private-registry story acknowledges), a promotion of
+    /// the plain `Option<String>` byte-string to a richer
+    /// `RepoUrl` enum discriminated on scheme — would have had to be
+    /// threaded through all four open-coded copies in lockstep or the
+    /// validate gate and the three emit paths would silently disagree
+    /// on which URL a given [`Caixa`] resolves to (an author's
+    /// `:repositorio "github:pleme-io/checkout"` would satisfy validate
+    /// while one of the emit paths silently rendered a stale URL, or
+    /// vice versa). Lifting the resolution to a typed method on the
+    /// substrate primitive means every downstream consumer of the
+    /// caixa's per-`Caixa` repo-URL surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit on
+    /// any future axis addition.
+    ///
+    /// Second outer top-level [`Caixa`] `Option<&str>`-return scalar
+    /// accessor — sibling of [`Self::licenca`] (6d5bc28), the accessor
+    /// that opened the "outer [`Caixa`] `Option<&str>` scalar"
+    /// projection pattern this lift folds on. Same "one typed dispatch
+    /// on the substrate primitive, thin projections at each consumer"
+    /// discipline the peer per-`:placement`
+    /// [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+    /// [`crate::aplicacao::Placement::affinity`] (74ec2d3) /
+    /// per-`:contratos` [`crate::aplicacao::WitContract::endpoint`]
+    /// (7020470) / [`crate::aplicacao::WitContract::subject`] (90de675)
+    /// / [`crate::aplicacao::WitContract::slot`] (ed22b66)
+    /// `Option<&str>`-return accessors carry on the sibling M2 / M3
+    /// typed-slot atom axes, extended here to the second outer top-level
+    /// `Caixa` universal-axis surface. Named `repositorio()` to match
+    /// the storage field's name; the accessor's identity maps onto the
+    /// canonical CAIXA-SDLC §I vocabulary the slot's docstring already
+    /// carries.
+    #[must_use]
+    pub fn repositorio(&self) -> Option<&str> {
+        self.repositorio.as_deref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1453,7 +1552,7 @@ impl Caixa {
     /// [`crate::LayoutError::ForeignCodeSlot`]) which fence kind-
     /// specific slot sets.
     pub fn validate_repositorio(&self) -> Result<(), ManifestError> {
-        let Some(s) = self.repositorio.as_deref() else {
+        let Some(s) = self.repositorio() else {
             return Ok(());
         };
         if s.is_empty() {
@@ -6674,6 +6773,193 @@ mod tests {
                 first, licenca,
                 "Caixa::licenca must return :licenca verbatim by \
                  borrow — got {first:?}, expected {licenca:?}",
+            );
+        }
+    }
+
+    // ── Caixa::repositorio — outer top-level Option<&str> scalar accessor ──
+
+    #[test]
+    fn repositorio_returns_repositorio_byte_string_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:repositorio` git-repo-URL scalar
+        // pin: [`Caixa::repositorio`] must return the `:repositorio`
+        // typed byte-string verbatim as an `Option<&str>`, byte-equal
+        // to the raw `self.repositorio.as_deref()` access across every
+        // representative value in the accept-set — `None` (the "omit
+        // the slot to defer to the per-renderer placeholder" arm every
+        // existing fixture without a `:repositorio` line carries),
+        // `Some("")` (a past-the-guard sentinel that pins the accessor
+        // doesn't perform a silent `Some("") → None` collapse on the
+        // empty arm — validate rejects `Some("")` through
+        // `RepositorioEmpty` but the accessor must ship the raw slot
+        // verbatim so a validate-time gate regression surfaces at the
+        // caixa-helm / caixa-flux emit boundary rather than being
+        // silently absorbed into the per-renderer fallback),
+        // `Some("github:pleme-io/hello-rio")` (the canonical `github:`
+        // shorthand every existing manifest fixture across
+        // `caixa-helm` / `caixa-mesh` and the `examples/` uses),
+        // `Some("https://github.com/pleme-io/checkout")` (the canonical
+        // `https://` URL the README quickstart uses),
+        // `Some("ssh://git@github.com/pleme-io/checkout.git")` /
+        // `Some("git://github.com/pleme-io/checkout.git")` /
+        // `Some("git@github.com:pleme-io/checkout.git")` /
+        // `Some("file:///opt/mirrors/pleme-io/checkout")` (every non-
+        // github scheme the shared `is_git_repo_url` predicate
+        // documents), and five past-the-guard sentinels for the
+        // `RepositorioInvalid` refusal cases (`Some("pleme-io/checkout")`
+        // missing-colon, `Some("-upload-pack=evil")` leading-dash, /
+        // `Some("github:pleme-io/checkout?ref=main")` query-string, /
+        // `Some("github:pleme-io/checkout#main")` fragment-anchor, /
+        // `Some("github:pleme-io/{tpl}")` URI-template-placeholder — the
+        // sentinels pin the accessor doesn't silently absorb the
+        // refusal cases into a fallback).
+        //
+        // Second outer top-level [`Caixa`] `Option<&str>`-return scalar
+        // accessor pin on the substrate primitive — sibling of the peer
+        // [`Caixa::licenca`] (6d5bc28) pin
+        // (`licenca_returns_licenca_byte_string_verbatim_across_permutations`)
+        // that opened the "outer [`Caixa`] `Option<&str>` scalar"
+        // projection pin pattern this pin folds on. Sibling in shape to
+        // the peer per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) /
+        // [`crate::aplicacao::Placement::affinity`] (74ec2d3) accessor
+        // pins on the sibling per-M3-mesh-slot `Option<&str>`-return
+        // axes, extended onto the outer top-level [`Caixa`] universal-
+        // axis surface. Pins against a future silent detour that
+        // returned an owned `Option<String>` (which would type-check
+        // but silently allocate on every accessor call, breaking the
+        // zero-cost projection every peer sibling accessor carries), a
+        // `Some("") → None` collapse (which would silently absorb the
+        // `RepositorioEmpty` refusal case at the accessor boundary and
+        // the caixa-helm `Chart.yaml` `home:` fold would silently
+        // render a `home: null` / omitted field on a struct-literal
+        // `Caixa { repositorio: Some(""), .. }`), or a
+        // `None → Some(<default>)` collapse (which would silently reify
+        // the per-renderer fallback at the accessor boundary and every
+        // downstream consumer keying off the `Option::is_none()`
+        // discriminator would lose the "author omitted the slot"
+        // signal).
+        for repositorio in [
+            None,
+            Some(""),
+            Some("github:pleme-io/hello-rio"),
+            Some("https://github.com/pleme-io/checkout"),
+            Some("ssh://git@github.com/pleme-io/checkout.git"),
+            Some("git://github.com/pleme-io/checkout.git"),
+            Some("git@github.com:pleme-io/checkout.git"),
+            Some("file:///opt/mirrors/pleme-io/checkout"),
+            Some("pleme-io/checkout"),
+            Some("-upload-pack=evil"),
+            Some("github:pleme-io/checkout?ref=main"),
+            Some("github:pleme-io/checkout#main"),
+            Some("github:pleme-io/{tpl}"),
+        ] {
+            let c = caixa_with_repositorio(repositorio);
+            assert_eq!(
+                c.repositorio(),
+                repositorio,
+                "Caixa::repositorio must return :repositorio verbatim \
+                 (got {:?}, expected {repositorio:?})",
+                c.repositorio(),
+            );
+            assert_eq!(
+                c.repositorio(),
+                c.repositorio.as_deref(),
+                "Caixa::repositorio must byte-equal the raw \
+                 `self.repositorio.as_deref()` field access across every \
+                 value in the Option<&str> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_repositorio_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_repositorio`]'s empty-arm
+        // gate must key off [`Caixa::repositorio`], not the raw
+        // `self.repositorio.as_deref()` field access. Structurally: a
+        // `Caixa { repositorio: Some(""), .. }` must surface the
+        // `RepositorioEmpty` refusal exactly, and a
+        // `Caixa { repositorio: Some("github:pleme-io/hello-rio"), .. }`
+        // (the canonical `github:` shorthand form) must pass validate.
+        // The pair jointly pins the accessor + validate-gate
+        // composition: any future silent detour that had the accessor
+        // return `None` on the empty arm (a `.filter(|s| !s.is_empty())`
+        // collapse) would silently absorb the `RepositorioEmpty` refusal
+        // at the accessor boundary and the validate gate would accept a
+        // struct-literal `Caixa { repositorio: Some(""), .. }` — the
+        // composition pin catches that at caixa-core build time.
+        //
+        // Peer of the [`Caixa::licenca`] (6d5bc28)
+        // `validate_licenca_empty_arm_routes_through_accessor`
+        // composition pin on the sibling outer top-level [`Caixa`]
+        // `Option<&str>` universal-axis surface — same "the validate /
+        // shape-gate predicate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the second
+        // outer top-level [`Caixa`] universal-axis `Option<&str>`-
+        // composition surface.
+        let c = caixa_with_repositorio(Some(""));
+        assert!(
+            matches!(
+                c.validate_repositorio(),
+                Err(ManifestError::RepositorioEmpty),
+            ),
+            "validate_repositorio must reject repositorio == Some(\"\") \
+             with RepositorioEmpty — the accessor and the validate gate \
+             must route through the same substrate-primitive typed \
+             dispatch on the :repositorio empty arm",
+        );
+        let c = caixa_with_repositorio(Some("github:pleme-io/hello-rio"));
+        assert!(
+            c.validate_repositorio().is_ok(),
+            "validate_repositorio must accept repositorio == \
+             Some(\"github:pleme-io/hello-rio\") (the canonical \
+             `github:` shorthand git-repo-URL shape)",
+        );
+    }
+
+    #[test]
+    fn repositorio_projects_option_str_by_borrow() {
+        // The by-borrow pin: [`Caixa::repositorio`] returns
+        // `Option<&str>` by borrow — the `&str` borrows the underlying
+        // `String` storage of the `Option<String>` slot and the
+        // accessor must not allocate a fresh `String` on every call.
+        // Peer of the per-`:placement`
+        // [`crate::aplicacao::Placement::shard_key`] (7cd2a28) and the
+        // [`Caixa::licenca`] (6d5bc28) by-borrow pins on the peer
+        // `Option<&str>`-return axes, extended onto the second outer
+        // top-level [`Caixa`] universal-axis `Option<&str>` shape —
+        // the accessor's returned `&str` must borrow from `&self` (the
+        // returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // the same `Option<&str>` verbatim (idempotent, no side effects
+        // on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Option<String>` (which would type-check but silently
+        // allocate on every call, breaking the zero-cost projection
+        // every peer sibling accessor carries), or a one-arm-only
+        // accessor that returned a saturating value on some sentinel
+        // input (breaking the pass-through invariant the sibling
+        // required-scalar accessors carry).
+        for repositorio in [
+            None,
+            Some(""),
+            Some("github:pleme-io/hello-rio"),
+            Some("https://github.com/pleme-io/checkout"),
+        ] {
+            let c = caixa_with_repositorio(repositorio);
+            let first = c.repositorio();
+            let second = c.repositorio();
+            assert_eq!(
+                first, second,
+                "Caixa::repositorio must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 Option<&str>",
+            );
+            assert_eq!(
+                first, repositorio,
+                "Caixa::repositorio must return :repositorio verbatim by \
+                 borrow — got {first:?}, expected {repositorio:?}",
             );
         }
     }

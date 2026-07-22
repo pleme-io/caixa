@@ -837,7 +837,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
         app_version: caixa.versao.clone(),
         keywords,
         maintainers,
-        home: caixa.repositorio.clone(),
+        home: caixa.repositorio().map(str::to_owned),
         dependencies: vec![ChartDependency {
             name: opts.library_name.clone(),
             version: opts.library_version.clone(),
@@ -954,10 +954,7 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
          {license}.\n",
         chart_name = chart_name,
         descricao = descricao,
-        repo = caixa
-            .repositorio
-            .clone()
-            .unwrap_or_else(|| caixa.nome.clone()),
+        repo = caixa.repositorio().unwrap_or(caixa.nome.as_str()),
         versao = caixa.versao,
         license = caixa.licenca().unwrap_or("MIT"),
     )
