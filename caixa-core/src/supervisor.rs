@@ -988,6 +988,127 @@ impl SupervisorSpec {
         self.restart_window
     }
 
+    /// Substrate-canonical per-`:supervisor` `:children` OTP-shaped
+    /// static-child-list slice accessor every consumer that walks the
+    /// supervisor's declared child set keys off — returns the author-
+    /// declared `:supervisor :children` `Vec<ChildSpec>` verbatim as a
+    /// `&[ChildSpec]` slice-view, borrowed from the typed slot's own
+    /// `Vec<ChildSpec>` storage (a zero-copy slice-view over the same
+    /// backing buffer the `Serialize`/`Deserialize` derives round-trip
+    /// through). Non-optional: an empty slice is the load-bearing
+    /// "author declared `:children ()`" sentinel every consumer of the
+    /// cross-slot `SimpleOneForOne ↔ children.is_empty()` partition
+    /// keys off (`SimpleOneForOne` requires the empty slice; the peer
+    /// three strategies require a non-empty slice — the paired
+    /// [`SupervisorError::SimpleOneForOneWithStaticChildren`] /
+    /// [`SupervisorError::NoChildren`] refusal cascade pins the
+    /// partition on both arms).
+    ///
+    /// The `:supervisor :children` slot carries the OTP-shaped static
+    /// child list the supervisor materializes one ComputeUnit per
+    /// entry from — the Erlang/OTP `supervisor:init/1`'s
+    /// `{ok, {SupFlags, ChildSpecs}}` `ChildSpecs` list, projected
+    /// through the tatara-lisp `:children` author surface onto a typed
+    /// `Vec<ChildSpec>` whose per-element `(nome(),
+    /// versao_requirement(), restart)` triple the per-child
+    /// [`SupervisorSpec::validate`] loop already gates through the
+    /// lifted [`ChildSpec::nome`] (57c61d0) /
+    /// [`ChildSpec::versao_requirement`] (2c053c8) scalar accessors.
+    /// Every downstream consumer that fans on the static child list
+    /// keys off this slice (the [`SupervisorSpec::validate`]
+    /// `SimpleOneForOne ↔ non-SimpleOneForOne` partition dispatch's
+    /// `.is_empty()` probe on both arms, the [`SupervisorSpec::validate`]
+    /// per-child DNS-1123 / semver-requirement / duplicate-detection
+    /// fan-out loop, every future wasm-operator (M3) per-supervisor
+    /// hierarchical-reconciliation scheduler's per-child ComputeUnit
+    /// materialization loop, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's per-child
+    /// admission-webhook fan-out, the future `feira app graph`
+    /// per-supervisor tree-print traversal).
+    ///
+    /// Prior to this lift the `.children` `Vec<ChildSpec>` was accessed
+    /// inline at three production sites in `caixa-core/src/supervisor.rs`
+    /// — the [`SupervisorSpec::validate`] `SimpleOneForOne`-arm
+    /// `!self.children.is_empty()` cross-slot refusal probe, the peer
+    /// non-`SimpleOneForOne`-arm `self.children.is_empty()`
+    /// [`SupervisorError::NoChildren`] refusal probe, and the per-child
+    /// validate loop's `for child in &self.children` traversal head —
+    /// three open-coded field-accesses that expressed no compile-time
+    /// link back to the typed slot. A future extension of the
+    /// `:supervisor :children` axis to a richer author surface (a
+    /// per-cluster child-set overlay the operator pins through a future
+    /// `:supervisor :children-overrides` slot the MESH-COMPOSITION §III.2
+    /// supervision-canary roadmap acknowledges, a per-tenant
+    /// child-set-alias table the M4 CR materializer resolves per-CR,
+    /// a per-supervisor dynamic-child derivation the future adaptive-
+    /// supervision engine computes from child-failure-history topology,
+    /// a promotion of the plain `Vec<ChildSpec>` to a richer
+    /// `{static, dynamic}` partition once Erlang/OTP's
+    /// `simple_one_for_one` dynamic-child slot comes into typed scope)
+    /// would have had to be threaded through all three open-coded copies
+    /// in lockstep or one consumer would silently disagree with the
+    /// peers on which child-set a given supervisor resolves to — the
+    /// `SimpleOneForOne`-arm probe reading the raw slot while the peer
+    /// non-`SimpleOneForOne`-arm probe read an operator-resolved slot
+    /// would silently split the partition-dispatch's two-arm coherence
+    /// (a supervisor that satisfies neither arm's precondition, or that
+    /// satisfies both, at the cost of the paired
+    /// `SimpleOneForOneWithStaticChildren`/`NoChildren` refusal cascade
+    /// silently drifting from the per-child validate loop's actual
+    /// traversal input), a three-consumer split at the validator far
+    /// from the source `caixa.lisp` with no field naming the
+    /// child-set-drift root cause. Lifting the resolution rule to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the Supervisor's per-`:supervisor` static-child-list
+    /// surface reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// First slice-return (`&[T]`) accessor on any M2 or M3 typed slot
+    /// — the seed for the same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline the
+    /// closed [`crate::LimitsSpec`] / [`BehaviorSpec`] /
+    /// [`crate::UpgradeFromEntry`] scalar-accessor families each carry
+    /// on their `Copy` / `Option<Copy>` / `Option<&str>` axes, extended
+    /// onto the first `Vec`-carry axis on the substrate. The four peer
+    /// `Vec`-carry axes still unlifted at the time of this seed —
+    /// [`crate::Placement::clusters`] (`Vec<String>` per-cluster
+    /// distribution-target list), [`crate::AplicacaoSpec::membros`]
+    /// (`Vec<Membro>` per-Aplicacao member list),
+    /// [`crate::AplicacaoSpec::contratos`] (`Vec<WitContract>`
+    /// per-Aplicacao WIT-typed edge list),
+    /// [`crate::UpgradeFromEntry::instructions`]
+    /// (`Vec<UpgradeInstruction>` per-appup migration-instruction list)
+    /// — inherit this accessor's discipline as future compounding runs
+    /// migrate their consumers onto the shared slice-return shape.
+    /// Fourth (and final) accessor on the M2 supervisor-slot
+    /// `SupervisorSpec` type, sibling to the three `Copy`-return
+    /// [`SupervisorSpec::estrategia`] (eafb619) /
+    /// [`SupervisorSpec::max_restarts`] (7844f4e) /
+    /// [`SupervisorSpec::restart_window`] (7e7b32f) accessors — closes
+    /// the last unlifted per-`:supervisor` field axis (the
+    /// `Vec<ChildSpec>` static-child-list carrier) so every downstream
+    /// per-`:supervisor` reader now routes through a typed dispatch on
+    /// the substrate primitive. Named `children()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:children`) the field's own docstring already carries; the
+    /// accessor's identity maps onto the canonical OTP-shape
+    /// supervision vocabulary the [`SupervisorSpec::children`] field's
+    /// docstring already reaches for ("Static children ..."). Returns
+    /// `&[ChildSpec]` (not `&Vec<ChildSpec>`) because every downstream
+    /// consumer of the child list treats it as a read-only sequence —
+    /// the slice-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (`.is_empty()`, `.iter()`,
+    /// index, `.len()`) without leaking the backing `Vec`'s
+    /// grow/push/reserve surface that no consumer of the typed view
+    /// reaches for (the storage-side `Vec` remains reachable through
+    /// the `pub children` field for the mutation-carrying
+    /// `Caixa::supervisor_view` fold-in path in
+    /// `manifest.rs:supervisor_view`).
+    #[must_use]
+    pub fn children(&self) -> &[ChildSpec] {
+        self.children.as_slice()
+    }
+
     /// Validate the supervisor's typed shape — strategy ↔ children
     /// invariants, max_restarts > 0, restart_window > 0 when set,
     /// per-child non-empty + duplicate-free names.
@@ -1032,16 +1153,35 @@ impl SupervisorSpec {
         // call sites — sibling of the peer M3 [`crate::Placement::estrategia`]
         // (921fe1b) four-consumer migration on the per-`:placement`
         // distribution-strategy axis.
+        // Route the `SimpleOneForOne ↔ non-SimpleOneForOne` partition-
+        // dispatch's paired `.is_empty()` cross-slot refusal probes
+        // (the `SimpleOneForOne`-arm
+        // [`SupervisorError::SimpleOneForOneWithStaticChildren`] refusal
+        // and the non-`SimpleOneForOne`-arm [`SupervisorError::NoChildren`]
+        // refusal) through the lifted [`SupervisorSpec::children`]
+        // slice-return accessor rather than the raw `self.children`
+        // field access — the two paired production consumers of the
+        // per-`:supervisor` static-child-list scalar-shape now key off
+        // exactly one typed dispatch on the substrate primitive, so any
+        // future rebrand on the axis (a per-cluster child-set overlay
+        // the operator pins through a future `:supervisor
+        // :children-overrides` slot, a per-tenant child-set-alias table
+        // the M4 CR materializer resolves per-CR) migrates as a single
+        // caixa-core edit rather than a coordinated rewrite of the
+        // paired arms — first slice-return migration on any typed slot,
+        // seed for the peer per-`:placement :clusters`,
+        // per-`:membros`, per-`:contratos`, and per-`:upgrade-from
+        // :instructions` `Vec`-carry axes.
         match self.estrategia() {
             RestartStrategy::SimpleOneForOne => {
                 // SimpleOneForOne: children added at runtime. Static
                 // list must be empty (one shape declared elsewhere).
-                if !self.children.is_empty() {
+                if !self.children().is_empty() {
                     return Err(SupervisorError::SimpleOneForOneWithStaticChildren);
                 }
             }
             _ => {
-                if self.children.is_empty() {
+                if self.children().is_empty() {
                     return Err(SupervisorError::NoChildren {
                         estrategia: self.estrategia(),
                     });
@@ -1144,8 +1284,20 @@ impl SupervisorSpec {
                 |window| SupervisorError::RestartWindowExceedsCap { window },
             )?;
         }
+        // Route the per-child DNS-1123 / semver-requirement / duplicate-
+        // detection fan-out loop's traversal head through the lifted
+        // [`SupervisorSpec::children`] slice-return accessor rather than
+        // the raw `self.children` field access — the third production
+        // consumer of the per-`:supervisor` static-child-list surface
+        // now keys off exactly one typed dispatch on the substrate
+        // primitive. Paired with the sibling `SimpleOneForOne ↔
+        // non-SimpleOneForOne` partition-dispatch two-arm probe above
+        // to close the third and final open-coded `.children` field
+        // access in [`SupervisorSpec::validate`], so a future extension
+        // of the axis migrates as a single caixa-core edit rather than
+        // a coordinated rewrite of three call sites.
         let mut seen = std::collections::HashSet::new();
-        for child in &self.children {
+        for child in self.children() {
             // Every emitted cluster artifact's `metadata.name` for a
             // supervised child derives from this `:children :caixa` value
             // verbatim — the rendered `wasm.pleme.io/v1alpha1/ComputeUnit
@@ -5502,5 +5654,219 @@ mod tests {
                  expected {restart_window:?}",
             );
         }
+    }
+
+    // ── per-`:supervisor` `:children` typed-accessor coherence pins ─────────
+    //
+    // The [`SupervisorSpec::children`] accessor lift is the seed of the
+    // slice-return (`&[T]`) accessor discipline on the substrate — the four
+    // peer `Vec`-carry axes ([`crate::Placement::clusters`],
+    // [`crate::AplicacaoSpec::membros`], [`crate::AplicacaoSpec::contratos`],
+    // [`crate::UpgradeFromEntry::instructions`]) still key off the raw field
+    // access at the time of this seed, and inherit this pin family's
+    // discipline as future compounding runs migrate their consumers. The
+    // three pins below cover (1) the accessor's byte-equal projection
+    // against the raw field access across the empty / singleton / cohort
+    // fixtures the [`SupervisorSpec::validate`] partition-dispatch fans
+    // between, (2) the [`SupervisorSpec::validate`] `SimpleOneForOne ↔
+    // non-SimpleOneForOne` partition dispatch's paired `.is_empty()`
+    // consumer routing through the accessor on both arms, and (3) the
+    // per-child validate loop's traversal reading the same slice-view the
+    // accessor projects. Peer of the sibling M2
+    // [`validate_reads_through_lifted_estrategia_accessor`] (eafb619)
+    // two-consumer coherence pin on the per-`:supervisor`
+    // sibling-restart-strategy `Copy`-composite-enum scalar axis, extended
+    // onto the per-`:supervisor` static-child-list `Vec`-carry axis.
+
+    #[test]
+    fn supervisor_spec_children_returns_children_slice_byte_equal_across_permutations() {
+        // The canonical per-`:supervisor` static-child-list scalar-shape
+        // pin: [`SupervisorSpec::children`] must return the `:supervisor
+        // :children` typed `Vec<ChildSpec>` verbatim as a `&[ChildSpec]`
+        // slice-view over the same backing buffer the raw
+        // `self.children.as_slice()` field access borrows from, byte-
+        // equal across every representative fixture in the accept-set —
+        // the empty slice (the `SimpleOneForOne`-arm sentinel),
+        // the singleton slice (the minimal non-`SimpleOneForOne` shape),
+        // and a two-child cohort (a peer non-`SimpleOneForOne` shape
+        // with the peer three restart-policy variants in play).
+        //
+        // Pins against a future silent detour that returned
+        // `&Vec<ChildSpec>` (which would type-check but leak the
+        // storage-side `Vec`'s grow/push/reserve surface no consumer of
+        // the typed view reaches for), a fresh-allocated
+        // `Vec<ChildSpec>` copy (which would type-check via a coercion
+        // but silently break every downstream caller that relied on the
+        // slice sharing the backing buffer's identity), or an
+        // out-of-order or length-drifted projection (which would silently
+        // split the per-child validate loop's traversal input from the
+        // paired partition-dispatch `.is_empty()` probe's input).
+        //
+        // Peer of the sibling
+        // `supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations`
+        // (eafb619) `Copy`-composite-enum byte-equal pin on the
+        // per-`:supervisor` sibling-restart-strategy axis, extended onto
+        // the per-`:supervisor` static-child-list `Vec`-carry axis.
+        let fixtures: Vec<Vec<ChildSpec>> = vec![
+            Vec::new(),
+            vec![child("worker", "^0.1", RestartPolicy::Permanent)],
+            vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("cache-server", "^0.1", RestartPolicy::Transient),
+            ],
+            vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("cache-server", "^0.1", RestartPolicy::Transient),
+                child("scratch-job", "^0.1", RestartPolicy::Temporary),
+            ],
+        ];
+        for children in fixtures {
+            let s = SupervisorSpec {
+                children: children.clone(),
+                ..SupervisorSpec::default()
+            };
+            assert_eq!(
+                s.children(),
+                children.as_slice(),
+                "SupervisorSpec::children must return :supervisor \
+                 :children verbatim (got {:?}, expected {:?})",
+                s.children(),
+                children.as_slice(),
+            );
+            assert_eq!(
+                s.children(),
+                s.children.as_slice(),
+                "SupervisorSpec::children accessor and \
+                 .children.as_slice() field access must byte-equal — \
+                 the accessor is the substrate-primitive typed \
+                 dispatch every downstream static-child-list consumer \
+                 must route through",
+            );
+            assert_eq!(
+                s.children().len(),
+                s.children.len(),
+                "SupervisorSpec::children().len() must byte-equal \
+                 self.children.len() — a length-drift would silently \
+                 split the paired partition-dispatch `.is_empty()` \
+                 probe input from the per-child validate loop's \
+                 traversal input",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_children_accessor() {
+        // Three-consumer coherence pin: the [`SupervisorSpec::validate`]
+        // `SimpleOneForOne`-arm `!self.children().is_empty()` refusal
+        // probe (which must trip [`SupervisorError::SimpleOneForOneWithStaticChildren`]
+        // when the accessor projects a non-empty slice under a
+        // `SimpleOneForOne` estrategia), the peer non-`SimpleOneForOne`-arm
+        // `self.children().is_empty()` refusal probe (which must trip
+        // [`SupervisorError::NoChildren`] when the accessor projects the
+        // empty slice under any peer estrategia), and the per-child
+        // validate loop's `for child in self.children()` traversal
+        // (which must reach every entry in the same order the accessor
+        // projects) must all key off the lifted accessor, so any future
+        // rebrand on the typed slot's reader shape lands at exactly one
+        // place. Pins the three-site coherence by exercising each
+        // production consumer end-to-end: (1) the
+        // `SimpleOneForOneWithStaticChildren` refusal under a non-empty
+        // slice + `SimpleOneForOne` estrategia, (2) the `NoChildren`
+        // refusal under the empty slice + non-`SimpleOneForOne`
+        // estrategia across every peer variant, and (3) the per-child
+        // duplicate-detection surface fires on the second entry of a
+        // two-child cohort that shares a `:caixa` name (which requires
+        // the loop to reach both entries — a first-entry-only projection
+        // would silently pass since the dedup HashSet has room for the
+        // first insert).
+        //
+        // Peer of the sibling M2
+        // [`validate_reads_through_lifted_estrategia_accessor`] (eafb619)
+        // two-consumer coherence pin on the per-`:supervisor`
+        // sibling-restart-strategy axis, extended onto the
+        // per-`:supervisor` static-child-list `Vec`-carry axis.
+
+        // (1) `SimpleOneForOne`-arm probe: a non-empty slice under a
+        // `SimpleOneForOne` estrategia must trip
+        // `SimpleOneForOneWithStaticChildren`.
+        let s = SupervisorSpec {
+            estrategia: RestartStrategy::SimpleOneForOne,
+            children: vec![child("worker", "^0.1", RestartPolicy::Permanent)],
+            ..SupervisorSpec::default()
+        };
+        assert_eq!(
+            s.validate().unwrap_err(),
+            SupervisorError::SimpleOneForOneWithStaticChildren,
+            "SimpleOneForOne + non-empty children must trip \
+             SimpleOneForOneWithStaticChildren — the accessor projects \
+             a non-empty slice, and the SimpleOneForOne-arm refusal \
+             probe reads through the lifted accessor",
+        );
+        assert!(
+            !s.children().is_empty(),
+            "the SimpleOneForOne-arm refusal input must be a non-empty \
+             slice per the accessor's projection",
+        );
+
+        // (2) Peer non-`SimpleOneForOne`-arm probe: the empty slice
+        // under any peer estrategia must trip `NoChildren`.
+        for estrategia in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+        ] {
+            let s = SupervisorSpec {
+                estrategia,
+                children: Vec::new(),
+                ..SupervisorSpec::default()
+            };
+            match s.validate().unwrap_err() {
+                SupervisorError::NoChildren { estrategia: e } => {
+                    assert_eq!(
+                        e, estrategia,
+                        "NoChildren.estrategia must carry the author-\
+                         declared :supervisor :estrategia variant \
+                         verbatim (got {e:?}, expected {estrategia:?})",
+                    );
+                }
+                other => panic!(
+                    "expected NoChildren, got {other:?} for \
+                     estrategia={estrategia:?}"
+                ),
+            }
+            assert!(
+                s.children().is_empty(),
+                "the non-SimpleOneForOne-arm refusal input must be the \
+                 empty slice per the accessor's projection",
+            );
+        }
+
+        // (3) Per-child validate loop: a two-child cohort that shares a
+        // `:caixa` name must trip `DuplicateChildCaixa` — the loop must
+        // reach both entries through the accessor.
+        let s = SupervisorSpec {
+            estrategia: RestartStrategy::OneForOne,
+            children: vec![
+                child("worker", "^0.1", RestartPolicy::Permanent),
+                child("worker", "^0.2", RestartPolicy::Transient),
+            ],
+            ..SupervisorSpec::default()
+        };
+        match s.validate().unwrap_err() {
+            SupervisorError::DuplicateChildCaixa { caixa } => {
+                assert_eq!(
+                    caixa, "worker",
+                    "DuplicateChildCaixa.caixa must carry the shared \
+                     child `:caixa` name verbatim",
+                );
+            }
+            other => panic!("expected DuplicateChildCaixa, got {other:?}"),
+        }
+        assert_eq!(
+            s.children().len(),
+            2,
+            "the per-child validate loop's traversal input must be a \
+             two-element slice per the accessor's projection",
+        );
     }
 }
