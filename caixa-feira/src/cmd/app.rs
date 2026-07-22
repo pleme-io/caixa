@@ -69,10 +69,20 @@ impl GraphArgs {
             println!("{}", serde_json::to_string_pretty(&spec)?);
         } else {
             println!("Aplicacao {} v{}", caixa.nome, caixa.versao);
+            // Route the per-Aplicacao `:placement` printer's paired
+            // `.estrategia()` + `.clusters()` reads through the lifted
+            // [`caixa_core::AplicacaoSpec::placement`] outer accessor
+            // rather than the raw `spec.placement` field access — the
+            // `feira app graph` per-Aplicacao print line now reaches
+            // exactly one typed dispatch on the substrate primitive at
+            // the outer composition altitude before dispatching onto
+            // the per-axis accessors, sibling to the peer per-`:membros`
+            // / per-`:contratos` slice-return accessor consumers below.
+            let placement = spec.placement();
             println!(
                 "  placement: {:?} on clusters {:?}",
-                spec.placement.estrategia(),
-                spec.placement.clusters()
+                placement.estrategia(),
+                placement.clusters()
             );
             println!("  membros ({}):", spec.membros().len(),);
             for m in spec.membros() {
