@@ -821,7 +821,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
         .into_iter()
         .collect();
     let maintainers = caixa
-        .autores
+        .autores()
         .iter()
         .map(|a| Maintainer {
             name: a.clone(),
