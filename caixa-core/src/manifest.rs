@@ -676,6 +676,98 @@ impl Caixa {
         &self.nome
     }
 
+    /// Substrate-canonical per-`Caixa` `:versao` universal-axis SemVer-2
+    /// pinned-version scalar accessor every consumer of the top-level
+    /// manifest's version axis keys off — returns the author-declared
+    /// `:versao` byte-string verbatim as an `&str`, borrowed from the
+    /// typed slot's own `String` storage. Non-optional (`:versao` is a
+    /// required-axis scalar every `defcaixa` form must supply alongside
+    /// `:nome` / `:kind`; the [`Self::from_lisp`] derive rejects an
+    /// omitted / non-string `:versao` at parse time, so a `Caixa` past
+    /// parse definitionally carries a non-`None` `:versao`).
+    ///
+    /// The `:versao` slot carries the universal-axis SemVer-2
+    /// concrete-version body every kind of caixa emits under
+    /// (CAIXA-SDLC §I — the required-scalar every `defcaixa` form
+    /// supplies alongside `:nome` / `:kind`; the substrate-wide
+    /// pinned-version every downstream artifact-emitting consumer
+    /// composes under — the `lareira-<nome>` Helm chart's `Chart.yaml`
+    /// `version:` + `appVersion:` axes, the `feira publish` Zig-style
+    /// `v<versao>` git tag the [`crate::DEFAULT_PUBLISH_TAG_PREFIX`]
+    /// prefix composes on top of, the programs.yaml entry's `versao:`
+    /// value the `lareira-fleet-programs` aggregator carries onto each
+    /// rendered `ComputeUnit`, the OCI image's `:v<versao>` / `:latest`
+    /// tags every substrate-side `skopeo push` writes, the lacre
+    /// closure's pinned `concrete_versao`, and the `:upgrade-from :from`
+    /// prior-version references peers in the exact same SemVer-2 shape).
+    /// The typed slot's `String` accept-set (empty rejected through
+    /// [`ManifestError::VersaoEmpty`], SemVer-2-shape-invalid rejected
+    /// through [`ManifestError::VersaoInvalid`] past
+    /// [`semver::Version::parse`]) maps onto every load-bearing
+    /// downstream consumer the substrate carries — the [`Self::validate_versao`]
+    /// universal-axis validate gate at caixa-build time, the
+    /// [`crate::CaixaVersion::parse`] typed-wrapper resolver,
+    /// [`caixa-helm`]'s `Chart.yaml` `version:` / `appVersion:` fold,
+    /// [`caixa-flux`]'s `programs.yaml` entry `versao:` fold + the
+    /// `cluster_bundle` `GitRepository` `ref: { tag: v<versao> }`
+    /// derivation, [`caixa-mesh`]'s per-Aplicacao `programs.yaml` fan-
+    /// out entry `versao:` fold, [`caixa-feira`]'s `feira publish` git-
+    /// tag derivation (`format!("{prefix}{versao}")`), and every future
+    /// substrate renderer that emits an artifact keyed by the caixa's
+    /// pinned version.
+    ///
+    /// Prior to this lift the `.versao` field was accessed inline at a
+    /// dozen production sites across `caixa-core` (the universal-axis
+    /// [`Self::validate_versao`] gate + [`Dep::validate`]-adjacent
+    /// version-shape gates), `caixa-helm` (the `ChartYaml.version` /
+    /// `ChartYaml.app_version` folds), `caixa-flux` (the `programs.yaml`
+    /// entry `versao:` fold, the `cluster_bundle` `GitRepository` `ref:
+    /// { tag: v<versao> }` derivation), `caixa-mesh` (the per-Aplicacao
+    /// `programs.yaml` fan-out entry `versao:` fold), and `caixa-feira`
+    /// (the `feira publish` git-tag derivation + the `feira app graph` /
+    /// `feira app deploy` diagnostic renderers) — a dozen open-coded
+    /// field-accesses that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:versao` axis to a richer
+    /// author surface — a per-`:versao` structured `CaixaVersion` at the
+    /// storage layer (the substrate already carries a `CaixaVersion`
+    /// newtype at [`crate::version::CaixaVersion`], deferred until the
+    /// serde-transparent-newtype-through-DeriveTataraDomain path lands),
+    /// a per-registry `:versao` immutability overlay the M4 CR
+    /// materializer enforces per-CR, a promotion of the plain `String`
+    /// byte-string to a richer `PinnedVersao` newtype discriminated on
+    /// SemVer-2 pre-release / build-metadata presence — would have had
+    /// to be threaded through every open-coded copy in lockstep or the
+    /// validate gate and the dozen emit paths would silently disagree
+    /// on which version a given [`Caixa`] resolves to (an author's
+    /// `:versao "0.1.0"` would satisfy validate while one of the emit
+    /// paths silently rendered a drifted other version, or vice versa).
+    /// Lifting the resolution to a typed method on the substrate
+    /// primitive means every downstream consumer of the caixa's
+    /// per-`Caixa` pinned-version surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// Second outer top-level [`Caixa`] `&str`-return required-scalar
+    /// accessor — folds on the "outer [`Caixa`] `&str` required-scalar"
+    /// projection pattern the sibling per-`Caixa` [`Self::nome`]
+    /// (e6b7d97) opened. Sibling in shape to the peer per-`:membros`
+    /// [`crate::aplicacao::Membro::versao_requirement`] (4127bb6) /
+    /// per-`:children` [`crate::supervisor::ChildSpec::versao_requirement`]
+    /// (2c053c8) / per-`:upgrade-from` [`crate::UpgradeFromEntry::prior_versao`]
+    /// (75d27a8) per-sub-struct `:versao`-shaped `&str`-return accessors
+    /// on the sibling per-typed-slot version-carrier axes, extended here
+    /// to close the second outer top-level [`Caixa`] required-`&str`-
+    /// carrying axis so the two universal-axis identity-carrying
+    /// scalars every `defcaixa` form supplies (`:nome` + `:versao`)
+    /// share the same "one typed dispatch per axis" discipline. Named
+    /// `versao()` to match the storage field's name; the accessor's
+    /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
+    /// slot's docstring already carries.
+    #[must_use]
+    pub fn versao(&self) -> &str {
+        &self.versao
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1201,11 +1293,12 @@ impl Caixa {
     /// `MembroVersaoInvalid`, `EmptyChildVersion` before
     /// `ChildVersaoInvalid`, `NomeEmpty` before `NomeInvalid`).
     pub fn validate_versao(&self) -> Result<(), ManifestError> {
-        if self.versao.is_empty() {
+        let versao = self.versao();
+        if versao.is_empty() {
             return Err(ManifestError::VersaoEmpty);
         }
-        semver::Version::parse(&self.versao).map_err(|e| ManifestError::VersaoInvalid {
-            versao: self.versao.clone(),
+        semver::Version::parse(versao).map_err(|e| ManifestError::VersaoInvalid {
+            versao: versao.to_string(),
             reason: e.to_string(),
         })?;
         Ok(())
@@ -8022,6 +8115,172 @@ mod tests {
                 first, nome,
                 "Caixa::nome must return :nome verbatim by borrow — \
                  got {first}, expected {nome}",
+            );
+        }
+    }
+
+    #[test]
+    fn versao_returns_versao_byte_string_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:versao` universal-axis SemVer-2
+        // pinned-version scalar pin: [`Caixa::versao`] must return the
+        // `:versao` typed `String` verbatim as `&str`, byte-equal to the
+        // raw `.versao` field access across every representative value
+        // in the accept-set — the canonical `"0.1.0"` template baseline
+        // (the same `feira init`-scaffolded default the sibling
+        // `validate_versao_accepts_canonical_template` positive-control
+        // gate pins), plus every canonical SemVer-2 shape the sibling
+        // `validate_versao_accepts_canonical_forms` positive-arm sweep
+        // covers (`"0.0.0"`, `"1.0.0"`, `"0.2.0-rc.1"`,
+        // `"1.0.0-alpha.0"`, `"1.0.0+build.42"`, `"1.0.0-rc.1+build.42"`,
+        // `"10.20.30"`), plus every past-the-guard sentinel for the
+        // `VersaoEmpty` / `VersaoInvalid` refusal cases (`""` the empty
+        // arm, `"v0.1.0"` the git-tag-shape-leak footgun, `"0.1"` the
+        // missing-patch footgun, `"^0.1"` the requirement-shape-leak
+        // footgun, `"0.1.0.0"` the four-part-Java-convention footgun,
+        // `"latest"` the docker-tag-shape footgun — the sentinels pin
+        // the accessor doesn't silently absorb the refusal cases into a
+        // template-derived fallback like `"0.1.0"`).
+        //
+        // The past-the-guard sentinels pin the accessor doesn't silently
+        // absorb the refusal cases into a template-derived fallback (a
+        // future `.versao().is_empty().then(|| "0.1.0")` collapse would
+        // silently absorb the `VersaoEmpty` refusal at the accessor
+        // boundary and the validate gate would accept a struct-literal
+        // `Caixa { versao: "".into(), .. }` — the pin catches that at
+        // caixa-core build time).
+        //
+        // Second outer top-level [`Caixa`] `&str`-return required-scalar
+        // accessor pin — folds on the "outer [`Caixa`] `&str` required-
+        // scalar" projection pattern the sibling per-`Caixa`
+        // [`Caixa::nome`] (e6b7d97) opened. Sibling in shape to the peer
+        // per-`:membros` [`crate::aplicacao::Membro::versao_requirement`]
+        // (4127bb6) / per-`:children`
+        // [`crate::supervisor::ChildSpec::versao_requirement`] (2c053c8)
+        // / per-`:upgrade-from`
+        // [`crate::UpgradeFromEntry::prior_versao`] (75d27a8) per-sub-
+        // struct `:versao`-shaped `&str`-return accessor pins on the
+        // sibling per-typed-slot version-carrier axes, extended onto the
+        // second outer top-level [`Caixa`] universal-axis required-
+        // `String`-carry axis so the two universal-axis identity-
+        // carrying scalars every `defcaixa` form supplies (`:nome` +
+        // `:versao`) share the same "one typed dispatch per axis" pin
+        // discipline.
+        for versao in [
+            "0.1.0",
+            "0.0.0",
+            "1.0.0",
+            "0.2.0-rc.1",
+            "1.0.0-alpha.0",
+            "1.0.0+build.42",
+            "1.0.0-rc.1+build.42",
+            "10.20.30",
+            "",
+            "v0.1.0",
+            "0.1",
+            "^0.1",
+            "0.1.0.0",
+            "latest",
+        ] {
+            let c = caixa_with_versao(versao);
+            assert_eq!(
+                c.versao(),
+                versao,
+                "Caixa::versao must return :versao verbatim (got {}, \
+                 expected {versao})",
+                c.versao(),
+            );
+            assert_eq!(
+                c.versao(),
+                c.versao.as_str(),
+                "Caixa::versao must byte-equal the raw .versao field \
+                 access across every value in the String accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_versao_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_versao`]'s empty-arm gate
+        // must key off [`Caixa::versao`], not the raw `.versao` field
+        // access. Structurally: a `Caixa { versao: "".into(), .. }` must
+        // surface the `VersaoEmpty` refusal exactly, and the canonical
+        // `"0.1.0"` template baseline (the peer positive-arm the sibling
+        // `validate_versao_accepts_canonical_template` gate carves out)
+        // must pass validate. The pair jointly pins the accessor +
+        // validate-gate composition: any future silent detour that had
+        // the accessor return a fresh `"0.1.0"` on the empty arm
+        // (a `.versao().is_empty().then(|| "0.1.0")` fallback collapse)
+        // would silently absorb the `VersaoEmpty` refusal at the
+        // accessor boundary and the validate gate would accept a
+        // struct-literal `Caixa { versao: "".into(), .. }` — the
+        // composition pin catches that at caixa-core build time.
+        //
+        // Peer of the sibling per-`Caixa`
+        // `validate_nome_empty_arm_routes_through_accessor` (e6b7d97)
+        // composition pin on the sibling outer top-level [`Caixa`]
+        // required-`&str` universal-axis surface — same "the validate /
+        // shape-gate predicate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the peer
+        // outer top-level [`Caixa`] required-`&str` universal-axis
+        // pinned-version composition axis, closing the second
+        // coordinate of the "one canonical typed dispatch per per-Caixa
+        // required-`&str` universal-axis" discipline.
+        let c = caixa_with_versao("");
+        assert!(
+            matches!(c.validate_versao(), Err(ManifestError::VersaoEmpty)),
+            "validate_versao must reject versao == \"\" with VersaoEmpty — \
+             the accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the :versao \
+             empty-arm",
+        );
+        let c = caixa_with_versao("0.1.0");
+        assert!(
+            c.validate_versao().is_ok(),
+            "validate_versao must accept versao == \"0.1.0\" (the \
+             canonical SemVer-2 template baseline)",
+        );
+    }
+
+    #[test]
+    fn versao_projects_str_by_borrow() {
+        // The by-borrow pin: [`Caixa::versao`] returns `&str` by borrow
+        // — the `&str` borrows the underlying `String` storage of the
+        // required `versao` slot and the accessor must not allocate a
+        // fresh `String` on every call. Peer of the [`Caixa::nome`]
+        // (e6b7d97) by-borrow pin on the sibling outer top-level
+        // [`Caixa`] required-`&str`-return axis, extended onto the
+        // second outer top-level [`Caixa`] required-`&str`-return
+        // universal-axis pinned-version surface — the accessor's
+        // returned `&str` must borrow from `&self` (the returned
+        // reference's lifetime is tied to `&self`), and calling the
+        // accessor twice on the same [`Caixa`] must yield the same
+        // `&str` verbatim (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `String` (which would type-check but silently allocate on
+        // every call, breaking the zero-cost projection every peer
+        // sibling accessor carries), an accidental
+        // `semver::Version::parse(&self.versao).unwrap().to_string()`
+        // detour that returned a canonicalized fresh allocation through
+        // an already-canonical byte-string (breaking a future `const fn`
+        // regression and silently absorbing the `VersaoInvalid` refusal
+        // at the accessor boundary), or a one-arm-only accessor that
+        // returned a canonicalized value on some sentinel input
+        // (breaking the pass-through invariant the sibling required-
+        // scalar accessors carry).
+        for versao in ["0.1.0", "1.0.0", "0.2.0-rc.1", "1.0.0+build.42"] {
+            let c = caixa_with_versao(versao);
+            let first = c.versao();
+            let second = c.versao();
+            assert_eq!(
+                first, second,
+                "Caixa::versao must be idempotent — two successive \
+                 calls on the same &self must return the same &str",
+            );
+            assert_eq!(
+                first, versao,
+                "Caixa::versao must return :versao verbatim by borrow \
+                 — got {first}, expected {versao}",
             );
         }
     }
