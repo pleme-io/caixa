@@ -144,6 +144,156 @@ impl UpgradeFromEntry {
         &self.from
     }
 
+    /// Substrate-canonical per-`:upgrade-from :instructions`
+    /// OTP-appup migration-instruction-list slice-return accessor
+    /// every per-entry instructions-list reader keys off — returns
+    /// the author-declared `:instructions` list verbatim as a
+    /// `&[UpgradeInstruction]` slice-view over the same backing
+    /// buffer the raw `self.instructions.as_slice()` field access
+    /// borrows from. Non-optional: an empty slice is the load-bearing
+    /// "author declared `:instructions ()`" sentinel — the
+    /// `Vec<UpgradeInstruction>::default()`-produced empty tail the
+    /// [`UpgradeFromEntry::instructions`] field's own docstring already
+    /// names as the "no-op upgrade" shape (a metadata-only upgrade
+    /// entry — the operator's `:from`-match dispatch matches the entry
+    /// but runs no instructions, advancing straight to the "traffic
+    /// swap" step) and every peer within-entry cross-instruction gate
+    /// no-ops against without allocating a new `Vec` per gate.
+    ///
+    /// The `:upgrade-from :instructions` slot carries the per-`:from`
+    /// OTP-appup ordered instruction list the wasm-operator's hot-
+    /// upgrade dispatch materializes one per-instruction runtime
+    /// primitive from — the Erlang/OTP appup's per-`{from, to,
+    /// UpgradeInstructions, DowngradeInstructions}` entry's
+    /// `UpgradeInstructions` list (`code:load_module/1` /
+    /// `gen_server:code_change/3` / `code:soft_purge/1` /
+    /// `code:purge/1` / `restart_new_emulator` — see INSPIRATIONS
+    /// §II.4), projected through the tatara-lisp
+    /// `:upgrade-from ((:from … :instructions …))` author surface
+    /// onto a typed `Vec<UpgradeInstruction>` whose per-element
+    /// variant is [`UpgradeInstruction::LoadModule`] /
+    /// [`UpgradeInstruction::StateChange`] /
+    /// [`UpgradeInstruction::SoftPurge`] / [`UpgradeInstruction::Purge`]
+    /// / [`UpgradeInstruction::Restart`]. Every downstream consumer
+    /// that fans on the per-entry instruction list keys off this
+    /// slice (the [`UpgradeFromEntry::validate`] per-instruction
+    /// shape-check fan-out, the seven paired within-entry cross-
+    /// instruction gates [`Self::validate_restart_exclusive`] /
+    /// [`Self::validate_state_change_ordering`] /
+    /// [`Self::validate_purge_ordering`] /
+    /// [`Self::validate_state_change_before_cleanup`] /
+    /// [`Self::validate_load_singularity`] /
+    /// [`Self::validate_state_change_singularity`] /
+    /// [`Self::validate_cleanup_singularity`], the layout-side
+    /// [`crate::layout::StandardLayout`]'s per-`:state-change`
+    /// script-existence fan-out
+    /// ([`crate::layout::LayoutError::MissingEntry`]'s
+    /// `LAYOUT_MISSING_ENTRY_KIND_UPGRADE_SCRIPT` arm), the cross-slot
+    /// [`validate_upgrade_from_against_behavior`] gate's per-entry
+    /// `:state-change`-instruction detection loop, every future
+    /// wasm-operator (M2.5) per-`:from`-match hot-upgrade dispatch's
+    /// per-instruction runtime-primitive fan-out, every future M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-entry
+    /// upgrade-plan admission-webhook fan-out).
+    ///
+    /// Prior to this lift the `.instructions` `Vec<UpgradeInstruction>`
+    /// was accessed inline at nine production sites across
+    /// `caixa-core/src/upgrade.rs` and `caixa-core/src/layout.rs` —
+    /// the [`UpgradeFromEntry::validate`] per-instruction shape-check
+    /// fan-out (`for instr in &self.instructions`), the paired
+    /// [`Self::validate_restart_exclusive`] restart-count / other-kind
+    /// projections + `.len()` probe (three raw-access sites in one
+    /// gate), the [`Self::validate_state_change_ordering`] /
+    /// [`Self::validate_purge_ordering`] /
+    /// [`Self::validate_state_change_before_cleanup`] /
+    /// [`Self::validate_load_singularity`] /
+    /// [`Self::validate_state_change_singularity`] /
+    /// [`Self::validate_cleanup_singularity`] within-entry cross-
+    /// instruction gate traversal heads, the peer
+    /// [`validate_upgrade_from_against_behavior`] cross-slot
+    /// composition gate's `for instr in &entry.instructions`
+    /// per-entry `:state-change` detection loop, and the
+    /// [`crate::layout::StandardLayout`]-side
+    /// `for instr in &entry.instructions` per-`:state-change`
+    /// script-existence fan-out — nine open-coded field-accesses
+    /// that expressed no compile-time link back to the typed slot.
+    /// A future extension of the `:instructions` axis to a richer
+    /// author surface (a per-cluster overlay the operator pins
+    /// through a future `:upgrade-from :instructions-overrides` slot
+    /// so a canary cluster runs a `(:state-change …)` before the
+    /// production fleet does, a per-tenant instruction-list overlay
+    /// the M4 CR materializer resolves per-CR to inject cluster-
+    /// specific `(:soft-purge …)` cooldown adjustments, a promotion
+    /// of the plain `Vec<UpgradeInstruction>` to a richer
+    /// `{static, dynamic}` partition once virtual-actor-style
+    /// dynamic-instruction composition (an operator-derived
+    /// `(:load-module …)` sequence computed from the running
+    /// module set at upgrade time) comes into typed scope, a
+    /// per-instruction pre-condition scalar the future adaptive-
+    /// upgrade engine reads to bias per-instruction retry
+    /// strategy) would have had to be threaded through all nine
+    /// open-coded copies in lockstep or one consumer would silently
+    /// disagree with the peers on which instruction sequence a
+    /// given `:upgrade-from` entry resolves to — the per-
+    /// instruction shape-check reading the raw slot while the
+    /// paired within-entry ordering gates read an operator-resolved
+    /// slot would silently split the build-time per-entry gate
+    /// cohort from the layout-side script-existence gate + the
+    /// cross-slot behavior-composition gate + the runtime hot-
+    /// upgrade dispatch, a nine-consumer split across the seven
+    /// within-entry cross-instruction gates + the layout invariant +
+    /// the cross-slot composition gate far from the source
+    /// `caixa.lisp` with no field naming the instruction-sequence-
+    /// drift root cause. Lifting the resolution rule to a typed
+    /// method on the substrate primitive means every downstream
+    /// consumer of the per-entry OTP-appup instruction-list surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Fifth slice-return (`&[T]`) accessor on any M2 or M3 typed
+    /// slot — sibling to the seed M2
+    /// [`crate::SupervisorSpec::children`] (bc92bce) `&[ChildSpec]`
+    /// accessor on the peer per-`:supervisor` static-child-list
+    /// `Vec`-carry axis, the M3 [`crate::Placement::clusters`]
+    /// (a6e18d7) `&[String]` accessor on the peer per-`:placement`
+    /// distribution-target-list `Vec`-carry axis, the M3
+    /// [`crate::AplicacaoSpec::membros`] (6c77e36) `&[Membro]`
+    /// accessor on the peer per-`:membros` node-list `Vec`-carry
+    /// axis, and the M3 [`crate::AplicacaoSpec::contratos`]
+    /// (0dcc926) `&[WitContract]` accessor on the peer per-
+    /// `:contratos` edge-list `Vec`-carry axis. This lift closes the
+    /// last unlifted `Vec`-carry axis on any M2 or M3 typed slot in
+    /// the substrate — the four peer axes named in the
+    /// [`crate::SupervisorSpec::children`] seed docstring
+    /// (`Placement::clusters`, `AplicacaoSpec::membros`,
+    /// `AplicacaoSpec::contratos`, `UpgradeFromEntry::instructions`)
+    /// are now all closed. The per-`UpgradeFromEntry` type carried
+    /// two axes: the scalar `Copy`-return
+    /// [`UpgradeFromEntry::prior_versao`] (75d27a8) on the
+    /// `:from` axis, and now the slice-return
+    /// [`UpgradeFromEntry::instructions`] on the peer
+    /// `:instructions` axis. Named `instructions()` to match the
+    /// storage field's name verbatim and the tatara-lisp
+    /// author-surface term (`:instructions`) the field's own
+    /// docstring already carries; the accessor's identity maps
+    /// onto the canonical OTP-appup vocabulary the
+    /// [`crate::upgrade`] module doc already reaches for ("runs
+    /// the instructions in order"). Returns `&[UpgradeInstruction]`
+    /// (not `&Vec<UpgradeInstruction>`) because every downstream
+    /// consumer of the instruction list treats it as a read-only
+    /// sequence — the slice-view is the narrowest borrow that
+    /// supports every present + roadmapped consumer (`.iter()`,
+    /// `.len()`, `.filter(...).count()`) without leaking the
+    /// backing `Vec`'s grow/push/reserve surface that no consumer
+    /// of the typed view reaches for (the storage-side `Vec`
+    /// remains reachable through the `pub instructions` field for
+    /// the mutation-carrying `Serialize`/`Deserialize` derive
+    /// round-trip and per-test fixture-mutation paths).
+    #[must_use]
+    pub fn instructions(&self) -> &[UpgradeInstruction] {
+        self.instructions.as_slice()
+    }
+
     /// Verify the `:from` field is a valid semver, every instruction's
     /// typed shape, the within-entry `(:restart)`-exclusivity invariant
     /// (an entry containing `(:restart)` must contain exactly one
@@ -187,7 +337,14 @@ impl UpgradeFromEntry {
         // uses (`validate_module`'s ModuleEmpty arm precedes the
         // DNS-1123 predicate; `validate` on `StateChange` consults
         // the lifted `is_sandboxed_relative_path` shape gate first).
-        for instr in &self.instructions {
+        // Route the per-instruction shape-check fan-out through the
+        // lifted [`Self::instructions`] slice-return accessor rather
+        // than the raw `self.instructions` field access — first of
+        // nine paired production consumers of the per-`:upgrade-from
+        // :instructions` OTP-appup migration-instruction-list surface
+        // that now key off exactly one typed dispatch on the substrate
+        // primitive.
+        for instr in self.instructions() {
             instr.validate()?;
         }
         self.validate_restart_exclusive()?;
@@ -246,19 +403,23 @@ impl UpgradeFromEntry {
     /// extended onto the first within-list cross-instruction axis on
     /// the `:upgrade-from` typed slot.
     fn validate_restart_exclusive(&self) -> Result<(), UpgradeError> {
-        let restart_count = self
-            .instructions
+        // Route the paired restart-count / instructions-len / other-
+        // kind projections through the lifted [`Self::instructions`]
+        // slice-return accessor rather than the raw `self.instructions`
+        // field access — three raw-access sites in one gate collapse
+        // onto exactly one typed dispatch on the substrate primitive.
+        let instructions = self.instructions();
+        let restart_count = instructions
             .iter()
             .filter(|i| matches!(i, UpgradeInstruction::Restart))
             .count();
         if restart_count == 0 {
             return Ok(());
         }
-        if restart_count == 1 && self.instructions.len() == 1 {
+        if restart_count == 1 && instructions.len() == 1 {
             return Ok(());
         }
-        let other_kinds: Vec<&'static str> = self
-            .instructions
+        let other_kinds: Vec<&'static str> = instructions
             .iter()
             .filter(|i| !matches!(i, UpgradeInstruction::Restart))
             .map(UpgradeInstruction::lisp_form)
@@ -317,7 +478,7 @@ impl UpgradeFromEntry {
     /// `StateChange`).
     fn validate_state_change_ordering(&self) -> Result<(), UpgradeError> {
         let mut loaded = false;
-        for instr in &self.instructions {
+        for instr in self.instructions() {
             match instr {
                 UpgradeInstruction::LoadModule { .. } => loaded = true,
                 UpgradeInstruction::StateChange { script } if !loaded => {
@@ -382,7 +543,7 @@ impl UpgradeFromEntry {
     /// author should see the migration-side diagnostic first).
     fn validate_purge_ordering(&self) -> Result<(), UpgradeError> {
         let mut loaded = false;
-        for instr in &self.instructions {
+        for instr in self.instructions() {
             match instr {
                 UpgradeInstruction::LoadModule { .. } => loaded = true,
                 UpgradeInstruction::SoftPurge { module } | UpgradeInstruction::Purge { module }
@@ -502,7 +663,7 @@ impl UpgradeFromEntry {
     /// without prior load).
     fn validate_state_change_before_cleanup(&self) -> Result<(), UpgradeError> {
         let mut prior_cleanup: Option<(&str, &'static str)> = None;
-        for instr in &self.instructions {
+        for instr in self.instructions() {
             match instr {
                 UpgradeInstruction::SoftPurge { module } | UpgradeInstruction::Purge { module } => {
                     if prior_cleanup.is_none() {
@@ -613,7 +774,7 @@ impl UpgradeFromEntry {
     /// duplicate gate's first-collision discipline.
     fn validate_cleanup_singularity(&self) -> Result<(), UpgradeError> {
         let mut seen: Vec<(&str, &'static str)> = Vec::new();
-        for instr in &self.instructions {
+        for instr in self.instructions() {
             let (module, kind) = match instr {
                 UpgradeInstruction::SoftPurge { module } => (
                     module.as_str(),
@@ -724,7 +885,7 @@ impl UpgradeFromEntry {
     /// and every peer duplicate gate's first-collision discipline.
     fn validate_load_singularity(&self) -> Result<(), UpgradeError> {
         let mut seen: Vec<&str> = Vec::new();
-        for instr in &self.instructions {
+        for instr in self.instructions() {
             let module = match instr {
                 UpgradeInstruction::LoadModule { module } => module.as_str(),
                 _ => continue,
@@ -840,7 +1001,7 @@ impl UpgradeFromEntry {
     /// and every peer duplicate gate's first-collision discipline.
     fn validate_state_change_singularity(&self) -> Result<(), UpgradeError> {
         let mut seen: Vec<&std::path::Path> = Vec::new();
-        for instr in &self.instructions {
+        for instr in self.instructions() {
             let script = match instr {
                 UpgradeInstruction::StateChange { script } => script.as_path(),
                 _ => continue,
@@ -1149,7 +1310,7 @@ pub fn validate_upgrade_from_against_behavior(
         return Ok(());
     }
     for entry in entries {
-        for instr in &entry.instructions {
+        for instr in entry.instructions() {
             if let UpgradeInstruction::StateChange { script } = instr {
                 return Err(UpgradeError::StateChangeWithoutOnStateChangeCallback {
                     from: entry.prior_versao().to_string(),
@@ -5729,5 +5890,203 @@ mod tests {
                  const (expected {expected:?})",
             );
         }
+    }
+
+    #[test]
+    fn upgrade_from_entry_instructions_returns_instructions_slice_byte_equal_across_permutations() {
+        // The canonical per-`:upgrade-from :instructions` OTP-appup
+        // migration-instruction-list slice-shape pin:
+        // [`UpgradeFromEntry::instructions`] must return the
+        // `:instructions` typed `Vec<UpgradeInstruction>` verbatim as
+        // a `&[UpgradeInstruction]` slice-view over the same backing
+        // buffer the raw `self.instructions.as_slice()` field access
+        // borrows from, byte-equal across every representative fixture
+        // in the accept-set — the empty slice (the "no-op upgrade" /
+        // metadata-only sentinel the [`UpgradeFromEntry::instructions`]
+        // field's own docstring names), the singleton slice on every
+        // variant of the [`UpgradeInstruction`] arm-space
+        // (`LoadModule` / `StateChange` / `SoftPurge` / `Purge` /
+        // `Restart` — the five OTP-appup runtime-primitive variants),
+        // and multi-instruction cohorts (the canonical
+        // `LoadModule → StateChange → SoftPurge` OTP two-phase code-
+        // load + state-migration triad the module doc names as the
+        // "runs the instructions in order" example).
+        //
+        // Pins against a future silent detour that returned
+        // `&Vec<UpgradeInstruction>` (which would type-check but leak
+        // the storage-side `Vec`'s grow/push/reserve surface no
+        // consumer of the typed view reaches for), a fresh-allocated
+        // `Vec<UpgradeInstruction>` copy (which would type-check via
+        // a coercion but silently break every downstream caller that
+        // relied on the slice sharing the backing buffer's identity),
+        // or an out-of-order or length-drifted projection (which
+        // would silently split the paired within-entry cross-
+        // instruction ordering gates' inputs from the peer per-
+        // instruction shape-check loop's input, one seven-gate cohort
+        // silently drifting from the peer gate's actual traversal
+        // input).
+        //
+        // Peer of the sibling
+        // `aplicacao_spec_contratos_returns_contratos_slice_byte_equal_across_permutations`
+        // (0dcc926) `&[WitContract]` byte-equal pin on the M3 per-
+        // `:contratos` edge-list axis, extended onto the M2 per-
+        // `:upgrade-from :instructions` migration-instruction-list
+        // axis — the fifth `&[T]`-return byte-equal pin, closing the
+        // last unlifted `Vec`-carry axis on any M2 or M3 typed slot.
+        let fixtures: Vec<Vec<UpgradeInstruction>> = vec![
+            Vec::new(),
+            vec![UpgradeInstruction::LoadModule { module: "x".into() }],
+            vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            }],
+            vec![UpgradeInstruction::SoftPurge {
+                module: "x-old".into(),
+            }],
+            vec![UpgradeInstruction::Purge {
+                module: "x-old".into(),
+            }],
+            vec![UpgradeInstruction::Restart],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        ];
+        for instructions in fixtures {
+            let e = UpgradeFromEntry {
+                from: "0.1.0".into(),
+                instructions: instructions.clone(),
+            };
+            assert_eq!(
+                e.instructions(),
+                e.instructions.as_slice(),
+                "UpgradeFromEntry::instructions must project the raw \
+                 `:instructions` `Vec<UpgradeInstruction>` verbatim as a \
+                 `&[UpgradeInstruction]` slice-view over the same backing buffer \
+                 (fixture: {instructions:?})",
+            );
+            assert_eq!(
+                e.instructions().len(),
+                instructions.len(),
+                "UpgradeFromEntry::instructions length must match the raw \
+                 `:instructions` `Vec<UpgradeInstruction>` length (fixture: {instructions:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_instructions_accessor() {
+        // Three-consumer coherence pin on the lifted
+        // [`UpgradeFromEntry::instructions`] slice-return accessor:
+        // exercises three of the nine paired production consumers of
+        // the per-`:upgrade-from :instructions` OTP-appup migration-
+        // instruction-list surface through end-to-end validate() paths
+        // that require the accessor to reach each of the fixture's
+        // instructions.
+        //
+        // (1) The per-instruction shape-check fan-out
+        // ([`UpgradeFromEntry::validate`]'s `for instr in
+        // self.instructions()` loop): pass the well-formed load →
+        // state-change → soft-purge triad — `validate()` must accept
+        // it, which requires the accessor to project every entry so
+        // each `instr.validate()` fires.
+        //
+        // (2) The within-entry state-change-ordering gate
+        // ([`Self::validate_state_change_ordering`]): pass a
+        // `((:state-change …))` singleton — `validate()` must return
+        // [`UpgradeError::StateChangeWithoutPriorLoad`], which
+        // requires the accessor to reach the state-change so the
+        // no-prior-load probe fires.
+        //
+        // (3) The within-entry per-module cleanup-singularity gate
+        // ([`Self::validate_cleanup_singularity`]): pass a
+        // `((:load-module "x") (:soft-purge "x-old") (:soft-purge
+        // "x-old"))` cohort — `validate()` must return
+        // [`UpgradeError::DuplicateCleanup`], which requires the
+        // accessor to iterate the whole list so the second `SoftPurge`
+        // matches the first via the `seen` set.
+        //
+        // Peer of the sibling
+        // `validate_reads_through_lifted_contratos_accessor` (0dcc926)
+        // three-consumer coherence pin on the M3 per-`:contratos`
+        // edge-list axis, extended onto the M2 per-`:upgrade-from
+        // :instructions` migration-instruction-list axis.
+
+        // (1) accept the well-formed OTP two-phase code-load triad
+        let well_formed = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/migrations/v01-to-v02.lisp"),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        assert!(
+            well_formed.validate().is_ok(),
+            "well-formed `LoadModule → StateChange → SoftPurge` triad must accept — \
+             the per-instruction shape-check fan-out requires the accessor to reach every entry"
+        );
+
+        // (2) refuse a `((:state-change …))` singleton — the
+        // state-change-without-prior-load gate must fire, which
+        // requires the accessor to reach the single instruction.
+        let no_prior_load = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            }],
+        );
+        match no_prior_load.validate() {
+            Err(UpgradeError::StateChangeWithoutPriorLoad { .. }) => {}
+            other => panic!(
+                "expected StateChangeWithoutPriorLoad on a `((:state-change …))` singleton \
+                 — the within-entry state-change-ordering gate must reach the single \
+                 instruction through the lifted accessor; got: {other:?}"
+            ),
+        }
+
+        // (3) refuse a `((:load-module "x") (:soft-purge "x-old")
+        // (:soft-purge "x-old"))` cohort — the per-module cleanup-
+        // singularity gate must fire on the second `SoftPurge`, which
+        // requires the accessor to iterate the whole list.
+        let duplicate_cleanup = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+        );
+        match duplicate_cleanup.validate() {
+            Err(UpgradeError::DuplicateCleanup { module, .. }) => {
+                assert_eq!(
+                    module, "x-old",
+                    "DuplicateCleanup must name the colliding module `x-old` — the per-module \
+                     cleanup-singularity gate must iterate through the lifted accessor to \
+                     match the second SoftPurge against the first via the `seen` set"
+                );
+            }
+            other => panic!(
+                "expected DuplicateCleanup on `((:load-module x) (:soft-purge x-old) \
+                 (:soft-purge x-old))` — the within-entry cleanup-singularity gate must \
+                 iterate the whole list through the lifted accessor; got: {other:?}"
+            ),
+        }
+
+        // Path::new suppresses the unused-import warning if the
+        // outer module trims `use std::path::Path;` in a future edit.
+        let _ = Path::new("lib/m.lisp");
     }
 }

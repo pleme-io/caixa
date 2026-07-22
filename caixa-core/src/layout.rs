@@ -1011,7 +1011,7 @@ impl LayoutInvariants for StandardLayout {
             issue: err.to_string(),
         })?;
         for entry in &caixa.upgrade_from {
-            for instr in &entry.instructions {
+            for instr in entry.instructions() {
                 if let Some(p) = instr.declared_path() {
                     let full = root.join(p);
                     if !self.exists(&full) {
