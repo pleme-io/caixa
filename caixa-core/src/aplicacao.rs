@@ -4532,6 +4532,115 @@ pub struct AplicacaoSpec {
 }
 
 impl AplicacaoSpec {
+    /// Substrate-canonical per-`:membros` `Vec<Membro>` MESH-COMPOSITION
+    /// per-Aplicacao member-list slice-return accessor every
+    /// per-Aplicacao member-list reader keys off — returns the author-
+    /// declared `:membros` list verbatim as a `&[Membro]` slice-view
+    /// over the same backing buffer the raw `self.membros.as_slice()`
+    /// field access borrows from.
+    ///
+    /// The `:membros` slot carries the M3 mesh-slot per-Aplicacao
+    /// member list — the load-bearing identity of the application graph
+    /// (MESH-COMPOSITION §III.1: the graph nodes are a set, not a
+    /// multiset). Every per-`:membros` entry pairs a `:caixa` member-
+    /// caixa name (through the lifted [`Membro::nome`] (4a32abf)
+    /// accessor) with a `:versao` semver-requirement string (through
+    /// the lifted [`Membro::versao_requirement`] (a40b0e3) accessor),
+    /// and every downstream consumer that fans on the member-set keys
+    /// off this slice (the [`AplicacaoSpec::validate`] `:contratos`
+    /// membership-lookup `HashSet<&str>` seed's collect input, the
+    /// [`AplicacaoSpec::validate_membros`] pre-flight `.is_empty()`
+    /// [`AplicacaoError::NoMembros`] refusal probe, the same method's
+    /// per-member DNS-1123 / semver-requirement / duplicate-detection
+    /// fan-out loop, the [`AplicacaoSpec::detect_sync_cycles`]
+    /// adjacency-list seed, the [`caixa_mesh::programs_for_aplicacao`]
+    /// programs.yaml per-`:membros` fan-out emitter's per-entry
+    /// mapping-composition loop, the `feira app graph` per-Aplicacao
+    /// member-count print line and per-member tree traversal,
+    /// every future wasm-operator (M4) per-Aplicacao CR materializer's
+    /// per-member `ComputeUnit` fan-out, the future M5 adaptive-
+    /// placement engine's per-member weight-topology reader).
+    ///
+    /// Prior to this lift the `.membros` `Vec<Membro>` was accessed
+    /// inline at six production sites — the [`AplicacaoSpec::validate`]
+    /// `self.membros.iter().map(Membro::nome).collect()` name-set seed,
+    /// [`AplicacaoSpec::validate_membros`]'s pre-flight
+    /// `self.membros.is_empty()` [`AplicacaoError::NoMembros`] refusal
+    /// probe, the same method's per-member `for m in &self.membros`
+    /// validate-loop traversal head, the
+    /// [`AplicacaoSpec::detect_sync_cycles`]'s
+    /// `for m in &self.membros` adjacency-list seed, the
+    /// [`caixa_mesh::programs_for_aplicacao`] emitter's
+    /// `Vec::with_capacity(spec.membros.len())` output-buffer sizing
+    /// paired with the peer `for m in &spec.membros` per-entry fan-out
+    /// loop, and the `feira app graph` per-Aplicacao print line's
+    /// `spec.membros.len()` count formatter argument paired with the
+    /// peer `for m in &spec.membros` per-member tree traversal — six
+    /// open-coded field-accesses that expressed no compile-time link
+    /// back to the typed slot. A future extension of the `:membros`
+    /// axis to a richer author surface (a per-cluster member-set
+    /// overlay the operator pins through a future
+    /// `:membros-overrides` slot the MESH-COMPOSITION §V federation
+    /// roadmap acknowledges, a per-tenant member-alias table the M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer resolves per-
+    /// CR at admission time, a per-Aplicacao dynamic member-set
+    /// derivation the future adaptive-placement engine computes from
+    /// weighted membership topology, a promotion of the plain
+    /// `Vec<Membro>` to a richer `{static, dynamic}` partition once
+    /// Orleans-style virtual-actor dynamic-membership comes into typed
+    /// scope) would have had to be threaded through all six open-coded
+    /// copies in lockstep or one consumer would silently disagree with
+    /// the peers on which member-set a given Aplicacao resolves to —
+    /// the `HashSet<&str>` name-set seed reading the raw slot while
+    /// the peer `.is_empty()` refusal probe read an operator-resolved
+    /// slot would silently split the `:contratos` membership-lookup
+    /// input from the pre-flight-refusal input, a six-consumer split
+    /// at the validator + programs.yaml emitter + graph printer far
+    /// from the source `caixa.lisp` with no field naming the member-
+    /// set-drift root cause. Lifting the resolution rule to a typed
+    /// method on the substrate primitive means every downstream
+    /// consumer of the Aplicacao's per-`:membros` member-list surface
+    /// reaches for exactly one typed dispatch — the resolver's accept-
+    /// set migrates as a unit on any future axis addition.
+    ///
+    /// Third slice-return (`&[T]`) accessor on any M2 or M3 typed slot
+    /// — sibling to the seed M2 [`crate::SupervisorSpec::children`]
+    /// (bc92bce) `&[ChildSpec]` accessor on the peer per-`:supervisor`
+    /// static-child-list `Vec`-carry axis, and to the M3
+    /// [`crate::Placement::clusters`] (a6e18d7) `&[String]` accessor
+    /// on the peer per-`:placement` distribution-target-list `Vec`-
+    /// carry axis. Same "one typed dispatch on the substrate primitive,
+    /// thin projections at each consumer" discipline. The two peer
+    /// `Vec`-carry axes still unlifted at the time of this lift —
+    /// [`AplicacaoSpec::contratos`] (`Vec<WitContract>` per-Aplicacao
+    /// WIT-typed edge list) and
+    /// [`crate::UpgradeFromEntry::instructions`]
+    /// (`Vec<UpgradeInstruction>` per-appup migration-instruction list)
+    /// — inherit this accessor's discipline as future compounding runs
+    /// migrate their consumers onto the shared slice-return shape.
+    /// First `&[T]`-return accessor on the top-level M3 mesh-slot
+    /// `AplicacaoSpec` type itself, extending the discipline beyond
+    /// the inner per-slot types ([`crate::Placement`],
+    /// [`crate::SupervisorSpec`]) onto the outermost typed composition
+    /// view every renderer consumes. Named `membros()` to match the
+    /// storage field's name verbatim and the tatara-lisp author-
+    /// surface term (`:membros`) the field's own docstring already
+    /// carries; the accessor's identity maps onto the canonical
+    /// MESH-COMPOSITION §III.1 vocabulary the slot's docstring already
+    /// reaches for. Returns `&[Membro]` (not `&Vec<Membro>`) because
+    /// every downstream consumer of the member list treats it as a
+    /// read-only sequence — the slice-view is the narrowest borrow
+    /// that supports every present + roadmapped consumer
+    /// (`.is_empty()`, `.iter()`, `.len()`) without leaking the
+    /// backing `Vec`'s grow/push/reserve surface that no consumer of
+    /// the typed view reaches for (the storage-side `Vec` remains
+    /// reachable through the `pub membros` field for the mutation-
+    /// carrying serde round-trip and per-test fixture-mutation paths).
+    #[must_use]
+    pub fn membros(&self) -> &[Membro] {
+        self.membros.as_slice()
+    }
+
     /// Validate the typed shape:
     ///   - `:membros` is non-empty; every entry has a non-empty `:caixa`
     ///     and a non-empty `:versao`; no two entries share the same
@@ -4568,7 +4677,7 @@ impl AplicacaoSpec {
     pub fn validate(&self) -> Result<(), AplicacaoError> {
         self.validate_membros()?;
         let names: std::collections::HashSet<&str> =
-            self.membros.iter().map(Membro::nome).collect();
+            self.membros().iter().map(Membro::nome).collect();
 
         // Identity key for the typed-edge duplicate gate below: every
         // field that distinguishes one contract from another. Two
@@ -4879,11 +4988,11 @@ impl AplicacaoSpec {
     /// §III.3 promise that the `:membros` set — the load-bearing identity
     /// of the application graph — is well-formed by construction.
     fn validate_membros(&self) -> Result<(), AplicacaoError> {
-        if self.membros.is_empty() {
+        if self.membros().is_empty() {
             return Err(AplicacaoError::NoMembros);
         }
         let mut seen = std::collections::HashSet::new();
-        for m in &self.membros {
+        for m in self.membros() {
             if m.caixa.is_empty() {
                 return Err(AplicacaoError::MembroCaixaEmpty);
             }
@@ -5367,7 +5476,7 @@ impl AplicacaoSpec {
         }
 
         let mut adj: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
-        for m in &self.membros {
+        for m in self.membros() {
             adj.entry(m.nome()).or_default();
         }
         for c in &self.contratos {
@@ -16744,6 +16853,184 @@ mod tests {
             spec.placement.clusters().len(),
             2,
             "the per-cluster validate loop's traversal input must be \
+             a two-element slice per the accessor's projection",
+        );
+    }
+
+    #[test]
+    fn aplicacao_spec_membros_returns_membros_slice_byte_equal_across_permutations() {
+        // The canonical per-`:membros` member-list-slice-shape pin:
+        // [`AplicacaoSpec::membros`] must return the `:membros` typed
+        // `Vec<Membro>` verbatim as a `&[Membro]` slice-view over the
+        // same backing buffer the raw `self.membros.as_slice()` field
+        // access borrows from, byte-equal across every representative
+        // fixture in the accept-set — the empty slice (the pre-
+        // validation sentinel every [`AplicacaoError::NoMembros`]
+        // refusal keys off), the singleton slice (the minimal one-
+        // Servico Aplicacao shape), and multi-entry cohorts (the peer
+        // multi-Servico shapes MESH-COMPOSITION §III.1 declares as the
+        // load-bearing identity of the application graph).
+        //
+        // Pins against a future silent detour that returned
+        // `&Vec<Membro>` (which would type-check but leak the storage-
+        // side `Vec`'s grow/push/reserve surface no consumer of the
+        // typed view reaches for), a fresh-allocated `Vec<Membro>` copy
+        // (which would type-check via a coercion but silently break
+        // every downstream caller that relied on the slice sharing the
+        // backing buffer's identity), or an out-of-order or length-
+        // drifted projection (which would silently split the paired
+        // `HashSet<&str>` name-set seed's collect input from the
+        // pre-flight `.is_empty()` refusal probe's input from the per-
+        // member validate loop's traversal input from the
+        // programs.yaml emitter's per-entry fan-out loop's input from
+        // the `feira app graph` per-member print traversal's input).
+        //
+        // Peer of the sibling M2
+        // `supervisor_spec_children_returns_children_slice_byte_equal_across_permutations`
+        // (bc92bce) `&[ChildSpec]` byte-equal pin on the per-
+        // `:supervisor` static-child-list axis and the sibling M3
+        // `placement_clusters_returns_clusters_slice_byte_equal_across_permutations`
+        // (a6e18d7) `&[String]` byte-equal pin on the per-
+        // `:placement` distribution-target-list axis — extends the
+        // slice-return-accessor byte-equal-projection discipline onto
+        // the outermost M3 mesh-slot type's per-Aplicacao member-list
+        // `Vec`-carry axis.
+        let fixtures: Vec<Vec<Membro>> = vec![
+            Vec::new(),
+            vec![membro("catalog", "^0.1")],
+            vec![membro("catalog", "^0.1"), membro("cart", "^0.1")],
+            vec![
+                membro("catalog", "^0.1"),
+                membro("cart", "^0.1"),
+                membro("payment", "^0.2"),
+            ],
+        ];
+        for membros in fixtures {
+            let s = AplicacaoSpec {
+                membros: membros.clone(),
+                contratos: Vec::new(),
+                politicas: MeshPolicy::default(),
+                placement: Placement::default(),
+                entrada: None,
+            };
+            assert_eq!(
+                s.membros(),
+                membros.as_slice(),
+                "AplicacaoSpec::membros must return :membros verbatim \
+                 (got {:?}, expected {:?})",
+                s.membros(),
+                membros.as_slice(),
+            );
+            assert_eq!(
+                s.membros(),
+                s.membros.as_slice(),
+                "AplicacaoSpec::membros accessor and .membros.as_slice() \
+                 field access must byte-equal — the accessor is the \
+                 substrate-primitive typed dispatch every downstream \
+                 member-list consumer must route through",
+            );
+            assert_eq!(
+                s.membros().len(),
+                s.membros.len(),
+                "AplicacaoSpec::membros().len() must byte-equal \
+                 self.membros.len() — a length-drift would silently \
+                 split the paired `HashSet<&str>` name-set seed's \
+                 collect input from the pre-flight `.is_empty()` \
+                 refusal probe input from the per-member validate \
+                 loop's traversal input",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_membros_accessor() {
+        // Three-consumer coherence pin: the
+        // [`AplicacaoSpec::validate_membros`] pre-flight
+        // `self.membros().is_empty()` refusal probe (which must trip
+        // [`AplicacaoError::NoMembros`] when the accessor projects the
+        // empty slice), the same method's per-member validate loop's
+        // `for m in self.membros()` traversal (which must reach every
+        // entry in the same order the accessor projects, so both the
+        // per-entry empty-`:caixa` gate that trips
+        // [`AplicacaoError::MembroCaixaEmpty`] and the duplicate-
+        // detection `insert_first_seen` that trips
+        // [`AplicacaoError::MembroDuplicate`] key off the accessor's
+        // projection), and the peer [`AplicacaoSpec::validate`]'s
+        // `HashSet<&str>` name-set seed's
+        // `self.membros().iter().map(Membro::nome).collect()` collect
+        // input (which every `:contratos` `:de` / `:para` membership
+        // lookup rejects an unknown name against) must all three key
+        // off the lifted accessor, so any future rebrand on the typed
+        // slot's reader shape lands at exactly one place. Pins the
+        // three-site coherence by exercising each production consumer
+        // end-to-end: (1) the `NoMembros` refusal under the empty
+        // slice, (2) the `MembroCaixaEmpty` refusal fires on the
+        // second entry of a two-member cohort whose head is valid but
+        // tail has an empty `:caixa` (which requires the loop to
+        // reach the second entry through the accessor), and (3) the
+        // `MembroDuplicate` refusal fires on the second entry of a
+        // two-member cohort that shares a `:caixa` name (which
+        // requires the loop to reach both entries through the
+        // accessor for the dedup HashSet's second insert to collide).
+        //
+        // Peer of the sibling M2
+        // [`crate::supervisor::tests::validate_reads_through_lifted_children_accessor`]
+        // (bc92bce) coherence pin on the per-`:supervisor` static-
+        // child-list axis and the sibling M3
+        // `validate_placement_reads_through_lifted_clusters_accessor`
+        // (a6e18d7) coherence pin on the per-`:placement` distribution-
+        // target-list axis — extends the slice-return-accessor
+        // multi-consumer coherence discipline onto the outermost M3
+        // mesh-slot type's per-Aplicacao member-list `Vec`-carry axis.
+
+        // (1) Pre-flight `.is_empty()` probe: the empty slice must
+        // trip `NoMembros`.
+        let mut spec = three_member_spec();
+        spec.membros = Vec::new();
+        assert_eq!(spec.validate().unwrap_err(), AplicacaoError::NoMembros);
+        assert!(
+            spec.membros().is_empty(),
+            "the pre-flight refusal input must be the empty slice per \
+             the accessor's projection",
+        );
+
+        // (2) Per-member validate loop: a two-member cohort with an
+        // empty-`:caixa` tail entry must trip `MembroCaixaEmpty` on
+        // the tail — the loop must reach the second entry through
+        // the accessor.
+        let mut spec = three_member_spec();
+        spec.membros = vec![membro("catalog", "^0.1"), membro("", "^0.1")];
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::MembroCaixaEmpty,
+        );
+        assert_eq!(
+            spec.membros().len(),
+            2,
+            "the per-member validate loop's traversal input must be \
+             a two-element slice per the accessor's projection",
+        );
+
+        // (3) Per-member validate loop: a two-member cohort that
+        // shares a `:caixa` name must trip `MembroDuplicate` on the
+        // second entry — the loop must reach both entries through the
+        // accessor for the dedup HashSet's second insert to collide.
+        let mut spec = three_member_spec();
+        spec.membros = vec![membro("catalog", "^0.1"), membro("catalog", "^0.2")];
+        match spec.validate().unwrap_err() {
+            AplicacaoError::MembroDuplicate { caixa } => {
+                assert_eq!(
+                    caixa, "catalog",
+                    "MembroDuplicate.caixa must carry the shared \
+                     member name verbatim",
+                );
+            }
+            other => panic!("expected MembroDuplicate, got {other:?}"),
+        }
+        assert_eq!(
+            spec.membros().len(),
+            2,
+            "the per-member validate loop's traversal input must be \
              a two-element slice per the accessor's projection",
         );
     }

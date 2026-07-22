@@ -74,8 +74,8 @@ impl GraphArgs {
                 spec.placement.estrategia(),
                 spec.placement.clusters()
             );
-            println!("  membros ({}):", spec.membros.len(),);
-            for m in &spec.membros {
+            println!("  membros ({}):", spec.membros().len(),);
+            for m in spec.membros() {
                 println!("    - {} {}", m.nome(), m.versao_requirement());
             }
             println!("  contratos ({}):", spec.contratos.len());

@@ -143,8 +143,8 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
     // emission.
     let placement_value = serde_yaml::to_value(&spec.placement)?;
 
-    let mut out = Vec::with_capacity(spec.membros.len());
-    for m in &spec.membros {
+    let mut out = Vec::with_capacity(spec.membros().len());
+    for m in spec.membros() {
         let mut entry = serde_yaml::Mapping::new();
         // Route the per-`:membros` entry-`name:` byte-string through the
         // typed [`Membro::nome`] accessor rather than the raw `.caixa`
