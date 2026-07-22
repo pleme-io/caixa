@@ -497,6 +497,64 @@ impl ChildSpec {
     pub fn versao_requirement(&self) -> &str {
         self.versao.as_str()
     }
+
+    /// Substrate-canonical per-`:children` `:restart` OTP-shaped
+    /// per-child post-exit restart-decision policy scalar accessor every
+    /// consumer that dispatches on the supervised child's post-exit
+    /// reconcile posture keys off — returns the author-declared
+    /// `:children :restart` variant verbatim as a [`RestartPolicy`],
+    /// `Copy`-projected from the typed slot's own [`RestartPolicy`]
+    /// storage.
+    ///
+    /// The `:children :restart` slot carries the closed-set OTP-shaped
+    /// per-child restart-decision policy discriminator
+    /// ([`RestartPolicy::Permanent`] — always restart, the OTP `permanent`
+    /// worker-child default; [`RestartPolicy::Transient`] — restart only
+    /// on abnormal exit, the OTP `transient` clean-completion-aware
+    /// default; [`RestartPolicy::Temporary`] — never restart, the OTP
+    /// `temporary` one-shot default) that every downstream consumer of
+    /// the Supervisor's per-child post-exit reconcile branch keys off.
+    /// Every future downstream consumer that fans on the per-child
+    /// restart-decision keys off this scalar (the future `feira app
+    /// graph` per-child restart column, the future wasm-operator's
+    /// per-child post-exit restart-decision branch, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's per-child
+    /// admission webhook, the `caixa-operator`'s hierarchical
+    /// reconciliation scheduler's per-child post-exit reconcile branch,
+    /// the [`RestartPolicy::as_str`] `Serialize`-derive-pinning path the
+    /// [`tests::restart_policy_variants_serialize_to_lifted_scalar_values`]
+    /// pin threads through).
+    ///
+    /// Peer of the sibling per-`:supervisor` [`SupervisorSpec::estrategia`]
+    /// (eafb619) `Copy`-return [`RestartStrategy`] sibling-restart-strategy
+    /// scalar accessor and the M3 mesh-slot
+    /// [`crate::Placement::estrategia`] (921fe1b) `Copy`-return
+    /// [`crate::PlacementStrategy`] distribution-strategy scalar accessor
+    /// — same "one typed dispatch on the substrate primitive,
+    /// `Copy`-projected closed-set enum-arm discriminator that partitions
+    /// the downstream renderer's per-arm fan-out" discipline extended
+    /// onto the M2 supervisor-slot per-`:children` restart-decision-policy
+    /// `Copy`-composite-enum scalar axis. Third axis on the per-`:children`
+    /// [`ChildSpec`] type — companion to the sibling per-`:children`
+    /// [`ChildSpec::nome`] (57c61d0) child-caixa `:nome` scalar accessor
+    /// and the per-`:children` [`ChildSpec::versao_requirement`]
+    /// (2c053c8) child-caixa `:versao` semver-requirement scalar accessor
+    /// on the sibling `String`-carry axes. The triple
+    /// `(nome(), versao_requirement(), restart())` jointly projects the
+    /// `(caixa, versao, restart)` field trio every OTP-shape supervisor-
+    /// tree consumer that fans on per-child identity + version pin +
+    /// restart-decision keys off, closing the last unlifted per-`:children`
+    /// axis so every downstream per-`:children` reader now routes through
+    /// a typed dispatch on the substrate primitive. Named `restart()` to
+    /// match the storage field's name and the author-surface
+    /// `:children :restart` slot term verbatim; the accessor's identity
+    /// name maps onto the canonical OTP-shape per-child restart-decision-
+    /// policy vocabulary the [`RestartPolicy`] enum's docstring already
+    /// carries.
+    #[must_use]
+    pub fn restart(&self) -> RestartPolicy {
+        self.restart
+    }
 }
 
 /// Supervisor-typed slots that live alongside the standard Caixa
@@ -5033,6 +5091,81 @@ mod tests {
                 .is_err(),
                 "require_valid_versao_requirement must reject the accessor-projected \
                  :children :versao {bad_req:?}",
+            );
+        }
+    }
+
+    // ── per-`:children` `:restart` typed-accessor coherence pins ──────────
+    //
+    // The [`ChildSpec::restart`] accessor lift closes the last unlifted
+    // per-`:children` axis (the pair `nome()` + `versao_requirement()`
+    // already project the `String`-carry `(caixa, versao)` fields; the
+    // `Copy`-composite-enum `restart` field is the third and final axis).
+    // Peer of the sibling per-`:supervisor` [`SupervisorSpec::estrategia`]
+    // (eafb619) `Copy`-return [`RestartStrategy`] sibling-restart-strategy
+    // scalar accessor and the M3 mesh-slot [`crate::Placement::estrategia`]
+    // (921fe1b) `Copy`-return [`crate::PlacementStrategy`] distribution-
+    // strategy scalar accessor — same "one typed dispatch on the substrate
+    // primitive, `Copy`-projected closed-set enum-arm discriminator" shape
+    // extended onto the M2 supervisor-slot per-`:children` restart-decision
+    // axis. The pin below covers the accessor's byte-equal projection
+    // against the raw field access across every variant in the closed
+    // accept-set (`Permanent`, `Transient`, `Temporary`).
+
+    #[test]
+    fn child_spec_restart_returns_restart_verbatim_across_permutations() {
+        // The canonical per-`:children` restart-decision-policy-scalar
+        // pin: [`ChildSpec::restart`] must return the `:children :restart`
+        // field verbatim as a [`RestartPolicy`], `Copy`-projected from the
+        // typed slot's own [`RestartPolicy`] storage across every variant
+        // in the closed accept-set (`Permanent`, `Transient`, `Temporary`).
+        // Pins against a future silent detour that re-derived the policy
+        // from a peer axis (an accidental fallback to
+        // `if is_supervisor_child { Permanent } else { Temporary }` that
+        // collapsed the child's kind axis into the restart discriminator),
+        // a variant remap the operator authors on one consumer without the
+        // other, or a stale-derive detour that substituted
+        // [`RestartPolicy::default`] when the field held any explicit
+        // variant (which would silently collapse the distinction between
+        // "author explicitly declared `:restart Permanent`" and "author
+        // omitted the slot and inherited the default" the future
+        // per-cluster restart-decision override slot depends on).
+        //
+        // Peer of the sibling per-`:supervisor`
+        // `supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations`
+        // (eafb619) pin on the M2 supervisor-slot sibling-restart-strategy
+        // axis and the M3
+        // `placement_estrategia_returns_estrategia_verbatim_across_permutations`
+        // (921fe1b) pin on the per-`:placement` distribution-strategy axis
+        // — same "the substrate-primitive accessor must byte-equal the raw
+        // field access verbatim across every author-declared value"
+        // discipline extended onto the M2 supervisor-slot per-`:children`
+        // restart-decision-policy axis, closing the last unlifted axis on
+        // the per-`:children` [`ChildSpec`] type.
+        for restart in [
+            RestartPolicy::Permanent,
+            RestartPolicy::Transient,
+            RestartPolicy::Temporary,
+        ] {
+            let c = ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart,
+            };
+            assert_eq!(
+                c.restart(),
+                restart,
+                "ChildSpec::restart must return :children :restart \
+                 verbatim (got {:?}, expected {restart:?})",
+                c.restart(),
+            );
+            assert_eq!(
+                c.restart(),
+                c.restart,
+                "ChildSpec::restart accessor and .restart field access \
+                 must byte-equal — the accessor is the substrate-primitive \
+                 typed dispatch every downstream per-child restart-\
+                 decision consumer must route through",
             );
         }
     }
