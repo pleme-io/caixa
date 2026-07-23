@@ -828,13 +828,35 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
             email: None,
         })
         .collect();
+    // Canonical typed `String`-carry of the per-`Caixa` `:versao`
+    // universal-axis SemVer-2 pinned-version scalar into the two
+    // per-`Chart.yaml` version-carrier fields Helm's chart-schema
+    // parser routes per-chart identity through — `Chart.yaml`'s
+    // top-level `version:` (the axis Helm's per-chart resolver keys
+    // per-release reconciliation off, the paired `HelmRelease`
+    // `spec.chart.spec.version` binds through, and every `helm
+    // template <chart>` / `helm install <release> <chart>` /
+    // `helm upgrade <release> <chart> --version` invocation names
+    // through) and `Chart.yaml`'s top-level `appVersion:` (the
+    // axis Helm chart-consumers key per-application-version
+    // documentation / release-note / OCI-tag / operator-side
+    // per-Caixa CR revision off), both routing through the typed
+    // [`caixa_core::Caixa::versao`] accessor's canonical
+    // `to_string()` extension of `&self.versao`. Peer of the
+    // sibling 4a363bf / 54bf2f3 `caixa.nome.clone()` converges
+    // on the outer-Caixa `:nome` `String`-carry axis in caixa-flux
+    // / caixa-mesh — this converges the last unlifted per-Caixa
+    // `.versao.clone()` raw-field `String`-carry axis in
+    // caixa-helm on the same "one typed dispatch per axis"
+    // discipline.
+    let versao = caixa.versao().to_string();
     ChartYaml {
         api_version: HELM_CHART_API_VERSION.into(),
         name: chart_name.into(),
         description,
         chart_type: HELM_CHART_TYPE_APPLICATION.into(),
-        version: caixa.versao.clone(),
-        app_version: caixa.versao.clone(),
+        version: versao.clone(),
+        app_version: versao,
         keywords,
         maintainers,
         home: caixa.repositorio().map(str::to_owned),
@@ -2698,6 +2720,104 @@ spec:
              DEFAULT_LIBRARY_NAME {DEFAULT_LIBRARY_NAME:?} — the two-axis (repository, name) \
              per-Chart.yaml-dep tuple must resolve to the same library-chart identity on \
              disk, so a rebrand on either axis must move both",
+        );
+    }
+
+    #[test]
+    fn chart_yaml_version_routes_through_caixa_versao_accessor() {
+        // Fail-before-pass-after pin: the emit-side per-`Chart.yaml`
+        // top-level `version:` scalar the [`build_chart_yaml`] fn
+        // writes must derive from the typed
+        // [`caixa_core::Caixa::versao`] accessor byte-for-byte.
+        // Before this converge the emit site carried a raw
+        // `caixa.versao.clone()` field access at
+        // [`build_chart_yaml`]'s per-`Chart.yaml` version-field
+        // insert position — one of the two production-code
+        // `String`-carry sites of `Caixa::versao` on this fn's
+        // emit path — and a future extension of the accessor
+        // (a build-metadata canonicalization pass the CAIXA-SDLC
+        // §I SemVer-2 pin acknowledges, an OCI-tag normalization
+        // the M4 registry-alignment slot lands, a per-edition
+        // pre-release-tag overlay the sibling `Caixa::edicao`
+        // universal-axis 4-digit-ASCII-decimal-year scalar
+        // dispatches through) that landed on the accessor but
+        // not on this emit site would silently split the
+        // per-`Chart.yaml` `version:` axis (the discriminator
+        // Helm's per-chart resolver keys per-release
+        // reconciliation off, the paired `HelmRelease`
+        // `spec.chart.spec.version` binds through, and every
+        // `helm template <chart>` / `helm install <release>
+        // <chart>` / `helm upgrade <release> <chart>
+        // --version` invocation names through) from every peer
+        // read-side consumer of `Caixa::versao` (the
+        // README-body `v{versao}` scalar at
+        // [`build_readme`]:958 the paired `feira chart`
+        // Nord-themed emit round-trips through, every peer
+        // per-axis navigator via `Caixa::versao()`, the
+        // `caixa_flux::programs_yaml_entry` per-entry
+        // `versao:` scalar at caixa-flux/src/lib.rs:2031, the
+        // `caixa_feira::cmd::publish` per-tag `caixa {nome} v{versao}`
+        // git-tag scalar at caixa-feira/src/cmd/publish.rs:72).
+        // Byte-equal today (the accessor is `&self.versao`);
+        // the pin catches any future accessor extension whose
+        // emit-side write regresses to the raw field. Peer to
+        // [`chart_yaml_app_version_routes_through_caixa_versao_accessor`]
+        // on the sibling per-`Chart.yaml` `appVersion:` axis.
+        let caixa = sample_caixa();
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
+            .expect("Chart.yaml present");
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        assert_eq!(
+            chart.version.as_str(),
+            caixa.versao(),
+            "Chart.yaml `version:` must derive from the typed \
+             `caixa_core::Caixa::versao` accessor byte-for-byte — a regression \
+             that re-inlines `caixa.versao.clone()` at the emit site silently \
+             splits the per-`Chart.yaml` `version:` axis from every future \
+             accessor extension (SemVer-2 build-metadata canonicalization, \
+             OCI-tag normalization, per-edition pre-release-tag overlay) that \
+             lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn chart_yaml_app_version_routes_through_caixa_versao_accessor() {
+        // Fail-before-pass-after pin: the emit-side per-`Chart.yaml`
+        // top-level `appVersion:` scalar the [`build_chart_yaml`] fn
+        // writes must derive from the typed
+        // [`caixa_core::Caixa::versao`] accessor byte-for-byte.
+        // Same single-source `let versao = caixa.versao().to_string()`
+        // binding as the peer `version:` sibling pin — this test
+        // pins the derived `Chart.yaml` `appVersion:` axis (the
+        // axis Helm chart-consumers key per-application-version
+        // documentation / release-note / OCI-tag / operator-side
+        // per-Caixa CR revision off). Peer to
+        // [`chart_yaml_version_routes_through_caixa_versao_accessor`]
+        // on the sibling per-`Chart.yaml` `version:` axis — the
+        // two together pin every per-`Chart.yaml` version-carrier
+        // field on the typed accessor.
+        let caixa = sample_caixa();
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
+            .expect("Chart.yaml present");
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        assert_eq!(
+            chart.app_version.as_str(),
+            caixa.versao(),
+            "Chart.yaml `appVersion:` must derive from the typed \
+             `caixa_core::Caixa::versao` accessor byte-for-byte — a regression \
+             that re-inlines `caixa.versao.clone()` at the emit site silently \
+             splits the per-`Chart.yaml` `appVersion:` axis from every future \
+             accessor extension (SemVer-2 build-metadata canonicalization, \
+             OCI-tag normalization, per-edition pre-release-tag overlay) that \
+             lands on the accessor",
         );
     }
 }
