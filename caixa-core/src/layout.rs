@@ -1147,7 +1147,7 @@ impl LayoutInvariants for StandardLayout {
             // those two axes — every validated `:contratos` edge and
             // every validated `:entrada :para` cannot name the
             // Aplicacao itself, without re-deriving the partition.
-            crate::aplicacao::validate_no_self_membership(&caixa.membros, &caixa.nome).map_err(
+            crate::aplicacao::validate_no_self_membership(caixa.membros(), &caixa.nome).map_err(
                 |err| LayoutError::AplicacaoViolation {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),

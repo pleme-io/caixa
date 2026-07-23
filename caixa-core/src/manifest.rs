@@ -2569,6 +2569,128 @@ impl Caixa {
         self.children.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:membros` M3 mesh-slot outer-
+    /// composite MESH-COMPOSITION-shaped per-Aplicacao member-list slice
+    /// accessor every consumer of the top-level manifest's per-Aplicacao
+    /// `&[crate::aplicacao::Membro]` slice-view keys off — returns the
+    /// author-declared `:membros` typed `Vec<crate::aplicacao::Membro>`
+    /// verbatim as a `&[crate::aplicacao::Membro]` slice-view over the
+    /// same backing buffer the raw `self.membros.as_slice()` field access
+    /// borrows from. Empty-slice-carrying (the "no members declared" arm
+    /// every non-`Aplicacao`-kind `defcaixa` carries by `#[serde(default)]`
+    /// and every partially-authored Aplicacao carries before the
+    /// [`crate::AplicacaoError::MembrosEmpty`] gate fires; the returned
+    /// `&[Membro]` degenerates to an empty slice on those arms without any
+    /// silent `None` collapse).
+    ///
+    /// The outer `:membros` slot carries the M3 typed MESH-COMPOSITION
+    /// per-Aplicacao member list — the load-bearing container of every
+    /// per-member `{caixa, versao}` pair the caixa-mesh renderer's
+    /// per-Aplicacao program-emission dispatch fans on at mesh-artifact
+    /// materialization time (MESH-COMPOSITION §III.1 — the typed graph's
+    /// vertex set the `:contratos` `:de`/`:para` edges resolve against and
+    /// the `:entrada :para` external-gateway destination validates
+    /// against; CAIXA-SDLC §II — the typed-M3 slot algebra the operator's
+    /// per-Aplicacao fan-out dispatch fans on). Every per-member axis
+    /// threads through a lifted per-entry accessor on the
+    /// [`crate::aplicacao::Membro`] type: the
+    /// [`crate::aplicacao::Membro::nome`] DNS-1123-label member-caixa-
+    /// identity scalar accessor (4a32abf) and the peer
+    /// [`crate::aplicacao::Membro::versao_requirement`] SemVer-2
+    /// version-requirement scalar accessor (a40b0e3). Every downstream
+    /// consumer of the mesh-graph path first passes through this outer
+    /// accessor onto the slice and then dispatches per-member through
+    /// the inner accessors — the two-level dispatch means every per-
+    /// `:membros` reader now routes through a typed dispatch on the
+    /// substrate primitive at both altitudes.
+    ///
+    /// Prior to this lift the `.membros` `Vec<Membro>` slot was accessed
+    /// inline at three production sites across two files — the
+    /// [`Self::declared_mesh_slots`] mesh-slot declared-slot
+    /// enumerator's `!self.membros.is_empty()` presence probe
+    /// (caixa-core/src/manifest.rs, which drives the
+    /// `M3_AUTHOR_KEY_MEMBROS` kebab-case author-label push every
+    /// [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-coherence
+    /// gate reads), the [`Self::aplicacao_view`] per-Aplicacao typed-view
+    /// composer's `self.membros.clone()` per-member fold-in path
+    /// (caixa-core/src/manifest.rs, which materializes the typed
+    /// [`crate::aplicacao::AplicacaoSpec`] view every
+    /// [`crate::StandardLayout::verify`] Aplicacao-arm gate dispatches
+    /// on), and the [`crate::StandardLayout::verify`] per-`:membros
+    /// :caixa` self-membership refusal probe's `&caixa.membros`-borrowed
+    /// [`crate::aplicacao::validate_no_self_membership`] input
+    /// (caixa-core/src/layout.rs, which pins the "no member names the
+    /// Aplicacao's own `:nome`" cross-slot coherence gate). A future
+    /// extension of the outer `:membros` axis (a per-cluster
+    /// `:membros-overrides` overlay the wasm-engine operator resolves at
+    /// admission time so a cluster-specific member-set can tighten a
+    /// caixa-declared list without re-authoring the `caixa.lisp`,
+    /// promotion of the plain `Vec<Membro>` to a richer
+    /// `{static, dynamic}` partition once runtime-resolved Aplicacao
+    /// members land as a typed axis, per-member priority annotation once
+    /// multi-strategy fan-out lands) would have had to be threaded
+    /// through all three open-coded copies in lockstep or one consumer
+    /// would silently disagree with the peers on which member slice a
+    /// given Caixa resolves to — the enumerator's presence probe reading
+    /// the raw slot while the peer view-composer's fold-in path read an
+    /// operator-resolved slot would silently split the paired
+    /// declared-slot enumerator and typed-view composition, and the
+    /// [`crate::aplicacao::validate_no_self_membership`] self-membership
+    /// refusal probe reading a third borrow would silently drift the
+    /// cross-slot coherence gate's traversal input from the two peers, a
+    /// three-consumer split at the enumerator, the view composer, and
+    /// the self-membership gate far from the source `caixa.lisp` with no
+    /// field naming the member-set-drift root cause. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa`
+    /// MESH-COMPOSITION outer-slice surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit on
+    /// any future axis addition.
+    ///
+    /// Third outer top-level [`Caixa`] `&[Composite]`-return slice
+    /// accessor for M2 / M3 typed-slot vec-carry axes — opens the outer-
+    /// `Caixa` M3 mesh-slot arm of the `&[Composite]` composite-slice
+    /// sub-family the sibling M2 [`Self::upgrade_from`] (2a1f907) /
+    /// [`Self::children`] (c17b51e) accessors opened for the M2 vec-carry
+    /// altitude. Peer at the outer altitude of the closed inner-
+    /// [`crate::AplicacaoSpec::membros`] (6c77e36) accessor on the same
+    /// MESH-COMPOSITION per-Aplicacao member-list axis — the two
+    /// altitudes now share the same "byte-equal, borrow-shared" outer-
+    /// accessor discipline. Sibling in shape to the peer outer-`Caixa`
+    /// `&[Dep]`-return [`Self::deps`] (ad34b4e) / [`Self::deps_dev`]
+    /// (f7fd81e) and `&[String]`-return [`Self::autores`] (b5d813f) /
+    /// [`Self::etiquetas`] (78c7d3c) / [`Self::bibliotecas`] (8a36c23) /
+    /// [`Self::exe`] (65d9527) / [`Self::servicos`] (611f78b) slice-
+    /// accessors on the sibling outer-`Caixa` scalar-element vec-carry
+    /// axes — folds the "outer [`Caixa`] `&[T]` slice" projection
+    /// pattern onto the sibling M3 typed-composite-element axis
+    /// ([`crate::aplicacao::Membro`] composite, matching the per-inner
+    /// [`crate::AplicacaoSpec::membros`] element type at a different
+    /// altitude).
+    ///
+    /// Returns `&[crate::aplicacao::Membro]` (not `&Vec<Membro>`)
+    /// because every downstream consumer of the member list treats it
+    /// as a read-only sequence — the slice-view is the narrowest borrow
+    /// that supports every present + roadmapped consumer (`.iter()`,
+    /// `.len()`, `.is_empty()`, the
+    /// [`crate::aplicacao::validate_no_self_membership`] `&[Membro]`
+    /// input, `serde` slice-serialization) without leaking the backing
+    /// `Vec`'s grow/push/reserve surface no consumer of the typed view
+    /// reaches for (the storage-side `Vec` remains reachable through the
+    /// `pub membros` field for the mutation-carrying serde round-trip
+    /// and per-test fixture-mutation paths, including the
+    /// [`Self::aplicacao_view`] fold-in path that clones the slot into
+    /// the typed view). Named `membros()` to match the storage field's
+    /// name verbatim and the tatara-lisp author-surface term
+    /// (`:membros`) the field's own docstring already carries; the
+    /// accessor's identity maps onto the canonical MESH-COMPOSITION
+    /// vocabulary the [`Caixa::membros`] field's docstring already
+    /// reaches for ("Member Servicos that make up this Aplicacao").
+    #[must_use]
+    pub fn membros(&self) -> &[crate::aplicacao::Membro] {
+        self.membros.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -2579,7 +2701,7 @@ impl Caixa {
             return None;
         }
         Some(crate::aplicacao::AplicacaoSpec {
-            membros: self.membros.clone(),
+            membros: self.membros().to_vec(),
             contratos: self.contratos.clone(),
             politicas: self.politicas().cloned().unwrap_or_default(),
             placement: self.placement().cloned().unwrap_or_default(),
@@ -2637,7 +2759,7 @@ impl Caixa {
     #[must_use]
     pub fn declared_mesh_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
-        if !self.membros.is_empty() {
+        if !self.membros().is_empty() {
             slots.push(crate::render::M3_AUTHOR_KEY_MEMBROS);
         }
         if !self.contratos.is_empty() {
@@ -14045,6 +14167,320 @@ mod tests {
                 children.as_slice(),
                 "Caixa::children must return :children verbatim by \
                  borrow — got {first:?}, expected {children:?}",
+            );
+        }
+    }
+
+    // ── Caixa::membros — outer top-level &[Membro] composite-slice accessor ──
+
+    fn caixa_aplicacao_with_membros(membros: Vec<crate::aplicacao::Membro>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.membros = membros;
+        c
+    }
+
+    #[test]
+    fn membros_returns_membros_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:membros` M3 mesh-slot outer-
+        // composite `&[Membro]`-return slice-shape pin:
+        // [`Caixa::membros`] must return the `:membros` typed
+        // `Vec<Membro>` verbatim as a `&[Membro]` slice-view over the
+        // same backing buffer the raw `self.membros.as_slice()` field
+        // access borrows from, element-equal across every
+        // representative fixture in the accept-set — `[]` (the "no
+        // members declared" arm every non-`Aplicacao`-kind `defcaixa`
+        // carries by `#[serde(default)]` and every partially-authored
+        // Aplicacao carries before the
+        // [`crate::AplicacaoError::MembrosEmpty`] gate fires), a
+        // canonical single-member fixture (the shape a minimal
+        // Aplicacao carries — one Servico wrapping one contained
+        // computation), a canonical multi-member list carrying three
+        // distinct entries (the canonical checkout-shape Aplicacao —
+        // cart / pricing / auth — every canonical example carries), and
+        // a past-the-guard sentinel — a duplicate `:caixa`
+        // `[("cart", ...), ("cart", ...)]` entry pair
+        // ([`crate::AplicacaoSpec::validate`] rejects through
+        // `DuplicateMembro { nome: "cart" }` but the accessor must ship
+        // the raw slot verbatim so struct-literal fixtures continue to
+        // expose the duplicate at the accessor boundary).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<Membro>` (which would type-check but silently clone on
+        // every accessor call, breaking the zero-cost projection every
+        // peer sibling slice accessor carries), a `[dup, dup] → [dup]`
+        // dedup collapse (which would silently absorb the
+        // `DuplicateMembro` refusal case at the accessor boundary and
+        // the [`crate::StandardLayout::verify`] cross-member gate would
+        // silently accept a struct-literal `Caixa` carrying the drift),
+        // a reference to an operator-resolved overlay (the future per-
+        // cluster `:membros-overrides` slot — its resolution must land
+        // at exactly this accessor body, not silently divert the raw
+        // slot away from a second consumer), or an axis-shuffled
+        // projection (a future detour that reordered members through
+        // the accessor would silently split the paired
+        // [`crate::StandardLayout::verify`] per-Aplicacao gate's
+        // traversal input from the peer [`Self::aplicacao_view`] fold-
+        // in path's clone-order input, since the canonical `:contratos`
+        // `:de`/`:para` and `:entrada :para` cross-slot refusal probes
+        // read the member set through the same slice).
+        //
+        // Third outer top-level [`Caixa`] `&[Composite]`-return slice
+        // accessor pin on the substrate primitive for M2 / M3 typed-
+        // slot vec-carry axes — opens the outer-`Caixa` M3 mesh-slot
+        // arm of the `&[Composite]` composite-slice sub-family the
+        // sibling M2 `upgrade_from_returns_upgrade_from_slice_verbatim_across_permutations`
+        // (2a1f907) and
+        // `children_returns_children_slice_verbatim_across_permutations`
+        // (c17b51e) pins opened, peer at the outer altitude of the
+        // closed inner-[`crate::AplicacaoSpec::membros`] (6c77e36)
+        // accessor on the same MESH-COMPOSITION per-Aplicacao member-
+        // list axis.
+        use crate::aplicacao::Membro;
+        let fixtures: Vec<Vec<Membro>> = vec![
+            vec![],
+            vec![Membro {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+            }],
+            vec![
+                Membro {
+                    caixa: "cart".into(),
+                    versao: "^0.1".into(),
+                },
+                Membro {
+                    caixa: "pricing".into(),
+                    versao: "^0.2".into(),
+                },
+                Membro {
+                    caixa: "auth".into(),
+                    versao: "^1.0".into(),
+                },
+            ],
+            vec![
+                Membro {
+                    caixa: "cart".into(),
+                    versao: "^0.1".into(),
+                },
+                Membro {
+                    caixa: "cart".into(),
+                    versao: "^0.1".into(),
+                },
+            ],
+        ];
+        for membros in fixtures {
+            let c = caixa_aplicacao_with_membros(membros.clone());
+            assert_eq!(
+                c.membros(),
+                membros.as_slice(),
+                "Caixa::membros must return :membros verbatim \
+                 (got {:?}, expected {membros:?})",
+                c.membros(),
+            );
+            assert_eq!(
+                c.membros(),
+                c.membros.as_slice(),
+                "Caixa::membros must element-equal the raw \
+                 `self.membros.as_slice()` field access across every \
+                 value in the Vec<Membro> accept-set",
+            );
+            assert_eq!(
+                c.membros().is_empty(),
+                c.membros.is_empty(),
+                "Caixa::membros().is_empty() must byte-equal \
+                 self.membros.is_empty() — a presence-bit drift would \
+                 silently split the paired Caixa::declared_mesh_slots \
+                 mesh declared-slot enumerator's presence probe from \
+                 the peer Caixa::aplicacao_view typed-view composer's \
+                 fold-in path",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_mesh_slots_membros_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_mesh_slots`]'s `:membros`
+        // presence-probe arm must key off [`Caixa::membros`], not the
+        // raw `!self.membros.is_empty()` field-probe. Structurally: a
+        // `Caixa { membros: vec![Membro { caixa: "cart", versao:
+        // "^0.1" }], .. }` must push `M3_AUTHOR_KEY_MEMBROS` onto the
+        // declared-slot list (the presence bit is non-empty, so the
+        // mesh kind-coherence gate must surface the slot as
+        // "declared"), and a `Caixa { membros: vec![], .. }` must NOT
+        // push the label (the "author omitted the slot entirely" arm
+        // — the empty-slice partition the serde-default folds onto).
+        // The pair jointly pins the accessor + declared-slot
+        // enumerator composition: any future silent detour that had
+        // the accessor collapse `[Membro { .. }]` to `[]` (a
+        // `.filter(|m| m.nome() != "__reserved__")` projection) would
+        // silently absorb the "declared but degenerate" arm at the
+        // accessor boundary and the
+        // [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+        // coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_upgrade_from_arm_routes_through_accessor`
+        // (2a1f907) and
+        // `declared_supervisor_slots_children_arm_routes_through_accessor`
+        // (c17b51e) composition pins on the M2 `:upgrade-from` /
+        // `:children` composite-slice arms — same "the enumerator gate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the M3 `:membros` composite-slice
+        // arm, opening the M3 arm of the declared-slot enumerator's
+        // routing invariant.
+        use crate::aplicacao::Membro;
+        let c = caixa_aplicacao_with_membros(vec![Membro {
+            caixa: "cart".into(),
+            versao: "^0.1".into(),
+        }]);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            slots.contains(&crate::render::M3_AUTHOR_KEY_MEMBROS),
+            "declared_mesh_slots must push M3_AUTHOR_KEY_MEMBROS when \
+             `:membros` is non-empty — the accessor and the enumerator \
+             gate must route through the same substrate-primitive \
+             typed dispatch on the outer :membros presence bit (got \
+             slots={slots:?})",
+        );
+        let c = caixa_aplicacao_with_membros(vec![]);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            !slots.contains(&crate::render::M3_AUTHOR_KEY_MEMBROS),
+            "declared_mesh_slots must NOT push M3_AUTHOR_KEY_MEMBROS \
+             when `:membros` is empty — the author-omitted arm must \
+             route through the accessor's empty-slice return unchanged \
+             (got slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn aplicacao_view_membros_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::aplicacao_view`]'s per-`:membros`
+        // fold-in arm must key off [`Caixa::membros`], not the raw
+        // `self.membros.clone()` field-clone. Structurally: a `Caixa {
+        // kind: Aplicacao, membros: vec![Membro { caixa: "cart", .. },
+        // Membro { caixa: "pricing", .. }], .. }` must fold the per-
+        // member list through the accessor into the typed
+        // [`crate::AplicacaoSpec`] view's `membros` slot verbatim —
+        // every entry the accessor surfaces must land in the view's
+        // `membros` slot in the same order. The pair jointly pins the
+        // accessor + view-composer composition: any future silent
+        // detour that had the accessor return a fresh-cloned
+        // `Vec<Membro>` copy would silently break the reference-
+        // identity pin the peer `aplicacao_view` fold-in path reads
+        // from — the fold would clone once more per accessor call
+        // instead of borrowing the storage buffer verbatim once.
+        //
+        // Peer of the sibling
+        // `aplicacao_view_politicas_arm_folds_through_accessor`
+        // (5d23d29) /
+        // `aplicacao_view_placement_arm_folds_through_accessor`
+        // (4fb8074) /
+        // `aplicacao_view_entrada_arm_folds_through_accessor` (e4128e4)
+        // composition pins on the M3 `:politicas` / `:placement` /
+        // `:entrada` outer-`Option<&Composite>` arms — extended here to
+        // the M3 `:membros` outer-`&[Composite]` composite-slice arm,
+        // closing the aplicacao-view composer's routing invariant on
+        // the composite-slice input.
+        use crate::aplicacao::Membro;
+        let c = caixa_aplicacao_with_membros(vec![
+            Membro {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+            },
+            Membro {
+                caixa: "pricing".into(),
+                versao: "^0.2".into(),
+            },
+        ]);
+        let view = c
+            .aplicacao_view()
+            .expect("Aplicacao kind must produce an aplicacao_view");
+        assert_eq!(
+            view.membros(),
+            c.membros(),
+            "aplicacao_view must fold Caixa::membros verbatim into \
+             AplicacaoSpec::membros — the accessor and the view \
+             composer must route through the same substrate-primitive \
+             typed dispatch on the outer :membros slice (got view \
+             membros={:?}, expected {:?})",
+            view.membros(),
+            c.membros(),
+        );
+    }
+
+    #[test]
+    fn membros_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::membros`] returns `&[Membro]` by
+        // borrow — the returned slice borrows the underlying
+        // `Vec<Membro>` storage of the `:membros` slot and the
+        // accessor must not clone the backing `Vec` on every call.
+        // Peer of the sibling outer top-level [`Caixa`] `&[T]`-return
+        // by-borrow pins (`autores_projects_slice_by_borrow` b5d813f,
+        // `etiquetas_projects_slice_by_borrow` 78c7d3c,
+        // `bibliotecas_projects_slice_by_borrow` 8a36c23,
+        // `exe_projects_slice_by_borrow` 65d9527,
+        // `servicos_projects_slice_by_borrow` 611f78b,
+        // `deps_projects_slice_by_borrow` ad34b4e,
+        // `deps_dev_projects_slice_by_borrow` f7fd81e,
+        // `upgrade_from_projects_slice_by_borrow` 2a1f907,
+        // `children_projects_slice_by_borrow` c17b51e) on the sibling
+        // outer top-level [`Caixa`] scalar-element and composite-
+        // element `&[T]` axes — folds on the outer-`Caixa` M3 mesh-
+        // slot composite-element `&[Composite]` axis: the accessor's
+        // returned slice must borrow from `&self` (the returned
+        // reference's lifetime is tied to `&self`), and calling the
+        // accessor twice on the same [`Caixa`] must yield slices that
+        // are pointer-equal (the underlying byte-buffer is the storage
+        // `Vec`'s allocation, not a fresh copy) as well as value-equal
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<Membro>` (which would type-check but silently clone on
+        // every call), a `&Vec<Membro>` return (which would leak the
+        // backing `Vec`'s grow/push/reserve surface no downstream
+        // consumer reaches for), or a one-arm-only accessor that
+        // returned a saturating value on some sentinel input.
+        use crate::aplicacao::Membro;
+        for membros in [
+            vec![],
+            vec![Membro {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+            }],
+            vec![
+                Membro {
+                    caixa: "cart".into(),
+                    versao: "^0.1".into(),
+                },
+                Membro {
+                    caixa: "pricing".into(),
+                    versao: "^0.2".into(),
+                },
+            ],
+        ] {
+            let c = caixa_aplicacao_with_membros(membros.clone());
+            let first = c.membros();
+            let second = c.membros();
+            assert_eq!(
+                first, second,
+                "Caixa::membros must be idempotent — two successive \
+                 calls on the same &self must return the same &[Membro]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::membros must borrow the underlying Vec<Membro> \
+                 storage — two successive calls must return slices with \
+                 the same backing pointer (a fresh Vec<Membro> clone \
+                 would change the pointer on every call)",
+            );
+            assert_eq!(
+                first,
+                membros.as_slice(),
+                "Caixa::membros must return :membros verbatim by borrow \
+                 — got {first:?}, expected {membros:?}",
             );
         }
     }
