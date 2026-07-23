@@ -1817,7 +1817,22 @@ pub fn programs_yaml_entry(
         .to_string();
 
     let mut entry = serde_yaml::Mapping::new();
-    entry.insert_string(FLEET_PROGRAMS_KEY_NAME, caixa.nome.clone());
+    // Route the per-entry `name:` `String`-carry through the typed
+    // [`caixa_core::Caixa::nome`] accessor (`caixa.nome().to_string()`)
+    // instead of the raw `caixa.nome.clone()` field access — sibling
+    // convergence to the peer 54bf2f3 caixa-mesh
+    // `programs_for_aplicacao` / `cilium_network_policies` /
+    // `gateway_routes` three-site converge on the same axis on the
+    // sibling renderer crate. Every future extension of the accessor
+    // (an M4 namespace-qualified rewrite the CR materializer applies
+    // per-CR, a per-cluster alias table pinned through a future
+    // `:placement`-scoped slot, the `:nome-suffix` overlay
+    // MESH-COMPOSITION §III.2 acknowledges) reaches this emit site
+    // through the accessor by construction. Pinned by the drift-
+    // detection test
+    // [`programs_yaml_entry_name_field_routes_through_caixa_nome_accessor`]
+    // in the tests module.
+    entry.insert_string(FLEET_PROGRAMS_KEY_NAME, caixa.nome().to_string());
     entry.insert_string(KUBE_KEY_NAMESPACE, namespace);
 
     // Two-step per-Servico value-block splice — the `spec.*` field
@@ -2077,7 +2092,27 @@ pub type BundleFile = caixa_core::RenderedFile;
 pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<BundleFile>, Error> {
     caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
-    let name = caixa.nome.clone();
+    // Route the per-bundle `let name` `String`-carry through the typed
+    // [`caixa_core::Caixa::nome`] accessor (`caixa.nome().to_string()`)
+    // instead of the raw `caixa.nome.clone()` field access — the one
+    // `let name` binding threads into every downstream
+    // `metadata.name` axis this fn emits (the `GitRepository`
+    // top-level `metadata.name`, the `HelmRelease` top-level
+    // `metadata.name` + nested `spec.chart.spec.sourceRef.name`, the
+    // `Kustomization` top-level `metadata.name` + nested
+    // `spec.healthChecks[0].name`, plus the
+    // [`flux_kustomization_source_subtree`] composer's per-caixa
+    // sub-tree scalar), so this single accessor edit shifts every
+    // per-CR name-axis derivation onto the typed dispatch at once.
+    // Sibling convergence to the peer 54bf2f3 caixa-mesh three-site
+    // converge on the same axis on the sibling renderer crate. Pinned
+    // by the drift-detection tests
+    // [`cluster_bundle_gitrepository_metadata_name_routes_through_caixa_nome_accessor`],
+    // [`cluster_bundle_helmrelease_metadata_name_routes_through_caixa_nome_accessor`],
+    // and
+    // [`cluster_bundle_kustomization_metadata_name_routes_through_caixa_nome_accessor`]
+    // in the tests module.
+    let name = caixa.nome().to_string();
     let chart_name = lareira_chart_name(&name);
 
     // The per-variant sub-selector key (`tag` / `branch` / `commit`)
@@ -7376,5 +7411,199 @@ spec:
             std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME),
         );
         assert_eq!(via_alias_new.contents, "kind: GitRepository\n");
+    }
+
+    #[test]
+    fn programs_yaml_entry_name_field_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the emit-side `name:` scalar the
+        // aggregator-path [`programs_yaml_entry`] writes into the
+        // per-Servico values-schema entry at
+        // `entry[FLEET_PROGRAMS_KEY_NAME]` must derive from the typed
+        // [`caixa_core::Caixa::nome`] accessor byte-for-byte. Before
+        // this converge the emit site carried a raw
+        // `caixa.nome.clone()` field access at
+        // [`programs_yaml_entry`]'s per-entry name-insert position —
+        // the sole production-code `String`-carry from `Caixa::nome`
+        // on this fn's emit path — and a future extension of the
+        // accessor (an M4 namespace-qualified rewrite the CR
+        // materializer applies per-CR, a per-cluster alias table
+        // pinned through a future `:placement`-scoped slot, the
+        // `:nome-suffix` overlay MESH-COMPOSITION §III.2 acknowledges)
+        // that landed on the accessor but not on this emit site would
+        // silently split the substrate-operator-side aggregator's
+        // per-entry `name:` axis (the discriminator
+        // [`caixa_core::upsert_named_entry`] keys off on every peer
+        // append / replace, and the substrate operator's fleet-programs
+        // reconciler groups per-Servico HelmRelease materialization by)
+        // from every peer read-side consumer of `Caixa::nome`
+        // (`lareira_chart_name` chart-directory composer,
+        // `flux_kustomization_source_subtree` per-caixa sub-tree
+        // composer, the error-path diagnostic
+        // [`caixa_core::KindMismatch`] names the offending caixa's
+        // `:nome` through). Byte-equal today (the accessor is
+        // `&self.nome`); the pin catches any future accessor
+        // extension whose emit-side write regresses to the raw field.
+        // Peer to
+        // [`caixa_mesh::tests::programs_for_aplicacao_entry_aplicacao_routes_through_caixa_nome_accessor`]
+        // on the sibling mesh-side fleet-programs-aggregator emit
+        // path.
+        let caixa = sample_caixa();
+        let entry = programs_yaml_entry(&caixa, &sample_cu_yaml()).unwrap();
+        let emitted = entry
+            .get(FLEET_PROGRAMS_KEY_NAME)
+            .and_then(|n| n.as_str())
+            .expect(
+                "programs.yaml entry must carry a `name:` scalar — drift here \
+                 silently splits the substrate-operator-side fleet-programs \
+                 aggregator's per-entry identity from every peer read-side \
+                 consumer of `Caixa::nome`",
+            );
+        assert_eq!(
+            emitted,
+            caixa.nome(),
+            "programs.yaml `entry[FLEET_PROGRAMS_KEY_NAME]` must derive from \
+             the typed `caixa_core::Caixa::nome` accessor byte-for-byte — a \
+             regression that re-inlines `caixa.nome.clone()` at the emit site \
+             silently splits the aggregator-path per-entry `name:` axis from \
+             every future accessor extension (namespace-qualified rewrite, \
+             per-cluster alias table, `:nome-suffix` overlay) that lands on \
+             the accessor",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_gitrepository_metadata_name_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the emit-side `metadata.name`
+        // scalar the bundle-path [`cluster_bundle`] writes into the
+        // `GitRepository` CR document must derive from the typed
+        // [`caixa_core::Caixa::nome`] accessor byte-for-byte. Before
+        // this converge the emit site carried a raw
+        // `let name = caixa.nome.clone()` field access at
+        // [`cluster_bundle`]'s per-bundle name-binding position — the
+        // sole production-code `String`-carry the fn threads into
+        // every downstream `metadata.name` axis it emits — so a future
+        // extension of the accessor that landed on the accessor but
+        // not on this emit site would silently split the source-
+        // controller-side `GitRepository` CR's per-Servico identity
+        // (the axis the paired `HelmRelease`
+        // `spec.chart.spec.sourceRef.name` binds through) from every
+        // peer read-side consumer of `Caixa::nome`. Peer to
+        // [`cluster_bundle_helmrelease_metadata_name_routes_through_caixa_nome_accessor`]
+        // and
+        // [`cluster_bundle_kustomization_metadata_name_routes_through_caixa_nome_accessor`]
+        // on the sibling per-CR emit-position pins.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let files = cluster_bundle(&caixa, &opts).unwrap();
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+            .expect("gitrepository.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
+        let emitted = kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(
+            "gitrepository.yaml `metadata.name` scalar present — drift here \
+             silently orphans the source-controller-side per-Servico \
+             GitRepository CR from every peer `spec.sourceRef.name` binding",
+        );
+        assert_eq!(
+            emitted,
+            caixa.nome(),
+            "gitrepository.yaml `metadata.name` must derive from the typed \
+             `caixa_core::Caixa::nome` accessor byte-for-byte — a regression \
+             that re-inlines `caixa.nome.clone()` at the per-bundle \
+             `let name` binding silently splits the source-controller-side \
+             per-Servico GitRepository CR's identity from every future \
+             accessor extension (namespace-qualified rewrite, per-cluster \
+             alias table, `:nome-suffix` overlay) that lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_helmrelease_metadata_name_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the emit-side `metadata.name`
+        // scalar the bundle-path [`cluster_bundle`] writes into the
+        // `HelmRelease` CR document must derive from the typed
+        // [`caixa_core::Caixa::nome`] accessor byte-for-byte. Same
+        // single-source `let name = caixa.nome()` binding as the
+        // peer GitRepository / Kustomization sibling pins — this test
+        // pins the derived `HelmRelease` `metadata.name` axis (the
+        // discriminator the Flux v2 helm-controller keys per-Servico
+        // reconciliation off, and the axis the paired Kustomization
+        // `spec.healthChecks[0].name` health-checks binds through).
+        // Peer to
+        // [`cluster_bundle_gitrepository_metadata_name_routes_through_caixa_nome_accessor`]
+        // and
+        // [`cluster_bundle_kustomization_metadata_name_routes_through_caixa_nome_accessor`]
+        // on the sibling per-CR emit-position pins.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let files = cluster_bundle(&caixa, &opts).unwrap();
+        let hr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_HELMRELEASE_YAML_FILENAME))
+            .expect("helmrelease.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
+        let emitted = kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(
+            "helmrelease.yaml `metadata.name` scalar present — drift here \
+             silently orphans the helm-controller-side per-Servico \
+             HelmRelease CR from every peer Kustomization \
+             `spec.healthChecks[].name` binding",
+        );
+        assert_eq!(
+            emitted,
+            caixa.nome(),
+            "helmrelease.yaml `metadata.name` must derive from the typed \
+             `caixa_core::Caixa::nome` accessor byte-for-byte — a regression \
+             that re-inlines `caixa.nome.clone()` at the per-bundle \
+             `let name` binding silently splits the helm-controller-side \
+             per-Servico HelmRelease CR's identity from every future \
+             accessor extension (namespace-qualified rewrite, per-cluster \
+             alias table, `:nome-suffix` overlay) that lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_kustomization_metadata_name_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the emit-side `metadata.name`
+        // scalar the bundle-path [`cluster_bundle`] writes into the
+        // `Kustomization` CR document must derive from the typed
+        // [`caixa_core::Caixa::nome`] accessor byte-for-byte. Same
+        // single-source `let name = caixa.nome()` binding as the
+        // peer GitRepository / HelmRelease sibling pins — this test
+        // pins the derived `Kustomization` `metadata.name` axis (the
+        // discriminator the Flux v2 kustomize-controller keys per-
+        // Servico prune / reconcile decisions off). Peer to
+        // [`cluster_bundle_gitrepository_metadata_name_routes_through_caixa_nome_accessor`]
+        // and
+        // [`cluster_bundle_helmrelease_metadata_name_routes_through_caixa_nome_accessor`]
+        // on the sibling per-CR emit-position pins.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let files = cluster_bundle(&caixa, &opts).unwrap();
+        let k = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_KUSTOMIZATION_YAML_FILENAME))
+            .expect("kustomization.yaml present");
+        let parsed: serde_yaml::Value =
+            serde_yaml::from_str(&k.contents).expect("kustomization.yaml parses as YAML");
+        let emitted = kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(
+            "kustomization.yaml `metadata.name` scalar present — drift here \
+             silently splits the kustomize-controller-side per-Servico \
+             Kustomization CR's prune / reconcile decisions from every peer \
+             HelmRelease CR's paired identity",
+        );
+        assert_eq!(
+            emitted,
+            caixa.nome(),
+            "kustomization.yaml `metadata.name` must derive from the typed \
+             `caixa_core::Caixa::nome` accessor byte-for-byte — a regression \
+             that re-inlines `caixa.nome.clone()` at the per-bundle \
+             `let name` binding silently splits the kustomize-controller-\
+             side per-Servico Kustomization CR's identity from every future \
+             accessor extension (namespace-qualified rewrite, per-cluster \
+             alias table, `:nome-suffix` overlay) that lands on the accessor",
+        );
     }
 }
