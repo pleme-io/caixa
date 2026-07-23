@@ -28,7 +28,7 @@ impl Build {
             .verify(&caixa, &root)
             .context("layout invariants violated")?;
 
-        for entry in &caixa.bibliotecas {
+        for entry in caixa.bibliotecas() {
             let path = root.join(entry);
             let src = std::fs::read_to_string(&path)
                 .with_context(|| format!("reading {}", path.display()))?;
@@ -40,7 +40,7 @@ impl Build {
             "caixa {} v{} — layout + lisp parse clean ({} lib entry/ies)",
             caixa.nome,
             caixa.versao,
-            caixa.bibliotecas.len()
+            caixa.bibliotecas().len()
         );
         Ok(())
     }
