@@ -937,7 +937,7 @@ impl LayoutInvariants for StandardLayout {
         //
         // 26da2c7 closed the per-entry validate gap; this commit closes
         // the cross-entry one on the same wiring site.
-        crate::upgrade::validate_upgrade_from(&caixa.upgrade_from).map_err(|err| {
+        crate::upgrade::validate_upgrade_from(caixa.upgrade_from()).map_err(|err| {
             LayoutError::UpgradeViolation {
                 caixa: caixa.nome.clone(),
                 issue: err.to_string(),
@@ -968,7 +968,7 @@ impl LayoutInvariants for StandardLayout {
         // arm-ordering posture every peer cross-axis gate uses
         // (`*_invalid_fires_before_duplicate_check` /
         // `*_takes_precedence_over_*` pins on every typed-graph axis).
-        crate::upgrade::validate_upgrade_from_against_versao(&caixa.upgrade_from, &caixa.versao)
+        crate::upgrade::validate_upgrade_from_against_versao(caixa.upgrade_from(), &caixa.versao)
             .map_err(|err| LayoutError::UpgradeViolation {
                 caixa: caixa.nome.clone(),
                 issue: err.to_string(),
@@ -1004,14 +1004,14 @@ impl LayoutInvariants for StandardLayout {
         // its narrower per-instruction-shape diagnostic before the
         // missing-callback gate fires.
         crate::upgrade::validate_upgrade_from_against_behavior(
-            &caixa.upgrade_from,
+            caixa.upgrade_from(),
             caixa.behavior(),
         )
         .map_err(|err| LayoutError::UpgradeViolation {
             caixa: caixa.nome.clone(),
             issue: err.to_string(),
         })?;
-        for entry in &caixa.upgrade_from {
+        for entry in caixa.upgrade_from() {
             for instr in entry.instructions() {
                 if let Some(p) = instr.declared_path() {
                     let full = root.join(p);
