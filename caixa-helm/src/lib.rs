@@ -763,7 +763,19 @@ pub fn render_chart_for_servico_with(
 ) -> Result<ChartDir, Error> {
     caixa_core::require_v0_servico_shape::<Error>(caixa)?;
 
-    let chart_name = lareira_chart_name(&caixa.nome);
+    // Canonical typed `&str`-read of the per-`Caixa` `:nome`
+    // universal-axis DNS-1123-label caixa-identity scalar into
+    // the per-chart-directory `lareira-<nome>` identity composer.
+    // Peer of the sibling 4a363bf / 54bf2f3 `caixa.nome.clone()`
+    // converges on the outer-Caixa `:nome` `String`-carry axis
+    // in caixa-flux / caixa-mesh and the sibling eb912de
+    // `caixa.versao.clone()` converge on the co-resident
+    // `Caixa::versao` `String`-carry axis in this crate — this
+    // extends the "one typed dispatch on the substrate primitive,
+    // thin projections at each consumer" discipline onto the
+    // non-`.clone()` raw-field-access axis of `Caixa::nome` in
+    // caixa-helm.
+    let chart_name = lareira_chart_name(caixa.nome());
     let chart_yaml = build_chart_yaml(caixa, &chart_name, opts);
     let values_yaml = build_values_yaml(caixa, computeunit_yaml, opts)?;
     let readme = build_readme(caixa, &chart_name);
@@ -804,7 +816,7 @@ fn build_chart_yaml(caixa: &Caixa, chart_name: &str, opts: &RenderOpts) -> Chart
     let description = caixa
         .descricao()
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("Generated chart for caixa Servico {}", caixa.nome));
+        .unwrap_or_else(|| format!("Generated chart for caixa Servico {}", caixa.nome()));
     let keywords: Vec<String> = caixa
         .etiquetas()
         .iter()
@@ -912,7 +924,7 @@ fn build_values_yaml(
          #\n\
          # `{library_alias}:` is the alias under which the library chart\n\
          # in pleme-io/helmworks/charts/{library_alias} consumes its values.\n\n",
-        nome = caixa.nome
+        nome = caixa.nome()
     );
 
     let mut block = BTreeMap::new();
@@ -953,7 +965,7 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
     let descricao = caixa
         .descricao()
         .map(str::to_owned)
-        .unwrap_or_else(|| format!("caixa Servico {}", caixa.nome));
+        .unwrap_or_else(|| format!("caixa Servico {}", caixa.nome()));
     format!(
         "# {chart_name}\n\
          \n\
@@ -976,7 +988,7 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
          {license}.\n",
         chart_name = chart_name,
         descricao = descricao,
-        repo = caixa.repositorio().unwrap_or(caixa.nome.as_str()),
+        repo = caixa.repositorio().unwrap_or(caixa.nome()),
         versao = caixa.versao,
         license = caixa.licenca().unwrap_or("MIT"),
     )
@@ -2818,6 +2830,190 @@ spec:
              accessor extension (SemVer-2 build-metadata canonicalization, \
              OCI-tag normalization, per-edition pre-release-tag overlay) that \
              lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn chart_yaml_name_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: the per-`Chart.yaml` top-level `name:`
+        // scalar the [`build_chart_yaml`] fn writes must derive
+        // from the typed [`caixa_core::Caixa::nome`] accessor
+        // byte-for-byte through the substrate-canonical
+        // [`caixa_core::lareira_chart_name`] identity composer.
+        // Before this converge the outer `lareira_chart_name(&caixa.nome)`
+        // call at [`render_chart_for_servico_with`] carried a raw
+        // `&caixa.nome` borrow-then-deref of the underlying `String`
+        // field, bypassing the typed accessor. Peer of the sibling
+        // eb912de `caixa.versao().to_string()` converge on the
+        // co-resident `Caixa::versao` `String`-carry axis in this
+        // crate and the sibling 4a363bf / 54bf2f3 `caixa.nome().to_string()`
+        // converges on the outer-Caixa `:nome` `String`-carry axis
+        // in caixa-flux / caixa-mesh — extends the "one typed
+        // dispatch on the substrate primitive, thin projections at
+        // each consumer" discipline onto the non-`.clone()` raw-
+        // field-access axis of `Caixa::nome` in caixa-helm. Byte-
+        // equal today (the accessor is `&self.nome`); the pin
+        // catches any future accessor extension (a per-cluster
+        // alias overlay, an M4 CR-materializer name rewrite, a
+        // future `:nome-suffix` slot) whose emit-side write
+        // regresses to the raw `&caixa.nome` field access.
+        let caixa = sample_caixa();
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
+            .expect("Chart.yaml present");
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        assert_eq!(
+            chart.name,
+            caixa_core::lareira_chart_name(caixa.nome()),
+            "Chart.yaml `name:` must derive from the typed \
+             `caixa_core::Caixa::nome` accessor through \
+             `caixa_core::lareira_chart_name` byte-for-byte — a regression \
+             that re-inlines `lareira_chart_name(&caixa.nome)` at the emit \
+             site silently splits the per-`Chart.yaml` `name:` axis from \
+             every future accessor extension (per-cluster alias overlay, \
+             M4 CR-materializer name rewrite, `:nome-suffix` slot) that \
+             lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn chart_yaml_description_fallback_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: on a `:descricao`-null caixa the
+        // [`build_chart_yaml`] `description:` fallback substitutes
+        // `format!("Generated chart for caixa Servico {}", caixa.nome())`,
+        // which must derive its terminal identity byte-string from the
+        // typed [`caixa_core::Caixa::nome`] accessor. Before this
+        // converge the fallback carried a raw `caixa.nome` Display of
+        // the underlying `String` field, bypassing the typed accessor.
+        // Byte-equal today; the pin catches any future accessor
+        // extension whose fallback emit regresses to the raw field.
+        let caixa = Caixa {
+            descricao: None,
+            ..sample_caixa()
+        };
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let chart_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_YAML_FILENAME))
+            .expect("Chart.yaml present");
+        let chart: ChartYaml = serde_yaml::from_str(&chart_file.contents).unwrap();
+        assert_eq!(
+            chart.description,
+            format!("Generated chart for caixa Servico {}", caixa.nome()),
+            "Chart.yaml `description:` `:descricao`-null fallback must \
+             derive from the typed `caixa_core::Caixa::nome` accessor \
+             byte-for-byte — a regression that re-inlines \
+             `format!(\"Generated chart for caixa Servico {{}}\", caixa.nome)` \
+             at the emit site silently splits the per-`Chart.yaml` \
+             `description:` axis from every future accessor extension \
+             that lands on the accessor",
+        );
+    }
+
+    #[test]
+    fn values_yaml_header_nome_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: the [`build_values_yaml`] `# Auto-generated
+        // by caixa-helm from caixa.lisp + servicos/{nome}.computeunit.yaml.`
+        // comment header carries the parent-caixa's `:nome` identity
+        // byte-string verbatim through the typed
+        // [`caixa_core::Caixa::nome`] accessor. Before this converge
+        // the site carried a raw `nome = caixa.nome` Display of the
+        // underlying `String` field, bypassing the typed accessor.
+        // Byte-equal today; the pin catches any future accessor
+        // extension whose header-emit regresses to the raw field.
+        let caixa = sample_caixa();
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let values_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_VALUES_YAML_FILENAME))
+            .expect("values.yaml present");
+        let expected = format!("servicos/{}.computeunit.yaml", caixa.nome());
+        assert!(
+            values_file.contents.contains(&expected),
+            "values.yaml header comment must carry the typed \
+             `caixa_core::Caixa::nome` accessor's byte-string \
+             ({expected:?}) verbatim — a regression that re-inlines \
+             `caixa.nome` in the header format silently splits the \
+             values.yaml provenance-annotation axis from every future \
+             accessor extension that lands on the accessor. \
+             Full contents:\n{contents}",
+            contents = values_file.contents,
+        );
+    }
+
+    #[test]
+    fn readme_descricao_fallback_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: on a `:descricao`-null caixa the
+        // [`build_readme`] descricao-line fallback substitutes
+        // `format!("caixa Servico {}", caixa.nome())`, which must
+        // derive its terminal identity byte-string from the typed
+        // [`caixa_core::Caixa::nome`] accessor. Before this converge
+        // the fallback carried a raw `caixa.nome` Display of the
+        // underlying `String` field, bypassing the typed accessor.
+        // Byte-equal today; the pin catches any future accessor
+        // extension whose fallback emit regresses to the raw field.
+        let caixa = Caixa {
+            descricao: None,
+            ..sample_caixa()
+        };
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let readme_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_README_FILENAME))
+            .expect("README.md present");
+        let expected = format!("caixa Servico {}", caixa.nome());
+        assert!(
+            readme_file.contents.contains(&expected),
+            "README.md `:descricao`-null fallback must carry the typed \
+             `caixa_core::Caixa::nome` accessor's byte-string ({expected:?}) \
+             verbatim — a regression that re-inlines `format!(\"caixa \
+             Servico {{}}\", caixa.nome)` at the emit site silently \
+             splits the README fallback-descricao axis from every future \
+             accessor extension. Full contents:\n{contents}",
+            contents = readme_file.contents,
+        );
+    }
+
+    #[test]
+    fn readme_repositorio_fallback_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: on a `:repositorio`-null caixa the
+        // [`build_readme`] `repo` interpolation falls back to
+        // `caixa.nome()`, which must derive from the typed
+        // [`caixa_core::Caixa::nome`] accessor. Before this converge
+        // the fallback carried a raw `caixa.nome.as_str()` on the
+        // underlying `String` field, bypassing the typed accessor.
+        // Byte-equal today; the pin catches any future accessor
+        // extension whose fallback emit regresses to the raw field.
+        let caixa = Caixa {
+            repositorio: None,
+            ..sample_caixa()
+        };
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let readme_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_README_FILENAME))
+            .expect("README.md present");
+        let expected = format!(
+            "Generated by `caixa-helm` from `{}/caixa.lisp`",
+            caixa.nome()
+        );
+        assert!(
+            readme_file.contents.contains(&expected),
+            "README.md `:repositorio`-null fallback must derive its \
+             `repo` interpolation from the typed \
+             `caixa_core::Caixa::nome` accessor byte-for-byte \
+             ({expected:?}) — a regression that re-inlines \
+             `caixa.nome.as_str()` at the emit site silently splits \
+             the README origin-line repo axis from every future \
+             accessor extension. Full contents:\n{contents}",
+            contents = readme_file.contents,
         );
     }
 }
