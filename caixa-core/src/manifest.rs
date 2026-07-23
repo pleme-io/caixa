@@ -1618,6 +1618,134 @@ impl Caixa {
         self.deps_dev.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:limits` M2 typed-slot outer-
+    /// composite Lunatic-per-process wasm32-sandboxing-composite optional-
+    /// composite-reference accessor every consumer of the top-level
+    /// manifest's per-Servico [`LimitsSpec`] outer-composite reader keys
+    /// off — returns the author-declared `:limits` typed composite
+    /// verbatim as an `Option<&LimitsSpec>` reference over the same
+    /// backing storage the raw `self.limits.as_ref()` field access
+    /// borrows from, with `None` naming the "no `:limits` block
+    /// authored — every per-axis Lunatic-sandbox cap defers to the
+    /// wasm-engine-default arm named on the per-axis
+    /// [`LimitsSpec::memory`] / [`LimitsSpec::fuel`] /
+    /// [`LimitsSpec::wall_clock`] / [`LimitsSpec::cpu`] scalar-accessor
+    /// docstrings" partition every downstream Servico-M2-overlay
+    /// emitter treats as "emit nothing" and the sibling
+    /// [`crate::StandardLayout::verify`] per-`:limits` shape gate
+    /// treats as "skip the per-axis
+    /// [`crate::LimitsError::MemoryZero`] / `MemoryBelowWasm32Page` /
+    /// `FuelZero` / `WallClockZero` / `CpuZero` refusal cascade".
+    ///
+    /// The outer `:limits` slot carries the M2 Servico-runtime typed
+    /// composite — the load-bearing container of every Lunatic-shaped
+    /// per-process wasm32-sandbox cap axis every long-running wasm
+    /// component's runtime dispatches on (INSPIRATIONS §III.1 —
+    /// Lunatic per-process linear-memory / fuel / wall-clock /
+    /// millicore cap primitives translated onto pleme-io's typed
+    /// `:limits :memory` / `:limits :fuel` / `:limits :wall-clock` /
+    /// `:limits :cpu` sub-slot axes; CAIXA-SDLC §II — the typed-M2
+    /// slot algebra the wasm-engine + `pleme-computeunit` Helm-library
+    /// chart both fan on). Every per-`:limits` axis threads through a
+    /// lifted per-slot accessor on the [`LimitsSpec`] type: the
+    /// [`LimitsSpec::memory`] wasm32 linear-memory byte-cap scalar
+    /// accessor, the [`LimitsSpec::fuel`] wasmtime fuel-cap scalar
+    /// accessor, the [`LimitsSpec::wall_clock`] per-call wall-clock
+    /// deadline scalar accessor, and the [`LimitsSpec::cpu`]
+    /// K8s-millicore soft-CPU-share scalar accessor. Every downstream
+    /// consumer that reaches for a limits axis first passes through
+    /// this outer accessor onto the composite and then dispatches
+    /// onto the per-axis accessor — the two-level dispatch means
+    /// every per-`:limits` reader now routes through a typed dispatch
+    /// on the substrate primitive at both altitudes.
+    ///
+    /// Prior to this lift the `.limits` `Option<LimitsSpec>` composite
+    /// was accessed inline at three production sites — the
+    /// [`crate::StandardLayout::verify`] per-`:limits` shape gate's
+    /// `if let Some(l) = &caixa.limits { … }` traversal head
+    /// (caixa-core/src/layout.rs:882, which drives the per-axis
+    /// refusal cascade on the composite: the `LimitsError::MemoryZero`
+    /// / `MemoryBelowWasm32Page` / `MemoryExceedsWasm32Max` /
+    /// `FuelZero` / `FuelExceedsMax` / `WallClockZero` /
+    /// `WallClockExceedsMax` / `CpuZero` / `CpuExceedsMax` refusals
+    /// [`LimitsSpec::validate`] fans onto), the
+    /// [`crate::render::servico_m2_overlay`] per-Servico M2 overlay
+    /// emitter's `if let Some(limits) = &caixa.limits { … }` traversal
+    /// head (caixa-core/src/render.rs:18504, which drives the
+    /// `M2_KEY_LIMITS`-keyed `limits.is_empty()`-gated `serde_yaml`
+    /// projection every `caixa-helm` / `caixa-flux` Servico values-
+    /// block emitter fans on), and the
+    /// [`Self::declared_servico_slots`] per-Servico M2 declared-slot-
+    /// set enumerator's `self.limits.is_some()` presence probe
+    /// (caixa-core/src/manifest.rs:1788, which drives the
+    /// `M2_AUTHOR_KEY_LIMITS` kebab-case author-label push every
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] kind-coherence
+    /// gate reads) — three open-coded outer-field accesses that
+    /// expressed no compile-time link back to the typed slot at the
+    /// [`Caixa`] altitude. A future extension of the `:limits` outer
+    /// axis to a richer author surface (a multi-`:limits` list the M4
+    /// CR materializer resolves per-CR at admission time so a Servico
+    /// can expose a compute-heavy + IO-heavy limits pair, a per-
+    /// cluster `:limits-overrides` slot the operator pins so a
+    /// cluster-specific policy can tighten a caixa-declared cap
+    /// without re-authoring the `caixa.lisp`, a promotion of the
+    /// plain `Option<LimitsSpec>` to a richer
+    /// `{static, dynamic}` partition once the wasm-engine's runtime-
+    /// resolved dynamic-cap surface lands) would have had to be
+    /// threaded through all three open-coded copies in lockstep or
+    /// one consumer would silently disagree with the peers on which
+    /// limits composite a given Caixa resolves to — the layout gate's
+    /// per-axis bracket-dispatch seed reading the raw slot while the
+    /// peer `servico_m2_overlay` emitter read an operator-resolved
+    /// slot would silently split the build-time sandbox-shape gate
+    /// from the runtime `ComputeUnit` CR emission gate, a three-
+    /// consumer split at the layout gate, the M2 overlay emitter, and
+    /// the declared-slot enumerator far from the source `caixa.lisp`
+    /// with no field naming the limits-drift root cause. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa`
+    /// Lunatic-sandboxing outer-composite surface reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a
+    /// unit on any future axis addition.
+    ///
+    /// First outer top-level [`Caixa`] `Option<&Composite>`-return
+    /// composite-reference accessor — opens the outer-`Caixa`
+    /// `Option<&Composite>` composite-reference projection pattern the
+    /// sibling per-`Caixa` `:behavior` [`crate::BehaviorSpec`] /
+    /// `:politicas` [`crate::aplicacao::MeshPolicy`] / `:placement`
+    /// [`crate::aplicacao::Placement`] / `:entrada`
+    /// [`crate::aplicacao::Entrada`] future outer-composite lifts
+    /// fold on. Peer of the M3 mesh-slot outer-composite family the
+    /// sibling [`crate::AplicacaoSpec::politicas`] (534dc21) /
+    /// [`crate::AplicacaoSpec::placement`] (9abb8f0) /
+    /// [`crate::AplicacaoSpec::entrada`] (d32111c) composite-reference
+    /// accessors already close on the outer [`crate::AplicacaoSpec`]
+    /// altitude — extends that "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline onto
+    /// the outer top-level [`Caixa`] altitude, opening the M2 Servico-
+    /// runtime slot family's outer-composite axis. Returns
+    /// `Option<&LimitsSpec>` (not the owning composite by copy or
+    /// clone) because every downstream consumer of the limits
+    /// composite treats it as a read-only per-axis dispatch source —
+    /// the reference-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (per-axis accessor dispatch,
+    /// `.is_empty()`-gated overlay projection, presence-probe early
+    /// return on the "author-omitted `:limits` ⇒ engine-default
+    /// applies" partition) without cloning the composite through
+    /// every consumer's fast path. The `Option` half of the return-
+    /// type preserves the load-bearing "author-omitted `:limits` ⇒
+    /// engine-default applies" partition (not a default composite the
+    /// downstream must reject on emptiness) — the accessor projects
+    /// the raw `Option<LimitsSpec>` slot's presence bit through the
+    /// reference-return unchanged. Named `limits()` to match the
+    /// storage field's name verbatim and the tatara-lisp author-
+    /// surface term (`:limits`) the field's own docstring already
+    /// carries.
+    #[must_use]
+    pub fn limits(&self) -> Option<&LimitsSpec> {
+        self.limits.as_ref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1785,7 +1913,7 @@ impl Caixa {
     #[must_use]
     pub fn declared_servico_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
-        if self.limits.is_some() {
+        if self.limits().is_some() {
             slots.push(crate::render::M2_AUTHOR_KEY_LIMITS);
         }
         if self.behavior.is_some() {
@@ -10770,6 +10898,311 @@ mod tests {
                  borrow — got {first:?}, expected {deps_dev:?}",
             );
         }
+    }
+
+    // ── Caixa::limits — outer top-level Option<&LimitsSpec> composite-reference accessor ──
+
+    fn caixa_with_limits(limits: Option<crate::LimitsSpec>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.limits = limits;
+        c
+    }
+
+    #[test]
+    fn limits_returns_limits_option_ref_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:limits` M2 typed-slot outer-
+        // composite optional-composite-reference-shape pin:
+        // [`Caixa::limits`] must return the `:limits` typed
+        // `Option<LimitsSpec>` verbatim as an `Option<&LimitsSpec>`
+        // reference over the same backing storage the raw
+        // `self.limits.as_ref()` field access borrows from, byte-equal
+        // across every representative fixture in the accept-set — the
+        // author-omitted `None` shape (the "engine-default applies"
+        // partition every downstream Servico M2 overlay emitter treats
+        // as "emit nothing"), the empty-composite `Some(LimitsSpec {
+        // .. default })` shape ([`LimitsSpec::is_empty`] holds — every
+        // per-axis cap is `None`, so the peer M2 overlay emitter's
+        // `.is_empty()`-gated projection still emits nothing but the
+        // outer presence-bit is `Some`, so [`Caixa::declared_servico_slots`]
+        // still pushes the `M2_AUTHOR_KEY_LIMITS` label), a single-axis
+        // fixture (only `:memory` set — the canonical shape most
+        // memory-heavy Servicos carry), and a fully-populated composite
+        // (every per-axis cap set — the canonical shape a
+        // sandboxed-by-default Servico carries).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned [`LimitsSpec`] copy (which would type-check via the
+        // `Clone` impl but silently break every downstream caller that
+        // relied on the reference sharing the composite's backing
+        // identity), a reference to an operator-resolved overlay (the
+        // future per-cluster `:limits-overrides` slot — its resolution
+        // must land at exactly this accessor body, not silently divert
+        // the raw slot away from a second consumer), a
+        // `None` → `Some(LimitsSpec::default)` cluster-default
+        // projection (which would collapse the load-bearing
+        // "author-omitted `:limits` ⇒ engine-default applies" partition
+        // the peer [`crate::render::servico_m2_overlay`] emitter and
+        // the peer [`Caixa::declared_servico_slots`] enumerator both
+        // read), or an axis-shuffled projection (a future detour that
+        // swapped `memory` and `fuel` through the accessor would
+        // silently split the paired [`crate::StandardLayout::verify`]
+        // per-`:limits` shape gate's traversal input from the peer
+        // `servico_m2_overlay` emitter's projection input).
+        //
+        // First outer top-level [`Caixa`] `Option<&Composite>`-return
+        // composite-reference accessor pin on the substrate primitive
+        // — opens the outer-`Caixa` `Option<&Composite>` composite-
+        // reference projection pattern the sibling `:behavior`
+        // [`crate::BehaviorSpec`] / `:politicas`
+        // [`crate::aplicacao::MeshPolicy`] / `:placement`
+        // [`crate::aplicacao::Placement`] / `:entrada`
+        // [`crate::aplicacao::Entrada`] future outer-composite lifts
+        // fold on. Peer of the closed M3 outer-composite family the
+        // sibling [`crate::AplicacaoSpec::politicas`] (534dc21) /
+        // [`crate::AplicacaoSpec::placement`] (9abb8f0) /
+        // [`crate::AplicacaoSpec::entrada`] (d32111c) composite-
+        // reference accessor pins already carry on the outer
+        // [`crate::AplicacaoSpec`] altitude — extends the outer-
+        // accessor byte-equal-projection discipline onto the outer
+        // top-level [`Caixa`] M2 Servico-runtime slot altitude.
+        use crate::LimitsSpec;
+        use std::time::Duration;
+        let fixtures: Vec<Option<LimitsSpec>> = vec![
+            None,
+            Some(LimitsSpec::default()),
+            Some(LimitsSpec {
+                memory: Some(64 * 1024 * 1024),
+                ..Default::default()
+            }),
+            Some(LimitsSpec {
+                memory: Some(64 * 1024 * 1024),
+                fuel: Some(1_000_000),
+                wall_clock: Some(Duration::from_secs(30)),
+                cpu: Some(500),
+            }),
+        ];
+        for limits in fixtures {
+            let c = caixa_with_limits(limits.clone());
+            assert_eq!(
+                c.limits(),
+                limits.as_ref(),
+                "Caixa::limits must return :limits verbatim (got {:?}, \
+                 expected {:?})",
+                c.limits(),
+                limits.as_ref(),
+            );
+            match (c.limits(), c.limits.as_ref()) {
+                (Some(a), Some(b)) => assert!(
+                    std::ptr::eq(a, b),
+                    "Caixa::limits accessor and self.limits.as_ref() \
+                     field access must borrow the same backing storage \
+                     — the accessor is the substrate-primitive typed \
+                     dispatch every downstream Servico-M2-overlay \
+                     composite consumer must route through, and a \
+                     reference-identity split would silently break \
+                     every consumer that relied on the borrow sharing \
+                     the composite's storage",
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "Caixa::limits presence bit must byte-equal \
+                     self.limits.is_some() — a presence-bit drift would \
+                     silently split the paired StandardLayout::verify \
+                     per-`:limits` shape gate's traversal head from \
+                     the peer render::servico_m2_overlay M2 overlay \
+                     emitter's traversal head from the peer \
+                     Caixa::declared_servico_slots M2 declared-slot \
+                     enumerator's presence probe",
+                ),
+            }
+            assert_eq!(
+                c.limits().is_some(),
+                c.limits.is_some(),
+                "Caixa::limits().is_some() must byte-equal \
+                 self.limits.is_some() — a presence-bit drift would \
+                 silently split every downstream Option<&LimitsSpec> \
+                 consumer's partition on the engine-default arm",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_servico_slots_limits_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_servico_slots`]'s
+        // `:limits` presence-probe arm must key off [`Caixa::limits`],
+        // not the raw `self.limits.is_some()` field-probe. Structurally:
+        // a `Caixa { limits: Some(LimitsSpec::default()), .. }` must
+        // still push `M2_AUTHOR_KEY_LIMITS` onto the declared-slot list
+        // (the presence bit is `Some`, so the M2 kind-coherence gate
+        // must surface the slot as "declared" even when every per-axis
+        // cap is unset), and a `Caixa { limits: None, .. }` must NOT
+        // push the label (the "author omitted the slot entirely"
+        // partition). The pair jointly pins the accessor + declared-
+        // slot enumerator composition: any future silent detour that
+        // had the accessor collapse `Some(LimitsSpec::default())` to
+        // `None` (a `.filter(|l| !l.is_empty())` projection) would
+        // silently absorb the "declared but empty" arm at the
+        // accessor boundary and the [`crate::LayoutError::ServicoSlotsOnNonServico`]
+        // kind-coherence gate would silently accept a
+        // struct-literal `Caixa` carrying the drift.
+        //
+        // Peer of the sibling per-`Caixa`
+        // `validate_deps_duplicate_arm_routes_through_accessor` (ad34b4e)
+        // and `validate_deps_duplicate_deps_dev_arm_routes_through_accessor`
+        // (f7fd81e) accessor-composition pins on the sibling `:deps` /
+        // `:deps-dev` outer-`&[Dep]`-composition axes — same "the
+        // enumerator gate must route through the substrate-primitive
+        // typed dispatch" discipline extended onto the outer top-level
+        // [`Caixa`] `Option<&LimitsSpec>`-composition surface, opening
+        // the outer-`Caixa` M2 Servico-runtime-slot arm of the
+        // composition-pin family.
+        use crate::LimitsSpec;
+        let c = caixa_with_limits(Some(LimitsSpec::default()));
+        let slots = c.declared_servico_slots();
+        assert!(
+            slots.contains(&crate::render::M2_AUTHOR_KEY_LIMITS),
+            "declared_servico_slots must push M2_AUTHOR_KEY_LIMITS \
+             when `:limits` is Some (even for LimitsSpec::default()) \
+             — the accessor and the enumerator gate must route through \
+             the same substrate-primitive typed dispatch on the outer \
+             :limits presence bit (got slots={slots:?})",
+        );
+        let c = caixa_with_limits(None);
+        let slots = c.declared_servico_slots();
+        assert!(
+            !slots.contains(&crate::render::M2_AUTHOR_KEY_LIMITS),
+            "declared_servico_slots must NOT push M2_AUTHOR_KEY_LIMITS \
+             when `:limits` is None — the author-omitted arm must \
+             route through the accessor's None-return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn servico_m2_overlay_limits_arm_routes_through_accessor() {
+        // Composition pin: [`crate::render::servico_m2_overlay`]'s
+        // per-`:limits` M2 overlay emit arm must key off
+        // [`Caixa::limits`], not the raw `&caixa.limits` field-borrow.
+        // Structurally: a `Caixa { limits: Some(LimitsSpec { memory:
+        // Some(64 MiB), .. default }), .. }` must surface the
+        // `M2_KEY_LIMITS` key with the per-axis
+        // `memory: "64MiB"` sub-mapping in the overlay, a `Caixa {
+        // limits: Some(LimitsSpec::default()), .. }` must omit the
+        // key entirely (the `.is_empty()`-gated inner arm elides an
+        // empty composite even when the outer presence bit is `Some`),
+        // and a `Caixa { limits: None, .. }` must also omit the key
+        // (the "author omitted the slot entirely" partition). The
+        // three-fixture family jointly pins the accessor + M2 overlay
+        // emitter composition: any future silent detour that had the
+        // accessor return a fresh-cloned copy on the `Some` arm (a
+        // `LimitsSpec::clone()` projection) would silently break the
+        // reference-identity pin the peer per-axis
+        // `serde_yaml::to_value(limits)` projection reads from.
+        use crate::LimitsSpec;
+        use crate::render::{M2_KEY_LIMITS, servico_m2_overlay};
+        let c = caixa_with_limits(Some(LimitsSpec {
+            memory: Some(64 * 1024 * 1024),
+            ..Default::default()
+        }));
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            overlay.contains_key(M2_KEY_LIMITS),
+            "servico_m2_overlay must surface M2_KEY_LIMITS when \
+             `:limits` carries a non-empty composite — the accessor \
+             and the M2 overlay emitter must route through the same \
+             substrate-primitive typed dispatch on the outer :limits \
+             composite (got overlay={overlay:?})",
+        );
+        let c = caixa_with_limits(Some(LimitsSpec::default()));
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            !overlay.contains_key(M2_KEY_LIMITS),
+            "servico_m2_overlay must omit M2_KEY_LIMITS when \
+             `:limits` is Some(LimitsSpec::default()) — the empty \
+             composite's `.is_empty()`-gated inner arm must elide \
+             the key regardless of the outer presence bit (got \
+             overlay={overlay:?})",
+        );
+        let c = caixa_with_limits(None);
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            !overlay.contains_key(M2_KEY_LIMITS),
+            "servico_m2_overlay must omit M2_KEY_LIMITS when \
+             `:limits` is None — the author-omitted arm must route \
+             through the accessor's None-return unchanged (got \
+             overlay={overlay:?})",
+        );
+    }
+
+    #[test]
+    fn limits_projects_option_ref_by_borrow() {
+        // The by-borrow pin: [`Caixa::limits`] returns
+        // `Option<&LimitsSpec>` by borrow — the returned reference
+        // borrows the underlying `Option<LimitsSpec>` storage of the
+        // `:limits` slot and the accessor must not clone the backing
+        // composite on every call. Peer of the sibling
+        // `deps_projects_slice_by_borrow` (ad34b4e) /
+        // `deps_dev_projects_slice_by_borrow` (f7fd81e) by-borrow pins
+        // on the outer top-level [`Caixa`] `&[Dep]`-return axes —
+        // extended here to the outer [`Caixa`] `Option<&Composite>`-
+        // return axis: the accessor's returned reference must borrow
+        // from `&self` (the returned reference's lifetime is tied to
+        // `&self`), and calling the accessor twice on the same
+        // [`Caixa`] must yield references that are pointer-equal (the
+        // underlying byte-buffer is the storage `LimitsSpec`'s
+        // allocation, not a fresh copy) as well as value-equal
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `LimitsSpec` (which would type-check via the `Clone` impl
+        // but silently clone on every call), a `&LimitsSpec` panic-
+        // return on the `None` arm (which would collapse the load-
+        // bearing `Option` presence-bit into a runtime panic), or a
+        // one-arm-only accessor that returned a saturating composite
+        // on some sentinel input.
+        use crate::LimitsSpec;
+        use std::time::Duration;
+        for limits in [
+            Some(LimitsSpec::default()),
+            Some(LimitsSpec {
+                memory: Some(64 * 1024 * 1024),
+                fuel: Some(1_000_000),
+                wall_clock: Some(Duration::from_secs(30)),
+                cpu: Some(500),
+            }),
+        ] {
+            let c = caixa_with_limits(limits.clone());
+            let first = c.limits().unwrap();
+            let second = c.limits().unwrap();
+            assert_eq!(
+                first, second,
+                "Caixa::limits must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 &LimitsSpec",
+            );
+            assert!(
+                std::ptr::eq(first, second),
+                "Caixa::limits must borrow the underlying \
+                 Option<LimitsSpec> storage — two successive calls \
+                 must return references with the same backing pointer \
+                 (a fresh LimitsSpec clone would change the pointer \
+                 on every call)",
+            );
+            assert_eq!(
+                Some(first),
+                limits.as_ref(),
+                "Caixa::limits must return :limits verbatim by borrow \
+                 — got {first:?}, expected {:?}",
+                limits.as_ref(),
+            );
+        }
+        let c = caixa_with_limits(None);
+        assert!(
+            c.limits().is_none(),
+            "Caixa::limits must return None when :limits is absent — \
+             the author-omitted arm must project through the \
+             accessor's Option::None unchanged",
+        );
     }
 
     // ── drift-detection: Caixa top-level multi-word serde-derive-to-const identity ──

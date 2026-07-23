@@ -18501,7 +18501,7 @@ pub fn servico_m2_overlay(
     caixa: &Caixa,
 ) -> Result<BTreeMap<&'static str, serde_yaml::Value>, RenderError> {
     let mut out = BTreeMap::new();
-    if let Some(limits) = &caixa.limits {
+    if let Some(limits) = caixa.limits() {
         if !limits.is_empty() {
             let v = serde_yaml::to_value(limits).map_err(|source| RenderError::Yaml {
                 slot: M2_KEY_LIMITS,

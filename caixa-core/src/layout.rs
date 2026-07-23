@@ -879,7 +879,7 @@ impl LayoutInvariants for StandardLayout {
         // a 0-port :entrada — wasmtime would consume the value as
         // "trap immediately" rather than the author's "an unspecified
         // bound". See `LimitsSpec::validate` for the full rationale.
-        if let Some(l) = &caixa.limits {
+        if let Some(l) = caixa.limits() {
             l.validate().map_err(|err| LayoutError::LimitsViolation {
                 caixa: caixa.nome.clone(),
                 issue: err.to_string(),
