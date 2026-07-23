@@ -2306,6 +2306,144 @@ impl Caixa {
         self.entrada.as_ref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:upgrade-from` M2 typed-slot
+    /// outer-composite OTP-appup-shaped per-prior-version migration-
+    /// entry-list slice accessor every consumer of the top-level
+    /// manifest's per-Servico hot-upgrade-block `&[UpgradeFromEntry]`
+    /// slice-view keys off — returns the author-declared `:upgrade-from`
+    /// typed `Vec<UpgradeFromEntry>` verbatim as a
+    /// `&[UpgradeFromEntry]` slice-view over the same backing buffer
+    /// the raw `self.upgrade_from.as_slice()` field access borrows
+    /// from. Empty-slice-carrying (the "no hot-upgrade path declared"
+    /// arm every `defcaixa` without an `:upgrade-from` block carries;
+    /// the [`Self::from_lisp`] derive folds an omitted `:upgrade-from`
+    /// through `#[serde(default)]` to `Vec::new()`, so a `Caixa` past
+    /// parse definitionally carries a `Vec<UpgradeFromEntry>` slot —
+    /// possibly empty — and the returned `&[UpgradeFromEntry]`
+    /// degenerates to an empty slice on that arm without any silent
+    /// `None` collapse).
+    ///
+    /// The outer `:upgrade-from` slot carries the M2 typed OTP-appup
+    /// migration block — the load-bearing container of every per-
+    /// prior-`:versao` migration-instruction list the wasm-operator
+    /// dispatches on at hot-upgrade time (INSPIRATIONS §II.4 — OTP
+    /// `.appup` per-prior-version `LoadModule | StateChange |
+    /// SoftPurge | Purge | Restart` instruction algebra translated
+    /// onto pleme-io's typed `:upgrade-from :from` + `:instructions`
+    /// entry list; CAIXA-SDLC §II — the typed-M2 slot algebra the
+    /// operator's hot-upgrade dispatch fans on). Every per-entry axis
+    /// threads through a lifted per-entry accessor on the
+    /// [`UpgradeFromEntry`] type: the
+    /// [`UpgradeFromEntry::prior_versao`] SemVer-shaped previous-
+    /// version scalar accessor and the
+    /// [`UpgradeFromEntry::instructions`] `&[UpgradeInstruction]`-
+    /// return per-entry instruction-list accessor (0137e5a). Every
+    /// downstream consumer of the hot-upgrade path first passes
+    /// through this outer accessor onto the slice and then dispatches
+    /// per-entry through the inner accessors — the two-level dispatch
+    /// means every per-`:upgrade-from` reader now routes through a
+    /// typed dispatch on the substrate primitive at both altitudes.
+    ///
+    /// Prior to this lift the `.upgrade_from` `Vec<UpgradeFromEntry>`
+    /// slot was accessed inline at production sites across three
+    /// files — the [`Self::declared_servico_slots`] M2 declared-slot
+    /// enumerator's `self.upgrade_from.is_empty()` presence probe
+    /// (caixa-core/src/manifest.rs, which drives the
+    /// `M2_AUTHOR_KEY_UPGRADE_FROM` kebab-case author-label push every
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] kind-coherence
+    /// gate reads), the [`crate::StandardLayout::verify`] per-
+    /// `:upgrade-from` three-stage validation pass (caixa-core/src/
+    /// layout.rs, which fans onto the
+    /// [`crate::upgrade::validate_upgrade_from`] per-entry shape +
+    /// cross-entry duplicate gate, the
+    /// [`crate::upgrade::validate_upgrade_from_against_versao`]
+    /// SemVer-precedence cross-slot gate, the
+    /// [`crate::upgrade::validate_upgrade_from_against_behavior`]
+    /// `:state-change` ↔ `:on-state-change` cross-slot composition
+    /// gate, and the per-instruction script-path existence-probe walk
+    /// that reads each entry's [`UpgradeFromEntry::instructions`] to
+    /// resolve every declared migration script against the layout
+    /// root), and the [`crate::render::servico_m2_overlay`] per-
+    /// Servico M2 overlay emitter's `!caixa.upgrade_from.is_empty()`
+    /// presence gate + `serde_yaml::to_value(&caixa.upgrade_from)`
+    /// projection (caixa-core/src/render.rs, which drives the
+    /// `M2_KEY_UPGRADE_FROM`-keyed `serde_yaml` projection every
+    /// `caixa-helm` / `caixa-flux` Servico values-block emitter fans
+    /// on and lands as the ComputeUnit CR's `spec.upgradeFrom` field).
+    /// A future extension of the outer `:upgrade-from` axis (a per-
+    /// cluster `:upgrade-overrides` overlay the wasm-engine operator
+    /// resolves at admission time so a cluster-specific migration
+    /// policy can tighten a caixa-declared step without re-authoring
+    /// the `caixa.lisp`, promotion of the plain
+    /// `Vec<UpgradeFromEntry>` to a richer `{static, dynamic}`
+    /// partition once runtime-resolved hot-upgrade instructions land,
+    /// per-entry priority annotation once multi-strategy fan-out
+    /// lands) would have had to be threaded through all six open-
+    /// coded copies in lockstep or one consumer would silently
+    /// disagree with the peers on which upgrade slice a given Caixa
+    /// resolves to — a six-consumer split at the enumerator, the
+    /// three-stage validate pass, the script-path probe walk, and the
+    /// M2 overlay emitter, far from the source `caixa.lisp` with no
+    /// field naming the upgrade-drift root cause. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa`
+    /// OTP-appup outer-slice surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// First outer top-level [`Caixa`] `&[Composite]`-return slice
+    /// accessor for M2 / M3 typed-slot vec-carry axes — opens the
+    /// outer-`Caixa` `&[Composite]` composite-slice projection
+    /// pattern the sibling `:children`
+    /// [`crate::supervisor::ChildSpec`] / `:membros`
+    /// [`crate::aplicacao::Membro`] / `:contratos`
+    /// [`crate::aplicacao::WitContract`] future outer-composite-slice
+    /// lifts fold on. Peer of the closed outer-`Caixa` scalar
+    /// `Option<&Composite>` composite-reference family the sibling
+    /// [`Self::limits`] (b2bd9d7) / [`Self::behavior`] (35d8b52) /
+    /// [`Self::politicas`] (5d23d29) / [`Self::placement`] (4fb8074) /
+    /// [`Self::entrada`] (e4128e4) accessors closed on the outer
+    /// `Option<&Composite>` altitude, extended here to the outer-
+    /// `Caixa` `&[Composite]` vec-carry altitude. Peer at the inner
+    /// altitude of [`crate::upgrade::UpgradeFromEntry::instructions`]
+    /// (0137e5a) — same "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline
+    /// folded onto the outer top-level [`Caixa`] altitude, opening the
+    /// M2 vec-carry slot family's outer-composite-slice axis. Sibling
+    /// in shape to the peer outer-`Caixa` `&[Dep]`-return
+    /// [`Self::deps`] (ad34b4e) / [`Self::deps_dev`] (f7fd81e) and
+    /// `&[String]`-return [`Self::autores`] (b5d813f) /
+    /// [`Self::etiquetas`] (78c7d3c) / [`Self::bibliotecas`]
+    /// (8a36c23) / [`Self::exe`] (65d9527) / [`Self::servicos`]
+    /// (611f78b) slice-accessors on the sibling outer-`Caixa` scalar-
+    /// element vec-carry axes — folds the "outer [`Caixa`] `&[T]`
+    /// slice" projection pattern onto the sibling M2 typed-composite-
+    /// element axis (`UpgradeFromEntry` composite, matching the
+    /// per-inner [`UpgradeFromEntry::instructions`] element type at a
+    /// different altitude).
+    ///
+    /// Returns `&[UpgradeFromEntry]` (not `&Vec<UpgradeFromEntry>`)
+    /// because every downstream consumer of the hot-upgrade list
+    /// treats it as a read-only sequence — the slice-view is the
+    /// narrowest borrow that supports every present + roadmapped
+    /// consumer (`.iter()`, `.len()`, `.is_empty()`, `serde` slice-
+    /// serialization through
+    /// `serde_yaml::to_value(&[UpgradeFromEntry])`) without leaking
+    /// the backing `Vec`'s grow/push/reserve surface no consumer of
+    /// the typed view reaches for (the storage-side `Vec` remains
+    /// reachable through the `pub upgrade_from` field for the
+    /// mutation-carrying serde round-trip and per-test fixture-
+    /// mutation paths). Named `upgrade_from()` to match the storage
+    /// field's `snake_case` name; the kebab-case author-surface tag
+    /// `:upgrade-from` is the same axis after tatara-lisp's
+    /// kebab↔snake fold and the accessor's identity maps onto the
+    /// canonical CAIXA-SDLC §II vocabulary the slot's docstring
+    /// already carries.
+    #[must_use]
+    pub fn upgrade_from(&self) -> &[UpgradeFromEntry] {
+        self.upgrade_from.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -2479,7 +2617,7 @@ impl Caixa {
         if self.behavior().is_some() {
             slots.push(crate::render::M2_AUTHOR_KEY_BEHAVIOR);
         }
-        if !self.upgrade_from.is_empty() {
+        if !self.upgrade_from().is_empty() {
             slots.push(crate::render::M2_AUTHOR_KEY_UPGRADE_FROM);
         }
         slots
@@ -13122,6 +13260,346 @@ mod tests {
              — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
         );
+    }
+
+    // ── Caixa::upgrade_from — outer top-level &[UpgradeFromEntry] composite-slice accessor ──
+
+    fn caixa_with_upgrade_from(upgrade_from: Vec<crate::upgrade::UpgradeFromEntry>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.upgrade_from = upgrade_from;
+        c
+    }
+
+    #[test]
+    fn upgrade_from_returns_upgrade_from_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:upgrade-from` M2 typed-slot
+        // outer-composite `&[UpgradeFromEntry]`-return slice-shape
+        // pin: [`Caixa::upgrade_from`] must return the `:upgrade-from`
+        // typed `Vec<UpgradeFromEntry>` verbatim as a
+        // `&[UpgradeFromEntry]` slice-view over the same backing
+        // buffer the raw `self.upgrade_from.as_slice()` field access
+        // borrows from, element-equal across every representative
+        // fixture in the accept-set — `[]` (the "no hot-upgrade path
+        // declared" arm every `defcaixa` without an `:upgrade-from`
+        // block carries; `#[serde(default)]` folds an omitted slot
+        // onto `Vec::new()`), a canonical single-entry `Restart`
+        // fixture (the shape most Servicos carry — a single prior
+        // version with the fallback strategy), a canonical multi-
+        // entry list carrying every typed instruction variant
+        // (`LoadModule` / `StateChange` / `SoftPurge` / `Purge` /
+        // `Restart`), and a past-the-guard sentinel — a duplicate-
+        // `:from` `[(0.1.0, Restart), (0.1.0, Restart)]` entry pair
+        // ([`crate::upgrade::validate_upgrade_from`] rejects through
+        // `DuplicateFrom { from: "0.1.0" }` but the accessor must
+        // ship the raw slot verbatim so struct-literal fixtures
+        // continue to expose the duplicate at the accessor boundary).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<UpgradeFromEntry>` (which would type-check but silently
+        // clone on every accessor call, breaking the zero-cost
+        // projection every peer sibling slice accessor carries), a
+        // `[dup, dup] → [dup]` dedup collapse (which would silently
+        // absorb the `DuplicateFrom` refusal case at the accessor
+        // boundary and the [`crate::StandardLayout::verify`] cross-
+        // entry gate would silently accept a struct-literal `Caixa`
+        // carrying the drift), a reference to an operator-resolved
+        // overlay (the future per-cluster `:upgrade-overrides` slot
+        // — its resolution must land at exactly this accessor body,
+        // not silently divert the raw slot away from a second
+        // consumer), or an axis-shuffled projection (a future detour
+        // that reordered entries through the accessor would silently
+        // split the paired [`crate::StandardLayout::verify`] per-
+        // `:upgrade-from` shape gate's traversal input from the peer
+        // [`crate::render::servico_m2_overlay`] emitter's projection
+        // input, since the operator's hot-upgrade dispatch matches
+        // per-`:from` and axis reordering would silently split the
+        // per-entry script-path existence probe's iteration order
+        // from the M2 overlay emitter's serialized-entry order).
+        //
+        // First outer top-level [`Caixa`] `&[Composite]`-return
+        // slice accessor pin on the substrate primitive for M2 / M3
+        // typed-slot vec-carry axes — opens the outer-`Caixa`
+        // `&[Composite]` composite-slice projection pattern the
+        // sibling `:children` [`crate::supervisor::ChildSpec`] /
+        // `:membros` [`crate::aplicacao::Membro`] / `:contratos`
+        // [`crate::aplicacao::WitContract`] future outer-composite-
+        // slice pins fold on. Peer of the closed outer-`Caixa`
+        // scalar `Option<&Composite>` composite-reference family the
+        // sibling `limits` / `behavior` / `politicas` / `placement`
+        // / `entrada` `..._returns_..._option_ref_verbatim_across_
+        // permutations` pins closed (b2bd9d7 → e4128e4) — extends
+        // the "byte-equal, borrow-shared" outer-accessor discipline
+        // onto the outer-`Caixa` `&[Composite]` vec-carry altitude.
+        use crate::upgrade::{UpgradeFromEntry, UpgradeInstruction};
+        let fixtures: Vec<Vec<UpgradeFromEntry>> = vec![
+            vec![],
+            vec![UpgradeFromEntry {
+                from: "0.0.1".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            }],
+            vec![
+                UpgradeFromEntry {
+                    from: "0.0.1".into(),
+                    instructions: vec![
+                        UpgradeInstruction::LoadModule {
+                            module: "demo".into(),
+                        },
+                        UpgradeInstruction::SoftPurge {
+                            module: "demo".into(),
+                        },
+                    ],
+                },
+                UpgradeFromEntry {
+                    from: "0.0.2".into(),
+                    instructions: vec![
+                        UpgradeInstruction::StateChange {
+                            script: "servicos/upgrade.lisp".into(),
+                        },
+                        UpgradeInstruction::Purge {
+                            module: "demo".into(),
+                        },
+                        UpgradeInstruction::Restart,
+                    ],
+                },
+            ],
+            vec![
+                UpgradeFromEntry {
+                    from: "0.1.0".into(),
+                    instructions: vec![UpgradeInstruction::Restart],
+                },
+                UpgradeFromEntry {
+                    from: "0.1.0".into(),
+                    instructions: vec![UpgradeInstruction::Restart],
+                },
+            ],
+        ];
+        for upgrade_from in fixtures {
+            let c = caixa_with_upgrade_from(upgrade_from.clone());
+            assert_eq!(
+                c.upgrade_from(),
+                upgrade_from.as_slice(),
+                "Caixa::upgrade_from must return :upgrade-from \
+                 verbatim (got {:?}, expected {upgrade_from:?})",
+                c.upgrade_from(),
+            );
+            assert_eq!(
+                c.upgrade_from(),
+                c.upgrade_from.as_slice(),
+                "Caixa::upgrade_from must element-equal the raw \
+                 `self.upgrade_from.as_slice()` field access across \
+                 every value in the Vec<UpgradeFromEntry> accept-set",
+            );
+            assert_eq!(
+                c.upgrade_from().is_empty(),
+                c.upgrade_from.is_empty(),
+                "Caixa::upgrade_from().is_empty() must byte-equal \
+                 self.upgrade_from.is_empty() — a presence-bit drift \
+                 would silently split the paired \
+                 Caixa::declared_servico_slots M2 declared-slot \
+                 enumerator's presence probe from the peer \
+                 crate::render::servico_m2_overlay M2 overlay \
+                 emitter's presence gate",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_servico_slots_upgrade_from_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_servico_slots`]'s
+        // `:upgrade-from` presence-probe arm must key off
+        // [`Caixa::upgrade_from`], not the raw
+        // `self.upgrade_from.is_empty()` field-probe. Structurally: a
+        // `Caixa { upgrade_from: vec![UpgradeFromEntry { from: "0.0.1",
+        // instructions: vec![Restart] }], .. }` must push
+        // `M2_AUTHOR_KEY_UPGRADE_FROM` onto the declared-slot list
+        // (the presence bit is non-empty, so the M2 kind-coherence
+        // gate must surface the slot as "declared"), and a `Caixa {
+        // upgrade_from: vec![], .. }` must NOT push the label (the
+        // "author omitted the slot entirely" arm — the empty-slice
+        // partition the serde-default folds onto). The pair jointly
+        // pins the accessor + declared-slot enumerator composition:
+        // any future silent detour that had the accessor collapse
+        // `[Restart]` to `[]` (a `.filter(|e| !e.instructions.
+        // is_empty())` projection) would silently absorb the
+        // "declared but degenerate" arm at the accessor boundary and
+        // the [`crate::LayoutError::ServicoSlotsOnNonServico`] kind-
+        // coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_limits_arm_routes_through_accessor`
+        // (b2bd9d7) and
+        // `declared_servico_slots_behavior_arm_routes_through_accessor`
+        // (35d8b52) composition pins on the sibling `:limits` /
+        // `:behavior` outer-`Option<&Composite>` arms — same "the
+        // enumerator gate must route through the substrate-primitive
+        // typed dispatch" discipline extended onto the third M2
+        // Servico-runtime slot axis, closing the enumerator's routing
+        // invariant on every M2 arm.
+        use crate::upgrade::{UpgradeFromEntry, UpgradeInstruction};
+        let c = caixa_with_upgrade_from(vec![UpgradeFromEntry {
+            from: "0.0.1".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }]);
+        let slots = c.declared_servico_slots();
+        assert!(
+            slots.contains(&crate::render::M2_AUTHOR_KEY_UPGRADE_FROM),
+            "declared_servico_slots must push \
+             M2_AUTHOR_KEY_UPGRADE_FROM when `:upgrade-from` is \
+             non-empty — the accessor and the enumerator gate must \
+             route through the same substrate-primitive typed \
+             dispatch on the outer :upgrade-from presence bit (got \
+             slots={slots:?})",
+        );
+        let c = caixa_with_upgrade_from(vec![]);
+        let slots = c.declared_servico_slots();
+        assert!(
+            !slots.contains(&crate::render::M2_AUTHOR_KEY_UPGRADE_FROM),
+            "declared_servico_slots must NOT push \
+             M2_AUTHOR_KEY_UPGRADE_FROM when `:upgrade-from` is \
+             empty — the author-omitted arm must route through the \
+             accessor's empty-slice return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn servico_m2_overlay_upgrade_from_arm_routes_through_accessor() {
+        // Composition pin: [`crate::render::servico_m2_overlay`]'s
+        // per-`:upgrade-from` M2 overlay emit arm must key off
+        // [`Caixa::upgrade_from`], not the raw
+        // `!caixa.upgrade_from.is_empty()` presence gate + the
+        // `serde_yaml::to_value(&caixa.upgrade_from)` projection.
+        // Structurally: a `Caixa { upgrade_from: vec![UpgradeFromEntry
+        // { from: "0.0.1", instructions: vec![Restart] }], .. }` must
+        // surface the `M2_KEY_UPGRADE_FROM` key with a per-entry
+        // sequence in the overlay (the emitter fans onto the serde
+        // slice-serialization), and a `Caixa { upgrade_from: vec![],
+        // .. }` must omit the key entirely (the empty-slice
+        // partition — the `!.is_empty()` outer gate elides the key
+        // when the author omitted the slot). The pair jointly pins
+        // the accessor + M2 overlay emitter composition: any future
+        // silent detour that had the accessor return a fresh-cloned
+        // `Vec<UpgradeFromEntry>` copy would silently break the
+        // reference-identity pin the peer per-entry
+        // `serde_yaml::to_value(caixa.upgrade_from())` projection
+        // reads from — the projection would clone once per accessor
+        // call instead of borrowing the storage buffer verbatim.
+        //
+        // Peer of the sibling
+        // `servico_m2_overlay_limits_arm_routes_through_accessor`
+        // (b2bd9d7) and
+        // `servico_m2_overlay_behavior_arm_routes_through_accessor`
+        // (35d8b52) composition pins on the sibling `:limits` /
+        // `:behavior` outer-`Option<&Composite>` arms — same "the
+        // M2 overlay emitter must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the
+        // third M2 Servico-runtime slot axis, closing the overlay
+        // emitter's routing invariant on every M2 arm.
+        use crate::render::{M2_KEY_UPGRADE_FROM, servico_m2_overlay};
+        use crate::upgrade::{UpgradeFromEntry, UpgradeInstruction};
+        let c = caixa_with_upgrade_from(vec![UpgradeFromEntry {
+            from: "0.0.1".into(),
+            instructions: vec![UpgradeInstruction::Restart],
+        }]);
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            overlay.contains_key(M2_KEY_UPGRADE_FROM),
+            "servico_m2_overlay must surface M2_KEY_UPGRADE_FROM when \
+             `:upgrade-from` is non-empty — the accessor and the M2 \
+             overlay emitter must route through the same substrate- \
+             primitive typed dispatch on the outer :upgrade-from \
+             slice (got overlay={overlay:?})",
+        );
+        let c = caixa_with_upgrade_from(vec![]);
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            !overlay.contains_key(M2_KEY_UPGRADE_FROM),
+            "servico_m2_overlay must omit M2_KEY_UPGRADE_FROM when \
+             `:upgrade-from` is empty — the empty-slice partition \
+             must route through the accessor's empty-slice return \
+             unchanged (got overlay={overlay:?})",
+        );
+    }
+
+    #[test]
+    fn upgrade_from_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::upgrade_from`] returns
+        // `&[UpgradeFromEntry]` by borrow — the returned slice
+        // borrows the underlying `Vec<UpgradeFromEntry>` storage of
+        // the `:upgrade-from` slot and the accessor must not clone
+        // the backing `Vec` on every call. Peer of the sibling
+        // outer top-level [`Caixa`] `&[T]`-return by-borrow pins
+        // (`autores_projects_slice_by_borrow` b5d813f,
+        // `etiquetas_projects_slice_by_borrow` 78c7d3c,
+        // `bibliotecas_projects_slice_by_borrow` 8a36c23,
+        // `exe_projects_slice_by_borrow` 65d9527,
+        // `servicos_projects_slice_by_borrow` 611f78b,
+        // `deps_projects_slice_by_borrow` ad34b4e,
+        // `deps_dev_projects_slice_by_borrow` f7fd81e) on the
+        // sibling outer top-level [`Caixa`] scalar-element `&[T]`
+        // axes — extended here to the first outer-`Caixa`
+        // composite-element `&[Composite]` axis: the accessor's
+        // returned slice must borrow from `&self` (the returned
+        // reference's lifetime is tied to `&self`), and calling the
+        // accessor twice on the same [`Caixa`] must yield slices
+        // that are pointer-equal (the underlying byte-buffer is the
+        // storage `Vec`'s allocation, not a fresh copy) as well as
+        // value-equal (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<UpgradeFromEntry>` (which would type-check but
+        // silently clone on every call), a `&Vec<UpgradeFromEntry>`
+        // return (which would leak the backing `Vec`'s
+        // grow/push/reserve surface no downstream consumer reaches
+        // for), or a one-arm-only accessor that returned a
+        // saturating value on some sentinel input.
+        use crate::upgrade::{UpgradeFromEntry, UpgradeInstruction};
+        for upgrade_from in [
+            vec![],
+            vec![UpgradeFromEntry {
+                from: "0.0.1".into(),
+                instructions: vec![UpgradeInstruction::Restart],
+            }],
+            vec![
+                UpgradeFromEntry {
+                    from: "0.0.1".into(),
+                    instructions: vec![UpgradeInstruction::Restart],
+                },
+                UpgradeFromEntry {
+                    from: "0.0.2".into(),
+                    instructions: vec![UpgradeInstruction::SoftPurge {
+                        module: "demo".into(),
+                    }],
+                },
+            ],
+        ] {
+            let c = caixa_with_upgrade_from(upgrade_from.clone());
+            let first = c.upgrade_from();
+            let second = c.upgrade_from();
+            assert_eq!(
+                first, second,
+                "Caixa::upgrade_from must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same &[UpgradeFromEntry]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::upgrade_from must borrow the underlying \
+                 Vec<UpgradeFromEntry> storage — two successive calls \
+                 must return slices with the same backing pointer (a \
+                 fresh Vec<UpgradeFromEntry> clone would change the \
+                 pointer on every call)",
+            );
+            assert_eq!(
+                first,
+                upgrade_from.as_slice(),
+                "Caixa::upgrade_from must return :upgrade-from \
+                 verbatim by borrow — got {first:?}, expected \
+                 {upgrade_from:?}",
+            );
+        }
     }
 
     // ── drift-detection: Caixa top-level multi-word serde-derive-to-const identity ──
