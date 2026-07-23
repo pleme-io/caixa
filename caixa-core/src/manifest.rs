@@ -1175,6 +1175,128 @@ impl Caixa {
         self.bibliotecas.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:exe` universal-axis
+    /// nix-built-executable-entry-path-list slice-accessor every consumer
+    /// of the top-level manifest's Binario-executable axis keys off —
+    /// returns the author-declared `:exe` list verbatim as a `&[String]`
+    /// slice-view over the same backing buffer the raw
+    /// `self.exe.as_slice()` field access borrows from. Empty-list-
+    /// carrying (`:exe` is a default-empty axis every `defcaixa` form
+    /// supplies with an empty `()` when unset; the [`Self::from_lisp`]
+    /// derive folds an omitted `:exe` through `#[serde(default)]` to
+    /// `Vec::new()`, so a `Caixa` past parse definitionally carries a
+    /// `Vec<String>` slot — possibly empty — and the returned `&[String]`
+    /// degenerates to an empty slice on that arm without any silent
+    /// `None` collapse).
+    ///
+    /// The `:exe` slot carries the universal-axis nix-built executable
+    /// entry-path list every `:kind Binario` caixa emits under
+    /// (CAIXA-SDLC §I — the author-facing surface every `defcaixa`
+    /// form supplies alongside `:nome` / `:versao` / `:kind`; the
+    /// substrate-wide `exe/`-directory-fenced entry-carrier axis every
+    /// downstream flake-build-facing consumer keys off) — the typed
+    /// slot's `Vec<String>` accept-set (empty-per-entry rejected
+    /// through [`ManifestError::CodePathEmpty { slot: ":exe" }`],
+    /// non-sandboxed-relative-shape rejected through
+    /// [`ManifestError::CodePathShape`], cross-entry duplicate rejected
+    /// through [`ManifestError::CodePathDuplicate`], out-of-`exe/`-
+    /// directory paths rejected past the layout's
+    /// [`crate::LayoutError::ExeOutsideDir`] `starts_with` fence) maps
+    /// onto every load-bearing downstream consumer the substrate carries
+    /// — the [`crate::LayoutInvariants`] Binario-arm empty-check +
+    /// per-entry file-exists + `exe/`-directory-fence loop at
+    /// caixa-core/src/layout.rs that gates each entry through
+    /// [`crate::LayoutError::BinarioWithoutExe`] / `MissingEntry` /
+    /// `ExeOutsideDir`, the compound `has_code` OR-fold on the
+    /// [`crate::LayoutError::SupervisorOwnsCode`] /
+    /// [`crate::LayoutError::AplicacaoOwnsCode`] kind-coherence gate
+    /// that fences code-surface slots off from the two no-code kinds,
+    /// [`Self::declared_foreign_code_slots`]'s `!self.exe.is_empty()`
+    /// arm on the [`crate::LayoutError::ForeignCodeSlot`] gate that
+    /// fences the `:exe` code surface off from every non-Binario code-
+    /// running kind, [`Self::validate_code_paths`]'s per-slot shape gate
+    /// that walks each entry through the sandbox-relative / cross-entry
+    /// duplicate gates, every future per-`Caixa` executable-facing
+    /// renderer the CAIXA-SDLC §I roadmap acknowledges (the future
+    /// `caixa-flake` per-Binario `packages.<system>.<nome>` derivation
+    /// entry the caixa-flake docstring roadmaps, the future per-cluster
+    /// `nix-store` overlay the M4 CR materializer resolves per-CR, the
+    /// future `feira nix` per-executable Binario-target emit path).
+    ///
+    /// Prior to this lift the `.exe` field was accessed inline at three
+    /// production sites — the compound-code-path `has_code =
+    /// !caixa.bibliotecas().is_empty() || !caixa.exe.is_empty() ||
+    /// !caixa.servicos.is_empty()` OR-fold on the
+    /// [`crate::LayoutError::SupervisorOwnsCode`] /
+    /// `AplicacaoOwnsCode` kind-coherence gate, the Binario-arm
+    /// `caixa.exe.is_empty()` [`crate::LayoutError::BinarioWithoutExe`]
+    /// gate, the per-entry `for p in &caixa.exe`
+    /// `MissingEntry`/`ExeOutsideDir` walk, and the
+    /// [`Self::declared_foreign_code_slots`]'s
+    /// `!self.exe.is_empty()` arm on the `ForeignCodeSlot` gate — four
+    /// open-coded field-accesses that expressed no compile-time link
+    /// back to the typed slot. A future extension of the `:exe` axis
+    /// to a richer executable surface — a per-`:exe` structured
+    /// `BinarioEntry { path, wrapper, capabilities }` at the storage
+    /// layer once the substrate absorbs the per-executable
+    /// nix-wrapper + linux-capabilities tuple the CAIXA-SDLC §I
+    /// executable roadmap acknowledges, a per-registry `:exe` allowlist
+    /// the M4 CR materializer enforces per-CR (the "cluster policy
+    /// demands every Binario declare an explicit `:wrapper`" arm), a
+    /// promotion of the plain `Vec<String>` byte-string list to a
+    /// richer `Vec<ExecutablePath>` newtype discriminated on the
+    /// `exe/<nome>`-shape grammar the layout's `starts_with(exe_dir)`
+    /// fence already resolves through — would have had to be threaded
+    /// through all four open-coded copies in lockstep or the layout
+    /// gate, the shape validator, and the `feira nix` emit path would
+    /// silently disagree on which executable paths a given [`Caixa`]
+    /// resolves to (an author's `:exe ("exe/cli" "exe/serve")` would
+    /// satisfy layout while `feira nix` silently packaged a drifted
+    /// other list, or vice versa). Lifting the resolution to a typed
+    /// method on the substrate primitive means every downstream
+    /// consumer of the caixa's per-`Caixa` executable-source surface
+    /// reaches for exactly one typed dispatch — the resolver's accept-
+    /// set migrates as a unit on any future axis addition.
+    ///
+    /// Fourth outer top-level [`Caixa`] `&[T]`-return slice-accessor —
+    /// folds on the "outer [`Caixa`] `&[T]` slice" projection pattern
+    /// [`Self::autores`] (b5d813f) opened, [`Self::etiquetas`]
+    /// (78c7d3c) folded on, and [`Self::bibliotecas`] (8a36c23) closed
+    /// the universal-axis text-tag family of. Opens the outer-`Caixa`
+    /// foreign-code-slot `&[T]` sub-family the sibling `:servicos`
+    /// future lift closes onto (per the trio of code-surface list slots
+    /// the [`Self::validate_code_paths`] per-slot dispatch tuple
+    /// already carries — `:bibliotecas` + `:exe` + `:servicos`, of which
+    /// `:bibliotecas` landed at 8a36c23 and `:servicos` remains as the
+    /// last unlifted code-surface slot). Sibling in shape to the peer
+    /// per-`:supervisor` [`crate::supervisor::SupervisorSpec::children`]
+    /// (bc92bce), per-`:placement`
+    /// [`crate::aplicacao::Placement::clusters`] (a6e18d7),
+    /// per-`:membros` [`crate::aplicacao::AplicacaoSpec::membros`]
+    /// (6c77e36), per-`:contratos`
+    /// [`crate::aplicacao::AplicacaoSpec::contratos`] (0dcc926), and
+    /// per-`:upgrade-from :instructions`
+    /// [`crate::upgrade::UpgradeFromEntry::instructions`] (0137e5a)
+    /// `&[T]`-return slice accessors on the sibling per-M2 / per-M3
+    /// typed-slot list axes, extended here to the outer top-level
+    /// [`Caixa`] universal-axis surface. Returns `&[String]` (not
+    /// `&Vec<String>`) because every downstream consumer of the
+    /// executable-source list treats it as a read-only sequence — the
+    /// slice-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (`.iter()`, `.len()`,
+    /// `.is_empty()`) without leaking the backing `Vec`'s
+    /// grow/push/reserve surface no consumer of the typed view
+    /// reaches for (the storage-side `Vec` remains reachable through
+    /// the `pub exe` field for the mutation-carrying serde
+    /// round-trip and per-test fixture-mutation paths). Named `exe()`
+    /// to match the storage field's name; the accessor's identity
+    /// maps onto the canonical CAIXA-SDLC §I vocabulary the slot's
+    /// docstring already carries.
+    #[must_use]
+    pub fn exe(&self) -> &[String] {
+        self.exe.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1411,7 +1533,7 @@ impl Caixa {
     #[must_use]
     pub fn declared_foreign_code_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
-        if !self.exe.is_empty() && !self.kind().requires_exe() {
+        if !self.exe().is_empty() && !self.kind().requires_exe() {
             slots.push(":exe");
         }
         if !self.servicos.is_empty() && !self.kind().requires_servicos() {
@@ -9527,6 +9649,206 @@ mod tests {
                 expected.as_slice(),
                 "Caixa::bibliotecas must return :bibliotecas verbatim \
                  by borrow — got {first:?}, expected {expected:?}",
+            );
+        }
+    }
+
+    // ── Caixa::exe — outer top-level &[T] slice accessor ──────────────
+
+    #[test]
+    fn exe_returns_exe_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:exe` universal-axis
+        // nix-built-executable-entry-path-list slice pin: [`Caixa::exe`]
+        // must return the `:exe` typed [`Vec<String>`] list verbatim as
+        // a `&[String]`, byte-equal to the raw `self.exe.as_slice()`
+        // access across every representative value in the accept-set —
+        // `[]` (the "no executable declared" arm every `:kind` other
+        // than `Binario` carries; the layout's [`crate::LayoutInvariants`]
+        // `BinarioWithoutExe` arm-gate fires exactly on this empty-slot
+        // + `Binario`-kind combination), `[""]` (a past-the-guard
+        // sentinel that pins the accessor doesn't perform a silent
+        // `[""] → []` collapse on the empty-entry arm — validate rejects
+        // `[""]` through `CodePathEmpty { slot: ":exe" }` but the
+        // accessor must ship the raw slot verbatim so a validate-time
+        // gate regression surfaces at the layout / `feira nix` boundary
+        // rather than being silently absorbed into an executable-drop),
+        // `["exe/cli"]` (the canonical single-entry Binario form every
+        // in-tree `caixa_with_code_paths` positive control uses),
+        // `["exe/cli", "exe/serve"]` (the canonical multi-executable
+        // form the `validate_code_paths_accepts_explicit_relative_paths_
+        // on_every_slot` fixture emits), and `["exe/cli", "exe/cli"]`
+        // (a past-the-guard duplicate sentinel — validate rejects
+        // through `CodePathDuplicate { slot: ":exe" }` per the per-slot
+        // set-not-multiset gate, but the accessor must ship the raw
+        // slot verbatim so struct-literal `Caixa { exe: vec!["exe/cli".
+        // into(), "exe/cli".into()], .. }` fixtures continue to expose
+        // the duplicate at the accessor).
+        //
+        // Fourth outer top-level [`Caixa`] `&[T]`-return slice accessor
+        // pin on the substrate primitive — folds on the "outer
+        // [`Caixa`] `&[T]` slice" projection pattern
+        // `autores_returns_autores_slice_verbatim_across_permutations`
+        // (b5d813f) opened,
+        // `etiquetas_returns_etiquetas_slice_verbatim_across_permutations`
+        // (78c7d3c) folded on, and
+        // `bibliotecas_returns_bibliotecas_slice_verbatim_across_permutations`
+        // (8a36c23) closed the universal-axis text-tag family of.
+        // Opens the outer-`Caixa` foreign-code-slot `&[T]` sub-family
+        // the sibling `:servicos` future lift closes onto. Pins against
+        // a future silent detour that returned an owned `Vec<String>`
+        // (which would type-check but silently clone on every accessor
+        // call, breaking the zero-cost projection every peer sibling
+        // slice accessor carries), a `[""] → []` collapse (which would
+        // silently absorb the `CodePathEmpty` refusal case at the
+        // accessor boundary), or an `["exe/cli", "exe/cli"] →
+        // ["exe/cli"]` dedup collapse (which would silently absorb the
+        // `CodePathDuplicate` refusal case at the accessor boundary —
+        // the per-slot set-not-multiset gate is downstream of the
+        // accessor and must not be silently promoted into it).
+        for exe in [
+            vec![],
+            vec![""],
+            vec!["exe/cli"],
+            vec!["exe/cli", "exe/serve"],
+            vec!["exe/cli", "exe/cli"],
+        ] {
+            let c = caixa_with_code_paths(vec![], exe.clone(), vec![]);
+            let expected: Vec<String> = exe.iter().map(|s| (*s).to_string()).collect();
+            assert_eq!(
+                c.exe(),
+                expected.as_slice(),
+                "Caixa::exe must return :exe verbatim (got {:?}, \
+                 expected {expected:?})",
+                c.exe(),
+            );
+            assert_eq!(
+                c.exe(),
+                c.exe.as_slice(),
+                "Caixa::exe must byte-equal the raw \
+                 `self.exe.as_slice()` field access across every value \
+                 in the Vec<String> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_exe_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_code_paths`]'s per-entry
+        // empty-arm gate on the `:exe` slot must key off
+        // [`Caixa::exe`], not a divergent raw `&self.exe` field-borrow
+        // walk. Structurally: a `Caixa { exe: vec!["".into()], .. }`
+        // must surface the `CodePathEmpty { slot: ":exe" }` refusal
+        // exactly, and a `Caixa { exe: vec!["exe/cli".into()], .. }`
+        // (the canonical single-executable form every in-tree
+        // `caixa_with_code_paths` positive control uses) must pass
+        // validate. The pair jointly pins the accessor + validate-gate
+        // composition: any future silent detour that had the accessor
+        // return an empty slice on the `[""]` arm (a
+        // `.iter().filter(|s| !s.is_empty()).collect()` collapse) would
+        // silently absorb the `CodePathEmpty` refusal at the accessor
+        // boundary and the validate gate would accept a struct-literal
+        // `Caixa { exe: vec!["".into()], .. }` — the composition pin
+        // catches that at caixa-core build time.
+        //
+        // Peer of the per-`Caixa`
+        // `validate_code_paths_bibliotecas_empty_arm_routes_through_accessor`
+        // (8a36c23), `validate_autores_empty_arm_routes_through_accessor`
+        // (b5d813f), and
+        // `validate_etiquetas_empty_entry_arm_routes_through_accessor`
+        // (78c7d3c) accessor-composition pins on the sibling `&[T]`-
+        // composition axes — same "the validate / shape-gate predicate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the sibling outer top-level [`Caixa`]
+        // `&[T]`-composition surface. Nominally the in-tree
+        // `validate_code_paths` production body still keys off the
+        // internal `[(":bibliotecas", &self.bibliotecas,
+        // CodePathFileType::LispSource), (":exe", &self.exe, ..),
+        // (":servicos", &self.servicos, ..)]` per-slot dispatch tuple
+        // (the tuple's homogeneous slice-typed shape blocks a per-
+        // element accessor swap in isolation — a future companion lift
+        // for `:servicos` on the same outer-`Caixa` `&[T]` slice-
+        // accessor axis closes that tuple onto the triple of typed
+        // dispatches as a unit); the composition pin catches any future
+        // accessor-side silent filter drop against that eventual tuple-
+        // closure regardless of whether the `:exe` slot is threaded
+        // through the accessor or the raw field access at the tuple's
+        // construction site.
+        let c = caixa_with_code_paths(vec![], vec![""], vec![]);
+        assert!(
+            matches!(
+                c.validate_code_paths(),
+                Err(ManifestError::CodePathEmpty { slot: ":exe" })
+            ),
+            "validate_code_paths must reject exe == vec![\"\"] \
+             with CodePathEmpty {{ slot: \":exe\" }} — the \
+             accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the \
+             :exe per-entry empty arm",
+        );
+        let c = caixa_with_code_paths(vec![], vec!["exe/cli"], vec![]);
+        assert!(
+            c.validate_code_paths().is_ok(),
+            "validate_code_paths must accept exe == vec![\"exe/cli\"] \
+             (the canonical single-executable shape every in-tree \
+             `caixa_with_code_paths` positive control uses)",
+        );
+    }
+
+    #[test]
+    fn exe_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::exe`] returns `&[String]` by
+        // borrow — the returned slice borrows the underlying
+        // `Vec<String>` storage of the `:exe` slot and the accessor
+        // must not clone the backing `Vec` on every call. Peer of the
+        // per-`Caixa` `autores_projects_slice_by_borrow` (b5d813f),
+        // `etiquetas_projects_slice_by_borrow` (78c7d3c), and
+        // `bibliotecas_projects_slice_by_borrow` (8a36c23) by-borrow
+        // pins on the sibling outer top-level [`Caixa`] `&[String]`-
+        // return axes — the accessor's returned slice must borrow from
+        // `&self` (the returned reference's lifetime is tied to
+        // `&self`), and calling the accessor twice on the same
+        // [`Caixa`] must yield slices that are pointer-equal (the
+        // underlying byte-buffer is the storage `Vec`'s allocation,
+        // not a fresh copy) as well as value-equal (idempotent, no
+        // side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<String>` (which would type-check but silently clone on
+        // every call, breaking the zero-cost projection every peer
+        // sibling slice accessor carries), a `&Vec<String>` return
+        // (which would leak the backing `Vec`'s grow/push/reserve
+        // surface no downstream consumer reaches for), or a one-arm-
+        // only accessor that returned a saturating value on some
+        // sentinel input (breaking the pass-through invariant the
+        // sibling slice accessors carry).
+        for exe in [
+            vec![],
+            vec!["exe/cli"],
+            vec!["exe/cli", "exe/serve"],
+            vec!["exe/cli", "exe/cli"],
+        ] {
+            let c = caixa_with_code_paths(vec![], exe.clone(), vec![]);
+            let expected: Vec<String> = exe.iter().map(|s| (*s).to_string()).collect();
+            let first = c.exe();
+            let second = c.exe();
+            assert_eq!(
+                first, second,
+                "Caixa::exe must be idempotent — two successive calls \
+                 on the same &self must return the same &[String]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::exe must borrow the underlying Vec<String> \
+                 storage — two successive calls must return slices \
+                 with the same backing pointer (a fresh Vec<String> \
+                 clone would change the pointer on every call)",
+            );
+            assert_eq!(
+                first,
+                expected.as_slice(),
+                "Caixa::exe must return :exe verbatim by borrow — \
+                 got {first:?}, expected {expected:?}",
             );
         }
     }

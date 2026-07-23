@@ -651,8 +651,9 @@ impl LayoutInvariants for StandardLayout {
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
         // "missing entry" error first).
-        let has_code =
-            !caixa.bibliotecas().is_empty() || !caixa.exe.is_empty() || !caixa.servicos.is_empty();
+        let has_code = !caixa.bibliotecas().is_empty()
+            || !caixa.exe().is_empty()
+            || !caixa.servicos.is_empty();
         if caixa.kind() == CaixaKind::Supervisor && has_code {
             return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
         }
@@ -824,7 +825,7 @@ impl LayoutInvariants for StandardLayout {
             }
         }
 
-        if caixa.kind().requires_exe() && caixa.exe.is_empty() {
+        if caixa.kind().requires_exe() && caixa.exe().is_empty() {
             return Err(LayoutError::BinarioWithoutExe(caixa.nome.clone()));
         }
 
@@ -843,7 +844,7 @@ impl LayoutInvariants for StandardLayout {
         }
 
         let exe_dir = root.join(crate::render::LAYOUT_DIR_EXE);
-        for p in &caixa.exe {
+        for p in caixa.exe() {
             let full = root.join(p);
             if !self.exists(&full) {
                 return Err(LayoutError::MissingEntry {
