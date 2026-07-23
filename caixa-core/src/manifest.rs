@@ -1056,6 +1056,125 @@ impl Caixa {
         self.etiquetas.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:bibliotecas` universal-axis
+    /// library-source-path-list slice-accessor every consumer of the
+    /// top-level manifest's Biblioteca-source axis keys off — returns
+    /// the author-declared `:bibliotecas` list verbatim as a
+    /// `&[String]` slice-view over the same backing buffer the raw
+    /// `self.bibliotecas.as_slice()` field access borrows from. Empty-
+    /// list-carrying (`:bibliotecas` is a default-empty axis every
+    /// `defcaixa` form supplies with an empty `()` when unset; the
+    /// [`Self::from_lisp`] derive folds an omitted `:bibliotecas`
+    /// through `#[serde(default)]` to `Vec::new()`, so a `Caixa` past
+    /// parse definitionally carries a `Vec<String>` slot — possibly
+    /// empty — and the returned `&[String]` degenerates to an empty
+    /// slice on that arm without any silent `None` collapse).
+    ///
+    /// The `:bibliotecas` slot carries the universal-axis lisp-library
+    /// entry-path list every `:kind Biblioteca` caixa emits under
+    /// (CAIXA-SDLC §I — the author-facing surface every `defcaixa`
+    /// form supplies alongside `:nome` / `:versao` / `:kind`; the
+    /// substrate-wide library-carrier axis every downstream
+    /// authoring-facing consumer keys off) — the typed slot's
+    /// `Vec<String>` accept-set (empty-per-entry rejected through
+    /// [`ManifestError::CodePathEmpty { slot: ":bibliotecas" }`],
+    /// non-sandboxed-relative-shape rejected through
+    /// [`ManifestError::CodePathShape`], non-`.lisp`-extension rejected
+    /// through [`ManifestError::CodePathNonLispExtension`], cross-entry
+    /// duplicate rejected through [`ManifestError::CodePathDuplicate`])
+    /// maps onto every load-bearing downstream consumer the substrate
+    /// carries — the [`crate::LayoutInvariants`] Biblioteca-arm
+    /// empty-check + per-entry file-exists loop at
+    /// caixa-core/src/layout.rs that gates each entry through
+    /// [`crate::LayoutError::MissingLib`] / `MissingEntry`, the
+    /// [`Self::validate_code_paths`] per-slot shape gate at
+    /// caixa-core/src/manifest.rs that walks each entry through the
+    /// sandbox-relative / `.lisp`-extension / cross-entry duplicate
+    /// gates, the `feira build` per-entry `tatara_lisp::read` parse
+    /// walk at caixa-feira/src/cmd/build.rs that phase-1-checks each
+    /// declared library file for lexical / structural errors before
+    /// downstream `importar` resolution, every future per-`Caixa`
+    /// library-facing renderer the CAIXA-SDLC §I roadmap acknowledges
+    /// (the future `tatara-lispc` compilation entry the docstring at
+    /// caixa-feira/src/cmd/build.rs alludes to, the future per-cluster
+    /// bytecode-caching overlay the M4 CR materializer resolves per-CR,
+    /// the future `caixa-lsp` per-library semantic-token stream the
+    /// caixa-lsp docstring roadmaps).
+    ///
+    /// Prior to this lift the `.bibliotecas` field was accessed inline
+    /// at three production sites — [`crate::LayoutInvariants`]'s
+    /// `caixa.bibliotecas.is_empty()` `MissingLib`-arm gate + `for p
+    /// in &caixa.bibliotecas` `MissingEntry` walk that gates each
+    /// declared library path through the on-disk-existence check,
+    /// the compound-code-path `has_code = !caixa.bibliotecas.is_empty()
+    /// || !caixa.exe.is_empty() || !caixa.servicos.is_empty()` OR-fold
+    /// on the [`crate::LayoutError::SupervisorOwnsCode`] /
+    /// `AplicacaoOwnsCode` kind-coherence gate, and the `feira build`
+    /// per-entry `for entry in &caixa.bibliotecas` + `caixa.bibliotecas.
+    /// len()` phase-1 tatara-lispc-precursor parse walk — three open-
+    /// coded field-accesses that expressed no compile-time link back
+    /// to the typed slot. A future extension of the `:bibliotecas`
+    /// axis to a richer library surface — a per-`:bibliotecas`
+    /// structured `BibliotecaEntry { path, edition, exports }` at the
+    /// storage layer once the substrate absorbs the per-library
+    /// language-edition + explicit-exports tuple the tatara-lisp
+    /// module-system roadmap acknowledges, a per-registry
+    /// `:bibliotecas` allowlist the M4 CR materializer enforces
+    /// per-CR (the "cluster policy demands every biblioteca declare
+    /// its own :edicao" arm), a promotion of the plain `Vec<String>`
+    /// byte-string list to a richer `Vec<LibraryPath>` newtype
+    /// discriminated on the `lib/<nome>.lisp`-shape grammar the
+    /// [`crate::render::is_sandboxed_relative_path`] +
+    /// [`crate::render::is_lisp_extension`] predicates already resolve
+    /// through — would have had to be threaded through all three
+    /// open-coded copies in lockstep or the layout gate, the shape
+    /// validator, and the `feira build` phase-1 parse walk would
+    /// silently disagree on which library paths a given [`Caixa`]
+    /// resolves to (an author's `:bibliotecas ("lib/foo.lisp"
+    /// "lib/bar.lisp")` would satisfy layout while `feira build`
+    /// silently parsed a drifted other list, or vice versa). Lifting
+    /// the resolution to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa`
+    /// library-source surface reaches for exactly one typed dispatch
+    /// — the resolver's accept-set migrates as a unit on any future
+    /// axis addition.
+    ///
+    /// Third outer top-level [`Caixa`] `&[T]`-return slice-accessor —
+    /// folds on the "outer [`Caixa`] `&[T]` slice" projection pattern
+    /// [`Self::autores`] (b5d813f) opened and [`Self::etiquetas`]
+    /// (78c7d3c) folded on, sibling in shape and idiom. The remaining
+    /// unlifted outer-`Caixa` slice-carrying axes (`:deps` /
+    /// `:deps-dev` / `:exe` / `:servicos` / `:upgrade-from` /
+    /// `:children` / `:membros` / `:contratos`) fold onto the same
+    /// pattern in future lifts. Sibling in shape to the peer
+    /// per-`:supervisor`
+    /// [`crate::supervisor::SupervisorSpec::children`] (bc92bce),
+    /// per-`:placement` [`crate::aplicacao::Placement::clusters`]
+    /// (a6e18d7), per-`:membros`
+    /// [`crate::aplicacao::AplicacaoSpec::membros`] (6c77e36),
+    /// per-`:contratos` [`crate::aplicacao::AplicacaoSpec::contratos`]
+    /// (0dcc926), and per-`:upgrade-from :instructions`
+    /// [`crate::upgrade::UpgradeFromEntry::instructions`] (0137e5a)
+    /// `&[T]`-return slice accessors on the sibling per-M2 / per-M3
+    /// typed-slot list axes, extended here to the outer top-level
+    /// [`Caixa`] universal-axis surface. Returns `&[String]` (not
+    /// `&Vec<String>`) because every downstream consumer of the
+    /// library-source list treats it as a read-only sequence — the
+    /// slice-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (`.iter()`, `.len()`,
+    /// `.is_empty()`) without leaking the backing `Vec`'s
+    /// grow/push/reserve surface no consumer of the typed view
+    /// reaches for (the storage-side `Vec` remains reachable through
+    /// the `pub bibliotecas` field for the mutation-carrying serde
+    /// round-trip and per-test fixture-mutation paths). Named
+    /// `bibliotecas()` to match the storage field's name; the
+    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub fn bibliotecas(&self) -> &[String] {
+        self.bibliotecas.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -9202,6 +9321,212 @@ mod tests {
                 expected.as_slice(),
                 "Caixa::etiquetas must return :etiquetas verbatim by \
                  borrow — got {first:?}, expected {expected:?}",
+            );
+        }
+    }
+
+    // ── Caixa::bibliotecas — outer top-level &[T] slice accessor ──────
+
+    #[test]
+    fn bibliotecas_returns_bibliotecas_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:bibliotecas` universal-axis
+        // library-source-path-list slice pin: [`Caixa::bibliotecas`]
+        // must return the `:bibliotecas` typed [`Vec<String>`] list
+        // verbatim as a `&[String]`, byte-equal to the raw
+        // `self.bibliotecas.as_slice()` access across every
+        // representative value in the accept-set — `[]` (the "no
+        // libraries declared" arm every `:kind` other than `Biblioteca`
+        // + every `Biblioteca` relying on the canonical
+        // `lib/<nome>.lisp` implicit-default path carries; the
+        // layout's [`crate::LayoutInvariants`] `MissingLib` arm-gate
+        // fires exactly on this empty-slot + `Biblioteca`-kind
+        // combination), `[""]` (a past-the-guard sentinel that pins
+        // the accessor doesn't perform a silent `[""] → []` collapse
+        // on the empty-entry arm — validate rejects `[""]` through
+        // `CodePathEmpty { slot: ":bibliotecas" }` but the accessor
+        // must ship the raw slot verbatim so a validate-time gate
+        // regression surfaces at the `feira build` phase-1 parse
+        // boundary rather than being silently absorbed into a
+        // library-drop), `["lib/demo.lisp"]` (the canonical single-
+        // entry form `Caixa::template` scaffolds and every `feira init`
+        // template emits), `["lib/demo.lisp", "lib/helpers.lisp"]`
+        // (the canonical multi-library form the
+        // `validate_code_paths_accepts_explicit_relative_paths_on_
+        // every_slot` fixture emits), and `["lib/foo.lisp",
+        // "lib/foo.lisp"]` (a past-the-guard duplicate sentinel —
+        // validate rejects through `CodePathDuplicate { slot:
+        // ":bibliotecas" }` per the per-slot set-not-multiset gate,
+        // but the accessor must ship the raw slot verbatim so the
+        // `feira build` `for entry in caixa.bibliotecas()` parse walk
+        // sees the duplicate at the accessor boundary and struct-
+        // literal `Caixa { bibliotecas: vec!["lib/foo.lisp".into(),
+        // "lib/foo.lisp".into()], .. }` fixtures continue to expose
+        // the duplicate at the accessor).
+        //
+        // Third outer top-level [`Caixa`] `&[T]`-return slice accessor
+        // pin on the substrate primitive — folds on the "outer
+        // [`Caixa`] `&[T]` slice" projection pattern
+        // `autores_returns_autores_slice_verbatim_across_permutations`
+        // (b5d813f) opened and
+        // `etiquetas_returns_etiquetas_slice_verbatim_across_permutations`
+        // (78c7d3c) folded on, sibling in shape and idiom. Pins
+        // against a future silent detour that returned an owned
+        // `Vec<String>` (which would type-check but silently clone on
+        // every accessor call, breaking the zero-cost projection
+        // every peer sibling slice accessor carries), a `[""] → []`
+        // collapse (which would silently absorb the `CodePathEmpty`
+        // refusal case at the accessor boundary), or a `["lib/foo.lisp",
+        // "lib/foo.lisp"] → ["lib/foo.lisp"]` dedup collapse (which
+        // would silently absorb the `CodePathDuplicate` refusal case
+        // at the accessor boundary — the per-slot set-not-multiset
+        // gate is downstream of the accessor and must not be silently
+        // promoted into it).
+        for bibliotecas in [
+            vec![],
+            vec![""],
+            vec!["lib/demo.lisp"],
+            vec!["lib/demo.lisp", "lib/helpers.lisp"],
+            vec!["lib/foo.lisp", "lib/foo.lisp"],
+        ] {
+            let c = caixa_with_code_paths(bibliotecas.clone(), vec![], vec![]);
+            let expected: Vec<String> = bibliotecas.iter().map(|s| (*s).to_string()).collect();
+            assert_eq!(
+                c.bibliotecas(),
+                expected.as_slice(),
+                "Caixa::bibliotecas must return :bibliotecas verbatim \
+                 (got {:?}, expected {expected:?})",
+                c.bibliotecas(),
+            );
+            assert_eq!(
+                c.bibliotecas(),
+                c.bibliotecas.as_slice(),
+                "Caixa::bibliotecas must byte-equal the raw \
+                 `self.bibliotecas.as_slice()` field access across \
+                 every value in the Vec<String> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_bibliotecas_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_code_paths`]'s per-entry
+        // empty-arm gate on the `:bibliotecas` slot must key off
+        // [`Caixa::bibliotecas`], not a divergent raw
+        // `&self.bibliotecas` field-borrow walk. Structurally: a
+        // `Caixa { bibliotecas: vec!["".into()], .. }` must surface
+        // the `CodePathEmpty { slot: ":bibliotecas" }` refusal
+        // exactly, and a `Caixa { bibliotecas: vec!["lib/demo.lisp".
+        // into()], .. }` (the canonical single-library form
+        // `Caixa::template` scaffolds) must pass validate. The pair
+        // jointly pins the accessor + validate-gate composition: any
+        // future silent detour that had the accessor return an empty
+        // slice on the `[""]` arm (a `.iter().filter(|s|
+        // !s.is_empty()).collect()` collapse) would silently absorb
+        // the `CodePathEmpty` refusal at the accessor boundary and
+        // the validate gate would accept a struct-literal
+        // `Caixa { bibliotecas: vec!["".into()], .. }` — the
+        // composition pin catches that at caixa-core build time.
+        //
+        // Peer of the per-`Caixa` `validate_autores_empty_arm_routes_
+        // through_accessor` (b5d813f) and
+        // `validate_etiquetas_empty_entry_arm_routes_through_accessor`
+        // (78c7d3c) accessor-composition pins on the sibling `&[T]`-
+        // composition axes — same "the validate / shape-gate
+        // predicate must route through the substrate-primitive typed
+        // dispatch" discipline extended onto the sibling outer top-
+        // level [`Caixa`] `&[T]`-composition surface. Nominally the
+        // in-tree `validate_code_paths` production body still keys
+        // off the internal `[(":bibliotecas", &self.bibliotecas,
+        // CodePathFileType::LispSource), (":exe", &self.exe, ..),
+        // (":servicos", &self.servicos, ..)]` per-slot dispatch tuple
+        // (the tuple's homogeneous slice-typed shape blocks a per-
+        // element accessor swap in isolation — a future companion
+        // lift for `:exe` and `:servicos` on the same outer-`Caixa`
+        // `&[T]` slice-accessor axis closes that tuple onto the
+        // triple of typed dispatches as a unit); the composition pin
+        // catches any future accessor-side silent filter drop against
+        // that eventual tuple-closure regardless of whether the
+        // `:bibliotecas` slot is threaded through the accessor or the
+        // raw field access at the tuple's construction site.
+        let c = caixa_with_code_paths(vec![""], vec![], vec![]);
+        assert!(
+            matches!(
+                c.validate_code_paths(),
+                Err(ManifestError::CodePathEmpty {
+                    slot: ":bibliotecas"
+                })
+            ),
+            "validate_code_paths must reject bibliotecas == vec![\"\"] \
+             with CodePathEmpty {{ slot: \":bibliotecas\" }} — the \
+             accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the \
+             :bibliotecas per-entry empty arm",
+        );
+        let c = caixa_with_code_paths(vec!["lib/demo.lisp"], vec![], vec![]);
+        assert!(
+            c.validate_code_paths().is_ok(),
+            "validate_code_paths must accept bibliotecas == \
+             vec![\"lib/demo.lisp\"] (the canonical single-library \
+             shape every `feira init` template scaffolds)",
+        );
+    }
+
+    #[test]
+    fn bibliotecas_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::bibliotecas`] returns
+        // `&[String]` by borrow — the returned slice borrows the
+        // underlying `Vec<String>` storage of the `:bibliotecas` slot
+        // and the accessor must not clone the backing `Vec` on every
+        // call. Peer of the per-`Caixa` `autores_projects_slice_by_borrow`
+        // (b5d813f) and `etiquetas_projects_slice_by_borrow` (78c7d3c)
+        // by-borrow pins on the sibling outer top-level [`Caixa`]
+        // `&[String]`-return axes — the accessor's returned slice
+        // must borrow from `&self` (the returned reference's lifetime
+        // is tied to `&self`), and calling the accessor twice on the
+        // same [`Caixa`] must yield slices that are pointer-equal
+        // (the underlying byte-buffer is the storage `Vec`'s
+        // allocation, not a fresh copy) as well as value-equal
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<String>` (which would type-check but silently clone on
+        // every call, breaking the zero-cost projection every peer
+        // sibling slice accessor carries), a `&Vec<String>` return
+        // (which would leak the backing `Vec`'s grow/push/reserve
+        // surface no downstream consumer reaches for), or a one-arm-
+        // only accessor that returned a saturating value on some
+        // sentinel input (breaking the pass-through invariant the
+        // sibling slice accessors carry).
+        for bibliotecas in [
+            vec![],
+            vec!["lib/demo.lisp"],
+            vec!["lib/demo.lisp", "lib/helpers.lisp"],
+            vec!["lib/foo.lisp", "lib/foo.lisp"],
+        ] {
+            let c = caixa_with_code_paths(bibliotecas.clone(), vec![], vec![]);
+            let expected: Vec<String> = bibliotecas.iter().map(|s| (*s).to_string()).collect();
+            let first = c.bibliotecas();
+            let second = c.bibliotecas();
+            assert_eq!(
+                first, second,
+                "Caixa::bibliotecas must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same &[String]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::bibliotecas must borrow the underlying \
+                 Vec<String> storage — two successive calls must \
+                 return slices with the same backing pointer (a \
+                 fresh Vec<String> clone would change the pointer on \
+                 every call)",
+            );
+            assert_eq!(
+                first,
+                expected.as_slice(),
+                "Caixa::bibliotecas must return :bibliotecas verbatim \
+                 by borrow — got {first:?}, expected {expected:?}",
             );
         }
     }
