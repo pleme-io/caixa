@@ -212,12 +212,12 @@ pub struct ServicoCountMismatch {
 /// `Error::From<ServicoCountMismatch>` converts into the renderer's
 /// local error type.
 pub fn require_single_servico(caixa: &Caixa) -> Result<(), ServicoCountMismatch> {
-    if caixa.servicos.len() == 1 {
+    if caixa.servicos().len() == 1 {
         Ok(())
     } else {
         Err(ServicoCountMismatch {
             nome: caixa.nome.clone(),
-            count: caixa.servicos.len(),
+            count: caixa.servicos().len(),
         })
     }
 }
