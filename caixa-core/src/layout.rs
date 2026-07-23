@@ -1113,12 +1113,11 @@ impl LayoutInvariants for StandardLayout {
             // diagnostics surface first; a self-referential child is
             // always a valid DNS-1123 label (it equals the already-valid
             // `:nome`), so this ordering never masks a narrower defect.
-            crate::supervisor::validate_no_self_supervision(&caixa.children, &caixa.nome).map_err(
-                |err| LayoutError::SupervisorViolation {
+            crate::supervisor::validate_no_self_supervision(caixa.children(), &caixa.nome)
+                .map_err(|err| LayoutError::SupervisorViolation {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),
-                },
-            )?;
+                })?;
         }
 
         // Aplicacao invariants — typed graph composition. Like
