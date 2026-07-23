@@ -1452,6 +1452,85 @@ impl Caixa {
         self.servicos.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:deps` universal-axis
+    /// runtime-dependency-declaration-list slice-accessor every consumer
+    /// of the top-level manifest's runtime-dep-graph axis keys off —
+    /// returns the author-declared `:deps` list verbatim as a `&[Dep]`
+    /// slice-view over the same backing buffer the raw
+    /// `self.deps.as_slice()` field access borrows from. Empty-list-
+    /// carrying (`:deps` is a default-empty axis every `defcaixa` form
+    /// supplies with an empty `()` when unset; the [`Self::from_lisp`]
+    /// derive folds an omitted `:deps` through `#[serde(default)]` to
+    /// `Vec::new()`, so a `Caixa` past parse definitionally carries a
+    /// `Vec<Dep>` slot — possibly empty — and the returned `&[Dep]`
+    /// degenerates to an empty slice on that arm without any silent
+    /// `None` collapse).
+    ///
+    /// The `:deps` slot carries the universal-axis runtime dependency
+    /// list every kind of caixa emits under (CAIXA-SDLC §I — the author-
+    /// facing surface every `defcaixa` form supplies alongside `:nome` /
+    /// `:versao` / `:kind`; the substrate-wide runtime-closure-input axis
+    /// every downstream resolver-facing artifact emits under) — the
+    /// typed slot's `Vec<Dep>` accept-set (empty-`:nome` rejected through
+    /// [`DepError::NomeEmpty`], non-DNS-1123-label `:nome` rejected
+    /// through [`DepError::NomeInvalid`], malformed `:versao` rejected
+    /// through [`DepError::VersaoInvalid`], empty `:fonte.repo` rejected
+    /// through [`DepError::FonteRepoEmpty`], within-list duplicate `:nome`
+    /// rejected through [`DepError::DuplicateNome { list: ":deps" }`])
+    /// maps onto every load-bearing downstream consumer the substrate
+    /// carries — the [`Self::validate_deps`] per-entry
+    /// [`Dep::validate`] + within-list dedup walk at
+    /// caixa-core/src/manifest.rs, the [`crate::dep::validate_no_self_dep`]
+    /// cross-list self-reference gate at caixa-core/src/layout.rs that
+    /// checks each entry against the caixa's own `:nome`, the
+    /// caixa-resolver `for dep in &root.deps` closure walk at
+    /// caixa-resolver/src/resolve.rs that seeds every git-clone target
+    /// through the resolver's [`crate::Dep`]-keyed pipeline, the
+    /// caixa-crd `caixa.deps.iter().map(dep_into_ref).collect()` fold at
+    /// caixa-crd/src/conversion.rs that materializes each entry into the
+    /// K8s `Caixa` CR's `spec.deps` field, every future per-`Caixa`
+    /// resolver-facing renderer the CAIXA-SDLC §I roadmap acknowledges
+    /// (the future per-cluster runtime-closure-audit overlay the M4 CR
+    /// materializer resolves per-CR, the future `lacre.lisp` BLAKE3-
+    /// closure emit walk the caixa-resolver docstring roadmaps).
+    ///
+    /// First outer top-level [`Caixa`] `&[Dep]`-return slice-accessor —
+    /// opens the outer-`Caixa` dependency-slot `&[Dep]` sub-family the
+    /// sibling `:deps-dev` future lift closes on. Peer of the closed
+    /// outer-`Caixa` foreign-code-slot `&[String]` sub-family
+    /// ([`Self::bibliotecas`] 8a36c23, [`Self::exe`] 65d9527,
+    /// [`Self::servicos`] 611f78b) and the outer-`Caixa` universal-axis
+    /// text-tag family ([`Self::autores`] b5d813f, [`Self::etiquetas`]
+    /// 78c7d3c) — extends the "outer [`Caixa`] `&[T]` slice" projection
+    /// pattern onto a novel element-type axis (`Dep` composite vs the
+    /// prior sibling family's `String` scalar). Sibling in shape to the
+    /// peer per-`:supervisor`
+    /// [`crate::supervisor::SupervisorSpec::children`] (bc92bce),
+    /// per-`:placement` [`crate::aplicacao::Placement::clusters`]
+    /// (a6e18d7), per-`:membros`
+    /// [`crate::aplicacao::AplicacaoSpec::membros`] (6c77e36),
+    /// per-`:contratos` [`crate::aplicacao::AplicacaoSpec::contratos`]
+    /// (0dcc926), and per-`:upgrade-from :instructions`
+    /// [`crate::upgrade::UpgradeFromEntry::instructions`] (0137e5a)
+    /// `&[T]`-return slice accessors on the sibling per-M2 / per-M3
+    /// typed-slot list axes, extended here to the outer top-level
+    /// [`Caixa`] universal-axis dep-graph surface. Returns `&[Dep]`
+    /// (not `&Vec<Dep>`) because every downstream consumer of the
+    /// runtime-dep list treats it as a read-only sequence — the slice-
+    /// view is the narrowest borrow that supports every present +
+    /// roadmapped consumer (`.iter()`, `.len()`, `.is_empty()`) without
+    /// leaking the backing `Vec`'s grow/push/reserve surface no consumer
+    /// of the typed view reaches for (the storage-side `Vec` remains
+    /// reachable through the `pub deps` field for the mutation-carrying
+    /// serde round-trip and per-test fixture-mutation paths). Named
+    /// `deps()` to match the storage field's name; the accessor's
+    /// identity maps onto the canonical CAIXA-SDLC §I vocabulary the
+    /// slot's docstring already carries.
+    #[must_use]
+    pub fn deps(&self) -> &[Dep] {
+        self.deps.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1759,7 +1838,7 @@ impl Caixa {
     /// incoherent — those are what this gate closes.
     pub fn validate_deps(&self) -> Result<(), DepError> {
         let mut seen = std::collections::HashSet::new();
-        for dep in &self.deps {
+        for dep in self.deps() {
             dep.validate()?;
             crate::render::insert_first_seen(&mut seen, dep.nome.as_str(), || {
                 DepError::DuplicateNome {
@@ -10226,6 +10305,198 @@ mod tests {
                 expected.as_slice(),
                 "Caixa::servicos must return :servicos verbatim by \
                  borrow — got {first:?}, expected {expected:?}",
+            );
+        }
+    }
+
+    // ── Caixa::deps — outer top-level &[Dep] slice accessor ───────────
+
+    fn caixa_with_deps(deps: Vec<Dep>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.deps = deps;
+        c
+    }
+
+    #[test]
+    fn deps_returns_deps_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:deps` universal-axis runtime-
+        // dependency-declaration-list slice pin: [`Caixa::deps`] must
+        // return the `:deps` typed [`Vec<Dep>`] list verbatim as a
+        // `&[Dep]`, element-equal to the raw `self.deps.as_slice()`
+        // access across every representative value in the accept-set —
+        // `[]` (the "no runtime deps declared" arm every existing
+        // fixture without a `:deps` line carries; the
+        // [`Caixa::template`] scaffold emits `:deps ()`), a canonical
+        // single-entry list (the shape most consumer caixas carry), a
+        // canonical two-entry list (the multi-dep runtime closure), and
+        // two past-the-guard sentinels — a `[""]`-`:nome` entry
+        // ([`Self::validate_deps`] rejects through `NomeEmpty` /
+        // `NomeInvalid` but the accessor must ship the raw slot
+        // verbatim) and a `[a, a]` duplicate (validate rejects through
+        // `DuplicateNome { list: ":deps" }` but the accessor must ship
+        // the raw slot verbatim so struct-literal fixtures continue to
+        // expose the duplicate at the accessor).
+        //
+        // First outer top-level [`Caixa`] `&[Dep]`-return slice accessor
+        // pin on the substrate primitive — opens the outer-`Caixa`
+        // dependency-slot `&[Dep]` sub-family the sibling `:deps-dev`
+        // future lift closes on. Peer of the closed outer-`Caixa`
+        // foreign-code-slot `&[String]` sub-family
+        // (`bibliotecas_returns_bibliotecas_slice_verbatim_across_permutations`
+        // 8a36c23, `exe_returns_exe_slice_verbatim_across_permutations`
+        // 65d9527, `servicos_returns_servicos_slice_verbatim_across_permutations`
+        // 611f78b) and the outer-`Caixa` universal-axis text-tag family
+        // (`autores_returns_autores_slice_verbatim_across_permutations`
+        // b5d813f, `etiquetas_returns_etiquetas_slice_verbatim_across_permutations`
+        // 78c7d3c) — extends the "outer [`Caixa`] `&[T]` slice"
+        // projection pattern onto a novel element-type axis (`Dep`
+        // composite vs the prior sibling family's `String` scalar).
+        // Pins against a future silent detour that returned an owned
+        // `Vec<Dep>` (which would type-check but silently clone on every
+        // accessor call, breaking the zero-cost projection every peer
+        // sibling slice accessor carries), a `[""] → []` collapse (which
+        // would silently absorb the `NomeEmpty` refusal case at the
+        // accessor boundary), or a `[a, a] → [a]` dedup collapse (which
+        // would silently absorb the `DuplicateNome` refusal case at the
+        // accessor boundary).
+        for deps in [
+            vec![],
+            vec![Dep::simple("", "^0.1")],
+            vec![Dep::simple("caixa-teia", "^0.1")],
+            vec![
+                Dep::simple("caixa-teia", "^0.1"),
+                Dep::simple("caixa-core", "^0.1"),
+            ],
+            vec![
+                Dep::simple("caixa-teia", "^0.1"),
+                Dep::simple("caixa-teia", "^0.2"),
+            ],
+        ] {
+            let c = caixa_with_deps(deps.clone());
+            assert_eq!(
+                c.deps(),
+                deps.as_slice(),
+                "Caixa::deps must return :deps verbatim (got {:?}, \
+                 expected {deps:?})",
+                c.deps(),
+            );
+            assert_eq!(
+                c.deps(),
+                c.deps.as_slice(),
+                "Caixa::deps must element-equal the raw \
+                 `self.deps.as_slice()` field access across every \
+                 value in the Vec<Dep> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_deps_duplicate_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_deps`]'s within-`:deps`
+        // duplicate-`:nome` gate must key off [`Caixa::deps`], not the
+        // raw `&self.deps` field-borrow walk. Structurally: a `Caixa
+        // { deps: vec![Dep::simple("d", "^0.1"), Dep::simple("d",
+        // "^0.2")], .. }` must surface the `DuplicateNome { list:
+        // ":deps" }` refusal exactly, and a `Caixa { deps: vec![
+        // Dep::simple("d", "^0.1")], .. }` (the canonical single-entry
+        // form) must pass validate. The pair jointly pins the accessor +
+        // validate-gate composition: any future silent detour that had
+        // the accessor return a dedupped slice on the `[a, a]` arm (a
+        // `.iter().unique_by(|d| d.nome.as_str()).collect()` collapse)
+        // would silently absorb the `DuplicateNome` refusal at the
+        // accessor boundary and the validate gate would accept a
+        // struct-literal `Caixa` carrying the drift — the composition
+        // pin catches that at caixa-core build time.
+        //
+        // Peer of the per-`Caixa`
+        // `validate_autores_empty_entry_arm_routes_through_accessor`
+        // (b5d813f), `validate_etiquetas_empty_entry_arm_routes_through_accessor`
+        // (78c7d3c), `validate_code_paths_bibliotecas_empty_arm_routes_through_accessor`
+        // (8a36c23), `validate_code_paths_exe_empty_arm_routes_through_accessor`
+        // (65d9527), and `validate_code_paths_servicos_empty_arm_routes_through_accessor`
+        // (611f78b) accessor-composition pins on the sibling `&[T]`-
+        // composition axes — same "the validate gate must route through
+        // the substrate-primitive typed dispatch" discipline extended
+        // onto the sibling outer top-level [`Caixa`] `&[Dep]`-
+        // composition surface, opening the outer-`Caixa` dependency-slot
+        // arm of the composition-pin family.
+        let c = caixa_with_deps(vec![Dep::simple("d", "^0.1"), Dep::simple("d", "^0.2")]);
+        let err = c.validate_deps().unwrap_err();
+        assert!(
+            matches!(
+                err,
+                DepError::DuplicateNome { ref nome, list } if nome == "d"
+                    && list == crate::render::DEP_AUTHOR_KEY_DEPS
+            ),
+            "validate_deps must reject deps == \
+             vec![Dep(\"d\",\"^0.1\"), Dep(\"d\",\"^0.2\")] with \
+             DuplicateNome {{ nome: \"d\", list: \":deps\" }} — the \
+             accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the :deps \
+             within-list duplicate arm (got {err:?})",
+        );
+        let c = caixa_with_deps(vec![Dep::simple("d", "^0.1")]);
+        assert!(
+            c.validate_deps().is_ok(),
+            "validate_deps must accept deps == vec![Dep(\"d\",\"^0.1\")] \
+             (the canonical single-entry form)",
+        );
+    }
+
+    #[test]
+    fn deps_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::deps`] returns `&[Dep]` by borrow
+        // — the returned slice borrows the underlying `Vec<Dep>` storage
+        // of the `:deps` slot and the accessor must not clone the
+        // backing `Vec` on every call. Peer of the per-`Caixa`
+        // `autores_projects_slice_by_borrow` (b5d813f),
+        // `etiquetas_projects_slice_by_borrow` (78c7d3c),
+        // `bibliotecas_projects_slice_by_borrow` (8a36c23),
+        // `exe_projects_slice_by_borrow` (65d9527), and
+        // `servicos_projects_slice_by_borrow` (611f78b) by-borrow pins
+        // on the sibling outer top-level [`Caixa`] `&[String]`-return
+        // axes — the accessor's returned slice must borrow from `&self`
+        // (the returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // slices that are pointer-equal (the underlying byte-buffer is
+        // the storage `Vec`'s allocation, not a fresh copy) as well as
+        // value-equal (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<Dep>` (which would type-check but silently clone on
+        // every call), a `&Vec<Dep>` return (which would leak the
+        // backing `Vec`'s grow/push/reserve surface no downstream
+        // consumer reaches for), or a one-arm-only accessor that
+        // returned a saturating value on some sentinel input.
+        for deps in [
+            vec![],
+            vec![Dep::simple("caixa-teia", "^0.1")],
+            vec![
+                Dep::simple("caixa-teia", "^0.1"),
+                Dep::simple("caixa-core", "^0.1"),
+            ],
+        ] {
+            let c = caixa_with_deps(deps.clone());
+            let first = c.deps();
+            let second = c.deps();
+            assert_eq!(
+                first, second,
+                "Caixa::deps must be idempotent — two successive calls \
+                 on the same &self must return the same &[Dep]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::deps must borrow the underlying Vec<Dep> \
+                 storage — two successive calls must return slices \
+                 with the same backing pointer (a fresh Vec<Dep> clone \
+                 would change the pointer on every call)",
+            );
+            assert_eq!(
+                first,
+                deps.as_slice(),
+                "Caixa::deps must return :deps verbatim by borrow — \
+                 got {first:?}, expected {deps:?}",
             );
         }
     }
