@@ -2444,6 +2444,131 @@ impl Caixa {
         self.upgrade_from.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:children` M2 supervisor-tree-
+    /// slot outer-composite OTP-shaped per-supervisor static-child-list
+    /// slice accessor every consumer of the top-level manifest's per-
+    /// Supervisor `&[ChildSpec]` slice-view keys off — returns the
+    /// author-declared `:children` typed `Vec<crate::supervisor::ChildSpec>`
+    /// verbatim as a `&[crate::supervisor::ChildSpec]` slice-view over
+    /// the same backing buffer the raw `self.children.as_slice()` field
+    /// access borrows from. Empty-slice-carrying (the "no static children
+    /// declared" arm every non-`Supervisor`-kind `defcaixa` carries by
+    /// #[serde(default)] and every `SimpleOneForOne` supervisor carries
+    /// by [`crate::supervisor::SupervisorError::SimpleOneForOneWithStaticChildren`]
+    /// gate; the returned `&[ChildSpec]` degenerates to an empty slice
+    /// on those arms without any silent `None` collapse).
+    ///
+    /// The outer `:children` slot carries the M2 typed OTP-supervisor
+    /// static-child list — the load-bearing container of every per-
+    /// child `{caixa, versao, restart}` triple the wasm-operator's
+    /// hierarchical reconciler dispatches on at supervisor-tree
+    /// materialization time (INSPIRATIONS §II.2 — OTP `supervisor:init/1`
+    /// static-child list translated onto pleme-io's typed
+    /// [`crate::supervisor::ChildSpec`] entry list; CAIXA-SDLC §II —
+    /// the typed-M2 slot algebra the operator's per-supervisor fan-out
+    /// dispatch fans on). Every per-child axis threads through a lifted
+    /// per-entry accessor on the [`crate::supervisor::ChildSpec`] type:
+    /// the [`crate::supervisor::ChildSpec::nome`] DNS-1123-label
+    /// child-caixa-identity scalar accessor, the peer versao SemVer-2
+    /// version-requirement scalar accessor, and the
+    /// [`crate::supervisor::ChildSpec::restart`] `Copy`-composite-enum
+    /// per-child post-exit restart-decision-policy discriminant
+    /// accessor (dfb4a81). Every downstream consumer of the supervisor-
+    /// tree path first passes through this outer accessor onto the
+    /// slice and then dispatches per-child through the inner accessors
+    /// — the two-level dispatch means every per-`:children` reader now
+    /// routes through a typed dispatch on the substrate primitive at
+    /// both altitudes.
+    ///
+    /// Prior to this lift the `.children` `Vec<ChildSpec>` slot was
+    /// accessed inline at three production sites across two files —
+    /// the [`Self::declared_supervisor_slots`] supervisor-tree
+    /// declared-slot enumerator's `!self.children.is_empty()` presence
+    /// probe (caixa-core/src/manifest.rs, which drives the
+    /// `SUPERVISOR_AUTHOR_KEY_CHILDREN` kebab-case author-label push
+    /// every [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+    /// kind-coherence gate reads), the [`Self::supervisor_view`]
+    /// per-supervisor typed-view composer's `self.children.clone()`
+    /// per-child fold-in path (caixa-core/src/manifest.rs, which
+    /// materializes the typed [`crate::supervisor::SupervisorSpec`]
+    /// view every [`crate::StandardLayout::verify`] Supervisor-arm gate
+    /// dispatches on), and the [`crate::StandardLayout::verify`] per-
+    /// `:children :caixa` self-parent refusal probe's
+    /// `&caixa.children`-borrowed
+    /// [`crate::supervisor::validate_no_self_supervision`] input
+    /// (caixa-core/src/layout.rs, which pins the "no child names the
+    /// supervisor's own `:nome`" cross-slot coherence gate). A future
+    /// extension of the outer `:children` axis (a per-cluster
+    /// `:children-overrides` overlay the wasm-engine operator resolves
+    /// at admission time so a cluster-specific child-set can tighten
+    /// a caixa-declared list without re-authoring the `caixa.lisp`,
+    /// promotion of the plain `Vec<ChildSpec>` to a richer
+    /// `{static, dynamic}` partition once Erlang/OTP's
+    /// `simple_one_for_one`-shaped dynamic-child slot lands as a typed
+    /// axis, per-child priority annotation once multi-strategy fan-out
+    /// lands) would have had to be threaded through all three open-
+    /// coded copies in lockstep or one consumer would silently
+    /// disagree with the peers on which child slice a given Caixa
+    /// resolves to — the enumerator's presence probe reading the raw
+    /// slot while the peer view-composer's fold-in path read an
+    /// operator-resolved slot would silently split the paired
+    /// declared-slot enumerator and typed-view composition, and the
+    /// [`crate::supervisor::validate_no_self_supervision`] self-parent
+    /// refusal probe reading a third borrow would silently drift the
+    /// cross-slot coherence gate's traversal input from the two peers,
+    /// a three-consumer split at the enumerator, the view composer,
+    /// and the self-parent gate far from the source `caixa.lisp` with
+    /// no field naming the child-set-drift root cause. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa`
+    /// OTP-supervisor outer-slice surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit
+    /// on any future axis addition.
+    ///
+    /// Second outer top-level [`Caixa`] `&[Composite]`-return slice
+    /// accessor for M2 / M3 typed-slot vec-carry axes — folds on the
+    /// outer-`Caixa` `&[Composite]` composite-slice sub-family the
+    /// sibling [`Self::upgrade_from`] (2a1f907) accessor opened, peer
+    /// at the outer altitude of the closed inner-`SupervisorSpec`
+    /// [`crate::SupervisorSpec::children`] (bc92bce) accessor on the
+    /// same OTP-supervisor static-child-list axis — same "byte-equal,
+    /// borrow-shared" outer-accessor discipline extended onto the
+    /// second outer-`Caixa` `&[Composite]` vec-carry axis. Sibling in
+    /// shape to the peer outer-`Caixa` `&[Dep]`-return [`Self::deps`]
+    /// (ad34b4e) / [`Self::deps_dev`] (f7fd81e) and `&[String]`-return
+    /// [`Self::autores`] (b5d813f) / [`Self::etiquetas`] (78c7d3c) /
+    /// [`Self::bibliotecas`] (8a36c23) / [`Self::exe`] (65d9527) /
+    /// [`Self::servicos`] (611f78b) slice-accessors on the sibling
+    /// outer-`Caixa` scalar-element vec-carry axes — folds the "outer
+    /// [`Caixa`] `&[T]` slice" projection pattern onto the sibling
+    /// M2 typed-composite-element axis
+    /// ([`crate::supervisor::ChildSpec`] composite, matching the
+    /// per-inner [`crate::SupervisorSpec::children`] element type at a
+    /// different altitude).
+    ///
+    /// Returns `&[crate::supervisor::ChildSpec]` (not
+    /// `&Vec<ChildSpec>`) because every downstream consumer of the
+    /// child list treats it as a read-only sequence — the slice-view
+    /// is the narrowest borrow that supports every present +
+    /// roadmapped consumer (`.iter()`, `.len()`, `.is_empty()`, the
+    /// [`crate::supervisor::validate_no_self_supervision`] `&[ChildSpec]`
+    /// input, `serde` slice-serialization) without leaking the backing
+    /// `Vec`'s grow/push/reserve surface no consumer of the typed view
+    /// reaches for (the storage-side `Vec` remains reachable through
+    /// the `pub children` field for the mutation-carrying serde round-
+    /// trip and per-test fixture-mutation paths, including the
+    /// [`Self::supervisor_view`] fold-in path that clones the slot
+    /// into the typed view). Named `children()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:children`) the field's own docstring already carries; the
+    /// accessor's identity maps onto the canonical OTP supervision
+    /// vocabulary the [`Caixa::children`] field's docstring already
+    /// reaches for ("Static children of a supervisor").
+    #[must_use]
+    pub fn children(&self) -> &[crate::supervisor::ChildSpec] {
+        self.children.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -2565,7 +2690,7 @@ impl Caixa {
         if self.restart_window.is_some() {
             slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW);
         }
-        if !self.children.is_empty() {
+        if !self.children().is_empty() {
             slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN);
         }
         slots
@@ -3966,7 +4091,7 @@ impl Caixa {
             estrategia: self.estrategia.unwrap_or_default(),
             max_restarts: self.max_restarts.unwrap_or(5),
             restart_window,
-            children: self.children.clone(),
+            children: self.children().to_vec(),
         })
     }
 
@@ -13598,6 +13723,328 @@ mod tests {
                 "Caixa::upgrade_from must return :upgrade-from \
                  verbatim by borrow — got {first:?}, expected \
                  {upgrade_from:?}",
+            );
+        }
+    }
+
+    // ── Caixa::children — outer top-level &[ChildSpec] composite-slice accessor ──
+
+    fn caixa_with_children(children: Vec<crate::supervisor::ChildSpec>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.children = children;
+        c
+    }
+
+    #[test]
+    fn children_returns_children_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:children` M2 supervisor-tree-slot
+        // outer-composite `&[ChildSpec]`-return slice-shape pin:
+        // [`Caixa::children`] must return the `:children` typed
+        // `Vec<ChildSpec>` verbatim as a `&[ChildSpec]` slice-view over
+        // the same backing buffer the raw `self.children.as_slice()`
+        // field access borrows from, element-equal across every
+        // representative fixture in the accept-set — `[]` (the "no
+        // static children declared" arm every non-`Supervisor`-kind
+        // `defcaixa` carries by `#[serde(default)]` and every
+        // `SimpleOneForOne` supervisor carries by cross-slot refusal),
+        // a canonical single-child `Permanent` fixture (the shape
+        // most `OneForOne` supervisors carry — a single long-running
+        // worker child), a canonical multi-child list carrying every
+        // typed restart-policy variant (`Permanent` / `Transient` /
+        // `Temporary`), and a past-the-guard sentinel — a duplicate
+        // `:caixa` `[("w", ...), ("w", ...)]` entry pair
+        // ([`crate::SupervisorSpec::validate`] rejects through
+        // `DuplicateChildNome { nome: "w" }` but the accessor must
+        // ship the raw slot verbatim so struct-literal fixtures
+        // continue to expose the duplicate at the accessor boundary).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<ChildSpec>` (which would type-check but silently clone
+        // on every accessor call, breaking the zero-cost projection
+        // every peer sibling slice accessor carries), a `[dup, dup] →
+        // [dup]` dedup collapse (which would silently absorb the
+        // `DuplicateChildNome` refusal case at the accessor boundary
+        // and the [`crate::StandardLayout::verify`] cross-child gate
+        // would silently accept a struct-literal `Caixa` carrying the
+        // drift), a reference to an operator-resolved overlay (the
+        // future per-cluster `:children-overrides` slot — its
+        // resolution must land at exactly this accessor body, not
+        // silently divert the raw slot away from a second consumer),
+        // or an axis-shuffled projection (a future detour that
+        // reordered children through the accessor would silently
+        // split the paired [`crate::StandardLayout::verify`] per-
+        // supervisor gate's traversal input from the peer
+        // [`Self::supervisor_view`] fold-in path's clone-order input,
+        // since the OTP `RestForOne` restart strategy dispatches on
+        // declared child order and axis reordering would silently
+        // split the operator's per-cluster restart-fan-out order
+        // from the caixa.lisp source-order).
+        //
+        // Second outer top-level [`Caixa`] `&[Composite]`-return slice
+        // accessor pin on the substrate primitive for M2 / M3 typed-
+        // slot vec-carry axes — folds on the outer-`Caixa`
+        // `&[Composite]` composite-slice sub-family the sibling
+        // `upgrade_from_returns_upgrade_from_slice_verbatim_across_permutations`
+        // (2a1f907) pin opened, peer at the outer altitude of the
+        // closed inner-`SupervisorSpec` `SupervisorSpec::children`
+        // (bc92bce) accessor on the same OTP-supervisor static-child-
+        // list axis.
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let fixtures: Vec<Vec<ChildSpec>> = vec![
+            vec![],
+            vec![ChildSpec {
+                caixa: "worker".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            }],
+            vec![
+                ChildSpec {
+                    caixa: "worker-a".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                },
+                ChildSpec {
+                    caixa: "worker-b".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Transient,
+                },
+                ChildSpec {
+                    caixa: "worker-c".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Temporary,
+                },
+            ],
+            vec![
+                ChildSpec {
+                    caixa: "w".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                },
+                ChildSpec {
+                    caixa: "w".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                },
+            ],
+        ];
+        for children in fixtures {
+            let c = caixa_with_children(children.clone());
+            assert_eq!(
+                c.children(),
+                children.as_slice(),
+                "Caixa::children must return :children verbatim \
+                 (got {:?}, expected {children:?})",
+                c.children(),
+            );
+            assert_eq!(
+                c.children(),
+                c.children.as_slice(),
+                "Caixa::children must element-equal the raw \
+                 `self.children.as_slice()` field access across \
+                 every value in the Vec<ChildSpec> accept-set",
+            );
+            assert_eq!(
+                c.children().is_empty(),
+                c.children.is_empty(),
+                "Caixa::children().is_empty() must byte-equal \
+                 self.children.is_empty() — a presence-bit drift \
+                 would silently split the paired \
+                 Caixa::declared_supervisor_slots supervisor-tree \
+                 declared-slot enumerator's presence probe from the \
+                 peer Caixa::supervisor_view typed-view composer's \
+                 fold-in path",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_supervisor_slots_children_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_supervisor_slots`]'s
+        // `:children` presence-probe arm must key off
+        // [`Caixa::children`], not the raw
+        // `!self.children.is_empty()` field-probe. Structurally: a
+        // `Caixa { children: vec![ChildSpec { caixa: "w", versao:
+        // "^0.1", restart: Permanent }], .. }` must push
+        // `SUPERVISOR_AUTHOR_KEY_CHILDREN` onto the declared-slot list
+        // (the presence bit is non-empty, so the supervisor-tree
+        // kind-coherence gate must surface the slot as "declared"),
+        // and a `Caixa { children: vec![], .. }` must NOT push the
+        // label (the "author omitted the slot entirely" arm — the
+        // empty-slice partition the serde-default folds onto). The
+        // pair jointly pins the accessor + declared-slot enumerator
+        // composition: any future silent detour that had the accessor
+        // collapse `[Permanent]` to `[]` (a `.filter(|c| c.nome() !=
+        // "__reserved__")` projection) would silently absorb the
+        // "declared but degenerate" arm at the accessor boundary and
+        // the [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+        // kind-coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_upgrade_from_arm_routes_through_accessor`
+        // (2a1f907) on the M2 `:upgrade-from` composite-slice arm —
+        // same "the enumerator gate must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the
+        // supervisor-tree `:children` composite-slice arm.
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let c = caixa_with_children(vec![ChildSpec {
+            caixa: "w".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }]);
+        let slots = c.declared_supervisor_slots();
+        assert!(
+            slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN),
+            "declared_supervisor_slots must push \
+             SUPERVISOR_AUTHOR_KEY_CHILDREN when `:children` is \
+             non-empty — the accessor and the enumerator gate must \
+             route through the same substrate-primitive typed \
+             dispatch on the outer :children presence bit (got \
+             slots={slots:?})",
+        );
+        let c = caixa_with_children(vec![]);
+        let slots = c.declared_supervisor_slots();
+        assert!(
+            !slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_CHILDREN),
+            "declared_supervisor_slots must NOT push \
+             SUPERVISOR_AUTHOR_KEY_CHILDREN when `:children` is \
+             empty — the author-omitted arm must route through the \
+             accessor's empty-slice return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_children_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::supervisor_view`]'s per-`:children`
+        // fold-in arm must key off [`Caixa::children`], not the raw
+        // `self.children.clone()` field-clone. Structurally: a `Caixa {
+        // kind: Supervisor, estrategia: Some(OneForOne), children:
+        // vec![ChildSpec { caixa: "w", .. }], .. }` must fold the
+        // per-child list through the accessor into the typed
+        // [`SupervisorSpec`] view's `children` field verbatim — every
+        // entry the accessor surfaces must land in the view's
+        // `children` slot in the same order. The pair jointly pins the
+        // accessor + view-composer composition: any future silent
+        // detour that had the accessor return a fresh-cloned
+        // `Vec<ChildSpec>` copy would silently break the reference-
+        // identity pin the peer `supervisor_view` fold-in path reads
+        // from — the fold would clone once more per accessor call
+        // instead of borrowing the storage buffer verbatim once.
+        //
+        // Peer of the sibling
+        // `supervisor_view_kind_gate_routes_through_accessor` (35d8b52-
+        // family) composition pin on the peer kind-gate arm — same
+        // "the view composer must route through the substrate-
+        // primitive typed dispatch" discipline extended onto the
+        // per-`:children` fold-in arm, closing the supervisor-view
+        // composer's routing invariant on the composite-slice input.
+        use crate::supervisor::{ChildSpec, RestartPolicy, RestartStrategy};
+        let mut c = caixa_with_children(vec![
+            ChildSpec {
+                caixa: "worker-a".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            },
+            ChildSpec {
+                caixa: "worker-b".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Transient,
+            },
+        ]);
+        c.kind = crate::CaixaKind::Supervisor;
+        c.estrategia = Some(RestartStrategy::OneForOne);
+        let view = c
+            .supervisor_view()
+            .expect("Supervisor kind must produce a supervisor_view");
+        assert_eq!(
+            view.children(),
+            c.children(),
+            "supervisor_view must fold Caixa::children verbatim into \
+             SupervisorSpec::children — the accessor and the view \
+             composer must route through the same substrate-primitive \
+             typed dispatch on the outer :children slice (got view \
+             children={:?}, expected {:?})",
+            view.children(),
+            c.children(),
+        );
+    }
+
+    #[test]
+    fn children_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::children`] returns
+        // `&[ChildSpec]` by borrow — the returned slice borrows the
+        // underlying `Vec<ChildSpec>` storage of the `:children` slot
+        // and the accessor must not clone the backing `Vec` on every
+        // call. Peer of the sibling outer top-level [`Caixa`]
+        // `&[T]`-return by-borrow pins (`autores_projects_slice_by_borrow`
+        // b5d813f, `etiquetas_projects_slice_by_borrow` 78c7d3c,
+        // `bibliotecas_projects_slice_by_borrow` 8a36c23,
+        // `exe_projects_slice_by_borrow` 65d9527,
+        // `servicos_projects_slice_by_borrow` 611f78b,
+        // `deps_projects_slice_by_borrow` ad34b4e,
+        // `deps_dev_projects_slice_by_borrow` f7fd81e,
+        // `upgrade_from_projects_slice_by_borrow` 2a1f907) on the
+        // sibling outer top-level [`Caixa`] scalar-element and
+        // composite-element `&[T]` axes — folds on the outer-`Caixa`
+        // composite-element `&[Composite]` axis: the accessor's
+        // returned slice must borrow from `&self` (the returned
+        // reference's lifetime is tied to `&self`), and calling the
+        // accessor twice on the same [`Caixa`] must yield slices
+        // that are pointer-equal (the underlying byte-buffer is the
+        // storage `Vec`'s allocation, not a fresh copy) as well as
+        // value-equal (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<ChildSpec>` (which would type-check but silently clone
+        // on every call), a `&Vec<ChildSpec>` return (which would leak
+        // the backing `Vec`'s grow/push/reserve surface no downstream
+        // consumer reaches for), or a one-arm-only accessor that
+        // returned a saturating value on some sentinel input.
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        for children in [
+            vec![],
+            vec![ChildSpec {
+                caixa: "w".into(),
+                versao: "^0.1".into(),
+                restart: RestartPolicy::Permanent,
+            }],
+            vec![
+                ChildSpec {
+                    caixa: "worker-a".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                },
+                ChildSpec {
+                    caixa: "worker-b".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Transient,
+                },
+            ],
+        ] {
+            let c = caixa_with_children(children.clone());
+            let first = c.children();
+            let second = c.children();
+            assert_eq!(
+                first, second,
+                "Caixa::children must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 &[ChildSpec]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::children must borrow the underlying \
+                 Vec<ChildSpec> storage — two successive calls must \
+                 return slices with the same backing pointer (a fresh \
+                 Vec<ChildSpec> clone would change the pointer on \
+                 every call)",
+            );
+            assert_eq!(
+                first,
+                children.as_slice(),
+                "Caixa::children must return :children verbatim by \
+                 borrow — got {first:?}, expected {children:?}",
             );
         }
     }
