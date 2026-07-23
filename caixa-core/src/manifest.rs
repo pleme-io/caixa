@@ -2020,6 +2020,151 @@ impl Caixa {
         self.politicas.as_ref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:placement` M3 mesh-slot outer-
+    /// composite MESH-COMPOSITION-shaped distribution optional-composite-
+    /// reference accessor every consumer of the top-level manifest's
+    /// per-Aplicacao [`crate::aplicacao::Placement`] outer-composite
+    /// reader keys off — returns the author-declared `:placement` typed
+    /// composite verbatim as an `Option<&Placement>` reference over the
+    /// same backing storage the raw `self.placement.as_ref()` field
+    /// access borrows from, with `None` naming the "no `:placement`
+    /// block authored — every per-axis placement scalar defers to the
+    /// cluster-default arm named on the per-axis
+    /// [`crate::aplicacao::Placement::estrategia`] /
+    /// [`crate::aplicacao::Placement::clusters`] /
+    /// [`crate::aplicacao::Placement::affinity`] /
+    /// [`crate::aplicacao::Placement::shard_key`] scalar-accessor
+    /// docstrings" partition every downstream caixa-mesh /
+    /// caixa-flux / caixa-helm Aplicacao-artifact emitter treats as
+    /// "emit no per-`:placement` overlay" and the sibling
+    /// [`Self::aplicacao_view`] Aplicacao-composition seed folds through
+    /// the [`crate::aplicacao::Placement::default`] cluster-default arm.
+    ///
+    /// The outer `:placement` slot carries the M3 mesh-slot per-
+    /// Aplicacao typed distribution composite — the load-bearing
+    /// container of every where-does-this-Aplicacao-run axis every
+    /// caixa-mesh programs.yaml per-cluster distribution overlay /
+    /// caixa-flux per-Aplicacao GitRepository/HelmRelease fan-out /
+    /// future M4 per-Aplicacao Akka-style cluster-sharding entity-id
+    /// resolver emitter fans on (MESH-COMPOSITION §II.4 — the
+    /// Aplicacao's typed distribution composite; §V CSE invariants —
+    /// "distribution is a first-class typed composite, not a runtime
+    /// scheduler hint" the per-axis scalars enforce; §III.3 — the
+    /// typed inter-Servico contrato-edge overlay the per-cluster
+    /// mesh renderer keys off). Every per-`:placement` axis threads
+    /// through a lifted per-slot accessor on the
+    /// [`crate::aplicacao::Placement`] type: the
+    /// [`crate::aplicacao::Placement::estrategia`] (921fe1b)
+    /// MESH-COMPOSITION distribution-strategy scalar, the
+    /// [`crate::aplicacao::Placement::clusters`] (a6e18d7) per-cluster
+    /// distribution-target slice, the [`crate::aplicacao::Placement::affinity`]
+    /// M3-Adaptive-compression-hint optional-scalar, and the
+    /// [`crate::aplicacao::Placement::shard_key`] (7cd2a28) Akka-cluster-
+    /// sharding extractor-expression optional-scalar. Every downstream
+    /// consumer that reaches for a placement axis first passes through
+    /// this outer accessor onto the composite and then dispatches onto
+    /// the per-axis accessor — the two-level dispatch means every per-
+    /// `:placement` reader now routes through a typed dispatch on the
+    /// substrate primitive at both altitudes.
+    ///
+    /// Composes through [`Self::aplicacao_view`]'s Aplicacao-composition
+    /// seed: the Aplicacao-view builder folds the outer `Option`'s
+    /// author-omitted arm onto the [`crate::aplicacao::Placement::default`]
+    /// cluster-default, so the peer inner [`crate::AplicacaoSpec::placement`]
+    /// (9abb8f0) `&Placement`-return accessor observes a typed composite
+    /// whether or not the author declared the outer slot. The outer
+    /// accessor preserves the "author-omitted vs authored-empty" partition
+    /// the inner accessor collapses at the cluster-default fold —
+    /// routing the presence bit through this accessor keeps the
+    /// [`Self::declared_mesh_slots`] M3 kind-coherence enumerator's
+    /// `M3_AUTHOR_KEY_PLACEMENT` push separate from the inner
+    /// [`crate::AplicacaoSpec::validate_placement`]-gated overlay
+    /// dispatch.
+    ///
+    /// Prior to this lift the `.placement` `Option<Placement>`
+    /// composite was accessed inline at two production sites — the
+    /// [`Self::aplicacao_view`] Aplicacao-composition seed's
+    /// `self.placement.clone().unwrap_or_default()` traversal head
+    /// (caixa-core/src/manifest.rs:2036, which drives the fold onto
+    /// the [`crate::aplicacao::Placement::default`] cluster-default
+    /// arm the inner [`crate::AplicacaoSpec::placement`] accessor
+    /// then observes), and the [`Self::declared_mesh_slots`] M3
+    /// declared-slot-set enumerator's `self.placement.is_some()`
+    /// presence probe (caixa-core/src/manifest.rs:2100, which drives
+    /// the `M3_AUTHOR_KEY_PLACEMENT` kebab-case author-label push
+    /// every [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+    /// coherence gate reads) — two open-coded outer-field accesses
+    /// that expressed no compile-time link back to the typed slot at
+    /// the [`Caixa`] altitude. A future extension of the `:placement`
+    /// outer axis to a richer author surface (a per-cluster
+    /// `:placement-overrides` slot the operator materializes at
+    /// admission time so a cluster-specific placement can tighten the
+    /// caixa-declared bound without re-authoring the `caixa.lisp`, a
+    /// per-tenant placement-alias table the M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer resolves
+    /// per-CR at admission time, a promotion of the plain
+    /// `Option<Placement>` to a richer `{static, dynamic}` partition
+    /// once Orleans-style virtual-actor dynamic placement comes into
+    /// typed scope) would have had to be threaded through both open-
+    /// coded copies in lockstep or the Aplicacao-composition seed's
+    /// default-fold arm would silently disagree with the M3 declared-
+    /// slot enumerator on which distribution composite a given Caixa
+    /// resolves to — the seed reading an operator-resolved slot while
+    /// the enumerator's presence probe read the raw slot would
+    /// silently split the build-time distribution-artifact emission
+    /// gate from the M3 declared-slot enumerator's kind-coherence
+    /// gate, a two-consumer split far from the source `caixa.lisp`
+    /// with no field naming the distribution-drift root cause.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the caixa's per-
+    /// `Caixa` MESH-COMPOSITION distribution outer-composite surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Fourth outer top-level [`Caixa`] `Option<&Composite>`-return
+    /// composite-reference accessor — sibling to the opening
+    /// [`Self::limits`] (b2bd9d7) / [`Self::behavior`] (35d8b52) M2-
+    /// Servico-runtime pair and the peer [`Self::politicas`] (5d23d29)
+    /// M3-mesh-slot arm on the outer-`Caixa` `Option<&Composite>`
+    /// composite-reference sub-family, folds on the "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline extended onto the second of the three M3
+    /// mesh-slot axes. Peer of the closed inner mesh-slot outer-
+    /// composite family the sibling
+    /// [`crate::AplicacaoSpec::politicas`] (534dc21) /
+    /// [`crate::AplicacaoSpec::placement`] (9abb8f0) /
+    /// [`crate::AplicacaoSpec::entrada`] (d32111c) composite-reference
+    /// accessor pins already close on the inner
+    /// [`crate::AplicacaoSpec`] altitude — folds on the outer top-
+    /// level [`Caixa`] altitude's M3 mesh-slot arm the sibling
+    /// [`Self::politicas`] opened, extending the discipline onto the
+    /// second of the three M3 mesh-slot axes. The remaining M3
+    /// mesh-slot axis (`:entrada`) folds onto this accessor's
+    /// discipline in the final sibling lift, closing the outer top-
+    /// level [`Caixa`] `Option<&Composite>` M3 mesh-slot sub-family.
+    /// Returns `Option<&Placement>` (not the owning composite by copy
+    /// or clone) because every downstream consumer of the placement
+    /// composite treats it as a read-only per-axis dispatch source —
+    /// the reference-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (per-axis accessor dispatch,
+    /// serde composite-serialization on the programs.yaml overlay,
+    /// presence-probe early return on the "author-omitted `:placement`
+    /// ⇒ cluster-default applies" partition, `Aplicacao`-composition
+    /// seed's default-fold arm) without cloning the composite through
+    /// every consumer's fast path. The `Option` half of the return-
+    /// type preserves the load-bearing "author-omitted `:placement` ⇒
+    /// cluster-default applies" partition (not a default composite
+    /// the downstream must reject on emptiness) — the accessor
+    /// projects the raw `Option<Placement>` slot's presence bit
+    /// through the reference-return unchanged. Named `placement()` to
+    /// match the storage field's name verbatim and the tatara-lisp
+    /// author-surface term (`:placement`) the field's own docstring
+    /// already carries.
+    #[must_use]
+    pub fn placement(&self) -> Option<&crate::aplicacao::Placement> {
+        self.placement.as_ref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -2033,7 +2178,7 @@ impl Caixa {
             membros: self.membros.clone(),
             contratos: self.contratos.clone(),
             politicas: self.politicas().cloned().unwrap_or_default(),
-            placement: self.placement.clone().unwrap_or_default(),
+            placement: self.placement().cloned().unwrap_or_default(),
             entrada: self.entrada.clone(),
         })
     }
@@ -2097,7 +2242,7 @@ impl Caixa {
         if self.politicas().is_some() {
             slots.push(crate::render::M3_AUTHOR_KEY_POLITICAS);
         }
-        if self.placement.is_some() {
+        if self.placement().is_some() {
             slots.push(crate::render::M3_AUTHOR_KEY_PLACEMENT);
         }
         if self.entrada.is_some() {
@@ -12150,6 +12295,359 @@ mod tests {
         assert!(
             c.politicas().is_none(),
             "Caixa::politicas must return None when :politicas is \
+             absent — the author-omitted arm must project through the \
+             accessor's Option::None unchanged",
+        );
+    }
+
+    // ── Caixa::placement — outer top-level Option<&Placement> composite-reference accessor ──
+
+    fn caixa_aplicacao_with_placement(placement: Option<crate::aplicacao::Placement>) -> Caixa {
+        use crate::aplicacao::{Membro, WitContract};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.membros = vec![Membro {
+            caixa: "a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "a".into(),
+            para: "a".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        c.placement = placement;
+        c
+    }
+
+    #[test]
+    fn placement_returns_placement_option_ref_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:placement` M3 mesh-slot outer-
+        // composite optional-composite-reference-shape pin:
+        // [`Caixa::placement`] must return the `:placement` typed
+        // `Option<Placement>` verbatim as an `Option<&Placement>`
+        // reference over the same backing storage the raw
+        // `self.placement.as_ref()` field access borrows from,
+        // byte-equal across every representative fixture in the
+        // accept-set — the author-omitted `None` shape (the
+        // "cluster-default applies" partition every downstream mesh-
+        // artifact emitter treats as "emit no `:placement` overlay"),
+        // the empty-composite `Some(Placement { .. default })` shape
+        // (`estrategia: SingleNode`, empty clusters, no shard-key /
+        // affinity — the outer presence-bit is `Some` so
+        // [`Caixa::declared_mesh_slots`] still pushes the
+        // `M3_AUTHOR_KEY_PLACEMENT` label), a single-axis
+        // `Replicated`-on-two-clusters fixture (the canonical shape a
+        // stateless HTTP Aplicacao carries), and a fully-populated
+        // `Sharded`-with-shard-key-and-affinity fixture (the canonical
+        // shape a stateful Akka-style cluster-sharding Aplicacao
+        // carries).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned [`crate::aplicacao::Placement`] copy (which would
+        // type-check via the `Clone` impl but silently break every
+        // downstream caller that relied on the reference sharing the
+        // composite's backing identity), a reference to an operator-
+        // resolved overlay (the future per-cluster
+        // `:placement-overrides` slot — its resolution must land at
+        // exactly this accessor body, not silently divert the raw
+        // slot away from the peer [`Caixa::declared_mesh_slots`]
+        // enumerator's presence probe), a `None` →
+        // `Some(Placement::default)` cluster-default projection (which
+        // would collapse the load-bearing "author-omitted `:placement`
+        // ⇒ cluster-default applies" partition the peer
+        // [`Caixa::declared_mesh_slots`] enumerator and the peer
+        // [`Caixa::aplicacao_view`] Aplicacao-composition seed both
+        // read), or an axis-shuffled projection (a future detour that
+        // swapped `clusters` and `affinity` through the accessor would
+        // silently split the paired [`Caixa::aplicacao_view`] seed's
+        // fold input from the sibling M3 mesh-artifact emitter's
+        // projection input).
+        //
+        // Fourth outer top-level [`Caixa`] `Option<&Composite>`-return
+        // composite-reference accessor pin on the substrate primitive
+        // — peer of the sibling
+        // `limits_returns_limits_option_ref_verbatim_across_permutations`
+        // (b2bd9d7),
+        // `behavior_returns_behavior_option_ref_verbatim_across_permutations`
+        // (35d8b52), and
+        // `politicas_returns_politicas_option_ref_verbatim_across_permutations`
+        // (5d23d29) opening triad pins on the outer top-level
+        // [`Caixa`] `Option<&Composite>`-return sub-family — extended
+        // here to the second of the three M3 mesh-slot axes so the
+        // opening four-fifths of the outer `Option<&Composite>` sub-
+        // family carries the same "byte-equal, borrow-shared,
+        // presence-bit-preserved" outer-accessor discipline.
+        use crate::aplicacao::{Placement, PlacementStrategy};
+        let fixtures: Vec<Option<Placement>> = vec![
+            None,
+            Some(Placement::default()),
+            Some(Placement {
+                estrategia: PlacementStrategy::Replicated,
+                clusters: vec!["rio".into(), "sao-paulo".into()],
+                affinity: None,
+                shard_key: None,
+            }),
+            Some(Placement {
+                estrategia: PlacementStrategy::Sharded,
+                clusters: vec!["rio".into(), "sao-paulo".into(), "brasilia".into()],
+                affinity: Some("data-locality".into()),
+                shard_key: Some("$tenantId".into()),
+            }),
+        ];
+        for placement in fixtures {
+            let c = caixa_aplicacao_with_placement(placement.clone());
+            assert_eq!(
+                c.placement(),
+                placement.as_ref(),
+                "Caixa::placement must return :placement verbatim (got \
+                 {:?}, expected {:?})",
+                c.placement(),
+                placement.as_ref(),
+            );
+            match (c.placement(), c.placement.as_ref()) {
+                (Some(a), Some(b)) => assert!(
+                    std::ptr::eq(a, b),
+                    "Caixa::placement accessor and self.placement.as_ref() \
+                     field access must borrow the same backing storage \
+                     — the accessor is the substrate-primitive typed \
+                     dispatch every downstream Aplicacao-distribution- \
+                     overlay composite consumer must route through, and \
+                     a reference-identity split would silently break \
+                     every consumer that relied on the borrow sharing \
+                     the composite's storage",
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "Caixa::placement presence bit must byte-equal \
+                     self.placement.is_some() — a presence-bit drift \
+                     would silently split the paired \
+                     Caixa::aplicacao_view Aplicacao-composition seed's \
+                     traversal head from the peer \
+                     Caixa::declared_mesh_slots M3 declared-slot \
+                     enumerator's presence probe",
+                ),
+            }
+            assert_eq!(
+                c.placement().is_some(),
+                c.placement.is_some(),
+                "Caixa::placement().is_some() must byte-equal \
+                 self.placement.is_some() — a presence-bit drift would \
+                 silently split every downstream Option<&Placement> \
+                 consumer's partition on the cluster-default arm",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_mesh_slots_placement_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_mesh_slots`]'s
+        // `:placement` presence-probe arm must key off
+        // [`Caixa::placement`], not the raw `self.placement.is_some()`
+        // field-probe. Structurally: a `Caixa { placement:
+        // Some(Placement::default()), .. }` must still push
+        // `M3_AUTHOR_KEY_PLACEMENT` onto the declared-slot list (the
+        // presence bit is `Some`, so the M3 kind-coherence gate must
+        // surface the slot as "declared" even when every per-axis
+        // scalar defers to the cluster-default arm), and a `Caixa {
+        // placement: None, .. }` must NOT push the label (the "author
+        // omitted the slot entirely" partition). The pair jointly pins
+        // the accessor + declared-slot enumerator composition: any
+        // future silent detour that had the accessor collapse
+        // `Some(Placement::default())` to `None` (a `.filter(|p|
+        // p.clusters().is_empty().not())` projection) would silently
+        // absorb the "declared but empty" arm at the accessor boundary
+        // and the [`crate::LayoutError::MeshSlotsOnNonAplicacao`]
+        // kind-coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_limits_arm_routes_through_accessor`
+        // (b2bd9d7),
+        // `declared_servico_slots_behavior_arm_routes_through_accessor`
+        // (35d8b52), and
+        // `declared_mesh_slots_politicas_arm_routes_through_accessor`
+        // (5d23d29) composition pins on the sibling `:limits` /
+        // `:behavior` / `:politicas` outer-`Option<&Composite>` arms
+        // — same "the enumerator gate must route through the
+        // substrate-primitive typed dispatch" discipline extended onto
+        // the second of the three M3 mesh-slot axes so the
+        // [`Caixa::declared_mesh_slots`] enumerator carries the same
+        // routing invariant on the `:placement` arm as the peer
+        // `:politicas` arm.
+        use crate::aplicacao::Placement;
+        let c = caixa_aplicacao_with_placement(Some(Placement::default()));
+        let slots = c.declared_mesh_slots();
+        assert!(
+            slots.contains(&crate::render::M3_AUTHOR_KEY_PLACEMENT),
+            "declared_mesh_slots must push M3_AUTHOR_KEY_PLACEMENT \
+             when `:placement` is Some (even for Placement::default()) \
+             — the accessor and the enumerator gate must route through \
+             the same substrate-primitive typed dispatch on the outer \
+             :placement presence bit (got slots={slots:?})",
+        );
+        let c = caixa_aplicacao_with_placement(None);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            !slots.contains(&crate::render::M3_AUTHOR_KEY_PLACEMENT),
+            "declared_mesh_slots must NOT push M3_AUTHOR_KEY_PLACEMENT \
+             when `:placement` is None — the author-omitted arm must \
+             route through the accessor's None-return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn aplicacao_view_placement_arm_folds_through_accessor() {
+        // Composition pin: [`Caixa::aplicacao_view`]'s per-`:placement`
+        // Aplicacao-composition seed must fold through
+        // [`Caixa::placement`], not the raw
+        // `self.placement.clone().unwrap_or_default()` field-borrow.
+        // Structurally: a `Caixa { placement: Some(Placement {
+        // estrategia: Replicated, clusters: ["rio"], .. default }),
+        // kind: Aplicacao, .. }` must surface a projected
+        // [`crate::AplicacaoSpec`] whose `placement().estrategia()` +
+        // `placement().clusters()` byte-equal the outer composite's
+        // authored values (the fold must project the authored
+        // composite verbatim), a `Caixa { placement:
+        // Some(Placement::default()), kind: Aplicacao, .. }` must
+        // surface an [`crate::AplicacaoSpec`] whose `placement()`
+        // byte-equals [`crate::aplicacao::Placement::default`] (the
+        // fold's empty-composite arm collapses to the same default
+        // the author-omitted arm does), and a `Caixa { placement:
+        // None, kind: Aplicacao, .. }` must surface an
+        // [`crate::AplicacaoSpec`] whose `placement()` byte-equals
+        // [`crate::aplicacao::Placement::default`] (the "author
+        // omitted the slot entirely" arm folds through the
+        // `unwrap_or_default` onto the cluster-default). The triad
+        // jointly pins the accessor + Aplicacao-composition seed
+        // composition: any future silent detour that had the accessor
+        // divert the raw slot away from the seed's fold (an operator-
+        // resolved overlay's default-fold arm silently differing from
+        // the raw slot's default-fold arm) would silently split the
+        // build-time distribution-artifact emission gate from the
+        // caixa-mesh renderer's Aplicacao-view input at the
+        // composition boundary.
+        use crate::aplicacao::{Placement, PlacementStrategy};
+        let c = caixa_aplicacao_with_placement(Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        }));
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.placement().estrategia(),
+            PlacementStrategy::Replicated,
+            "Caixa::aplicacao_view must fold the authored :placement \
+             :estrategia scalar through the accessor verbatim onto the \
+             projected AplicacaoSpec — a future silent detour at the \
+             seed's fold arm would surface here as a projected-scalar \
+             drift (got {:?})",
+            view.placement().estrategia(),
+        );
+        assert_eq!(
+            view.placement().clusters(),
+            &["rio"],
+            "Caixa::aplicacao_view must fold the authored :placement \
+             :clusters list through the accessor verbatim onto the \
+             projected AplicacaoSpec — a future silent detour at the \
+             seed's fold arm would surface here as a projected-list \
+             drift (got {:?})",
+            view.placement().clusters(),
+        );
+        let c = caixa_aplicacao_with_placement(Some(Placement::default()));
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.placement(),
+            &Placement::default(),
+            "Caixa::aplicacao_view must fold Some(Placement::default()) \
+             through the accessor onto Placement::default — the empty- \
+             composite arm collapses to the same default the author- \
+             omitted arm does (got {:?})",
+            view.placement(),
+        );
+        let c = caixa_aplicacao_with_placement(None);
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.placement(),
+            &Placement::default(),
+            "Caixa::aplicacao_view must fold None through the accessor's \
+             unwrap_or_default onto Placement::default — the author- \
+             omitted arm must route through the accessor's None-return \
+             unchanged (got {:?})",
+            view.placement(),
+        );
+    }
+
+    #[test]
+    fn placement_projects_option_ref_by_borrow() {
+        // The by-borrow pin: [`Caixa::placement`] returns
+        // `Option<&Placement>` by borrow — the returned reference
+        // borrows the underlying `Option<Placement>` storage of the
+        // `:placement` slot and the accessor must not clone the
+        // backing composite on every call. Peer of the sibling
+        // `limits_projects_option_ref_by_borrow` (b2bd9d7),
+        // `behavior_projects_option_ref_by_borrow` (35d8b52), and
+        // `politicas_projects_option_ref_by_borrow` (5d23d29) by-borrow
+        // pins on the outer top-level [`Caixa`]
+        // `Option<&Composite>`-return sub-family — extended here to
+        // the fourth axis of the same sub-family: the accessor's
+        // returned reference must borrow from `&self` (the returned
+        // reference's lifetime is tied to `&self`), and calling the
+        // accessor twice on the same [`Caixa`] must yield references
+        // that are pointer-equal (the underlying byte-buffer is the
+        // storage `Placement`'s allocation, not a fresh copy) as well
+        // as value-equal (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Placement` (which would type-check via the `Clone` impl
+        // but silently clone on every call), a `&Placement` panic-
+        // return on the `None` arm (which would collapse the load-
+        // bearing `Option` presence-bit into a runtime panic), or a
+        // one-arm-only accessor that returned a saturating composite
+        // on some sentinel input.
+        use crate::aplicacao::{Placement, PlacementStrategy};
+        for placement in [
+            Some(Placement::default()),
+            Some(Placement {
+                estrategia: PlacementStrategy::Sharded,
+                clusters: vec!["rio".into(), "sao-paulo".into()],
+                affinity: Some("data-locality".into()),
+                shard_key: Some("$tenantId".into()),
+            }),
+        ] {
+            let c = caixa_aplicacao_with_placement(placement.clone());
+            let first = c.placement().unwrap();
+            let second = c.placement().unwrap();
+            assert_eq!(
+                first, second,
+                "Caixa::placement must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 &Placement",
+            );
+            assert!(
+                std::ptr::eq(first, second),
+                "Caixa::placement must borrow the underlying \
+                 Option<Placement> storage — two successive calls \
+                 must return references with the same backing pointer \
+                 (a fresh Placement clone would change the pointer on \
+                 every call)",
+            );
+            assert_eq!(
+                Some(first),
+                placement.as_ref(),
+                "Caixa::placement must return :placement verbatim by \
+                 borrow — got {first:?}, expected {:?}",
+                placement.as_ref(),
+            );
+        }
+        let c = caixa_aplicacao_with_placement(None);
+        assert!(
+            c.placement().is_none(),
+            "Caixa::placement must return None when :placement is \
              absent — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
         );
