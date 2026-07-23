@@ -2691,6 +2691,129 @@ impl Caixa {
         self.membros.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:contratos` M3 mesh-slot outer-
+    /// composite MESH-COMPOSITION-shaped per-Aplicacao WIT-typed
+    /// inter-Servico contract-list slice accessor every consumer of the
+    /// top-level manifest's per-Aplicacao `&[crate::aplicacao::WitContract]`
+    /// slice-view keys off — returns the author-declared `:contratos`
+    /// typed `Vec<crate::aplicacao::WitContract>` verbatim as a
+    /// `&[crate::aplicacao::WitContract]` slice-view over the same
+    /// backing buffer the raw `self.contratos.as_slice()` field access
+    /// borrows from. Empty-slice-carrying (the "no contracts declared"
+    /// arm every non-`Aplicacao`-kind `defcaixa` carries by
+    /// `#[serde(default)]` and every leaf Aplicacao carrying only a
+    /// single member with no inter-Servico edge carries; the returned
+    /// `&[WitContract]` degenerates to an empty slice on those arms
+    /// without any silent `None` collapse).
+    ///
+    /// The outer `:contratos` slot carries the M3 typed MESH-COMPOSITION
+    /// per-Aplicacao WIT-typed inter-Servico edge list — the load-bearing
+    /// container of every per-edge `{de, para, wit, endpoint | subject |
+    /// slot}` quadruple the caixa-mesh renderer's per-Aplicacao
+    /// `CiliumNetworkPolicy` fan-out (one L7 policy per edge —
+    /// MESH-COMPOSITION §III.2 point 2) and per-`(:de, :para)`
+    /// adjacency-list seed dispatch on at mesh-artifact materialization
+    /// time (MESH-COMPOSITION §III.1 — the typed graph's edge set the
+    /// `:membros` vertex set resolves against, closed by the
+    /// [`crate::AplicacaoError::ContractoUnknownMember`] / cycle-refusal
+    /// gates in §III.3; CAIXA-SDLC §II — the typed-M3 slot algebra the
+    /// operator's per-Aplicacao fan-out dispatch fans on). Every
+    /// per-edge axis threads through a lifted per-entry accessor on the
+    /// [`crate::aplicacao::WitContract`] type: the peer `de` / `para`
+    /// DNS-1123-label member-caixa-name endpoint scalar accessors, the
+    /// [`crate::aplicacao::WitContract::endpoint`] (7020470) HTTP-shape
+    /// / [`crate::aplicacao::WitContract::subject`] (90de675)
+    /// NATS-pub-sub-shape / [`crate::aplicacao::WitContract::slot`]
+    /// (ed22b66) `wasi:keyvalue/store`-shape payload-carrier accessors,
+    /// and the WIT-world discriminant. Every downstream consumer of the
+    /// mesh-graph edge path first passes through this outer accessor
+    /// onto the slice and then dispatches per-contract through the
+    /// inner accessors — the two-level dispatch means every
+    /// per-`:contratos` reader now routes through a typed dispatch on
+    /// the substrate primitive at both altitudes.
+    ///
+    /// Prior to this lift the `.contratos` `Vec<WitContract>` slot was
+    /// accessed inline at two production sites in
+    /// caixa-core/src/manifest.rs — the [`Self::declared_mesh_slots`]
+    /// mesh-slot declared-slot enumerator's
+    /// `!self.contratos.is_empty()` presence probe (which drives the
+    /// `M3_AUTHOR_KEY_CONTRATOS` kebab-case author-label push every
+    /// [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-coherence
+    /// gate reads) and the [`Self::aplicacao_view`] per-Aplicacao
+    /// typed-view composer's `self.contratos.clone()` per-contract
+    /// fold-in path (which materializes the typed
+    /// [`crate::aplicacao::AplicacaoSpec`] view every
+    /// [`crate::StandardLayout::verify`] Aplicacao-arm gate and every
+    /// downstream `caixa-mesh` renderer dispatches on). A future
+    /// extension of the outer `:contratos` axis (a per-cluster
+    /// `:contratos-overrides` overlay the wasm-engine operator resolves
+    /// at admission time so a cluster-specific edge-set can tighten a
+    /// caixa-declared list without re-authoring the `caixa.lisp`,
+    /// promotion of the plain `Vec<WitContract>` to a richer
+    /// `{static, dynamic}` partition once runtime-resolved contract
+    /// edges land, per-edge policy annotation once the M4 per-edge
+    /// policy overlay axis lands) would have had to be threaded through
+    /// both open-coded copies in lockstep or one consumer would
+    /// silently disagree with the peer on which edge slice a given
+    /// Caixa resolves to — the enumerator's presence probe reading the
+    /// raw slot while the peer view-composer's fold-in path read an
+    /// operator-resolved slot would silently split the paired
+    /// declared-slot enumerator and typed-view composition, a
+    /// two-consumer split at the enumerator and the view composer far
+    /// from the source `caixa.lisp` with no field naming the edge-set-
+    /// drift root cause. Lifting the resolution rule to a typed method
+    /// on the substrate primitive means every downstream consumer of
+    /// the caixa's per-`Caixa` MESH-COMPOSITION outer-slice surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Fourth and final outer top-level [`Caixa`] `&[Composite]`-return
+    /// slice accessor for M2 / M3 typed-slot vec-carry axes — closes
+    /// the outer-`Caixa` `&[Composite]` composite-slice sub-family the
+    /// sibling M2 [`Self::upgrade_from`] (2a1f907) / [`Self::children`]
+    /// (c17b51e) accessors opened and the M3 [`Self::membros`]
+    /// (0f26987) accessor folded on, and closes the outer-`Caixa` M3
+    /// mesh-slot arm of the composite-slice sub-family the sibling
+    /// [`Self::membros`] accessor opened for the M3 vec-carry altitude.
+    /// Peer at the outer altitude of the closed inner-
+    /// [`crate::AplicacaoSpec::contratos`] (0dcc926) accessor on the
+    /// same MESH-COMPOSITION per-Aplicacao contract-list axis — the two
+    /// altitudes now share the same "byte-equal, borrow-shared" outer-
+    /// accessor discipline. Sibling in shape to the peer outer-`Caixa`
+    /// `&[Dep]`-return [`Self::deps`] (ad34b4e) / [`Self::deps_dev`]
+    /// (f7fd81e) and `&[String]`-return [`Self::autores`] (b5d813f) /
+    /// [`Self::etiquetas`] (78c7d3c) / [`Self::bibliotecas`] (8a36c23) /
+    /// [`Self::exe`] (65d9527) / [`Self::servicos`] (611f78b) slice-
+    /// accessors on the sibling outer-`Caixa` scalar-element vec-carry
+    /// axes — folds the "outer [`Caixa`] `&[T]` slice" projection
+    /// pattern onto the sibling M3 typed-composite-element axis
+    /// ([`crate::aplicacao::WitContract`] composite, matching the
+    /// per-inner [`crate::AplicacaoSpec::contratos`] element type at a
+    /// different altitude).
+    ///
+    /// Returns `&[crate::aplicacao::WitContract]` (not
+    /// `&Vec<WitContract>`) because every downstream consumer of the
+    /// contract list treats it as a read-only sequence — the slice-view
+    /// is the narrowest borrow that supports every present + roadmapped
+    /// consumer (`.iter()`, `.len()`, `.is_empty()`, per-edge WIT-world
+    /// discriminant dispatch, `serde` slice-serialization) without
+    /// leaking the backing `Vec`'s grow/push/reserve surface no
+    /// consumer of the typed view reaches for (the storage-side `Vec`
+    /// remains reachable through the `pub contratos` field for the
+    /// mutation-carrying serde round-trip and per-test fixture-mutation
+    /// paths, including the [`Self::aplicacao_view`] fold-in path that
+    /// clones the slot into the typed view). Named `contratos()` to
+    /// match the storage field's name verbatim and the tatara-lisp
+    /// author-surface term (`:contratos`) the field's own docstring
+    /// already carries; the accessor's identity maps onto the canonical
+    /// MESH-COMPOSITION vocabulary the [`Caixa::contratos`] field's
+    /// docstring already reaches for ("WIT-typed inter-Servico
+    /// contracts").
+    #[must_use]
+    pub fn contratos(&self) -> &[crate::aplicacao::WitContract] {
+        self.contratos.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -2702,7 +2825,7 @@ impl Caixa {
         }
         Some(crate::aplicacao::AplicacaoSpec {
             membros: self.membros().to_vec(),
-            contratos: self.contratos.clone(),
+            contratos: self.contratos().to_vec(),
             politicas: self.politicas().cloned().unwrap_or_default(),
             placement: self.placement().cloned().unwrap_or_default(),
             entrada: self.entrada().cloned(),
@@ -2762,7 +2885,7 @@ impl Caixa {
         if !self.membros().is_empty() {
             slots.push(crate::render::M3_AUTHOR_KEY_MEMBROS);
         }
-        if !self.contratos.is_empty() {
+        if !self.contratos().is_empty() {
             slots.push(crate::render::M3_AUTHOR_KEY_CONTRATOS);
         }
         if self.politicas().is_some() {
@@ -14481,6 +14604,285 @@ mod tests {
                 membros.as_slice(),
                 "Caixa::membros must return :membros verbatim by borrow \
                  — got {first:?}, expected {membros:?}",
+            );
+        }
+    }
+
+    // ── Caixa::contratos — outer top-level &[WitContract] composite-slice accessor ──
+
+    fn caixa_aplicacao_with_contratos(contratos: Vec<crate::aplicacao::WitContract>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.contratos = contratos;
+        c
+    }
+
+    fn contrato_http_for_test(
+        de: &str,
+        para: &str,
+        endpoint: &str,
+    ) -> crate::aplicacao::WitContract {
+        crate::aplicacao::WitContract {
+            de: de.into(),
+            para: para.into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some(endpoint.into()),
+            subject: None,
+            slot: None,
+        }
+    }
+
+    #[test]
+    fn contratos_returns_contratos_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:contratos` M3 mesh-slot outer-
+        // composite `&[WitContract]`-return slice-shape pin:
+        // [`Caixa::contratos`] must return the `:contratos` typed
+        // `Vec<WitContract>` verbatim as a `&[WitContract]` slice-view
+        // over the same backing buffer the raw
+        // `self.contratos.as_slice()` field access borrows from,
+        // element-equal across every representative fixture in the
+        // accept-set — `[]` (the "no contracts declared" arm every
+        // non-`Aplicacao`-kind `defcaixa` carries by
+        // `#[serde(default)]` and every leaf-Aplicacao with a single
+        // member carries), a canonical single-edge fixture (the
+        // minimal directed-graph shape: one HTTP-shape `(cart → catalog)`
+        // edge), and a canonical multi-edge fixture with three distinct
+        // edges (the checkout-shape Aplicacao's HTTP-fan pattern:
+        // `(cart → catalog)`, `(cart → pricing)`, `(cart → auth)`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<WitContract>` (which would type-check but silently clone
+        // on every accessor call, breaking the zero-cost projection
+        // every peer sibling slice accessor carries), an axis-shuffled
+        // projection (a future detour that reordered edges through the
+        // accessor would silently split the paired
+        // [`crate::StandardLayout::verify`] per-Aplicacao gate's
+        // traversal input from the peer [`Self::aplicacao_view`] fold-
+        // in path's clone-order input, since every canonical
+        // `caixa-mesh` renderer's per-`(:de, :para)` adjacency-list
+        // seed dispatch reads the edge set through the same slice),
+        // or a reference to an operator-resolved overlay (the future
+        // per-cluster `:contratos-overrides` slot — its resolution
+        // must land at exactly this accessor body, not silently divert
+        // the raw slot away from a second consumer).
+        //
+        // Fourth outer top-level [`Caixa`] `&[Composite]`-return slice
+        // accessor pin on the substrate primitive for M2 / M3 typed-
+        // slot vec-carry axes — closes the outer-`Caixa`
+        // `&[Composite]` composite-slice sub-family the sibling M2
+        // `upgrade_from_returns_upgrade_from_slice_verbatim_across_permutations`
+        // (2a1f907) and
+        // `children_returns_children_slice_verbatim_across_permutations`
+        // (c17b51e) pins opened and the M3
+        // `membros_returns_membros_slice_verbatim_across_permutations`
+        // (0f26987) pin folded on, closing the outer-`Caixa` M3 mesh-
+        // slot arm of the composite-slice sub-family. Peer at the outer
+        // altitude of the closed inner-
+        // [`crate::AplicacaoSpec::contratos`] (0dcc926) accessor on the
+        // same MESH-COMPOSITION per-Aplicacao contract-list axis.
+        let fixtures: Vec<Vec<crate::aplicacao::WitContract>> = vec![
+            vec![],
+            vec![contrato_http_for_test("cart", "catalog", "/items")],
+            vec![
+                contrato_http_for_test("cart", "catalog", "/items"),
+                contrato_http_for_test("cart", "pricing", "/price"),
+                contrato_http_for_test("cart", "auth", "/whoami"),
+            ],
+        ];
+        for contratos in fixtures {
+            let c = caixa_aplicacao_with_contratos(contratos.clone());
+            assert_eq!(
+                c.contratos(),
+                contratos.as_slice(),
+                "Caixa::contratos must return :contratos verbatim \
+                 (got {:?}, expected {contratos:?})",
+                c.contratos(),
+            );
+            assert_eq!(
+                c.contratos(),
+                c.contratos.as_slice(),
+                "Caixa::contratos must element-equal the raw \
+                 `self.contratos.as_slice()` field access across every \
+                 value in the Vec<WitContract> accept-set",
+            );
+            assert_eq!(
+                c.contratos().is_empty(),
+                c.contratos.is_empty(),
+                "Caixa::contratos().is_empty() must byte-equal \
+                 self.contratos.is_empty() — a presence-bit drift would \
+                 silently split the paired Caixa::declared_mesh_slots \
+                 mesh declared-slot enumerator's presence probe from \
+                 the peer Caixa::aplicacao_view typed-view composer's \
+                 fold-in path",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_mesh_slots_contratos_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_mesh_slots`]'s `:contratos`
+        // presence-probe arm must key off [`Caixa::contratos`], not the
+        // raw `!self.contratos.is_empty()` field-probe. Structurally: a
+        // `Caixa { contratos: vec![WitContract { .. }], .. }` must push
+        // `M3_AUTHOR_KEY_CONTRATOS` onto the declared-slot list (the
+        // presence bit is non-empty, so the mesh kind-coherence gate
+        // must surface the slot as "declared"), and a `Caixa {
+        // contratos: vec![], .. }` must NOT push the label (the "author
+        // omitted the slot entirely" arm — the empty-slice partition
+        // the serde-default folds onto). The pair jointly pins the
+        // accessor + declared-slot enumerator composition: any future
+        // silent detour that had the accessor collapse
+        // `[WitContract { .. }]` to `[]` (a `.filter(|c| c.de() !=
+        // "__reserved__")` projection) would silently absorb the
+        // "declared but degenerate" arm at the accessor boundary and
+        // the [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+        // coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_upgrade_from_arm_routes_through_accessor`
+        // (2a1f907),
+        // `declared_supervisor_slots_children_arm_routes_through_accessor`
+        // (c17b51e), and
+        // `declared_mesh_slots_membros_arm_routes_through_accessor`
+        // (0f26987) composition pins on the M2 `:upgrade-from` /
+        // `:children` / M3 `:membros` composite-slice arms — same "the
+        // enumerator gate must route through the substrate-primitive
+        // typed dispatch" discipline extended onto the M3 `:contratos`
+        // composite-slice arm, closing the M3 mesh-slot arm of the
+        // declared-slot enumerator's routing invariant on the
+        // composite-slice inputs.
+        let c = caixa_aplicacao_with_contratos(vec![contrato_http_for_test(
+            "cart", "catalog", "/items",
+        )]);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            slots.contains(&crate::render::M3_AUTHOR_KEY_CONTRATOS),
+            "declared_mesh_slots must push M3_AUTHOR_KEY_CONTRATOS when \
+             `:contratos` is non-empty — the accessor and the enumerator \
+             gate must route through the same substrate-primitive \
+             typed dispatch on the outer :contratos presence bit (got \
+             slots={slots:?})",
+        );
+        let c = caixa_aplicacao_with_contratos(vec![]);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            !slots.contains(&crate::render::M3_AUTHOR_KEY_CONTRATOS),
+            "declared_mesh_slots must NOT push M3_AUTHOR_KEY_CONTRATOS \
+             when `:contratos` is empty — the author-omitted arm must \
+             route through the accessor's empty-slice return unchanged \
+             (got slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn aplicacao_view_contratos_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::aplicacao_view`]'s per-`:contratos`
+        // fold-in arm must key off [`Caixa::contratos`], not the raw
+        // `self.contratos.clone()` field-clone. Structurally: a `Caixa
+        // { kind: Aplicacao, contratos: vec![WitContract { de: "cart",
+        // .. }, WitContract { de: "pricing", .. }], .. }` must fold the
+        // per-edge list through the accessor into the typed
+        // [`crate::AplicacaoSpec`] view's `contratos` slot verbatim —
+        // every entry the accessor surfaces must land in the view's
+        // `contratos` slot in the same order. The pair jointly pins
+        // the accessor + view-composer composition: a future silent
+        // detour that had the accessor shuffle or drop an edge would
+        // silently split the paired declared-slot enumerator's
+        // presence bit from the typed-view composer's edge-list, a
+        // two-consumer split at the enumerator and the view composer
+        // far from the source `caixa.lisp`.
+        //
+        // Peer of the sibling
+        // `aplicacao_view_membros_arm_routes_through_accessor`
+        // (0f26987) composition pin on the M3 `:membros` outer-
+        // `&[Composite]` composite-slice arm, closing the aplicacao-
+        // view composer's routing invariant on the composite-slice
+        // inputs at the outer altitude.
+        let c = caixa_aplicacao_with_contratos(vec![
+            contrato_http_for_test("cart", "catalog", "/items"),
+            contrato_http_for_test("cart", "pricing", "/price"),
+        ]);
+        let view = c
+            .aplicacao_view()
+            .expect("Aplicacao kind must produce an aplicacao_view");
+        assert_eq!(
+            view.contratos(),
+            c.contratos(),
+            "aplicacao_view must fold Caixa::contratos verbatim into \
+             AplicacaoSpec::contratos — the accessor and the view \
+             composer must route through the same substrate-primitive \
+             typed dispatch on the outer :contratos slice (got view \
+             contratos={:?}, expected {:?})",
+            view.contratos(),
+            c.contratos(),
+        );
+    }
+
+    #[test]
+    fn contratos_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::contratos`] returns `&[WitContract]`
+        // by borrow — the returned slice borrows the underlying
+        // `Vec<WitContract>` storage of the `:contratos` slot and the
+        // accessor must not clone the backing `Vec` on every call.
+        // Peer of the sibling outer top-level [`Caixa`] `&[T]`-return
+        // by-borrow pins (`autores_projects_slice_by_borrow` b5d813f,
+        // `etiquetas_projects_slice_by_borrow` 78c7d3c,
+        // `bibliotecas_projects_slice_by_borrow` 8a36c23,
+        // `exe_projects_slice_by_borrow` 65d9527,
+        // `servicos_projects_slice_by_borrow` 611f78b,
+        // `deps_projects_slice_by_borrow` ad34b4e,
+        // `deps_dev_projects_slice_by_borrow` f7fd81e,
+        // `upgrade_from_projects_slice_by_borrow` 2a1f907,
+        // `children_projects_slice_by_borrow` c17b51e,
+        // `membros_projects_slice_by_borrow` 0f26987) on the sibling
+        // outer top-level [`Caixa`] scalar-element and composite-
+        // element `&[T]` axes — closes the outer-`Caixa` M3 mesh-slot
+        // composite-element `&[Composite]` axis on the by-borrow pin:
+        // the accessor's returned slice must borrow from `&self` (the
+        // returned reference's lifetime is tied to `&self`), and
+        // calling the accessor twice on the same [`Caixa`] must yield
+        // slices that are pointer-equal (the underlying byte-buffer is
+        // the storage `Vec`'s allocation, not a fresh copy) as well as
+        // value-equal (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<WitContract>` (which would type-check but silently clone
+        // on every call), a `&Vec<WitContract>` return (which would
+        // leak the backing `Vec`'s grow/push/reserve surface no
+        // downstream consumer reaches for), or a one-arm-only accessor
+        // that returned a saturating value on some sentinel input.
+        for contratos in [
+            vec![],
+            vec![contrato_http_for_test("cart", "catalog", "/items")],
+            vec![
+                contrato_http_for_test("cart", "catalog", "/items"),
+                contrato_http_for_test("cart", "pricing", "/price"),
+            ],
+        ] {
+            let c = caixa_aplicacao_with_contratos(contratos.clone());
+            let first = c.contratos();
+            let second = c.contratos();
+            assert_eq!(
+                first, second,
+                "Caixa::contratos must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 &[WitContract]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::contratos must borrow the underlying \
+                 Vec<WitContract> storage — two successive calls must \
+                 return slices with the same backing pointer (a fresh \
+                 Vec<WitContract> clone would change the pointer on \
+                 every call)",
+            );
+            assert_eq!(
+                first,
+                contratos.as_slice(),
+                "Caixa::contratos must return :contratos verbatim by \
+                 borrow — got {first:?}, expected {contratos:?}",
             );
         }
     }
