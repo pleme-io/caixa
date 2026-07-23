@@ -2019,10 +2019,30 @@ impl ClusterBundleOpts {
             interval: DEFAULT_FLUX_RECONCILE_INTERVAL.into(),
             chart_path: DEFAULT_FLUX_CHART_SOURCE_SUBPATH.into(),
             git_url: caixa.repositorio().map(str::to_owned).unwrap_or_else(|| {
+                // Canonical typed `&str`-read of the per-`Caixa`
+                // `:nome` universal-axis DNS-1123-label caixa-identity
+                // scalar into the `:repositorio`-null pleme-org
+                // github URL fallback composer. Peer of the sibling
+                // 22461ef (caixa-helm) / 980c059 (caixa-mesh)
+                // `caixa.nome()` converges on the co-resident
+                // non-`.clone()` `&str`/Display raw-field-access axis
+                // of `Caixa::nome` in the other two substrate-side
+                // renderers and the sibling 4a363bf `caixa.nome().to_string()`
+                // converge on the co-resident `String`-carry axis on
+                // `Caixa::nome` in this crate — this extends the
+                // "one typed dispatch on the substrate primitive,
+                // thin projections at each consumer" discipline onto
+                // the last unlifted non-`.clone()` raw-field-access
+                // axis of `Caixa::nome` in caixa-flux, so every
+                // substrate-side renderer (caixa-helm, caixa-flux,
+                // caixa-mesh) now owns every projection of the
+                // `Caixa::nome` axis through the typed accessor,
+                // `.clone()` `String`-carry and `&str`/Display
+                // raw-field-access alike.
                 format!(
                     "https://github.com/{org}/{nome}",
                     org = caixa_core::DEFAULT_PLEME_GIT_ORG,
-                    nome = caixa.nome,
+                    nome = caixa.nome(),
                 )
             }),
             git_ref: GitRefSpec::Tag(format!(
@@ -2570,6 +2590,69 @@ spec:
              silently splits the substrate's per-caixa chart-open \
              contract between the operator-facing canonical default \
              and the per-caixa seeded chart-directory pointer"
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_opts_for_caixa_git_url_fallback_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the substrate's per-caixa
+        // `:repositorio`-null pleme-org github URL fallback composer
+        // inside [`ClusterBundleOpts::for_caixa`] must derive its
+        // trailing `<nome>` path segment through the typed
+        // [`caixa_core::Caixa::nome`] accessor, not the raw
+        // `caixa.nome` field access. Before this converge the
+        // fallback branch carried a raw `nome = caixa.nome` Display
+        // of the underlying `String` field into the `format!("https://\
+        // github.com/{org}/{nome}", ...)` template, bypassing the
+        // typed dispatch every peer per-Caixa identity consumer in
+        // caixa-helm / caixa-mesh already routes through — the
+        // canonical drift-footgun shape where a future
+        // `Caixa::nome`-accessor extension (a per-cluster alias
+        // table the operator pins through a future `:placement`-
+        // scoped slot, an M4 namespace-qualified rewrite the CR
+        // materializer applies per-CR, the future `:nome-suffix`
+        // overlay MESH-COMPOSITION §III.2 acknowledges) would land
+        // on the accessor but never reach this emit site, silently
+        // splitting the parent-Caixa identity between the
+        // FluxCD `GitRepository` `spec.url` `<org>/<nome>` clone
+        // target this fallback composes and every other per-Caixa
+        // identity consumer the caixa-helm / caixa-mesh renderers
+        // emit — the source-controller would then clone from a
+        // wrong-name pleme-org repository, silently freezing every
+        // `:repositorio`-null caixa's Flux v2 clone target at the
+        // pre-extension name and orphaning the paired `HelmRelease`
+        // `chart: sourceRef` from the actual per-caixa git source
+        // the substrate resolves through the accessor. Pin the
+        // equality on the constructed `opts.git_url` so a regression
+        // that re-inlines `caixa.nome` at the fallback site
+        // surfaces here as a build-time test failure rather than as
+        // a silent deploy-time `GitRepository` reconcile loop. Peer
+        // to the sibling `cluster_bundle_default_git_tag_uses_lifted_caixa_core_prefix`
+        // pin on the co-resident `git_ref` axis of the same
+        // `ClusterBundleOpts::for_caixa` composer surface, and to
+        // the sibling 22461ef (caixa-helm) / 980c059 (caixa-mesh)
+        // `caixa.nome()` converge pins on the peer non-`.clone()`
+        // raw-field-access axis of `Caixa::nome` in the other two
+        // substrate-side renderers.
+        let mut caixa = sample_caixa();
+        caixa.repositorio = None;
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let expected = format!(
+            "https://github.com/{org}/{nome}",
+            org = caixa_core::DEFAULT_PLEME_GIT_ORG,
+            nome = caixa.nome(),
+        );
+        assert_eq!(
+            opts.git_url, expected,
+            "the substrate's per-caixa `:repositorio`-null pleme-org \
+             github URL fallback composer must derive its trailing \
+             `<nome>` path segment through the typed \
+             `caixa_core::Caixa::nome` accessor — a regression that \
+             re-inlines `caixa.nome` at the fallback site silently \
+             splits the parent-Caixa identity between the FluxCD \
+             `GitRepository` `spec.url` `<org>/<nome>` clone target \
+             and every other per-Caixa identity consumer the sibling \
+             caixa-helm / caixa-mesh renderers emit"
         );
     }
 
