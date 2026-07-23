@@ -1746,6 +1746,144 @@ impl Caixa {
         self.limits.as_ref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:behavior` M2 typed-slot outer-
+    /// composite OTP-`gen_server`-shaped callback-table optional-
+    /// composite-reference accessor every consumer of the top-level
+    /// manifest's per-Servico [`BehaviorSpec`] outer-composite reader
+    /// keys off — returns the author-declared `:behavior` typed
+    /// composite verbatim as an `Option<&BehaviorSpec>` reference over
+    /// the same backing storage the raw `self.behavior.as_ref()` field
+    /// access borrows from, with `None` naming the "no `:behavior`
+    /// block authored — every per-callback OTP-shaped hook defers to
+    /// the wasm-engine's runtime default arm named on the per-axis
+    /// [`BehaviorSpec::on_init`] / [`BehaviorSpec::on_call`] /
+    /// [`BehaviorSpec::on_cast`] / [`BehaviorSpec::on_info`] /
+    /// [`BehaviorSpec::on_state_change`] /
+    /// [`BehaviorSpec::on_terminate`] scalar-accessor docstrings"
+    /// partition every downstream Servico-M2-overlay emitter treats as
+    /// "emit nothing" and the sibling [`crate::StandardLayout::verify`]
+    /// per-`:behavior` shape gate treats as "skip the per-arm
+    /// [`crate::behavior::BehaviorError`] refusal cascade + the
+    /// per-callback on-disk `MissingEntry` existence check".
+    ///
+    /// The outer `:behavior` slot carries the M2 Servico-runtime typed
+    /// composite — the load-bearing container of every OTP-shaped
+    /// per-Servico lifecycle-callback path axis every long-running wasm
+    /// component's runtime dispatches on (INSPIRATIONS §II.3 — Erlang/
+    /// OTP `gen_server:init/1` / `handle_call/3` / `handle_cast/2` /
+    /// `handle_info/2` / `code_change/3` / `terminate/2` primitives
+    /// translated onto pleme-io's typed `:behavior :on-init` /
+    /// `:on-call` / `:on-cast` / `:on-info` / `:on-state-change` /
+    /// `:on-terminate` sub-slot axes; CAIXA-SDLC §II — the typed-M2
+    /// slot algebra the wasm-engine + `pleme-computeunit` Helm-library
+    /// chart both fan on). Every per-`:behavior` axis threads through a
+    /// lifted per-callback accessor on the [`BehaviorSpec`] type
+    /// (9b4ecde / d66c702 / 156ddbe / 99616ac / 4846cef / 701add7).
+    /// Every downstream consumer that reaches for a behavior axis
+    /// first passes through this outer accessor onto the composite
+    /// and then dispatches onto the per-callback accessor — the
+    /// two-level dispatch means every per-`:behavior` reader now
+    /// routes through a typed dispatch on the substrate primitive at
+    /// both altitudes.
+    ///
+    /// Composes cross-slot with the M2 `:upgrade-from` gate: the
+    /// [`crate::upgrade::validate_upgrade_from_against_behavior`]
+    /// cross-slot composition gate at [`crate::StandardLayout::verify`]
+    /// keys the "per-version `:state-change` instruction must have a
+    /// `:on-state-change` callback" precondition off this accessor's
+    /// composite (the callback-side counterpart to the
+    /// `:upgrade-from :instructions :state-change :script` refusal at
+    /// the appup-side). Threading that gate's traversal input through
+    /// this accessor closes the cross-slot invariant on the substrate
+    /// primitive, not on the raw field.
+    ///
+    /// Prior to this lift the `.behavior` `Option<BehaviorSpec>`
+    /// composite was accessed inline at four production sites — the
+    /// [`crate::StandardLayout::verify`] per-`:behavior` shape gate's
+    /// `if let Some(b) = &caixa.behavior { … }` traversal head
+    /// (caixa-core/src/layout.rs:896, which drives the per-arm
+    /// `BehaviorError` refusal cascade + the per-callback on-disk
+    /// [`crate::LayoutError::MissingEntry`] existence check under
+    /// [`crate::render::LAYOUT_MISSING_ENTRY_KIND_BEHAVIOR_CALLBACK`]),
+    /// the [`crate::upgrade::validate_upgrade_from_against_behavior`]
+    /// cross-slot composition gate's `caixa.behavior.as_ref()`
+    /// traversal-input feed (caixa-core/src/layout.rs:1008, which
+    /// drives the `:state-change` ↔ `:on-state-change` precondition
+    /// refusal), the [`crate::render::servico_m2_overlay`] per-Servico
+    /// M2 overlay emitter's `if let Some(behavior) = &caixa.behavior
+    /// { … }` traversal head (caixa-core/src/render.rs:18513, which
+    /// drives the `M2_KEY_BEHAVIOR`-keyed `behavior.is_empty()`-gated
+    /// `serde_yaml` projection every `caixa-helm` / `caixa-flux`
+    /// Servico values-block emitter fans on), and the
+    /// [`Self::declared_servico_slots`] per-Servico M2 declared-slot-
+    /// set enumerator's `self.behavior.is_some()` presence probe
+    /// (caixa-core/src/manifest.rs:1919, which drives the
+    /// `M2_AUTHOR_KEY_BEHAVIOR` kebab-case author-label push every
+    /// [`crate::LayoutError::ServicoSlotsOnNonServico`] kind-coherence
+    /// gate reads) — four open-coded outer-field accesses that
+    /// expressed no compile-time link back to the typed slot at the
+    /// [`Caixa`] altitude. A future extension of the `:behavior`
+    /// outer axis to a richer author surface (a per-callback overlay
+    /// resolver the operator materializes at admission time so a
+    /// cluster-specific policy can inject a per-callback tracing
+    /// interceptor without re-authoring the `caixa.lisp`, a promotion
+    /// of the plain `Option<BehaviorSpec>` to a richer `{static,
+    /// dynamic}` partition once a runtime-resolved behavior-swap
+    /// surface lands, the M4 per-callback middleware chain the
+    /// caixa-operator's per-Servico admission webhook keys off) would
+    /// have had to be threaded through all four open-coded copies in
+    /// lockstep or one consumer would silently disagree with the
+    /// peers on which behavior composite a given Caixa resolves to —
+    /// the layout gate's per-callback existence-check seed reading
+    /// the raw slot while the peer `servico_m2_overlay` emitter read
+    /// an operator-resolved slot would silently split the build-time
+    /// callback-shape gate from the runtime `ComputeUnit` CR emission
+    /// gate from the cross-slot `:state-change` composition gate from
+    /// the M2 declared-slot enumerator, a four-consumer split far
+    /// from the source `caixa.lisp` with no field naming the
+    /// behavior-drift root cause. Lifting the resolution rule to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the caixa's per-`Caixa` OTP-callback-table outer-
+    /// composite surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Second outer top-level [`Caixa`] `Option<&Composite>`-return
+    /// composite-reference accessor — sibling to the opening
+    /// [`Self::limits`] (b2bd9d7) accessor on the outer-`Caixa`
+    /// `Option<&Composite>` composite-reference sub-family, extends
+    /// the "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline onto the second of
+    /// the three M2 Servico-runtime slots. The remaining
+    /// `Option<&Composite>` axes at the outer top-level [`Caixa`]
+    /// altitude — the M3 mesh-slot family (`:politicas`,
+    /// `:placement`, `:entrada` — already closed on the inner
+    /// [`crate::AplicacaoSpec`] altitude via 534dc21 / 9abb8f0 /
+    /// d32111c) — remain the future sibling lifts on the outer
+    /// top-level projection. Returns `Option<&BehaviorSpec>` (not
+    /// the owning composite by copy or clone) because every
+    /// downstream consumer of the behavior composite treats it as a
+    /// read-only per-callback dispatch source — the reference-view is
+    /// the narrowest borrow that supports every present + roadmapped
+    /// consumer (per-callback accessor dispatch, `.is_empty()`-gated
+    /// overlay projection, presence-probe early return on the
+    /// "author-omitted `:behavior` ⇒ runtime-default applies"
+    /// partition, cross-slot `:state-change` composition input)
+    /// without cloning the composite through every consumer's fast
+    /// path. The `Option` half of the return-type preserves the
+    /// load-bearing "author-omitted `:behavior` ⇒ runtime-default
+    /// applies" partition (not a default composite the downstream
+    /// must reject on emptiness) — the accessor projects the raw
+    /// `Option<BehaviorSpec>` slot's presence bit through the
+    /// reference-return unchanged. Named `behavior()` to match the
+    /// storage field's name verbatim and the tatara-lisp author-
+    /// surface term (`:behavior`) the field's own docstring already
+    /// carries.
+    #[must_use]
+    pub fn behavior(&self) -> Option<&crate::BehaviorSpec> {
+        self.behavior.as_ref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1916,7 +2054,7 @@ impl Caixa {
         if self.limits().is_some() {
             slots.push(crate::render::M2_AUTHOR_KEY_LIMITS);
         }
-        if self.behavior.is_some() {
+        if self.behavior().is_some() {
             slots.push(crate::render::M2_AUTHOR_KEY_BEHAVIOR);
         }
         if !self.upgrade_from.is_empty() {
@@ -11201,6 +11339,329 @@ mod tests {
             c.limits().is_none(),
             "Caixa::limits must return None when :limits is absent — \
              the author-omitted arm must project through the \
+             accessor's Option::None unchanged",
+        );
+    }
+
+    // ── Caixa::behavior — outer top-level Option<&BehaviorSpec> composite-reference accessor ──
+
+    fn caixa_with_behavior(behavior: Option<crate::BehaviorSpec>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.behavior = behavior;
+        c
+    }
+
+    #[test]
+    fn behavior_returns_behavior_option_ref_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:behavior` M2 typed-slot outer-
+        // composite optional-composite-reference-shape pin:
+        // [`Caixa::behavior`] must return the `:behavior` typed
+        // `Option<BehaviorSpec>` verbatim as an `Option<&BehaviorSpec>`
+        // reference over the same backing storage the raw
+        // `self.behavior.as_ref()` field access borrows from, byte-equal
+        // across every representative fixture in the accept-set — the
+        // author-omitted `None` shape (the "runtime-default applies"
+        // partition every downstream Servico M2 overlay emitter treats
+        // as "emit nothing"), the empty-composite `Some(BehaviorSpec {
+        // .. default })` shape ([`BehaviorSpec::is_empty`] holds —
+        // every per-callback path is `None`, so the peer M2 overlay
+        // emitter's `.is_empty()`-gated projection still emits nothing
+        // but the outer presence-bit is `Some`, so
+        // [`Caixa::declared_servico_slots`] still pushes the
+        // `M2_AUTHOR_KEY_BEHAVIOR` label), a single-callback fixture
+        // (only `:on-state-change` set — the canonical shape a caixa
+        // that only wires the hot-upgrade migration path carries), and
+        // a fully-populated composite (every per-callback path set —
+        // the canonical shape a fully-instrumented gen_server-shaped
+        // Servico carries).
+        //
+        // Peer of the sibling
+        // `limits_returns_limits_option_ref_verbatim_across_permutations`
+        // (b2bd9d7) opening fixture-family + reference-identity +
+        // presence-bit tetrad pin on the outer top-level [`Caixa`]
+        // `Option<&Composite>`-return sub-family — extended here to the
+        // second axis of that sub-family so both of the currently-lifted
+        // M2 Servico-runtime `Option<&Composite>` slots (`:limits` /
+        // `:behavior`) carry the same "byte-equal, borrow-shared,
+        // presence-bit-preserved" outer-accessor discipline.
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned [`crate::BehaviorSpec`] copy (which would type-check
+        // via the `Clone` impl but silently break every downstream
+        // caller that relied on the reference sharing the composite's
+        // backing identity), a reference to an operator-resolved
+        // overlay (a future per-cluster `:behavior-overrides` slot —
+        // its resolution must land at exactly this accessor body, not
+        // silently divert the raw slot away from a second consumer), a
+        // `None` → `Some(BehaviorSpec::default)` cluster-default
+        // projection (which would collapse the load-bearing
+        // "author-omitted `:behavior` ⇒ runtime-default applies"
+        // partition the peer [`crate::render::servico_m2_overlay`]
+        // emitter, the peer [`Caixa::declared_servico_slots`]
+        // enumerator, and the cross-slot
+        // [`crate::upgrade::validate_upgrade_from_against_behavior`]
+        // gate all read), or a callback-shuffled projection (a future
+        // detour that swapped `on_init` and `on_terminate` through the
+        // accessor would silently split the paired
+        // [`crate::StandardLayout::verify`] per-`:behavior` shape gate's
+        // traversal input from the peer `servico_m2_overlay` emitter's
+        // projection input from the cross-slot `:state-change`
+        // composition gate's traversal input).
+        use crate::BehaviorSpec;
+        use std::path::PathBuf;
+        let fixtures: Vec<Option<BehaviorSpec>> = vec![
+            None,
+            Some(BehaviorSpec::default()),
+            Some(BehaviorSpec {
+                on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+                ..Default::default()
+            }),
+            Some(BehaviorSpec {
+                on_init: Some(PathBuf::from("lib/init.lisp")),
+                on_call: Some(PathBuf::from("lib/handlers.lisp")),
+                on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+                on_info: Some(PathBuf::from("lib/handlers.lisp")),
+                on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+                on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            }),
+        ];
+        for behavior in fixtures {
+            let c = caixa_with_behavior(behavior.clone());
+            assert_eq!(
+                c.behavior(),
+                behavior.as_ref(),
+                "Caixa::behavior must return :behavior verbatim (got \
+                 {:?}, expected {:?})",
+                c.behavior(),
+                behavior.as_ref(),
+            );
+            match (c.behavior(), c.behavior.as_ref()) {
+                (Some(a), Some(b)) => assert!(
+                    std::ptr::eq(a, b),
+                    "Caixa::behavior accessor and self.behavior.as_ref() \
+                     field access must borrow the same backing storage \
+                     — the accessor is the substrate-primitive typed \
+                     dispatch every downstream Servico-M2-overlay \
+                     composite consumer must route through, and a \
+                     reference-identity split would silently break \
+                     every consumer that relied on the borrow sharing \
+                     the composite's storage",
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "Caixa::behavior presence bit must byte-equal \
+                     self.behavior.is_some() — a presence-bit drift \
+                     would silently split the paired \
+                     StandardLayout::verify per-`:behavior` shape \
+                     gate's traversal head from the peer \
+                     render::servico_m2_overlay M2 overlay emitter's \
+                     traversal head from the cross-slot \
+                     validate_upgrade_from_against_behavior \
+                     composition gate's traversal head from the peer \
+                     Caixa::declared_servico_slots M2 declared-slot \
+                     enumerator's presence probe",
+                ),
+            }
+            assert_eq!(
+                c.behavior().is_some(),
+                c.behavior.is_some(),
+                "Caixa::behavior().is_some() must byte-equal \
+                 self.behavior.is_some() — a presence-bit drift would \
+                 silently split every downstream Option<&BehaviorSpec> \
+                 consumer's partition on the runtime-default arm",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_servico_slots_behavior_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_servico_slots`]'s
+        // `:behavior` presence-probe arm must key off
+        // [`Caixa::behavior`], not the raw `self.behavior.is_some()`
+        // field-probe. Structurally: a `Caixa { behavior:
+        // Some(BehaviorSpec::default()), .. }` must still push
+        // `M2_AUTHOR_KEY_BEHAVIOR` onto the declared-slot list (the
+        // presence bit is `Some`, so the M2 kind-coherence gate must
+        // surface the slot as "declared" even when every per-callback
+        // path is unset), and a `Caixa { behavior: None, .. }` must
+        // NOT push the label (the "author omitted the slot entirely"
+        // partition). The pair jointly pins the accessor + declared-
+        // slot enumerator composition: any future silent detour that
+        // had the accessor collapse `Some(BehaviorSpec::default())`
+        // to `None` (a `.filter(|b| !b.is_empty())` projection) would
+        // silently absorb the "declared but empty" arm at the
+        // accessor boundary and the
+        // [`crate::LayoutError::ServicoSlotsOnNonServico`]
+        // kind-coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_limits_arm_routes_through_accessor`
+        // (b2bd9d7) composition pin on the sibling `:limits` outer-
+        // `Option<&LimitsSpec>` arm of the same
+        // [`Caixa::declared_servico_slots`] M2 declared-slot
+        // enumerator's traversal — same "the enumerator gate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the outer top-level [`Caixa`]
+        // `Option<&BehaviorSpec>`-composition surface.
+        use crate::BehaviorSpec;
+        let c = caixa_with_behavior(Some(BehaviorSpec::default()));
+        let slots = c.declared_servico_slots();
+        assert!(
+            slots.contains(&crate::render::M2_AUTHOR_KEY_BEHAVIOR),
+            "declared_servico_slots must push M2_AUTHOR_KEY_BEHAVIOR \
+             when `:behavior` is Some (even for BehaviorSpec::default()) \
+             — the accessor and the enumerator gate must route through \
+             the same substrate-primitive typed dispatch on the outer \
+             :behavior presence bit (got slots={slots:?})",
+        );
+        let c = caixa_with_behavior(None);
+        let slots = c.declared_servico_slots();
+        assert!(
+            !slots.contains(&crate::render::M2_AUTHOR_KEY_BEHAVIOR),
+            "declared_servico_slots must NOT push M2_AUTHOR_KEY_BEHAVIOR \
+             when `:behavior` is None — the author-omitted arm must \
+             route through the accessor's None-return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn servico_m2_overlay_behavior_arm_routes_through_accessor() {
+        // Composition pin: [`crate::render::servico_m2_overlay`]'s
+        // per-`:behavior` M2 overlay emit arm must key off
+        // [`Caixa::behavior`], not the raw `&caixa.behavior`
+        // field-borrow. Structurally: a `Caixa { behavior:
+        // Some(BehaviorSpec { on_state_change: Some(...), .. default
+        // }), .. }` must surface the `M2_KEY_BEHAVIOR` key with the
+        // per-callback `onStateChange` sub-mapping in the overlay, a
+        // `Caixa { behavior: Some(BehaviorSpec::default()), .. }`
+        // must omit the key entirely (the `.is_empty()`-gated inner
+        // arm elides an empty composite even when the outer presence
+        // bit is `Some`), and a `Caixa { behavior: None, .. }` must
+        // also omit the key (the "author omitted the slot entirely"
+        // partition). The three-fixture family jointly pins the
+        // accessor + M2 overlay emitter composition: any future
+        // silent detour that had the accessor return a fresh-cloned
+        // copy on the `Some` arm (a `BehaviorSpec::clone()`
+        // projection) would silently break the reference-identity
+        // pin the peer per-callback `serde_yaml::to_value(behavior)`
+        // projection reads from.
+        //
+        // Peer of the sibling
+        // `servico_m2_overlay_limits_arm_routes_through_accessor`
+        // (b2bd9d7) composition pin on the sibling `:limits` outer-
+        // `Option<&LimitsSpec>` arm of the same
+        // [`crate::render::servico_m2_overlay`] M2 overlay emitter's
+        // traversal — same "the emitter must route through the
+        // substrate-primitive typed dispatch on the outer composite"
+        // discipline extended onto the outer top-level [`Caixa`]
+        // `Option<&BehaviorSpec>`-composition surface.
+        use crate::BehaviorSpec;
+        use crate::render::{M2_KEY_BEHAVIOR, servico_m2_overlay};
+        use std::path::PathBuf;
+        let c = caixa_with_behavior(Some(BehaviorSpec {
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            ..Default::default()
+        }));
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            overlay.contains_key(M2_KEY_BEHAVIOR),
+            "servico_m2_overlay must surface M2_KEY_BEHAVIOR when \
+             `:behavior` carries a non-empty composite — the accessor \
+             and the M2 overlay emitter must route through the same \
+             substrate-primitive typed dispatch on the outer :behavior \
+             composite (got overlay={overlay:?})",
+        );
+        let c = caixa_with_behavior(Some(BehaviorSpec::default()));
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            !overlay.contains_key(M2_KEY_BEHAVIOR),
+            "servico_m2_overlay must omit M2_KEY_BEHAVIOR when \
+             `:behavior` is Some(BehaviorSpec::default()) — the empty \
+             composite's `.is_empty()`-gated inner arm must elide the \
+             key regardless of the outer presence bit (got \
+             overlay={overlay:?})",
+        );
+        let c = caixa_with_behavior(None);
+        let overlay = servico_m2_overlay(&c).unwrap();
+        assert!(
+            !overlay.contains_key(M2_KEY_BEHAVIOR),
+            "servico_m2_overlay must omit M2_KEY_BEHAVIOR when \
+             `:behavior` is None — the author-omitted arm must route \
+             through the accessor's None-return unchanged (got \
+             overlay={overlay:?})",
+        );
+    }
+
+    #[test]
+    fn behavior_projects_option_ref_by_borrow() {
+        // The by-borrow pin: [`Caixa::behavior`] returns
+        // `Option<&BehaviorSpec>` by borrow — the returned reference
+        // borrows the underlying `Option<BehaviorSpec>` storage of the
+        // `:behavior` slot and the accessor must not clone the backing
+        // composite on every call. Peer of the sibling
+        // `limits_projects_option_ref_by_borrow` (b2bd9d7) by-borrow
+        // pin on the outer top-level [`Caixa`] `Option<&Composite>`-
+        // return sub-family — extended here to the second axis of the
+        // same sub-family: the accessor's returned reference must
+        // borrow from `&self` (the returned reference's lifetime is
+        // tied to `&self`), and calling the accessor twice on the same
+        // [`Caixa`] must yield references that are pointer-equal (the
+        // underlying byte-buffer is the storage `BehaviorSpec`'s
+        // allocation, not a fresh copy) as well as value-equal
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `BehaviorSpec` (which would type-check via the `Clone` impl
+        // but silently clone on every call), a `&BehaviorSpec` panic-
+        // return on the `None` arm (which would collapse the load-
+        // bearing `Option` presence-bit into a runtime panic), or a
+        // one-arm-only accessor that returned a saturating composite
+        // on some sentinel input.
+        use crate::BehaviorSpec;
+        use std::path::PathBuf;
+        for behavior in [
+            Some(BehaviorSpec::default()),
+            Some(BehaviorSpec {
+                on_init: Some(PathBuf::from("lib/init.lisp")),
+                on_call: Some(PathBuf::from("lib/handlers.lisp")),
+                on_cast: Some(PathBuf::from("lib/handlers.lisp")),
+                on_info: Some(PathBuf::from("lib/handlers.lisp")),
+                on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+                on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+            }),
+        ] {
+            let c = caixa_with_behavior(behavior.clone());
+            let first = c.behavior().unwrap();
+            let second = c.behavior().unwrap();
+            assert_eq!(
+                first, second,
+                "Caixa::behavior must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 &BehaviorSpec",
+            );
+            assert!(
+                std::ptr::eq(first, second),
+                "Caixa::behavior must borrow the underlying \
+                 Option<BehaviorSpec> storage — two successive calls \
+                 must return references with the same backing pointer \
+                 (a fresh BehaviorSpec clone would change the pointer \
+                 on every call)",
+            );
+            assert_eq!(
+                Some(first),
+                behavior.as_ref(),
+                "Caixa::behavior must return :behavior verbatim by \
+                 borrow — got {first:?}, expected {:?}",
+                behavior.as_ref(),
+            );
+        }
+        let c = caixa_with_behavior(None);
+        assert!(
+            c.behavior().is_none(),
+            "Caixa::behavior must return None when :behavior is absent \
+             — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
         );
     }
