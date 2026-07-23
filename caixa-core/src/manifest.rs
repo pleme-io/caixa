@@ -2165,6 +2165,147 @@ impl Caixa {
         self.placement.as_ref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:entrada` M3 mesh-slot outer-
+    /// composite MESH-COMPOSITION-shaped external-gateway optional-
+    /// composite-reference accessor every consumer of the top-level
+    /// manifest's per-Aplicacao [`crate::aplicacao::Entrada`] outer-
+    /// composite reader keys off — returns the author-declared
+    /// `:entrada` typed composite verbatim as an `Option<&Entrada>`
+    /// reference over the same backing storage the raw
+    /// `self.entrada.as_ref()` field access borrows from, with `None`
+    /// naming the "no `:entrada` block authored — this Aplicacao is
+    /// cluster-internal, no `Gateway`/`HTTPRoute` fan-out emitted"
+    /// partition every downstream caixa-mesh Gateway-API artifact
+    /// emitter treats as "emit no gateway-listener + no `HTTPRoute`
+    /// backend for this Aplicacao" and the sibling
+    /// [`Self::aplicacao_view`] Aplicacao-composition seed forwards
+    /// verbatim (unlike the peer `:politicas` / `:placement` arms,
+    /// `:entrada` has no cluster-default fold — an omitted `:entrada`
+    /// stays `None` on the projected [`crate::AplicacaoSpec`] and the
+    /// peer inner [`crate::AplicacaoSpec::entrada`] accessor observes
+    /// the same `Option<&Entrada>` presence bit unchanged).
+    ///
+    /// The outer `:entrada` slot carries the M3 mesh-slot per-
+    /// Aplicacao typed external-gateway composite — the load-bearing
+    /// container of every how-does-the-outside-world-reach-this-
+    /// Aplicacao axis every caixa-mesh `Gateway`/`HTTPRoute` fan-out
+    /// emitter fans on (MESH-COMPOSITION §II.5 — the Aplicacao's typed
+    /// external-entry composite; §V CSE invariants — "the external
+    /// gateway is a first-class typed composite, not a per-Servico
+    /// ingress annotation" the per-axis scalars enforce; §III.4 — the
+    /// typed hostname + backend-Servico pair the per-cluster Gateway-
+    /// API renderer keys off). Every per-`:entrada` axis threads
+    /// through a lifted per-slot accessor on the
+    /// [`crate::aplicacao::Entrada`] type: the
+    /// [`crate::aplicacao::Entrada::host`] Gateway-API `Listener.hostname`
+    /// scalar, the [`crate::aplicacao::Entrada::para`] backend-Servico
+    /// caixa-name scalar, the [`crate::aplicacao::Entrada::paths`]
+    /// per-rule `HTTPPathMatch` list, the [`crate::aplicacao::Entrada::port`]
+    /// backend `trigger.service.port` scalar, and the
+    /// [`crate::aplicacao::Entrada::resolved_paths`] URL-path fallback
+    /// resolver every HTTPRoute-aware renderer consumes. Every
+    /// downstream consumer that reaches for an entry axis first passes
+    /// through this outer accessor onto the composite and then
+    /// dispatches onto the per-axis accessor — the two-level dispatch
+    /// means every per-`:entrada` reader now routes through a typed
+    /// dispatch on the substrate primitive at both altitudes.
+    ///
+    /// Composes through [`Self::aplicacao_view`]'s Aplicacao-composition
+    /// seed: the Aplicacao-view builder forwards the outer `Option`
+    /// arm verbatim (no default fold — `:entrada` is inherently
+    /// optional; a cluster-internal Aplicacao has no external gateway
+    /// at all, not "an external gateway that defaults to nothing"), so
+    /// the peer inner [`crate::AplicacaoSpec::entrada`] (d32111c)
+    /// `Option<&Entrada>`-return accessor observes the same presence
+    /// bit whether or not the author declared the outer slot. Routing
+    /// the presence bit through this accessor keeps the
+    /// [`Self::declared_mesh_slots`] M3 kind-coherence enumerator's
+    /// `M3_AUTHOR_KEY_ENTRADA` push separate from the inner
+    /// [`crate::AplicacaoSpec::validate_entrada`]-gated
+    /// hostname/backend/path emission dispatch.
+    ///
+    /// Prior to this lift the `.entrada` `Option<Entrada>` composite
+    /// was accessed inline at two production sites — the
+    /// [`Self::aplicacao_view`] Aplicacao-composition seed's
+    /// `self.entrada.clone()` traversal head (caixa-core/src/manifest.rs:2182,
+    /// which drives the forward onto the peer inner
+    /// [`crate::AplicacaoSpec::entrada`] accessor the caixa-mesh
+    /// Gateway-API fan-out then observes), and the
+    /// [`Self::declared_mesh_slots`] M3 declared-slot-set enumerator's
+    /// `self.entrada.is_some()` presence probe (caixa-core/src/manifest.rs:2248,
+    /// which drives the `M3_AUTHOR_KEY_ENTRADA` kebab-case author-
+    /// label push every [`crate::LayoutError::MeshSlotsOnNonAplicacao`]
+    /// kind-coherence gate reads) — two open-coded outer-field
+    /// accesses that expressed no compile-time link back to the typed
+    /// slot at the [`Caixa`] altitude. A future extension of the
+    /// `:entrada` outer axis to a richer author surface (a per-cluster
+    /// `:entrada-overrides` slot the operator materializes at admission
+    /// time so a cluster-specific hostname can pin the caixa-declared
+    /// bound without re-authoring the `caixa.lisp`, a per-tenant
+    /// gateway-alias table the M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+    /// CR materializer resolves per-CR at admission time, a promotion
+    /// of the plain `Option<Entrada>` to a richer
+    /// `{public, private, internal}` partition once Cilium-identity-
+    /// scoped internal gateways come into typed scope) would have had
+    /// to be threaded through both open-coded copies in lockstep or the
+    /// Aplicacao-composition seed's forward arm would silently
+    /// disagree with the M3 declared-slot enumerator on which external-
+    /// gateway composite a given Caixa resolves to — the seed reading
+    /// an operator-resolved slot while the enumerator's presence probe
+    /// read the raw slot would silently split the build-time gateway-
+    /// artifact emission gate from the M3 declared-slot enumerator's
+    /// kind-coherence gate, a two-consumer split far from the source
+    /// `caixa.lisp` with no field naming the entry-drift root cause.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the caixa's per-
+    /// `Caixa` MESH-COMPOSITION external-gateway outer-composite
+    /// surface reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Fifth and final outer top-level [`Caixa`] `Option<&Composite>`-
+    /// return composite-reference accessor — closes the outer-`Caixa`
+    /// `Option<&Composite>` composite-reference sub-family opened by
+    /// [`Self::limits`] (b2bd9d7) / [`Self::behavior`] (35d8b52) on the
+    /// M2 Servico-runtime arm and extended onto the M3 mesh-slot arm
+    /// by [`Self::politicas`] (5d23d29) / [`Self::placement`] (4fb8074),
+    /// folds on the "one typed dispatch on the substrate primitive,
+    /// thin projections at each consumer" discipline extended onto the
+    /// third and final M3 mesh-slot axis. Peer of the closed inner
+    /// mesh-slot outer-composite family the sibling
+    /// [`crate::AplicacaoSpec::politicas`] (534dc21) /
+    /// [`crate::AplicacaoSpec::placement`] (9abb8f0) /
+    /// [`crate::AplicacaoSpec::entrada`] (d32111c) composite-reference
+    /// accessor pins already close on the inner
+    /// [`crate::AplicacaoSpec`] altitude — this lift closes the mirror
+    /// sub-family on the outer top-level [`Caixa`] altitude, so both
+    /// altitudes of the outer-composite reference-return discipline
+    /// (per-`Caixa` outer-slot presence + per-`AplicacaoSpec` inner-
+    /// slot presence) now carry the full five-arm accept-set behind a
+    /// typed dispatch on the substrate primitive. Returns
+    /// `Option<&Entrada>` (not the owning composite by copy or clone)
+    /// because every downstream consumer of the entrada composite
+    /// treats it as a read-only per-axis dispatch source — the
+    /// reference-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (per-axis accessor dispatch,
+    /// serde composite-serialization on the programs.yaml overlay,
+    /// presence-probe early return on the "author-omitted `:entrada`
+    /// ⇒ cluster-internal Aplicacao" partition, `Aplicacao`-composition
+    /// seed's forward arm) without cloning the composite through every
+    /// consumer's fast path. The `Option` half of the return-type
+    /// preserves the load-bearing "author-omitted `:entrada` ⇒
+    /// cluster-internal Aplicacao" partition (not a default composite
+    /// the downstream must reject on emptiness — a cluster-internal
+    /// Aplicacao has no external gateway at all, not "a default gateway
+    /// that emits nothing"); the accessor projects the raw
+    /// `Option<Entrada>` slot's presence bit through the reference-
+    /// return unchanged. Named `entrada()` to match the storage field's
+    /// name verbatim and the tatara-lisp author-surface term
+    /// (`:entrada`) the field's own docstring already carries.
+    #[must_use]
+    pub fn entrada(&self) -> Option<&crate::aplicacao::Entrada> {
+        self.entrada.as_ref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -2179,7 +2320,7 @@ impl Caixa {
             contratos: self.contratos.clone(),
             politicas: self.politicas().cloned().unwrap_or_default(),
             placement: self.placement().cloned().unwrap_or_default(),
-            entrada: self.entrada.clone(),
+            entrada: self.entrada().cloned(),
         })
     }
 
@@ -2245,7 +2386,7 @@ impl Caixa {
         if self.placement().is_some() {
             slots.push(crate::render::M3_AUTHOR_KEY_PLACEMENT);
         }
-        if self.entrada.is_some() {
+        if self.entrada().is_some() {
             slots.push(crate::render::M3_AUTHOR_KEY_ENTRADA);
         }
         slots
@@ -12649,6 +12790,336 @@ mod tests {
             c.placement().is_none(),
             "Caixa::placement must return None when :placement is \
              absent — the author-omitted arm must project through the \
+             accessor's Option::None unchanged",
+        );
+    }
+
+    // ── Caixa::entrada — outer top-level Option<&Entrada> composite-reference accessor ──
+
+    fn caixa_aplicacao_with_entrada(entrada: Option<crate::aplicacao::Entrada>) -> Caixa {
+        use crate::aplicacao::{Membro, WitContract};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.membros = vec![Membro {
+            caixa: "a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "a".into(),
+            para: "a".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        c.entrada = entrada;
+        c
+    }
+
+    #[test]
+    fn entrada_returns_entrada_option_ref_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:entrada` M3 mesh-slot outer-
+        // composite optional-composite-reference-shape pin:
+        // [`Caixa::entrada`] must return the `:entrada` typed
+        // `Option<Entrada>` verbatim as an `Option<&Entrada>`
+        // reference over the same backing storage the raw
+        // `self.entrada.as_ref()` field access borrows from,
+        // byte-equal across every representative fixture in the
+        // accept-set — the author-omitted `None` shape (the
+        // "cluster-internal Aplicacao" partition every downstream
+        // Gateway-API emitter treats as "emit no listener + no
+        // HTTPRoute"), a bare-`host`/`para` minimum-composite fixture
+        // (empty `paths` — the resolved-paths fallback the peer
+        // [`crate::aplicacao::Entrada::resolved_paths`] cascade folds
+        // onto the substrate catch-all), and a fully-populated
+        // multi-path-with-non-default-port fixture (the canonical
+        // shape a public HTTP Aplicacao carries).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned [`crate::aplicacao::Entrada`] copy (which would
+        // type-check via the `Clone` impl but silently break every
+        // downstream caller that relied on the reference sharing the
+        // composite's backing identity), a reference to an operator-
+        // resolved overlay (the future per-cluster
+        // `:entrada-overrides` slot — its resolution must land at
+        // exactly this accessor body, not silently divert the raw
+        // slot away from the peer [`Caixa::declared_mesh_slots`]
+        // enumerator's presence probe), or an axis-shuffled projection
+        // (a future detour that swapped `host` and `para` through the
+        // accessor would silently split the paired
+        // [`Caixa::aplicacao_view`] seed's forward input from the
+        // sibling M3 gateway-artifact emitter's projection input).
+        //
+        // Fifth and final outer top-level [`Caixa`]
+        // `Option<&Composite>`-return composite-reference accessor pin
+        // on the substrate primitive — peer of the sibling
+        // `limits_returns_limits_option_ref_verbatim_across_permutations`
+        // (b2bd9d7),
+        // `behavior_returns_behavior_option_ref_verbatim_across_permutations`
+        // (35d8b52),
+        // `politicas_returns_politicas_option_ref_verbatim_across_permutations`
+        // (5d23d29), and
+        // `placement_returns_placement_option_ref_verbatim_across_permutations`
+        // (4fb8074) opening tetrad pins on the outer top-level
+        // [`Caixa`] `Option<&Composite>`-return sub-family — extended
+        // here to the third and final M3 mesh-slot axis so the closed
+        // outer `Option<&Composite>` sub-family carries the same
+        // "byte-equal, borrow-shared, presence-bit-preserved" outer-
+        // accessor discipline across all five arms.
+        use crate::aplicacao::Entrada;
+        let fixtures: Vec<Option<Entrada>> = vec![
+            None,
+            Some(Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: "gateway".into(),
+                paths: Vec::new(),
+                port: crate::DEFAULT_SERVICO_PORT,
+            }),
+            Some(Entrada {
+                host: "api.pleme.io".into(),
+                para: "public-api".into(),
+                paths: vec!["/v1".into(), "/v2".into()],
+                port: 8080,
+            }),
+        ];
+        for entrada in fixtures {
+            let c = caixa_aplicacao_with_entrada(entrada.clone());
+            assert_eq!(
+                c.entrada(),
+                entrada.as_ref(),
+                "Caixa::entrada must return :entrada verbatim (got \
+                 {:?}, expected {:?})",
+                c.entrada(),
+                entrada.as_ref(),
+            );
+            match (c.entrada(), c.entrada.as_ref()) {
+                (Some(a), Some(b)) => assert!(
+                    std::ptr::eq(a, b),
+                    "Caixa::entrada accessor and self.entrada.as_ref() \
+                     field access must borrow the same backing storage \
+                     — the accessor is the substrate-primitive typed \
+                     dispatch every downstream Aplicacao-external- \
+                     gateway composite consumer must route through, and \
+                     a reference-identity split would silently break \
+                     every consumer that relied on the borrow sharing \
+                     the composite's storage",
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "Caixa::entrada presence bit must byte-equal \
+                     self.entrada.is_some() — a presence-bit drift \
+                     would silently split the paired \
+                     Caixa::aplicacao_view Aplicacao-composition seed's \
+                     traversal head from the peer \
+                     Caixa::declared_mesh_slots M3 declared-slot \
+                     enumerator's presence probe",
+                ),
+            }
+            assert_eq!(
+                c.entrada().is_some(),
+                c.entrada.is_some(),
+                "Caixa::entrada().is_some() must byte-equal \
+                 self.entrada.is_some() — a presence-bit drift would \
+                 silently split every downstream Option<&Entrada> \
+                 consumer's partition on the cluster-internal arm",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_mesh_slots_entrada_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_mesh_slots`]'s `:entrada`
+        // presence-probe arm must key off [`Caixa::entrada`], not the
+        // raw `self.entrada.is_some()` field-probe. Structurally: a
+        // `Caixa { entrada: Some(Entrada { host: "...", para: "...",
+        // paths: [], port: DEFAULT_SERVICO_PORT }), .. }` must push
+        // `M3_AUTHOR_KEY_ENTRADA` onto the declared-slot list (the
+        // presence bit is `Some`, so the M3 kind-coherence gate must
+        // surface the slot as "declared" even when every per-axis
+        // scalar defers to the substrate catch-all / default port),
+        // and a `Caixa { entrada: None, .. }` must NOT push the label
+        // (the "author omitted the slot entirely" partition). The pair
+        // jointly pins the accessor + declared-slot enumerator
+        // composition: any future silent detour that had the accessor
+        // collapse `Some(Entrada { paths: [], .. })` to `None` (a
+        // `.filter(|e| !e.paths.is_empty())` projection) would silently
+        // absorb the "declared but empty-paths" arm at the accessor
+        // boundary and the
+        // [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+        // coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_limits_arm_routes_through_accessor`
+        // (b2bd9d7),
+        // `declared_servico_slots_behavior_arm_routes_through_accessor`
+        // (35d8b52),
+        // `declared_mesh_slots_politicas_arm_routes_through_accessor`
+        // (5d23d29), and
+        // `declared_mesh_slots_placement_arm_routes_through_accessor`
+        // (4fb8074) composition pins on the sibling `:limits` /
+        // `:behavior` / `:politicas` / `:placement` outer-
+        // `Option<&Composite>` arms — same "the enumerator gate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the third and final M3 mesh-slot
+        // axis so the [`Caixa::declared_mesh_slots`] enumerator now
+        // carries the routing invariant on every M3 mesh-slot arm.
+        use crate::aplicacao::Entrada;
+        let c = caixa_aplicacao_with_entrada(Some(Entrada {
+            host: "checkout.quero.cloud".into(),
+            para: "gateway".into(),
+            paths: Vec::new(),
+            port: crate::DEFAULT_SERVICO_PORT,
+        }));
+        let slots = c.declared_mesh_slots();
+        assert!(
+            slots.contains(&crate::render::M3_AUTHOR_KEY_ENTRADA),
+            "declared_mesh_slots must push M3_AUTHOR_KEY_ENTRADA when \
+             `:entrada` is Some (even for empty-paths / default-port) \
+             — the accessor and the enumerator gate must route through \
+             the same substrate-primitive typed dispatch on the outer \
+             :entrada presence bit (got slots={slots:?})",
+        );
+        let c = caixa_aplicacao_with_entrada(None);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            !slots.contains(&crate::render::M3_AUTHOR_KEY_ENTRADA),
+            "declared_mesh_slots must NOT push M3_AUTHOR_KEY_ENTRADA \
+             when `:entrada` is None — the author-omitted arm must \
+             route through the accessor's None-return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn aplicacao_view_entrada_arm_folds_through_accessor() {
+        // Composition pin: [`Caixa::aplicacao_view`]'s per-`:entrada`
+        // Aplicacao-composition seed must fold through
+        // [`Caixa::entrada`], not the raw `self.entrada.clone()` field-
+        // borrow. Structurally: a `Caixa { entrada: Some(Entrada {
+        // host: "api.pleme.io", para: "public-api", paths: ["/v1"],
+        // port: 8080 }), kind: Aplicacao, .. }` must surface a projected
+        // [`crate::AplicacaoSpec`] whose `entrada().unwrap()` byte-
+        // equals the outer composite's authored value (the fold must
+        // project the authored composite verbatim), and a `Caixa {
+        // entrada: None, kind: Aplicacao, .. }` must surface an
+        // [`crate::AplicacaoSpec`] whose `entrada()` is `None` (the
+        // "author omitted the slot entirely" arm folds through the
+        // accessor's `Option::cloned` onto the same `None` presence
+        // bit — unlike the peer `:politicas` / `:placement` arms
+        // `:entrada` has no cluster-default fold, the omitted arm
+        // stays omitted). The pair jointly pins the accessor +
+        // Aplicacao-composition seed composition: any future silent
+        // detour that had the accessor divert the raw slot away from
+        // the seed's fold (an operator-resolved overlay's forward arm
+        // silently differing from the raw slot's forward arm) would
+        // silently split the build-time gateway-artifact emission gate
+        // from the caixa-mesh renderer's Aplicacao-view input at the
+        // composition boundary.
+        use crate::aplicacao::Entrada;
+        let authored = Entrada {
+            host: "api.pleme.io".into(),
+            para: "public-api".into(),
+            paths: vec!["/v1".into()],
+            port: 8080,
+        };
+        let c = caixa_aplicacao_with_entrada(Some(authored.clone()));
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.entrada(),
+            Some(&authored),
+            "Caixa::aplicacao_view must fold the authored :entrada \
+             composite through the accessor verbatim onto the \
+             projected AplicacaoSpec — a future silent detour at the \
+             seed's fold arm would surface here as a projected- \
+             composite drift (got {:?})",
+            view.entrada(),
+        );
+        let c = caixa_aplicacao_with_entrada(None);
+        let view = c.aplicacao_view().unwrap();
+        assert!(
+            view.entrada().is_none(),
+            "Caixa::aplicacao_view must fold None through the \
+             accessor's Option::cloned onto None — the author- \
+             omitted arm must route through the accessor's None-return \
+             unchanged (got {:?})",
+            view.entrada(),
+        );
+    }
+
+    #[test]
+    fn entrada_projects_option_ref_by_borrow() {
+        // The by-borrow pin: [`Caixa::entrada`] returns
+        // `Option<&Entrada>` by borrow — the returned reference
+        // borrows the underlying `Option<Entrada>` storage of the
+        // `:entrada` slot and the accessor must not clone the backing
+        // composite on every call. Peer of the sibling
+        // `limits_projects_option_ref_by_borrow` (b2bd9d7),
+        // `behavior_projects_option_ref_by_borrow` (35d8b52),
+        // `politicas_projects_option_ref_by_borrow` (5d23d29), and
+        // `placement_projects_option_ref_by_borrow` (4fb8074) by-
+        // borrow pins on the outer top-level [`Caixa`]
+        // `Option<&Composite>`-return sub-family — extended here to
+        // the fifth and final axis of the same sub-family, closing
+        // the discipline: the accessor's returned reference must
+        // borrow from `&self` (the returned reference's lifetime is
+        // tied to `&self`), and calling the accessor twice on the
+        // same [`Caixa`] must yield references that are pointer-equal
+        // (the underlying byte-buffer is the storage `Entrada`'s
+        // allocation, not a fresh copy) as well as value-equal
+        // (idempotent, no side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Entrada` (which would type-check via the `Clone` impl but
+        // silently clone on every call), a `&Entrada` panic-return on
+        // the `None` arm (which would collapse the load-bearing
+        // `Option` presence-bit into a runtime panic), or a one-arm-
+        // only accessor that returned a saturating composite on some
+        // sentinel input.
+        use crate::aplicacao::Entrada;
+        for entrada in [
+            Some(Entrada {
+                host: "checkout.quero.cloud".into(),
+                para: "gateway".into(),
+                paths: Vec::new(),
+                port: crate::DEFAULT_SERVICO_PORT,
+            }),
+            Some(Entrada {
+                host: "api.pleme.io".into(),
+                para: "public-api".into(),
+                paths: vec!["/v1".into(), "/v2".into()],
+                port: 8080,
+            }),
+        ] {
+            let c = caixa_aplicacao_with_entrada(entrada.clone());
+            let first = c.entrada().unwrap();
+            let second = c.entrada().unwrap();
+            assert_eq!(
+                first, second,
+                "Caixa::entrada must be idempotent — two successive \
+                 calls on the same &self must return the same &Entrada",
+            );
+            assert!(
+                std::ptr::eq(first, second),
+                "Caixa::entrada must borrow the underlying \
+                 Option<Entrada> storage — two successive calls must \
+                 return references with the same backing pointer (a \
+                 fresh Entrada clone would change the pointer on every \
+                 call)",
+            );
+            assert_eq!(
+                Some(first),
+                entrada.as_ref(),
+                "Caixa::entrada must return :entrada verbatim by \
+                 borrow — got {first:?}, expected {:?}",
+                entrada.as_ref(),
+            );
+        }
+        let c = caixa_aplicacao_with_entrada(None);
+        assert!(
+            c.entrada().is_none(),
+            "Caixa::entrada must return None when :entrada is absent \
+             — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
         );
     }
