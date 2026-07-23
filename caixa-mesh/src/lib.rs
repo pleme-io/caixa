@@ -201,7 +201,7 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
         // — see its doc-comment for why the per-entry parent-graph-
         // annotation-key axis lives in one canonical const across
         // the emitter here + the readback probe below.
-        entry.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, caixa.nome.clone());
+        entry.insert_string(FLEET_PROGRAMS_KEY_APLICACAO, caixa.nome().to_string());
         // M3 `:placement` overlay — see the per-call rationale
         // above. Cloned per entry so each programs.yaml row is
         // self-describing for downstream filters that have no
@@ -2621,7 +2621,7 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
         // pleme.pleme.io/contrato=<de>-to-<para>` grep-by-label
         // query at apply time far from the source caixa.lisp.
         let mut labels = BTreeMap::new();
-        labels.insert(LABEL_APLICACAO, caixa.nome.clone());
+        labels.insert(LABEL_APLICACAO, caixa.nome().to_string());
         labels.insert(LABEL_CONTRATO, contrato_edge_label(de, para));
         // The apiVersion + kind + metadata.{name, namespace, labels}
         // skeleton comes from caixa_core::render::kube_resource_skeleton
@@ -2922,7 +2922,7 @@ pub fn gateway_routes(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, Error> {
     );
 
     let mut parent_ref = serde_yaml::Mapping::new();
-    parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome.clone());
+    parent_ref.insert_string(GATEWAY_API_KEY_NAME, caixa.nome().to_string());
     // Per-parentRef listener-selector sub-axis — pins the emitted
     // `HTTPRoute` to the parent Gateway's sole HTTP listener by name,
     // rather than accepting the Gateway API v1 default
@@ -6434,6 +6434,148 @@ mod tests {
                  through the typed accessor, not the raw `.versao` field"
             );
         }
+    }
+
+    #[test]
+    fn programs_for_aplicacao_entry_aplicacao_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: each `programs[]` entry's `aplicacao:`
+        // byte-string must resolve through the typed
+        // [`caixa_core::Caixa::nome`] accessor, not the raw `.nome`
+        // field. Pins the `caixa.nome().to_string()` edit at the
+        // per-`:membros` emit call site above against a future silent
+        // detour that re-inlined `caixa.nome.clone()` — the regression
+        // would round-trip past every fixture-literal aplicacao-name
+        // pin (which spells the emitted `aplicacao:` byte-string
+        // verbatim as `"checkout"`) but would silently split the emit-
+        // side write from any future substrate-side rewrite the
+        // accessor grows (a per-cluster alias table the operator pins
+        // through a future `:placement`-scoped slot, an M4 namespace-
+        // qualified rewrite the CR materializer applies per-CR, the
+        // future `:nome-suffix` overlay the MESH-COMPOSITION §III.2
+        // roadmap acknowledges). Asserted against the accessor byte-
+        // for-byte, per-entry — a mutation of the emit site back to
+        // `.nome.clone()` still passes this pin *today* (nome() is
+        // byte-equal to .nome on the sibling
+        // [`caixa_core::manifest::tests`] accessor pins), but any
+        // future accessor extension immediately fires the regression
+        // here — the pair `(emit path, accessor path)` moves as a unit
+        // on the substrate primitive. Peer of the sibling
+        // [`programs_for_aplicacao_entry_name_routes_through_membro_nome_accessor`]
+        // pin on the per-`:membros` `name:` axis (4127bb6) extended
+        // onto the parent-`Aplicacao` `aplicacao:` annotation axis;
+        // opens the "converge every remaining `caixa.nome.clone()`
+        // raw-field-access `String`-carry site in caixa-mesh onto
+        // Caixa::nome" sweep the sibling
+        // [`cilium_network_policies_label_aplicacao_routes_through_caixa_nome_accessor`]
+        // and
+        // [`gateway_routes_parent_ref_name_routes_through_caixa_nome_accessor`]
+        // pins fold on.
+        let c = aplicacao_caixa();
+        let entries = programs_for_aplicacao(&c).unwrap();
+        assert!(!entries.is_empty());
+        for entry in &entries {
+            let emitted = entry
+                .get(FLEET_PROGRAMS_KEY_APLICACAO)
+                .and_then(|v| v.as_str())
+                .expect("programs.yaml entry carries aplicacao: as a string");
+            assert_eq!(
+                emitted,
+                c.nome(),
+                "programs.yaml entry `aplicacao:` must byte-equal \
+                 Caixa::nome() — emit path must route through the typed \
+                 accessor, not the raw `.nome` field"
+            );
+        }
+    }
+
+    #[test]
+    fn cilium_network_policies_label_aplicacao_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: each CNP's
+        // `metadata.labels.pleme.pleme.io/aplicacao` byte-string must
+        // resolve through the typed [`caixa_core::Caixa::nome`]
+        // accessor, not the raw `.nome` field. Sibling of the peer
+        // [`programs_for_aplicacao_entry_aplicacao_routes_through_caixa_nome_accessor`]
+        // pin on the fleet-programs `aplicacao:` annotation axis,
+        // extended onto the per-`(:de, :para)` CNP `LABEL_APLICACAO`
+        // label-axis — same "the emit path must route through the
+        // substrate-primitive typed dispatch" discipline extended onto
+        // the peer per-CNP `String`-carry site. A future extension of
+        // the accessor to a richer author surface (a per-cluster alias
+        // table, an M4 namespace-qualified rewrite, the future
+        // `:nome-suffix` overlay MESH-COMPOSITION §III.2 acknowledges)
+        // that landed on the accessor but not on this label would have
+        // silently split the parent-Aplicacao identity between two
+        // consumers — the operator's `kubectl -n tatara-system get cnp
+        // -l pleme.pleme.io/aplicacao=<name>` grep-by-label would land
+        // on a policy whose parent-Aplicacao annotation drifted from
+        // the accessor's projection.
+        let c = aplicacao_caixa();
+        let policies = cilium_network_policies(&c).unwrap();
+        assert!(!policies.is_empty());
+        for policy in &policies {
+            let emitted = policy
+                .get(KUBE_KEY_METADATA)
+                .and_then(|m| m.get(KUBE_KEY_LABELS))
+                .and_then(|l| l.get(LABEL_APLICACAO))
+                .and_then(|v| v.as_str())
+                .expect("CNP metadata.labels carries LABEL_APLICACAO as a string");
+            assert_eq!(
+                emitted,
+                c.nome(),
+                "CNP `metadata.labels.{LABEL_APLICACAO}` must byte-equal \
+                 Caixa::nome() — emit path must route through the typed \
+                 accessor, not the raw `.nome` field"
+            );
+        }
+    }
+
+    #[test]
+    fn gateway_routes_parent_ref_name_routes_through_caixa_nome_accessor() {
+        // Emit-path pin: the HTTPRoute's
+        // `spec.parentRefs[0].name` byte-string must resolve through
+        // the typed [`caixa_core::Caixa::nome`] accessor, not the raw
+        // `.nome` field. Third and final sibling of the peer
+        // [`programs_for_aplicacao_entry_aplicacao_routes_through_caixa_nome_accessor`]
+        // + [`cilium_network_policies_label_aplicacao_routes_through_caixa_nome_accessor`]
+        // pins — closes the last unlifted `caixa.nome.clone()` raw-
+        // field-access `String`-carry site in caixa-mesh. The
+        // parentRefs[].name binds the emitted HTTPRoute to the peer
+        // Gateway whose `metadata.name` is derived from the same
+        // Caixa::nome earlier in this same emitter (via
+        // `kube_resource_skeleton(..., &caixa.nome, ...)` at the
+        // Gateway skeleton call above — a peer `&str`-read site out of
+        // scope for this `String`-carry sweep); a future accessor
+        // extension that split those two projections would orphan the
+        // route from its parent Gateway at every apply-time Gateway
+        // API v1.x per-parentRef resolution step. Pinning the emit
+        // path against the accessor byte-for-byte here fires that
+        // regression at caixa-mesh build time rather than at K8s API
+        // server admission.
+        let c = aplicacao_caixa();
+        let routes = gateway_routes(&c).unwrap();
+        let route = routes
+            .iter()
+            .find(|r| {
+                r.get(KUBE_KEY_KIND)
+                    .and_then(|k| k.as_str())
+                    .is_some_and(|k| k == GATEWAY_API_KIND_HTTP_ROUTE)
+            })
+            .expect("gateway_routes emits at least one HTTPRoute for the fixture Aplicacao");
+        let emitted = route
+            .get(KUBE_KEY_SPEC)
+            .and_then(|s| s.get(GATEWAY_API_KEY_PARENT_REFS))
+            .and_then(|p| p.as_sequence())
+            .and_then(|s| s.first())
+            .and_then(|p| p.get(GATEWAY_API_KEY_NAME))
+            .and_then(|v| v.as_str())
+            .expect("HTTPRoute spec.parentRefs[0].name is a string");
+        assert_eq!(
+            emitted,
+            c.nome(),
+            "HTTPRoute `spec.parentRefs[0].{GATEWAY_API_KEY_NAME}` must \
+             byte-equal Caixa::nome() — emit path must route through the \
+             typed accessor, not the raw `.nome` field"
+        );
     }
 
     #[test]
