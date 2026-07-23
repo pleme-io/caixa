@@ -1884,6 +1884,142 @@ impl Caixa {
         self.behavior.as_ref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:politicas` M3 mesh-slot outer-
+    /// composite MESH-COMPOSITION-shaped mesh-policy optional-composite-
+    /// reference accessor every consumer of the top-level manifest's
+    /// per-Aplicacao [`crate::aplicacao::MeshPolicy`] outer-composite
+    /// reader keys off — returns the author-declared `:politicas` typed
+    /// composite verbatim as an `Option<&MeshPolicy>` reference over the
+    /// same backing storage the raw `self.politicas.as_ref()` field
+    /// access borrows from, with `None` naming the "no `:politicas`
+    /// block authored — every per-axis mesh-policy scalar defers to the
+    /// cluster-default arm named on the per-axis
+    /// [`crate::aplicacao::MeshPolicy::timeout`] /
+    /// [`crate::aplicacao::MeshPolicy::retries`] /
+    /// [`crate::aplicacao::MeshPolicy::circuit_breaker`] /
+    /// [`crate::aplicacao::MeshPolicy::mtls_required`] /
+    /// [`crate::aplicacao::MeshPolicy::rate_limit`] scalar-accessor
+    /// docstrings" partition every downstream caixa-mesh /
+    /// caixa-flux / caixa-helm Aplicacao-artifact emitter treats as
+    /// "emit no per-`:politicas` overlay" and the sibling
+    /// [`Self::aplicacao_view`] Aplicacao-composition seed folds through
+    /// the [`crate::aplicacao::MeshPolicy::default`] cluster-default
+    /// arm.
+    ///
+    /// The outer `:politicas` slot carries the M3 mesh-slot per-
+    /// Aplicacao typed composite — the load-bearing container of every
+    /// mesh-level policy axis every Cilium NetworkPolicy / Gateway API
+    /// v1.x HTTPRoute / future M4 per-edge policy overlay emitter fans
+    /// on (MESH-COMPOSITION §III.2 — the Aplicacao's typed mesh-policy
+    /// composite; §V — the "no infinite blocking" per-call deadline +
+    /// "sandboxing-by-default" mTLS-enforcement CSE invariants; §III.3
+    /// — the typed inter-Servico contrato-edge overlay the per-`(:de,
+    /// :para)` mesh renderer keys off). Every per-`:politicas` axis
+    /// threads through a lifted per-slot accessor on the
+    /// [`crate::aplicacao::MeshPolicy`] type: the
+    /// [`crate::aplicacao::MeshPolicy::mtls_required`] (c0110f1) Cilium
+    /// mTLS-enforcement toggle, the
+    /// [`crate::aplicacao::MeshPolicy::retries`] (bdfb399) transient-
+    /// failure retry budget, the [`crate::aplicacao::MeshPolicy::timeout`]
+    /// (7073d0f) Gateway-API per-call deadline, the
+    /// [`crate::aplicacao::MeshPolicy::circuit_breaker`] (b0e741a)
+    /// Envoy-outlier-detection composite. Every downstream consumer
+    /// that reaches for a mesh-policy axis first passes through this
+    /// outer accessor onto the composite and then dispatches onto the
+    /// per-axis accessor — the two-level dispatch means every per-
+    /// `:politicas` reader now routes through a typed dispatch on the
+    /// substrate primitive at both altitudes.
+    ///
+    /// Composes through [`Self::aplicacao_view`]'s Aplicacao-composition
+    /// seed: the Aplicacao-view builder folds the outer `Option`'s
+    /// author-omitted arm onto the [`crate::aplicacao::MeshPolicy::default`]
+    /// cluster-default, so the peer inner [`crate::AplicacaoSpec::politicas`]
+    /// (534dc21) `&MeshPolicy`-return accessor observes a typed
+    /// composite whether or not the author declared the outer slot.
+    /// The outer accessor preserves the "author-omitted vs authored-
+    /// empty" partition the inner accessor's `is_empty()`-gated
+    /// renderer overlay collapses — routing the presence bit through
+    /// this accessor keeps the [`Self::declared_mesh_slots`] M3 kind-
+    /// coherence enumerator's `M3_AUTHOR_KEY_POLITICAS` push separate
+    /// from the inner `MeshPolicy::is_empty()`-gated overlay elision.
+    ///
+    /// Prior to this lift the `.politicas` `Option<MeshPolicy>`
+    /// composite was accessed inline at two production sites — the
+    /// [`Self::aplicacao_view`] Aplicacao-composition seed's
+    /// `self.politicas.clone().unwrap_or_default()` traversal head
+    /// (caixa-core/src/manifest.rs:1899, which drives the fold onto
+    /// the [`crate::aplicacao::MeshPolicy::default`] cluster-default
+    /// arm the inner [`crate::AplicacaoSpec::politicas`] accessor
+    /// then observes), and the [`Self::declared_mesh_slots`] M3
+    /// declared-slot-set enumerator's `self.politicas.is_some()`
+    /// presence probe (caixa-core/src/manifest.rs:1961, which drives
+    /// the `M3_AUTHOR_KEY_POLITICAS` kebab-case author-label push
+    /// every [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+    /// coherence gate reads) — two open-coded outer-field accesses
+    /// that expressed no compile-time link back to the typed slot at
+    /// the [`Caixa`] altitude. A future extension of the `:politicas`
+    /// outer axis to a richer author surface (a per-cluster
+    /// `:politicas-overrides` slot the operator materializes at
+    /// admission time so a cluster-specific policy can tighten the
+    /// caixa-declared bound without re-authoring the `caixa.lisp`, a
+    /// promotion of the plain `Option<MeshPolicy>` to a richer
+    /// `{static, dynamic}` partition once the M4 per-edge
+    /// contrato-scoped policy-override surface lands, the M5 traffic-
+    /// shaping composition the caixa-operator's per-Aplicacao mesh
+    /// admission webhook keys off) would have had to be threaded
+    /// through both open-coded copies in lockstep or the Aplicacao-
+    /// composition seed's default-fold arm would silently disagree
+    /// with the M3 declared-slot enumerator on which policy composite
+    /// a given Caixa resolves to — the seed reading an operator-
+    /// resolved slot while the enumerator's presence probe read the
+    /// raw slot would silently split the build-time mesh-artifact
+    /// emission gate from the M3 declared-slot enumerator's kind-
+    /// coherence gate, a two-consumer split far from the source
+    /// `caixa.lisp` with no field naming the policy-drift root cause.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the caixa's per-
+    /// `Caixa` MESH-COMPOSITION mesh-policy outer-composite surface
+    /// reaches for exactly one typed dispatch — the resolver's
+    /// accept-set migrates as a unit on any future axis addition.
+    ///
+    /// Third outer top-level [`Caixa`] `Option<&Composite>`-return
+    /// composite-reference accessor — sibling to the opening
+    /// [`Self::limits`] (b2bd9d7) and [`Self::behavior`] (35d8b52)
+    /// accessors on the outer-`Caixa` `Option<&Composite>` composite-
+    /// reference sub-family, extends the "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline onto the first of the three M3 mesh-slot axes.
+    /// Peer of the closed inner mesh-slot outer-composite family the
+    /// sibling [`crate::AplicacaoSpec::politicas`] (534dc21) /
+    /// [`crate::AplicacaoSpec::placement`] (9abb8f0) /
+    /// [`crate::AplicacaoSpec::entrada`] (d32111c) composite-reference
+    /// accessor pins already close on the inner [`crate::AplicacaoSpec`]
+    /// altitude — opens the outer top-level [`Caixa`] altitude's M3
+    /// mesh-slot arm of the composite-reference family the remaining
+    /// two axes (`:placement`, `:entrada`) fold onto in future
+    /// sibling lifts. Returns `Option<&MeshPolicy>` (not the owning
+    /// composite by copy or clone) because every downstream consumer
+    /// of the mesh-policy composite treats it as a read-only per-axis
+    /// dispatch source — the reference-view is the narrowest borrow
+    /// that supports every present + roadmapped consumer (per-axis
+    /// accessor dispatch, `.is_empty()`-gated overlay projection,
+    /// presence-probe early return on the "author-omitted `:politicas`
+    /// ⇒ cluster-default applies" partition, `Aplicacao`-composition
+    /// seed's default-fold arm) without cloning the composite through
+    /// every consumer's fast path. The `Option` half of the return-
+    /// type preserves the load-bearing "author-omitted `:politicas` ⇒
+    /// cluster-default applies" partition (not a default composite
+    /// the downstream must reject on emptiness) — the accessor
+    /// projects the raw `Option<MeshPolicy>` slot's presence bit
+    /// through the reference-return unchanged. Named `politicas()` to
+    /// match the storage field's name verbatim and the tatara-lisp
+    /// author-surface term (`:politicas`) the field's own docstring
+    /// already carries.
+    #[must_use]
+    pub fn politicas(&self) -> Option<&crate::aplicacao::MeshPolicy> {
+        self.politicas.as_ref()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1896,7 +2032,7 @@ impl Caixa {
         Some(crate::aplicacao::AplicacaoSpec {
             membros: self.membros.clone(),
             contratos: self.contratos.clone(),
-            politicas: self.politicas.clone().unwrap_or_default(),
+            politicas: self.politicas().cloned().unwrap_or_default(),
             placement: self.placement.clone().unwrap_or_default(),
             entrada: self.entrada.clone(),
         })
@@ -1958,7 +2094,7 @@ impl Caixa {
         if !self.contratos.is_empty() {
             slots.push(crate::render::M3_AUTHOR_KEY_CONTRATOS);
         }
-        if self.politicas.is_some() {
+        if self.politicas().is_some() {
             slots.push(crate::render::M3_AUTHOR_KEY_POLITICAS);
         }
         if self.placement.is_some() {
@@ -11662,6 +11798,359 @@ mod tests {
             c.behavior().is_none(),
             "Caixa::behavior must return None when :behavior is absent \
              — the author-omitted arm must project through the \
+             accessor's Option::None unchanged",
+        );
+    }
+
+    // ── Caixa::politicas — outer top-level Option<&MeshPolicy> composite-reference accessor ──
+
+    fn caixa_aplicacao_with_politicas(politicas: Option<crate::aplicacao::MeshPolicy>) -> Caixa {
+        use crate::aplicacao::{Membro, WitContract};
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.kind = CaixaKind::Aplicacao;
+        c.membros = vec![Membro {
+            caixa: "a".into(),
+            versao: "^0.1".into(),
+        }];
+        c.contratos = vec![WitContract {
+            de: "a".into(),
+            para: "a".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        }];
+        c.politicas = politicas;
+        c
+    }
+
+    #[test]
+    fn politicas_returns_politicas_option_ref_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:politicas` M3 mesh-slot outer-
+        // composite optional-composite-reference-shape pin:
+        // [`Caixa::politicas`] must return the `:politicas` typed
+        // `Option<MeshPolicy>` verbatim as an `Option<&MeshPolicy>`
+        // reference over the same backing storage the raw
+        // `self.politicas.as_ref()` field access borrows from,
+        // byte-equal across every representative fixture in the
+        // accept-set — the author-omitted `None` shape (the "cluster-
+        // default applies" partition every downstream mesh-artifact
+        // emitter treats as "emit no `:politicas` overlay"), the
+        // empty-composite `Some(MeshPolicy { .. default })` shape
+        // ([`crate::aplicacao::MeshPolicy::is_empty`] holds — every
+        // per-axis mesh-policy scalar is `None`, so the peer inner
+        // [`crate::AplicacaoSpec::politicas`] `.is_empty()`-gated
+        // caixa-mesh overlay elides every per-axis emit but the outer
+        // presence-bit is `Some`, so [`Caixa::declared_mesh_slots`]
+        // still pushes the `M3_AUTHOR_KEY_POLITICAS` label), a
+        // single-axis fixture (only `:timeout` set — the canonical
+        // shape a latency-sensitive Aplicacao carries), and a
+        // fully-populated composite (every per-axis mesh-policy
+        // scalar set — the canonical shape a fully-governed
+        // Aplicacao carries).
+        //
+        // Pins against a future silent detour that returned a fresh-
+        // cloned [`crate::aplicacao::MeshPolicy`] copy (which would
+        // type-check via the `Clone` impl but silently break every
+        // downstream caller that relied on the reference sharing the
+        // composite's backing identity), a reference to an operator-
+        // resolved overlay (the future per-cluster
+        // `:politicas-overrides` slot — its resolution must land at
+        // exactly this accessor body, not silently divert the raw
+        // slot away from the peer [`Caixa::declared_mesh_slots`]
+        // enumerator's presence probe), a
+        // `None` → `Some(MeshPolicy::default)` cluster-default
+        // projection (which would collapse the load-bearing
+        // "author-omitted `:politicas` ⇒ cluster-default applies"
+        // partition the peer [`Caixa::declared_mesh_slots`]
+        // enumerator and the peer [`Caixa::aplicacao_view`]
+        // Aplicacao-composition seed both read), or an axis-shuffled
+        // projection (a future detour that swapped `timeout` and
+        // `retries` through the accessor would silently split the
+        // paired [`Caixa::aplicacao_view`] seed's fold input from the
+        // sibling M3 mesh-artifact emitter's projection input).
+        //
+        // Third outer top-level [`Caixa`] `Option<&Composite>`-return
+        // composite-reference accessor pin on the substrate primitive
+        // — peer of the sibling
+        // `limits_returns_limits_option_ref_verbatim_across_permutations`
+        // (b2bd9d7) and
+        // `behavior_returns_behavior_option_ref_verbatim_across_permutations`
+        // (35d8b52) opening tetrad pins on the outer top-level
+        // [`Caixa`] `Option<&Composite>`-return sub-family — extended
+        // here to the first of the three M3 mesh-slot axes so the
+        // opening third of the outer `Option<&Composite>` sub-family
+        // carries the same "byte-equal, borrow-shared, presence-bit-
+        // preserved" outer-accessor discipline.
+        use crate::aplicacao::{CircuitBreaker, MeshPolicy, RateLimit};
+        use std::time::Duration;
+        let fixtures: Vec<Option<MeshPolicy>> = vec![
+            None,
+            Some(MeshPolicy::default()),
+            Some(MeshPolicy {
+                timeout: Some(Duration::from_secs(30)),
+                ..Default::default()
+            }),
+            Some(MeshPolicy {
+                timeout: Some(Duration::from_secs(30)),
+                retries: Some(3),
+                circuit_breaker: Some(CircuitBreaker {
+                    max_failures: 5,
+                    window: Duration::from_secs(60),
+                }),
+                mtls_required: Some(true),
+                rate_limit: Some(RateLimit {
+                    rate: 100,
+                    window: Duration::from_secs(1),
+                }),
+            }),
+        ];
+        for politicas in fixtures {
+            let c = caixa_aplicacao_with_politicas(politicas.clone());
+            assert_eq!(
+                c.politicas(),
+                politicas.as_ref(),
+                "Caixa::politicas must return :politicas verbatim (got \
+                 {:?}, expected {:?})",
+                c.politicas(),
+                politicas.as_ref(),
+            );
+            match (c.politicas(), c.politicas.as_ref()) {
+                (Some(a), Some(b)) => assert!(
+                    std::ptr::eq(a, b),
+                    "Caixa::politicas accessor and self.politicas.as_ref() \
+                     field access must borrow the same backing storage \
+                     — the accessor is the substrate-primitive typed \
+                     dispatch every downstream Aplicacao-mesh-overlay \
+                     composite consumer must route through, and a \
+                     reference-identity split would silently break \
+                     every consumer that relied on the borrow sharing \
+                     the composite's storage",
+                ),
+                (None, None) => {}
+                _ => panic!(
+                    "Caixa::politicas presence bit must byte-equal \
+                     self.politicas.is_some() — a presence-bit drift \
+                     would silently split the paired \
+                     Caixa::aplicacao_view Aplicacao-composition seed's \
+                     traversal head from the peer \
+                     Caixa::declared_mesh_slots M3 declared-slot \
+                     enumerator's presence probe",
+                ),
+            }
+            assert_eq!(
+                c.politicas().is_some(),
+                c.politicas.is_some(),
+                "Caixa::politicas().is_some() must byte-equal \
+                 self.politicas.is_some() — a presence-bit drift would \
+                 silently split every downstream Option<&MeshPolicy> \
+                 consumer's partition on the cluster-default arm",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_mesh_slots_politicas_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_mesh_slots`]'s
+        // `:politicas` presence-probe arm must key off
+        // [`Caixa::politicas`], not the raw `self.politicas.is_some()`
+        // field-probe. Structurally: a `Caixa { politicas:
+        // Some(MeshPolicy::default()), .. }` must still push
+        // `M3_AUTHOR_KEY_POLITICAS` onto the declared-slot list (the
+        // presence bit is `Some`, so the M3 kind-coherence gate must
+        // surface the slot as "declared" even when every per-axis
+        // scalar is unset), and a `Caixa { politicas: None, .. }` must
+        // NOT push the label (the "author omitted the slot entirely"
+        // partition). The pair jointly pins the accessor + declared-
+        // slot enumerator composition: any future silent detour that
+        // had the accessor collapse `Some(MeshPolicy::default())` to
+        // `None` (a `.filter(|p| !p.is_empty())` projection) would
+        // silently absorb the "declared but empty" arm at the
+        // accessor boundary and the
+        // [`crate::LayoutError::MeshSlotsOnNonAplicacao`] kind-
+        // coherence gate would silently accept a struct-literal
+        // `Caixa` carrying the drift.
+        //
+        // Peer of the sibling
+        // `declared_servico_slots_limits_arm_routes_through_accessor`
+        // (b2bd9d7) and
+        // `declared_servico_slots_behavior_arm_routes_through_accessor`
+        // (35d8b52) composition pins on the sibling `:limits` /
+        // `:behavior` outer-`Option<&Composite>` arms of the peer
+        // [`Caixa::declared_servico_slots`] M2 declared-slot
+        // enumerator's traversal — same "the enumerator gate must
+        // route through the substrate-primitive typed dispatch"
+        // discipline extended onto the outer top-level [`Caixa`] M3
+        // mesh-slot family so the [`Caixa::declared_mesh_slots`]
+        // enumerator carries the same routing invariant as its M2
+        // sibling.
+        use crate::aplicacao::MeshPolicy;
+        let c = caixa_aplicacao_with_politicas(Some(MeshPolicy::default()));
+        let slots = c.declared_mesh_slots();
+        assert!(
+            slots.contains(&crate::render::M3_AUTHOR_KEY_POLITICAS),
+            "declared_mesh_slots must push M3_AUTHOR_KEY_POLITICAS \
+             when `:politicas` is Some (even for MeshPolicy::default()) \
+             — the accessor and the enumerator gate must route through \
+             the same substrate-primitive typed dispatch on the outer \
+             :politicas presence bit (got slots={slots:?})",
+        );
+        let c = caixa_aplicacao_with_politicas(None);
+        let slots = c.declared_mesh_slots();
+        assert!(
+            !slots.contains(&crate::render::M3_AUTHOR_KEY_POLITICAS),
+            "declared_mesh_slots must NOT push M3_AUTHOR_KEY_POLITICAS \
+             when `:politicas` is None — the author-omitted arm must \
+             route through the accessor's None-return unchanged (got \
+             slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn aplicacao_view_politicas_arm_folds_through_accessor() {
+        // Composition pin: [`Caixa::aplicacao_view`]'s per-`:politicas`
+        // Aplicacao-composition seed must fold through
+        // [`Caixa::politicas`], not the raw
+        // `self.politicas.clone().unwrap_or_default()` field-borrow.
+        // Structurally: a `Caixa { politicas: Some(MeshPolicy {
+        // timeout: Some(30s), .. default }), kind: Aplicacao, .. }`
+        // must surface a projected [`crate::AplicacaoSpec`] whose
+        // `politicas().timeout()` field byte-equals the outer
+        // composite's `timeout` scalar (the fold must project the
+        // authored composite verbatim), a `Caixa { politicas:
+        // Some(MeshPolicy::default()), kind: Aplicacao, .. }` must
+        // surface an [`crate::AplicacaoSpec`] whose `politicas()`
+        // byte-equals [`crate::aplicacao::MeshPolicy::default`] (the
+        // fold's empty-composite arm collapses to the same default the
+        // author-omitted arm does), and a `Caixa { politicas: None,
+        // kind: Aplicacao, .. }` must surface an
+        // [`crate::AplicacaoSpec`] whose `politicas()` byte-equals
+        // [`crate::aplicacao::MeshPolicy::default`] (the "author
+        // omitted the slot entirely" arm folds through the
+        // `unwrap_or_default` onto the cluster-default). The triad
+        // jointly pins the accessor + Aplicacao-composition seed
+        // composition: any future silent detour that had the accessor
+        // divert the raw slot away from the seed's fold (an operator-
+        // resolved overlay's default-fold arm silently differing from
+        // the raw slot's default-fold arm) would silently split the
+        // build-time mesh-artifact emission gate from the caixa-mesh
+        // renderer's Aplicacao-view input at the composition boundary.
+        use crate::aplicacao::MeshPolicy;
+        use std::time::Duration;
+        let c = caixa_aplicacao_with_politicas(Some(MeshPolicy {
+            timeout: Some(Duration::from_secs(30)),
+            ..Default::default()
+        }));
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.politicas().timeout(),
+            Some(Duration::from_secs(30)),
+            "Caixa::aplicacao_view must fold the authored :politicas \
+             :timeout scalar through the accessor verbatim onto the \
+             projected AplicacaoSpec — a future silent detour at the \
+             seed's fold arm would surface here as a projected-scalar \
+             drift (got {:?})",
+            view.politicas().timeout(),
+        );
+        let c = caixa_aplicacao_with_politicas(Some(MeshPolicy::default()));
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.politicas(),
+            &MeshPolicy::default(),
+            "Caixa::aplicacao_view must fold Some(MeshPolicy::default()) \
+             through the accessor onto MeshPolicy::default — the empty- \
+             composite arm collapses to the same default the author- \
+             omitted arm does (got {:?})",
+            view.politicas(),
+        );
+        let c = caixa_aplicacao_with_politicas(None);
+        let view = c.aplicacao_view().unwrap();
+        assert_eq!(
+            view.politicas(),
+            &MeshPolicy::default(),
+            "Caixa::aplicacao_view must fold None through the accessor's \
+             unwrap_or_default onto MeshPolicy::default — the author- \
+             omitted arm must route through the accessor's None-return \
+             unchanged (got {:?})",
+            view.politicas(),
+        );
+    }
+
+    #[test]
+    fn politicas_projects_option_ref_by_borrow() {
+        // The by-borrow pin: [`Caixa::politicas`] returns
+        // `Option<&MeshPolicy>` by borrow — the returned reference
+        // borrows the underlying `Option<MeshPolicy>` storage of the
+        // `:politicas` slot and the accessor must not clone the
+        // backing composite on every call. Peer of the sibling
+        // `limits_projects_option_ref_by_borrow` (b2bd9d7) and
+        // `behavior_projects_option_ref_by_borrow` (35d8b52) by-borrow
+        // pins on the outer top-level [`Caixa`]
+        // `Option<&Composite>`-return sub-family — extended here to
+        // the third axis of the same sub-family: the accessor's
+        // returned reference must borrow from `&self` (the returned
+        // reference's lifetime is tied to `&self`), and calling the
+        // accessor twice on the same [`Caixa`] must yield references
+        // that are pointer-equal (the underlying byte-buffer is the
+        // storage `MeshPolicy`'s allocation, not a fresh copy) as
+        // well as value-equal (idempotent, no side effects on
+        // `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `MeshPolicy` (which would type-check via the `Clone` impl
+        // but silently clone on every call), a `&MeshPolicy` panic-
+        // return on the `None` arm (which would collapse the load-
+        // bearing `Option` presence-bit into a runtime panic), or a
+        // one-arm-only accessor that returned a saturating composite
+        // on some sentinel input.
+        use crate::aplicacao::{CircuitBreaker, MeshPolicy, RateLimit};
+        use std::time::Duration;
+        for politicas in [
+            Some(MeshPolicy::default()),
+            Some(MeshPolicy {
+                timeout: Some(Duration::from_secs(30)),
+                retries: Some(3),
+                circuit_breaker: Some(CircuitBreaker {
+                    max_failures: 5,
+                    window: Duration::from_secs(60),
+                }),
+                mtls_required: Some(true),
+                rate_limit: Some(RateLimit {
+                    rate: 100,
+                    window: Duration::from_secs(1),
+                }),
+            }),
+        ] {
+            let c = caixa_aplicacao_with_politicas(politicas.clone());
+            let first = c.politicas().unwrap();
+            let second = c.politicas().unwrap();
+            assert_eq!(
+                first, second,
+                "Caixa::politicas must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 &MeshPolicy",
+            );
+            assert!(
+                std::ptr::eq(first, second),
+                "Caixa::politicas must borrow the underlying \
+                 Option<MeshPolicy> storage — two successive calls \
+                 must return references with the same backing pointer \
+                 (a fresh MeshPolicy clone would change the pointer on \
+                 every call)",
+            );
+            assert_eq!(
+                Some(first),
+                politicas.as_ref(),
+                "Caixa::politicas must return :politicas verbatim by \
+                 borrow — got {first:?}, expected {:?}",
+                politicas.as_ref(),
+            );
+        }
+        let c = caixa_aplicacao_with_politicas(None);
+        assert!(
+            c.politicas().is_none(),
+            "Caixa::politicas must return None when :politicas is \
+             absent — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
         );
     }
