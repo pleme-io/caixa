@@ -893,7 +893,7 @@ impl LayoutInvariants for StandardLayout {
         // The shape pass runs first so the diagnostic names *which
         // :behavior slot* is malformed before the existence check
         // would otherwise surface a less-helpful "missing entry".
-        if let Some(b) = &caixa.behavior {
+        if let Some(b) = caixa.behavior() {
             b.validate().map_err(|err| LayoutError::BehaviorViolation {
                 caixa: caixa.nome.clone(),
                 issue: err.to_string(),
@@ -1005,7 +1005,7 @@ impl LayoutInvariants for StandardLayout {
         // missing-callback gate fires.
         crate::upgrade::validate_upgrade_from_against_behavior(
             &caixa.upgrade_from,
-            caixa.behavior.as_ref(),
+            caixa.behavior(),
         )
         .map_err(|err| LayoutError::UpgradeViolation {
             caixa: caixa.nome.clone(),

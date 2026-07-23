@@ -18510,7 +18510,7 @@ pub fn servico_m2_overlay(
             out.insert(M2_KEY_LIMITS, v);
         }
     }
-    if let Some(behavior) = &caixa.behavior {
+    if let Some(behavior) = caixa.behavior() {
         if !behavior.is_empty() {
             let v = serde_yaml::to_value(behavior).map_err(|source| RenderError::Yaml {
                 slot: M2_KEY_BEHAVIOR,
