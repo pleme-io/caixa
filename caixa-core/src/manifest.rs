@@ -1297,6 +1297,161 @@ impl Caixa {
         self.exe.as_slice()
     }
 
+    /// Substrate-canonical per-`Caixa` `:servicos` universal-axis
+    /// ComputeUnit-CR-YAML-entry-path-list slice-accessor every consumer
+    /// of the top-level manifest's Servico-component axis keys off —
+    /// returns the author-declared `:servicos` list verbatim as a
+    /// `&[String]` slice-view over the same backing buffer the raw
+    /// `self.servicos.as_slice()` field access borrows from. Empty-list-
+    /// carrying (`:servicos` is a default-empty axis every `defcaixa`
+    /// form supplies with an empty `()` when unset; the
+    /// [`Self::from_lisp`] derive folds an omitted `:servicos` through
+    /// `#[serde(default)]` to `Vec::new()`, so a `Caixa` past parse
+    /// definitionally carries a `Vec<String>` slot — possibly empty —
+    /// and the returned `&[String]` degenerates to an empty slice on
+    /// that arm without any silent `None` collapse).
+    ///
+    /// The `:servicos` slot carries the universal-axis
+    /// `.computeunit.yaml` ComputeUnit-CR entry-path list every
+    /// `:kind Servico` caixa emits under (CAIXA-SDLC §I — the
+    /// author-facing surface every `defcaixa` form supplies alongside
+    /// `:nome` / `:versao` / `:kind`; the substrate-wide
+    /// `servicos/`-directory-fenced entry-carrier axis every downstream
+    /// Servico-facing renderer keys off) — the typed slot's
+    /// `Vec<String>` accept-set (empty-per-entry rejected through
+    /// [`ManifestError::CodePathEmpty { slot: ":servicos" }`],
+    /// non-sandboxed-relative-shape rejected through
+    /// [`ManifestError::CodePathShape`], non-`.computeunit.yaml`
+    /// extension rejected through
+    /// [`ManifestError::CodePathNonComputeUnitYamlExtension`], cross-
+    /// entry duplicate rejected through
+    /// [`ManifestError::CodePathDuplicate`], `len != 1` rejected by the
+    /// V0 [`crate::ServicoCountMismatch`] gate on the per-Servico
+    /// renderer entry-points, out-of-`servicos/`-directory paths
+    /// rejected past the layout's [`crate::LayoutError::ServicoOutsideDir`]
+    /// `starts_with` fence) maps onto every load-bearing downstream
+    /// consumer the substrate carries — the [`crate::LayoutInvariants`]
+    /// Servico-arm empty-check + per-entry file-exists + `servicos/`-
+    /// directory-fence loop at caixa-core/src/layout.rs that gates each
+    /// entry through [`crate::LayoutError::ServicoWithoutServicos`] /
+    /// `MissingEntry` / `ServicoOutsideDir`, the compound `has_code`
+    /// OR-fold on the [`crate::LayoutError::SupervisorOwnsCode`] /
+    /// [`crate::LayoutError::AplicacaoOwnsCode`] kind-coherence gate
+    /// that fences code-surface slots off from the two no-code kinds,
+    /// [`Self::declared_foreign_code_slots`]'s
+    /// `!self.servicos.is_empty()` arm on the
+    /// [`crate::LayoutError::ForeignCodeSlot`] gate that fences the
+    /// `:servicos` code surface off from every non-Servico code-running
+    /// kind, [`Self::validate_code_paths`]'s per-slot shape gate that
+    /// walks each entry through the sandbox-relative / `.computeunit.
+    /// yaml`-extension / cross-entry duplicate gates, the
+    /// [`crate::require_single_servico`] V0 singularity gate every
+    /// per-Servico renderer entry-point runs through
+    /// [`crate::require_v0_servico_shape`], the `feira chart` /
+    /// `feira deploy` per-verb `first_servico_path` walk at
+    /// caixa-feira/src/cmd/chart.rs that resolves the singleton
+    /// ComputeUnit-CR file, every future per-`Caixa` Servico-facing
+    /// renderer the CAIXA-SDLC §I roadmap acknowledges (the future
+    /// per-Servico OCI packager, the future M4
+    /// `wasm.pleme.io/v1alpha1/ComputeUnit` CR materializer, the future
+    /// per-Servico OTel collector-config emit).
+    ///
+    /// Prior to this lift the `.servicos` field was accessed inline at
+    /// five production sites — the compound-code-path `has_code =
+    /// !caixa.bibliotecas().is_empty() || !caixa.exe().is_empty() ||
+    /// !caixa.servicos.is_empty()` OR-fold on the
+    /// [`crate::LayoutError::SupervisorOwnsCode`] /
+    /// `AplicacaoOwnsCode` kind-coherence gate, the Servico-arm
+    /// `caixa.servicos.is_empty()`
+    /// [`crate::LayoutError::ServicoWithoutServicos`] gate, the
+    /// per-entry `for p in &caixa.servicos`
+    /// `MissingEntry`/`ServicoOutsideDir` walk, the
+    /// [`Self::declared_foreign_code_slots`]'s
+    /// `!self.servicos.is_empty()` arm on the `ForeignCodeSlot` gate,
+    /// and the [`crate::require_single_servico`] V0 count gate's
+    /// `caixa.servicos.len() == 1` / `caixa.servicos.len()` count
+    /// projection (both the accept-arm predicate and the
+    /// diagnostic-carrying `ServicoCountMismatch { count }`
+    /// projection) — five open-coded field-accesses across three
+    /// crates that expressed no compile-time link back to the typed
+    /// slot. A future extension of the `:servicos` axis to a richer
+    /// component surface — a per-`:servicos` structured
+    /// `ServicoEntry { path, world, capabilities }` at the storage
+    /// layer once the substrate absorbs the per-component WIT-world +
+    /// capability-set tuple the CAIXA-SDLC §I Servico roadmap
+    /// acknowledges, a per-registry `:servicos` allowlist the M4 CR
+    /// materializer enforces per-CR (the "cluster policy demands every
+    /// Servico declare an explicit `:world`" arm), a promotion of the
+    /// plain `Vec<String>` byte-string list to a richer
+    /// `Vec<ComputeUnitPath>` newtype discriminated on the
+    /// `servicos/<nome>.computeunit.yaml`-shape grammar the layout's
+    /// `starts_with(servicos_dir)` fence and the
+    /// [`crate::render::is_computeunit_yaml_extension`] predicate
+    /// already resolve through, a promotion of the V0 singleton
+    /// contract to a multi-component `Vec<ComputeUnitPath>` past the M5
+    /// component-model multi-world boundary — would have had to be
+    /// threaded through all five open-coded copies in lockstep or the
+    /// layout gate, the shape validator, the V0 count gate, and the
+    /// `feira chart` / `feira deploy` entry-point walks would silently
+    /// disagree on which ComputeUnit-CR paths a given [`Caixa`]
+    /// resolves to (an author's `:servicos ("servicos/foo.computeunit.
+    /// yaml")` would satisfy layout while `feira chart` silently
+    /// packaged a drifted other list, or vice versa). Lifting the
+    /// resolution to a typed method on the substrate primitive means
+    /// every downstream consumer of the caixa's per-`Caixa`
+    /// ComputeUnit-CR-source surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// Fifth and final outer top-level [`Caixa`] `&[T]`-return slice-
+    /// accessor — folds on the "outer [`Caixa`] `&[T]` slice"
+    /// projection pattern [`Self::autores`] (b5d813f) opened,
+    /// [`Self::etiquetas`] (78c7d3c) folded on, [`Self::bibliotecas`]
+    /// (8a36c23) closed the universal-axis text-tag family of, and
+    /// [`Self::exe`] (65d9527) opened the foreign-code-slot sub-family
+    /// of. Closes the outer-`Caixa` foreign-code-slot `&[T]` sub-family
+    /// — with `:bibliotecas`, `:exe`, and `:servicos` now each carrying
+    /// a substrate-canonical slice accessor, the trio of code-surface
+    /// list slots the [`Self::validate_code_paths`] per-slot dispatch
+    /// tuple carries is complete on the typed dispatch surface (the
+    /// internal `[(":bibliotecas", &self.bibliotecas, ..), (":exe",
+    /// &self.exe, ..), (":servicos", &self.servicos, ..)]` per-slot
+    /// dispatch tuple's homogeneous `&Vec<String>`-typed shape blocks a
+    /// per-element accessor swap in isolation — a future companion lift
+    /// promotes the tuple's element type to `&[String]` and threads the
+    /// triple of typed dispatches through as a unit). Sibling in shape
+    /// to the peer per-`:supervisor`
+    /// [`crate::supervisor::SupervisorSpec::children`] (bc92bce),
+    /// per-`:placement` [`crate::aplicacao::Placement::clusters`]
+    /// (a6e18d7), per-`:membros`
+    /// [`crate::aplicacao::AplicacaoSpec::membros`] (6c77e36),
+    /// per-`:contratos`
+    /// [`crate::aplicacao::AplicacaoSpec::contratos`] (0dcc926), and
+    /// per-`:upgrade-from :instructions`
+    /// [`crate::upgrade::UpgradeFromEntry::instructions`] (0137e5a)
+    /// `&[T]`-return slice accessors on the sibling per-M2 / per-M3
+    /// typed-slot list axes, extended here to the outer top-level
+    /// [`Caixa`] universal-axis surface. Returns `&[String]` (not
+    /// `&Vec<String>`) because every downstream consumer of the
+    /// ComputeUnit-CR-source list treats it as a read-only sequence —
+    /// the slice-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (`.iter()`, `.len()`,
+    /// `.is_empty()`, `.first()`) without leaking the backing `Vec`'s
+    /// grow/push/reserve surface no consumer of the typed view reaches
+    /// for (the storage-side `Vec` remains reachable through the
+    /// `pub servicos` field for the mutation-carrying serde round-trip
+    /// and per-test fixture-mutation paths, and for the
+    /// [`Self::validate_code_paths`] per-slot dispatch tuple whose
+    /// homogeneous-element-type shape carries the raw field access
+    /// until the trio-closure lift promotes the tuple as a unit).
+    /// Named `servicos()` to match the storage field's name; the
+    /// accessor's identity maps onto the canonical CAIXA-SDLC §I
+    /// vocabulary the slot's docstring already carries.
+    #[must_use]
+    pub fn servicos(&self) -> &[String] {
+        self.servicos.as_slice()
+    }
+
     /// Compose the Aplicacao-related flat slots into a single typed
     /// [`crate::aplicacao::AplicacaoSpec`] for validation +
     /// downstream renderer consumption. Returns `None` when the
@@ -1536,7 +1691,7 @@ impl Caixa {
         if !self.exe().is_empty() && !self.kind().requires_exe() {
             slots.push(":exe");
         }
-        if !self.servicos.is_empty() && !self.kind().requires_servicos() {
+        if !self.servicos().is_empty() && !self.kind().requires_servicos() {
             slots.push(":servicos");
         }
         slots
@@ -9849,6 +10004,228 @@ mod tests {
                 expected.as_slice(),
                 "Caixa::exe must return :exe verbatim by borrow — \
                  got {first:?}, expected {expected:?}",
+            );
+        }
+    }
+
+    // ── Caixa::servicos — outer top-level &[T] slice accessor ─────────
+
+    #[test]
+    fn servicos_returns_servicos_slice_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:servicos` universal-axis
+        // ComputeUnit-CR-YAML-entry-path-list slice pin:
+        // [`Caixa::servicos`] must return the `:servicos` typed
+        // [`Vec<String>`] list verbatim as a `&[String]`, byte-equal to
+        // the raw `self.servicos.as_slice()` access across every
+        // representative value in the accept-set — `[]` (the "no
+        // ComputeUnit-CR declared" arm every `:kind` other than
+        // `Servico` carries; the layout's [`crate::LayoutInvariants`]
+        // `ServicoWithoutServicos` arm-gate fires exactly on this
+        // empty-slot + `Servico`-kind combination), `[""]` (a past-the-
+        // guard sentinel that pins the accessor doesn't perform a
+        // silent `[""] → []` collapse on the empty-entry arm — validate
+        // rejects `[""]` through `CodePathEmpty { slot: ":servicos" }`
+        // but the accessor must ship the raw slot verbatim so a
+        // validate-time gate regression surfaces at the layout /
+        // per-Servico renderer boundary rather than being silently
+        // absorbed into a component-drop),
+        // `["servicos/demo.computeunit.yaml"]` (the canonical
+        // singleton V0-shape every in-tree `caixa_with_code_paths`
+        // positive control uses; the same shape
+        // [`crate::require_single_servico`] admits),
+        // `["servicos/a.computeunit.yaml", "servicos/b.computeunit.
+        // yaml"]` (a past-the-guard `len != 1` sentinel — the V0
+        // singularity gate rejects through `ServicoCountMismatch
+        // { count: 2 }` but the accessor must ship the raw slot
+        // verbatim so struct-literal `Caixa { servicos: vec![...,
+        // ...], .. }` fixtures continue to expose the count at the
+        // accessor), and `["servicos/a.computeunit.yaml",
+        // "servicos/a.computeunit.yaml"]` (a past-the-guard duplicate
+        // sentinel — validate rejects through
+        // `CodePathDuplicate { slot: ":servicos" }` per the per-slot
+        // set-not-multiset gate, but the accessor must ship the raw
+        // slot verbatim so struct-literal fixtures continue to expose
+        // the duplicate at the accessor).
+        //
+        // Fifth and final outer top-level [`Caixa`] `&[T]`-return
+        // slice accessor pin on the substrate primitive — folds on the
+        // "outer [`Caixa`] `&[T]` slice" projection pattern
+        // `autores_returns_autores_slice_verbatim_across_permutations`
+        // (b5d813f) opened,
+        // `etiquetas_returns_etiquetas_slice_verbatim_across_permutations`
+        // (78c7d3c) folded on,
+        // `bibliotecas_returns_bibliotecas_slice_verbatim_across_permutations`
+        // (8a36c23) closed the universal-axis text-tag family of, and
+        // `exe_returns_exe_slice_verbatim_across_permutations`
+        // (65d9527) opened the foreign-code-slot sub-family of. Closes
+        // the outer-`Caixa` foreign-code-slot `&[T]` sub-family — the
+        // trio of code-surface list slots (`:bibliotecas` + `:exe` +
+        // `:servicos`) now each carries a substrate-canonical slice
+        // accessor. Pins against a future silent detour that returned
+        // an owned `Vec<String>` (which would type-check but silently
+        // clone on every accessor call, breaking the zero-cost
+        // projection every peer sibling slice accessor carries), a
+        // `[""] → []` collapse (which would silently absorb the
+        // `CodePathEmpty` refusal case at the accessor boundary), an
+        // `[a, a] → [a]` dedup collapse (which would silently absorb
+        // the `CodePathDuplicate` refusal case at the accessor
+        // boundary — the per-slot set-not-multiset gate is downstream
+        // of the accessor and must not be silently promoted into it),
+        // or a `[a, b] → [a]` singleton collapse (which would silently
+        // absorb the V0 `ServicoCountMismatch` refusal case at the
+        // accessor boundary — the V0 singularity gate is downstream of
+        // the accessor and must not be silently promoted into it).
+        for servicos in [
+            vec![],
+            vec![""],
+            vec!["servicos/demo.computeunit.yaml"],
+            vec!["servicos/a.computeunit.yaml", "servicos/b.computeunit.yaml"],
+            vec!["servicos/a.computeunit.yaml", "servicos/a.computeunit.yaml"],
+        ] {
+            let c = caixa_with_code_paths(vec![], vec![], servicos.clone());
+            let expected: Vec<String> = servicos.iter().map(|s| (*s).to_string()).collect();
+            assert_eq!(
+                c.servicos(),
+                expected.as_slice(),
+                "Caixa::servicos must return :servicos verbatim (got \
+                 {:?}, expected {expected:?})",
+                c.servicos(),
+            );
+            assert_eq!(
+                c.servicos(),
+                c.servicos.as_slice(),
+                "Caixa::servicos must byte-equal the raw \
+                 `self.servicos.as_slice()` field access across every \
+                 value in the Vec<String> accept-set",
+            );
+        }
+    }
+
+    #[test]
+    fn validate_code_paths_servicos_empty_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_code_paths`]'s per-entry
+        // empty-arm gate on the `:servicos` slot must key off
+        // [`Caixa::servicos`], not a divergent raw `&self.servicos`
+        // field-borrow walk. Structurally: a `Caixa { servicos:
+        // vec!["".into()], .. }` must surface the `CodePathEmpty
+        // { slot: ":servicos" }` refusal exactly, and a `Caixa
+        // { servicos: vec!["servicos/demo.computeunit.yaml".into()],
+        // .. }` (the canonical singleton V0-shape every in-tree
+        // `caixa_with_code_paths` positive control uses) must pass
+        // validate. The pair jointly pins the accessor + validate-gate
+        // composition: any future silent detour that had the accessor
+        // return an empty slice on the `[""]` arm (a `.iter().filter
+        // (|s| !s.is_empty()).collect()` collapse) would silently
+        // absorb the `CodePathEmpty` refusal at the accessor boundary
+        // and the validate gate would accept a struct-literal
+        // `Caixa { servicos: vec!["".into()], .. }` — the composition
+        // pin catches that at caixa-core build time.
+        //
+        // Peer of the per-`Caixa`
+        // `validate_code_paths_bibliotecas_empty_arm_routes_through_accessor`
+        // (8a36c23), `validate_code_paths_exe_empty_arm_routes_through_accessor`
+        // (65d9527), `validate_autores_empty_arm_routes_through_accessor`
+        // (b5d813f), and
+        // `validate_etiquetas_empty_entry_arm_routes_through_accessor`
+        // (78c7d3c) accessor-composition pins on the sibling `&[T]`-
+        // composition axes — same "the validate / shape-gate predicate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the sibling outer top-level
+        // [`Caixa`] `&[T]`-composition surface, closing the trio of
+        // code-surface accessor-composition pins on the same axis.
+        // Nominally the in-tree `validate_code_paths` production body
+        // still keys off the internal
+        // `[(":bibliotecas", &self.bibliotecas,
+        // CodePathFileType::LispSource), (":exe", &self.exe, ..),
+        // (":servicos", &self.servicos, ..)]` per-slot dispatch tuple
+        // (the tuple's homogeneous `&Vec<String>`-typed shape blocks a
+        // per-element accessor swap in isolation — a future companion
+        // lift promotes the tuple's element type to `&[String]` and
+        // threads the triple of typed dispatches through as a unit);
+        // the composition pin catches any future accessor-side silent
+        // filter drop against that eventual tuple-closure regardless
+        // of whether the `:servicos` slot is threaded through the
+        // accessor or the raw field access at the tuple's construction
+        // site.
+        let c = caixa_with_code_paths(vec![], vec![], vec![""]);
+        assert!(
+            matches!(
+                c.validate_code_paths(),
+                Err(ManifestError::CodePathEmpty { slot: ":servicos" })
+            ),
+            "validate_code_paths must reject servicos == vec![\"\"] \
+             with CodePathEmpty {{ slot: \":servicos\" }} — the \
+             accessor and the validate gate must route through the \
+             same substrate-primitive typed dispatch on the \
+             :servicos per-entry empty arm",
+        );
+        let c = caixa_with_code_paths(vec![], vec![], vec!["servicos/demo.computeunit.yaml"]);
+        assert!(
+            c.validate_code_paths().is_ok(),
+            "validate_code_paths must accept servicos == \
+             vec![\"servicos/demo.computeunit.yaml\"] (the canonical \
+             singleton V0-shape every in-tree `caixa_with_code_paths` \
+             positive control uses)",
+        );
+    }
+
+    #[test]
+    fn servicos_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::servicos`] returns `&[String]` by
+        // borrow — the returned slice borrows the underlying
+        // `Vec<String>` storage of the `:servicos` slot and the
+        // accessor must not clone the backing `Vec` on every call.
+        // Peer of the per-`Caixa` `autores_projects_slice_by_borrow`
+        // (b5d813f), `etiquetas_projects_slice_by_borrow` (78c7d3c),
+        // `bibliotecas_projects_slice_by_borrow` (8a36c23), and
+        // `exe_projects_slice_by_borrow` (65d9527) by-borrow pins on
+        // the sibling outer top-level [`Caixa`] `&[String]`-return
+        // axes — the accessor's returned slice must borrow from
+        // `&self` (the returned reference's lifetime is tied to
+        // `&self`), and calling the accessor twice on the same
+        // [`Caixa`] must yield slices that are pointer-equal (the
+        // underlying byte-buffer is the storage `Vec`'s allocation,
+        // not a fresh copy) as well as value-equal (idempotent, no
+        // side effects on `&self`).
+        //
+        // Pins against a future silent detour that returned an owned
+        // `Vec<String>` (which would type-check but silently clone on
+        // every call, breaking the zero-cost projection every peer
+        // sibling slice accessor carries), a `&Vec<String>` return
+        // (which would leak the backing `Vec`'s grow/push/reserve
+        // surface no downstream consumer reaches for), or a one-arm-
+        // only accessor that returned a saturating value on some
+        // sentinel input (breaking the pass-through invariant the
+        // sibling slice accessors carry).
+        for servicos in [
+            vec![],
+            vec!["servicos/demo.computeunit.yaml"],
+            vec!["servicos/a.computeunit.yaml", "servicos/b.computeunit.yaml"],
+            vec!["servicos/a.computeunit.yaml", "servicos/a.computeunit.yaml"],
+        ] {
+            let c = caixa_with_code_paths(vec![], vec![], servicos.clone());
+            let expected: Vec<String> = servicos.iter().map(|s| (*s).to_string()).collect();
+            let first = c.servicos();
+            let second = c.servicos();
+            assert_eq!(
+                first, second,
+                "Caixa::servicos must be idempotent — two successive \
+                 calls on the same &self must return the same &[String]",
+            );
+            assert_eq!(
+                first.as_ptr(),
+                second.as_ptr(),
+                "Caixa::servicos must borrow the underlying \
+                 Vec<String> storage — two successive calls must \
+                 return slices with the same backing pointer (a fresh \
+                 Vec<String> clone would change the pointer on every \
+                 call)",
+            );
+            assert_eq!(
+                first,
+                expected.as_slice(),
+                "Caixa::servicos must return :servicos verbatim by \
+                 borrow — got {first:?}, expected {expected:?}",
             );
         }
     }

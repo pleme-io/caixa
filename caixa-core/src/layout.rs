@@ -653,7 +653,7 @@ impl LayoutInvariants for StandardLayout {
         // "missing entry" error first).
         let has_code = !caixa.bibliotecas().is_empty()
             || !caixa.exe().is_empty()
-            || !caixa.servicos.is_empty();
+            || !caixa.servicos().is_empty();
         if caixa.kind() == CaixaKind::Supervisor && has_code {
             return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
         }
@@ -829,7 +829,7 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::BinarioWithoutExe(caixa.nome.clone()));
         }
 
-        if caixa.kind().requires_servicos() && caixa.servicos.is_empty() {
+        if caixa.kind().requires_servicos() && caixa.servicos().is_empty() {
             return Err(LayoutError::ServicoWithoutServicos(caixa.nome.clone()));
         }
 
@@ -858,7 +858,7 @@ impl LayoutInvariants for StandardLayout {
         }
 
         let servicos_dir = root.join(crate::render::LAYOUT_DIR_SERVICOS);
-        for p in &caixa.servicos {
+        for p in caixa.servicos() {
             let full = root.join(p);
             if !self.exists(&full) {
                 return Err(LayoutError::MissingEntry {

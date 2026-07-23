@@ -130,11 +130,11 @@ pub(crate) fn first_servico_path(caixa: &Caixa, root: &std::path::Path) -> Resul
         .with_context(|| "feira chart / feira deploy require :kind Servico")?;
     caixa_core::require_single_servico(caixa)
         .with_context(|| "feira chart / feira deploy require exactly one :servicos entry")?;
-    // After `require_single_servico` guarantees `caixa.servicos.len() == 1`,
+    // After `require_single_servico` guarantees `caixa.servicos().len() == 1`,
     // `.first()` is infallible; the V0 invariant is now a structural
     // property of every verb-entry-point on the per-Servico axis.
     let s = caixa
-        .servicos
+        .servicos()
         .first()
         .expect("require_single_servico guarantees one entry");
     let p = root.join(s);
