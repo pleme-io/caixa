@@ -2048,7 +2048,7 @@ impl ClusterBundleOpts {
             git_ref: GitRefSpec::Tag(format!(
                 "{prefix}{versao}",
                 prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
-                versao = caixa.versao,
+                versao = caixa.versao(),
             )),
         }
     }
@@ -5223,7 +5223,7 @@ spec:
                     &format!(
                         "{prefix}{versao}",
                         prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
-                        versao = caixa.versao,
+                        versao = caixa.versao(),
                     ),
                     "default git_ref tag must compose the lifted prefix \
                      against the caixa's :versao verbatim"
@@ -5239,12 +5239,90 @@ spec:
         let expected_tag = format!(
             "{prefix}{versao}",
             prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
-            versao = caixa.versao,
+            versao = caixa.versao(),
         );
         assert!(
             gr.contents.contains(&format!("tag: {expected_tag:?}")),
             "gitrepository.yaml must spell the lifted-prefix-composed tag \
              at ref.tag (expected: {expected_tag:?}, got: {contents:?})",
+            contents = gr.contents
+        );
+    }
+
+    #[test]
+    fn cluster_bundle_default_git_tag_versao_routes_through_caixa_versao_accessor() {
+        // Emit-path pin: the per-`ClusterBundleOpts::for_caixa`
+        // constructor's default `git_ref: GitRefSpec::Tag(...)` body
+        // and the paired `gitrepository.yaml`'s `ref.tag` scalar must
+        // derive their terminal `{versao}` byte-string through the
+        // typed [`caixa_core::Caixa::versao`] accessor byte-for-byte.
+        // Before this converge the emit site carried a raw
+        // `caixa.versao` `Display` field-access into the
+        // `format!("{prefix}{versao}", ...)` template, bypassing the
+        // typed dispatch. Sibling of the 05a7701 (caixa-helm)
+        // `Caixa::versao` Display-axis converge — this closes the
+        // co-resident `Caixa::versao` Display-axis in caixa-flux the
+        // sibling 4a363bf `Caixa::nome` `String`-carry axis and
+        // 162e2e2 `Caixa::nome` `&str`/Display-axis converges in
+        // this crate already closed on the peer `Caixa::nome`
+        // primitive, so caixa-flux now owns every projection of the
+        // `Caixa::versao` axis through the typed accessor.
+        //
+        // A future extension of the accessor (a SemVer-2
+        // build-metadata canonicalization pass, an OCI-tag
+        // normalization the M4 registry-alignment slot lands, a
+        // per-edition pre-release-tag overlay dispatched through
+        // `Caixa::edicao`) that landed on the accessor but not on
+        // this emit site would silently split the FluxCD
+        // `GitRepository` clone-target `ref.tag` from every other
+        // per-Caixa version-identity consumer (the peer caixa-helm
+        // Chart.yaml `version:` / `appVersion:` and README `Origin`
+        // line, the paired `feira publish` git-tag `v{versao}`
+        // emit) — the source-controller would then resolve a
+        // pre-extension git tag while the paired `HelmRelease` /
+        // Chart.yaml / README carried the post-extension form,
+        // silently freezing every deployed chart at the wrong
+        // per-caixa git snapshot. Pin the equality on the
+        // constructed `GitRefSpec::Tag` body and on the rendered
+        // `gitrepository.yaml`'s `ref: { tag: ... }` field so a
+        // regression that re-inlines the raw `caixa.versao` field
+        // access at either layer (this constructor or the
+        // format-string in [`cluster_bundle`]) surfaces here as a
+        // build-time test failure rather than as a silent
+        // deploy-time `GitRepository` reconcile loop.
+        let caixa = sample_caixa();
+        let opts = ClusterBundleOpts::for_caixa(&caixa, "rio");
+        let expected_tag = format!(
+            "{prefix}{versao}",
+            prefix = caixa_core::DEFAULT_PUBLISH_TAG_PREFIX,
+            versao = caixa.versao(),
+        );
+        match &opts.git_ref {
+            GitRefSpec::Tag(tag) => assert_eq!(
+                tag, &expected_tag,
+                "default git_ref tag must derive its `{{versao}}` \
+                 scalar through the typed `caixa_core::Caixa::versao` \
+                 accessor — a regression that re-inlines \
+                 `caixa.versao` at the constructor site silently \
+                 splits the FluxCD `GitRepository` clone-target \
+                 `ref.tag` from every other per-Caixa \
+                 version-identity consumer"
+            ),
+            other => panic!("expected GitRefSpec::Tag, got {other:?}"),
+        }
+        let files = cluster_bundle(&caixa, &opts).unwrap();
+        let gr = files
+            .iter()
+            .find(|f| f.path == std::path::PathBuf::from(FLUX_GITREPOSITORY_YAML_FILENAME))
+            .expect("gitrepository.yaml present");
+        assert!(
+            gr.contents.contains(&format!("tag: {expected_tag:?}")),
+            "gitrepository.yaml must spell the accessor-derived tag \
+             at ref.tag (expected: {expected_tag:?}, got: {contents:?}) \
+             — a regression that re-inlines `caixa.versao` at the \
+             [`cluster_bundle`] format-string site silently splits \
+             the on-disk Flux v2 `GitRepository` YAML from the \
+             substrate's per-caixa version-identity dispatch",
             contents = gr.contents
         );
     }
