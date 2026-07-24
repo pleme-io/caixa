@@ -2417,6 +2417,92 @@ impl Dep {
         self.nome.as_str()
     }
 
+    /// Substrate-canonical per-`:deps` / `:deps-dev` entry `:versao`
+    /// Cargo-shaped semver-requirement scalar accessor every consumer of
+    /// the dep-graph version-pin axis keys off — returns the author-
+    /// declared `:versao` requirement byte-string verbatim as a `&str`,
+    /// borrowed from the typed slot's own [`String`] storage.
+    ///
+    /// The `:deps :versao` / `:deps-dev :versao` slot carries the
+    /// Cargo-shaped semver requirement string (`"^0.1"`, `"~0.1.2"`,
+    /// `"0.1.0"`, `"*"`) the shared [`crate::version::parse_requirement`]
+    /// entry-point consumes — same accept-set the peer requirement-
+    /// carrying axes carry (per-`:membros`
+    /// [`crate::Membro::versao_requirement`], per-`:children`
+    /// [`crate::supervisor::ChildSpec::versao_requirement`]), validated
+    /// through the shared
+    /// [`crate::render::require_valid_versao_requirement`] cascade in
+    /// [`Self::validate`]. Every downstream consumer that fans on the
+    /// dep's version-pin keys off this scalar: the [`Self::validate`]
+    /// `require_valid_versao_requirement` gate + the paired
+    /// [`DepError::VersaoInvalid`] carrier the cascade raises on
+    /// requirement-shape rejection, the `feira lock` stub-resolver's
+    /// `format!("{}@{}", dep.nome(), dep.versao_requirement())`
+    /// `conteudo` hash-input interpolation and the paired
+    /// `LacreEntry.versao:` `String`-carry fill (`caixa-feira/src/cmd/lock.rs`),
+    /// and the peer `feira lock` end-to-end fixture in `caixa-feira/tests/feira_e2e.rs`.
+    ///
+    /// Prior to this lift the `.versao` byte-string was read inline at
+    /// every production site — the [`Self::validate`] paired
+    /// `&self.versao` requirement-gate reference and `self.versao.clone()`
+    /// error-body carrier, the `caixa-feira/src/cmd/lock.rs` paired
+    /// `format!("{}@{}", dep.nome(), dep.versao)` `conteudo` interpolation
+    /// and `versao: dep.versao.clone()` `LacreEntry` fill, and the
+    /// `caixa-feira/tests/feira_e2e.rs` end-to-end fixture's pair of the
+    /// same shapes — open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:deps :versao` axis to a richer author surface (a per-scope
+    /// version-lock overlay the resolver folds through the
+    /// `~/.config/caixa/config.yaml` entry the [`crate::dep::Dep`]
+    /// docstring already acknowledges, a per-cluster canary-version
+    /// overlay per MESH-COMPOSITION §III.2, a promotion of the plain
+    /// [`String`] requirement to a richer parsed-`VersionReq` newtype
+    /// once cross-registry federation lands) would have had to be
+    /// threaded through every open-coded copy in lockstep or two
+    /// consumers would silently disagree on which release constraint a
+    /// given dep resolves to — the [`Self::validate`] requirement-gate
+    /// call reading `"^0.1"` while the `feira lock` stub-resolver's
+    /// `conteudo` hash-input read `"tenant-a-pin/^0.1"` would silently
+    /// split the [`DepError::VersaoInvalid`] refusal from the lacre's
+    /// content-addressed hash the substrate's fetch pipeline actually
+    /// materializes, one build-time diagnostic disagreeing with the
+    /// run-time closure. Lifting the resolution rule to a typed method
+    /// on the substrate primitive means every downstream consumer of
+    /// the caixa's per-`:deps` version-pin surface reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a
+    /// unit on any future axis addition.
+    ///
+    /// Second accessor on the outer `Dep` type — folds on the outer-
+    /// `Dep` `&str`-return required-scalar projection pattern the
+    /// sibling per-`Dep` [`Self::nome`] (eba2cde) accessor opened. Peer
+    /// of the per-`:membros` [`crate::Membro::versao_requirement`]
+    /// (a40b0e3) / per-`:children`
+    /// [`crate::supervisor::ChildSpec::versao_requirement`] (7844f4e
+    /// family) member/child version-pin accessors — the three
+    /// requirement-carrying axes (`Dep::versao_requirement` on the
+    /// per-caixa dep-graph edge, `Membro::versao_requirement` on the M3
+    /// Aplicacao side, `ChildSpec::versao_requirement` on the M2
+    /// Supervisor side) now share one accessor discipline for the
+    /// shared substrate concept "another caixa referenced by a
+    /// Cargo-shaped semver requirement". The pair
+    /// `(nome(), versao_requirement())` jointly projects the
+    /// `(nome, versao)` field pair every dep-graph consumer that fans
+    /// on per-dep identity + version pin keys off. Named
+    /// `versao_requirement()` rather than `versao()` because the field's
+    /// storage-side `.versao` label is already the author-surface term
+    /// (`:versao`); the accessor's name carries the semantic role — the
+    /// semver *requirement* string the shared
+    /// [`crate::version::parse_requirement`] entry-point consumes — so a
+    /// raw field access and a typed dispatch read differently at every
+    /// consumer site. Matches the peer
+    /// [`crate::Membro::versao_requirement`] /
+    /// [`crate::supervisor::ChildSpec::versao_requirement`] naming
+    /// discipline verbatim.
+    #[must_use]
+    pub fn versao_requirement(&self) -> &str {
+        self.versao.as_str()
+    }
+
     /// Build a minimal registry-sourced dep.
     #[must_use]
     pub fn simple(nome: impl Into<String>, versao: impl Into<String>) -> Self {
@@ -2539,13 +2625,13 @@ impl Dep {
         // parse-side no-op the empty-first arm closes (semver's empty
         // parse yields an implicit `*`) lives in exactly one predicate.
         crate::render::require_valid_versao_requirement(
-            &self.versao,
+            self.versao_requirement(),
             || DepError::VersaoEmpty {
                 nome: self.nome.clone(),
             },
             |reason| DepError::VersaoInvalid {
                 nome: self.nome.clone(),
-                versao: self.versao.clone(),
+                versao: self.versao_requirement().to_string(),
                 reason,
             },
         )?;
@@ -14407,6 +14493,118 @@ mod tests {
         // pointers diverge and this pin fails at build time.
         let d = Dep::simple("caixa-teia", "^0.1");
         assert!(std::ptr::eq(d.nome().as_ptr(), d.nome.as_ptr()));
+    }
+
+    // ── Dep::versao_requirement accessor pins ─────────────────────────
+    //
+    // Three coherence pins on the lifted `Dep::versao_requirement`
+    // accessor: byte-equal projection over the plain-shorthand /
+    // explicit-git / explicit-path fixture triad the [`Dep`] docstring
+    // lists plus the empty-sentinel that round-trips as `""` (the accessor
+    // is a projection, not a gate; the gate is [`Dep::validate`]); by-
+    // borrow pointer identity so the projection stays zero-copy at every
+    // consumer site; and validate-composition through the
+    // [`crate::render::require_valid_versao_requirement`] cascade reading
+    // its requirement-shape check through the lifted accessor rather than
+    // the raw field.
+    #[test]
+    fn dep_versao_requirement_returns_declared_versao_across_fonte_shapes() {
+        // Plain-shorthand form (`:fonte None`).
+        assert_eq!(
+            Dep::simple("caixa-teia", "^0.1").versao_requirement(),
+            "^0.1",
+        );
+        // Explicit git-source form with a tag pin — same accessor path.
+        assert_eq!(
+            Dep::git(
+                "caixa-teia",
+                "~0.1.2",
+                "github:pleme-io/caixa-teia",
+                "v0.1.0"
+            )
+            .versao_requirement(),
+            "~0.1.2",
+        );
+        // Explicit path-source form.
+        assert_eq!(
+            Dep {
+                nome: "caixa-teia".to_string(),
+                versao: "0.1.0".to_string(),
+                fonte: Some(DepSource::Path {
+                    caminho: "../caixa-teia".to_string(),
+                }),
+                opcional: false,
+                caracteristicas: Vec::new(),
+            }
+            .versao_requirement(),
+            "0.1.0",
+        );
+        // The wildcard requirement (`"*"`) — the shorthand
+        // `parse_requirement` accepts as `VersionReq::STAR` — round-trips
+        // verbatim through the accessor as `"*"`, same byte-shape the
+        // author wrote.
+        assert_eq!(Dep::simple("caixa-teia", "*").versao_requirement(), "*");
+        // The empty-string `:versao` sentinel (which [`Dep::validate`]
+        // refuses through the [`DepError::VersaoEmpty`] arm) still round-
+        // trips as an empty `&str` through the accessor — the accessor is
+        // a projection, not a gate; the gate is [`Dep::validate`]. Peer
+        // of the sibling [`Dep::nome`] empty-sentinel round-trip pin.
+        assert_eq!(Dep::simple("caixa-teia", "").versao_requirement(), "");
+    }
+
+    #[test]
+    fn dep_versao_requirement_is_by_borrow_pointer_identity() {
+        // Zero-copy pin: the accessor must borrow into the field's own
+        // storage, not clone. If a future rewrite regresses to
+        // `self.versao.clone().leak()` or an owned-buffer shape, the two
+        // pointers diverge and this pin fails at build time. Peer of the
+        // sibling [`Dep::nome`] pointer-identity pin — same by-borrow
+        // discipline extended onto the requirement-carrying axis.
+        let d = Dep::simple("caixa-teia", "^0.1");
+        assert!(std::ptr::eq(
+            d.versao_requirement().as_ptr(),
+            d.versao.as_ptr(),
+        ));
+    }
+
+    #[test]
+    fn dep_validate_reads_requirement_through_accessor() {
+        // Composition pin: the [`Dep::validate`]
+        // [`crate::render::require_valid_versao_requirement`] cascade
+        // consumes the requirement string through the lifted accessor —
+        // both the requirement-gate input and the
+        // [`DepError::VersaoInvalid`] error-body carrier route through
+        // `self.versao_requirement()`. A valid requirement passes
+        // (positive control); a malformed-but-non-empty requirement fails
+        // and the diagnostic quotes the offending byte-string verbatim
+        // (same shape the accessor projects), so a future regression that
+        // detoured the requirement carrier through a different byte-
+        // string (say the parsed `VersionReq`'s `Display`, or a
+        // normalized rewrite) would surface here at build time. The
+        // empty-`:versao` arm fires the [`DepError::VersaoEmpty`] variant
+        // ahead of the parse arm, pinning the empty-first cascade the
+        // accessor's `""` sentinel round-trip acknowledges.
+        Dep::simple("caixa-teia", "^0.1").validate().unwrap();
+        let err = Dep::simple("caixa-teia", "v0.1").validate().unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                DepError::VersaoInvalid {
+                    nome,
+                    versao,
+                    ..
+                } if nome == "caixa-teia" && versao == "v0.1",
+            ),
+            "expected VersaoInvalid quoting the accessor-projected requirement, got {err:?}",
+        );
+        let err = Dep::simple("caixa-teia", "").validate().unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                DepError::VersaoEmpty { nome } if nome == "caixa-teia",
+            ),
+            "expected VersaoEmpty from the empty-first arm, got {err:?}",
+        );
     }
 
     #[test]
