@@ -120,7 +120,7 @@ pub fn require_kind(caixa: &Caixa, expected: CaixaKind) -> Result<(), KindMismat
         Ok(())
     } else {
         Err(KindMismatch {
-            nome: caixa.nome.clone(),
+            nome: caixa.nome().to_string(),
             expected,
             actual: caixa.kind(),
         })
@@ -216,7 +216,7 @@ pub fn require_single_servico(caixa: &Caixa) -> Result<(), ServicoCountMismatch>
         Ok(())
     } else {
         Err(ServicoCountMismatch {
-            nome: caixa.nome.clone(),
+            nome: caixa.nome().to_string(),
             count: caixa.servicos().len(),
         })
     }
@@ -27285,6 +27285,50 @@ mod tests {
     }
 
     #[test]
+    fn require_kind_routes_offending_nome_via_caixa_nome_accessor() {
+        // Pin: the [`KindMismatch::nome`] `String` the constructor
+        // writes must be a byte-identical copy of what the lifted
+        // [`crate::Caixa::nome`] accessor returns for the same
+        // [`Caixa`] input — the same discipline the sibling
+        // [`crate::LayoutInvariants::verify`] wrap-envelope emitters
+        // pin at 9842a4b's `expected_nome_via_accessor` line (the
+        // routing pin the 31-site converge introduced on the substrate's
+        // own layout-invariant verifier's per-axis diagnostic emitters).
+        //
+        // Guardrails a future regression that re-inlines the raw
+        // `caixa.nome.clone()` `String::clone()` of the underlying
+        // field at the constructor site — the accessor's borrow
+        // return + typed `.to_string()` `String` promotion is the
+        // one canonical shape the substrate's own [`KindMismatch`]
+        // typed-view constructor carries onto every downstream
+        // renderer's `Error::From<KindMismatch>` `#[from]` arm, so
+        // any drift (a byte-non-identical shape, e.g. a future
+        // `CaixaNome` newtype the [`crate::Caixa::nome`] accessor
+        // upgrades to project the display byte-string of, that
+        // `.nome.clone()` would silently ignore) surfaces here
+        // before the drift lands on a per-renderer `#[from]` arm.
+        let mut c = bare_servico();
+        c.kind = CaixaKind::Biblioteca;
+        c.servicos = vec![];
+        c.nome = "kind-mismatch-pin".into();
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "kind-mismatch-pin",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before the kind-mismatch gate fires",
+        );
+        let err = require_kind(&c, CaixaKind::Servico).unwrap_err();
+        assert_eq!(
+            err.nome, expected_nome_via_accessor,
+            "the KindMismatch's `nome` field must equal \
+             `caixa.nome().to_string()` — the typed-view constructor \
+             must route through the lifted [`Caixa::nome`] accessor's \
+             `.to_string()` extension, not the raw `caixa.nome.clone()` \
+             `String::clone()` of the underlying field",
+        );
+    }
+
+    #[test]
     fn kind_mismatch_display_names_offending_caixa_nome() {
         // The Display impl is the load-bearing surface every renderer's
         // `#[error("{0}")] NotAXKind(#[from] KindMismatch)` arm prints
@@ -27381,6 +27425,39 @@ mod tests {
         let err = require_single_servico(&c).unwrap_err();
         assert_eq!(err.nome, "hello-rio");
         assert_eq!(err.count, 2);
+    }
+
+    #[test]
+    fn require_single_servico_routes_offending_nome_via_caixa_nome_accessor() {
+        // Peer to the sibling
+        // [`require_kind_routes_offending_nome_via_caixa_nome_accessor`]
+        // pin on the V0 Servico-shape gate's `:nome`-carry axis:
+        // the [`ServicoCountMismatch::nome`] `String` the constructor
+        // writes must be a byte-identical copy of what the lifted
+        // [`crate::Caixa::nome`] accessor returns. Same 9842a4b-shaped
+        // routing pin the substrate's own [`crate::LayoutInvariants::verify`]
+        // wrap-envelope emitters carry, extended here to the second of
+        // the two [`crate::render`]-module typed-view constructor sites
+        // that carried a raw `caixa.nome.clone()` `String::clone()`
+        // field access at the pre-converge state.
+        let mut c = bare_servico();
+        c.servicos = vec![];
+        c.nome = "servico-count-pin".into();
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "servico-count-pin",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before the servico-count gate fires",
+        );
+        let err = require_single_servico(&c).unwrap_err();
+        assert_eq!(
+            err.nome, expected_nome_via_accessor,
+            "the ServicoCountMismatch's `nome` field must equal \
+             `caixa.nome().to_string()` — the typed-view constructor \
+             must route through the lifted [`Caixa::nome`] accessor's \
+             `.to_string()` extension, not the raw `caixa.nome.clone()` \
+             `String::clone()` of the underlying field",
+        );
     }
 
     #[test]
