@@ -989,7 +989,7 @@ fn build_readme(caixa: &Caixa, chart_name: &str) -> String {
         chart_name = chart_name,
         descricao = descricao,
         repo = caixa.repositorio().unwrap_or(caixa.nome()),
-        versao = caixa.versao,
+        versao = caixa.versao(),
         license = caixa.licenca().unwrap_or("MIT"),
     )
 }
@@ -2976,6 +2976,48 @@ spec:
              Servico {{}}\", caixa.nome)` at the emit site silently \
              splits the README fallback-descricao axis from every future \
              accessor extension. Full contents:\n{contents}",
+            contents = readme_file.contents,
+        );
+    }
+
+    #[test]
+    fn readme_body_version_routes_through_caixa_versao_accessor() {
+        // Emit-path pin: the per-`README.md` `Origin` line the
+        // [`build_readme`] fn writes carries the terminal
+        // `v{versao}` scalar the `feira chart` Nord-themed emit
+        // round-trips through — that scalar must derive from the
+        // typed [`caixa_core::Caixa::versao`] accessor byte-for-byte.
+        // Before this converge the emit site carried a raw
+        // `caixa.versao` `Display` field-access, bypassing the
+        // typed accessor. Sibling of the 162e2e2 (caixa-flux) /
+        // 980c059 (caixa-mesh) / 22461ef (caixa-helm) `Caixa::nome`
+        // Display-axis converges — this closes the co-resident
+        // `Caixa::versao` Display-axis in caixa-helm the eb912de
+        // `caixa.versao().to_string()` `String`-carry converge
+        // left open on the read-only Display-borrow arm. Byte-equal
+        // today (the accessor is `&self.versao`); the pin catches
+        // any future accessor extension (SemVer-2 build-metadata
+        // canonicalization, OCI-tag normalization, per-edition
+        // pre-release-tag overlay) whose emit-side Display regresses
+        // to the raw field.
+        let caixa = sample_caixa();
+        let dir = render_chart_for_servico(&caixa, &sample_cu_yaml()).unwrap();
+        let readme_file = dir
+            .files
+            .iter()
+            .find(|f| f.path == PathBuf::from(HELM_CHART_README_FILENAME))
+            .expect("README.md present");
+        let expected = format!("caixa.lisp` v{}.", caixa.versao());
+        assert!(
+            readme_file.contents.contains(&expected),
+            "README.md `Origin`-line `v{{versao}}` scalar must derive from \
+             the typed `caixa_core::Caixa::versao` accessor byte-for-byte \
+             ({expected:?}) — a regression that re-inlines `caixa.versao` \
+             in the format silently splits the README origin-line version \
+             axis from every future accessor extension (SemVer-2 \
+             build-metadata canonicalization, OCI-tag normalization, \
+             per-edition pre-release-tag overlay) that lands on the \
+             accessor. Full contents:\n{contents}",
             contents = readme_file.contents,
         );
     }
