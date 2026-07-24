@@ -2714,6 +2714,102 @@ impl Dep {
         self.caracteristicas.as_slice()
     }
 
+    /// Substrate-canonical per-`:deps` / `:deps-dev` entry `:opcional`
+    /// missing-source-tolerance flag scalar accessor every consumer of
+    /// the dep-graph opt-in-fetch axis keys off — returns the author-
+    /// declared `:opcional` `bool` verbatim, `Copy`-projected from the
+    /// typed slot's own `bool` storage (no borrow of `&self` past the
+    /// call; the `Copy`-return arm matches the peer
+    /// [`crate::Caixa::max_restarts`] (eba5211) `Option<u32>` `Copy`-
+    /// projected sibling discipline the outer flat-spread family
+    /// already carries). Default-`false` (`#[serde(default,
+    /// skip_serializing_if = "is_false")]` on the storage slot, so a
+    /// `Dep` past parse definitionally carries a `bool` — `false` when
+    /// the author omits `:opcional` — and the returned value degenerates
+    /// to `false` on that arm without any silent `None` collapse).
+    ///
+    /// The `:deps :opcional` / `:deps-dev :opcional` slot carries the
+    /// per-entry "if this dep's `:fonte` cannot be resolved, treat the
+    /// missing-source arm as a soft-fail rather than a build refusal"
+    /// bit — the same Cargo-shaped `[dependencies.<dep>.optional = true]`
+    /// accept-set (an opcional dep whose `:fonte` fails to resolve is
+    /// dropped from the resolved dep-graph rather than tripping the
+    /// build-refusal edge that a mandatory `:opcional false` entry
+    /// would). Every downstream consumer that fans on the dep's
+    /// missing-source-tolerance keys off this accessor: the future
+    /// caixa-resolver's per-`:fonte` resolve-fail arm (drop-vs-error
+    /// dispatch on the opcional bit ahead of the lacre closure
+    /// materialization), the future caixa-crd per-`spec.deps`
+    /// `optional` boolean the K8s-CR admission gate consumes on the
+    /// per-dep partition, and the future feira / caixa-resolver /
+    /// caixa-crd feature-projection walk that folds the opcional bit
+    /// into the resolved feature-closure the future M4 lacre-federation
+    /// layer emits.
+    ///
+    /// Prior to this lift the `.opcional` `bool` slot was read inline
+    /// at the sole in-crate consumer site — the tests-module
+    /// `registry_dep_is_minimal` fixture's `assert!(!d.opcional)` gate
+    /// pinning the [`Self::simple`] constructor's default-`false` fill
+    /// (the only in-crate read of the raw field beyond the per-`Dep`
+    /// constructor pair [`Self::simple`] / [`Self::git`] and the paired
+    /// serde round-trip / per-test fixture-mutation paths) — an open-
+    /// coded field-access that expressed no compile-time link back to
+    /// the typed slot. A future extension of the `:opcional` axis to a
+    /// richer author surface (a per-scope opcional-override the resolver
+    /// folds through the `~/.config/caixa/config.yaml` entry the [`Dep`]
+    /// docstring already acknowledges, a per-cluster opcional-override
+    /// the future M4 lacre-federation layer applies per-CR, a promotion
+    /// of the plain `bool` to a richer `OpcionalPolicy { drop, warn,
+    /// error }` tri-state once the CAIXA-SDLC §II opcional-policy
+    /// roadmap lands) would have had to be threaded through every open-
+    /// coded copy in lockstep or two consumers would silently disagree
+    /// on which missing-source arm a given dep resolves to — the
+    /// [`Self::simple`] constructor's default-`false` fill reading
+    /// verbatim while a downstream caixa-resolver consumer read a per-
+    /// scope-override-resolved bit would silently split the build-time
+    /// arm from the lacre closure the substrate's fetch pipeline
+    /// actually materializes, one build-time diagnostic disagreeing
+    /// with the run-time closure. Lifting the resolution rule to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the caixa's per-`:deps` opcional-tolerance surface
+    /// reaches for exactly one typed dispatch — the resolver's accept-
+    /// set migrates as a unit on any future axis addition.
+    ///
+    /// Fifth and final outer-`Dep` accessor — closes the outer-`Dep`
+    /// slot-family the sibling per-`Dep` [`Self::nome`] (eba2cde) /
+    /// [`Self::versao_requirement`] (05529b1) / [`Self::fonte`] (d65d1bf)
+    /// / [`Self::caracteristicas`] (9197944) accessors opened, so every
+    /// outer-`Dep` slot (`:nome`, `:versao`, `:fonte`, `:opcional`,
+    /// `:caracteristicas`) now routes through exactly one typed
+    /// dispatch on the substrate primitive. First outer-`Dep`
+    /// `bool`-return / plain-`Copy`-scalar accessor — opens the
+    /// outer-`Dep` `Copy`-scalar projection pattern that folds on the
+    /// peer outer-top-level [`crate::Caixa`] `Option<Copy>`
+    /// flat-spread sub-family ([`crate::Caixa::max_restarts`] eba5211,
+    /// [`crate::Caixa::estrategia`] ed04d3c) the outer-`Caixa` altitude
+    /// already carries — extends the "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline onto the outer per-dep-list-entry [`Dep`] altitude's
+    /// bool-shaped missing-source-tolerance slot. Returns `bool` by
+    /// `Copy` (not by `&bool` reference) because `bool` is `Copy` and
+    /// every downstream consumer treats it as a plain discriminant
+    /// value — the by-value return is the narrowest return-shape that
+    /// supports every present + roadmapped consumer (`.then(…)` early
+    /// return on the resolver-side drop-vs-error partition, direct
+    /// bool composition with a per-scope-override projector, plain
+    /// `if dep.opcional() { … }` early return at every future admission
+    /// gate) without leaking the storage field's `bool`-in-`&self`
+    /// lifetime the by-value return elides. Marked `pub const fn` so
+    /// the accessor is `const`-callable — same discipline the peer
+    /// [`crate::Caixa::max_restarts`] `Option<u32>` `Copy`-return
+    /// accessor carries. Named `opcional()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:opcional`) the field's own docstring already carries.
+    #[must_use]
+    pub const fn opcional(&self) -> bool {
+        self.opcional
+    }
+
     /// Build a minimal registry-sourced dep.
     #[must_use]
     pub fn simple(nome: impl Into<String>, versao: impl Into<String>) -> Self {
@@ -3984,7 +4080,7 @@ mod tests {
         assert_eq!(d.nome, "caixa-teia");
         assert_eq!(d.versao, "^0.1");
         assert!(d.fonte.is_none());
-        assert!(!d.opcional);
+        assert!(!d.opcional());
         assert!(d.caracteristicas().is_empty());
     }
 
@@ -15108,5 +15204,133 @@ mod tests {
             ),
             "expected CaracteristicaDuplicate from the accessor-routed dedup, got {err:?}",
         );
+    }
+
+    // ── Dep::opcional accessor pins ───────────────────────────────────
+    //
+    // Two coherence pins on the lifted `Dep::opcional` accessor: byte-
+    // equal projection over the default-`false` / explicit-`true`
+    // fixture pair across the plain-shorthand (`:fonte None`) / explicit-
+    // git-tag / explicit-path fixture triad the [`Dep`] docstring lists,
+    // exercising the accessor's accept-set over every author-surface
+    // `:fonte` shape × every author-surface `:opcional` shape; and by-
+    // `Copy` idempotency so the projection stays value-return (no
+    // silent detour to a fresh `&bool` borrow that would introduce a
+    // lifetime on the return type the plain-`Copy`-scalar axis's `bool`
+    // shape elides). No composition pin — `:opcional` does not
+    // participate in [`Dep::validate`] (an opcional dep with any bool
+    // value is validate-accepted; the missing-source arm is a resolver-
+    // side runtime dispatch, not a build-time refusal), so the axis
+    // reduces to the value-shape + `Copy` pin pair the peer
+    // [`crate::Caixa::max_restarts`] / [`crate::Caixa::estrategia`]
+    // outer-`Option<Copy>` accessor pins already carry.
+
+    #[test]
+    fn dep_opcional_returns_declared_opcional_across_fonte_shapes() {
+        // Default-`false` form via the [`Dep::simple`] constructor —
+        // the accessor projects the `false` bit the default-fill sets.
+        assert!(!Dep::simple("caixa-teia", "^0.1").opcional());
+        // Default-`false` form via the [`Dep::git`] constructor — same
+        // default fill; the accessor projects `false` regardless of the
+        // `:fonte` arm.
+        assert!(!Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0").opcional(),);
+        // Explicit-`true` form × plain-shorthand `:fonte` — the
+        // canonical author-surface "this dep may be missing" shape.
+        let plain_true = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: true,
+            caracteristicas: Vec::new(),
+        };
+        assert!(plain_true.opcional());
+        // Explicit-`true` form × explicit git-source — the accessor
+        // projects the bit verbatim regardless of the `:fonte` arm.
+        let git_true = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: Some(DepSource::Git {
+                repo: "github:pleme-io/caixa-teia".to_string(),
+                tag: Some("v0.1.0".to_string()),
+                rev: None,
+                branch: None,
+            }),
+            opcional: true,
+            caracteristicas: Vec::new(),
+        };
+        assert!(git_true.opcional());
+        // Explicit-`true` form × explicit path-source — the dev-only
+        // local-filesystem arm the [`Dep`] docstring's third fixture
+        // carries.
+        let path_true = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "0.1.0".to_string(),
+            fonte: Some(DepSource::Path {
+                caminho: "../caixa-teia".to_string(),
+            }),
+            opcional: true,
+            caracteristicas: Vec::new(),
+        };
+        assert!(path_true.opcional());
+    }
+
+    #[test]
+    fn dep_opcional_projects_bool_by_copy() {
+        // The by-`Copy` pin: [`Dep::opcional`] returns `bool` by value
+        // (`bool: Copy`) — the accessor does not borrow `&self` past
+        // the call (no lifetime on the return type), and calling the
+        // accessor twice on the same [`Dep`] must yield discriminant-
+        // equal values (idempotent, no side effects on `&self`). Peer
+        // of the sibling outer-`Caixa` `Option<Copy>` by-`Copy`
+        // `max_restarts_projects_option_by_copy` (eba5211) /
+        // `estrategia_projects_option_by_copy` (ed04d3c) pins on the
+        // outer-`Caixa` altitude — extended here to the outer-`Dep`
+        // altitude's plain-`Copy` `bool` axis. The `Copy` discipline
+        // replaces the pointer-equality claim the sibling per-`Dep`
+        // by-borrow pins (`dep_nome_is_by_borrow_pointer_identity`
+        // eba2cde, `dep_versao_requirement_is_by_borrow_pointer_identity`
+        // 05529b1, `dep_fonte_is_by_borrow_pointer_identity` d65d1bf,
+        // `dep_caracteristicas_is_by_borrow_pointer_identity` 9197944)
+        // carry (a fresh `Copy` of a `Copy` discriminant is definitionally
+        // the same discriminant, so the axis reduces to discriminant
+        // equality).
+        //
+        // Pins against a future silent detour that returned a fresh
+        // `&bool` reference (which would type-check but silently
+        // introduce a borrow of `&self` past the call, collapsing the
+        // load-bearing "no lifetime on the return type" `Copy`
+        // projection the plain-`Copy`-scalar axis's `bool` shape
+        // carries) or a stale-read side effect that flipped the outer
+        // discriminant on successive calls.
+        for opcional in [false, true] {
+            let d = Dep {
+                nome: "caixa-teia".to_string(),
+                versao: "^0.1".to_string(),
+                fonte: None,
+                opcional,
+                caracteristicas: Vec::new(),
+            };
+            let first = d.opcional();
+            let second = d.opcional();
+            assert_eq!(
+                first, second,
+                "Dep::opcional must be idempotent — two successive calls \
+                 on the same &self must return the same bool",
+            );
+            assert_eq!(
+                first, opcional,
+                "Dep::opcional must return :opcional verbatim by Copy — \
+                 got {first}, expected {opcional}",
+            );
+            assert_eq!(
+                d.opcional(),
+                d.opcional,
+                "Dep::opcional accessor and self.opcional field access \
+                 must byte-equal — a bit-flip drift would silently split \
+                 the paired resolver-side drop-vs-error dispatch from \
+                 the storage-side default-fill the [`Dep::simple`] / \
+                 [`Dep::git`] constructor pair carries",
+            );
+        }
     }
 }
