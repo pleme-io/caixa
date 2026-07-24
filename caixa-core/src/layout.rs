@@ -1113,7 +1113,24 @@ impl LayoutInvariants for StandardLayout {
             // diagnostics surface first; a self-referential child is
             // always a valid DNS-1123 label (it equals the already-valid
             // `:nome`), so this ordering never masks a narrower defect.
-            crate::supervisor::validate_no_self_supervision(caixa.children(), &caixa.nome)
+            //
+            // Routes the `parent_nome` arg through the typed
+            // [`Caixa::nome`] accessor (`caixa.nome()`) rather than
+            // the raw `&caixa.nome` `&String`-borrow of the underlying
+            // field — same one-typed-dispatch-per-`:nome`-consumer
+            // discipline the sibling caixa-mesh (980c059) / caixa-helm
+            // (22461ef) / caixa-flux (162e2e2) / caixa-crd (61d3429) /
+            // caixa-feira (ef83332) `caixa.nome`-arg raw-borrow converges
+            // established on the peer renderer / CR-materializer / CLI
+            // crates, extended here onto the substrate's own
+            // [`LayoutInvariants::verify`] cross-slot self-edge gate
+            // wire-up on the supervisor-tree kind arm — the
+            // [`crate::supervisor::validate_no_self_supervision`] helper
+            // accepts `parent_nome: &str`, so the accessor's `&str`
+            // return threads through without an intermediate deref-
+            // coerce, closing the raw `&caixa.nome` arg-passing axis at
+            // this call site.
+            crate::supervisor::validate_no_self_supervision(caixa.children(), caixa.nome())
                 .map_err(|err| LayoutError::SupervisorViolation {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),
@@ -1147,7 +1164,26 @@ impl LayoutInvariants for StandardLayout {
             // those two axes — every validated `:contratos` edge and
             // every validated `:entrada :para` cannot name the
             // Aplicacao itself, without re-deriving the partition.
-            crate::aplicacao::validate_no_self_membership(caixa.membros(), &caixa.nome).map_err(
+            //
+            // Routes the `parent_nome` arg through the typed
+            // [`Caixa::nome`] accessor (`caixa.nome()`) rather than
+            // the raw `&caixa.nome` `&String`-borrow of the underlying
+            // field — peer of the sibling supervision-tree-arm
+            // [`crate::supervisor::validate_no_self_supervision`] arg
+            // converge immediately above on the same
+            // [`LayoutInvariants::verify`] cross-slot self-edge gate
+            // wire-up, extended here onto the Aplicacao-kind arm. Both
+            // per-kind arms now key off exactly one typed dispatch on
+            // the substrate primitive for the parent-`:nome` self-edge
+            // arg, closing the raw `&caixa.nome` arg-passing axis on
+            // the cross-slot self-edge gate wire-up across both
+            // typed-name-graph kinds ([`crate::supervisor::validate_no_self_supervision`]
+            // on the supervision tree, this call on the Aplicacao
+            // graph). The [`crate::aplicacao::validate_no_self_membership`]
+            // helper accepts `parent_nome: &str`, so the accessor's
+            // `&str` return threads through without an intermediate
+            // deref-coerce.
+            crate::aplicacao::validate_no_self_membership(caixa.membros(), caixa.nome()).map_err(
                 |err| LayoutError::AplicacaoViolation {
                     caixa: caixa.nome.clone(),
                     issue: err.to_string(),
@@ -3896,6 +3932,116 @@ mod tests {
             restart: RestartPolicy::Permanent,
         }];
         layout.verify(&c, &root).unwrap();
+    }
+
+    #[test]
+    fn cross_slot_self_edge_gates_route_parent_nome_through_lifted_accessor() {
+        // Composition pin: both cross-slot self-edge gates fired from
+        // `LayoutInvariants::verify` — the supervision-tree arm's
+        // `crate::supervisor::validate_no_self_supervision` call and the
+        // Aplicacao arm's `crate::aplicacao::validate_no_self_membership`
+        // call — must key their `parent_nome` arg off the typed
+        // [`Caixa::nome`] accessor, not the raw `&caixa.nome`
+        // `&String`-borrow of the underlying field.
+        //
+        // Structurally: a rename of the storage field or a hypothetical
+        // accessor rebrand (a per-cluster alias table pinned through a
+        // future `:placement`-scoped slot, the M4 CR materializer's
+        // per-CR namespace-qualified rewrite, a `:nome-suffix` overlay
+        // the MESH-COMPOSITION §III.2 roadmap acknowledges) would land
+        // through the accessor by construction; a raw-borrow bypass
+        // would silently disagree with every peer consumer that already
+        // routes through `caixa.nome()` (the caixa-mesh 980c059,
+        // caixa-helm 22461ef, caixa-flux 162e2e2, caixa-crd 61d3429,
+        // caixa-feira ef83332 raw-borrow converges), reintroducing the
+        // drift surface the sibling converges closed. Both arms fire
+        // their per-kind `LayoutError` variant (`SupervisorViolation` /
+        // `AplicacaoViolation`) whose `caixa` field carries the offending
+        // parent name verbatim through `caixa.nome().clone()`; asserting
+        // the field equals `caixa.nome()` on the mutated fixture pins
+        // the accessor-routed parent-nome projection at both call sites
+        // — a future silent detour that had the gate observe a stale /
+        // aliased name at the arg boundary would surface here as a
+        // `caixa != "demo"` inequality.
+        //
+        // Peer of the sibling per-caixa-crate `nome`-arg raw-borrow
+        // convergence pin discipline (54bf2f3 / 22461ef / 162e2e2 on the
+        // renderer crates; ef83332 on the CLI) — extends the "one typed
+        // dispatch per `:nome` consumer" discipline onto the substrate's
+        // own [`LayoutInvariants::verify`] cross-slot self-edge gate
+        // wire-up on both typed-name-graph kinds.
+        use crate::{
+            ChildSpec, Membro, Placement, PlacementStrategy, RestartPolicy, RestartStrategy,
+        };
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+
+        // Supervisor arm — the `caixa()` helper's `:nome` is "demo",
+        // and the accessor's return `caixa.nome()` must equal the
+        // parent-nome that the self-supervision gate observes.
+        let mut sup = caixa(CaixaKind::Supervisor);
+        sup.estrategia = Some(RestartStrategy::OneForOne);
+        sup.max_restarts = Some(5);
+        sup.children = vec![ChildSpec {
+            caixa: "demo".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let parent_nome_via_accessor = sup.nome();
+        assert_eq!(
+            parent_nome_via_accessor, "demo",
+            "the caixa() fixture helper's `:nome` must be \"demo\" — \
+             the accessor's return is the pin's ground truth for the \
+             cross-slot gate's parent-nome arg",
+        );
+        let err = layout.verify(&sup, &root).unwrap_err();
+        let LayoutError::SupervisorViolation { caixa: c_nome, .. } = err else {
+            panic!("expected SupervisorViolation for self-referential child, got {err:?}");
+        };
+        assert_eq!(
+            c_nome, parent_nome_via_accessor,
+            "the SupervisorViolation's `caixa` field must equal \
+             `sup.nome()` — the cross-slot self-supervision gate's \
+             `parent_nome` arg must route through the lifted \
+             [`Caixa::nome`] accessor, not the raw `&caixa.nome` \
+             `&String`-borrow of the underlying field",
+        );
+
+        // Aplicacao arm — same discipline on the peer typed-name-graph
+        // kind. Constructed alongside the supervisor arm so any future
+        // accessor drift lands on both arms in the same pin.
+        let mut app = caixa(CaixaKind::Aplicacao);
+        app.placement = Some(Placement {
+            estrategia: PlacementStrategy::Replicated,
+            clusters: vec!["rio".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        app.membros = vec![Membro {
+            caixa: "demo".into(),
+            versao: "^0.1".into(),
+        }];
+        let parent_nome_via_accessor = app.nome();
+        assert_eq!(
+            parent_nome_via_accessor, "demo",
+            "the caixa() fixture helper's `:nome` must be \"demo\" on \
+             the Aplicacao arm too — same accessor-ground-truth as the \
+             sibling supervisor arm above",
+        );
+        let err = layout.verify(&app, &root).unwrap_err();
+        let LayoutError::AplicacaoViolation { caixa: c_nome, .. } = err else {
+            panic!("expected AplicacaoViolation for self-referential membro, got {err:?}");
+        };
+        assert_eq!(
+            c_nome, parent_nome_via_accessor,
+            "the AplicacaoViolation's `caixa` field must equal \
+             `app.nome()` — the cross-slot self-membership gate's \
+             `parent_nome` arg must route through the lifted \
+             [`Caixa::nome`] accessor, not the raw `&caixa.nome` \
+             `&String`-borrow of the underlying field",
+        );
     }
 
     #[test]
