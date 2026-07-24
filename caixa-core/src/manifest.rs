@@ -3134,7 +3134,7 @@ impl Caixa {
     /// caixa isn't a `:kind Aplicacao`.
     #[must_use]
     pub fn aplicacao_view(&self) -> Option<crate::aplicacao::AplicacaoSpec> {
-        if self.kind() != CaixaKind::Aplicacao {
+        if !self.kind().is_aplicacao() {
             return None;
         }
         Some(crate::aplicacao::AplicacaoSpec {
@@ -4616,7 +4616,7 @@ impl Caixa {
     /// consume.
     #[must_use]
     pub fn supervisor_view(&self) -> Option<SupervisorSpec> {
-        if self.kind() != CaixaKind::Supervisor {
+        if !self.kind().is_supervisor() {
             return None;
         }
         // Fold through the shared `supervisor::duration_codec::parse`
