@@ -52,7 +52,7 @@ pub fn resolve_lacre(
     let mut resolved: BTreeMap<String, ResolvedDep> = BTreeMap::new();
 
     while let Some((dep, from)) = queue.pop_front() {
-        if !seen.insert(dep.nome.clone()) {
+        if !seen.insert(dep.nome().to_string()) {
             continue;
         }
         let fetched = fetch_dep(&dep, cfg, cache).map_err(|e| match e {
@@ -60,10 +60,10 @@ pub fn resolve_lacre(
             other => other,
         })?;
         for t in &fetched.child_deps {
-            queue.push_back((t.clone(), dep.nome.clone()));
+            queue.push_back((t.clone(), dep.nome().to_string()));
         }
         resolved.insert(
-            dep.nome.clone(),
+            dep.nome().to_string(),
             ResolvedDep {
                 dep,
                 child_deps: fetched.child_deps,
@@ -88,7 +88,7 @@ pub fn resolve_lacre(
             let child_closures: Option<Vec<String>> = r
                 .child_deps
                 .iter()
-                .map(|c| fechamento.get(&c.nome).cloned())
+                .map(|c| fechamento.get(c.nome()).cloned())
                 .collect();
             if let Some(closures) = child_closures {
                 fechamento.insert(name.clone(), closure_hash(&r.conteudo, &closures));
@@ -105,15 +105,15 @@ pub fn resolve_lacre(
     let entries: Vec<LacreEntry> = resolved
         .values()
         .map(|r| LacreEntry {
-            nome: r.dep.nome.clone(),
+            nome: r.dep.nome().to_string(),
             versao: r.concrete_versao.clone(),
             fonte: r.resolved_fonte.clone(),
             conteudo: r.conteudo.clone(),
             fechamento: fechamento
-                .get(&r.dep.nome)
+                .get(r.dep.nome())
                 .cloned()
                 .unwrap_or_else(|| hash_bytes(b"unresolved")),
-            deps_diretas: r.child_deps.iter().map(|c| c.nome.clone()).collect(),
+            deps_diretas: r.child_deps.iter().map(|c| c.nome().to_string()).collect(),
         })
         .collect();
 
@@ -144,7 +144,7 @@ fn fetch_dep(
     let fonte = dep.fonte.clone().unwrap_or_else(|| {
         let (host, org) = split_default_host(&cfg.default_host);
         DepSource::Git {
-            repo: format!("{host}:{org}/{}", dep.nome),
+            repo: format!("{host}:{org}/{}", dep.nome()),
             tag: None,
             rev: None,
             branch: None,
@@ -174,7 +174,7 @@ fn fetch_path(dep: &Dep, caminho: &str) -> Result<FetchedDep, ResolveError> {
     let path = PathBuf::from(caminho);
     if !path.exists() {
         return Err(ResolveError::MissingPath {
-            nome: dep.nome.clone(),
+            nome: dep.nome().to_string(),
             path,
         });
     }
@@ -203,7 +203,7 @@ fn fetch_git(
         .or(tag)
         .or(branch)
         .ok_or_else(|| ResolveError::MissingPin {
-            nome: dep.nome.clone(),
+            nome: dep.nome().to_string(),
         })?;
     let full_url = expand_shorthand(repo);
     let key_bytes = format!("{full_url}#{gitref}");

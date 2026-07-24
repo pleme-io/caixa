@@ -40,12 +40,12 @@ fn init_add_lock_build_cycle() {
         .deps
         .iter()
         .map(|dep| {
-            let conteudo = hash_bytes(format!("{}@{}", dep.nome, dep.versao).as_bytes());
+            let conteudo = hash_bytes(format!("{}@{}", dep.nome(), dep.versao).as_bytes());
             let fechamento = closure_hash(&conteudo, &[]);
             LacreEntry {
-                nome: dep.nome.clone(),
+                nome: dep.nome().to_string(),
                 versao: dep.versao.clone(),
-                fonte: caixa_core::DepSource::default_github("pleme-io", &dep.nome),
+                fonte: caixa_core::DepSource::default_github("pleme-io", dep.nome()),
                 conteudo,
                 fechamento,
                 deps_diretas: Vec::new(),

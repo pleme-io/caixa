@@ -3437,19 +3437,17 @@ impl Caixa {
         let mut seen = std::collections::HashSet::new();
         for dep in self.deps() {
             dep.validate()?;
-            crate::render::insert_first_seen(&mut seen, dep.nome.as_str(), || {
-                DepError::DuplicateNome {
-                    nome: dep.nome.clone(),
-                    list: crate::render::DEP_AUTHOR_KEY_DEPS,
-                }
+            crate::render::insert_first_seen(&mut seen, dep.nome(), || DepError::DuplicateNome {
+                nome: dep.nome().to_string(),
+                list: crate::render::DEP_AUTHOR_KEY_DEPS,
             })?;
         }
         let mut seen_dev = std::collections::HashSet::new();
         for dep in self.deps_dev() {
             dep.validate()?;
-            crate::render::insert_first_seen(&mut seen_dev, dep.nome.as_str(), || {
+            crate::render::insert_first_seen(&mut seen_dev, dep.nome(), || {
                 DepError::DuplicateNome {
-                    nome: dep.nome.clone(),
+                    nome: dep.nome().to_string(),
                     list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
                 }
             })?;
