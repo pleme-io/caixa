@@ -2342,6 +2342,81 @@ impl DepSource {
 }
 
 impl Dep {
+    /// Substrate-canonical per-`:deps` / `:deps-dev` entry `:nome` scalar
+    /// accessor every consumer of the dep-graph identity axis keys off —
+    /// returns the author-declared `:nome` byte-string verbatim as a
+    /// `&str`, borrowed from the typed slot's own [`String`] storage.
+    ///
+    /// The `:deps :nome` / `:deps-dev :nome` slot carries the DNS-1123
+    /// label that names the target caixa (validated by [`Self::validate`]
+    /// through the shared [`crate::render::is_dns_1123_label`] predicate,
+    /// same accept-set the peer caixa-identifier axes carry — top-level
+    /// [`crate::Caixa::nome`], per-`:membros` [`crate::Membro::nome`],
+    /// per-`:children` [`crate::supervisor::ChildSpec::nome`]). Every
+    /// downstream consumer that fans on the dep's name-identity keys off
+    /// this scalar: the [`crate::Caixa::validate_deps`] per-list
+    /// [`crate::render::insert_first_seen`] dedup key + the paired
+    /// [`DepError::DuplicateNome`] carrier the walk raises on collision,
+    /// the cross-list [`validate_no_self_dep`] parent-name equality gate
+    /// on both `:deps` and `:deps-dev` traversals, the `caixa-resolver`
+    /// pipeline's `HashSet<String>` seen-set the closure walker gates
+    /// requeueing off (`caixa-resolver/src/resolve.rs:55`), the resolver's
+    /// per-transitive-target requeue path (`resolve.rs:63,66`), the
+    /// [`crate::DepSource::default_github`]-shaped resolver-side shorthand
+    /// fill-in that folds `:nome` into the fetched-git-URL (`resolve.rs:147`),
+    /// every `caixa-resolver` `ResolveError::MissingPath` /
+    /// `ResolveError::MissingPin` carrier that names the offending dep
+    /// (`resolve.rs:177,206`), each resolved
+    /// `caixa-lacre::LacreEntry` `nome:` field the closure hash keys off
+    /// (`resolve.rs:108,113`), and the peer `feira lock` stub-resolver's
+    /// `LacreEntry` emitter (`caixa-feira/src/cmd/lock.rs:59,61,64`).
+    ///
+    /// Prior to this lift the `.nome` byte-string was read inline at every
+    /// production site — the [`crate::Caixa::validate_deps`] paired
+    /// `dep.nome.as_str()` / `dep.nome.clone()` accesses on both `:deps`
+    /// and `:deps-dev` traversals, the [`validate_no_self_dep`] pair of
+    /// parent-equality checks, and every caixa-resolver / caixa-feira
+    /// site enumerated above — open-coded field-accesses that expressed
+    /// no compile-time link back to the typed slot. A future extension of
+    /// the `:deps :nome` axis to a richer author surface (a per-scope
+    /// alias table the resolver folds through the `~/.config/caixa/config.yaml`
+    /// entry the [`crate::dep::Dep`] docstring already acknowledges, a
+    /// namespace-qualified rewrite the future M4 lacre-federation layer
+    /// applies per-cluster, a promotion of the plain [`String`] byte-string
+    /// to a richer scoped-identifier newtype once cross-registry federation
+    /// lands) would have had to be threaded through every open-coded copy
+    /// in lockstep or two consumers would silently disagree on which caixa
+    /// a given dep resolves to — the [`crate::Caixa::validate_deps`] dedup
+    /// set treating the name as `"caixa-teia"` while the caixa-resolver
+    /// closure walker treated it as `"tenant-a/caixa-teia"` would silently
+    /// split the [`DepError::DuplicateNome`] refusal from the resolver's
+    /// requeue-suppression seen-set, one build-time diagnostic
+    /// disagreeing with the run-time closure the substrate's lacre
+    /// pipeline actually materializes. Lifting the resolution rule to a
+    /// typed method on the substrate primitive means every downstream
+    /// consumer of the caixa's per-`:deps` identity surface reaches for
+    /// exactly one typed dispatch — the resolver's accept-set migrates as
+    /// a unit on any future axis addition.
+    ///
+    /// First accessor on the outer `Dep` type — opens the outer-`Dep`
+    /// `&str`-return required-scalar projection pattern the sibling
+    /// per-`Dep` `:versao` future lift folds on. Peer of the sibling
+    /// per-`:membros` [`crate::Membro::nome`] (4a32abf) /
+    /// per-`:children` [`crate::supervisor::ChildSpec::nome`] (dfb4a81)
+    /// / top-level [`crate::Caixa::nome`] (e6b7d97) caixa-identity scalar
+    /// accessors — same "one typed dispatch on the substrate primitive,
+    /// thin projections at each consumer" discipline extended onto the
+    /// third named-caixa-referencing axis (`:deps` / `:deps-dev`), the
+    /// remaining unlifted caixa-name-referencing accessor family in the
+    /// substrate. Named `nome()` to match the tatara-lisp author-surface
+    /// term the field's docstring already reaches for ("Caixa name — must
+    /// match the target caixa's `:nome`") and the peer caixa-identity
+    /// accessor family the substrate already carries.
+    #[must_use]
+    pub fn nome(&self) -> &str {
+        self.nome.as_str()
+    }
+
     /// Build a minimal registry-sourced dep.
     #[must_use]
     pub fn simple(nome: impl Into<String>, versao: impl Into<String>) -> Self {
@@ -2636,7 +2711,7 @@ pub fn validate_no_self_dep(
     parent_nome: &str,
 ) -> Result<(), DepError> {
     for dep in deps {
-        if dep.nome == parent_nome {
+        if dep.nome() == parent_nome {
             return Err(DepError::DepIsSelf {
                 nome: parent_nome.to_string(),
                 list: crate::render::DEP_AUTHOR_KEY_DEPS,
@@ -2644,7 +2719,7 @@ pub fn validate_no_self_dep(
         }
     }
     for dep in deps_dev {
-        if dep.nome == parent_nome {
+        if dep.nome() == parent_nome {
             return Err(DepError::DepIsSelf {
                 nome: parent_nome.to_string(),
                 list: crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
@@ -14280,5 +14355,89 @@ mod tests {
             panic!("expected DepIsSelf from :deps-dev walk");
         };
         assert_eq!(list, crate::render::DEP_AUTHOR_KEY_DEPS_DEV);
+    }
+
+    // ── Dep::nome accessor pins ───────────────────────────────────────
+    //
+    // Three coherence pins on the lifted `Dep::nome` accessor: byte-equal
+    // projection over the plain-shorthand / explicit-git / explicit-path
+    // fixture triad the [`Dep`] docstring lists (so the accessor's
+    // accept-set is exercised across every author-surface `:fonte`
+    // shape); by-borrow pointer identity so the projection stays
+    // zero-copy at every consumer site; and validate-composition through
+    // the [`validate_no_self_dep`] cross-slot gate reading its
+    // parent-name equality check through the lifted accessor rather than
+    // the raw field.
+
+    #[test]
+    fn dep_nome_returns_declared_nome_across_fonte_shapes() {
+        // Plain-shorthand form (`:fonte None`).
+        assert_eq!(Dep::simple("caixa-teia", "^0.1").nome(), "caixa-teia");
+        // Explicit git-source form with a tag pin — same accessor path.
+        assert_eq!(
+            Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0").nome(),
+            "caixa-teia",
+        );
+        // Explicit path-source form.
+        assert_eq!(
+            Dep {
+                nome: "caixa-teia".to_string(),
+                versao: "0.1.0".to_string(),
+                fonte: Some(DepSource::Path {
+                    caminho: "../caixa-teia".to_string(),
+                }),
+                opcional: false,
+                caracteristicas: Vec::new(),
+            }
+            .nome(),
+            "caixa-teia",
+        );
+        // The empty-string `:nome` sentinel (which [`Dep::validate`]
+        // refuses through the [`DepError::NomeEmpty`] arm) still round-
+        // trips as an empty `&str` through the accessor — the accessor is
+        // a projection, not a gate; the gate is [`Dep::validate`].
+        assert_eq!(Dep::simple("", "^0.1").nome(), "");
+    }
+
+    #[test]
+    fn dep_nome_is_by_borrow_pointer_identity() {
+        // Zero-copy pin: the accessor must borrow into the field's own
+        // storage, not clone. If a future rewrite regresses to
+        // `self.nome.clone().leak()` or an owned-buffer shape, the two
+        // pointers diverge and this pin fails at build time.
+        let d = Dep::simple("caixa-teia", "^0.1");
+        assert!(std::ptr::eq(d.nome().as_ptr(), d.nome.as_ptr()));
+    }
+
+    #[test]
+    fn validate_no_self_dep_reads_parent_equality_through_accessor() {
+        // Composition pin: the cross-slot [`validate_no_self_dep`] gate
+        // rejects a `:deps` entry whose `:nome` equals the parent caixa's
+        // own `:nome` through the lifted accessor rather than the raw
+        // field. Fails-before-passes-after: with the accessor lifted the
+        // gate reads its equality check through `dep.nome() ==
+        // parent_nome` on both the `:deps` and `:deps-dev` traversals, so
+        // the diagnostic still names the offending list tag as expected.
+        let deps = vec![Dep::simple("orquestra", "^0.1")];
+        let err = validate_no_self_dep(&deps, &[], "orquestra").unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::DepIsSelf {
+                ref nome,
+                list,
+            } if nome == "orquestra" && list == crate::render::DEP_AUTHOR_KEY_DEPS,
+        ));
+        let deps_dev = vec![Dep::simple("orquestra", "^0.1")];
+        let err = validate_no_self_dep(&[], &deps_dev, "orquestra").unwrap_err();
+        assert!(matches!(
+            err,
+            DepError::DepIsSelf {
+                ref nome,
+                list,
+            } if nome == "orquestra" && list == crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+        ));
+        // A non-matching `:nome` passes through the accessor gate.
+        let deps = vec![Dep::simple("caixa-teia", "^0.1")];
+        validate_no_self_dep(&deps, &[], "orquestra").unwrap();
     }
 }
