@@ -4879,7 +4879,7 @@ impl AplicacaoSpec {
     /// [`AplicacaoSpec::validate_politicas`] entry-side `let p =
     /// &self.politicas;` traversal seed (which drives every per-axis
     /// zero-floor + upper-cap + canonical-form bracket dispatch through
-    /// `p.timeout`, `p.retries`, `p.circuit_breaker()`,
+    /// `p.timeout()`, `p.retries()`, `p.circuit_breaker()`,
     /// `p.rate_limit()` on the axis-level lifted accessors), the
     /// [`caixa_mesh::cilium_network_policies`] per-CNP mTLS-mode-overlay
     /// emitter's `spec.politicas.mtls_required()` field-then-accessor
@@ -5867,14 +5867,22 @@ impl AplicacaoSpec {
         // Route the per-`:politicas` composite-reference read through
         // the lifted [`AplicacaoSpec::politicas`] outer accessor rather
         // than the raw `&self.politicas` field access — the per-axis
-        // bracket-dispatch fan-out below (`p.timeout`, `p.retries`,
+        // bracket-dispatch fan-out below (`p.timeout()`, `p.retries()`,
         // `p.circuit_breaker()`, `p.rate_limit()`) now routes through
         // the substrate-primitive typed dispatch at the outer
-        // composition altitude, the same shape the peer caixa-mesh
-        // CNP mTLS-overlay + HTTPRoute timeout/retry-overlay emitters
-        // now key off after the accessor lift.
+        // composition altitude AND at every per-axis altitude, matching
+        // the peer caixa-mesh CNP mTLS-overlay + HTTPRoute
+        // timeout/retry-overlay emitters that already key off the same
+        // per-axis accessor family. The four-axis fan-out is now
+        // uniformly `p.<axis>()` — the last two raw `p.timeout` /
+        // `p.retries` field-access sites (co-resident with the peer
+        // `p.circuit_breaker()` / `p.rate_limit()` accessor sites that
+        // b0e741a / 21a6c3b already lifted) now route through
+        // [`MeshPolicy::timeout`] / [`MeshPolicy::retries`], closing
+        // the per-`:politicas` bracket-dispatch fan-out's raw-field-
+        // access axis on the M3 mesh-slot family.
         let p = self.politicas();
-        if let Some(t) = p.timeout {
+        if let Some(t) = p.timeout() {
             // Zero-floor + integer-millisecond canonical-form +
             // upper-cap bracket on the typed `:timeout` axis. See
             // [`crate::render::require_positive_canonical_bounded_duration`]
@@ -5900,7 +5908,7 @@ impl AplicacaoSpec {
                 |timeout| AplicacaoError::PolicyTimeoutExceedsCap { timeout },
             )?;
         }
-        if let Some(r) = p.retries {
+        if let Some(r) = p.retries() {
             // Zero-floor + upper-cap bracket on the typed `:retries`
             // axis. See [`crate::render::require_positive_bounded_u32`]
             // for the ordering discipline (zero-floor arm strictly
@@ -18201,8 +18209,8 @@ mod tests {
     fn validate_politicas_reads_through_lifted_politicas_accessor() {
         // Multi-axis coherence pin: the [`AplicacaoSpec::validate_politicas`]
         // per-axis bracket-dispatch seed (`let p = self.politicas();`,
-        // followed by the per-axis fan-out `p.timeout` /
-        // `p.retries` / `p.circuit_breaker()` / `p.rate_limit()` on
+        // followed by the per-axis fan-out `p.timeout()` /
+        // `p.retries()` / `p.circuit_breaker()` / `p.rate_limit()` on
         // the lifted axis-level accessor family) must key off the
         // lifted outer accessor, so any future rebrand on the typed
         // slot's outer-composite reader shape lands at exactly one
@@ -18230,7 +18238,7 @@ mod tests {
         // (1) `PolicyTimeoutZero` refusal under the outer accessor's
         // reference projection: a `Some(Duration::ZERO)` timeout must
         // trip the zero-floor gate. The bracket-dispatch's first arm
-        // reads `p.timeout` on the reference returned by the outer
+        // reads `p.timeout()` on the reference returned by the outer
         // accessor.
         let mut spec = three_member_spec();
         spec.politicas.timeout = Some(Duration::ZERO);
@@ -18251,7 +18259,7 @@ mod tests {
         // (2) `PolicyRetriesZero` refusal under the outer accessor's
         // reference projection: a `Some(0)` retries must trip the
         // zero-floor gate. The bracket-dispatch's second arm reads
-        // `p.retries` on the reference returned by the outer accessor.
+        // `p.retries()` on the reference returned by the outer accessor.
         let mut spec = three_member_spec();
         spec.politicas.timeout = None;
         spec.politicas.retries = Some(0);
@@ -18278,6 +18286,181 @@ mod tests {
             spec.politicas().is_empty(),
             "the outer accessor's reference projection must be the \
              empty composite per the `MeshPolicy::default()` fixture",
+        );
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn validate_politicas_timeout_and_retries_arms_route_through_lifted_axis_accessors() {
+        // Per-axis coherence pin: the [`AplicacaoSpec::validate_politicas`]
+        // per-axis bracket-dispatch's `:timeout` and `:retries` arms
+        // must both key off the lifted axis-level accessors
+        // ([`MeshPolicy::timeout`] / [`MeshPolicy::retries`]), matching
+        // the peer `:circuit-breaker` / `:rate-limit` arms already
+        // routing through [`MeshPolicy::circuit_breaker`] /
+        // [`MeshPolicy::rate_limit`] — a uniform "one typed dispatch
+        // per axis on the substrate primitive" shape at the fan-out
+        // (four axes, four accessors, no raw-field-access site
+        // anywhere on the bracket-dispatch). Pins the per-axis
+        // coherence at the accept-set boundaries the bracket carves:
+        //   1. accessor byte-equal to raw field on every representative
+        //      accept-set value (`None`, sub-cap, at-cap, past-cap
+        //      sentinel) — a future accessor drift that no longer
+        //      shipped the raw slot verbatim would surface here,
+        //   2. `PolicyTimeoutZero` refusal fires on `Some(Duration::ZERO)`
+        //      routed through the accessor's projection, proving the
+        //      first arm reads through the accessor rather than a
+        //      silent-detour peer-axis field access,
+        //   3. `PolicyRetriesZero` refusal fires on `Some(0)` routed
+        //      through the accessor's projection, proving the second
+        //      arm reads through the accessor,
+        //   4. an at-cap `Some(POLICY_RETRIES_MAX)` retries value
+        //      passes validate under the accessor projection (paired
+        //      with a `Some(POLICY_TIMEOUT_MAX)` at-cap timeout on the
+        //      sibling axis), pinning the upper-boundary accept-arm
+        //      also routes through the accessor.
+        //
+        // Peer of the sibling M3
+        // [`validate_politicas_reads_through_lifted_politicas_accessor`]
+        // outer-composite-reference coherence pin (which asserts the
+        // `let p = self.politicas()` seed); extends the discipline onto
+        // the per-axis fan-out layer that consumes the seed's
+        // reference. Same shape as
+        // [`validate_reads_through_lifted_contratos_accessor`] (0dcc926)
+        // and [`validate_reads_through_lifted_membros_accessor`] (6c77e36)
+        // apply on the per-`AplicacaoSpec` `Vec`-carry axes, extended
+        // onto the per-`MeshPolicy` `Option<Copy-T>`-carry axes.
+
+        // (1) Accessor byte-equal to raw field on the `:timeout` axis
+        // across the accept-set boundaries the bracket dispatch's
+        // three-arm gate carves out
+        // ([`crate::render::require_positive_canonical_bounded_duration`]
+        // — zero-floor + canonical-form + upper-cap).
+        for timeout in [
+            None,
+            Some(Duration::ZERO),
+            Some(Duration::from_millis(1)),
+            Some(POLICY_TIMEOUT_MAX),
+        ] {
+            let p = MeshPolicy {
+                timeout,
+                ..MeshPolicy::default()
+            };
+            assert_eq!(
+                p.timeout(),
+                p.timeout,
+                "MeshPolicy::timeout accessor must byte-equal the raw \
+                 .timeout field across every accept-set boundary the \
+                 validate_politicas :timeout arm carves out — a drift \
+                 here would silently split the validate bracket's arm \
+                 from the peer caixa-mesh HTTPRoute timeout-overlay \
+                 emitter's read",
+            );
+        }
+
+        // (2) Accessor byte-equal to raw field on the `:retries` axis
+        // across the accept-set boundaries the bracket dispatch's
+        // two-arm gate carves out
+        // ([`crate::render::require_positive_bounded_u32`] — zero-floor
+        // + upper-cap).
+        for retries in [
+            None,
+            Some(0u32),
+            Some(1u32),
+            Some(POLICY_RETRIES_MAX),
+            Some(POLICY_RETRIES_MAX + 1),
+            Some(u32::MAX),
+        ] {
+            let p = MeshPolicy {
+                retries,
+                ..MeshPolicy::default()
+            };
+            assert_eq!(
+                p.retries(),
+                p.retries,
+                "MeshPolicy::retries accessor must byte-equal the raw \
+                 .retries field across every accept-set boundary the \
+                 validate_politicas :retries arm carves out — a drift \
+                 here would silently split the validate bracket's arm \
+                 from the peer caixa-mesh HTTPRoute retry-overlay \
+                 emitter's read",
+            );
+        }
+
+        // (3) `PolicyTimeoutZero` fires on the accessor-projected
+        // zero-floor boundary. A silent detour that no longer read
+        // through `p.timeout()` (a peer-axis field read, an accidental
+        // Option::and-then chain that collapsed the None arm to Some,
+        // an accessor rebrand that clamped the return through the
+        // upper cap) would fail to refuse here.
+        let mut spec = three_member_spec();
+        spec.politicas.timeout = Some(Duration::ZERO);
+        spec.politicas.retries = None;
+        spec.politicas.circuit_breaker = None;
+        spec.politicas.rate_limit = None;
+        assert_eq!(
+            spec.politicas().timeout(),
+            Some(Duration::ZERO),
+            "the accessor projection must reflect the fixture's \
+             `Some(Duration::ZERO)` :timeout verbatim",
+        );
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::PolicyTimeoutZero,
+            "the validate_politicas :timeout zero-floor arm must fire \
+             through the lifted accessor's projection — a silent \
+             detour to a peer-axis field would fail to refuse",
+        );
+
+        // (4) `PolicyRetriesZero` fires on the accessor-projected
+        // zero-floor boundary on the sibling `:retries` axis.
+        let mut spec = three_member_spec();
+        spec.politicas.timeout = None;
+        spec.politicas.retries = Some(0);
+        spec.politicas.circuit_breaker = None;
+        spec.politicas.rate_limit = None;
+        assert_eq!(
+            spec.politicas().retries(),
+            Some(0),
+            "the accessor projection must reflect the fixture's \
+             `Some(0)` :retries verbatim",
+        );
+        assert_eq!(
+            spec.validate().unwrap_err(),
+            AplicacaoError::PolicyRetriesZero,
+            "the validate_politicas :retries zero-floor arm must fire \
+             through the lifted accessor's projection — a silent \
+             detour to a peer-axis field would fail to refuse",
+        );
+
+        // (5) At-cap accept-arm on both axes: a `Some(POLICY_TIMEOUT_MAX)`
+        // timeout paired with a `Some(POLICY_RETRIES_MAX)` retries
+        // must pass validate under the accessor projection — pins the
+        // upper-boundary accept-arm also routes through the lifted
+        // accessor (a drift that clamped or short-circuited at the
+        // upper boundary would fail the whole-spec validate here).
+        let mut spec = three_member_spec();
+        spec.politicas.timeout = Some(POLICY_TIMEOUT_MAX);
+        spec.politicas.retries = Some(POLICY_RETRIES_MAX);
+        spec.politicas.circuit_breaker = None;
+        spec.politicas.rate_limit = None;
+        assert_eq!(
+            spec.politicas().timeout(),
+            Some(POLICY_TIMEOUT_MAX),
+            "the accessor projection must reflect the fixture's \
+             at-cap :timeout verbatim",
+        );
+        assert_eq!(
+            spec.politicas().retries(),
+            Some(POLICY_RETRIES_MAX),
+            "the accessor projection must reflect the fixture's \
+             at-cap :retries verbatim",
+        );
+        assert!(
+            spec.validate().is_ok(),
+            "at-cap :timeout + :retries must pass validate under the \
+             accessor projection — the upper-boundary accept-arm on \
+             both axes routes through the lifted accessor",
         );
     }
 
