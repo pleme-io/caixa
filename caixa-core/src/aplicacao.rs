@@ -603,6 +603,94 @@ impl WitContract {
         self.slot.as_deref()
     }
 
+    /// Substrate-canonical per-`:contratos` `(caller, callee)` owned-form
+    /// caller-callee-pair accessor every consumer that constructs an
+    /// [`AplicacaoError`] variant carrying the per-edge `(de, para)`
+    /// caller-callee pair keys off — returns the author-declared
+    /// `:contratos :de` / `:contratos :para` byte-strings verbatim as an
+    /// owned `(String, String)` tuple, projected through the lifted
+    /// [`WitContract::source`] / [`WitContract::destination`] scalar
+    /// accessors so any future rebrand on the caller-arm / callee-arm
+    /// projection axis (an M4 per-cluster caller-alias table the
+    /// operator pins through a future `:placement`-scoped slot, a
+    /// namespace-qualified rewrite the M4 CR materializer applies per-CR,
+    /// a per-`:membros` alias overlay from the future `:membros
+    /// :nome-suffix` slot the MESH-COMPOSITION §III.2 roadmap
+    /// acknowledges) reaches every diagnostic-construction site by
+    /// construction.
+    ///
+    /// The `(de, para)` pair is the "typed-edge caller-callee identity in
+    /// owned form" primitive every per-`:contratos` diagnostic variant on
+    /// [`AplicacaoError`] carries alongside its payload-shape arm — the
+    /// nine variants [`AplicacaoError::EmptyWit`],
+    /// [`AplicacaoError::ContratoEndpointEmpty`],
+    /// [`AplicacaoError::ContratoEndpointNotAbsolute`],
+    /// [`AplicacaoError::ContratoEndpointInvalid`],
+    /// [`AplicacaoError::ContratoSubjectEmpty`],
+    /// [`AplicacaoError::ContratoSubjectInvalid`],
+    /// [`AplicacaoError::ContratoSlotEmpty`],
+    /// [`AplicacaoError::ContratoSlotInvalid`], and
+    /// [`AplicacaoError::ContratoDuplicate`] each carry a `de: String,
+    /// para: String` field pair the constructor site reads verbatim off
+    /// the [`WitContract`] the diagnostic points at, so a diagnostic
+    /// whose `de:` and `para:` labels silently drift off the source
+    /// caller/callee — a per-cluster caller-alias rewrite that landed on
+    /// one variant's inline `de: c.de.clone()` field access but not on
+    /// its sibling variant's, an accidental swap of the `de:` and `para:`
+    /// arms in a copy-paste of the constructor block — would emit a
+    /// build-time error whose "which caixa is at fault" question the
+    /// operator answers wrongly, far from the source `caixa.lisp`.
+    ///
+    /// Prior to this lift the `(self.de.clone(), self.para.clone())`
+    /// pair was inlined at seven [`WitContract::target`] error-
+    /// construction sites (the [`AplicacaoError::ContratoEndpointEmpty`]
+    /// / [`AplicacaoError::ContratoEndpointNotAbsolute`] /
+    /// [`AplicacaoError::ContratoEndpointInvalid`] HTTP-arm variants,
+    /// the [`AplicacaoError::ContratoSubjectEmpty`] /
+    /// [`AplicacaoError::ContratoSubjectInvalid`] pub-sub-arm variants,
+    /// the [`AplicacaoError::ContratoSlotEmpty`] /
+    /// [`AplicacaoError::ContratoSlotInvalid`] store-arm variants) and
+    /// two [`AplicacaoSpec::validate`] error-construction sites (the
+    /// [`AplicacaoError::EmptyWit`] empty-`:wit` gate, the
+    /// [`AplicacaoError::ContratoDuplicate`] duplicate-`:contratos`
+    /// insert-first-seen closure) — nine open-coded `.de.clone() +
+    /// .para.clone()` pairs that expressed no compile-time contract that
+    /// the caller-arm and callee-arm arms of the same diagnostic
+    /// construction reach for the same [`WitContract`] instance or that
+    /// the `de:` and `para:` label pair binds to the fields the author
+    /// declared. Any future rebrand on the axis — an M4 per-cluster
+    /// caller/callee-alias rewrite the operator pins through a future
+    /// `:placement :caller-alias` / `:placement :callee-alias` slot, a
+    /// per-CR fully-qualified namespace prefix the M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer applies
+    /// per-tenant, a canonicalization pass that lowercases the caller +
+    /// callee identifiers post-parse — would have had to be threaded
+    /// through every open-coded copy in lockstep or one variant's
+    /// diagnostic would silently name a different caller/callee pair
+    /// than its peer, silently degrading the "which caixa is at fault"
+    /// self-locating signal every operator-facing typed diagnostic
+    /// exists to carry. Lifting the pair to a typed method on the
+    /// substrate primitive means every downstream diagnostic-construction
+    /// site reaches for exactly one typed dispatch — the resolver's
+    /// projection migrates as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling per-`:contratos` scalar accessor family
+    /// [`WitContract::source`] / [`WitContract::destination`] (7f0fd43)
+    /// / [`WitContract::world_ref`] (6226bf4) on the mesh-slot-atom
+    /// scalar-value axes — first composite-projection accessor on the
+    /// per-`:contratos` mesh-slot atom, folds the two open-coded owned-
+    /// form `.clone()` field-accesses that pair the sibling
+    /// caller/callee accessors' `&str`-return borrowed-form outputs onto
+    /// one typed dispatch. Named `edge_pair()` to reflect the identity
+    /// name of the projected tuple (the typed-edge caller-callee pair,
+    /// distinct from the sibling triple-projection future
+    /// `edge_triple()` accessor that folds the remaining local `edge`
+    /// closure in [`WitContract::target`]).
+    #[must_use]
+    pub fn edge_pair(&self) -> (String, String) {
+        (self.source().to_string(), self.destination().to_string())
+    }
+
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
@@ -738,15 +826,14 @@ impl WitContract {
                 }
             })?;
             if ep.is_empty() {
-                return Err(AplicacaoError::ContratoEndpointEmpty {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
-                });
+                let (de, para) = self.edge_pair();
+                return Err(AplicacaoError::ContratoEndpointEmpty { de, para });
             }
             if !ep.starts_with('/') {
+                let (de, para) = self.edge_pair();
                 return Err(AplicacaoError::ContratoEndpointNotAbsolute {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
+                    de,
+                    para,
                     endpoint: ep.to_string(),
                 });
             }
@@ -767,9 +854,10 @@ impl WitContract {
             // shared with `:contratos :endpoint` through the lifted
             // `crate::render::is_gateway_api_http_path` predicate.
             if let Err(reason) = crate::render::is_gateway_api_http_path(ep) {
+                let (de, para) = self.edge_pair();
                 return Err(AplicacaoError::ContratoEndpointInvalid {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
+                    de,
+                    para,
                     endpoint: ep.to_string(),
                     reason,
                 });
@@ -796,10 +884,8 @@ impl WitContract {
                 }
             })?;
             if s.is_empty() {
-                return Err(AplicacaoError::ContratoSubjectEmpty {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
-                });
+                let (de, para) = self.edge_pair();
+                return Err(AplicacaoError::ContratoSubjectEmpty { de, para });
             }
             // The `:subject` lands at runtime as the NATS subject the
             // producer publishes to and the consumer subscribes from.
@@ -821,9 +907,10 @@ impl WitContract {
             // with `:contratos :subject` through the lifted
             // `crate::render::is_nats_subject` predicate.
             if let Err(reason) = crate::render::is_nats_subject(s) {
+                let (de, para) = self.edge_pair();
                 return Err(AplicacaoError::ContratoSubjectInvalid {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
+                    de,
+                    para,
                     subject: s.to_string(),
                     reason,
                 });
@@ -850,10 +937,8 @@ impl WitContract {
                 }
             })?;
             if sl.is_empty() {
-                return Err(AplicacaoError::ContratoSlotEmpty {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
-                });
+                let (de, para) = self.edge_pair();
+                return Err(AplicacaoError::ContratoSlotEmpty { de, para });
             }
             // Value-shape gate on the third (and last) typed payload
             // axis the `WitContract::target` dispatch carries — the
@@ -882,9 +967,10 @@ impl WitContract {
             // [`WitTarget`] arms (HTTP / PubSub / Store / Capability)
             // that caixa-mesh + the future kv emitters land in.
             if let Err(reason) = crate::render::is_wasi_keyvalue_slot(sl) {
+                let (de, para) = self.edge_pair();
                 return Err(AplicacaoError::ContratoSlotInvalid {
-                    de: self.de.clone(),
-                    para: self.para.clone(),
+                    de,
+                    para,
                     slot: sl.to_string(),
                     reason,
                 });
@@ -5325,10 +5411,8 @@ impl AplicacaoSpec {
                 });
             }
             if c.world_ref().is_empty() {
-                return Err(AplicacaoError::EmptyWit {
-                    de: c.de.clone(),
-                    para: c.para.clone(),
-                });
+                let (de, para) = c.edge_pair();
+                return Err(AplicacaoError::EmptyWit { de, para });
             }
             // Shape ↔ target consistency — surfaces "HTTP wit without
             // :endpoint", "NATS wit with :endpoint set", etc. as named
@@ -5397,9 +5481,10 @@ impl AplicacaoSpec {
                 c.slot(),
             );
             crate::render::insert_first_seen(&mut seen_contracts, key, || {
+                let (de, para) = c.edge_pair();
                 AplicacaoError::ContratoDuplicate {
-                    de: c.de.clone(),
-                    para: c.para.clone(),
+                    de,
+                    para,
                     wit: c.wit.clone(),
                     target: target_view.label(),
                 }
@@ -16416,6 +16501,137 @@ mod tests {
                 c.world_ref(),
             );
         }
+    }
+
+    #[test]
+    fn wit_contract_edge_pair_returns_source_destination_owned_pair_across_permutations() {
+        // The canonical per-`:contratos` owned-form caller-callee-pair
+        // pin: [`WitContract::edge_pair`] must return the
+        // `(source(), destination())` tuple in owned form byte-for-byte,
+        // projected through the lifted [`WitContract::source`] /
+        // [`WitContract::destination`] scalar accessors. Pins the
+        // composite-projection invariant on the per-`:contratos`
+        // mesh-slot atom — every author-declared `(de, para)` pair must
+        // round-trip verbatim through the substrate primitive's typed
+        // dispatch, so the nine [`AplicacaoError`] diagnostic-
+        // construction sites the accessor now feeds
+        // ([`AplicacaoError::EmptyWit`],
+        // [`AplicacaoError::ContratoEndpointEmpty`],
+        // [`AplicacaoError::ContratoEndpointNotAbsolute`],
+        // [`AplicacaoError::ContratoEndpointInvalid`],
+        // [`AplicacaoError::ContratoSubjectEmpty`],
+        // [`AplicacaoError::ContratoSubjectInvalid`],
+        // [`AplicacaoError::ContratoSlotEmpty`],
+        // [`AplicacaoError::ContratoSlotInvalid`],
+        // [`AplicacaoError::ContratoDuplicate`]) all read the same
+        // `(de, para)` label pair every author sees at the source
+        // `caixa.lisp`. Pins against a future silent detour that swapped
+        // the `.0` / `.1` arms (an accidental `(destination(),
+        // source())` re-order in the body would silently invert every
+        // downstream diagnostic's `de:` / `para:` label pair, silently
+        // reversing the direction of every operator-facing typed error
+        // arrow), a fresh-allocation shape drift (an accidental
+        // `.to_string()` on one arm but not the other would leave the
+        // owned/borrowed pair mismatched vs. the sibling `source()` /
+        // `destination()` returns), or an M4 per-cluster caller/callee-
+        // alias rewrite that landed on `source()` without reaching
+        // `destination()` (or vice versa). Peer of the sibling per-
+        // `:contratos` `(source, destination, world_ref)` triple
+        // pin above on the mesh-slot-atom scalar-value axes, extended
+        // to the owned-form pair-projection axis.
+        for (de, para, wit, endpoint, subject, slot) in [
+            (
+                "cart",
+                "catalog",
+                "wasi:http/proxy",
+                Some("/lookup"),
+                None,
+                None,
+            ),
+            (
+                "checkout",
+                "orders",
+                "nats:pub-sub",
+                None,
+                Some("orders.paid"),
+                None,
+            ),
+            (
+                "cart",
+                "kv",
+                "wasi:keyvalue/store",
+                None,
+                None,
+                Some("carts/{cart_id}"),
+            ),
+            (
+                "orders-v2",
+                "inventory-v3",
+                "http:proxy",
+                Some("/reserve"),
+                None,
+                None,
+            ),
+        ] {
+            let c = WitContract {
+                de: de.into(),
+                para: para.into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert_eq!(
+                c.edge_pair(),
+                (de.to_string(), para.to_string()),
+                "WitContract::edge_pair must return (:contratos :de, \
+                 :contratos :para) as an owned tuple verbatim (got {:?}, \
+                 expected ({de:?}, {para:?}))",
+                c.edge_pair(),
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_edge_pair_routes_through_source_destination_accessors() {
+        // The composition pin: [`WitContract::edge_pair`] must return
+        // exactly `(source().to_string(), destination().to_string())` —
+        // the owned form of the sibling accessor pair — so any future
+        // refactor that silently re-authored the caller-arm / callee-arm
+        // projection to bypass the lifted scalar accessors (an accidental
+        // `(self.de.clone(), self.para.clone())` regression back to the
+        // raw field-access shape, an M4-typed-caller-enum `Display`
+        // re-canonicalization on `source()` that didn't reach
+        // `edge_pair()`, a per-cluster alias rewrite the operator lands
+        // on `destination()` without reaching this composite projection)
+        // trips at caixa-core build time. Pins the "typed dispatch
+        // composes with typed dispatch, not with raw field access"
+        // discipline every downstream diagnostic-construction site now
+        // routes through — a `de:` / `para:` label pair whose
+        // projection silently drifted off the substrate primitive's
+        // scalar accessors would silently split the diagnostic's self-
+        // locating signal from the source `caixa.lisp` author's view.
+        // Peer of the sibling per-`:politicas` `is_empty` /
+        // `validate_politicas` accessor-routing-pin family on the M3
+        // mesh-slot family (18575, 18739, 18918, 19140, 19371).
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        assert_eq!(
+            c.edge_pair(),
+            (c.source().to_string(), c.destination().to_string()),
+            "WitContract::edge_pair must compose exactly \
+             (source().to_string(), destination().to_string()) — a \
+             bypass of either sibling accessor here would silently \
+             decouple the composite-projection axis from the \
+             substrate-primitive scalar accessors every downstream \
+             consumer routes through",
+        );
     }
 
     #[test]
