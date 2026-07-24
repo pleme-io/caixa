@@ -113,7 +113,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_nome()
             .map_err(|err| LayoutError::NomeViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
         // `:nome`-side joint-length budget on the canonical
@@ -136,13 +136,13 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_nome_chart_name_budget()
             .map_err(|err| LayoutError::NomeViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
         caixa
             .validate_versao()
             .map_err(|err| LayoutError::VersaoViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -176,7 +176,7 @@ impl LayoutInvariants for StandardLayout {
         // derivation (DNS-1123-violating `:deps :nome`) — each far from
         // the source `caixa.lisp`, none naming the offending `:deps` /
         // `:deps-dev` axis. Runs *after* the Caixa-identity gates (the
-        // diagnostic carries `caixa.nome.clone()` verbatim, which the
+        // diagnostic carries `caixa.nome().to_string()` verbatim, which the
         // peer [`Caixa::validate_nome`] gate above has just guaranteed is
         // a valid DNS-1123 label) and *before* every kind-coherence gate
         // (the dep surface is universal — every kind has `:deps` /
@@ -204,7 +204,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_deps()
             .map_err(|err| LayoutError::DepsViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -252,7 +252,7 @@ impl LayoutInvariants for StandardLayout {
         // every typed-name-graph axis the substrate carries).
         crate::dep::validate_no_self_dep(&caixa.deps, &caixa.deps_dev, &caixa.nome).map_err(
             |err| LayoutError::DepsViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             },
         )?;
@@ -312,7 +312,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_etiquetas()
             .map_err(|err| LayoutError::EtiquetasViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -368,7 +368,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_autores()
             .map_err(|err| LayoutError::AutoresViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -442,7 +442,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_repositorio()
             .map_err(|err| LayoutError::RepositorioViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -507,7 +507,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_descricao()
             .map_err(|err| LayoutError::DescricaoViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -569,7 +569,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_licenca()
             .map_err(|err| LayoutError::LicencaViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -643,7 +643,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_edicao()
             .map_err(|err| LayoutError::EdicaoViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -655,10 +655,10 @@ impl LayoutInvariants for StandardLayout {
             || !caixa.exe().is_empty()
             || !caixa.servicos().is_empty();
         if caixa.kind() == CaixaKind::Supervisor && has_code {
-            return Err(LayoutError::SupervisorOwnsCode(caixa.nome.clone()));
+            return Err(LayoutError::SupervisorOwnsCode(caixa.nome().to_string()));
         }
         if caixa.kind() == CaixaKind::Aplicacao && has_code {
-            return Err(LayoutError::AplicacaoOwnsCode(caixa.nome.clone()));
+            return Err(LayoutError::AplicacaoOwnsCode(caixa.nome().to_string()));
         }
 
         // Kind ↔ slot coherence: the M3 mesh slots (:membros,
@@ -680,7 +680,7 @@ impl LayoutInvariants for StandardLayout {
             let mesh_slots = caixa.declared_mesh_slots();
             if !mesh_slots.is_empty() {
                 return Err(LayoutError::MeshSlotsOnNonAplicacao {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     kind: caixa.kind(),
                     slots: mesh_slots.join(" "),
                 });
@@ -706,7 +706,7 @@ impl LayoutInvariants for StandardLayout {
             let supervisor_slots = caixa.declared_supervisor_slots();
             if !supervisor_slots.is_empty() {
                 return Err(LayoutError::SupervisorSlotsOnNonSupervisor {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     kind: caixa.kind(),
                     slots: supervisor_slots.join(" "),
                 });
@@ -736,7 +736,7 @@ impl LayoutInvariants for StandardLayout {
             let servico_slots = caixa.declared_servico_slots();
             if !servico_slots.is_empty() {
                 return Err(LayoutError::ServicoSlotsOnNonServico {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     kind: caixa.kind(),
                     slots: servico_slots.join(" "),
                 });
@@ -786,7 +786,7 @@ impl LayoutInvariants for StandardLayout {
         let foreign_code_slots = caixa.declared_foreign_code_slots();
         if !foreign_code_slots.is_empty() {
             return Err(LayoutError::ForeignCodeSlot {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 kind: caixa.kind(),
                 slots: foreign_code_slots.join(" "),
             });
@@ -809,7 +809,7 @@ impl LayoutInvariants for StandardLayout {
         caixa
             .validate_code_paths()
             .map_err(|err| LayoutError::CodePathViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
 
@@ -819,18 +819,20 @@ impl LayoutInvariants for StandardLayout {
                 .join(format!("{}.lisp", caixa.nome));
             if !self.exists(&expected) {
                 return Err(LayoutError::MissingLib {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     expected,
                 });
             }
         }
 
         if caixa.kind().requires_exe() && caixa.exe().is_empty() {
-            return Err(LayoutError::BinarioWithoutExe(caixa.nome.clone()));
+            return Err(LayoutError::BinarioWithoutExe(caixa.nome().to_string()));
         }
 
         if caixa.kind().requires_servicos() && caixa.servicos().is_empty() {
-            return Err(LayoutError::ServicoWithoutServicos(caixa.nome.clone()));
+            return Err(LayoutError::ServicoWithoutServicos(
+                caixa.nome().to_string(),
+            ));
         }
 
         for p in caixa.bibliotecas() {
@@ -881,7 +883,7 @@ impl LayoutInvariants for StandardLayout {
         // bound". See `LimitsSpec::validate` for the full rationale.
         if let Some(l) = caixa.limits() {
             l.validate().map_err(|err| LayoutError::LimitsViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
         }
@@ -895,7 +897,7 @@ impl LayoutInvariants for StandardLayout {
         // would otherwise surface a less-helpful "missing entry".
         if let Some(b) = caixa.behavior() {
             b.validate().map_err(|err| LayoutError::BehaviorViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             })?;
             for p in b.declared_paths() {
@@ -939,7 +941,7 @@ impl LayoutInvariants for StandardLayout {
         // the cross-entry one on the same wiring site.
         crate::upgrade::validate_upgrade_from(caixa.upgrade_from()).map_err(|err| {
             LayoutError::UpgradeViolation {
-                caixa: caixa.nome.clone(),
+                caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
             }
         })?;
@@ -970,7 +972,7 @@ impl LayoutInvariants for StandardLayout {
         // `*_takes_precedence_over_*` pins on every typed-graph axis).
         crate::upgrade::validate_upgrade_from_against_versao(caixa.upgrade_from(), &caixa.versao)
             .map_err(|err| LayoutError::UpgradeViolation {
-            caixa: caixa.nome.clone(),
+            caixa: caixa.nome().to_string(),
             issue: err.to_string(),
         })?;
         // Cross-slot composition gate: every `:upgrade-from` entry whose
@@ -1008,7 +1010,7 @@ impl LayoutInvariants for StandardLayout {
             caixa.behavior(),
         )
         .map_err(|err| LayoutError::UpgradeViolation {
-            caixa: caixa.nome.clone(),
+            caixa: caixa.nome().to_string(),
             issue: err.to_string(),
         })?;
         for entry in caixa.upgrade_from() {
@@ -1092,7 +1094,7 @@ impl LayoutInvariants for StandardLayout {
             caixa
                 .validate_restart_window()
                 .map_err(|err| LayoutError::RestartWindowViolation {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     issue: err.to_string(),
                 })?;
             let view = caixa
@@ -1100,7 +1102,7 @@ impl LayoutInvariants for StandardLayout {
                 .expect("Supervisor kind must have a supervisor_view");
             view.validate()
                 .map_err(|err| LayoutError::SupervisorViolation {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     issue: err.to_string(),
                 })?;
             // Cross-slot coherence: `:children :caixa` must not name the
@@ -1132,7 +1134,7 @@ impl LayoutInvariants for StandardLayout {
             // this call site.
             crate::supervisor::validate_no_self_supervision(caixa.children(), caixa.nome())
                 .map_err(|err| LayoutError::SupervisorViolation {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     issue: err.to_string(),
                 })?;
         }
@@ -1145,7 +1147,7 @@ impl LayoutInvariants for StandardLayout {
                 .expect("Aplicacao kind must have an aplicacao_view");
             view.validate()
                 .map_err(|err| LayoutError::AplicacaoViolation {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     issue: err.to_string(),
                 })?;
             // Cross-slot coherence: `:membros :caixa` must not name the
@@ -1185,7 +1187,7 @@ impl LayoutInvariants for StandardLayout {
             // deref-coerce.
             crate::aplicacao::validate_no_self_membership(caixa.membros(), caixa.nome()).map_err(
                 |err| LayoutError::AplicacaoViolation {
-                    caixa: caixa.nome.clone(),
+                    caixa: caixa.nome().to_string(),
                     issue: err.to_string(),
                 },
             )?;
@@ -4041,6 +4043,147 @@ mod tests {
              `parent_nome` arg must route through the lifted \
              [`Caixa::nome`] accessor, not the raw `&caixa.nome` \
              `&String`-borrow of the underlying field",
+        );
+    }
+
+    #[test]
+    fn layout_violation_envelopes_carry_caixa_nome_through_lifted_accessor() {
+        // Wrap-envelope drift-detection pin: every per-axis
+        // `LayoutError::*Violation { caixa, issue }` envelope fired
+        // from `LayoutInvariants::verify` must key its offending-caixa
+        // field off the typed [`Caixa::nome`] accessor's
+        // `.to_string()` extension, not the raw
+        // `caixa.nome.clone()` `String::clone()` of the underlying
+        // field. Structurally byte-equal today (each accessor is
+        // `pub fn nome(&self) -> &str { &self.nome }`, so
+        // `caixa.nome().to_string()` and `caixa.nome.clone()` produce
+        // the same bytes); the pin catches a future silent detour
+        // (an accessor rebrand that no longer shipped the raw slot
+        // verbatim — a per-cluster alias table pinned through a
+        // future `:placement`-scoped slot, the M4 CR materializer's
+        // per-CR namespace-qualified rewrite, a `:nome-suffix`
+        // overlay the MESH-COMPOSITION §III.2 roadmap acknowledges)
+        // that would silently split the substrate's own layout
+        // invariant verifier's diagnostic surface from every peer
+        // caixa-crate consumer that already routes `:nome` reads
+        // through the lifted accessor (the caixa-mesh 980c059,
+        // caixa-helm 22461ef, caixa-flux 162e2e2, caixa-crd 61d3429,
+        // caixa-feira ef83332 raw-borrow converges).
+        //
+        // Exercises a representative variant on each of the three
+        // wrap-envelope arm shapes the substrate's per-axis fan-out
+        // carries: (1) `LayoutError::NomeViolation` (the leading arm
+        // in the `verify` order — the `:nome` axis's DNS-1123 shape
+        // gate fires immediately after the manifest-existence gate),
+        // (2) `LayoutError::BinarioWithoutExe` (a tuple-variant on
+        // the kind-coherence family — different envelope shape than
+        // the struct-variant `*Violation { caixa, issue }` family
+        // but the same converge target on the `caixa.nome().to_string()`
+        // arg), and (3) `LayoutError::ServicoWithoutServicos` (the
+        // sibling tuple-variant on the same kind-coherence family).
+        // Together they cover the two `LayoutError` envelope shapes
+        // (struct-variant + tuple-variant) the layout invariants file
+        // emits on `:nome`-carrying arms.
+        //
+        // Peer of the sibling
+        // [`cross_slot_self_edge_gates_route_parent_nome_through_lifted_accessor`]
+        // pin above — extends the "wrap-envelope `caixa:` field
+        // reads through the lifted accessor" discipline from the
+        // cross-slot self-edge gates' `parent_nome` arg boundary
+        // onto the per-axis `LayoutError::*Violation` envelope's
+        // `caixa:` field boundary.
+
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+
+        // (1) `NomeViolation` on the struct-variant envelope: force a
+        // DNS-1123-invalid `:nome` (uppercase byte — `is_dns_1123_label`
+        // rejects) and assert the fired envelope's `caixa:` field
+        // byte-equals `c.nome().to_string()`.
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.nome = "BAD_NAME".into();
+        c.bibliotecas = vec!["lib/demo.lisp".into()];
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "BAD_NAME",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before layout verification fires — a drift \
+             on `Caixa::nome` would surface here as a `!= \"BAD_NAME\"` \
+             inequality",
+        );
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::NomeViolation { caixa: c_nome, .. } = err else {
+            panic!("expected NomeViolation for DNS-1123-invalid :nome, got {err:?}");
+        };
+        assert_eq!(
+            c_nome, expected_nome_via_accessor,
+            "the NomeViolation's `caixa` field must equal \
+             `c.nome().to_string()` — the wrap envelope's per-axis \
+             projection must route through the lifted [`Caixa::nome`] \
+             accessor's `.to_string()` extension, not the raw \
+             `caixa.nome.clone()` `String::clone()` of the underlying \
+             field",
+        );
+
+        // (2) `BinarioWithoutExe` on the tuple-variant envelope: a
+        // Binario-kind caixa with an empty `:exe` list fires the
+        // kind-coherence gate whose payload is a bare `String`, so the
+        // pattern is `LayoutError::BinarioWithoutExe(String)` rather
+        // than the struct-variant `{ caixa, issue }` family. The
+        // converge target is the same — `caixa.nome().to_string()` — but
+        // the envelope shape is different, so the pin exercises both.
+        let mut c = caixa(CaixaKind::Binario);
+        // `:exe` empty is the trigger — the fixture helper defaults
+        // it to `vec![]`, so no mutation is needed.
+        c.nome = "binario-demo".into();
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "binario-demo",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before layout verification fires",
+        );
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::BinarioWithoutExe(c_nome) = err else {
+            panic!("expected BinarioWithoutExe for empty :exe list on Binario kind, got {err:?}");
+        };
+        assert_eq!(
+            c_nome, expected_nome_via_accessor,
+            "the BinarioWithoutExe's payload must equal \
+             `c.nome().to_string()` — the tuple-variant envelope's \
+             per-axis projection must route through the lifted \
+             [`Caixa::nome`] accessor's `.to_string()` extension, not \
+             the raw `caixa.nome.clone()` `String::clone()` of the \
+             underlying field",
+        );
+
+        // (3) `ServicoWithoutServicos` on the sibling tuple-variant
+        // envelope: same discipline on the peer kind-coherence
+        // partition arm. Constructed alongside the Binario arm so any
+        // future accessor drift lands on both arms in the same pin.
+        let mut c = caixa(CaixaKind::Servico);
+        // `:servicos` empty is the trigger — the fixture helper
+        // defaults it to `vec![]`, so no mutation is needed.
+        c.nome = "servico-demo".into();
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "servico-demo",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before layout verification fires",
+        );
+        let err = layout.verify(&c, &root).unwrap_err();
+        let LayoutError::ServicoWithoutServicos(c_nome) = err else {
+            panic!(
+                "expected ServicoWithoutServicos for empty :servicos list on Servico kind, \
+                 got {err:?}"
+            );
+        };
+        assert_eq!(
+            c_nome, expected_nome_via_accessor,
+            "the ServicoWithoutServicos's payload must equal \
+             `c.nome().to_string()` — same converge discipline as the \
+             sibling `BinarioWithoutExe` tuple-variant arm above",
         );
     }
 
