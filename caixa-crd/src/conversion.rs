@@ -14,7 +14,17 @@ use crate::caixa_cr::{Caixa as CaixaCr, CaixaSource, CaixaSpec, DepRef, Reconcil
 #[must_use]
 pub fn caixa_into_cr(caixa: &Caixa, source: CaixaSource) -> CaixaCr {
     let spec = CaixaSpec {
-        nome: caixa.nome.clone(),
+        // Read every projection of the outer-`Caixa` `:nome` axis through
+        // the typed [`caixa_core::Caixa::nome`] `&str`-return accessor so
+        // both the `CaixaSpec.nome` `String`-carry emit-site and the
+        // paired [`CaixaCr::new`] `&str` `.metadata.name` emit-site
+        // route through one typed dispatch; any future extension of the
+        // accessor's accept-set reaches both sites by construction. Peer
+        // of the substrate-side [`caixa-helm`] (22461ef) /
+        // [`caixa-flux`] (162e2e2) / [`caixa-mesh`] (980c059)
+        // `Caixa::nome` non-`.clone()` field-access converges on the same
+        // axis in the sibling per-target renderer crates.
+        nome: caixa.nome().to_owned(),
         versao: caixa.versao.clone(),
         kind: format!("{:?}", caixa.kind),
         source,
@@ -25,7 +35,7 @@ pub fn caixa_into_cr(caixa: &Caixa, source: CaixaSource) -> CaixaCr {
         }),
         deps: caixa.deps.iter().map(dep_into_ref).collect(),
     };
-    CaixaCr::new(&caixa.nome, spec)
+    CaixaCr::new(caixa.nome(), spec)
 }
 
 /// Lower a K8s `Caixa` back to a `caixa_core::Caixa`. Loses trailing
@@ -168,5 +178,58 @@ mod tests {
         assert_eq!(back.versao, c.versao);
         assert_eq!(back.kind, c.kind);
         assert_eq!(back.deps.len(), c.deps.len());
+    }
+
+    /// Pin that both projections of the outer-`Caixa` `:nome` axis in
+    /// [`caixa_into_cr`] — the `CaixaSpec.nome` `String`-carry emit-site
+    /// and the paired [`CaixaCr::new`] `&str` `.metadata.name` emit-site
+    /// — route through the typed [`Caixa::nome`] `&str`-return accessor.
+    /// Byte-equal today (accessor returns `&self.nome`); catches any
+    /// future accessor extension whose either emit-site regresses to a
+    /// raw field read. Peer of the sibling substrate-side
+    /// caixa-helm / caixa-flux / caixa-mesh `Caixa::nome`
+    /// non-`.clone()` field-access converges (22461ef / 162e2e2 /
+    /// 980c059).
+    #[test]
+    fn caixa_into_cr_nome_routes_through_caixa_nome_accessor() {
+        let c = Caixa {
+            nome: "demo".into(),
+            versao: "0.1.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+        };
+        let cr = caixa_into_cr(
+            &c,
+            CaixaSource {
+                repo: "github:pleme-io/demo".into(),
+                git_ref: "v0.1.0".into(),
+            },
+        );
+        // CaixaSpec.nome emit-site echoes the accessor.
+        assert_eq!(cr.spec.nome, c.nome());
+        // CaixaCr::new `.metadata.name` emit-site echoes the accessor.
+        assert_eq!(cr.metadata.name.as_deref(), Some(c.nome()));
     }
 }
