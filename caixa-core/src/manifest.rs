@@ -2426,6 +2426,200 @@ impl Caixa {
         self.estrategia
     }
 
+    /// Substrate-canonical per-`Caixa` `:max-restarts` M2 supervisor-tree-
+    /// slot flat-spread OTP-`MaxIntensity`-shaped restart-budget-count
+    /// scalar accessor every consumer of the top-level manifest's per-
+    /// Supervisor `:max-restarts` restart-budget-count axis keys off —
+    /// returns the author-declared `:max-restarts` typed `Option<u32>`
+    /// verbatim, `Copy`-projected from the typed slot's own `Option<u32>`
+    /// storage (`u32` is `Copy`, so `Option<u32>` is `Copy` and the
+    /// accessor returns by value; no borrow of `&self` past the call).
+    /// Optional (`:max-restarts` is a flat-spread supervisor-only slot
+    /// every non-`Supervisor`-kind `defcaixa` carries as `None` by
+    /// `#[serde(default)]`, and every `Supervisor`-kind `defcaixa` may
+    /// still omit to defer to the [`Self::supervisor_view`]
+    /// `unwrap_or(5)` fold's OTP-canonical `{intensity, 5, 60}` default).
+    ///
+    /// The `:max-restarts` slot carries the M2 typed Erlang/OTP-shaped
+    /// `MaxIntensity` restart-budget count that pairs with the sibling
+    /// `:restart-window` `Period` to form the `MaxIntensity / Period`
+    /// restart-intensity ratio the supervisor trips its own escalation on
+    /// (INSPIRATIONS §II.2 — Erlang/OTP `supervisor` `{intensity, 5, 60}`
+    /// worker-supervisor default; RUNTIME-PATTERNS §II.2; CAIXA-SDLC §II
+    /// — the M2 supervisor-tree slot algebra the operator's hierarchical
+    /// reconciliation scheduler fans on). The slot is *flat-spread* on
+    /// the outer top-level `Caixa` (per the field-shape docstring at
+    /// caixa-core/src/manifest.rs — "The supervisor slots are flat on
+    /// Caixa (vs nested under a `SupervisorSpec` sub-form)"), so the
+    /// accessor's altitude is the outer [`Caixa`] surface rather than the
+    /// composed [`SupervisorSpec`] altitude the sibling
+    /// [`crate::supervisor::SupervisorSpec::max_restarts`] accessor keys
+    /// off. The two typed axes — the outer author-surface `Option<u32>`
+    /// on the [`Caixa`] altitude (author-omitted arm carried as `None`)
+    /// and the inner post-composition `u32` on the [`SupervisorSpec`]
+    /// altitude (`Option` collapsed through the [`Self::supervisor_view`]
+    /// `unwrap_or(5)` fold) — now share one accessor discipline for the
+    /// shared substrate concept "the author-declared OTP-shaped
+    /// restart-budget count every downstream per-Supervisor consumer's
+    /// restart-intensity budget-vs-count comparator fans on".
+    ///
+    /// Prior to this lift the `.max_restarts` field was accessed inline
+    /// at two production sites in `caixa-core/src/manifest.rs` — the
+    /// [`Self::declared_supervisor_slots`] `SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS`
+    /// presence-probe arm at `if self.max_restarts.is_some()` (which
+    /// drives the [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+    /// kind-coherence gate's per-slot label push) and the
+    /// [`Self::supervisor_view`] `SupervisorSpec` construction site at
+    /// `max_restarts: self.max_restarts.unwrap_or(5)` (which composes the
+    /// flat-spread outer author-surface `Option<u32>` onto the inner
+    /// post-composition [`SupervisorSpec`] `u32` field the
+    /// [`SupervisorSpec::max_restarts`] accessor keys off) — two open-
+    /// coded field-accesses that expressed no compile-time link back to
+    /// the typed slot. A future extension of the outer `:max-restarts`
+    /// axis to a richer author surface (a per-cluster restart-budget
+    /// override the operator pins through a future `:max-restarts-overrides`
+    /// overlay the MESH-COMPOSITION §III.2 supervision-canary roadmap
+    /// acknowledges, a per-tenant restart-budget-alias table the M4 CR
+    /// materializer resolves per-CR, a per-Supervisor dynamic restart-
+    /// budget derivation the future adaptive-supervision engine computes
+    /// from child-failure-history topology, a promotion of the plain
+    /// `Option<u32>` count to a richer `{MaxR, MaxT}` per-child-cohort
+    /// restart-budget-partition once the INSPIRATIONS §II.2 Erlang/OTP
+    /// per-child-cohort roadmap lands) would have had to be threaded
+    /// through both open-coded copies in lockstep or the enumerator's
+    /// presence probe and the composition site's `unwrap_or(5)` fold
+    /// would silently disagree on which restart-budget a given [`Caixa`]
+    /// resolves to (an author's `:max-restarts 10` would satisfy the
+    /// enumerator's presence probe while the composition site silently
+    /// composed the OTP-canonical `5`, or vice versa). Lifting the
+    /// resolution rule to a typed method on the substrate primitive means
+    /// every downstream consumer of the caixa's per-`Caixa` outer-altitude
+    /// restart-budget-count surface reaches for exactly one typed dispatch
+    /// — the resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Second outer top-level [`Caixa`] `Option<Copy>`-return supervisor-
+    /// tree-slot flat-spread accessor for M2 supervisor-slot Copy-carry
+    /// axes — folds on the outer-`Caixa` `Option<Copy>` flat-spread
+    /// projection pattern the sibling per-`Caixa`
+    /// [`Self::estrategia`] (ed04d3c) accessor opened, extends the
+    /// sub-family onto the sibling `Option<u32>` restart-budget-count arm.
+    /// Peer of the inner-altitude
+    /// [`crate::supervisor::SupervisorSpec::max_restarts`] `u32` accessor
+    /// on the post-composition [`SupervisorSpec`] altitude — same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline extended onto the pre-composition outer
+    /// author-surface [`Caixa`] altitude for the same OTP-`MaxIntensity`-
+    /// shaped restart-budget-count axis. Named `max_restarts()` to match
+    /// the storage field's name and the per-[`SupervisorSpec`] peer
+    /// [`crate::supervisor::SupervisorSpec::max_restarts`] method-name
+    /// discipline verbatim; the accessor's identity maps onto the
+    /// canonical OTP-shape supervision vocabulary the `:max-restarts`
+    /// field's docstring already carries.
+    #[must_use]
+    pub const fn max_restarts(&self) -> Option<u32> {
+        self.max_restarts
+    }
+
+    /// Substrate-canonical per-`Caixa` `:restart-window` M2 supervisor-
+    /// tree-slot flat-spread OTP-`Period`-shaped restart-intensity-
+    /// denominator raw-duration-string scalar accessor every consumer of
+    /// the top-level manifest's per-Supervisor `:restart-window` sliding-
+    /// window axis keys off — returns the author-declared `:restart-window`
+    /// typed `Option<String>` verbatim as an `Option<&str>`, borrowed
+    /// from the typed slot's own `Option<String>` storage. `None` when
+    /// the slot is absent (the canonical "never reset — every restart
+    /// across the supervisor's lifetime counts against the sibling
+    /// `:max-restarts` budget" sentinel every non-`Supervisor`-kind
+    /// `defcaixa` carries by `#[serde(default)]` and every
+    /// `Supervisor`-kind `defcaixa` may still omit to defer to the
+    /// [`Self::supervisor_view`] `restart_window: None` composition
+    /// through the [`crate::supervisor::duration_codec::parse`] soft-
+    /// swallow `.and_then(|s| … .ok())` fold).
+    ///
+    /// The `:restart-window` slot carries the raw M2 typed Erlang/OTP-
+    /// shaped `Period` sliding-observation-interval duration string that
+    /// pairs with the sibling `:max-restarts` `MaxIntensity` restart-
+    /// budget count to form the `MaxIntensity / Period` restart-intensity
+    /// ratio the supervisor trips its own escalation on (INSPIRATIONS
+    /// §II.2 — Erlang/OTP `supervisor` `{intensity, 5, 60}` worker-
+    /// supervisor default; RUNTIME-PATTERNS §II.2). The outer-`Caixa`
+    /// slot stores the raw duration string (`"60s"`, `"5m"`, `"500ms"`)
+    /// authored under `:restart-window` — the typed [`SupervisorSpec`]
+    /// holds an `Option<Duration>` routed through the shared
+    /// [`crate::supervisor::duration_codec`] via `with = "duration_codec"`
+    /// — so the outer altitude's accessor returns `Option<&str>` (raw
+    /// authoring surface) while the inner altitude's
+    /// [`crate::supervisor::SupervisorSpec::restart_window`] returns
+    /// `Option<Duration>` (parsed typed surface). The parse-refusal arm
+    /// is closed by the sibling [`Self::validate_restart_window`] gate
+    /// that surfaces [`ManifestError::RestartWindowMalformed`] naming
+    /// the offending value; the view-construction path
+    /// [`Self::supervisor_view`] soft-swallows the same parse error to
+    /// `None` to keep the view best-effort.
+    ///
+    /// Prior to this lift the `.restart_window` field was accessed inline
+    /// at three production sites in `caixa-core/src/manifest.rs` — the
+    /// [`Self::declared_supervisor_slots`]
+    /// `SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW` presence-probe arm at
+    /// `if self.restart_window.is_some()` (which drives the
+    /// [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] kind-
+    /// coherence gate's per-slot label push), the
+    /// [`Self::validate_restart_window`] `let Some(s) =
+    /// self.restart_window.as_deref()` empty-and-shape gate binding
+    /// (which folds the raw string through the shared
+    /// [`crate::supervisor::duration_codec::parse`] to surface
+    /// [`ManifestError::RestartWindowMalformed`] naming the offending
+    /// value), and the [`Self::supervisor_view`] `self.restart_window
+    /// .as_deref().and_then(…)` view-construction fold (which composes
+    /// the flat-spread outer author-surface `Option<String>` onto the
+    /// inner post-composition [`SupervisorSpec`] `Option<Duration>`
+    /// field the [`SupervisorSpec::restart_window`] accessor keys off) —
+    /// three open-coded field-accesses that expressed no compile-time
+    /// link back to the typed slot. A future extension of the outer
+    /// `:restart-window` axis to a richer author surface (a per-cluster
+    /// window override, a per-tenant window-alias table, a per-Supervisor
+    /// dynamic window derivation the future adaptive-supervision engine
+    /// computes from child-failure-history topology, a promotion of the
+    /// plain `Option<String>` raw duration to a typed `Option<Duration>`
+    /// once the future author-surface parser lands at the [`Caixa`]
+    /// altitude and the raw-string form is retired) would have had to be
+    /// threaded through every open-coded copy in lockstep or the three
+    /// consumers would silently disagree on which raw string a given
+    /// [`Caixa`] resolves to. Lifting the resolution rule to a typed
+    /// method on the substrate primitive means every downstream consumer
+    /// of the caixa's per-`Caixa` outer-altitude restart-window raw-
+    /// string surface reaches for exactly one typed dispatch — the
+    /// resolver's accept-set migrates as a unit on any future axis
+    /// addition.
+    ///
+    /// Third outer top-level [`Caixa`] supervisor-tree-slot flat-spread
+    /// accessor — folds on the outer-`Caixa` M2 supervisor-tree flat-
+    /// spread projection pattern the sibling per-`Caixa`
+    /// [`Self::estrategia`] (ed04d3c) `Option<Copy>` and
+    /// [`Self::max_restarts`] `Option<Copy>` accessors opened, extends
+    /// the sub-family onto the sibling `Option<&str>` raw-duration-
+    /// string arm (the outer altitude's raw-string form; the inner
+    /// altitude's parsed [`Duration`] form is the peer
+    /// [`crate::supervisor::SupervisorSpec::restart_window`] accessor).
+    /// Peer of the sibling per-`Caixa` `Option<&str>`-return scalar
+    /// accessors ([`Self::licenca`] / [`Self::repositorio`] /
+    /// [`Self::descricao`] / [`Self::edicao`]) on the universal-axis
+    /// outer scalar-projection family the outer-`Caixa` `Option<&str>`
+    /// sub-family already carries — same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline extended onto the M2 supervisor-tree flat-spread
+    /// `Option<&str>` raw-duration-string arm. Named `restart_window()`
+    /// to match the storage field's name and the per-[`SupervisorSpec`]
+    /// peer [`crate::supervisor::SupervisorSpec::restart_window`]
+    /// method-name discipline verbatim; the accessor's identity maps
+    /// onto the canonical OTP-shape supervision vocabulary the
+    /// `:restart-window` field's docstring already carries.
+    #[must_use]
+    pub fn restart_window(&self) -> Option<&str> {
+        self.restart_window.as_deref()
+    }
+
     /// Substrate-canonical per-`Caixa` `:upgrade-from` M2 typed-slot
     /// outer-composite OTP-appup-shaped per-prior-version migration-
     /// entry-list slice accessor every consumer of the top-level
@@ -3049,10 +3243,10 @@ impl Caixa {
         if self.estrategia().is_some() {
             slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA);
         }
-        if self.max_restarts.is_some() {
+        if self.max_restarts().is_some() {
             slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS);
         }
-        if self.restart_window.is_some() {
+        if self.restart_window().is_some() {
             slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW);
         }
         if !self.children().is_empty() {
@@ -3520,7 +3714,7 @@ impl Caixa {
     /// magnitude), surfacing the same `RestartWindowMalformed`
     /// diagnostic as every other rejected non-canonical shape.
     pub fn validate_restart_window(&self) -> Result<(), ManifestError> {
-        let Some(s) = self.restart_window.as_deref() else {
+        let Some(s) = self.restart_window() else {
             return Ok(());
         };
         crate::supervisor::duration_codec::parse(s)
@@ -4449,12 +4643,11 @@ impl Caixa {
         // self-locating diagnostic instead of a silently dropped
         // window.
         let restart_window = self
-            .restart_window
-            .as_deref()
+            .restart_window()
             .and_then(|s| crate::supervisor::duration_codec::parse(s).ok());
         Some(SupervisorSpec {
             estrategia: self.estrategia().unwrap_or_default(),
-            max_restarts: self.max_restarts.unwrap_or(5),
+            max_restarts: self.max_restarts().unwrap_or(5),
             restart_window,
             children: self.children().to_vec(),
         })
@@ -14082,6 +14275,409 @@ mod tests {
             "Caixa::estrategia must return None when :estrategia is \
              absent — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
+        );
+    }
+
+    // ── Caixa::max_restarts / Caixa::restart_window —
+    //    outer top-level M2 supervisor-tree-slot flat-spread accessors
+    //    (Option<u32> / Option<&str>) folding on the ed04d3c
+    //    Caixa::estrategia Option<Copy> sub-family ─────────────────────
+
+    fn caixa_with_max_restarts(max_restarts: Option<u32>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.max_restarts = max_restarts;
+        c
+    }
+
+    fn caixa_supervisor_with_max_restarts_and_window(
+        max_restarts: Option<u32>,
+        restart_window: Option<&str>,
+    ) -> Caixa {
+        use crate::CaixaKind;
+        use crate::supervisor::{ChildSpec, RestartPolicy};
+        let mut c = Caixa::from_lisp(&Caixa::template("root")).unwrap();
+        c.kind = CaixaKind::Supervisor;
+        c.max_restarts = max_restarts;
+        c.restart_window = restart_window.map(str::to_string);
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        c
+    }
+
+    #[test]
+    fn max_restarts_returns_max_restarts_option_verbatim_across_permutations() {
+        // Value-shape pin: [`Caixa::max_restarts`] returns the
+        // `:max-restarts` typed `Option<u32>` verbatim, `Copy`-projected
+        // from the typed slot's own storage, byte-equal across the
+        // author-omitted `None` arm (the "defer to the
+        // [`Self::supervisor_view`] `unwrap_or(5)` OTP-canonical
+        // `{intensity, 5, 60}` default" partition every
+        // non-`Supervisor`-kind caixa carries by `#[serde(default)]`)
+        // and each of the representative fixtures in the accept-set —
+        // `0` (the zero-floor arm the peer
+        // [`crate::supervisor::SupervisorSpec::validate`]
+        // [`crate::SupervisorError::ZeroMaxRestarts`] gate refuses on
+        // the post-composition altitude — the accessor must ship the
+        // raw slot verbatim so struct-literal fixtures continue to
+        // expose the zero at the accessor boundary), the OTP-canonical
+        // `5` default (`{intensity, 5, 60}` worker-supervisor from
+        // Learn You Some Erlang), `1000` (the
+        // [`SUPERVISOR_MAX_RESTARTS_MAX`] cap the peer post-composition
+        // upper-bound gate accepts on the boundary), `u32::MAX` (a
+        // past-the-cap sentinel that the substrate-primitive accessor
+        // must still ship verbatim). Second outer top-level
+        // [`Caixa`] `Option<Copy>`-return supervisor-tree flat-spread
+        // pin — folds on the sibling
+        // `estrategia_returns_estrategia_option_verbatim_across_permutations`
+        // (ed04d3c) pin's `Option<Copy>` shape, extending the sub-family
+        // onto the sibling `Option<u32>` restart-budget-count arm.
+        let fixtures: Vec<Option<u32>> = vec![None, Some(0), Some(5), Some(1000), Some(u32::MAX)];
+        for max_restarts in fixtures {
+            let c = caixa_with_max_restarts(max_restarts);
+            assert_eq!(
+                c.max_restarts(),
+                max_restarts,
+                "Caixa::max_restarts must return :max-restarts verbatim \
+                 (got {:?}, expected {max_restarts:?})",
+                c.max_restarts(),
+            );
+            assert_eq!(
+                c.max_restarts(),
+                c.max_restarts,
+                "Caixa::max_restarts accessor and self.max_restarts \
+                 field access must byte-equal — a presence-bit or count \
+                 drift would silently split the paired \
+                 Caixa::declared_supervisor_slots presence-probe arm \
+                 from the Caixa::supervisor_view unwrap_or(5) fold's \
+                 composition input",
+            );
+        }
+    }
+
+    #[test]
+    fn max_restarts_projects_option_by_copy() {
+        // The by-`Copy` pin: [`Caixa::max_restarts`] returns
+        // `Option<u32>` by value (`u32: Copy`) — the accessor does not
+        // borrow `&self` past the call (no lifetime on the return type),
+        // and calling the accessor twice on the same [`Caixa`] must
+        // yield equal values (idempotent, no side effects). Peer of the
+        // sibling `estrategia_projects_option_by_copy` (ed04d3c) pin on
+        // the outer-`Caixa` `Option<Copy>`-return flat-spread axis.
+        for max_restarts in [Some(0u32), Some(5), Some(1000), Some(u32::MAX), None] {
+            let c = caixa_with_max_restarts(max_restarts);
+            let first = c.max_restarts();
+            let second = c.max_restarts();
+            assert_eq!(
+                first, second,
+                "Caixa::max_restarts must be idempotent — two successive \
+                 calls on the same &self must return the same Option<u32>",
+            );
+            assert_eq!(
+                first, max_restarts,
+                "Caixa::max_restarts must return :max-restarts verbatim \
+                 by Copy — got {first:?}, expected {max_restarts:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_supervisor_slots_max_restarts_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_supervisor_slots`]'s
+        // `:max-restarts` presence-probe arm must key off
+        // [`Caixa::max_restarts`], not the raw
+        // `self.max_restarts.is_some()` field-probe. Structurally: every
+        // `Caixa { max_restarts: Some(_), .. }` variant must push
+        // `SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS` onto the declared-slot
+        // list (the presence bit is `Some` for every representative
+        // count, so the M2 kind-coherence gate must surface the slot as
+        // "declared"), and a `Caixa { max_restarts: None, .. }` must
+        // NOT push the label. Peer of the sibling
+        // `declared_supervisor_slots_estrategia_arm_routes_through_accessor`
+        // (ed04d3c) composition pin — same routing-through-accessor
+        // discipline extended onto the sibling flat-spread `Option<u32>`
+        // arm.
+        for max_restarts in [0u32, 5, 1000, u32::MAX] {
+            let c = caixa_with_max_restarts(Some(max_restarts));
+            let slots = c.declared_supervisor_slots();
+            assert!(
+                slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS),
+                "declared_supervisor_slots must push \
+                 SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS when `:max-restarts` \
+                 is Some({max_restarts}) — the accessor and the \
+                 enumerator gate must route through the same \
+                 substrate-primitive typed dispatch on the outer \
+                 :max-restarts presence bit (got slots={slots:?})",
+            );
+        }
+        let c = caixa_with_max_restarts(None);
+        let slots = c.declared_supervisor_slots();
+        assert!(
+            !slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS),
+            "declared_supervisor_slots must NOT push \
+             SUPERVISOR_AUTHOR_KEY_MAX_RESTARTS when `:max-restarts` is \
+             None — the author-omitted arm must route through the \
+             accessor's None-return unchanged (got slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_max_restarts_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::supervisor_view`]'s per-`:max-restarts`
+        // [`SupervisorSpec`] construction arm must key off
+        // [`Caixa::max_restarts`]'s `unwrap_or(5)` fold, not the raw
+        // `self.max_restarts.unwrap_or(5)` field-fold. Structurally: for
+        // every `:kind Supervisor` `Caixa` carrying an author-declared
+        // `Some(n)`, the composed [`SupervisorSpec`]'s `.max_restarts()`
+        // must byte-equal `n`; and for a `:kind Supervisor` `Caixa`
+        // carrying `None`, the composed [`SupervisorSpec`]'s
+        // `.max_restarts()` must byte-equal the OTP-canonical `5`. Peer
+        // of the sibling
+        // `supervisor_view_estrategia_arm_routes_through_accessor`
+        // (ed04d3c) composition pin.
+        for max_restarts in [1u32, 5, 1000] {
+            let c = caixa_supervisor_with_max_restarts_and_window(Some(max_restarts), None);
+            let view = c.supervisor_view().expect(
+                "supervisor_view must materialize a SupervisorSpec for a \
+                 :kind Supervisor Caixa carrying a Some(:max-restarts)",
+            );
+            assert_eq!(
+                view.max_restarts(),
+                max_restarts,
+                "supervisor_view must carry the outer \
+                 Caixa::max_restarts() Some arm onto the composed \
+                 SupervisorSpec.max_restarts field verbatim (got {}, \
+                 expected {max_restarts})",
+                view.max_restarts(),
+            );
+        }
+        let c = caixa_supervisor_with_max_restarts_and_window(None, None);
+        let view = c.supervisor_view().expect(
+            "supervisor_view must materialize a SupervisorSpec for a \
+             :kind Supervisor Caixa carrying a None :max-restarts",
+        );
+        assert_eq!(
+            view.max_restarts(),
+            5,
+            "supervisor_view must project the outer \
+             Caixa::max_restarts() None arm onto the OTP-canonical \
+             {{intensity, 5, 60}} default (5) through the flat-spread \
+             unwrap_or(5) fold (got {})",
+            view.max_restarts(),
+        );
+        assert!(
+            c.max_restarts().is_none(),
+            "Caixa::max_restarts() must remain None on the author-\
+             omitted arm — the supervisor_view fold must not mutate \
+             the outer flat-spread presence bit",
+        );
+    }
+
+    #[test]
+    fn restart_window_returns_restart_window_option_verbatim_across_permutations() {
+        // Value-shape pin: [`Caixa::restart_window`] returns the
+        // `:restart-window` typed `Option<String>` verbatim as an
+        // `Option<&str>`, borrowed from the typed slot's own storage,
+        // byte-equal across the author-omitted `None` arm and each of
+        // the representative fixtures in the accept-set — the canonical
+        // `"60s"` from `{intensity, 5, 60}`, the sibling
+        // canonical-magnitude forms (`"5m"` / `"1h"` / `"500ms"` / `"30"`
+        // / `"0s"`) the shared codec's positive-set sweep pin covers,
+        // plus a past-the-guard sentinel (`"1.5s"` — the fractional-
+        // seconds drift the sibling [`Self::validate_restart_window`]
+        // gate refuses; the accessor must ship the raw slot verbatim
+        // so struct-literal fixtures continue to expose the drift at
+        // the accessor boundary). Third outer top-level [`Caixa`]
+        // supervisor-tree flat-spread pin — extends the sub-family onto
+        // the sibling `Option<&str>` raw-duration-string arm.
+        for window in [
+            None,
+            Some("60s"),
+            Some("5m"),
+            Some("1h"),
+            Some("500ms"),
+            Some("1.5s"),
+            Some(""),
+        ] {
+            let c = caixa_with_restart_window(window);
+            assert_eq!(
+                c.restart_window(),
+                window,
+                "Caixa::restart_window must return :restart-window \
+                 verbatim as Option<&str> (got {:?}, expected {window:?})",
+                c.restart_window(),
+            );
+            assert_eq!(
+                c.restart_window(),
+                c.restart_window.as_deref(),
+                "Caixa::restart_window accessor and \
+                 self.restart_window.as_deref() field access must \
+                 byte-equal — a byte-level drift would silently split \
+                 the paired Caixa::declared_supervisor_slots \
+                 presence-probe arm from the \
+                 Caixa::validate_restart_window shared-codec gate and \
+                 the Caixa::supervisor_view soft-swallowing fold",
+            );
+        }
+    }
+
+    #[test]
+    fn restart_window_projects_slice_by_borrow() {
+        // The by-borrow pin: [`Caixa::restart_window`] returns
+        // `Option<&str>` by borrow — the returned string slice borrows
+        // the underlying `Option<String>` storage of the `:restart-window`
+        // slot and the accessor must not clone on every call. Peer of
+        // the sibling outer top-level [`Caixa`] `Option<&str>`-return
+        // by-borrow pins on the universal-axis scalar family
+        // (`licenca_projects_option_ref_by_borrow` /
+        // `descricao_projects_option_ref_by_borrow` and siblings) —
+        // extended onto the M2 supervisor-tree flat-spread
+        // `Option<&str>` raw-duration-string axis.
+        for window in [None, Some("60s"), Some("5m"), Some("")] {
+            let c = caixa_with_restart_window(window);
+            let first = c.restart_window();
+            let second = c.restart_window();
+            assert_eq!(
+                first, second,
+                "Caixa::restart_window must be idempotent — two \
+                 successive calls on the same &self must return the \
+                 same Option<&str>",
+            );
+            if let (Some(a), Some(b)) = (first, second) {
+                assert_eq!(
+                    a.as_ptr(),
+                    b.as_ptr(),
+                    "Caixa::restart_window must borrow the underlying \
+                     String storage — two successive Some-arm calls must \
+                     return slices with the same backing pointer (a fresh \
+                     String clone would change the pointer on every call)",
+                );
+            }
+            assert_eq!(
+                first, window,
+                "Caixa::restart_window must return :restart-window \
+                 verbatim by borrow — got {first:?}, expected {window:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_supervisor_slots_restart_window_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_supervisor_slots`]'s
+        // `:restart-window` presence-probe arm must key off
+        // [`Caixa::restart_window`], not the raw
+        // `self.restart_window.is_some()` field-probe. Structurally:
+        // every `Caixa { restart_window: Some(_), .. }` must push
+        // `SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW` onto the declared-slot
+        // list, and a `Caixa { restart_window: None, .. }` must NOT
+        // push the label. Peer of the sibling
+        // `declared_supervisor_slots_max_restarts_arm_routes_through_accessor`
+        // routing pin.
+        for window in ["60s", "5m", "1h", "500ms", "1.5s", ""] {
+            let c = caixa_with_restart_window(Some(window));
+            let slots = c.declared_supervisor_slots();
+            assert!(
+                slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW),
+                "declared_supervisor_slots must push \
+                 SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW when \
+                 `:restart-window` is Some({window:?}) — the accessor \
+                 and the enumerator gate must route through the same \
+                 substrate-primitive typed dispatch on the outer \
+                 :restart-window presence bit (got slots={slots:?})",
+            );
+        }
+        let c = caixa_with_restart_window(None);
+        let slots = c.declared_supervisor_slots();
+        assert!(
+            !slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW),
+            "declared_supervisor_slots must NOT push \
+             SUPERVISOR_AUTHOR_KEY_RESTART_WINDOW when `:restart-window` \
+             is None — the author-omitted arm must route through the \
+             accessor's None-return unchanged (got slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn validate_restart_window_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::validate_restart_window`]'s
+        // shared-codec fold arm must key off [`Caixa::restart_window`],
+        // not the raw `self.restart_window.as_deref()` field-projection.
+        // Structurally: (1) `None` → `Ok(())` (the "omit the slot to
+        // express no reset" canonical shape); (2) a canonical `Some`
+        // arm (`"60s"`) → `Ok(())`; (3) a codec-rejected `Some` arm
+        // (`"1.5s"`) → `Err(RestartWindowMalformed { restart_window,
+        // .. })` carrying the offending raw string verbatim. The three
+        // arms jointly pin that the validator's raw-string binding is
+        // the accessor's return, not a peer projection — any future
+        // silent detour that had the accessor collapse `Some("")` to
+        // `None` would silently absorb the empty-after-trim refusal
+        // case at the accessor boundary.
+        caixa_with_restart_window(None)
+            .validate_restart_window()
+            .expect("None :restart-window must validate through the accessor");
+        caixa_with_restart_window(Some("60s"))
+            .validate_restart_window()
+            .expect("canonical :restart-window \"60s\" must validate through the accessor");
+        let err = caixa_with_restart_window(Some("1.5s"))
+            .validate_restart_window()
+            .expect_err("fractional-seconds :restart-window must fail through the accessor");
+        assert!(
+            matches!(
+                err,
+                ManifestError::RestartWindowMalformed { ref restart_window, .. }
+                    if restart_window == "1.5s"
+            ),
+            "validator must carry the offending raw string verbatim \
+             from the accessor's borrowed &str (got {err:?})",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_restart_window_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::supervisor_view`]'s
+        // per-`:restart-window` [`SupervisorSpec`] construction arm
+        // must key off [`Caixa::restart_window`]'s soft-swallowing
+        // `.and_then(|s| duration_codec::parse(s).ok())` fold, not the
+        // raw `self.restart_window.as_deref().and_then(…)` field-fold.
+        // Structurally: (1) `None` → `SupervisorSpec.restart_window ==
+        // None` (the "never reset" sentinel); (2) canonical `Some("60s")`
+        // → `SupervisorSpec.restart_window == Some(Duration::from_secs(60))`
+        // (the shared codec's canonical parse); (3) codec-rejected
+        // `Some("1.5s")` → `SupervisorSpec.restart_window == None`
+        // (the soft-swallow preserving the view's best-effort shape).
+        let c = caixa_supervisor_with_max_restarts_and_window(None, None);
+        let view = c.supervisor_view().expect("Supervisor kind has a view");
+        assert_eq!(
+            view.restart_window(),
+            None,
+            "supervisor_view must project outer None :restart-window \
+             onto None on the composed SupervisorSpec (never-reset \
+             sentinel) through the accessor's None-return unchanged",
+        );
+
+        let c = caixa_supervisor_with_max_restarts_and_window(None, Some("60s"));
+        let view = c.supervisor_view().expect("Supervisor kind has a view");
+        assert_eq!(
+            view.restart_window(),
+            Some(std::time::Duration::from_secs(60)),
+            "supervisor_view must fold outer Some(\"60s\") through the \
+             shared duration_codec into Duration::from_secs(60) on the \
+             composed SupervisorSpec (accessor's Some(&str) → codec \
+             parse → Some(Duration))",
+        );
+
+        let c = caixa_supervisor_with_max_restarts_and_window(None, Some("1.5s"));
+        let view = c.supervisor_view().expect("Supervisor kind has a view");
+        assert_eq!(
+            view.restart_window(),
+            None,
+            "supervisor_view must soft-swallow the shared-codec parse \
+             failure to None (the view's best-effort shape the sibling \
+             manifest-level validate_restart_window surfaces as \
+             RestartWindowMalformed); the accessor's raw-string return \
+             is the single input every downstream consumer keys off",
         );
     }
 
