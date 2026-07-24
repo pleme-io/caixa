@@ -2306,6 +2306,126 @@ impl Caixa {
         self.entrada.as_ref()
     }
 
+    /// Substrate-canonical per-`Caixa` `:estrategia` M2 supervisor-tree-
+    /// slot flat-spread OTP-shaped sibling-restart-strategy discriminant
+    /// accessor every consumer of the top-level manifest's per-Supervisor
+    /// restart-strategy axis keys off — returns the author-declared
+    /// `:estrategia` variant verbatim as an `Option<RestartStrategy>`,
+    /// `Copy`-projected from the typed slot's own
+    /// `Option<crate::supervisor::RestartStrategy>` storage. Optional
+    /// (`:estrategia` is a flat-spread supervisor-only slot every
+    /// non-`Supervisor`-kind `defcaixa` carries as `None` by
+    /// `#[serde(default)]`, and every `Supervisor`-kind `defcaixa` may
+    /// still omit to defer to [`RestartStrategy::default`] —
+    /// [`RestartStrategy::OneForOne`] — through the [`Self::supervisor_view`]
+    /// `unwrap_or_default()` fold; a returned `None` degenerates to the
+    /// [`SupervisorSpec::default`]-inherited strategy without any silent
+    /// promotion to a fresh explicit variant at the accessor boundary).
+    ///
+    /// The `:estrategia` slot carries the M2 typed OTP-shaped sibling-
+    /// restart-strategy discriminant every substrate-side per-Supervisor
+    /// dispatch fans on (INSPIRATIONS §II.2 — OTP `supervisor:strategy`
+    /// closed-set `one_for_one | one_for_all | rest_for_one |
+    /// simple_one_for_one` algebra translated onto pleme-io's typed
+    /// [`RestartStrategy`] enum; CAIXA-SDLC §II — the M2 supervisor-tree
+    /// slot algebra the operator's hierarchical reconciliation scheduler
+    /// fans on). The slot is *flat-spread* on the outer top-level `Caixa`
+    /// (per the field-shape docstring at caixa-core/src/manifest.rs — "The
+    /// supervisor slots are flat on Caixa (vs nested under a
+    /// `SupervisorSpec` sub-form) to keep tatara-lisp authoring at one
+    /// level of nesting"), so the accessor's altitude is the outer
+    /// [`Caixa`] surface rather than the composed [`SupervisorSpec`]
+    /// altitude the sibling [`crate::supervisor::SupervisorSpec::estrategia`]
+    /// (eafb619) accessor keys off. The two typed axes — the outer
+    /// author-surface `Option<RestartStrategy>` on the [`Caixa`] altitude
+    /// (author-omitted arm carried as `None`) and the inner post-
+    /// composition `RestartStrategy` on the [`SupervisorSpec`] altitude
+    /// (`Option` collapsed through the [`Self::supervisor_view`]
+    /// `unwrap_or_default()` fold) — now share one accessor discipline for
+    /// the shared substrate concept "the author-declared OTP-shaped
+    /// sibling-restart-strategy variant that partitions the downstream
+    /// per-Supervisor renderer's per-arm fan-out"; the outer-altitude
+    /// `None` arm is the pre-composition presence bit every declared-slot
+    /// enumerator ([`Self::declared_supervisor_slots`]) reads, and the
+    /// inner-altitude non-`Option` `RestartStrategy` is the post-
+    /// composition partition-dispatch input every strategy-arm consumer
+    /// ([`SupervisorSpec::validate`], the future wasm-operator's per-
+    /// Supervisor sibling-restart branch, the future M4
+    /// `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's admission
+    /// webhook) fans on.
+    ///
+    /// Prior to this lift the `.estrategia` field was accessed inline at
+    /// two production sites in `caixa-core/src/manifest.rs` — the
+    /// [`Self::declared_supervisor_slots`] `SUPERVISOR_AUTHOR_KEY_ESTRATEGIA`
+    /// presence-probe arm at `if self.estrategia.is_some()` (which drives
+    /// the [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] kind-
+    /// coherence gate's per-slot label push) and the [`Self::supervisor_view`]
+    /// `SupervisorSpec` construction site at `estrategia:
+    /// self.estrategia.unwrap_or_default()` (which composes the flat-
+    /// spread outer author-surface `Option<RestartStrategy>` onto the
+    /// inner post-composition [`SupervisorSpec`] `RestartStrategy` field
+    /// the [`SupervisorSpec::estrategia`] accessor keys off) — two open-
+    /// coded field-accesses that expressed no compile-time link back to
+    /// the typed slot. A future extension of the outer `:estrategia` axis
+    /// to a richer author surface (a per-cluster strategy override the
+    /// operator pins through a future `:estrategia-overrides` overlay the
+    /// MESH-COMPOSITION §III.2 supervision-canary roadmap acknowledges,
+    /// a per-tenant strategy-alias table the M4 CR materializer resolves
+    /// per-CR, a per-Supervisor dynamic strategy derivation the future
+    /// adaptive-supervision engine computes from child-failure-history
+    /// topology, a per-child-cohort strategy split the future
+    /// `RestForCohort` extension the INSPIRATIONS.md §II.2 Erlang/OTP
+    /// absorption roadmap acknowledges, a promotion of the plain
+    /// `Option<RestartStrategy>` to a richer
+    /// `AuthorDeclaredStrategy { declared, overlay }` newtype once the
+    /// operator-resolved overlay lands) would have had to be threaded
+    /// through both open-coded copies in lockstep or the enumerator's
+    /// presence probe and the composition site's `unwrap_or_default()`
+    /// fold would silently disagree on which strategy a given [`Caixa`]
+    /// resolves to (an author's `:estrategia OneForAll` would satisfy
+    /// the enumerator's presence probe while the composition site
+    /// silently rendered a stale `OneForOne`, or vice versa). Lifting
+    /// the resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer of the caixa's per-`Caixa` outer-
+    /// altitude sibling-restart-strategy surface reaches for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit on
+    /// any future axis addition.
+    ///
+    /// First outer top-level [`Caixa`] `Option<Copy>`-return supervisor-
+    /// tree-slot flat-spread accessor for M2 supervisor-slot Copy-carry
+    /// axes — opens the outer-`Caixa` `Option<Copy>` flat-spread
+    /// projection pattern the sibling per-`Caixa` `:max-restarts`
+    /// `Option<u32>` and (through the future duration-newtype landing)
+    /// `:restart-window` `Option<Duration>` future outer-scalar lifts
+    /// fold on. Peer of the inner-altitude [`crate::supervisor::SupervisorSpec::estrategia`]
+    /// (eafb619) `Copy`-return sibling-restart-strategy scalar accessor on
+    /// the post-composition [`SupervisorSpec`] altitude — same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline extended onto the pre-composition outer
+    /// author-surface [`Caixa`] altitude for the same OTP-shaped
+    /// sibling-restart-strategy axis. Peer of the closed outer-`Caixa`
+    /// `Option<&Composite>` composite-reference family the sibling
+    /// [`Self::limits`] (b2bd9d7) / [`Self::behavior`] (35d8b52) /
+    /// [`Self::politicas`] (5d23d29) / [`Self::placement`] (4fb8074) /
+    /// [`Self::entrada`] (e4128e4) accessor pins already carry on the
+    /// outer `Option<&Composite>` altitude — extends the outer-`Caixa`
+    /// typed-slot accessor discipline onto the flat-spread M2 supervisor-
+    /// tree `Option<Copy>`-discriminant sub-family the sibling M3
+    /// [`crate::aplicacao::Placement::estrategia`] (921fe1b)
+    /// `PlacementStrategy` `Copy`-composite-enum scalar accessor already
+    /// pins on the inner-altitude per-`:placement` composite. Named
+    /// `estrategia()` to match the storage field's name and the
+    /// per-[`SupervisorSpec`] peer [`crate::supervisor::SupervisorSpec::estrategia`]
+    /// / per-[`crate::aplicacao::Placement`] peer
+    /// [`crate::aplicacao::Placement::estrategia`] method-name discipline
+    /// verbatim; the accessor's identity name maps onto the canonical
+    /// OTP-shape supervision vocabulary the [`RestartStrategy`] enum's
+    /// docstring already carries.
+    #[must_use]
+    pub fn estrategia(&self) -> Option<crate::supervisor::RestartStrategy> {
+        self.estrategia
+    }
+
     /// Substrate-canonical per-`Caixa` `:upgrade-from` M2 typed-slot
     /// outer-composite OTP-appup-shaped per-prior-version migration-
     /// entry-list slice accessor every consumer of the top-level
@@ -2926,7 +3046,7 @@ impl Caixa {
     #[must_use]
     pub fn declared_supervisor_slots(&self) -> Vec<&'static str> {
         let mut slots = Vec::new();
-        if self.estrategia.is_some() {
+        if self.estrategia().is_some() {
             slots.push(crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA);
         }
         if self.max_restarts.is_some() {
@@ -4333,7 +4453,7 @@ impl Caixa {
             .as_deref()
             .and_then(|s| crate::supervisor::duration_codec::parse(s).ok());
         Some(SupervisorSpec {
-            estrategia: self.estrategia.unwrap_or_default(),
+            estrategia: self.estrategia().unwrap_or_default(),
             max_restarts: self.max_restarts.unwrap_or(5),
             restart_window,
             children: self.children().to_vec(),
@@ -13628,6 +13748,339 @@ mod tests {
             c.entrada().is_none(),
             "Caixa::entrada must return None when :entrada is absent \
              — the author-omitted arm must project through the \
+             accessor's Option::None unchanged",
+        );
+    }
+
+    // ── Caixa::estrategia — outer top-level Option<RestartStrategy> flat-spread supervisor-tree accessor ──
+
+    fn caixa_with_estrategia(estrategia: Option<crate::supervisor::RestartStrategy>) -> Caixa {
+        let mut c = Caixa::from_lisp(&Caixa::template("demo")).unwrap();
+        c.estrategia = estrategia;
+        c
+    }
+
+    #[test]
+    fn estrategia_returns_estrategia_option_verbatim_across_permutations() {
+        // The canonical per-`Caixa` `:estrategia` M2 supervisor-tree-slot
+        // flat-spread `Option<RestartStrategy>`-return `Copy`-composite-
+        // enum-arm scalar shape pin: [`Caixa::estrategia`] must return
+        // the `:estrategia` typed `Option<crate::supervisor::RestartStrategy>`
+        // verbatim as an `Option<RestartStrategy>` `Copy`-projected value
+        // over the same discriminant the raw `self.estrategia` field
+        // access carries, byte-equal across every representative fixture
+        // in the accept-set — the author-omitted `None` shape (the
+        // "defer to [`RestartStrategy::default`] through the
+        // [`Self::supervisor_view`] `unwrap_or_default()` fold" partition
+        // every non-`Supervisor`-kind `defcaixa` carries by
+        // `#[serde(default)]`), and each of the four closed-set variants
+        // [`RestartStrategy::OneForOne`] / [`RestartStrategy::OneForAll`]
+        // / [`RestartStrategy::RestForOne`] /
+        // [`RestartStrategy::SimpleOneForOne`] the author-declared arm
+        // partitions on.
+        //
+        // Pins against a future silent detour that re-derived the
+        // strategy from a peer axis (an accidental fallback to
+        // `if children.is_empty() { SimpleOneForOne } else { OneForOne }`
+        // collapse that read the outer `:children` list-length axis into
+        // the strategy discriminator at the accessor boundary), a
+        // stale-derive detour that substituted [`RestartStrategy::default`]
+        // when the outer `Option` held `None` (which would silently
+        // collapse the load-bearing "author explicitly declared
+        // `:estrategia OneForOne`" vs "author omitted the slot and
+        // inherited the default" partition the [`Self::declared_supervisor_slots`]
+        // presence-probe reads — the enumerator gate would still push
+        // `SUPERVISOR_AUTHOR_KEY_ESTRATEGIA` on the omitted arm, silently
+        // splitting the paired [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`]
+        // kind-coherence gate's traversal head from the
+        // [`Self::supervisor_view`] `unwrap_or_default()` fold's
+        // composition head), a reference to an operator-resolved overlay
+        // (the future per-cluster `:estrategia-overrides` slot — its
+        // resolution must land at exactly this accessor body, not
+        // silently divert the raw slot away from a second consumer), or
+        // an axis-remap projection (a future detour that mapped
+        // `OneForAll` through the accessor onto `OneForOne` would
+        // silently split every downstream sibling-restart-strategy
+        // consumer's per-arm fan-out).
+        //
+        // First outer top-level [`Caixa`] `Option<Copy>`-return
+        // supervisor-tree-slot flat-spread accessor pin on the substrate
+        // primitive — opens the outer-`Caixa` `Option<Copy>` flat-spread
+        // projection pattern the sibling per-`Caixa` `:max-restarts` /
+        // `:restart-window` future outer-scalar pins fold on. Peer of
+        // the inner-altitude
+        // `supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations`
+        // (eafb619) pin on the post-composition [`SupervisorSpec`]
+        // altitude — same "the substrate-primitive accessor must byte-
+        // equal the raw field access verbatim across every author-
+        // declared value" discipline extended onto the pre-composition
+        // outer author-surface [`Caixa`] altitude. Peer of the closed
+        // outer-`Caixa` `Option<&Composite>` composite-reference family
+        // the sibling `limits` / `behavior` / `politicas` / `placement` /
+        // `entrada`
+        // `..._returns_..._option_ref_verbatim_across_permutations` pins
+        // already carry on the outer `Option<&Composite>` altitude.
+        use crate::supervisor::RestartStrategy;
+        let fixtures: Vec<Option<RestartStrategy>> = vec![
+            None,
+            Some(RestartStrategy::OneForOne),
+            Some(RestartStrategy::OneForAll),
+            Some(RestartStrategy::RestForOne),
+            Some(RestartStrategy::SimpleOneForOne),
+        ];
+        for estrategia in fixtures {
+            let c = caixa_with_estrategia(estrategia);
+            assert_eq!(
+                c.estrategia(),
+                estrategia,
+                "Caixa::estrategia must return :estrategia verbatim (got \
+                 {:?}, expected {:?})",
+                c.estrategia(),
+                estrategia,
+            );
+            assert_eq!(
+                c.estrategia(),
+                c.estrategia,
+                "Caixa::estrategia accessor and self.estrategia field \
+                 access must byte-equal — the accessor is the substrate-\
+                 primitive typed dispatch every downstream supervisor-\
+                 tree flat-spread consumer must route through, and a \
+                 discriminant split would silently break every consumer \
+                 that relied on the accessor sharing the field's own \
+                 Option<Copy> shape",
+            );
+            assert_eq!(
+                c.estrategia().is_some(),
+                c.estrategia.is_some(),
+                "Caixa::estrategia().is_some() must byte-equal \
+                 self.estrategia.is_some() — a presence-bit drift would \
+                 silently split the paired Caixa::declared_supervisor_slots \
+                 presence-probe arm from the Caixa::supervisor_view \
+                 unwrap_or_default() fold's composition input",
+            );
+        }
+    }
+
+    #[test]
+    fn declared_supervisor_slots_estrategia_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::declared_supervisor_slots`]'s
+        // `:estrategia` presence-probe arm must key off
+        // [`Caixa::estrategia`], not the raw `self.estrategia.is_some()`
+        // field-probe. Structurally: every `Caixa { estrategia:
+        // Some(RestartStrategy::_), .. }` variant must push
+        // `SUPERVISOR_AUTHOR_KEY_ESTRATEGIA` onto the declared-slot list
+        // (the presence bit is `Some` for every closed-set variant, so
+        // the M2 supervisor-tree kind-coherence gate must surface the
+        // slot as "declared" regardless of which variant the author
+        // picked), and a `Caixa { estrategia: None, .. }` must NOT push
+        // the label (the "author omitted the slot entirely, deferring
+        // to [`RestartStrategy::default`] through the supervisor_view
+        // fold" partition). The pair jointly pins the accessor +
+        // declared-slot enumerator composition: any future silent detour
+        // that had the accessor collapse `Some(RestartStrategy::default())`
+        // to `None` (a `.filter(|e| *e != RestartStrategy::default())`
+        // projection) would silently absorb the "declared but default-
+        // valued" arm at the accessor boundary and the
+        // [`crate::LayoutError::SupervisorSlotsOnNonSupervisor`] kind-
+        // coherence gate would silently accept a struct-literal `Caixa`
+        // carrying the drift.
+        //
+        // Peer of the sibling per-`Caixa`
+        // `declared_servico_slots_limits_arm_routes_through_accessor`
+        // (b2bd9d7) accessor-composition pin on the sibling outer-`Caixa`
+        // `Option<&LimitsSpec>` composition axis — same "the enumerator
+        // gate must route through the substrate-primitive typed
+        // dispatch" discipline extended onto the flat-spread M2
+        // supervisor-tree `Option<RestartStrategy>`-composition surface,
+        // opening the outer-`Caixa` supervisor-tree-slot arm of the
+        // composition-pin family.
+        use crate::supervisor::RestartStrategy;
+        for estrategia in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ] {
+            let c = caixa_with_estrategia(Some(estrategia));
+            let slots = c.declared_supervisor_slots();
+            assert!(
+                slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA),
+                "declared_supervisor_slots must push \
+                 SUPERVISOR_AUTHOR_KEY_ESTRATEGIA when `:estrategia` is \
+                 Some({estrategia:?}) — the accessor and the enumerator \
+                 gate must route through the same substrate-primitive \
+                 typed dispatch on the outer :estrategia presence bit \
+                 (got slots={slots:?})",
+            );
+        }
+        let c = caixa_with_estrategia(None);
+        let slots = c.declared_supervisor_slots();
+        assert!(
+            !slots.contains(&crate::render::SUPERVISOR_AUTHOR_KEY_ESTRATEGIA),
+            "declared_supervisor_slots must NOT push \
+             SUPERVISOR_AUTHOR_KEY_ESTRATEGIA when `:estrategia` is None \
+             — the author-omitted arm must route through the accessor's \
+             None-return unchanged (got slots={slots:?})",
+        );
+    }
+
+    #[test]
+    fn supervisor_view_estrategia_arm_routes_through_accessor() {
+        // Composition pin: [`Caixa::supervisor_view`]'s per-`:estrategia`
+        // [`SupervisorSpec`] construction arm must key off
+        // [`Caixa::estrategia`]'s `unwrap_or_default()` fold, not the raw
+        // `self.estrategia.unwrap_or_default()` field-fold. Structurally:
+        // for every `:kind Supervisor` `Caixa` carrying an author-
+        // declared `Some(RestartStrategy::_)` variant, the composed
+        // [`SupervisorSpec`]'s `.estrategia` field must byte-equal the
+        // outer accessor's declared variant unchanged; and for a
+        // `:kind Supervisor` `Caixa` carrying `None`, the composed
+        // [`SupervisorSpec`]'s `.estrategia` field must byte-equal
+        // [`RestartStrategy::default`] (the [`RestartStrategy::OneForOne`]
+        // arm the flat-spread `unwrap_or_default()` fold projects to on
+        // the author-omitted arm — this is the *composition* between the
+        // outer `Option<RestartStrategy>` accessor's presence-bit
+        // surface and the inner post-composition non-`Option`
+        // [`SupervisorSpec::estrategia`] altitude). The pair jointly
+        // pins the accessor + supervisor_view composition: any future
+        // silent detour that had the accessor promote `None` to
+        // `Some(RestartStrategy::default())` (a `.or_else(|| Some(RestartStrategy::default()))`
+        // projection) would silently collapse the two arms into one at
+        // the accessor boundary and the [`Self::declared_supervisor_slots`]
+        // presence probe would silently drift from the composition site.
+        //
+        // Peer of the sibling M2 supervisor-slot post-composition
+        // `validate_reads_through_lifted_estrategia_accessor` (eafb619)
+        // pin on the [`SupervisorSpec::validate`] altitude — this pin
+        // extends that inner-altitude accessor-routing discipline onto
+        // the pre-composition outer author-surface [`Caixa`] altitude,
+        // pinning the composition edge between the flat-spread outer
+        // `Option<RestartStrategy>` and the composed [`SupervisorSpec`]
+        // `RestartStrategy` axes.
+        use crate::CaixaKind;
+        use crate::supervisor::{ChildSpec, RestartPolicy, RestartStrategy};
+        for estrategia in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ] {
+            let mut c = caixa_with_estrategia(Some(estrategia));
+            c.kind = CaixaKind::Supervisor;
+            c.children = if matches!(estrategia, RestartStrategy::SimpleOneForOne) {
+                Vec::new()
+            } else {
+                vec![ChildSpec {
+                    caixa: "worker".into(),
+                    versao: "^0.1".into(),
+                    restart: RestartPolicy::Permanent,
+                }]
+            };
+            let view = c.supervisor_view().expect(
+                "supervisor_view must materialize a SupervisorSpec for a \
+                 :kind Supervisor Caixa carrying a Some(:estrategia) slot",
+            );
+            assert_eq!(
+                view.estrategia(),
+                c.estrategia().unwrap(),
+                "supervisor_view must carry the outer Caixa::estrategia() \
+                 declared variant onto the composed SupervisorSpec.estrategia \
+                 field verbatim on the Some arm (got {:?}, expected {:?})",
+                view.estrategia(),
+                c.estrategia().unwrap(),
+            );
+        }
+        // The author-omitted arm: outer `None` → composed
+        // `RestartStrategy::default()` through the flat-spread
+        // `unwrap_or_default()` fold.
+        let mut c = caixa_with_estrategia(None);
+        c.kind = CaixaKind::Supervisor;
+        // Populate children so the sibling supervisor slots are coherent
+        // for the [`Self::supervisor_view`] projection; the `:estrategia`
+        // arm still defers to [`RestartStrategy::default`] on the
+        // author-omitted arm even when the sibling slots carry values.
+        c.children = vec![ChildSpec {
+            caixa: "worker".into(),
+            versao: "^0.1".into(),
+            restart: RestartPolicy::Permanent,
+        }];
+        let view = c.supervisor_view().expect(
+            "supervisor_view must materialize a SupervisorSpec for a \
+             :kind Supervisor Caixa carrying a None `:estrategia` slot",
+        );
+        assert_eq!(
+            view.estrategia(),
+            RestartStrategy::default(),
+            "supervisor_view must project the outer Caixa::estrategia() \
+             None arm onto RestartStrategy::default() through the flat-\
+             spread unwrap_or_default() fold (got {:?}, expected {:?})",
+            view.estrategia(),
+            RestartStrategy::default(),
+        );
+        assert!(
+            c.estrategia().is_none(),
+            "Caixa::estrategia() must remain None on the author-omitted \
+             arm — the supervisor_view fold must not mutate the outer \
+             flat-spread presence bit",
+        );
+    }
+
+    #[test]
+    fn estrategia_projects_option_by_copy() {
+        // The by-`Copy` pin: [`Caixa::estrategia`] returns
+        // `Option<RestartStrategy>` by value (`RestartStrategy: Copy`) —
+        // the accessor does not borrow `&self` past the call (no
+        // lifetime on the return type), and calling the accessor twice
+        // on the same [`Caixa`] must yield discriminant-equal values
+        // (idempotent, no side effects on `&self`). Peer of the sibling
+        // outer-`Caixa` `Option<&Composite>` by-borrow
+        // `limits_projects_option_ref_by_borrow` (b2bd9d7) /
+        // `behavior_projects_option_ref_by_borrow` (35d8b52) /
+        // `politicas_projects_option_ref_by_borrow` (5d23d29) /
+        // `placement_projects_option_ref_by_borrow` (4fb8074) /
+        // `entrada_projects_option_ref_by_borrow` (e4128e4) by-borrow
+        // pins on the outer-`Caixa` `Option<&Composite>`-return axes —
+        // extended here to the outer-`Caixa` `Option<Copy>`-return
+        // flat-spread axis. The `Copy` discipline replaces the pointer-
+        // equality claim the by-borrow siblings pin (a fresh `Copy` of a
+        // `Copy` discriminant is definitionally the same discriminant, so
+        // the axis reduces to discriminant equality).
+        //
+        // Pins against a future silent detour that returned a fresh
+        // `Option<&RestartStrategy>` (which would type-check but silently
+        // introduce a borrow of `&self` past the call, collapsing the
+        // load-bearing "no lifetime on the return type" `Copy` projection
+        // the flat-spread axis's `Option<Copy>` shape carries), a stale-
+        // read side effect that flipped the outer discriminant on
+        // successive calls, or an axis-remap projection that returned a
+        // different variant than the field storage.
+        use crate::supervisor::RestartStrategy;
+        for estrategia in [
+            Some(RestartStrategy::OneForOne),
+            Some(RestartStrategy::OneForAll),
+            Some(RestartStrategy::RestForOne),
+            Some(RestartStrategy::SimpleOneForOne),
+        ] {
+            let c = caixa_with_estrategia(estrategia);
+            let first = c.estrategia();
+            let second = c.estrategia();
+            assert_eq!(
+                first, second,
+                "Caixa::estrategia must be idempotent — two successive \
+                 calls on the same &self must return the same \
+                 Option<RestartStrategy>",
+            );
+            assert_eq!(
+                first, estrategia,
+                "Caixa::estrategia must return :estrategia verbatim by \
+                 Copy — got {first:?}, expected {estrategia:?}",
+            );
+        }
+        let c = caixa_with_estrategia(None);
+        assert!(
+            c.estrategia().is_none(),
+            "Caixa::estrategia must return None when :estrategia is \
+             absent — the author-omitted arm must project through the \
              accessor's Option::None unchanged",
         );
     }
