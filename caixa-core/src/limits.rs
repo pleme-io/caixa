@@ -722,7 +722,20 @@ impl LimitsSpec {
     /// — every typed value carried by a slot is either absent or
     /// meaningfully non-zero.
     pub fn validate(&self) -> Result<(), LimitsError> {
-        if self.memory == Some(0) {
+        // Route the `:memory` axis's four inline value-shape gates
+        // through the typed [`LimitsSpec::memory`] accessor rather
+        // than the raw `self.memory` field access — brings the four
+        // arms below (zero-floor, page-floor, cap, page-multiple) onto
+        // the same "one typed dispatch on the substrate primitive at
+        // every altitude" discipline the peer `:fuel` / `:wall-clock`
+        // / `:cpu` arms already carry via `self.fuel()` /
+        // `self.wall_clock()` / `self.cpu()`. Byte-equal today
+        // (`LimitsSpec::memory` is `pub const fn memory(&self) ->
+        // Option<u64> { self.memory }`, returning by copy on the
+        // `Option<u64>` `Copy` composite). Same shape as 1017b9d's
+        // `validate_politicas` per-axis converge on the M3
+        // `:politicas` fan-out.
+        if self.memory() == Some(0) {
             return Err(LimitsError::MemoryZero);
         }
         // Structural-floor gate on `:memory`: every validated value
@@ -752,7 +765,7 @@ impl LimitsSpec {
         // `PolicyRetriesExceedsCap`) and `:circuit-breaker
         // :max-failures` (`PolicyBreakerZeroFailures` →
         // `PolicyBreakerMaxFailuresExceedsCap`).
-        if let Some(m) = self.memory {
+        if let Some(m) = self.memory() {
             if m < LIMITS_MEMORY_WASM32_PAGE_BYTES {
                 return Err(LimitsError::MemoryBelowWasm32Page { bytes: m });
             }
@@ -774,7 +787,7 @@ impl LimitsSpec {
         // (the canonical-rate-limit-window upper bound) and the
         // [`is_dns_1123_label`]/[`is_gateway_api_http_path`] length
         // caps lift to the typed surface.
-        if let Some(m) = self.memory {
+        if let Some(m) = self.memory() {
             if m > LIMITS_MEMORY_WASM32_MAX_BYTES {
                 return Err(LimitsError::MemoryExceedsWasm32Cap { bytes: m });
             }
@@ -839,7 +852,7 @@ impl LimitsSpec {
         // `MemoryZero` → `MemoryBelowWasm32Page` →
         // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple` cascade
         // surfacing the smallest-scope-issue last.
-        if let Some(m) = self.memory
+        if let Some(m) = self.memory()
             && m % LIMITS_MEMORY_WASM32_PAGE_BYTES != 0
         {
             return Err(LimitsError::MemoryNotPageMultiple { bytes: m });
@@ -5685,6 +5698,149 @@ mod tests {
                  verbatim by copy — got {first:?}, expected {memory:?}",
             );
         }
+    }
+
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn validate_memory_arms_route_through_lifted_memory_accessor() {
+        // Composition pin: every value-shape gate in
+        // [`LimitsSpec::validate`] on the `:memory` axis (the
+        // zero-floor `MemoryZero` arm, the sub-page `MemoryBelowWasm32Page`
+        // arm, the above-cap `MemoryExceedsWasm32Cap` arm, the
+        // non-page-multiple `MemoryNotPageMultiple` arm) must key off
+        // [`LimitsSpec::memory`], not the raw `self.memory` field
+        // access. Peer of the sibling per-`:politicas`
+        // [`crate::AplicacaoSpec::validate_politicas`] `:timeout` /
+        // `:retries` arm converge pin (1017b9d) on the sibling M3
+        // mesh-slot family, extended onto the M2 per-`:limits`
+        // `:memory` axis; peer of the sibling per-`:limits` `:fuel` /
+        // `:wall-clock` / `:cpu` arms in the same fan-out that
+        // already route through `self.fuel()` / `self.wall_clock()`
+        // / `self.cpu()` at :880 / :888 / :942.
+        //
+        // Assertion shape: for each memory value in the
+        // accept-and-refuse set, `LimitsSpec::memory()` must byte-
+        // equal the raw `.memory` field it borrows from, and the
+        // validate call on a `LimitsSpec { memory: <v>, ..default() }`
+        // fixture must surface the same variant/Ok discriminant the
+        // accessor-composed spec surfaces. Together they catch any
+        // future silent detour — an accessor drift that no longer
+        // shipped the raw slot verbatim, a validate-branch rebrand to
+        // a peer-axis field read, an accidental `Option`-collapse in
+        // any of the four arms — at caixa-core build time rather than
+        // at a downstream runtime declared-but-inert-limits divergence
+        // at the wasmtime `Store::limiter` boundary.
+        //
+        // `#[allow(clippy::too_many_lines)]` per the same discipline
+        // peer over-100-line composition pins in this module accept
+        // (see e.g. `limits_is_empty_memory_arm_routes_through_accessor`,
+        // `limits_memory_returns_option_u64_byte_equal_across_permutations`).
+        for memory in [
+            None,
+            Some(0),                                   // → MemoryZero
+            Some(1),                                   // → MemoryBelowWasm32Page (sub-page)
+            Some(LIMITS_MEMORY_WASM32_PAGE_BYTES - 1), // → MemoryBelowWasm32Page (at-under-page)
+            Some(LIMITS_MEMORY_WASM32_PAGE_BYTES),     // → Ok (at-page-floor)
+            Some(LIMITS_MEMORY_WASM32_PAGE_BYTES + 1), // → MemoryNotPageMultiple (one-past-page)
+            Some(2 * LIMITS_MEMORY_WASM32_PAGE_BYTES), // → Ok (multi-page)
+            Some(LIMITS_MEMORY_WASM32_MAX_BYTES),      // → Ok (at-cap)
+            Some(LIMITS_MEMORY_WASM32_MAX_BYTES + 1),  // → MemoryExceedsWasm32Cap (one-past-cap)
+        ] {
+            let l = LimitsSpec {
+                memory,
+                ..LimitsSpec::default()
+            };
+            // (1) The accessor must byte-equal the raw field it wraps.
+            assert_eq!(
+                l.memory(),
+                l.memory,
+                "LimitsSpec::memory() must byte-equal the raw \
+                 .memory field for {memory:?} — an accessor detour \
+                 that dropped the raw slot's Option<u64> verbatim \
+                 would silently split validate's :memory arms from \
+                 every peer emit-site consumer that also routes \
+                 through the accessor (the future wasmtime \
+                 Store::limiter wire path, the caixa-helm \
+                 resources.limits.memory materializer)",
+            );
+            // (2) Two successive validate() calls must yield the same
+            // variant/Ok discriminant — the accessor-projected reads
+            // and the raw-projected reads must produce identical
+            // validation outcomes.
+            let first = l.validate();
+            let second = l.validate();
+            assert_eq!(
+                first, second,
+                "LimitsSpec::validate must be idempotent on :memory \
+                 {memory:?} — two successive calls must surface the \
+                 same variant/Ok discriminant, catching any accessor \
+                 detour that would introduce a value-dependent side \
+                 effect on the &self projection",
+            );
+        }
+        // (3) The specific arm-order shape the four converged sites
+        // encode: `MemoryZero` (raw-`Some(0)`) precedes the page-floor
+        // arm, which precedes the cap arm, which precedes the page-
+        // multiple arm. Each arm must fire off the accessor-projected
+        // read on its specific fixture value.
+        assert_eq!(
+            LimitsSpec {
+                memory: Some(0),
+                ..LimitsSpec::default()
+            }
+            .validate(),
+            Err(LimitsError::MemoryZero),
+            "MemoryZero must fire on Some(0) via the accessor projection",
+        );
+        assert_eq!(
+            LimitsSpec {
+                memory: Some(1),
+                ..LimitsSpec::default()
+            }
+            .validate(),
+            Err(LimitsError::MemoryBelowWasm32Page { bytes: 1 }),
+            "MemoryBelowWasm32Page must fire on Some(1) via the accessor projection",
+        );
+        assert_eq!(
+            LimitsSpec {
+                memory: Some(LIMITS_MEMORY_WASM32_MAX_BYTES + 1),
+                ..LimitsSpec::default()
+            }
+            .validate(),
+            Err(LimitsError::MemoryExceedsWasm32Cap {
+                bytes: LIMITS_MEMORY_WASM32_MAX_BYTES + 1
+            }),
+            "MemoryExceedsWasm32Cap must fire on one-past-cap via the accessor projection",
+        );
+        assert_eq!(
+            LimitsSpec {
+                memory: Some(LIMITS_MEMORY_WASM32_PAGE_BYTES + 1),
+                ..LimitsSpec::default()
+            }
+            .validate(),
+            Err(LimitsError::MemoryNotPageMultiple {
+                bytes: LIMITS_MEMORY_WASM32_PAGE_BYTES + 1
+            }),
+            "MemoryNotPageMultiple must fire on one-past-page-floor via the accessor projection",
+        );
+        assert_eq!(
+            LimitsSpec {
+                memory: Some(LIMITS_MEMORY_WASM32_PAGE_BYTES),
+                ..LimitsSpec::default()
+            }
+            .validate(),
+            Ok(()),
+            "at-page-floor must pass validate via the accessor projection",
+        );
+        assert_eq!(
+            LimitsSpec {
+                memory: Some(LIMITS_MEMORY_WASM32_MAX_BYTES),
+                ..LimitsSpec::default()
+            }
+            .validate(),
+            Ok(()),
+            "at-cap must pass validate via the accessor projection",
+        );
     }
 
     // ── per-`:limits :fuel` accessor pins (LimitsSpec::fuel) ─────────
