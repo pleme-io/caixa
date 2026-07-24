@@ -4155,10 +4155,22 @@ impl Entrada {
     /// otherwise re-inlines.
     #[must_use]
     pub fn resolved_paths(&self) -> Vec<&str> {
-        if self.paths.is_empty() {
+        // Route the internal cascade-head + per-entry projection reads
+        // through the lifted [`Self::paths`] slice accessor rather than
+        // the raw `self.paths` field access — the substrate-primitive
+        // per-`:entrada` path-list resolver's two internal reads now
+        // key off the canonical raw-slot surface every downstream
+        // per-`:entrada` path-list consumer (`AplicacaoSpec::validate`'s
+        // per-entry value-shape gate, `feira app graph`'s per-Aplicacao
+        // entrada summary line's `{:?}` Debug print) routes through, so
+        // any future rebrand on the typed slot's raw-slot reader lands
+        // at exactly one place. Same two-consumer coherence discipline
+        // the sibling `Placement::clusters` (a6e18d7) accessor pins on
+        // the peer M3 mesh-slot `Vec<String>`-carry axis.
+        if self.paths().is_empty() {
             vec![crate::render::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH]
         } else {
-            self.paths.iter().map(String::as_str).collect()
+            self.paths().iter().map(String::as_str).collect()
         }
     }
 
@@ -4378,6 +4390,75 @@ impl Entrada {
     #[must_use]
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    /// Substrate-canonical per-`:entrada` URL-path-list `&[String]`
+    /// slice accessor every HTTPRoute-aware renderer keys off when it
+    /// wants the raw author-declared path-list (not the fallback-
+    /// applied projection [`Self::resolved_paths`] returns) — returns
+    /// the author-declared `:entrada :paths` list verbatim as `&[String]`,
+    /// borrowed from the typed slot's own [`Vec<String>`] storage.
+    ///
+    /// Named the "raw slot" half of the per-`:entrada` path-list resolver
+    /// pair on the substrate primitive: the sibling [`Self::resolved_paths`]
+    /// (1449891) closes the fallback-applying arm every per-Aplicacao
+    /// HTTPRoute per-rule `matches[].path` emitter routes through (empty
+    /// slot → single [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`]
+    /// catch-all; non-empty slot → per-entry verbatim projection); this
+    /// accessor closes the raw-slot arm every consumer that must see the
+    /// author's declaration verbatim (the [`AplicacaoSpec::validate`]
+    /// per-entry value-shape gate — empty `:paths` must be `Ok(())`,
+    /// not `Err(EntradaPathEmpty)`, so it cannot route through the
+    /// fallback-applying sibling; the `feira app graph` per-Aplicacao
+    /// external-gateway summary line's `{:?}` Debug print — which must
+    /// name the author's declaration, not the substrate's fallback, so
+    /// an author reading their graph output can grep their caixa.lisp
+    /// for the exact list they authored) routes through.
+    ///
+    /// Prior to this lift the `.paths` field was accessed inline at four
+    /// production sites: the two internal reads in [`Self::resolved_paths`]
+    /// (the `.is_empty()` cascade-head and the `.iter().map(String::as_str)`
+    /// per-entry projection), the [`AplicacaoSpec::validate`] per-entry
+    /// value-shape gate's `for p in &e.paths` traversal head, and the
+    /// `feira app graph` per-Aplicacao entrada summary line's `{:?}`
+    /// Debug print — four open-coded field-accesses that expressed no
+    /// compile-time link back to the typed slot. A future extension of
+    /// the `:entrada :paths` axis to a richer author surface — a
+    /// per-path per-method HTTP-verb filter overlay (`(:paths ((:path
+    /// "/api" :methods (:get :post))))` the Gateway API v1 HTTPRoute
+    /// spec supports through `matches[].method`), a per-path per-header
+    /// filter overlay (`matches[].headers[]`), a per-cluster override
+    /// the operator pins through a future `:placement :path-overlay`
+    /// slot, an M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+    /// per-CR admission-webhook that normalized the list at admission
+    /// time — would have had to be threaded through every open-coded
+    /// copy in lockstep or the validator's per-entry gate would silently
+    /// disagree with the renderer's per-entry emit on which list a given
+    /// `:entrada` block resolves to. Lifting the resolution to a typed
+    /// method on the substrate primitive means every downstream consumer
+    /// of the Aplicacao's per-`:entrada` path-list surface reaches for
+    /// exactly one typed dispatch — the resolver's accept-set migrates
+    /// as a unit on any future axis addition.
+    ///
+    /// Peer of the sibling [`crate::Placement::clusters`] (a6e18d7)
+    /// `&[String]` slice accessor on the peer M3 mesh-slot `Vec<String>`-
+    /// carry axis — same "one typed dispatch on the substrate primitive,
+    /// thin projections at each consumer" discipline extended onto the
+    /// per-`:entrada` `Vec<String>` slice-carry axis. Closes the last
+    /// unlifted per-`:entrada` field axis (the `Vec<String>` path-list
+    /// carrier) so every downstream per-`:entrada` reader now routes
+    /// through a typed dispatch on the substrate primitive. Returns
+    /// `&[String]` (not `&Vec<String>`) because every downstream consumer
+    /// treats the list as a read-only sequence — the slice-view is the
+    /// narrowest borrow that supports every present + roadmapped consumer
+    /// (`.is_empty()`, `.iter()`, `.len()`) without leaking the backing
+    /// `Vec`'s grow/push/reserve surface that no consumer of the typed
+    /// view reaches for (the storage-side `Vec` remains reachable through
+    /// the `pub paths` field for the mutation-carrying serde round-trip
+    /// and per-test fixture-mutation paths).
+    #[must_use]
+    pub fn paths(&self) -> &[String] {
+        self.paths.as_slice()
     }
 }
 
@@ -5416,7 +5497,21 @@ impl AplicacaoSpec {
             // failures. Empty `:paths` itself is fine — caixa-mesh
             // falls back to a single `/` catch-all.
             let mut seen = std::collections::HashSet::new();
-            for p in &e.paths {
+            // Route the per-entry value-shape gate's traversal head
+            // through the lifted [`Entrada::paths`] slice accessor
+            // rather than the raw `&e.paths` field access — the
+            // per-Aplicacao `:entrada :paths` validate loop now keys
+            // off the canonical raw-slot surface every downstream
+            // per-`:entrada` path-list consumer (the sibling
+            // [`Entrada::resolved_paths`] fallback-applying resolver
+            // internal reads, `feira app graph`'s per-Aplicacao entrada
+            // summary line's `{:?}` Debug print) routes through, so any
+            // future rebrand on the typed slot's raw-slot reader lands
+            // at exactly one place. Same convergence discipline as the
+            // sibling [`Placement::clusters`] (a6e18d7) reader-site
+            // convergences on the peer M3 mesh-slot `Vec<String>`-carry
+            // axis.
+            for p in e.paths() {
                 if p.is_empty() {
                     return Err(AplicacaoError::EntradaPathEmpty);
                 }
@@ -15476,6 +15571,203 @@ mod tests {
             "resolved_paths must preserve author-declared `:entrada \
              :paths` order verbatim — got {:?}",
             e.resolved_paths(),
+        );
+    }
+
+    // ── Entrada::paths — the substrate-canonical per-`:entrada` raw-
+    //    slot `&[String]` slice accessor every per-`:entrada` consumer
+    //    that must see the author's declaration verbatim (not the
+    //    fallback-applied projection the sibling `resolved_paths`
+    //    returns) routes through. The three pin tests below fix the
+    //    accept-set the accessor must honor: (:non-empty-byte-equal,
+    //    :empty-projects-empty-slice, :preserves-author-declared-order)
+    //    — drift on any arm surfaces at caixa-core build time rather
+    //    than at cluster-apply time. Peer discipline with the sibling
+    //    [`Placement::clusters`] (a6e18d7) `&[String]` accessor on the
+    //    peer M3 mesh-slot `Vec<String>`-carry axis.
+
+    #[test]
+    fn paths_returns_entrada_paths_slice_byte_equal_across_permutations() {
+        // Byte-equal pin: [`Entrada::paths`] must project the raw
+        // `:entrada :paths` `Vec<String>` verbatim as a `&[String]`
+        // slice borrowed from the typed slot's own [`Vec<String>`]
+        // storage — no re-ordering, no dedup, no per-entry normalization,
+        // no fallback substitution (the fallback-applying projection is
+        // the sibling [`Entrada::resolved_paths`] resolver). Pins against
+        // a future silent detour that re-normalized the list, dropped
+        // duplicates the [`AplicacaoSpec::validate`]
+        // `EntradaPathDuplicate` refusal already rejects at build time,
+        // or (most severe) accidentally routed through the fallback-
+        // applying sibling and returned the substrate catch-all when
+        // the author declared an empty list — collapsing the raw-slot
+        // and fallback-applied axes into one and breaking the
+        // [`AplicacaoSpec::validate`] "empty `:paths` is `Ok(())`" contract.
+        //
+        // Peer of the sibling
+        // [`Placement::clusters`]-shape byte-equal pin
+        // `placement_clusters_returns_clusters_slice_byte_equal_across_permutations`
+        // (a6e18d7) on the peer M3 mesh-slot `Vec<String>`-carry axis.
+        let fixtures: Vec<Vec<String>> = vec![
+            Vec::new(),
+            vec!["/api/cart".into()],
+            vec!["/api/cart".into(), "/api/products".into()],
+            vec!["/z/last".into(), "/a/first".into(), "/m/mid".into()],
+        ];
+        for paths in fixtures {
+            let e = Entrada {
+                host: "example.com".into(),
+                para: "cart".into(),
+                paths: paths.clone(),
+                port: DEFAULT_SERVICO_PORT,
+            };
+            assert_eq!(
+                e.paths(),
+                paths.as_slice(),
+                "Entrada::paths must return :entrada :paths verbatim \
+                 (got {:?}, expected {:?})",
+                e.paths(),
+                paths.as_slice(),
+            );
+            assert_eq!(
+                e.paths(),
+                e.paths.as_slice(),
+                "Entrada::paths accessor and .paths.as_slice() field \
+                 access must byte-equal — the accessor is the substrate-\
+                 primitive typed dispatch every downstream per-`:entrada` \
+                 raw-slot path-list consumer must route through",
+            );
+            assert_eq!(
+                e.paths().len(),
+                e.paths.len(),
+                "Entrada::paths().len() must byte-equal self.paths.len() \
+                 — a length drift would silently split the paired \
+                 pre-flight cascade-head `.is_empty()` probe input in \
+                 the sibling [`Entrada::resolved_paths`] resolver from \
+                 the per-entry validate loop's traversal input in \
+                 [`AplicacaoSpec::validate`]",
+            );
+        }
+    }
+
+    #[test]
+    fn resolved_paths_reads_through_lifted_paths_accessor() {
+        // Two-consumer coherence pin: the [`Entrada::resolved_paths`]
+        // pre-flight `.paths().is_empty()` cascade-head probe (which
+        // must trip the [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`]
+        // catch-all fallback arm when the accessor projects the empty
+        // slice) and the per-entry `.paths().iter().map(String::as_str)`
+        // projection (which must reach every entry in the same order
+        // the accessor projects, so the sibling
+        // [`AplicacaoSpec::validate`] per-entry gate and the resolver's
+        // per-entry projection stay in lockstep by construction) must
+        // both key off the lifted accessor. Pins the two-site coherence
+        // by exercising each production consumer end-to-end: (1) the
+        // catch-all-fallback arm under the empty slice, (2) the
+        // author-declared-verbatim arm under a two-entry cohort whose
+        // per-entry projection must byte-equal the input's per-entry
+        // author-declared paths in the author's declared order.
+        //
+        // Peer of the sibling M3
+        // [`AplicacaoSpec::validate_placement`]-shape two-consumer pin
+        // `validate_placement_reads_through_lifted_clusters_accessor`
+        // on the sibling `Placement::clusters` reader-site convergence.
+        let empty = entrada_with_paths(vec![]);
+        assert_eq!(
+            empty.resolved_paths(),
+            vec![crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH],
+            "resolved_paths on empty :entrada :paths must trip the \
+             lifted [`crate::GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH`] \
+             catch-all fallback — routing through the lifted paths() \
+             accessor must not silently drop the fallback arm",
+        );
+
+        let declared = entrada_with_paths(vec!["/api/cart", "/api/products"]);
+        assert_eq!(
+            declared.resolved_paths(),
+            vec!["/api/cart", "/api/products"],
+            "resolved_paths on non-empty :entrada :paths must return each \
+             entry verbatim in the author's declared order — routing \
+             through the lifted paths() accessor must not silently \
+             reorder or drop entries",
+        );
+        // Byte-equal pin against the raw-slot accessor to keep the
+        // fallback-applying resolver's per-entry projection input in
+        // lockstep with the raw-slot accessor's projection.
+        let raw_projected: Vec<&str> = declared.paths().iter().map(String::as_str).collect();
+        assert_eq!(
+            declared.resolved_paths(),
+            raw_projected,
+            "resolved_paths non-empty projection must byte-equal the \
+             lifted paths() accessor's per-entry String::as_str projection \
+             — the two projections share the same input slice by \
+             construction, so any drift here would surface a silent \
+             re-ordering / dedup / normalization detour in the resolver",
+        );
+    }
+
+    #[test]
+    fn validate_reads_through_lifted_entrada_paths_accessor() {
+        // Two-consumer coherence pin: the [`AplicacaoSpec::validate`]
+        // per-entry value-shape gate's `for p in e.paths()` traversal
+        // (which must reach every entry in the same order the accessor
+        // projects, so both the per-entry `EntradaPathEmpty` /
+        // `EntradaPathNotAbsolute` / `EntradaPathInvalid` gates and
+        // the duplicate-detection HashSet insert that trips
+        // [`AplicacaoError::EntradaPathDuplicate`] key off the accessor's
+        // projection) must route through the lifted accessor. Pins the
+        // coherence by exercising each production consumer end-to-end:
+        // (1) the `EntradaPathEmpty` refusal fires on the second entry
+        // of a two-entry cohort whose head is valid but tail is empty
+        // (which requires the loop to reach the second entry through
+        // the accessor), and (2) the `EntradaPathDuplicate` refusal
+        // fires on the second entry of a two-entry cohort that shares
+        // a path (which requires the loop to reach both entries — a
+        // first-entry-only projection would silently pass since the
+        // dedup HashSet has room for the first insert).
+        //
+        // Peer of the sibling
+        // `validate_placement_reads_through_lifted_clusters_accessor`
+        // on the sibling `Placement::clusters` reader-site convergence.
+        let base = crate::AplicacaoSpec {
+            membros: vec![crate::Membro {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+            }],
+            contratos: Vec::new(),
+            politicas: crate::MeshPolicy::default(),
+            placement: crate::Placement {
+                estrategia: crate::PlacementStrategy::SingleNode,
+                clusters: vec!["rio".into()],
+                shard_key: None,
+                affinity: None,
+            },
+            entrada: Some(Entrada {
+                host: "example.com".into(),
+                para: "cart".into(),
+                paths: vec!["/api/cart".into(), String::new()],
+                port: DEFAULT_SERVICO_PORT,
+            }),
+        };
+        assert_eq!(
+            base.validate(),
+            Err(crate::AplicacaoError::EntradaPathEmpty),
+            "validate must trip EntradaPathEmpty on the second entry of \
+             a two-entry cohort — routing through the lifted paths() \
+             accessor must not silently short-circuit the loop at the \
+             valid head entry",
+        );
+
+        let mut dup = base;
+        dup.entrada.as_mut().unwrap().paths = vec!["/api/cart".into(), "/api/cart".into()];
+        assert_eq!(
+            dup.validate(),
+            Err(crate::AplicacaoError::EntradaPathDuplicate {
+                path: "/api/cart".into(),
+            }),
+            "validate must trip EntradaPathDuplicate on the second entry \
+             of a two-entry cohort that shares a path — routing through \
+             the lifted paths() accessor must not silently short-circuit \
+             the dedup HashSet insert at the first entry",
         );
     }
 

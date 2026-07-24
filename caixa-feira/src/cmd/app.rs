@@ -125,10 +125,28 @@ impl GraphArgs {
             // gateway summary line now keys off the canonical read-
             // side surface every per-Aplicacao entrada consumer
             // routes through.
+            //
+            // Every per-`:entrada` scalar-value + list-value axis this
+            // summary line reads now routes through the typed accessor
+            // on the substrate primitive (`hostname()` on the `:host`
+            // DNS-hostname singular axis, `destination()` on the
+            // `:para` member-Servico scalar axis, `paths()` on the
+            // `:paths` `&[String]` slice axis, `port()` on the `:port`
+            // `u16` L4 scalar axis) rather than the raw `e.host` /
+            // `e.para` / `e.paths` / `e.port` field accesses — the
+            // graph-verb print now shares the same read-side surface
+            // every peer per-`:entrada` consumer (the
+            // [`caixa_core::AplicacaoSpec::validate`] per-`:paths`
+            // gate + `:port` structural-floor gate; the
+            // `caixa-mesh` Gateway / HTTPRoute renderers'
+            // per-listener / per-rule projections) routes through.
             if let Some(e) = spec.entrada() {
                 println!(
                     "  entrada: {} → {} (paths={:?}, port={})",
-                    e.host, e.para, e.paths, e.port
+                    e.hostname(),
+                    e.destination(),
+                    e.paths(),
+                    e.port(),
                 );
             } else {
                 println!("  entrada: (internal-only mesh)");
