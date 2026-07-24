@@ -95,10 +95,24 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
 }
 
 fn dep_into_ref(d: &Dep) -> DepRef {
+    // Route every projection of the per-`:deps` entry's typed slots
+    // through the lifted [`caixa_core::Dep`] accessors — `:nome`
+    // through [`Dep::nome`] (eba2cde), `:versao` through
+    // [`Dep::versao_requirement`] (05529b1), `:fonte` through the
+    // newly-lifted [`Dep::fonte`] outer-`Dep` `Option<&DepSource>`
+    // composite-reference accessor — so all three emit-sites in the
+    // K8s-CR conversion crate route through one typed dispatch per
+    // axis; any future accessor extension (per-scope alias table on
+    // `:nome`, per-cluster canary-version overlay on `:versao`, per-
+    // scope source-override table on `:fonte`) reaches this emit
+    // surface by construction. Peer of the sibling top-level
+    // [`Caixa`] `Caixa::nome` (61d3429) / [`Caixa::versao`] (41ab9a3)
+    // converges in the enclosing `caixa_into_cr` on the same axis
+    // family.
     DepRef {
-        nome: d.nome.clone(),
-        versao: d.versao.clone(),
-        source: d.fonte.as_ref().and_then(|s| match s {
+        nome: d.nome().to_owned(),
+        versao: d.versao_requirement().to_owned(),
+        source: d.fonte().and_then(|s| match s {
             DepSource::Git {
                 repo,
                 tag,
@@ -297,5 +311,78 @@ mod tests {
         );
         // CaixaSpec.versao emit-site echoes the accessor.
         assert_eq!(cr.spec.versao, c.versao());
+    }
+
+    /// Pin that every per-`:deps` entry projection in [`dep_into_ref`]
+    /// — the `DepRef.nome` `String`-carry, the `DepRef.versao`
+    /// `String`-carry, and the `DepRef.source` two-arm [`DepSource`]
+    /// projection — routes through the typed [`caixa_core::Dep`]
+    /// accessors ([`Dep::nome`] / [`Dep::versao_requirement`] /
+    /// [`Dep::fonte`]) rather than raw `.nome.clone()` /
+    /// `.versao.clone()` / `.fonte.as_ref()` field reads. Byte-equal
+    /// today (each accessor returns a borrow into its own storage);
+    /// catches any future emit-site regression that reintroduces a raw
+    /// field read, and pins the two-arm `CaixaSource` projection
+    /// (`DepSource::Git` → `{repo, git_ref: rev|tag|branch}`,
+    /// `DepSource::Path { caminho }` → `{"path:<caminho>", "HEAD"}`)
+    /// against the accessor-routed `:fonte` value. Peer of the sibling
+    /// `caixa_into_cr_nome_routes_through_caixa_nome_accessor` /
+    /// `caixa_into_cr_versao_routes_through_caixa_versao_accessor`
+    /// pins on the outer-`Caixa` altitude.
+    #[test]
+    fn dep_into_ref_routes_through_dep_accessors() {
+        // Git-source arm.
+        let git = Dep {
+            nome: "caixa-teia".into(),
+            versao: "^0.1".into(),
+            fonte: Some(DepSource::Git {
+                repo: "github:pleme-io/caixa-teia".into(),
+                tag: Some("v0.1.0".into()),
+                rev: None,
+                branch: None,
+            }),
+            opcional: false,
+            caracteristicas: vec![],
+        };
+        let r = dep_into_ref(&git);
+        assert_eq!(r.nome, git.nome());
+        assert_eq!(r.versao, git.versao_requirement());
+        let src = r.source.as_ref().expect("git dep projects a source");
+        assert_eq!(src.repo, "github:pleme-io/caixa-teia");
+        assert_eq!(src.git_ref, "v0.1.0");
+        // Confirm the projector read `:fonte` through the accessor,
+        // not the raw field — the accessor returned a `Some(&Git{…})`
+        // whose `repo` byte-string is what the two-arm projection
+        // consumed.
+        match git.fonte() {
+            Some(DepSource::Git { repo, .. }) => assert_eq!(repo, &src.repo),
+            other => panic!("expected git :fonte from accessor, got {other:?}"),
+        }
+
+        // Path-source arm.
+        let path = Dep {
+            nome: "caixa-teia".into(),
+            versao: "0.1.0".into(),
+            fonte: Some(DepSource::Path {
+                caminho: "../caixa-teia".into(),
+            }),
+            opcional: false,
+            caracteristicas: vec![],
+        };
+        let r = dep_into_ref(&path);
+        assert_eq!(r.nome, path.nome());
+        assert_eq!(r.versao, path.versao_requirement());
+        let src = r.source.as_ref().expect("path dep projects a source");
+        assert_eq!(src.repo, "path:../caixa-teia");
+        assert_eq!(src.git_ref, "HEAD");
+
+        // Author-omitted `:fonte` arm — the accessor projects `None`
+        // and the projector's `and_then` short-circuits to `None`.
+        let none = Dep::simple("caixa-teia", "^0.1");
+        let r = dep_into_ref(&none);
+        assert_eq!(r.nome, none.nome());
+        assert_eq!(r.versao, none.versao_requirement());
+        assert!(none.fonte().is_none());
+        assert!(r.source.is_none());
     }
 }

@@ -2503,6 +2503,111 @@ impl Dep {
         self.versao.as_str()
     }
 
+    /// Substrate-canonical per-`:deps` / `:deps-dev` entry `:fonte`
+    /// Zig-store-model per-dep source-tuple optional-composite-reference
+    /// accessor every consumer of the dep-graph fetch-source axis keys
+    /// off — returns the author-declared `:fonte` typed [`DepSource`]
+    /// verbatim as an `Option<&DepSource>` borrowed from the typed slot's
+    /// own `Option<DepSource>` storage, with `None` naming the "author
+    /// omitted `:fonte`" shorthand every resolver-side default-fill
+    /// (`caixa-feira/src/cmd/lock.rs`'s stub, `caixa-resolver/src/resolve.rs`'s
+    /// canonical fetcher, per the [`DepSource::default_github`] fallback
+    /// the [`Dep::fonte`] field docstring already documents) treats as
+    /// the "resolve through the configured default host / org
+    /// (`github:<default-org>/<nome>`)" partition.
+    ///
+    /// The `:deps :fonte` / `:deps-dev :fonte` slot carries the two-
+    /// arm typed [`DepSource`] the `Zig-style git-only store model` the
+    /// enclosing [`Dep`] docstring names — `DepSource::Git { repo, tag,
+    /// rev, branch }` for the git-clone arm every published caixa
+    /// resolves through, `DepSource::Path { caminho }` for the dev-only
+    /// local-filesystem arm every unpublishable in-tree checkout
+    /// resolves through. Every downstream consumer that fans on the
+    /// dep's fetch-source keys off this accessor: [`Self::validate`]'s
+    /// per-`:fonte` [`DepSource::validate`] delegation (which raises
+    /// the empty-`:repo` / missing-pin / multiple-pin / empty-`:caminho`
+    /// diagnostics through the [`DepError::Fonte*`] carrier family
+    /// naming the offending `Dep::nome`), the caixa-crd conversion
+    /// crate's `dep_into_ref` two-arm projection into the `CaixaSource`
+    /// `{repo, git_ref}` pair the K8s-CR side consumes
+    /// (`caixa-crd/src/conversion.rs`), and — through the paired
+    /// resolver-side default-fill's `Option::unwrap_or_else` — every
+    /// `caixa-feira` / `caixa-resolver` fetch site that requires a
+    /// concrete `DepSource` at run time.
+    ///
+    /// Prior to this lift the `.fonte` typed slot was read inline at
+    /// every production site — the [`Self::validate`]
+    /// `if let Some(ref fonte) = self.fonte` bracket the per-`:fonte`
+    /// gate delegates through, the caixa-crd `dep_into_ref`
+    /// `d.fonte.as_ref().and_then(...)` two-arm `CaixaSource` projector,
+    /// the resolver-side `caixa-feira/src/cmd/lock.rs` / `caixa-resolver/src/resolve.rs`
+    /// `dep.fonte.clone().unwrap_or_else(...)` default-fill pair — open-
+    /// coded field-accesses that expressed no compile-time link back to
+    /// the typed slot. A future extension of the `:deps :fonte` axis
+    /// to a richer author surface (a per-scope source-override table
+    /// the resolver folds through the `~/.config/caixa/config.yaml`
+    /// entry the [`Dep`] docstring already acknowledges, a per-org
+    /// mirror-fallback list the future M4 lacre-federation resolver
+    /// consults ahead of the `default_github` fallback, a promotion of
+    /// the plain `Option<DepSource>` to a richer
+    /// `{primary, mirrors, integrity}` triple once cross-registry
+    /// federation lands, a per-dep `sri:sha256-…` integrity slot the
+    /// M4 lacre gate binds against ahead of the git-fetch) would have
+    /// had to be threaded through every open-coded copy in lockstep or
+    /// two consumers would silently disagree on which fetch source a
+    /// given dep resolves to — the [`Self::validate`] per-`:fonte`
+    /// gate reading the author-declared source while the caixa-crd
+    /// projector read a per-scope-override-resolved source would
+    /// silently split the build-time refusal from the CR the
+    /// substrate's admission pipeline actually materializes, one
+    /// build-time diagnostic disagreeing with the run-time closure.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the caixa's per-
+    /// `:deps` fetch-source surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// First outer-`Dep` `Option<&Composite>`-return composite-reference
+    /// accessor — opens the outer-`Dep` `Option<&Composite>` composite-
+    /// reference projection pattern the sibling per-`Dep` `:opcional`
+    /// (`Option<Copy>` — the plain-bool axis) / `:caracteristicas`
+    /// (`&[String]` — the feature-flag list) future outer scalar / slice
+    /// lifts fold on. Peer of the outer-top-level [`crate::Caixa`]
+    /// `Option<&Composite>` composite-reference sub-family the
+    /// [`crate::Caixa::limits`] (b2bd9d7) / [`crate::Caixa::behavior`]
+    /// (35d8b52) / [`crate::Caixa::politicas`] (5d23d29) /
+    /// [`crate::Caixa::placement`] (4fb8074) / [`crate::Caixa::entrada`]
+    /// (e4128e4) accessors already close on the outer [`crate::Caixa`]
+    /// altitude, and of the outer M3 mesh-slot [`crate::AplicacaoSpec`]
+    /// altitude the sibling [`crate::AplicacaoSpec::entrada`] (d32111c)
+    /// accessor already carries — extends that "one typed dispatch on
+    /// the substrate primitive, thin projections at each consumer"
+    /// discipline onto the third outer typed-slot altitude that carries
+    /// an `Option<Composite>` axis (`Dep`, the outer per-dep-list-entry
+    /// slot). Returns `Option<&DepSource>` (not the owning composite by
+    /// copy or clone) because every downstream consumer of the fonte
+    /// composite treats it as a read-only per-arm dispatch source — the
+    /// reference-view is the narrowest borrow that supports every
+    /// present + roadmapped consumer (per-arm match projection at the
+    /// caixa-crd `CaixaSource` two-arm emitter, presence-probe early
+    /// return on the "author-omitted `:fonte` ⇒ resolver-side
+    /// `default_github` fill applies" partition every resolver
+    /// consults, `.cloned()`-on-demand for the two resolver-side
+    /// default-fill call sites that require an owned `DepSource` for
+    /// `Option::unwrap_or_else`) without cloning the composite through
+    /// every consumer's fast path. The `Option` half of the return-type
+    /// preserves the load-bearing "author-omitted `:fonte` ⇒ resolver-
+    /// side default applies" partition (not a default composite the
+    /// downstream must reject on emptiness) — the accessor projects the
+    /// raw `Option<DepSource>` slot's presence bit through the
+    /// reference-return unchanged. Named `fonte()` to match the storage
+    /// field's name verbatim and the tatara-lisp author-surface term
+    /// (`:fonte`) the field's own docstring already carries.
+    #[must_use]
+    pub fn fonte(&self) -> Option<&DepSource> {
+        self.fonte.as_ref()
+    }
+
     /// Build a minimal registry-sourced dep.
     #[must_use]
     pub fn simple(nome: impl Into<String>, versao: impl Into<String>) -> Self {
@@ -2635,7 +2740,7 @@ impl Dep {
                 reason,
             },
         )?;
-        if let Some(ref fonte) = self.fonte {
+        if let Some(fonte) = self.fonte() {
             fonte.validate(&self.nome)?;
         }
         self.validate_caracteristicas()?;
@@ -14604,6 +14709,123 @@ mod tests {
                 DepError::VersaoEmpty { nome } if nome == "caixa-teia",
             ),
             "expected VersaoEmpty from the empty-first arm, got {err:?}",
+        );
+    }
+
+    // ── Dep::fonte accessor pins ──────────────────────────────────────
+    //
+    // Three coherence pins on the lifted `Dep::fonte` accessor: byte-
+    // equal projection over the plain-shorthand (`:fonte None`) /
+    // explicit-git-tag / explicit-path fixture triad the [`Dep`]
+    // docstring lists (so the accessor's accept-set is exercised across
+    // every author-surface `:fonte` shape and both `DepSource` variants);
+    // pointer identity so the borrowed reference points into the field's
+    // own `Option<DepSource>` storage (not a cloned side-buffer); and
+    // validate-composition through the [`Dep::validate`] gate reading
+    // its per-`:fonte` [`DepSource::validate`] delegation through the
+    // lifted accessor rather than the raw `if let Some(ref fonte) =
+    // self.fonte` bracket.
+
+    #[test]
+    fn dep_fonte_returns_declared_source_across_shapes() {
+        // Plain-shorthand form — `:fonte` omitted, accessor projects
+        // the `None` partition the resolver-side default-fill treats
+        // as "resolve through `github:<default-org>/<nome>`".
+        assert!(Dep::simple("caixa-teia", "^0.1").fonte().is_none());
+        // Explicit git-source form with a tag pin — same accessor path.
+        let git = Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0");
+        match git.fonte() {
+            Some(DepSource::Git {
+                repo,
+                tag,
+                rev,
+                branch,
+            }) => {
+                assert_eq!(repo, "github:pleme-io/caixa-teia");
+                assert_eq!(tag.as_deref(), Some("v0.1.0"));
+                assert!(rev.is_none());
+                assert!(branch.is_none());
+            }
+            other => panic!("expected explicit git :fonte, got {other:?}"),
+        }
+        // Explicit path-source form — the dev-only local-filesystem
+        // arm the [`Dep`] docstring's third fixture carries.
+        let path = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "0.1.0".to_string(),
+            fonte: Some(DepSource::Path {
+                caminho: "../caixa-teia".to_string(),
+            }),
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        match path.fonte() {
+            Some(DepSource::Path { caminho }) => {
+                assert_eq!(caminho, "../caixa-teia");
+            }
+            other => panic!("expected explicit path :fonte, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn dep_fonte_is_by_borrow_pointer_identity() {
+        // Zero-copy pin: the accessor must borrow into the field's own
+        // `Option<DepSource>` storage, not clone into a side buffer. If
+        // a future rewrite regresses to `self.fonte.clone()` or an
+        // owned-buffer shape, the two pointers diverge and this pin
+        // fails at build time. Peer of the sibling per-`Dep` [`Dep::nome`]
+        // (eba2cde) / [`Dep::versao_requirement`] (05529b1) pointer-
+        // identity pins — same by-borrow discipline extended onto the
+        // outer-`Dep` `Option<&Composite>` composite-reference axis.
+        let d = Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0");
+        let accessed = d.fonte().expect("git :fonte present") as *const DepSource;
+        let raw = d.fonte.as_ref().expect("git :fonte present") as *const DepSource;
+        assert!(std::ptr::eq(accessed, raw));
+    }
+
+    #[test]
+    fn dep_validate_reads_fonte_through_accessor() {
+        // Composition pin: [`Dep::validate`]'s per-`:fonte`
+        // [`DepSource::validate`] delegation consumes the typed slot
+        // through the lifted accessor — an author-omitted `:fonte`
+        // still passes the outer gate (positive control), an explicit
+        // well-formed git source with exactly one pin passes, and a
+        // malformed git source (empty `:repo`) surfaces the
+        // [`DepError::FonteRepoEmpty`] variant quoting the offending
+        // dep's `:nome` verbatim so a future regression that detoured
+        // the `:fonte` delegation through a different path (say a
+        // per-scope override projector) would surface here at build
+        // time. Peer of the sibling
+        // `dep_validate_reads_requirement_through_accessor` composition
+        // pin on the `:versao` axis.
+        // Positive control 1: no `:fonte` at all.
+        Dep::simple("caixa-teia", "^0.1").validate().unwrap();
+        // Positive control 2: well-formed git source.
+        Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0")
+            .validate()
+            .unwrap();
+        // Negative control: empty `:repo` — the accessor still returns
+        // `Some(&DepSource::Git { repo: "", … })` and the delegated
+        // `DepSource::validate` gate raises the typed carrier.
+        let bad = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: Some(DepSource::Git {
+                repo: String::new(),
+                tag: Some("v0.1.0".to_string()),
+                rev: None,
+                branch: None,
+            }),
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        let err = bad.validate().unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                DepError::FonteRepoEmpty { nome } if nome == "caixa-teia",
+            ),
+            "expected FonteRepoEmpty from the accessor-routed :fonte gate, got {err:?}",
         );
     }
 
