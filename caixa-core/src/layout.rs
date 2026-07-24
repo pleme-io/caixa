@@ -970,9 +970,9 @@ impl LayoutInvariants for StandardLayout {
         // `*_takes_precedence_over_*` pins on every typed-graph axis).
         crate::upgrade::validate_upgrade_from_against_versao(caixa.upgrade_from(), &caixa.versao)
             .map_err(|err| LayoutError::UpgradeViolation {
-                caixa: caixa.nome.clone(),
-                issue: err.to_string(),
-            })?;
+            caixa: caixa.nome.clone(),
+            issue: err.to_string(),
+        })?;
         // Cross-slot composition gate: every `:upgrade-from` entry whose
         // `:instructions` list carries a `(:state-change …)` instruction
         // must also have `:behavior :on-state-change` declared on the
