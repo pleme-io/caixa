@@ -25,7 +25,22 @@ pub fn caixa_into_cr(caixa: &Caixa, source: CaixaSource) -> CaixaCr {
         // `Caixa::nome` non-`.clone()` field-access converges on the same
         // axis in the sibling per-target renderer crates.
         nome: caixa.nome().to_owned(),
-        versao: caixa.versao.clone(),
+        // Read the outer-`Caixa` `:versao` `String`-carry emit-site
+        // through the typed [`caixa_core::Caixa::versao`] `&str`-return
+        // accessor so the `CaixaSpec.versao` `String`-carry projection —
+        // the axis the operator-side reconciler binds every per-Caixa
+        // CR revision against, the axis every downstream `HelmRelease`
+        // `spec.chart.spec.version` / OCI-tag / Artifact Hub release-
+        // note surface consults — routes through one typed dispatch;
+        // any future extension of the accessor's accept-set (SemVer-2
+        // build-metadata canonicalization, OCI-tag normalization, per-
+        // edition pre-release-tag overlay) reaches this emit site by
+        // construction. Peer of caixa-helm eb912de's two-site
+        // `caixa.versao.clone()` converge on the `Chart.yaml` `version:`
+        // / `appVersion:` pair; closes the last unlifted per-`Caixa`
+        // `.versao.clone()` raw-field-access `String`-carry axis in the
+        // K8s-CR conversion crate.
+        versao: caixa.versao().to_owned(),
         kind: format!("{:?}", caixa.kind),
         source,
         reconcile: Some(ReconcilePolicy {
@@ -231,5 +246,56 @@ mod tests {
         assert_eq!(cr.spec.nome, c.nome());
         // CaixaCr::new `.metadata.name` emit-site echoes the accessor.
         assert_eq!(cr.metadata.name.as_deref(), Some(c.nome()));
+    }
+
+    /// Pin that the outer-`Caixa` `:versao` `String`-carry emit-site in
+    /// [`caixa_into_cr`] — the `CaixaSpec.versao` projection every
+    /// operator-side per-Caixa CR revision binds against, and every
+    /// downstream `HelmRelease` `spec.chart.spec.version` / OCI-tag /
+    /// Artifact Hub release-note surface consults — routes through the
+    /// typed [`Caixa::versao`] `&str`-return accessor. Byte-equal today
+    /// (accessor returns `&self.versao`); catches any future accessor
+    /// extension whose emit-side write regresses to a raw field read.
+    /// Peer of caixa-helm eb912de's `Chart.yaml` `version:` / `appVersion:`
+    /// two-site converge on `caixa.versao.clone()`.
+    #[test]
+    fn caixa_into_cr_versao_routes_through_caixa_versao_accessor() {
+        let c = Caixa {
+            nome: "demo".into(),
+            versao: "0.1.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+        };
+        let cr = caixa_into_cr(
+            &c,
+            CaixaSource {
+                repo: "github:pleme-io/demo".into(),
+                git_ref: "v0.1.0".into(),
+            },
+        );
+        // CaixaSpec.versao emit-site echoes the accessor.
+        assert_eq!(cr.spec.versao, c.versao());
     }
 }
