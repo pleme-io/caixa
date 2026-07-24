@@ -654,10 +654,10 @@ impl LayoutInvariants for StandardLayout {
         let has_code = !caixa.bibliotecas().is_empty()
             || !caixa.exe().is_empty()
             || !caixa.servicos().is_empty();
-        if caixa.kind() == CaixaKind::Supervisor && has_code {
+        if caixa.kind().is_supervisor() && has_code {
             return Err(LayoutError::SupervisorOwnsCode(caixa.nome().to_string()));
         }
-        if caixa.kind() == CaixaKind::Aplicacao && has_code {
+        if caixa.kind().is_aplicacao() && has_code {
             return Err(LayoutError::AplicacaoOwnsCode(caixa.nome().to_string()));
         }
 
@@ -676,7 +676,7 @@ impl LayoutInvariants for StandardLayout {
         // above: a slot foreign to the kind is a build error, not a
         // silent drop. `declared_mesh_slots` is the single typed source
         // of the mesh-slot set + its canonical diagnostic order.
-        if caixa.kind() != CaixaKind::Aplicacao {
+        if !caixa.kind().is_aplicacao() {
             let mesh_slots = caixa.declared_mesh_slots();
             if !mesh_slots.is_empty() {
                 return Err(LayoutError::MeshSlotsOnNonAplicacao {
@@ -702,7 +702,7 @@ impl LayoutInvariants for StandardLayout {
         // loops — naming the offending kind + slot(s). `declared_
         // supervisor_slots` is the single typed source of the
         // supervisor-slot set + its canonical diagnostic order.
-        if caixa.kind() != CaixaKind::Supervisor {
+        if !caixa.kind().is_supervisor() {
             let supervisor_slots = caixa.declared_supervisor_slots();
             if !supervisor_slots.is_empty() {
                 return Err(LayoutError::SupervisorSlotsOnNonSupervisor {
@@ -732,7 +732,7 @@ impl LayoutInvariants for StandardLayout {
         // the offending kind + slot(s). `declared_servico_slots` is the
         // single typed source of the M2-slot set + its canonical
         // diagnostic order.
-        if caixa.kind() != CaixaKind::Servico {
+        if !caixa.kind().is_servico() {
             let servico_slots = caixa.declared_servico_slots();
             if !servico_slots.is_empty() {
                 return Err(LayoutError::ServicoSlotsOnNonServico {
@@ -813,7 +813,7 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
-        if caixa.kind() == CaixaKind::Biblioteca && caixa.bibliotecas().is_empty() {
+        if caixa.kind().is_biblioteca() && caixa.bibliotecas().is_empty() {
             let expected = root
                 .join(crate::render::LAYOUT_DIR_LIB)
                 .join(format!("{}.lisp", caixa.nome));
@@ -1030,7 +1030,7 @@ impl LayoutInvariants for StandardLayout {
         // Supervisor invariants (typed shape — children, restart strategy).
         // The "supervisor doesn't own code" check is at the top of verify()
         // so it fires before the existence-check loops.
-        if caixa.kind() == CaixaKind::Supervisor {
+        if caixa.kind().is_supervisor() {
             // Raw `:restart-window` parse gate on the flat
             // `Caixa::restart_window: Option<String>` axis — the last
             // orphan-validator on the typed Caixa surface flagged by the
@@ -1141,7 +1141,7 @@ impl LayoutInvariants for StandardLayout {
 
         // Aplicacao invariants — typed graph composition. Like
         // Supervisor, an Aplicacao runs no code itself.
-        if caixa.kind() == CaixaKind::Aplicacao {
+        if caixa.kind().is_aplicacao() {
             let view = caixa
                 .aplicacao_view()
                 .expect("Aplicacao kind must have an aplicacao_view");

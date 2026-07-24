@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 /// Authored as bare symbols (`Biblioteca` not `:biblioteca`) to match the
 /// tatara-lisp enum convention where symbols become enum discriminants via
 /// the serde `Deserialize` fallthrough.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant,
+)]
 pub enum CaixaKind {
     /// Library — exports Lisp forms for other caixas to `(importar …)`.
     Biblioteca,
@@ -377,6 +379,82 @@ mod tests {
         assert_eq!(crate::render::CAIXA_KIND_LABEL_SERVICO, "servico");
         assert_eq!(crate::render::CAIXA_KIND_LABEL_SUPERVISOR, "supervisor");
         assert_eq!(crate::render::CAIXA_KIND_LABEL_APLICACAO, "aplicacao");
+    }
+
+    #[test]
+    fn caixa_kind_is_variant_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+        // derive: for each of the five variants, exactly one of the
+        // generated `is_biblioteca` / `is_binario` / `is_servico` /
+        // `is_supervisor` / `is_aplicacao` predicates returns `true` and
+        // the other four return `false`. Prior to this derive the ten
+        // production `caixa.kind() == CaixaKind::X` / `!=` sites in
+        // `layout.rs` (`SupervisorOwnsCode` / `AplicacaoOwnsCode` /
+        // `MeshSlotsOnNonAplicacao` / `SupervisorSlotsOnNonSupervisor` /
+        // `ServicoSlotsOnNonServico` / `MissingLib` biblioteca-fallback
+        // / Supervisor invariants / Aplicacao invariants) plus
+        // `manifest.rs` (`aplicacao_view` / `supervisor_view` kind
+        // gates) each open-coded a per-arm PartialEq compare against
+        // the enum variant — ten sites that expressed no compile-time
+        // link back to the closed-set typed dispatch a future sixth
+        // `:kind` (e.g. an `Actor` virtual-actor arm for the
+        // absorption-roadmap M5 Orleans-inspired kind) would have to
+        // thread through in lockstep or one gate would silently
+        // disagree with the others on which arms it treats as "runs
+        // no code" / "declares mesh slots" / etc. Peer of the sibling
+        // [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`] /
+        // [`crate::upgrade::UpgradeInstruction`] `IsVariant` derives on
+        // the sibling closed-set typed-enum discriminator axes — extends
+        // the same one-typed-dispatch-per-variant discipline onto the
+        // fourth (and structurally most fundamental — every caixa
+        // carries a `:kind`) closed-set typed-enum discriminator axis.
+        let rows: [(CaixaKind, [bool; 5]); 5] = [
+            (CaixaKind::Biblioteca, [true, false, false, false, false]),
+            (CaixaKind::Binario, [false, true, false, false, false]),
+            (CaixaKind::Servico, [false, false, true, false, false]),
+            (CaixaKind::Supervisor, [false, false, false, true, false]),
+            (CaixaKind::Aplicacao, [false, false, false, false, true]),
+        ];
+        for (variant, expected) in rows {
+            let observed = [
+                variant.is_biblioteca(),
+                variant.is_binario(),
+                variant.is_servico(),
+                variant.is_supervisor(),
+                variant.is_aplicacao(),
+            ];
+            assert_eq!(
+                observed, expected,
+                "CaixaKind::{variant:?} is_* predicates must partition \
+                 the arm set (biblioteca, binario, servico, supervisor, \
+                 aplicacao); got {observed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_is_variant_predicates_are_const_fn() {
+        // The [`gen_platform::IsVariant`] derive emits `const fn`
+        // predicates on the peer [`crate::upgrade::UpgradeInstruction`] +
+        // [`crate::supervisor::RestartStrategy`] +
+        // [`crate::supervisor::RestartPolicy`] closed-set typed enums —
+        // pin the same posture on [`CaixaKind`] so a future accidental
+        // downgrade to non-`const` (an added runtime helper reachable
+        // only from a non-`const` context, a manual hand-rolled `impl`
+        // that shadows the derive-generated method) trips at
+        // caixa-core build time rather than surfacing as a
+        // downstream `const`-context regression far from the derive
+        // declaration.
+        const IS_APLICACAO: bool = CaixaKind::Aplicacao.is_aplicacao();
+        const IS_BIBLIOTECA: bool = CaixaKind::Biblioteca.is_biblioteca();
+        const IS_SERVICO: bool = CaixaKind::Servico.is_servico();
+        const IS_SUPERVISOR: bool = CaixaKind::Supervisor.is_supervisor();
+        const IS_BINARIO: bool = CaixaKind::Binario.is_binario();
+        assert!(IS_APLICACAO);
+        assert!(IS_BIBLIOTECA);
+        assert!(IS_SERVICO);
+        assert!(IS_SUPERVISOR);
+        assert!(IS_BINARIO);
     }
 
     #[test]
