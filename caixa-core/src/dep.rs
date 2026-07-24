@@ -2608,6 +2608,112 @@ impl Dep {
         self.fonte.as_ref()
     }
 
+    /// Substrate-canonical per-`:deps` / `:deps-dev` entry
+    /// `:caracteristicas` Cargo-shaped feature-toggle-set slice accessor
+    /// every consumer of the dep-graph feature-flag axis keys off —
+    /// returns the author-declared `:caracteristicas` feature-name list
+    /// verbatim as a `&[String]` slice-view over the same backing buffer
+    /// the raw `self.caracteristicas.as_slice()` field access borrows
+    /// from. Empty-list-carrying (`:caracteristicas` is a default-empty
+    /// axis every `Dep` supplies with `Vec::new()` when the author omits
+    /// the slot; the [`crate::Caixa::from_lisp`] derive folds an omitted
+    /// `:caracteristicas` through `#[serde(default)]` to `Vec::new()`,
+    /// so a `Dep` past parse definitionally carries a `Vec<String>` slot
+    /// — possibly empty — and the returned `&[String]` degenerates to
+    /// an empty slice on that arm without any silent `None` collapse).
+    ///
+    /// The `:deps :caracteristicas` / `:deps-dev :caracteristicas` slot
+    /// carries the set-shaped feature-toggle list the substrate walks
+    /// through the [`Self::validate_caracteristicas`] per-entry shape +
+    /// duplicate cascade — same Cargo `[dependencies.<dep>.features]`
+    /// accept-set (per-entry Cargo-feature-name grammar via the shared
+    /// [`crate::render::is_cargo_feature_name`] predicate, cross-entry
+    /// uniqueness via the shared [`crate::render::insert_first_seen`]
+    /// walk, empty-first / value-shape-second / duplicate-third
+    /// precedence via the peer per-axis two-arm cascade discipline every
+    /// substrate-blessed Vec-keyed-by-name slot already follows).
+    /// Every downstream consumer that fans on the dep's feature-toggle
+    /// keys off this accessor: [`Self::validate_caracteristicas`]'s
+    /// per-entry linear walk that gates each feature-name byte-string
+    /// through the empty / value-shape / duplicate arms (raising the
+    /// [`DepError::CaracteristicaEmpty`] / [`DepError::CaracteristicaInvalid`]
+    /// / [`DepError::CaracteristicaDuplicate`] carrier family naming the
+    /// offending `Dep::nome`), and every future
+    /// per-`Caixa`-manifest / caixa-resolver / caixa-crd feature-toggle-
+    /// facing consumer the CAIXA-SDLC §I roadmap acknowledges (the
+    /// future caixa-resolver per-dep feature-projection walk that folds
+    /// the toggle set into the resolved [`crate::Caixa`]'s activated
+    /// [`crate::render::CARGO_FEATURE_NAME_MAX_LEN`]-bounded feature
+    /// closure ahead of the lacre hash, the future caixa-crd per-`spec.deps`
+    /// features slice the K8s-CR admission gate consumes, the future
+    /// per-cluster feature-overlay the M4 lacre-federation resolver
+    /// composes ahead of the substrate-wide feature-name accept-set).
+    ///
+    /// Prior to this lift the `.caracteristicas` byte-string list was
+    /// read inline at the [`Self::validate_caracteristicas`] `for c in
+    /// &self.caracteristicas` walk — the only in-crate consumer of the
+    /// raw field beyond the per-`Dep` constructor pair
+    /// ([`Self::simple`] / [`Self::git`]) and the paired serde
+    /// round-trip / per-test fixture-mutation paths — an open-coded
+    /// field-access that expressed no compile-time link back to the
+    /// typed slot. A future extension of the `:caracteristicas` axis to
+    /// a richer author surface (a per-scope feature-overlay the resolver
+    /// folds through the `~/.config/caixa/config.yaml` entry the
+    /// [`Dep`] docstring already acknowledges, a per-cluster feature-
+    /// activation overlay the future M4 lacre-federation layer applies
+    /// per-CR, a promotion of the plain `Vec<String>` byte-string list
+    /// to a richer parsed-feature-set newtype once the Cargo-shaped
+    /// namespaced-dep `dep/feat` syntax the value-shape gate's
+    /// docstring anticipates lands) would have had to be threaded
+    /// through every open-coded copy in lockstep or two consumers
+    /// would silently disagree on which feature closure a given dep
+    /// activates — the [`Self::validate_caracteristicas`] gate walking
+    /// the author-declared list while a downstream caixa-resolver
+    /// consumer walked a per-scope-override-resolved list would
+    /// silently split the build-time refusal from the lacre closure
+    /// the substrate's fetch pipeline actually materializes, one
+    /// build-time diagnostic disagreeing with the run-time closure.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer of the caixa's per-
+    /// `:deps` feature-toggle surface reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// First outer-`Dep` `&[T]`-return slice accessor — opens the
+    /// outer-`Dep` `&[String]` slice projection pattern the sibling
+    /// per-`Dep` `:opcional` (`bool` — the plain-`Copy`-scalar axis)
+    /// future outer scalar lift folds on and closes the outer-`Dep`
+    /// slot-family the sibling [`Self::nome`] (eba2cde) /
+    /// [`Self::versao_requirement`] (05529b1) / [`Self::fonte`] (d65d1bf)
+    /// accessors already open, leaving the `:opcional` `Copy`-scalar arm
+    /// as the sole remaining unlifted outer-`Dep` slot. Peer of the
+    /// outer top-level [`crate::Caixa`] `&[String]`-return foreign-code-
+    /// slot sub-family ([`crate::Caixa::bibliotecas`] 8a36c23,
+    /// [`crate::Caixa::exe`] 65d9527, [`crate::Caixa::servicos`]
+    /// 611f78b) and the outer top-level [`crate::Caixa`] universal-axis
+    /// text-tag family ([`crate::Caixa::autores`] b5d813f,
+    /// [`crate::Caixa::etiquetas`] 78c7d3c) that already carry the
+    /// `&[String]` slice-projection discipline on the outer-`Caixa`
+    /// altitude — extends the "one typed dispatch on the substrate
+    /// primitive, thin projections at each consumer" discipline onto the
+    /// outer per-dep-list-entry [`Dep`] altitude's set-shaped byte-
+    /// string list slot. Returns `&[String]` (not `&Vec<String>`)
+    /// because every downstream consumer of the feature-toggle list
+    /// treats it as a read-only sequence — the slice-view is the
+    /// narrowest borrow that supports every present + roadmapped
+    /// consumer (`.iter()`, `.len()`, `.is_empty()`) without leaking
+    /// the backing `Vec`'s grow/push/reserve surface no consumer of
+    /// the typed view reaches for (the storage-side `Vec` remains
+    /// reachable through the `pub caracteristicas` field for the
+    /// mutation-carrying serde round-trip and per-test fixture-mutation
+    /// paths). Named `caracteristicas()` to match the storage field's
+    /// name verbatim and the tatara-lisp author-surface term
+    /// (`:caracteristicas`) the field's own docstring already carries.
+    #[must_use]
+    pub fn caracteristicas(&self) -> &[String] {
+        self.caracteristicas.as_slice()
+    }
+
     /// Build a minimal registry-sourced dep.
     #[must_use]
     pub fn simple(nome: impl Into<String>, versao: impl Into<String>) -> Self {
@@ -2830,7 +2936,7 @@ impl Dep {
     /// [`is_git_repo_url`](crate::render::is_git_repo_url)).
     fn validate_caracteristicas(&self) -> Result<(), DepError> {
         let mut seen = std::collections::HashSet::new();
-        for c in &self.caracteristicas {
+        for c in self.caracteristicas() {
             if c.is_empty() {
                 return Err(DepError::CaracteristicaEmpty {
                     nome: self.nome.clone(),
@@ -3879,7 +3985,7 @@ mod tests {
         assert_eq!(d.versao, "^0.1");
         assert!(d.fonte.is_none());
         assert!(!d.opcional);
-        assert!(d.caracteristicas.is_empty());
+        assert!(d.caracteristicas().is_empty());
     }
 
     #[test]
@@ -14859,5 +14965,148 @@ mod tests {
         // A non-matching `:nome` passes through the accessor gate.
         let deps = vec![Dep::simple("caixa-teia", "^0.1")];
         validate_no_self_dep(&deps, &[], "orquestra").unwrap();
+    }
+
+    // ── Dep::caracteristicas accessor pins ────────────────────────────
+    //
+    // Three coherence pins on the lifted `Dep::caracteristicas` accessor:
+    // byte-equal projection over the default-empty / single-entry /
+    // multi-entry fixture triad (so the accessor's accept-set is
+    // exercised across every author-surface `:caracteristicas` shape,
+    // matching the peer sibling family's fixture-triad discipline); by-
+    // borrow pointer identity so the projection stays zero-copy at every
+    // consumer site; and validate-composition through the
+    // [`Dep::validate_caracteristicas`] gate reading its per-entry
+    // linear walk through the lifted accessor rather than the raw
+    // `for c in &self.caracteristicas` bracket.
+
+    #[test]
+    fn dep_caracteristicas_returns_declared_features_across_shapes() {
+        // Default-empty form — the [`Dep::simple`] constructor's
+        // `Vec::new()` fill; the accessor projects the empty slice
+        // verbatim (no `None` collapse).
+        assert!(
+            Dep::simple("caixa-teia", "^0.1")
+                .caracteristicas()
+                .is_empty(),
+        );
+        // Single-entry form — the canonical Cargo-shaped one-feature
+        // enable ([`crate::render::is_cargo_feature_name`] accepts the
+        // `"http"` byte-string as a valid feature name).
+        let one = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".to_string()],
+        };
+        assert_eq!(one.caracteristicas(), &["http".to_string()]);
+        // Multi-entry form — the substrate's set-shaped multi-feature
+        // enable, exercising the accessor over a length-two slice with
+        // no duplicate collapse.
+        let two = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".to_string(), "json".to_string()],
+        };
+        assert_eq!(
+            two.caracteristicas(),
+            &["http".to_string(), "json".to_string()],
+        );
+    }
+
+    #[test]
+    fn dep_caracteristicas_is_by_borrow_pointer_identity() {
+        // Zero-copy pin: the accessor must borrow into the field's own
+        // `Vec<String>` storage, not clone into a side buffer. If a
+        // future rewrite regresses to `self.caracteristicas.clone()` or
+        // an owned-buffer shape, the two pointers diverge and this pin
+        // fails at build time. Peer of the sibling per-`Dep`
+        // [`Dep::nome`] (eba2cde) / [`Dep::versao_requirement`] (05529b1)
+        // / [`Dep::fonte`] (d65d1bf) pointer-identity pins — same by-
+        // borrow discipline extended onto the outer-`Dep` `&[String]`
+        // slice-projection axis.
+        let d = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".to_string(), "json".to_string()],
+        };
+        assert!(std::ptr::eq(
+            d.caracteristicas().as_ptr(),
+            d.caracteristicas.as_ptr(),
+        ));
+    }
+
+    #[test]
+    fn dep_validate_reads_caracteristicas_through_accessor() {
+        // Composition pin: [`Dep::validate_caracteristicas`]'s per-entry
+        // linear walk consumes the feature-toggle list through the
+        // lifted accessor — a well-formed `:caracteristicas` set passes
+        // (positive control), an empty-string entry surfaces the
+        // [`DepError::CaracteristicaEmpty`] variant quoting the offending
+        // `Dep::nome`, and a within-list duplicate surfaces the
+        // [`DepError::CaracteristicaDuplicate`] variant so a future
+        // regression that detoured the walk through a different byte-
+        // string list (say a per-scope override projector) would surface
+        // here at build time. Peer of the sibling
+        // `dep_validate_reads_fonte_through_accessor` /
+        // `dep_validate_reads_requirement_through_accessor` composition
+        // pins on the `:fonte` / `:versao` axes.
+        // Positive control: two distinct well-formed feature names pass.
+        Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".to_string(), "json".to_string()],
+        }
+        .validate()
+        .unwrap();
+        // Negative control 1: empty-string feature-name entry — the
+        // accessor still returns `&[""]` and the walk raises the typed
+        // empty-first carrier.
+        let err = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec![String::new()],
+        }
+        .validate()
+        .unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                DepError::CaracteristicaEmpty { nome } if nome == "caixa-teia",
+            ),
+            "expected CaracteristicaEmpty from the accessor-routed walk, got {err:?}",
+        );
+        // Negative control 2: within-list duplicate — the accessor's
+        // slice view carries both entries, and the walk's dedup arm
+        // raises the typed duplicate carrier quoting the offending
+        // feature name verbatim.
+        let err = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: vec!["http".to_string(), "http".to_string()],
+        }
+        .validate()
+        .unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                DepError::CaracteristicaDuplicate {
+                    nome,
+                    caracteristica,
+                } if nome == "caixa-teia" && caracteristica == "http",
+            ),
+            "expected CaracteristicaDuplicate from the accessor-routed dedup, got {err:?}",
+        );
     }
 }
