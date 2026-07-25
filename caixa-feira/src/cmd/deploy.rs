@@ -124,12 +124,7 @@ impl Deploy {
             .with_context(|| format!("writing {}", programs_abs.display()))?;
 
         let action = if inserted { "added" } else { "updated" };
-        eprintln!(
-            "{action} entry for {} v{} in {}",
-            caixa.nome,
-            caixa.versao,
-            programs_abs.display()
-        );
+        eprintln!("{}", deploy_summary_line(action, &caixa, &programs_abs));
 
         if self.commit || self.apply {
             commit_change(&k8s_repo, &programs_rel, &caixa, action)?;
@@ -172,15 +167,62 @@ fn commit_change(
     caixa: &Caixa,
     action: &str,
 ) -> Result<()> {
-    let msg = format!(
-        "deploy: {action} {} v{}\n\
-         \n\
-         Updated by `feira deploy --cluster <name>`.\n",
-        caixa.nome, caixa.versao,
-    );
+    let msg = deploy_commit_message(action, caixa);
     git(repo, ["add", &rel.display().to_string()])?;
     git(repo, ["commit", "-m", &msg])?;
     Ok(())
+}
+
+/// Compose the operator-visible stderr notice `feira deploy` writes past
+/// a successful upsert into the cluster's fleet-programs HelmRelease.
+/// Derives its terminal `{nome}` / `{versao}` scalars through the typed
+/// [`Caixa::nome`] / [`Caixa::versao`] accessors so the byte-string every
+/// operator sees on stderr shares one canonical read-side surface with
+/// every peer per-`Caixa` substrate-side renderer emit
+/// (caixa-helm `Chart.yaml` `version:` / `appVersion:`, caixa-flux
+/// `programs.yaml` `versao:` fold + `cluster_bundle` `GitRepository`
+/// `spec.ref.tag`, caixa-crd `CaixaSpec.versao`) and with the sibling
+/// `feira` verbs' emit surfaces
+/// (`feira build` summary-line via [`super::build::build_summary_line`],
+/// `feira app graph` header-line via [`super::app::graph_header_line`],
+/// `feira app deploy` commit-message via
+/// [`super::app::deploy_commit_message`]). Peer with
+/// [`deploy_commit_message`] on the writer-side git-commit-subject
+/// surface — the paired stderr-notice + commit-subject emit sites share
+/// one accessor rather than four raw field-accesses in lockstep.
+pub(crate) fn deploy_summary_line(
+    action: &str,
+    caixa: &Caixa,
+    programs_abs: &std::path::Path,
+) -> String {
+    format!(
+        "{action} entry for {} v{} in {}",
+        caixa.nome(),
+        caixa.versao(),
+        programs_abs.display()
+    )
+}
+
+/// Compose the git-commit subject + body `feira deploy --commit /
+/// --apply` writes past a successful upsert into the cluster's
+/// fleet-programs HelmRelease. Derives its terminal `{nome}` / `{versao}`
+/// scalars through the typed [`Caixa::nome`] / [`Caixa::versao`]
+/// accessors so a future git-history reader (a future `feira deploy
+/// rollback` that scans commit subjects, a k8s-repo audit walker that
+/// greps `deploy: added <nome>` / `deploy: updated <nome>` prefixes)
+/// reads a byte-string identical to the one the paired downstream
+/// Servico artefact emit already carries. Peer with
+/// [`deploy_summary_line`] on the operator-visible stderr-notice
+/// surface — the paired stderr-notice + commit-subject emit sites share
+/// one accessor rather than four raw field-accesses in lockstep.
+pub(crate) fn deploy_commit_message(action: &str, caixa: &Caixa) -> String {
+    format!(
+        "deploy: {action} {} v{}\n\
+         \n\
+         Updated by `feira deploy --cluster <name>`.\n",
+        caixa.nome(),
+        caixa.versao(),
+    )
 }
 
 fn push_origin(repo: &std::path::Path) -> Result<()> {
@@ -247,6 +289,164 @@ mod tests {
              a sibling local `pub const` that happens to carry the same \
              string — drift between the two is the canonical footgun \
              this lift closes"
+        );
+    }
+
+    fn servico_caixa(nome: &str, versao: &str) -> Caixa {
+        // Minimal `:kind Servico` caixa carrying the identity pair the
+        // pins below assert against. The declared `:servicos` entry is
+        // never opened on disk from these tests — every consumer under
+        // test reads only `Caixa::nome` / `Caixa::versao`.
+        let src = format!(
+            "(defcaixa :nome \"{nome}\" :versao \"{versao}\" :kind Servico \
+             :servicos (\"servicos/{nome}.computeunit.yaml\"))"
+        );
+        Caixa::from_lisp(&src).expect("Servico caixa src parses")
+    }
+
+    #[test]
+    fn deploy_summary_line_routes_through_caixa_nome_and_versao_accessors() {
+        // Fail-before-pass-after pin: the `feira deploy` operator-
+        // visible post-upsert stderr notice's terminal `{nome}` /
+        // `{versao}` scalars must resolve through the typed
+        // [`Caixa::nome`] / [`Caixa::versao`] accessors, not the raw
+        // `caixa.nome` / `caixa.versao` field-accesses this converge
+        // lifts. A regression that re-inlines either raw field at the
+        // emit site silently splits the byte-string the operator reads
+        // on stderr past a successful `feira deploy` from the identity
+        // the paired downstream Servico artefacts already carry (the
+        // caixa-helm `Chart.yaml` `version:` / `appVersion:` per
+        // eb912de / 05a7701, the caixa-flux `programs.yaml` `versao:`
+        // fold + `cluster_bundle` `GitRepository` `spec.ref.tag` per
+        // 2fc5f81, the caixa-crd `CaixaSpec.versao` CR-side emit per
+        // 41ab9a3) — the operator's post-deploy confirmation of a
+        // Servico's `{nome} v{versao}` identity would silently
+        // disagree with the identity the substrate reconciler binds
+        // against per-CR revision.
+        //
+        // Pin the emit composer's output byte-equal against a scratch
+        // notice derived through the typed accessors + the canonical
+        // action / programs-path scalars this verb carries, and pin
+        // the exact operator-facing line
+        // (`"added entry for checkout v0.4.2 in /k8s/…"`) so a future
+        // template-format extension (e.g. adding a `[cluster=<name>]`
+        // suffix once the sibling `feira app deploy` post-upsert
+        // notice grows the same axis) reaches this site through one
+        // composer rather than re-rolling a parallel template. Peer
+        // with the sibling
+        // [`super::build::build_summary_line`] / [`super::app::graph_header_line`]
+        // pins on the peer `feira build` / `feira app graph` verb-emit
+        // surfaces.
+        let caixa = servico_caixa("checkout", "0.4.2");
+        let programs_abs = std::path::Path::new("/k8s/clusters/rio/programs/release.yaml");
+        let rendered = deploy_summary_line("added", &caixa, programs_abs);
+        assert_eq!(
+            rendered,
+            format!(
+                "added entry for {} v{} in {}",
+                caixa.nome(),
+                caixa.versao(),
+                programs_abs.display()
+            ),
+            "deploy_summary_line must derive its {{nome}} / {{versao}} \
+             slots through the typed Caixa::nome / Caixa::versao \
+             accessors — a regression that re-inlines caixa.nome / \
+             caixa.versao at the emit site silently splits the operator-\
+             facing stderr notice from the peer accessor-derived \
+             substrate-side emit"
+        );
+        assert_eq!(
+            rendered,
+            "added entry for checkout v0.4.2 in /k8s/clusters/rio/programs/release.yaml"
+        );
+    }
+
+    #[test]
+    fn deploy_summary_line_carries_updated_action_verbatim() {
+        // Paired inversion pin: the `--commit` / `--apply`-triggered
+        // per-entry-existed-already arm emits `updated` in the action
+        // slot the [`Deploy::run`] `let action = if inserted { "added"
+        // } else { "updated" }` cascade chooses off the
+        // `upsert_into_helmrelease_programs` `inserted` bool. Pin the
+        // `"updated"` shape end-to-end so a future refactor of the
+        // action-slot cascade (e.g. splitting into a typed
+        // `enum UpsertOutcome { Added, Updated }` once the sibling
+        // `feira app deploy` cascade grows the same axis) reaches this
+        // composer through one canonical form rather than re-rolling a
+        // parallel byte-string.
+        let caixa = servico_caixa("cart", "1.0.0");
+        let programs_abs = std::path::Path::new("/k8s/clusters/mar/programs/release.yaml");
+        assert_eq!(
+            deploy_summary_line("updated", &caixa, programs_abs),
+            "updated entry for cart v1.0.0 in /k8s/clusters/mar/programs/release.yaml"
+        );
+    }
+
+    #[test]
+    fn deploy_commit_message_routes_through_caixa_nome_and_versao_accessors() {
+        // Fail-before-pass-after pin: the `feira deploy --commit /
+        // --apply` git-commit-message composer's terminal `{nome}` /
+        // `{versao}` scalars must resolve through the typed
+        // [`Caixa::nome`] / [`Caixa::versao`] accessors, not the raw
+        // `caixa.nome` / `caixa.versao` field-accesses the pre-lift
+        // `format!("deploy: {action} {} v{}\n...\n", caixa.nome,
+        // caixa.versao)` at :175-180 carried. A regression that re-
+        // inlines either raw field at the emit site silently splits
+        // the k8s-repo git-history commit subject a future git-history
+        // reader greps against (a future `feira deploy rollback` that
+        // scans commit subjects for `deploy: added <nome> v<versao>`
+        // / `deploy: updated <nome> v<versao>` prefixes, a k8s-repo
+        // audit walker that projects the Servico's identity out of
+        // the commit-history axis) from the identity every paired
+        // downstream Servico artefact already carries under one
+        // accessor.
+        //
+        // Pin the composer's output byte-equal against a scratch
+        // message derived through the typed accessors + the canonical
+        // subject-line + trailing-body shape this verb carries, and
+        // pin the exact commit-message body
+        // (`"deploy: added checkout v0.4.2\n\nUpdated by `feira …`.\n"`)
+        // so a future subject-line extension (e.g. adding a
+        // `[cluster=<name>]` suffix once the sibling
+        // `feira app deploy` commit-subject grows the same axis)
+        // reaches this site through one composer rather than re-
+        // rolling a parallel template. Peer with the sibling
+        // [`super::app::deploy_commit_message`] pin on the peer
+        // Aplicacao-deploy verb's commit-subject axis, and with the
+        // sibling `deploy_summary_line` pin on the paired stderr-
+        // notice axis of this same verb.
+        let caixa = servico_caixa("checkout", "0.4.2");
+        let msg = deploy_commit_message("added", &caixa);
+        assert_eq!(
+            msg,
+            format!(
+                "deploy: added {} v{}\n\
+                 \n\
+                 Updated by `feira deploy --cluster <name>`.\n",
+                caixa.nome(),
+                caixa.versao()
+            ),
+            "deploy_commit_message must derive its {{nome}} / {{versao}} \
+             slots through the typed Caixa::nome / Caixa::versao \
+             accessors — a regression that re-inlines caixa.nome / \
+             caixa.versao at the emit site silently splits the k8s-repo \
+             git-history commit subject from the peer accessor-derived \
+             substrate-side emit"
+        );
+        assert_eq!(
+            msg,
+            "deploy: added checkout v0.4.2\n\
+             \n\
+             Updated by `feira deploy --cluster <name>`.\n"
+        );
+        // Symmetric assertion on the `updated` action arm; the
+        // subject-prefix cascade must fold onto the same accessor-
+        // derived composer.
+        assert_eq!(
+            deploy_commit_message("updated", &servico_caixa("cart", "1.0.0")),
+            "deploy: updated cart v1.0.0\n\
+             \n\
+             Updated by `feira deploy --cluster <name>`.\n"
         );
     }
 }
