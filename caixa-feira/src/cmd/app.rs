@@ -68,7 +68,7 @@ impl GraphArgs {
         if self.json {
             println!("{}", serde_json::to_string_pretty(&spec)?);
         } else {
-            println!("Aplicacao {} v{}", caixa.nome, caixa.versao);
+            println!("{}", graph_header_line(&caixa));
             // Route the per-Aplicacao `:placement` printer's paired
             // `.estrategia()` + `.clusters()` reads through the lifted
             // [`caixa_core::AplicacaoSpec::placement`] outer accessor
@@ -204,7 +204,7 @@ impl DeployArgs {
         let caixa = load_aplicacao(self.path.as_deref())?;
         let docs = caixa_mesh::render_all(&caixa)?;
 
-        let serialized = render_multidoc(&caixa.nome, &docs)?;
+        let serialized = render_multidoc(caixa.nome(), &docs)?;
 
         if self.dry_run {
             print!("{serialized}");
@@ -220,7 +220,7 @@ impl DeployArgs {
         let rel = PathBuf::from("clusters")
             .join(&self.cluster)
             .join("aplicacaos")
-            .join(&caixa.nome)
+            .join(caixa.nome())
             .join("manifests.yaml");
         let abs = k8s_repo.join(&rel);
         if let Some(parent) = abs.parent() {
@@ -229,7 +229,7 @@ impl DeployArgs {
         }
         std::fs::write(&abs, &serialized).with_context(|| format!("writing {}", abs.display()))?;
 
-        eprintln!("rendered {} → {}", caixa.nome, abs.display());
+        eprintln!("rendered {} → {}", caixa.nome(), abs.display());
 
         if self.commit || self.apply {
             commit_change(&k8s_repo, &rel, &caixa)?;
@@ -250,6 +250,49 @@ impl DeployArgs {
 }
 
 // ── helpers ─────────────────────────────────────────────────────────
+
+/// Substrate-canonical `feira app graph` per-Aplicacao header line
+/// composer — derives the `"Aplicacao {nome} v{versao}"` byte-string
+/// every operator sees on stdout past a clean `feira app graph`
+/// through the typed [`caixa_core::Caixa::nome`] /
+/// [`caixa_core::Caixa::versao`] accessors rather than the raw
+/// `.nome` / `.versao` field-accesses the inline emit at
+/// [`GraphArgs::run`] used before this lift. Peer with every prior
+/// per-substrate-side renderer converge on the outer-`Caixa` `:nome`
+/// / `:versao` universal-axis accessors (caixa-helm 22461ef /
+/// eb912de / 05a7701, caixa-flux 4a363bf / 162e2e2 / 2fc5f81,
+/// caixa-mesh 54bf2f3 / 980c059, caixa-crd 61d3429 / 41ab9a3) and
+/// with the sibling [`crate::cmd::build::build_summary_line`] (ef83332)
+/// on the peer `feira build` verb — closes the analogous last
+/// unlifted `feira app graph` header-line raw-field-access site in
+/// caixa-feira on both axes at once (the emit site composes `:nome`
+/// and `:versao` in the same `println!` template, so converging one
+/// without the other would leave a mixed-mode emit).
+pub(crate) fn graph_header_line(caixa: &Caixa) -> String {
+    format!("Aplicacao {} v{}", caixa.nome(), caixa.versao())
+}
+
+/// Substrate-canonical `feira app deploy --commit` / `--apply`
+/// per-Aplicacao git-commit-message composer — derives the
+/// `"deploy: aplicacao {nome} v{versao}\n\nUpdated by `feira app
+/// deploy --cluster <name>`.\n"` byte-string every downstream git
+/// history reader sees on the writer-side deploy path through the
+/// typed [`caixa_core::Caixa::nome`] / [`caixa_core::Caixa::versao`]
+/// accessors rather than the raw `.nome` / `.versao` field-accesses
+/// the inline `format!` at [`commit_change`] used before this lift.
+/// Peer with the sibling [`graph_header_line`] above (same lift, same
+/// verb, sibling emit surface) and with the analogous `feira deploy`
+/// per-Servico writer-side commit-message emit at
+/// [`crate::cmd::deploy::commit_change`]'s `caixa.nome, caixa.versao`
+/// field-accesses (a future peer converge folds on this template's
+/// shape).
+pub(crate) fn deploy_commit_message(caixa: &Caixa) -> String {
+    format!(
+        "deploy: aplicacao {} v{}\n\nUpdated by `feira app deploy --cluster <name>`.\n",
+        caixa.nome(),
+        caixa.versao(),
+    )
+}
 
 fn load_aplicacao(path: Option<&std::path::Path>) -> Result<Caixa> {
     let root = caixa_root(path);
@@ -288,10 +331,7 @@ fn render_multidoc(nome: &str, docs: &[serde_yaml::Value]) -> Result<String> {
 }
 
 fn commit_change(repo: &std::path::Path, rel: &std::path::Path, caixa: &Caixa) -> Result<()> {
-    let msg = format!(
-        "deploy: aplicacao {} v{}\n\nUpdated by `feira app deploy --cluster <name>`.\n",
-        caixa.nome, caixa.versao
-    );
+    let msg = deploy_commit_message(caixa);
     git(repo, ["add", &rel.display().to_string()])?;
     git(repo, ["commit", "-m", &msg])?;
     Ok(())
@@ -346,8 +386,8 @@ mod tests {
                  :membros ())"#,
         );
         let caixa = load_aplicacao(Some(dir.path())).expect("Aplicacao must load");
-        assert_eq!(caixa.nome, "checkout");
-        assert_eq!(caixa.kind, CaixaKind::Aplicacao);
+        assert_eq!(caixa.nome(), "checkout");
+        assert_eq!(caixa.kind(), CaixaKind::Aplicacao);
     }
 
     #[test]
@@ -427,6 +467,121 @@ mod tests {
              a sibling local `pub const` that happens to carry the same \
              string — drift between the two is the canonical footgun \
              this lift closes"
+        );
+    }
+
+    #[test]
+    fn graph_header_line_routes_through_caixa_nome_and_versao_accessors() {
+        // Emit-path pin: the `feira app graph` per-Aplicacao header
+        // line composer's terminal `{nome}` / `{versao}` scalars must
+        // derive through the typed [`caixa_core::Caixa::nome`] /
+        // [`caixa_core::Caixa::versao`] accessors byte-for-byte.
+        // Before this converge the emit site at [`GraphArgs::run`]
+        // carried raw `caixa.nome` / `caixa.versao` field-accesses
+        // into the inline `println!("Aplicacao {} v{}", ...)`
+        // template, bypassing the typed dispatch every peer
+        // substrate-side renderer's `:nome` / `:versao` emit-site
+        // already routes through.
+        //
+        // Byte-equal today (both accessors are `&self.<field>`); the
+        // pin catches any future accessor extension (SemVer-2 build-
+        // metadata canonicalization the CAIXA-SDLC §I SemVer-2 pin
+        // acknowledges, per-edition pre-release-tag overlay dispatched
+        // through the sibling [`caixa_core::Caixa::edicao`]
+        // universal-axis scalar) whose `feira app graph` header line
+        // regresses to the raw field and silently splits the byte-
+        // string the operator reads on stdout from the paired
+        // downstream Aplicacao artefact emit (the [`caixa_mesh`]
+        // programs.yaml fan-out `versao:` fold + the
+        // `CiliumNetworkPolicy` `metadata.name` `:nome` projection)
+        // that already routes through the accessor. Peer with the
+        // sibling [`crate::cmd::build::build_summary_line`] (ef83332)
+        // drift pin on the `feira build` verb-emit surface.
+        let caixa = Caixa::from_lisp(
+            r#"(defcaixa
+                 :nome "checkout"
+                 :kind Aplicacao
+                 :versao "0.2.3"
+                 :membros ())"#,
+        )
+        .expect("parse");
+        let line = graph_header_line(&caixa);
+        assert_eq!(
+            line,
+            format!("Aplicacao {} v{}", caixa.nome(), caixa.versao()),
+            "graph header line must route the `{{nome}}` / `{{versao}}` \
+             scalars through the typed Caixa::nome / Caixa::versao \
+             accessors — any regression to the raw `caixa.nome` / \
+             `caixa.versao` field-accesses would silently pass today \
+             (accessors are `&self.<field>`) but drift on the first \
+             accessor extension"
+        );
+        assert_eq!(
+            line, "Aplicacao checkout v0.2.3",
+            "graph header line must carry the Aplicacao's `:nome` / \
+             `:versao` verbatim (got: {line:?})"
+        );
+    }
+
+    #[test]
+    fn deploy_commit_message_routes_through_caixa_nome_and_versao_accessors() {
+        // Emit-path pin: the `feira app deploy --commit / --apply`
+        // per-Aplicacao git-commit-message composer's terminal
+        // `{nome}` / `{versao}` scalars must derive through the typed
+        // [`caixa_core::Caixa::nome`] / [`caixa_core::Caixa::versao`]
+        // accessors byte-for-byte. Before this converge the emit site
+        // at [`commit_change`] carried raw `caixa.nome` /
+        // `caixa.versao` field-accesses into the inline `format!(
+        // "deploy: aplicacao {} v{}\n...", ...)` template, bypassing
+        // the typed dispatch every peer substrate-side renderer's
+        // `:nome` / `:versao` emit-site already routes through.
+        //
+        // Byte-equal today (both accessors are `&self.<field>`); the
+        // pin catches any future accessor extension whose `feira app
+        // deploy` writer-side commit-message regresses to the raw
+        // field and silently splits the git-history byte-string every
+        // downstream reader (a future `feira app rollback` verb that
+        // scans commit subjects to locate the last deploy per
+        // Aplicacao, a k8s-repo audit walker that greps
+        // `deploy: aplicacao <nome>` prefixes) sees from the paired
+        // downstream Aplicacao artefact emit that already routes
+        // through the accessor. Peer with the sibling
+        // [`graph_header_line`] drift pin above on the same
+        // `feira app` verb and with the sibling
+        // [`crate::cmd::build::build_summary_line`] (ef83332) drift
+        // pin on the peer `feira build` verb-emit surface.
+        let caixa = Caixa::from_lisp(
+            r#"(defcaixa
+                 :nome "checkout"
+                 :kind Aplicacao
+                 :versao "1.4.7"
+                 :membros ())"#,
+        )
+        .expect("parse");
+        let msg = deploy_commit_message(&caixa);
+        assert_eq!(
+            msg,
+            format!(
+                "deploy: aplicacao {} v{}\n\nUpdated by `feira app deploy --cluster <name>`.\n",
+                caixa.nome(),
+                caixa.versao(),
+            ),
+            "commit message must route the `{{nome}}` / `{{versao}}` \
+             scalars through the typed Caixa::nome / Caixa::versao \
+             accessors — any regression to the raw `caixa.nome` / \
+             `caixa.versao` field-accesses would silently pass today \
+             (accessors are `&self.<field>`) but drift on the first \
+             accessor extension"
+        );
+        assert!(
+            msg.starts_with("deploy: aplicacao checkout v1.4.7\n"),
+            "commit message subject line must carry the Aplicacao's \
+             `:nome` / `:versao` verbatim (got: {msg:?})"
+        );
+        assert!(
+            msg.ends_with("Updated by `feira app deploy --cluster <name>`.\n"),
+            "commit message body must carry the canonical trailing \
+             sentence naming the verb that produced it (got: {msg:?})"
         );
     }
 
