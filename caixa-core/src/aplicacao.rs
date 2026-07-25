@@ -3702,7 +3702,9 @@ mod rate_limit_codec {
 /// - `Replicated` — every named cluster runs an instance (active-active).
 /// - `Sharded` — entities distribute by hash key across clusters
 ///   (Akka cluster sharding).
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant,
+)]
 pub enum PlacementStrategy {
     SingleNode,
     Replicated,
@@ -11800,7 +11802,7 @@ mod tests {
                 estrategia: s,
                 clusters: vec!["rio".into()],
                 affinity: None,
-                shard_key: if matches!(s, PlacementStrategy::Sharded) {
+                shard_key: if s.is_sharded() {
                     Some("$key".into())
                 } else {
                     None
@@ -12003,6 +12005,74 @@ mod tests {
                  M3_PLACEMENT_ESTRATEGIA_* const)"
             );
         }
+    }
+
+    #[test]
+    fn placement_strategy_is_variant_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+        // derive on [`PlacementStrategy`]: for each of the three variants
+        // exactly one of the generated `is_single_node` / `is_replicated`
+        // / `is_sharded` predicates returns `true` and the other two
+        // return `false`. Prior to this derive the three per-arm
+        // `matches!(s, PlacementStrategy::Sharded)` sites in this crate
+        // (the `placement_strategy_variants_round_trip` fixture, the
+        // `estrategia_returns_placement_estrategia_verbatim_across_permutations`
+        // fixture, and the
+        // `validate_placement_reads_through_lifted_estrategia_accessor`
+        // fixture) each open-coded a per-arm PartialEq compare against
+        // the enum variant — three sites that expressed no compile-time
+        // link back to the closed-set typed dispatch a future fourth
+        // `:placement :estrategia` (e.g. an `Anycast` mesh-anycast arm
+        // for the future MESH-COMPOSITION §II.5 hint the roadmap names)
+        // would have to thread through in lockstep or one fixture would
+        // silently disagree with the others on which arms consume the
+        // `:shard-key` axis. Peer of the sibling
+        // [`crate::CaixaKind`] / [`crate::supervisor::RestartStrategy`]
+        // / [`crate::supervisor::RestartPolicy`] /
+        // [`crate::upgrade::UpgradeInstruction`] `IsVariant` derives on
+        // the sibling closed-set typed-enum discriminator axes — extends
+        // the same one-typed-dispatch-per-variant discipline onto the
+        // fifth (and only remaining) closed-set typed-enum discriminator
+        // on the caixa surface, closing the axis on the M3 mesh-slot
+        // family.
+        let rows: [(PlacementStrategy, [bool; 3]); 3] = [
+            (PlacementStrategy::SingleNode, [true, false, false]),
+            (PlacementStrategy::Replicated, [false, true, false]),
+            (PlacementStrategy::Sharded, [false, false, true]),
+        ];
+        for (variant, expected) in rows {
+            let observed = [
+                variant.is_single_node(),
+                variant.is_replicated(),
+                variant.is_sharded(),
+            ];
+            assert_eq!(
+                observed, expected,
+                "PlacementStrategy::{variant:?} is_* predicates must partition \
+                 the arm set (single_node, replicated, sharded); got {observed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_is_variant_predicates_are_const_fn() {
+        // The [`gen_platform::IsVariant`] derive emits `const fn`
+        // predicates on the peer [`crate::CaixaKind`] +
+        // [`crate::upgrade::UpgradeInstruction`] +
+        // [`crate::supervisor::RestartStrategy`] +
+        // [`crate::supervisor::RestartPolicy`] closed-set typed enums —
+        // pin the same posture on [`PlacementStrategy`] so a future
+        // accidental downgrade to non-`const` (an added runtime helper
+        // reachable only from a non-`const` context, a manual hand-rolled
+        // `impl` that shadows the derive-generated method) trips at
+        // caixa-core build time rather than surfacing as a downstream
+        // `const`-context regression far from the derive declaration.
+        const IS_SINGLE_NODE: bool = PlacementStrategy::SingleNode.is_single_node();
+        const IS_REPLICATED: bool = PlacementStrategy::Replicated.is_replicated();
+        const IS_SHARDED: bool = PlacementStrategy::Sharded.is_sharded();
+        assert!(IS_SINGLE_NODE);
+        assert!(IS_REPLICATED);
+        assert!(IS_SHARDED);
     }
 
     #[test]
@@ -17614,8 +17684,7 @@ mod tests {
             PlacementStrategy::Replicated,
             PlacementStrategy::Sharded,
         ] {
-            let shard_key =
-                matches!(estrategia, PlacementStrategy::Sharded).then(|| "tenantId".to_string());
+            let shard_key = estrategia.is_sharded().then(|| "tenantId".to_string());
             let p = Placement {
                 estrategia,
                 clusters: vec!["rio".into()],
@@ -17674,8 +17743,7 @@ mod tests {
             let mut spec = three_member_spec();
             spec.placement.estrategia = estrategia;
             spec.placement.clusters = Vec::new();
-            spec.placement.shard_key =
-                matches!(estrategia, PlacementStrategy::Sharded).then(|| "tenantId".to_string());
+            spec.placement.shard_key = estrategia.is_sharded().then(|| "tenantId".to_string());
             let err = spec.validate().unwrap_err();
             match err {
                 AplicacaoError::PlacementWithoutClusters { estrategia: e } => {
