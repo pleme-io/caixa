@@ -201,13 +201,30 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
     // mandate names) — this lift closes that last per-renderer drift
     // surface on the shared kind-gate axis.
     caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
-    if caixa.versao.is_empty() {
+    // Route the `:versao` presence + carry-through both through the typed
+    // [`caixa_core::Caixa::versao`] `&str`-return accessor rather than the
+    // raw `.versao` field access — closes the last unlifted per-`Caixa`
+    // `.versao.is_empty()` / `.versao.clone()` raw-field-access sites in
+    // this crate on the same universal-axis surface every peer per-`Caixa`
+    // renderer (caixa-helm eb912de / 05a7701, caixa-flux 2fc5f81,
+    // caixa-crd 41ab9a3) already routes the `:versao` scalar through.
+    // Byte-equal today (`Caixa::versao` is `&self.versao`); an accessor
+    // extension (SemVer-2 build-metadata canonicalization the
+    // CAIXA-SDLC §I SemVer-2 pin acknowledges, an OCI-tag normalization
+    // the M4 registry-alignment slot lands) reaches both the presence
+    // gate and the `AplicacaoIntent.version` carrier through one
+    // dispatch rather than two raw field-accesses in lockstep.
+    if caixa.versao().is_empty() {
         return Err(Error::MissingVersao);
     }
-    let versao = caixa.versao.clone();
+    let versao = caixa.versao().to_owned();
 
     let chart_ref = derive_chart_ref(caixa, &inputs.registry);
-    let release_name = lareira_chart_name(caixa.nome.as_str());
+    // Route the `lareira-<nome>` chart-name compose through the typed
+    // [`caixa_core::Caixa::nome`] `&str`-return accessor — sibling to
+    // the paired `.versao` converge above; closes the emit-side raw
+    // `.nome.as_str()` field-access at this composer site.
+    let release_name = lareira_chart_name(caixa.nome());
 
     let aplicacao = AplicacaoIntent {
         chart_ref,
@@ -287,7 +304,13 @@ pub fn process_for_aplicacao(caixa: &Caixa, inputs: &RenderInputs) -> Result<Pro
         suspended: false,
     };
 
-    let mut process = Process::new(caixa.nome.as_str(), spec);
+    // Route the `Process`-CR `metadata.name` compose through the typed
+    // [`caixa_core::Caixa::nome`] `&str`-return accessor rather than the
+    // raw `.nome.as_str()` field access — the same universal-axis
+    // dispatch every peer per-`Caixa` renderer (caixa-helm 22461ef,
+    // caixa-flux 162e2e2, caixa-mesh 980c059, caixa-crd 61d3429) routes
+    // its per-CR / per-artefact `:nome` scalar through.
+    let mut process = Process::new(caixa.nome(), spec);
     process.metadata.namespace = Some(inputs.target_namespace.clone());
     Ok(process)
 }
@@ -306,7 +329,13 @@ fn derive_chart_ref(caixa: &Caixa, registry: &str) -> String {
     // [`caixa_core::lareira_chart_name`]) so the Process resolves the
     // same chart name the publisher pushed under, with no inline
     // prefix-format drift on either the scheme or the chart-name axis.
-    oci_chart_ref(registry, caixa.nome.as_str())
+    // Route the OCI-ref compose through the typed
+    // [`caixa_core::Caixa::nome`] `&str`-return accessor — closes the
+    // last unlifted `.nome.as_str()` raw-field-access site in this
+    // crate's production emit path, sibling to the paired
+    // `Process::new(caixa.nome(), ..)` + `lareira_chart_name(caixa.nome())`
+    // converges above.
+    oci_chart_ref(registry, caixa.nome())
 }
 
 fn default_class() -> Classification {
@@ -614,7 +643,7 @@ mod tests {
             let composed = derive_chart_ref(&caixa, registry);
             assert_eq!(
                 composed,
-                caixa_core::oci_chart_ref(registry, caixa.nome.as_str()),
+                caixa_core::oci_chart_ref(registry, caixa.nome()),
                 "derive_chart_ref must route through caixa_core::oci_chart_ref for \
                  registry {registry:?}"
             );
@@ -700,12 +729,137 @@ mod tests {
         // canonical `lareira_chart_name` helper's output.
         let caixa = Caixa::from_lisp(&sample_caixa_src()).unwrap();
         let composed = derive_chart_ref(&caixa, "ghcr.io/pleme-io/charts");
-        let chart = lareira_chart_name(caixa.nome.as_str());
+        let chart = lareira_chart_name(caixa.nome());
         assert!(
             composed.ends_with(&chart),
             "derive_chart_ref emission {composed:?} must end with the canonical \
              lareira_chart_name({:?}) = {chart:?}",
-            caixa.nome
+            caixa.nome()
         );
+    }
+
+    #[test]
+    fn process_for_aplicacao_routes_nome_and_versao_through_caixa_accessors() {
+        // Drift-detection pin on the emit-side identity carriers of the
+        // `Process` CR this crate materializes for an `:kind Aplicacao`
+        // caixa. Every per-`Caixa` `:nome` / `:versao` scalar the emit
+        // path composes onto the CR — `metadata.name`, the
+        // `AplicacaoIntent.release_name` composed via `lareira_chart_name`,
+        // the `AplicacaoIntent.chart_ref` composed via `oci_chart_ref`,
+        // the `AplicacaoIntent.version` scalar — is derived through the
+        // typed [`caixa_core::Caixa::nome`] / [`caixa_core::Caixa::versao`]
+        // `&str`-return accessors, not the raw `caixa.nome` /
+        // `caixa.versao` field-access. Pin each emitted scalar against
+        // the accessor's return value so a regression that re-inlines
+        // the raw field-access surfaces at build time verbatim with
+        // the peer pins the sibling per-`Caixa` renderer converges
+        // established on the same universal-axis surface
+        // (caixa-crd's `caixa_into_cr_versao_routes_through_caixa_
+        // versao_accessor` per 41ab9a3, caixa-flux's `cluster_bundle_
+        // default_git_tag_versao_routes_through_caixa_versao_accessor`
+        // per 2fc5f81, caixa-feira's `build_summary_line_routes_
+        // through_caixa_nome_and_versao_accessors` per ef83332, and
+        // `graph_header_line_routes_through_caixa_nome_and_versao_
+        // accessors` + `deploy_commit_message_routes_through_caixa_
+        // nome_and_versao_accessors` per 3219a42).
+        //
+        // Byte-equal today (both accessors are `&self.<field>`); the
+        // pin catches any future accessor extension (SemVer-2 build-
+        // metadata canonicalization the CAIXA-SDLC §I SemVer-2 pin
+        // acknowledges, an OCI-tag normalization the M4 registry-
+        // alignment slot lands, a DNS-1123 normalization pass on
+        // `:nome` the layout-invariant gate already accepts under
+        // `is_dns_1123_label`) whose `Process`-CR emit regresses to
+        // the raw field.
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        let inputs = sample_inputs();
+        let process = process_for_aplicacao(&caixa, &inputs).expect("render");
+
+        // `metadata.name` — the CR's identity discriminator — carries
+        // exactly `Caixa::nome()`, not the raw `.nome` field.
+        assert_eq!(
+            process.metadata.name.as_deref(),
+            Some(caixa.nome()),
+            "Process metadata.name must route through Caixa::nome() — a \
+             regression that re-inlines `caixa.nome.as_str()` at the \
+             `Process::new(..)` site silently splits the CR's identity \
+             discriminator from every peer renderer's `:nome` emit"
+        );
+
+        // `AplicacaoIntent.{version, release_name, chart_ref}` all fold
+        // on the accessor-derived identity carriers.
+        match process.spec.intent.variant().expect("intent") {
+            IntentVariant::Aplicacao(a) => {
+                assert_eq!(
+                    a.version,
+                    caixa.versao(),
+                    "AplicacaoIntent.version must route through Caixa::versao() \
+                     — a regression that re-inlines `caixa.versao.clone()` at \
+                     the intent-compose site silently splits the CR's install \
+                     version from the peer `Chart.yaml` `version:` per eb912de \
+                     and the `GitRepository` `spec.ref.tag` per 2fc5f81 that \
+                     each already routes through the same accessor"
+                );
+                let expected_release = lareira_chart_name(caixa.nome());
+                assert_eq!(
+                    a.release_name.as_deref(),
+                    Some(expected_release.as_str()),
+                    "AplicacaoIntent.release_name must route through \
+                     `lareira_chart_name(caixa.nome())` — a regression that \
+                     re-inlines `caixa.nome.as_str()` at the release-name \
+                     compose site silently splits the CR's release-name from \
+                     the peer per-Servico renderer chart-name path (caixa-helm \
+                     `ChartDir.name`, caixa-flux `HelmRelease.chart:`) that \
+                     each already routes through the same accessor"
+                );
+                assert_eq!(
+                    a.chart_ref,
+                    caixa_core::oci_chart_ref(&inputs.registry, caixa.nome()),
+                    "AplicacaoIntent.chart_ref must route through \
+                     `oci_chart_ref(registry, caixa.nome())` — a regression \
+                     that re-inlines `caixa.nome.as_str()` at the OCI-ref \
+                     compose site silently splits the CR's chart-ref from the \
+                     peer `caixa_core::oci_chart_ref` composer's shape and \
+                     from the `derive_chart_ref_ends_with_lareira_chart_name` \
+                     cross-axis pin"
+                );
+            }
+            other => panic!("expected Aplicacao intent, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_versao_gate_routes_through_caixa_versao_accessor() {
+        // Peer-arm pin on the `:versao` presence gate in
+        // `process_for_aplicacao`. Before this converge the gate read
+        // through the raw `caixa.versao.is_empty()` field-access; now
+        // it routes through `caixa.versao().is_empty()` — same
+        // universal-axis accessor the sibling `AplicacaoIntent.version`
+        // carry-through consults. Pin the gate's behavior against the
+        // accessor's return value so a regression that re-inlines the
+        // raw field on either side (the presence gate or the carry-
+        // through) surfaces at build time.
+        //
+        // A `:versao ""` shape is rejected at `Caixa::from_lisp` parse
+        // time by the `caixa-core` `validate_versao` cascade (the
+        // per-`Caixa` universal-axis gate at
+        // caixa-core/src/manifest.rs:646), so this test doesn't
+        // exercise the runtime `MissingVersao` arm through a parse-
+        // valid fixture — instead it structurally pins the fact that
+        // `Caixa::versao()` returns `&str` (the same shape
+        // `String::is_empty()` had before the converge, so the gate's
+        // boolean semantics are preserved byte-for-byte).
+        let caixa = Caixa::from_lisp(&sample_caixa_src()).expect("parse caixa");
+        assert!(
+            !caixa.versao().is_empty(),
+            "sample fixture's :versao must be non-empty for the emit path \
+             to reach the AplicacaoIntent compose site (rules out a false-\
+             positive on the presence gate's carry-through pin)"
+        );
+        // Non-`&str`-return regression sentinel: `Caixa::versao()` must
+        // return a `&str` so the `.is_empty()` boolean projection the
+        // gate performs on the accessor's return value binds to
+        // `str::is_empty` (identical semantics to `String::is_empty`).
+        let _: &str = caixa.versao();
     }
 }
