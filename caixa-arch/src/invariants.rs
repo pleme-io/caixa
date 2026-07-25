@@ -125,17 +125,20 @@ fn collect_ref_violations(
     match v {
         TeiaValue::Ref(r) => {
             // Read the per-`TeiaRefRepr` `:tipo` provider-qualified
-            // resource-type identity through the lifted
-            // [`caixa_teia::TeiaRefRepr::tipo`] scalar accessor rather
-            // than the raw `r.tipo` field access — the declared-set
-            // lookup key + the `(ref <tipo> …)` refusal-message Display
-            // interpolation both key off the substrate-canonical
-            // per-`Ref` `:tipo` resolver, so a future rebrand on the
-            // typed slot's raw-slot reader lands at exactly one place
-            // and the `no-unresolved-refs` gate stays lockstep with the
+            // resource-type identity and the per-`TeiaRefRepr` `:nome`
+            // per-reference target-instance-identity through the lifted
+            // [`caixa_teia::TeiaRefRepr::tipo`] / [`caixa_teia
+            // ::TeiaRefRepr::nome`] scalar accessors rather than the
+            // raw `r.tipo` / `r.nome` field accesses — the declared-set
+            // `(tipo, nome)` lookup key + the `(ref <tipo> <nome> …)`
+            // refusal-message Display interpolation both key off the
+            // substrate-canonical per-`Ref` `:tipo` / `:nome`
+            // resolvers, so a future rebrand on either typed slot's
+            // raw-slot reader lands at exactly one place and the
+            // `no-unresolved-refs` gate stays lockstep with the
             // `caixa-pangea` `${<tf>.<nome>.<attr>}` Terraform-JSON
-            // emit path's `<tf>` mint.
-            if !declared.contains(&(r.tipo().to_string(), r.nome.clone())) {
+            // emit path's `<tf>` / `<nome>` mints.
+            if !declared.contains(&(r.tipo().to_string(), r.nome().to_string())) {
                 out.push(Violation {
                     invariant_id: "no-unresolved-refs".into(),
                     kind: InvariantKind::Safety,
@@ -144,7 +147,7 @@ fn collect_ref_violations(
                     message: format!(
                         "(ref {} {} {}) targets an undeclared instance",
                         r.tipo(),
-                        r.nome,
+                        r.nome(),
                         r.atributo
                     ),
                 });
