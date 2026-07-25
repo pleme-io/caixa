@@ -86,31 +86,54 @@ impl BehaviorSpec {
     /// peers, so both halves of the M2 `:behavior` sub-slot's dual
     /// axis (author-facing kebab-case label + renderer-side camelCase
     /// wire key) route through one canonical declaration per arm.
-    pub fn declared_slots(&self) -> impl Iterator<Item = (&'static str, &PathBuf)> {
+    ///
+    /// Each per-arm `Option<&Path>` path-value is routed through the
+    /// sibling lifted [`BehaviorSpec::on_init`] / [`BehaviorSpec::on_call`]
+    /// / [`BehaviorSpec::on_cast`] / [`BehaviorSpec::on_info`] /
+    /// [`BehaviorSpec::on_state_change`] / [`BehaviorSpec::on_terminate`]
+    /// per-slot accessors, so the iterator's per-arm typed dispatch
+    /// composes with every future accessor-side extension (a
+    /// per-prior-`:versao` state-migration callback the operator pins
+    /// through a future `:behavior :on-state-change-overrides` slot the
+    /// `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine callback-dispatch
+    /// wire acknowledges, a per-tenant callback alias table the M4 CR
+    /// materializer resolves per-CR, a per-cluster callback overlay the
+    /// operator pins through a future placement-scoped slot) as a unit:
+    /// the layout checker's existence sweep + the sibling
+    /// [`BehaviorSpec::validate`] value-shape gate consume whichever
+    /// accept-set the accessor exposes, so both halves of the diagnostic
+    /// surface migrate together. Prior to this converge the six per-arm
+    /// `self.on_*.as_ref()` raw-field-access sites bypassed the accessor
+    /// dispatch — the accessors owned the accept-set on the read side but
+    /// the iterator that both production consumers actually read
+    /// projected through the raw `Option<PathBuf>` field, silently
+    /// disagreeing with every accessor extension until the two-site
+    /// rewrite reached both halves in lockstep.
+    pub fn declared_slots(&self) -> impl Iterator<Item = (&'static str, &Path)> {
         [
             (
                 crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_INIT,
-                self.on_init.as_ref(),
+                self.on_init(),
             ),
             (
                 crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_CALL,
-                self.on_call.as_ref(),
+                self.on_call(),
             ),
             (
                 crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_CAST,
-                self.on_cast.as_ref(),
+                self.on_cast(),
             ),
             (
                 crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_INFO,
-                self.on_info.as_ref(),
+                self.on_info(),
             ),
             (
                 crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
-                self.on_state_change.as_ref(),
+                self.on_state_change(),
             ),
             (
                 crate::render::M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
-                self.on_terminate.as_ref(),
+                self.on_terminate(),
             ),
         ]
         .into_iter()
@@ -119,7 +142,7 @@ impl BehaviorSpec {
 
     /// Iterate over every declared callback path. Used by the
     /// layout checker.
-    pub fn declared_paths(&self) -> impl Iterator<Item = &PathBuf> {
+    pub fn declared_paths(&self) -> impl Iterator<Item = &Path> {
         self.declared_slots().map(|(_slot, p)| p)
     }
 
@@ -717,7 +740,7 @@ impl BehaviorSpec {
     /// carried by a slot is either absent or value-shape valid.
     pub fn validate(&self) -> Result<(), BehaviorError> {
         for (slot, path) in self.declared_slots() {
-            validate_callback_path(slot, path.as_path())?;
+            validate_callback_path(slot, path)?;
         }
         Ok(())
     }
@@ -900,7 +923,7 @@ mod tests {
             ..Default::default()
         };
         assert!(!b.is_empty());
-        let paths: Vec<_> = b.declared_paths().cloned().collect();
+        let paths: Vec<PathBuf> = b.declared_paths().map(Path::to_path_buf).collect();
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&PathBuf::from("lib/init.lisp")));
         assert!(paths.contains(&PathBuf::from("lib/handlers.lisp")));
@@ -913,7 +936,7 @@ mod tests {
             on_terminate: Some(PathBuf::from("b.lisp")),
             ..Default::default()
         };
-        let paths: Vec<_> = b.declared_paths().cloned().collect();
+        let paths: Vec<PathBuf> = b.declared_paths().map(Path::to_path_buf).collect();
         assert_eq!(
             paths,
             vec![PathBuf::from("a.lisp"), PathBuf::from("b.lisp")]
@@ -1495,6 +1518,109 @@ mod tests {
                 M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
                 M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
             ]
+        );
+    }
+
+    #[test]
+    fn declared_slots_paths_route_through_lifted_on_star_accessors() {
+        // Production-through-accessor pin: the six per-arm
+        // `Option<&Path>` path-values [`BehaviorSpec::declared_slots`]
+        // threads through as the `(slot, path)` iterator's second
+        // component route through the lifted per-slot
+        // [`BehaviorSpec::on_init`] / [`BehaviorSpec::on_call`] /
+        // [`BehaviorSpec::on_cast`] / [`BehaviorSpec::on_info`] /
+        // [`BehaviorSpec::on_state_change`] / [`BehaviorSpec::on_terminate`]
+        // accessors, so every future accessor-side extension of an
+        // `:on-*` slot (a per-prior-`:versao` state-migration callback
+        // the operator pins through a future `:behavior
+        // :on-state-change-overrides` slot the
+        // `theory/ABSORPTION-ROADMAP.md` M2.5 wasm-engine
+        // callback-dispatch wire acknowledges, a per-tenant callback
+        // alias table the M4 CR materializer resolves per-CR, a
+        // per-cluster callback overlay the operator pins through a
+        // future placement-scoped slot) reaches both production
+        // consumers of the iterator (the layout checker's existence
+        // sweep in `layout.rs` + the sibling [`BehaviorSpec::validate`]
+        // value-shape gate) by construction, without a coordinated
+        // rewrite of the iterator's six raw-field-access sites and the
+        // six accessor bodies in lockstep. Peer of the sibling
+        // `declared_slots_labels_route_through_lifted_author_key_consts`
+        // pin on the tag-surface axis — same "one typed dispatch on the
+        // substrate primitive, thin projections at each consumer"
+        // discipline extended onto the peer per-arm `Option<&Path>`
+        // path-value axis.
+        //
+        // Byte-equal today (each `on_*()` accessor is a thin
+        // `.as_deref()` on the raw `Option<PathBuf>` field); the pin
+        // catches any future accessor-side extension whose iterator
+        // read regresses to the raw field.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/rpc/call.lisp")),
+            on_cast: Some(PathBuf::from("lib/rpc/cast.lisp")),
+            on_info: Some(PathBuf::from("lib/rpc/info.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+        };
+        let entries: Vec<(&'static str, &Path)> = b.declared_slots().collect();
+        assert_eq!(
+            entries,
+            vec![
+                (M2_BEHAVIOR_AUTHOR_KEY_ON_INIT, b.on_init().unwrap()),
+                (M2_BEHAVIOR_AUTHOR_KEY_ON_CALL, b.on_call().unwrap()),
+                (M2_BEHAVIOR_AUTHOR_KEY_ON_CAST, b.on_cast().unwrap()),
+                (M2_BEHAVIOR_AUTHOR_KEY_ON_INFO, b.on_info().unwrap()),
+                (
+                    M2_BEHAVIOR_AUTHOR_KEY_ON_STATE_CHANGE,
+                    b.on_state_change().unwrap(),
+                ),
+                (
+                    M2_BEHAVIOR_AUTHOR_KEY_ON_TERMINATE,
+                    b.on_terminate().unwrap(),
+                ),
+            ],
+            "declared_slots must route each of its six per-arm \
+             Option<&Path> path-values through the sibling lifted \
+             BehaviorSpec::on_* accessor for its slot, so future \
+             accessor-side extensions reach both the layout checker \
+             + validate gate by construction (got {entries:?})",
+        );
+    }
+
+    #[test]
+    fn declared_paths_routes_through_lifted_on_star_accessors() {
+        // Sibling of `declared_slots_paths_route_through_lifted_
+        // on_star_accessors` on the peer path-only projection axis:
+        // [`BehaviorSpec::declared_paths`] must project each declared
+        // callback path through the lifted per-slot
+        // [`BehaviorSpec::on_*`] accessor, so the layout checker's
+        // `for p in b.declared_paths() { root.join(p) }` on-disk
+        // existence sweep at `layout.rs:901` reaches every future
+        // accessor-side extension without a coordinated rewrite of the
+        // sibling `declared_slots` internal iterator + the accessor
+        // bodies in lockstep.
+        let b = BehaviorSpec {
+            on_init: Some(PathBuf::from("lib/init.lisp")),
+            on_call: Some(PathBuf::from("lib/rpc/call.lisp")),
+            on_cast: Some(PathBuf::from("lib/rpc/cast.lisp")),
+            on_info: Some(PathBuf::from("lib/rpc/info.lisp")),
+            on_state_change: Some(PathBuf::from("lib/migrations.lisp")),
+            on_terminate: Some(PathBuf::from("lib/cleanup.lisp")),
+        };
+        let paths: Vec<&Path> = b.declared_paths().collect();
+        assert_eq!(
+            paths,
+            vec![
+                b.on_init().unwrap(),
+                b.on_call().unwrap(),
+                b.on_cast().unwrap(),
+                b.on_info().unwrap(),
+                b.on_state_change().unwrap(),
+                b.on_terminate().unwrap(),
+            ],
+            "declared_paths must project each callback path through \
+             the sibling lifted BehaviorSpec::on_* accessor for its \
+             slot (got {paths:?})",
         );
     }
 
