@@ -5780,7 +5780,42 @@ impl AplicacaoSpec {
         }
         let mut seen = std::collections::HashSet::new();
         for m in self.membros() {
-            if m.caixa.is_empty() {
+            // Route the `MembroCaixaEmpty` refusal-arm's per-member
+            // empty-`:caixa` shape-gate through the typed
+            // [`Membro::nome`] accessor rather than the raw `.caixa`
+            // field access — the last un-lifted `.caixa` production-
+            // code read site on the per-`:membros` member-caixa `:nome`
+            // axis, sibling to the six caixa-core validator read sites
+            // (member-set collector, per-member value-shape gate,
+            // duplicate dedup key, cycle-detector adjacency-map seed,
+            // self-loop gate) the 4a32abf lift already routed through
+            // the accessor and the peer 54bf2f3 caixa-mesh emit-side
+            // per-`programs[]` entry-`name:` `String`-carry converge.
+            // Prior to this converge the `MembroCaixaEmpty` refusal
+            // arm was the solitary consumer bypassing the typed
+            // dispatch — the same-loop iteration's very next call
+            // `validate_membro_caixa(m.nome())` already routed through
+            // the accessor, so an author landing an empty-`:caixa`
+            // entry hit the accessor on the shape-gate line but
+            // bypassed it on the emptiness line one line above. A
+            // future extension of the `:membros :caixa` axis to a
+            // richer author surface (a per-cluster alias table pinned
+            // through a future `:placement`-scoped slot, a namespace-
+            // qualified rewrite the M4 CR materializer applies per-CR,
+            // a per-member overlay from the future `:membros
+            // :nome-suffix` slot MESH-COMPOSITION §III.2 acknowledges)
+            // that lands on the accessor would silently disagree
+            // between the emptiness gate and every peer consumer —
+            // an author-declared `:caixa "checkout"` value the
+            // accessor rewrote to `""` under a future alias arm would
+            // pass the raw `.is_empty()` gate here while the peer
+            // `validate_membro_caixa(m.nome())` call one line below
+            // (and every downstream emit-side consumer routing through
+            // the accessor) tripped on the empty-value shape far from
+            // this diagnostic. Pinned by the drift-detection test
+            // [`validate_membros_empty_gate_routes_through_nome_accessor`]
+            // below.
+            if m.nome().is_empty() {
                 return Err(AplicacaoError::MembroCaixaEmpty);
             }
             // Every emitted cluster artifact's `metadata.name` derives
@@ -17578,6 +17613,67 @@ mod tests {
                 m.versao_requirement(),
             );
         }
+    }
+
+    #[test]
+    fn validate_membros_empty_gate_routes_through_nome_accessor() {
+        // Composition pin: [`AplicacaoSpec::validate_membros`]'s
+        // `MembroCaixaEmpty` refusal-arm must key off [`Membro::nome`],
+        // not the raw `.caixa` field access. Structurally: setting
+        // ONLY the `.caixa` field to `""` on an otherwise-well-formed
+        // `:membros` entry must (1) trip the `MembroCaixaEmpty` gate
+        // and (2) produce a `m.nome()` byte-equal to `m.caixa.as_str()`
+        // (i.e. the empty string) — so the emptiness predicate the
+        // refusal arm reaches under is the accessor-projected value,
+        // not a peer field that would silently drift under a future
+        // accessor-side rewrite.
+        //
+        // Pins against a future silent detour that (a) re-derived the
+        // emptiness gate off `self.caixa.is_empty()` in `validate_membros`
+        // instead of `self.nome().is_empty()`, silently disagreeing with
+        // every peer consumer (the `validate_membro_caixa(m.nome())`
+        // call one line below, the dedup-key `insert_first_seen(&mut
+        // seen, m.nome(), …)` two lines below, the emit-side per-
+        // `programs[]` entry-`name:` at caixa-mesh/src/lib.rs:133),
+        // (b) accessor-side introduced a per-tenant alias arm the
+        // caller was unaware of, silently rewriting an author-declared
+        // `:caixa "checkout"` to `""` — the raw-field-access gate
+        // would fail-open while the accessor-routed peer consumers
+        // would fail-closed, splitting the diagnostic from the actual
+        // failure surface.
+        //
+        // Peer of the sibling
+        // [`mesh_policy_is_empty_mtls_required_arm_routes_through_accessor`]
+        // (c0110f1) composition pin — same "the shape-gate predicate
+        // must route through the substrate-primitive typed dispatch"
+        // discipline extended onto the per-`:membros` empty-`:caixa`
+        // refusal-arm axis. Closes the last unlifted `.caixa` production-
+        // code read site on `Membro` — after this converge every
+        // caixa-core `.caixa` field access outside the accessor's own
+        // body is either a test-side field-setter (in-module tests
+        // constructing invalid-shape inputs) or a doc-comment reference.
+        let mut s = three_member_spec();
+        s.membros[1].caixa = String::new();
+        assert!(
+            s.membros[1].nome().is_empty(),
+            "Membro::nome must byte-equal the .caixa field access — an \
+             accessor-side detour that no longer projects the raw field \
+             would silently split this drift-detection test from the \
+             validate() refusal arm",
+        );
+        assert_eq!(
+            s.membros[1].nome(),
+            s.membros[1].caixa.as_str(),
+            "Membro::nome and .caixa.as_str() must byte-equal on an \
+             empty-`:caixa` entry — the emptiness gate keys off the \
+             accessor by construction",
+        );
+        assert_eq!(
+            s.validate().unwrap_err(),
+            AplicacaoError::MembroCaixaEmpty,
+            "validate_membros' emptiness gate must fire MembroCaixaEmpty \
+             on an entry whose accessor-projected `nome()` is empty",
+        );
     }
 
     #[test]
