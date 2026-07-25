@@ -762,6 +762,59 @@ impl WitContract {
         wit_shape_is_store(self.world_ref())
     }
 
+    /// True when this contract's caller equals its callee — a
+    /// structurally degenerate typed edge that no `:contratos` entry can
+    /// legitimately carry (MESH-COMPOSITION §III.1 — "Servico A calls
+    /// Servico B" is an *inter*-Servico contract between two distinct
+    /// graph nodes). A Servico contracting with itself resolves to an
+    /// in-process call the wasm-engine never routes through the mesh at
+    /// all, so no rendered `CiliumNetworkPolicy` / `HTTPRoute` /
+    /// per-edge policy can express the intended shape — the pub-sub
+    /// path silently rendered a self-allow rule that is a no-op (intra-
+    /// pod traffic bypasses the mesh entirely), and the synchronous
+    /// paths surfaced as a misleading `ContratoCycle` whose path was
+    /// `["cart", "cart"]` — framing a self-edge as a multi-node
+    /// deadlock. Every downstream consumer that must reject the shape
+    /// (the [`AplicacaoSpec::validate`] per-`:contratos` self-loop
+    /// gate at caixa-core/src/aplicacao.rs:5559, every future
+    /// per-`:contratos`-edge policy resolver on the M4 CR materializer
+    /// axis, every future adjacency-graph builder that must skip self-
+    /// edges rather than fold them into an incidental cycle) now keys
+    /// off exactly one typed dispatch on the substrate primitive, so
+    /// any future rebrand on the axis (an M4-typed-caller enum whose
+    /// identity comparison rule the accessor could route through, an
+    /// operator-side per-cluster caller/callee-alias table the
+    /// materializer resolves per-CR before the equality probe, a
+    /// promotion of the pointwise `==` to a set-membership check once
+    /// SimpleOneForOne-shaped dynamic replicas come into typed scope
+    /// so a per-replica self-edge is rejected under the same predicate)
+    /// migrates as a single caixa-core edit rather than a coordinated
+    /// rewrite of every downstream self-edge consumer. Composes
+    /// byte-for-byte through the lifted [`Self::source`] /
+    /// [`Self::destination`] scalar accessors — the accessor pair every
+    /// per-`:contratos` scalar-value axis already routes through — so
+    /// any future rebrand of the underlying `:de` / `:para` storage
+    /// (a lift from `String` to a typed `ServicoName(String)` newtype,
+    /// a per-Aplicacao interning arena the M4 CR materializer authors,
+    /// a `smol_str::SmolStr` inline-buffer swap) flows through the
+    /// same one body without a coordinated per-consumer rewrite.
+    ///
+    /// Sibling in shape to the peer per-`:contratos` shape-predicate
+    /// family [`Self::is_http`] / [`Self::is_pubsub`] / [`Self::is_store`]
+    /// on the `:wit` world-ref axis — extended onto the per-edge
+    /// endpoint-equality axis: `is_http` / `is_pubsub` / `is_store`
+    /// partition the WIT-shape-space; `is_self_loop` partitions the
+    /// caller-callee identity-space. Named `is_self_loop()` to reflect
+    /// the graph-theoretic identity of the shape (a loop from a graph
+    /// node to itself, distinct from the sibling multi-node
+    /// `ContratoCycle` shape [`Self::detect_sync_cycles`] rejects) and
+    /// to match the [`AplicacaoError::ContratoSelfLoop`] diagnostic
+    /// variant already carrying the term.
+    #[must_use]
+    pub fn is_self_loop(&self) -> bool {
+        self.source() == self.destination()
+    }
+
     /// Typed view of the contract's payload target. Enforces that the
     /// `:wit` shape and the carried `:endpoint`/`:subject`/`:slot`
     /// fields agree, and that each carried value is itself
@@ -5556,10 +5609,45 @@ impl AplicacaoSpec {
             // ill-formed graph at the typed surface, before the renderer
             // emits a K8s object that fails or no-ops far from the source
             // caixa.lisp.
-            if c.de == c.para {
+            // Route the per-`:contratos` structural self-edge probe
+            // through the lifted [`WitContract::is_self_loop`] typed
+            // predicate rather than the raw `c.de == c.para` field-
+            // equality check — the one production consumer of the per-
+            // `:contratos` caller-equals-callee endpoint-equality axis
+            // now keys off exactly one typed dispatch on the substrate
+            // primitive, so any future rebrand of the axis (an M4-typed-
+            // caller enum whose identity comparison rule the predicate
+            // could route through, a per-cluster caller/callee-alias
+            // table the M4 CR materializer resolves per-CR before the
+            // equality probe) migrates as a single caixa-core edit
+            // rather than a coordinated rewrite of the gate + every
+            // downstream self-edge consumer. Peer of the sibling
+            // [`WitContract::is_http`] / [`WitContract::is_pubsub`] /
+            // [`WitContract::is_store`] shape-predicate routing on the
+            // `:wit` world-ref axis, extended onto the per-edge
+            // endpoint-equality axis.
+            //
+            // Route the paired [`AplicacaoError::ContratoSelfLoop`]
+            // diagnostic's `caixa:` / `wit:` carriers through the
+            // lifted [`WitContract::source`] / [`WitContract::world_ref`]
+            // scalar accessors rather than the raw `c.de.clone()` /
+            // `c.wit.clone()` field-access `String`-carry sites — the
+            // last unlifted per-`:contratos` raw-field-access
+            // `.clone()` sites in the M3 mesh-slot validator's self-
+            // edge refusal arm. `.source().to_string()` is byte-
+            // identical to `.de.clone()` (pinned by the sibling
+            // `source_returns_de_byte_equal_across_permutations` accessor
+            // test), and `.world_ref().to_string()` is byte-identical
+            // to `.wit.clone()` (pinned by the sibling
+            // `world_ref_returns_wit_byte_equal_across_permutations`
+            // accessor test) — so a future rebrand of either underlying
+            // storage flows through the accessor's one body without a
+            // coordinated per-consumer rewrite across the M3 mesh
+            // validator.
+            if c.is_self_loop() {
                 return Err(AplicacaoError::ContratoSelfLoop {
-                    caixa: c.de.clone(),
-                    wit: c.wit.clone(),
+                    caixa: c.source().to_string(),
+                    wit: c.world_ref().to_string(),
                 });
             }
             if c.world_ref().is_empty() {
@@ -17437,6 +17525,155 @@ mod tests {
         assert_eq!(de, "checkout");
         assert_eq!(para, "orders");
         assert_eq!(wit, "nats:pub-sub");
+    }
+
+    #[test]
+    fn wit_contract_is_self_loop_returns_true_on_matching_endpoints_across_permutations() {
+        // The canonical per-`:contratos` structural-self-edge pin:
+        // [`WitContract::is_self_loop`] must return `true` when the
+        // `:de` and `:para` fields agree byte-for-byte, across every
+        // WIT-shape variant the per-edge shape family carries. Pins
+        // the shape-agnostic identity-space partition the
+        // [`AplicacaoSpec::validate`] self-edge gate at
+        // caixa-core/src/aplicacao.rs:5559 fires against — all four
+        // [`WitTarget`] arms (HTTP / PubSub / Store / Capability) fall
+        // under the same one predicate. Four permutations sweep the
+        // accept-set: HTTP with endpoint, pub-sub with subject, KV
+        // store with slot, and payload-less capability.
+        for (nome, wit, endpoint, subject, slot) in [
+            ("cart", "wasi:http/proxy", Some("/lookup"), None, None),
+            ("checkout", "nats:pub-sub", None, Some("orders.paid"), None),
+            (
+                "kv",
+                "wasi:keyvalue/store",
+                None,
+                None,
+                Some("carts/{cart_id}"),
+            ),
+            ("audit", "wasi:logging", None, None, None),
+        ] {
+            let c = WitContract {
+                de: nome.into(),
+                para: nome.into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert!(
+                c.is_self_loop(),
+                "WitContract::is_self_loop must return true when \
+                 :contratos :de == :contratos :para (got false on \
+                 {nome:?} under {wit:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_is_self_loop_returns_false_on_distinct_endpoints_across_permutations() {
+        // The complement pin: [`WitContract::is_self_loop`] must return
+        // `false` on every well-shaped inter-Servico contract (the
+        // author-intended `:contratos` shape MESH-COMPOSITION §III.1
+        // names — "Servico A calls Servico B" between two distinct
+        // graph nodes). Pins against a future silent detour that
+        // inverted the predicate (an accidental `!= ` swap for `==`
+        // would silently reject every legitimate inter-Servico edge
+        // and admit every self-edge — the exact inversion of the
+        // author-intended shape). Four permutations sweep the same
+        // WIT-shape accept-set the sibling positive-arm test carries.
+        for (de, para, wit, endpoint, subject, slot) in [
+            (
+                "cart",
+                "catalog",
+                "wasi:http/proxy",
+                Some("/lookup"),
+                None,
+                None,
+            ),
+            (
+                "checkout",
+                "orders",
+                "nats:pub-sub",
+                None,
+                Some("orders.paid"),
+                None,
+            ),
+            (
+                "cart",
+                "kv",
+                "wasi:keyvalue/store",
+                None,
+                None,
+                Some("carts/{cart_id}"),
+            ),
+            ("audit", "sink", "wasi:logging", None, None, None),
+        ] {
+            let c = WitContract {
+                de: de.into(),
+                para: para.into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_string),
+                subject: subject.map(str::to_string),
+                slot: slot.map(str::to_string),
+            };
+            assert!(
+                !c.is_self_loop(),
+                "WitContract::is_self_loop must return false when \
+                 :contratos :de differs from :contratos :para (got true \
+                 on {de:?} → {para:?} under {wit:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_is_self_loop_routes_through_source_destination_accessors() {
+        // The composition pin: [`WitContract::is_self_loop`] must
+        // resolve to exactly `self.source() == self.destination()` —
+        // the equality probe of the sibling scalar-accessor pair — so
+        // any future refactor that silently re-authored the predicate
+        // to bypass the lifted scalar accessors (an accidental
+        // `self.de == self.para` regression back to the raw field-
+        // access shape, an M4-typed-caller-enum identity-comparison
+        // rule that landed on `source()` without reaching
+        // `destination()`, a per-cluster alias rewrite the operator
+        // pins on `destination()` without reaching this predicate)
+        // trips at caixa-core build time. Pins the "typed dispatch
+        // composes with typed dispatch, not with raw field access"
+        // discipline the sibling [`WitContract::edge_pair`] /
+        // [`WitContract::edge_triple`] composite-projection accessors
+        // already carry, extended onto the per-edge endpoint-equality
+        // predicate axis. Positive and complement arms both fire.
+        let self_edge = WitContract {
+            de: "cart".into(),
+            para: "cart".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        assert_eq!(
+            self_edge.is_self_loop(),
+            self_edge.source() == self_edge.destination(),
+            "WitContract::is_self_loop must compose exactly \
+             `source() == destination()` — a bypass of either sibling \
+             accessor here would silently decouple the endpoint-\
+             equality predicate from the substrate-primitive scalar \
+             accessors every downstream consumer routes through",
+        );
+        let inter_edge = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/lookup".into()),
+            subject: None,
+            slot: None,
+        };
+        assert_eq!(
+            inter_edge.is_self_loop(),
+            inter_edge.source() == inter_edge.destination(),
+            "WitContract::is_self_loop must compose exactly \
+             `source() == destination()` on the complement arm too",
+        );
     }
 
     #[test]
