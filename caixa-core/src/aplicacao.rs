@@ -6467,8 +6467,52 @@ impl AplicacaoSpec {
         // of the sibling `validate` per-`:entrada` shape-and-
         // membership gate migration on the same outer-composite
         // axis.
+        // Route the per-`:entrada` apex-destination membership probe
+        // through the lifted [`Entrada::destination`] accessor rather
+        // than the raw `e.para == destination` field access — the last
+        // un-lifted `.para` production-code read site on the per-
+        // `:entrada` `:para` axis, sibling to the four caixa-core
+        // consumer sites the peer 15ddd8c converge already routed
+        // through the accessor (the three
+        // `AplicacaoSpec::validate`-side per-`:entrada` shape-and-
+        // membership gate sites: the `validate_entrada_para` DNS-1123
+        // shape gate, the per-`:membros` membership lookup, and the
+        // `EntradaTargetMissing` diagnostic-carry `String`-clone) and
+        // the peer emit-side per-Aplicacao `HTTPRoute` per-parent-refs
+        // `entrada.para`-projection converge at
+        // caixa-core/src/render.rs (the `gateway_api_http_route_name`
+        // route-name projection site). Prior to this converge the
+        // `port_for_destination` resolver was the solitary consumer
+        // bypassing the typed dispatch on the `.para` axis — the two
+        // `caixa-mesh` per-`(HTTPRoute, CNP)` emit sites at
+        // caixa-mesh/src/lib.rs:3173 (`entrada.destination()`) and
+        // caixa-mesh/src/lib.rs:2739 (`c.destination()`) that already
+        // reach through the same accessor family compose with this
+        // resolver at the emit boundary via the apex-identity
+        // invariant `spec.port_for_destination(entrada.destination())
+        // == entrada.port` the sibling
+        // [`port_for_destination_at_entrada_destination_returns_entrada_port_across_permutations`]
+        // pin pins across four permutations. A future extension of the
+        // `:entrada :para` axis to a richer author surface (a per-
+        // cluster alias overlay the operator pins through a future
+        // `:placement`-scoped slot, a namespace-qualified rewrite the
+        // M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer applies
+        // per-CR, a `:entrada :para-aliases` overlay MESH-COMPOSITION
+        // §III.2 acknowledges) that lands on the accessor would silently
+        // disagree between this resolver and the two `caixa-mesh` emit
+        // sites — an author-declared `:para "cart"` value the accessor
+        // rewrote to `"cart-v2"` under a future canary arm would leave
+        // the resolver's membership arm falling through to
+        // `DEFAULT_SERVICO_PORT` (matching against the raw un-aliased
+        // `.para`) while the peer emit-site consumers landed on the
+        // accessor-projected value at `caixa-mesh/src/lib.rs:3173` and
+        // silently disagreed on which destination port a given typed
+        // `:entrada` resolves to at cluster-apply time. Pinned by the
+        // drift-detection test
+        // [`port_for_destination_apex_arm_routes_through_destination_accessor`]
+        // below.
         self.entrada()
-            .filter(|e| e.para == destination)
+            .filter(|e| e.destination() == destination)
             .map_or(DEFAULT_SERVICO_PORT, Entrada::port)
     }
 }
@@ -21933,6 +21977,85 @@ mod tests {
                  `:entrada` slot — this is the apex-identity contract \
                  every downstream ingress-apex L4 port reader relies on. \
                  Input :entrada :para: {para:?}, :entrada :port: {port}"
+            );
+        }
+    }
+
+    #[test]
+    fn port_for_destination_apex_arm_routes_through_destination_accessor() {
+        // Composition pin: [`AplicacaoSpec::port_for_destination`]'s
+        // per-`:entrada` apex-arm membership probe must key off
+        // [`Entrada::destination`], not the raw `.para` field access.
+        // Structurally: setting ONLY the `:entrada :para` field to a
+        // fresh non-cart destination on an otherwise-well-formed
+        // Aplicacao must (1) leave `e.destination()` byte-equal to
+        // `e.para.as_str()` (the accessor is byte-projective by
+        // definition), and (2) cause the resolver's apex arm to fire
+        // and return `entrada.port` at exactly that new destination
+        // while every other destination string falls through to
+        // [`DEFAULT_SERVICO_PORT`] under the accessor-projected
+        // membership check. Pins against a future silent detour that
+        // (a) re-derived the apex-arm membership probe off
+        // `e.para == destination` in `port_for_destination` instead of
+        // `e.destination() == destination`, silently disagreeing with
+        // the two peer `caixa-mesh` per-`(HTTPRoute, CNP)` emit-site
+        // consumers (`entrada.destination()` at
+        // caixa-mesh/src/lib.rs:3173, `c.destination()` at
+        // caixa-mesh/src/lib.rs:2739) that already reach through the
+        // accessor, (b) accessor-side introduced a per-tenant alias
+        // arm the caller was unaware of, silently rewriting an
+        // author-declared `:para "cart"` value to a canary-aliased
+        // form — the raw-field-access resolver would fall through to
+        // `DEFAULT_SERVICO_PORT` matching the un-aliased destination
+        // while the peer emit-site consumers landed on the aliased
+        // destination, splitting the ingress-apex L4 port at
+        // cluster-apply time.
+        //
+        // Peer of the sibling
+        // [`validate_membros_empty_gate_routes_through_nome_accessor`]
+        // (d0de220) composition pin on the per-`:membros` refusal-arm
+        // axis — same "the shape-gate predicate must route through the
+        // substrate-primitive typed dispatch" discipline extended onto
+        // the per-`:entrada` apex-arm membership-probe axis. Closes
+        // the last unlifted `.para` production-code read site on
+        // `Entrada` in `caixa-core` — after this converge every
+        // `caixa-core` `.para` field access outside the accessor's own
+        // body and outside the `WitContract` per-`:contratos` sibling
+        // axis is either a test-side field-setter or a doc-comment
+        // reference.
+        for (para, port) in [("cart", 8080u16), ("payment", 9090u16), ("catalog", 443u16)] {
+            let mut spec = three_member_spec();
+            if let Some(e) = spec.entrada.as_mut() {
+                e.para = para.into();
+                e.port = port;
+            }
+            let e = spec
+                .entrada
+                .as_ref()
+                .expect("three_member_spec carries a typed `:entrada` block");
+            assert_eq!(
+                e.destination(),
+                e.para.as_str(),
+                "Entrada::destination must byte-equal the .para field \
+                 access — an accessor-side detour that no longer \
+                 projects the raw field would silently split this \
+                 drift-detection test from the port_for_destination \
+                 apex-arm membership probe",
+            );
+            assert_eq!(
+                spec.port_for_destination(para),
+                port,
+                "port_for_destination must key off the accessor-projected \
+                 destination and return `entrada.port` on the apex arm — \
+                 input :entrada :para: {para:?}, :entrada :port: {port}",
+            );
+            assert_eq!(
+                spec.port_for_destination("ghost-destination-never-a-member"),
+                DEFAULT_SERVICO_PORT,
+                "port_for_destination must fall through to \
+                 DEFAULT_SERVICO_PORT on a non-matching destination \
+                 under the accessor-projected membership check — input \
+                 :entrada :para: {para:?}, :entrada :port: {port}",
             );
         }
     }
