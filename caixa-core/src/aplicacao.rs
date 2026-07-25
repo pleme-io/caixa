@@ -1229,6 +1229,78 @@ impl<'a> WitTarget<'a> {
     }
 }
 
+/// [`std::fmt::Display`] routed through [`WitTarget::label`], so the
+/// pretty-printed byte-string every consumer that formats a typed
+/// payload target as user-facing text lands on (the
+/// [`AplicacaoError::ContratoDuplicate`] diagnostic's `target:` carry
+/// the [`AplicacaoSpec::validate`] duplicate-`:contratos` gate seeds via
+/// [`WitTarget::label`] at aplicacao.rs:5491, the future `feira app
+/// graph` per-`:contratos`-edge payload column that reaches the graph
+/// verb through `format!("{target}")`, the future M4 per-edge policy
+/// resolver's per-edge audit-log line, the operator's mesh-graph
+/// per-edge inspection view) reaches for the same lifted
+/// [`WitTarget::HTTP_FIELD_NAME`] / [`WitTarget::PUBSUB_FIELD_NAME`] /
+/// [`WitTarget::STORE_FIELD_NAME`] / [`WitTarget::CAPABILITY_LABEL`]
+/// const set the [`WitTarget::payload_pair`] 4-arm dispatch already
+/// routes through — extending the three-path-convergence
+/// (`Debug` for structural inspection, `Display` for user-facing text,
+/// per-arm typed accessor for the canonical byte-string) discipline the
+/// sibling M3 [`PlacementStrategy`] and M2 [`crate::supervisor::RestartStrategy`]
+/// / [`crate::supervisor::RestartPolicy`] OTP-shape typed enums carry
+/// onto the fourth (and only remaining) typed-shape-discriminator axis
+/// on the caixa surface.
+///
+/// Pre-lift the two paths were structurally independent — every consumer
+/// reaching for a payload byte-string past the [`WitTarget::label`]
+/// helper had to pick between three paths ([`WitTarget::label`],
+/// `format!("{v:?}")` on the `Debug` derive, hand-rolled per-arm
+/// formatting through the [`WitTarget::HTTP_FIELD_NAME`] /
+/// [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`] /
+/// [`WitTarget::CAPABILITY_LABEL`] const set), and a future consumer
+/// that reached for `format!("{target}")` — the canonical shape every
+/// user-facing pretty-print site on the sibling typed-enum axes already
+/// uses — would silently land on the `Debug` derive's structural output
+/// (`Http { endpoint: "/charge" }` — Rust struct-literal syntax) rather
+/// than the `label()` helper's stable byte-string (`:endpoint
+/// "/charge"` — the author-facing `:contratos` keyword form) the
+/// substrate-side duplicate-`:contratos` gate at aplicacao.rs:5491
+/// already threads through. The two spellings would diverge silently in
+/// every downstream diagnostic / graph / audit line reached through
+/// `format!` rather than through the `label()` helper. Routing
+/// [`std::fmt::Display`] through [`WitTarget::label`] closes the third
+/// path: every `format!("{v}")` call reaches the same
+/// [`WitTarget::payload_pair`]-shaped byte-string the `label()` helper
+/// and the duplicate-`:contratos` gate already route through, so a
+/// future variant addition (the M4-and-later per-edge WIT registry may
+/// split [`WitTarget::Http`] into `Rest` / `Grpc` peers, or extend
+/// [`WitTarget::Store`] with a `Queue`-shaped peer) reaches every
+/// consumer at exactly one place — the [`WitTarget::payload_pair`]
+/// match — rather than fanning out through hand-rolled per-arm
+/// [`std::fmt::Display`] arms.
+///
+/// The dispatcher-catalog identity remains unaffected — [`WitTarget`]
+/// is the typed view returned by [`WitContract::target`], not a
+/// closed-set discriminator enum with a gen-platform Discriminant
+/// registration, so the `Debug` derive's structural output (which every
+/// `{v:?}` consumer still reaches) stays distinct from the `Display`
+/// helper's stable pretty-printed byte-string. `Debug` reveals variant
+/// shape for structural inspection; `Display` (via `label`) reveals the
+/// stable author-facing payload projection.
+///
+/// Pin tests
+/// [`tests::wit_target_display_routes_through_label_helper`] and
+/// [`tests::wit_target_display_matches_duplicate_contratos_diagnostic_carrier`]
+/// assert the two paths agree byte-for-byte on every variant, so a
+/// future variant addition or `label()` reimplementation that hand-rolls
+/// the arms instead of delegating to [`WitTarget::payload_pair`] is a
+/// build error visible at caixa-core test time, not a silent
+/// per-consumer dispatch miss at diagnostic / audit / graph time.
+impl std::fmt::Display for WitTarget<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.label())
+    }
+}
+
 // ── one Aplicacao member ─────────────────────────────────────────────
 
 /// A Servico participating in the Aplicacao. Same shape as
@@ -10452,6 +10524,109 @@ mod tests {
         // here rather than a downstream consumer surprise.
         assert_eq!(WitTarget::Capability.label(), WitTarget::CAPABILITY_LABEL,);
         assert_eq!(WitTarget::CAPABILITY_LABEL, "(capability — no payload)");
+    }
+
+    #[test]
+    fn wit_target_display_routes_through_label_helper() {
+        // Fail-before-pass-after pin on the fourth (and only remaining)
+        // typed-shape-discriminator axis to converge onto the
+        // three-path-convergence discipline the sibling M3
+        // [`PlacementStrategy`] (0a2f653) and M2
+        // [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] OTP-shape typed enums
+        // already carry: [`std::fmt::Display`] on [`WitTarget`] routes
+        // through [`WitTarget::label`], so every consumer reaching for
+        // `format!("{v}")` on a typed payload target lands on the same
+        // stable author-facing byte-string [`WitTarget::label`] returns
+        // — the byte-string the [`AplicacaoError::ContratoDuplicate`]
+        // `target:` carry the [`AplicacaoSpec::validate`] duplicate-
+        // `:contratos` gate seeds via [`WitTarget::label`] at
+        // aplicacao.rs:5491 already threads through.
+        //
+        // Pre-lift `format!("{v}")` on [`WitTarget`] would have fallen
+        // through to the `Debug` derive's structural output
+        // (`Http { endpoint: "/charge" }` — Rust struct-literal syntax)
+        // rather than the [`WitTarget::label`] helper's stable byte-
+        // string (`:endpoint "/charge"` — the author-facing `:contratos`
+        // keyword form). Every future consumer that reaches for
+        // `format!("{target}")` — the canonical shape every user-facing
+        // pretty-print site on the sibling typed-enum axes
+        // ([`PlacementStrategy`], [`crate::supervisor::RestartStrategy`],
+        // [`crate::supervisor::RestartPolicy`]) already uses — would
+        // silently land under a different byte-string than the
+        // [`WitTarget::label`] callers that the duplicate-`:contratos`
+        // diagnostic already threads through, with the mismatch
+        // surfacing as a downstream diagnostic / graph / audit line
+        // reading one spelling while the substrate's own gate emitted
+        // another.
+        //
+        // Pin the routing here so a future
+        // `impl std::fmt::Display for WitTarget<'_>` reimplementation
+        // that hand-rolls the per-arm formatting instead of delegating
+        // to [`WitTarget::label`] fails at caixa-core build time.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            assert_eq!(
+                variant.to_string(),
+                variant.label(),
+                "WitTarget::{variant:?} Display must route through \
+                 WitTarget::label (single source of truth: the lifted \
+                 payload_pair 4-arm dispatch the label helper already \
+                 threads through)"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_target_display_matches_duplicate_contratos_diagnostic_carrier() {
+        // Consumer-side pin on the three-path convergence:
+        // [`std::fmt::Display`] agrees byte-for-byte with the
+        // [`AplicacaoError::ContratoDuplicate`] `target:` carrier the
+        // [`AplicacaoSpec::validate`] duplicate-`:contratos` gate seeds
+        // via [`WitTarget::label`] at aplicacao.rs:5491 on every arm.
+        // Pre-lift the two paths were structurally independent — the
+        // substrate-side gate reached for `target_view.label()` while a
+        // future downstream diagnostic / graph / audit line reaching
+        // for `format!("{target}")` would silently land on the `Debug`
+        // derive's structural output. Pin the two paths byte-for-byte
+        // here so any future variant addition (M4 `Rest`/`Grpc` split
+        // of [`WitTarget::Http`], `Queue`-shaped peer of
+        // [`WitTarget::Store`]) is a caixa-core-build-time exhaustive-
+        // match error at [`WitTarget::payload_pair`] rather than a
+        // silent per-consumer dispatch miss.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            assert_eq!(
+                format!("{variant}"),
+                variant.label(),
+                "WitTarget::{variant:?} Display byte-string must match \
+                 the AplicacaoError::ContratoDuplicate `target:` carrier \
+                 the AplicacaoSpec::validate duplicate-`:contratos` gate \
+                 seeds via WitTarget::label — three-path convergence: \
+                 Display + label + payload_pair all resolve to the same \
+                 per-arm byte-string"
+            );
+        }
     }
 
     #[test]
