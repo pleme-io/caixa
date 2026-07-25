@@ -27,6 +27,69 @@ impl TeiaInstance {
         }
     }
 
+    /// Substrate-canonical per-`(defteia …)` `:tipo` provider-qualified
+    /// resource-type scalar accessor every downstream IaC-facing consumer
+    /// of the `TeiaInstance` primitive keys off — returns the author-
+    /// declared `:tipo` byte-string verbatim as a `&str`, borrowed from
+    /// the typed slot's own [`String`] storage.
+    ///
+    /// The `:tipo` slot carries the qualified `<provider>/<kind>` shape
+    /// (`aws/vpc`, `akeyless/secret`, `google/compute-instance` — the
+    /// shape [`crate::parse_teia_source`] admits via its
+    /// [`caixa_ast::NodeKind::Symbol`] projection at
+    /// `manifest.rs`:`kwarg_symbol("tipo")`), and every downstream
+    /// consumer that reads the identity keys off this scalar (the
+    /// `caixa-arch` invariant checker's per-instance `(tipo, nome)`
+    /// dedup key + `Violation::instance_tipo` diagnostic carrier + per-
+    /// resource security-group / cidr-block gate, the `caixa-pangea`
+    /// `InstanceToHcl` per-resource `<provider>_<kind>` Terraform-JSON
+    /// type-name mint, and the substrate primitive's own [`Self::to_hcl`]
+    /// per-instance HCL block-header emit path).
+    ///
+    /// Prior to this lift the `.tipo` field was accessed inline at ten
+    /// caixa-monorepo sites — the `caixa-arch::invariants` per-invariant
+    /// `unique-resource-names` / `no-unresolved-refs` / `no-public-
+    /// ingress-without-tags` / `cidr-block-looks-valid` per-instance
+    /// dedup-key + Violation-envelope + security-group-substring gate
+    /// cascade (nine sites), and the `caixa-pangea::manifest_bridge`
+    /// `InstanceToHcl::mutate` per-instance `<provider>_<kind>`
+    /// Terraform-JSON type-name normalization (one site) — each expressed
+    /// no compile-time link back to the typed slot. A future extension of
+    /// the `:tipo` axis to a richer author surface — a per-provider
+    /// alias table the substrate rewrites through the (future) `iac-
+    /// forge` schema-resolution pass, a promotion of the `<provider>/
+    /// <kind>` plain byte-string to a richer scoped-provider-identifier
+    /// newtype once cross-provider federation lands, a per-tenant type
+    /// remap the future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer resolves per-CR — would have had to be threaded
+    /// through every open-coded copy in lockstep or the invariant
+    /// checker's `unique-resource-names` dedup key and the Terraform-
+    /// JSON emit path's `tf_type` mint would silently disagree on which
+    /// provider a given `TeiaInstance` resolves to. Lifting the
+    /// resolution rule to a typed method on the substrate primitive
+    /// means every downstream consumer reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// First `&str`-return accessor on the outer `TeiaInstance` — opens
+    /// the outer-`TeiaInstance` scalar projection pattern the sibling
+    /// `:nome` future lift folds on. Named `tipo()` to match the
+    /// storage field's name — the accessor's identity name maps onto
+    /// the author-declared `(defteia :tipo …)` vocabulary the slot's
+    /// docstring already carries. Same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer"
+    /// discipline as the sibling [`caixa_core::Dep::nome`] (eba2cde),
+    /// per-`:membros` [`caixa_core::aplicacao::Membro::nome`] (4a32abf),
+    /// and outer [`caixa_core::Caixa::nome`] (e6b7d97 and its
+    /// convergence family — most recent 3219a42 / c9be435 / 41ab9a3 /
+    /// 61d3429) named-caixa-referencing accessors, extended onto the
+    /// substrate's IaC-side `(defteia …)` per-instance provider-
+    /// identity axis.
+    #[must_use]
+    pub fn tipo(&self) -> &str {
+        self.tipo.as_str()
+    }
+
     /// Append an attribute — fluent builder.
     #[must_use]
     pub fn with_attr(mut self, key: impl Into<String>, value: TeiaValue) -> Self {
@@ -37,7 +100,15 @@ impl TeiaInstance {
     /// Terraform-style `resource "aws_vpc" "main" { … }` rendering.
     #[must_use]
     pub fn to_hcl(&self) -> String {
-        let tf_tipo = self.tipo.replace('/', "_");
+        // Route the internal `<provider>_<kind>` type-name mint through
+        // the lifted [`Self::tipo`] scalar accessor rather than the raw
+        // `self.tipo` field access — the substrate primitive's own HCL
+        // block-header emit path now keys off the canonical raw-slot
+        // surface every downstream [`caixa_arch`] / [`caixa_pangea`]
+        // per-`TeiaInstance` `:tipo` consumer routes through, so any
+        // future rebrand on the typed slot's raw-slot reader lands at
+        // exactly one place.
+        let tf_tipo = self.tipo().replace('/', "_");
         let mut out = format!("resource \"{tf_tipo}\" \"{}\" {{", self.nome);
         out.push('\n');
         for (k, v) in &self.atributos {
@@ -65,6 +136,91 @@ impl TeiaInstance {
 mod tests {
     use super::*;
     use crate::reference::TeiaRef;
+    use crate::value::TeiaValue;
+
+    #[test]
+    fn tipo_returns_declared_tipo_verbatim() {
+        // The accessor is a projection, not a gate. Every author-
+        // declared `:tipo` byte-string — the canonical `aws/vpc` shape,
+        // a hyphenated `google/compute-instance` shape, a snake_cased
+        // `aws_iam_role` shape (already-normalized), a namespaced
+        // `akeyless/static-secret`, an empty `""` sentinel — round-
+        // trips as-is through `TeiaInstance::tipo()`. Pins the
+        // "verbatim projection" contract every downstream consumer
+        // (`caixa-arch::invariants` dedup key, `caixa-pangea::manifest_
+        // bridge` `<provider>_<kind>` mint, `TeiaInstance::to_hcl`
+        // block-header emit) depends on.
+        for fixture in [
+            "aws/vpc",
+            "akeyless/static-secret",
+            "google/compute-instance",
+            "aws_iam_role",
+            "",
+        ] {
+            let inst = TeiaInstance::new(fixture, "main");
+            assert_eq!(
+                inst.tipo(),
+                fixture,
+                "TeiaInstance::tipo must return the author-declared :tipo \
+                 byte-string verbatim (fixture: {fixture:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn tipo_is_by_borrow_pointer_identity() {
+        // Zero-copy pin — `inst.tipo()` must borrow from the typed
+        // slot's own [`String`] storage, not clone into a fresh buffer.
+        // Fails at build time if a future rewrite regresses to an
+        // owned-buffer shape (`self.tipo.clone()` in the body would
+        // type-check but silently allocate on every call — the pointer
+        // identity check catches it).
+        let inst = TeiaInstance::new("aws/vpc", "main");
+        let via_accessor: &str = inst.tipo();
+        assert_eq!(
+            via_accessor.as_ptr(),
+            inst.tipo.as_ptr(),
+            "TeiaInstance::tipo must borrow from the .tipo String's \
+             backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            inst.tipo.len(),
+            "TeiaInstance::tipo and .tipo.as_str() must byte-equal in \
+             length (same slice)",
+        );
+    }
+
+    #[test]
+    fn tipo_agrees_with_parsed_source() {
+        // Composition pin: the accessor projects through the parser's
+        // own `kwarg_symbol("tipo")` capture — any future rebrand of
+        // the parser-side `:tipo` reader lands at exactly one place
+        // and both `parse_teia_source(…).instances[0].tipo()` and the
+        // raw slot byte-equal each other.
+        let src = r#"(defteia :tipo aws/vpc :nome main
+                     :atributos (:cidr-block "10.0.0.0/16"))"#;
+        let m = crate::parse_teia_source(src).unwrap();
+        let inst = &m.instances[0];
+        assert_eq!(inst.tipo(), "aws/vpc");
+        assert_eq!(inst.tipo(), inst.tipo.as_str());
+    }
+
+    #[test]
+    fn to_hcl_reader_routes_through_tipo_accessor() {
+        // Coherence pin: the substrate primitive's own `to_hcl` reader
+        // and every downstream `caixa-arch` / `caixa-pangea` per-`:tipo`
+        // consumer share the same accessor. Regresses if a future
+        // detour re-inlines the raw `self.tipo` field access at the
+        // HCL block-header emit path.
+        let inst = TeiaInstance::new("aws/vpc", "main")
+            .with_attr("cidr_block", TeiaValue::Str("10.0.0.0/16".into()));
+        let hcl = inst.to_hcl();
+        assert!(
+            hcl.contains("resource \"aws_vpc\" \"main\""),
+            "to_hcl must mint <provider>_<kind> through the .tipo() accessor",
+        );
+    }
 
     #[test]
     fn hcl_rendering() {
