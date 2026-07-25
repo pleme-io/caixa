@@ -1086,11 +1086,23 @@ type ContratoIdentity<'a> = (
 /// instead of probing `Option<String>` fields one by one — the
 /// "which payload field is set?" question is answered once, at
 /// validation time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, gen_platform::IsVariant)]
 pub enum WitTarget<'a> {
     /// HTTP-shaped WIT world. Carries the configured request path.
     Http { endpoint: &'a str },
     /// Pub-sub-shaped WIT world. Carries the event-stream subject.
+    ///
+    /// The `IsVariant` derive would auto-name the predicate `is_pub_sub`
+    /// (`discriminant_to_snake("PubSub") == "pub_sub"`); the explicit
+    /// `#[is_variant(name = "pubsub")]` override keeps the emitted
+    /// method name byte-identical to the sibling
+    /// [`WitContract::is_pubsub`] predicate (the paired shape-side
+    /// arm-discriminator that routes through
+    /// [`wit_shape_is_pubsub`] on the wit-world-ref scalar rather than
+    /// through `matches!` on the variant), so the two arm-discriminator
+    /// axes — target-side variant-arm and shape-side ref-prefix — reach
+    /// every downstream consumer through the same `is_pubsub()` name.
+    #[is_variant(name = "pubsub")]
     PubSub { subject: &'a str },
     /// Key-value-shaped WIT world. Carries the slot template.
     Store { slot: &'a str },
@@ -6412,7 +6424,25 @@ impl AplicacaoSpec {
             // target() was already called by validate(); re-running here
             // keeps detect_sync_cycles self-contained for callers that
             // reuse it (M4 per-edge policy resolver) without revalidating.
-            if matches!(c.target()?, WitTarget::PubSub { .. }) {
+            //
+            // The pub-sub-arm check routes through the lifted
+            // [`WitTarget::is_pubsub`] `gen_platform::IsVariant`-derived
+            // arm-discriminator predicate rather than a raw `matches!(…,
+            // WitTarget::PubSub { .. })` on the variant so a future
+            // rebrand on the axis (an M4 per-edge WIT registry split of
+            // [`WitTarget::PubSub`] into shape-specific peers, a
+            // per-consumer rename that the accept-set already carries)
+            // reaches this call site through the derive rather than a
+            // scattered per-arm `matches!` rewrite — same
+            // `IsVariant`-derived-arm-discriminator discipline the
+            // peer closed-set typed enums ([`crate::CaixaKind`] via
+            // f5bba80, [`PlacementStrategy`] via 766ec63,
+            // [`crate::supervisor::RestartStrategy`] +
+            // [`crate::supervisor::RestartPolicy`],
+            // [`crate::upgrade::UpgradeInstruction`] via 915a934)
+            // already route through on the substrate's other typed-enum
+            // arm-discriminator axes.
+            if c.target()?.is_pubsub() {
                 continue;
             }
             adj.entry(c.source()).or_default().insert(c.destination());
@@ -10997,6 +11027,169 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn wit_target_is_variant_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the
+        // [`gen_platform::IsVariant`] derive on [`WitTarget`]: for
+        // each of the four variants exactly one of the generated
+        // `is_http` / `is_pubsub` / `is_store` / `is_capability`
+        // predicates returns `true` and the other three return
+        // `false`. Prior to this derive the only production
+        // arm-discriminator on [`WitTarget`] — the sync-cycle
+        // exclusion in [`AplicacaoSpec::detect_sync_cycles`] — was a
+        // raw `matches!(c.target()?, WitTarget::PubSub { .. })` on
+        // the variant that expressed no compile-time link back to
+        // the closed-set typed dispatch a future fifth
+        // `:contratos :wit`-shape arm (an M4 per-edge WIT registry
+        // split of [`WitTarget::PubSub`] into shape-specific peers,
+        // an M4-and-later `Rest` / `Grpc` split of [`WitTarget::Http`],
+        // a `Queue`-shaped peer of [`WitTarget::Store`]) would have
+        // to thread through in lockstep or the DFS exclusion would
+        // silently disagree with the peer diagnostic templates on
+        // which arms carry sync-versus-async semantics. Peer of the
+        // sibling [`crate::CaixaKind`] (f5bba80),
+        // [`PlacementStrategy`] (766ec63),
+        // [`crate::supervisor::RestartStrategy`],
+        // [`crate::supervisor::RestartPolicy`], and
+        // [`crate::upgrade::UpgradeInstruction`] (915a934)
+        // `IsVariant` derives on the sibling closed-set typed-enum
+        // discriminator axes — extends the same one-typed-dispatch-
+        // per-variant discipline onto the last unlifted closed-set
+        // typed-enum discriminator on the caixa surface (the M3
+        // mesh-slot per-`:contratos` target-arm axis), closing the
+        // arm-discriminator convergence trajectory across every
+        // closed-set typed enum in caixa-core.
+        let rows: [(WitTarget<'static>, [bool; 4]); 4] = [
+            (
+                WitTarget::Http { endpoint: "/x" },
+                [true, false, false, false],
+            ),
+            (
+                WitTarget::PubSub {
+                    subject: "events.x",
+                },
+                [false, true, false, false],
+            ),
+            (
+                WitTarget::Store { slot: "kv/x" },
+                [false, false, true, false],
+            ),
+            (WitTarget::Capability, [false, false, false, true]),
+        ];
+        for (variant, expected) in rows {
+            let observed = [
+                variant.is_http(),
+                variant.is_pubsub(),
+                variant.is_store(),
+                variant.is_capability(),
+            ];
+            assert_eq!(
+                observed, expected,
+                "WitTarget::{variant:?} is_* predicates must partition \
+                 the arm set (http, pubsub, store, capability); got {observed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_target_is_variant_predicates_are_const_fn() {
+        // The [`gen_platform::IsVariant`] derive emits `const fn`
+        // predicates on the peer [`crate::CaixaKind`] +
+        // [`crate::upgrade::UpgradeInstruction`] +
+        // [`crate::supervisor::RestartStrategy`] +
+        // [`crate::supervisor::RestartPolicy`] +
+        // [`PlacementStrategy`] closed-set typed enums — pin the
+        // same posture on [`WitTarget`] so a future accidental
+        // downgrade to non-`const` (an added runtime helper reachable
+        // only from a non-`const` context, a manual hand-rolled
+        // `impl` that shadows the derive-generated method) trips at
+        // caixa-core build time rather than surfacing as a downstream
+        // `const`-context regression far from the derive declaration.
+        //
+        // Unlike the peer unit-variant enums (`CaixaKind` /
+        // `PlacementStrategy` / `RestartStrategy` / `RestartPolicy`)
+        // whose `const` constructors need no arguments, the three
+        // payload-carrying [`WitTarget`] arms are const-constructed
+        // through `&'static str` payloads — the same `'static`
+        // lifetime the closed-set typed enum's four-arm partition
+        // pin above already threads through.
+        const HTTP: WitTarget<'static> = WitTarget::Http { endpoint: "/x" };
+        const PUBSUB: WitTarget<'static> = WitTarget::PubSub { subject: "e" };
+        const STORE: WitTarget<'static> = WitTarget::Store { slot: "kv/x" };
+        const CAPABILITY: WitTarget<'static> = WitTarget::Capability;
+        const IS_HTTP: bool = HTTP.is_http();
+        const IS_PUBSUB: bool = PUBSUB.is_pubsub();
+        const IS_STORE: bool = STORE.is_store();
+        const IS_CAPABILITY: bool = CAPABILITY.is_capability();
+        assert!(IS_HTTP);
+        assert!(IS_PUBSUB);
+        assert!(IS_STORE);
+        assert!(IS_CAPABILITY);
+    }
+
+    #[test]
+    fn detect_sync_cycles_skips_pubsub_edges_through_is_pubsub_predicate() {
+        // Consumer-side pin on the sole production converge site:
+        // [`AplicacaoSpec::detect_sync_cycles`] excludes pub-sub
+        // edges from the synchronous-subgraph DFS via the lifted
+        // [`WitTarget::is_pubsub`] `IsVariant`-derived arm-discriminator
+        // predicate (rebound from the prior raw
+        // `matches!(c.target()?, WitTarget::PubSub { .. })` on the
+        // variant). Byte-equivalent today (`is_pubsub` is the
+        // derive-generated `matches!(self, Self::PubSub { .. })` by
+        // construction, the `#[is_variant(name = "pubsub")]` override
+        // aliasing the auto-derived `is_pub_sub` back to the sibling
+        // [`WitContract::is_pubsub`] name); pin the behavior so a
+        // future accidental drift (a rebind onto a peer arm
+        // predicate, a manual hand-rolled `impl` that shadows the
+        // derive-generated method with different semantics, a peer
+        // arm rename that shifts which variant carries sync-versus-
+        // async semantics) trips at caixa-core test time rather than
+        // at some downstream operator's runtime dispatch far from the
+        // rebind commit.
+        //
+        // The fixture constructs a two-Servico Aplicacao with one
+        // pub-sub edge that would close a sync-cycle if the DFS did
+        // not exclude it: `a → b` (pub-sub) + `b → a` (http). The
+        // pub-sub exclusion means the DFS sees only the `b → a` HTTP
+        // edge, which is not a cycle. A regression in the converge
+        // (a rebind that reads the pub-sub arm as sync) would report
+        // `AplicacaoError::ContratoCycle`.
+        let s = AplicacaoSpec {
+            membros: vec![membro("a", "^0.1"), membro("b", "^0.1")],
+            contratos: vec![
+                // Pub-sub edge: DFS must skip via is_pubsub().
+                WitContract {
+                    de: "a".into(),
+                    para: "b".into(),
+                    wit: "nats:pub-sub".into(),
+                    endpoint: None,
+                    subject: Some("events.x".into()),
+                    slot: None,
+                },
+                // HTTP edge: DFS must include.
+                WitContract {
+                    de: "b".into(),
+                    para: "a".into(),
+                    wit: "wasi:http/proxy".into(),
+                    endpoint: Some("/x".into()),
+                    subject: None,
+                    slot: None,
+                },
+            ],
+            politicas: MeshPolicy::default(),
+            placement: Placement {
+                estrategia: PlacementStrategy::Replicated,
+                clusters: vec!["rio".into()],
+                affinity: None,
+                shard_key: None,
+            },
+            entrada: None,
+        };
+        s.validate()
+            .expect("pub-sub edge must be excluded from sync-cycle DFS");
     }
 
     #[test]
