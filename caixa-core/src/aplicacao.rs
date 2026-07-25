@@ -5597,13 +5597,51 @@ impl AplicacaoSpec {
             // / `:para` (8d5af6b) axes already follow. This closes
             // the fourth and last Aplicacao-level Servico-name
             // reference axis on the canonical DNS-1123 floor.
-            validate_entrada_para(&e.para)?;
-            if !names.contains(e.para.as_str()) {
+            // Route the per-`:entrada :para` byte-string reads through
+            // the lifted [`Entrada::destination`] accessor rather than
+            // the raw `e.para` field access — the three
+            // per-`AplicacaoSpec::validate` `:entrada :para` consumers
+            // (shape-gate `validate_entrada_para` arg, membership
+            // lookup, `EntradaMemberMissing` diagnostic carry) now key
+            // off exactly one typed dispatch on the substrate
+            // primitive, closing the last unlifted per-`:entrada :para`
+            // raw-field-access axis on the M3 mesh-slot validator.
+            // The `.destination().to_string()` at the diagnostic site
+            // is byte-identical to `.para.clone()` — pinned by the
+            // sibling `destination_returns_entrada_para_byte_equal` +
+            // `destination_borrows_from_entrada_para_storage` accessor
+            // tests — so a future rebrand of the underlying `:para`
+            // storage (a lift from `String` to a typed
+            // `ServicoName(String)` newtype, a per-Aplicacao interning
+            // arena the M4 CR materializer authors, a
+            // `smol_str::SmolStr` inline-buffer swap) flows through
+            // the accessor's one body without a coordinated
+            // per-consumer rewrite across the M3 mesh validator.
+            validate_entrada_para(e.destination())?;
+            if !names.contains(e.destination()) {
                 return Err(AplicacaoError::EntradaMemberMissing {
-                    para: e.para.clone(),
+                    para: e.destination().to_string(),
                 });
             }
-            if e.host.is_empty() {
+            // Route the per-`:entrada :host` byte-string reads through
+            // the lifted [`Entrada::hostname`] accessor rather than
+            // the raw `e.host` field access — the emptiness gate and
+            // the shape-gate `validate_entrada_host` arg now key off
+            // exactly one typed dispatch on the substrate primitive,
+            // closing the last unlifted per-`:entrada :host` raw-
+            // field-access axis on the M3 mesh-slot validator. Peer
+            // of the sibling per-`:entrada :para` convergence above
+            // and pinned by the existing
+            // `hostname_returns_entrada_host_byte_equal` +
+            // `hostnames_returns_singleton_of_hostname_accessor`
+            // accessor tests, so any future
+            // Gateway-API-shaped host renormalization (a wildcard-
+            // label lift, a trailing-`.` FQDN substitution, an IDNA
+            // Punycode round-trip the SNI fan-out overlay authors)
+            // flows through the accessor's one body without a
+            // coordinated per-consumer rewrite across the M3 mesh
+            // validator.
+            if e.hostname().is_empty() {
                 return Err(AplicacaoError::EmptyEntradaHost);
             }
             // The `:host` lands verbatim as a K8s Gateway API v1
@@ -5623,7 +5661,7 @@ impl AplicacaoSpec {
             // Lifting the gate to caixa-build time mirrors the
             // `:entrada :paths` value-shape trajectory (eb3456d) and
             // closes the last unstructured `:entrada` axis.
-            validate_entrada_host(&e.host)?;
+            validate_entrada_host(e.hostname())?;
             // Structural-floor gate on `:entrada :port`: every
             // validated `Entrada::port` past this gate lies in
             // `SERVICO_PORT_MIN..=u16::MAX` (the `u16` field's natural
