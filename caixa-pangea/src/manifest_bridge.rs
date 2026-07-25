@@ -62,7 +62,16 @@ fn value_to_json(v: &TeiaValue) -> Value {
             Value::Object(out)
         }
         TeiaValue::Ref(r) => {
-            let tf = r.tipo.replace(['/', '-'], "_");
+            // Terraform resource types are snake_case <provider>_<kind>;
+            // neither hyphens nor slashes are valid. The `:tipo` read
+            // routes through the lifted [`caixa_teia::TeiaRefRepr::tipo`]
+            // scalar accessor rather than the raw `r.tipo` field access
+            // — this per-`Ref` `<provider>_<kind>` Terraform-JSON type-
+            // name mint and every `caixa-arch::invariants`
+            // `no-unresolved-refs` per-`Ref` declared-set lookup key +
+            // refusal-message Display interpolation now key off the same
+            // substrate-canonical resolver.
+            let tf = r.tipo().replace(['/', '-'], "_");
             Value::String(format!("${{{tf}.{}.{}}}", r.nome, r.atributo))
         }
     }

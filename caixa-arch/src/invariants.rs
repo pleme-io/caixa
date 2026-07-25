@@ -124,7 +124,18 @@ fn collect_ref_violations(
 ) {
     match v {
         TeiaValue::Ref(r) => {
-            if !declared.contains(&(r.tipo.clone(), r.nome.clone())) {
+            // Read the per-`TeiaRefRepr` `:tipo` provider-qualified
+            // resource-type identity through the lifted
+            // [`caixa_teia::TeiaRefRepr::tipo`] scalar accessor rather
+            // than the raw `r.tipo` field access — the declared-set
+            // lookup key + the `(ref <tipo> …)` refusal-message Display
+            // interpolation both key off the substrate-canonical
+            // per-`Ref` `:tipo` resolver, so a future rebrand on the
+            // typed slot's raw-slot reader lands at exactly one place
+            // and the `no-unresolved-refs` gate stays lockstep with the
+            // `caixa-pangea` `${<tf>.<nome>.<attr>}` Terraform-JSON
+            // emit path's `<tf>` mint.
+            if !declared.contains(&(r.tipo().to_string(), r.nome.clone())) {
                 out.push(Violation {
                     invariant_id: "no-unresolved-refs".into(),
                     kind: InvariantKind::Safety,
@@ -132,7 +143,9 @@ fn collect_ref_violations(
                     instance_nome: inst.nome().to_string(),
                     message: format!(
                         "(ref {} {} {}) targets an undeclared instance",
-                        r.tipo, r.nome, r.atributo
+                        r.tipo(),
+                        r.nome,
+                        r.atributo
                     ),
                 });
             }
