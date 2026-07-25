@@ -408,11 +408,32 @@ impl UpgradeFromEntry {
         // slice-return accessor rather than the raw `self.instructions`
         // field access — three raw-access sites in one gate collapse
         // onto exactly one typed dispatch on the substrate primitive.
+        //
+        // The paired positive / negated `Self::Restart` arm-discriminator
+        // predicates route through the `gen_platform::IsVariant`
+        // derive-generated [`UpgradeInstruction::is_restart`] rather than
+        // the raw `matches!(i, UpgradeInstruction::Restart)` /
+        // `!matches!(i, UpgradeInstruction::Restart)` open-coded pattern-
+        // matches — same closed-set-typed-enum arm-discriminator dispatch
+        // discipline the sibling [`crate::CaixaKind`] `IsVariant` derive
+        // (f5bba80) extended onto its ten `caixa.kind() == CaixaKind::X`
+        // / `!= CaixaKind::X` production sites in the substrate's own
+        // layout invariant verifier + typed-view projection gates,
+        // extended here onto the last unlifted `matches!`-based
+        // arm-discriminator axis on the [`UpgradeInstruction`] closed-set
+        // typed enum. A future sixth `UpgradeInstruction` arm (an
+        // adaptive-upgrade-shaped `AwaitReadiness` gate the M2.5
+        // wasm-operator's hot-upgrade runtime could adopt to bracket the
+        // typed instruction sequence against a per-cluster readiness
+        // probe, a `Downgrade` variant OTP's `relup` acknowledges on the
+        // reverse axis, a `CanaryTraffic` split-traffic variant the M4 CR
+        // materializer could resolve per-CR) migrates as a single
+        // enum-declaration edit — the derive auto-generates the paired
+        // `.is_<new_arm>()` predicate; every consumer inherits the new
+        // arm on the next re-derive, rather than the two `matches!` sites
+        // here having to be threaded through in lockstep.
         let instructions = self.instructions();
-        let restart_count = instructions
-            .iter()
-            .filter(|i| matches!(i, UpgradeInstruction::Restart))
-            .count();
+        let restart_count = instructions.iter().filter(|i| i.is_restart()).count();
         if restart_count == 0 {
             return Ok(());
         }
@@ -421,7 +442,7 @@ impl UpgradeFromEntry {
         }
         let other_kinds: Vec<&'static str> = instructions
             .iter()
-            .filter(|i| !matches!(i, UpgradeInstruction::Restart))
+            .filter(|i| !i.is_restart())
             .map(UpgradeInstruction::lisp_form)
             .collect();
         Err(UpgradeError::RestartNotExclusive {
@@ -2478,6 +2499,88 @@ mod tests {
             script: PathBuf::from("lib/m.lisp"),
         };
         assert_eq!(mig.declared_path(), Some(&PathBuf::from("lib/m.lisp")));
+    }
+
+    #[test]
+    fn upgrade_instruction_is_restart_predicate_partitions_the_arm_set() {
+        // The fail-before-pass-after pin on the `gen_platform::IsVariant`
+        // derive's [`UpgradeInstruction::is_restart`] arm-discriminator
+        // predicate: [`UpgradeInstruction::Restart`] is the only variant
+        // that satisfies `.is_restart()`; every module-bearing arm
+        // (`LoadModule` / `SoftPurge` / `Purge`) and the script-carrying
+        // `StateChange` arm all return `false`. This pin makes the
+        // partition invariant load-bearing at caixa-core test time so a
+        // future derive regression (a hole that returns `false` for
+        // `Restart` too, or a byte-collision that flips a second variant
+        // to `true`) trips here rather than laundering the arm at
+        // [`Self::validate_restart_exclusive`]'s paired positive /
+        // negated filter sites (a hole flips restart-count to 0 →
+        // vacuous OK; a collision flips restart-count > 1 → false
+        // `RestartNotExclusive` on an entry the author declared without
+        // any `(:restart)`). Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_is_variant_predicates_partition_the_arm_set`]
+        // pin on the M0 `CaixaKind` axis.
+        let cases: &[(UpgradeInstruction, bool)] = &[
+            (UpgradeInstruction::LoadModule { module: "a".into() }, false),
+            (UpgradeInstruction::SoftPurge { module: "b".into() }, false),
+            (UpgradeInstruction::Purge { module: "c".into() }, false),
+            (
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                false,
+            ),
+            (UpgradeInstruction::Restart, true),
+        ];
+        for (variant, expected) in cases {
+            assert_eq!(
+                variant.is_restart(),
+                *expected,
+                "UpgradeInstruction::{variant:?}.is_restart() must \
+                 return {expected} (partition invariant on the \
+                 IsVariant-derived arm-discriminator predicate)"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_restart_exclusive_routes_through_is_restart_predicate() {
+        // Byte-identity pin on the paired positive / negated
+        // `.is_restart()` filters at
+        // [`Self::validate_restart_exclusive`] against the pre-lift
+        // `matches!(i, UpgradeInstruction::Restart)` /
+        // `!matches!(i, UpgradeInstruction::Restart)` predicates every
+        // consumer of the gate previously coupled to inline. Asserts
+        // the two projections agree byte-for-byte on every arm of the
+        // enum, so a future derive regression that flipped either
+        // predicate's arm-set would surface here at caixa-core test
+        // time rather than at
+        // [`Self::validate_restart_exclusive`]'s per-entry restart-
+        // count / other-kinds tabulation far from the derive site.
+        // Same peer-shape pin every sibling
+        // `IsVariant`-derive-routed gate carries on the substrate's
+        // closed-set typed-enum surface.
+        let cases: Vec<UpgradeInstruction> = vec![
+            UpgradeInstruction::LoadModule { module: "a".into() },
+            UpgradeInstruction::SoftPurge { module: "b".into() },
+            UpgradeInstruction::Purge { module: "c".into() },
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            UpgradeInstruction::Restart,
+        ];
+        for instr in &cases {
+            let via_predicate = instr.is_restart();
+            let via_matches = matches!(instr, UpgradeInstruction::Restart);
+            assert_eq!(
+                via_predicate, via_matches,
+                "UpgradeInstruction::{instr:?}: is_restart() must \
+                 byte-equal matches!(_, UpgradeInstruction::Restart) — \
+                 the pre-lift open-coded pattern and the \
+                 IsVariant-derived predicate are the same axis, \
+                 one typed dispatch"
+            );
+        }
     }
 
     #[test]
