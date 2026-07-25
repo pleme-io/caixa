@@ -27,8 +27,14 @@ impl TeiaInstanceMutation for InstanceToHcl {
 
     fn mutate(&self, inst: &Self::Source) -> Self::Target {
         // Terraform resource types are snake_case <provider>_<kind>; neither
-        // hyphens nor slashes are valid. Normalize both.
-        let tf_type = inst.tipo.replace(['/', '-'], "_");
+        // hyphens nor slashes are valid. Normalize both. The `:tipo` read
+        // routes through the lifted [`caixa_teia::TeiaInstance::tipo`]
+        // scalar accessor rather than the raw `inst.tipo` field access —
+        // this per-instance `<provider>_<kind>` Terraform-JSON type-name
+        // mint and every `caixa-arch::invariants` per-instance dedup key /
+        // `Violation::instance_tipo` carrier now key off the same
+        // substrate-canonical resolver.
+        let tf_type = inst.tipo().replace(['/', '-'], "_");
         let mut block = Map::new();
         for (k, v) in &inst.atributos {
             let key = k.replace('-', "_");
