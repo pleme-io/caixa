@@ -27,20 +27,22 @@ impl TeiaInstanceMutation for InstanceToHcl {
 
     fn mutate(&self, inst: &Self::Source) -> Self::Target {
         // Terraform resource types are snake_case <provider>_<kind>; neither
-        // hyphens nor slashes are valid. Normalize both. The `:tipo` read
-        // routes through the lifted [`caixa_teia::TeiaInstance::tipo`]
-        // scalar accessor rather than the raw `inst.tipo` field access —
+        // hyphens nor slashes are valid. Normalize both. The `:tipo` and
+        // `:nome` reads route through the lifted [`caixa_teia::TeiaInstance
+        // ::tipo`] / [`caixa_teia::TeiaInstance::nome`] scalar accessors
+        // rather than the raw `inst.tipo` / `inst.nome` field accesses —
         // this per-instance `<provider>_<kind>` Terraform-JSON type-name
-        // mint and every `caixa-arch::invariants` per-instance dedup key /
-        // `Violation::instance_tipo` carrier now key off the same
-        // substrate-canonical resolver.
+        // mint + `<name>` block-name carry and every `caixa-arch::
+        // invariants` per-instance dedup key / `Violation::instance_tipo`
+        // / `Violation::instance_nome` carrier now key off the same
+        // substrate-canonical resolvers.
         let tf_type = inst.tipo().replace(['/', '-'], "_");
         let mut block = Map::new();
         for (k, v) in &inst.atributos {
             let key = k.replace('-', "_");
             block.insert(key, value_to_json(v));
         }
-        (tf_type, inst.nome.clone(), Value::Object(block))
+        (tf_type, inst.nome().to_string(), Value::Object(block))
     }
 }
 
