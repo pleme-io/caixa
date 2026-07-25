@@ -69,24 +69,27 @@ fn unique_resource_names(m: &TeiaManifest) -> Vec<Violation> {
     let mut out = Vec::new();
     for inst in &m.instances {
         // Read the per-`TeiaInstance` `:tipo` provider-qualified
-        // resource-type identity through the lifted
-        // [`caixa_teia::TeiaInstance::tipo`] scalar accessor rather
-        // than the raw `inst.tipo` field access — the dedup key, the
-        // `Violation::instance_tipo` carrier, and the `{}` Display
-        // interpolation all key off the substrate-canonical `:tipo`
-        // resolver so a future rebrand on the typed slot's raw-slot
-        // reader lands at exactly one place.
-        let key = (inst.tipo().to_string(), inst.nome.clone());
+        // resource-type identity and the per-`TeiaInstance` `:nome`
+        // per-resource instance-identity through the lifted
+        // [`caixa_teia::TeiaInstance::tipo`] / [`caixa_teia::TeiaInstance
+        // ::nome`] scalar accessors rather than the raw `inst.tipo` /
+        // `inst.nome` field accesses — the `(tipo, nome)` dedup key,
+        // the `Violation::instance_tipo` / `Violation::instance_nome`
+        // carriers, and the `{}` Display interpolations all key off the
+        // substrate-canonical `:tipo` / `:nome` resolvers so a future
+        // rebrand on either typed slot's raw-slot reader lands at
+        // exactly one place.
+        let key = (inst.tipo().to_string(), inst.nome().to_string());
         if !seen.insert(key.clone()) {
             out.push(Violation {
                 invariant_id: "unique-resource-names".into(),
                 kind: InvariantKind::Safety,
                 instance_tipo: inst.tipo().to_string(),
-                instance_nome: inst.nome.clone(),
+                instance_nome: inst.nome().to_string(),
                 message: format!(
                     "duplicate instance {} / {} — Terraform resource names must be unique per type",
                     inst.tipo(),
-                    inst.nome,
+                    inst.nome(),
                 ),
             });
         }
@@ -98,11 +101,11 @@ fn no_unresolved_refs(m: &TeiaManifest) -> Vec<Violation> {
     let mut declared: std::collections::HashSet<(String, String)> =
         std::collections::HashSet::new();
     for inst in &m.instances {
-        // Same accessor-routed `:tipo` read as the sibling
+        // Same accessor-routed `:tipo` / `:nome` reads as the sibling
         // `unique-resource-names` invariant — the two dedup / lookup
         // sets are identity-comparable only because they share exactly
-        // one `:tipo` resolver.
-        declared.insert((inst.tipo().to_string(), inst.nome.clone()));
+        // one `:tipo` / `:nome` resolver pair.
+        declared.insert((inst.tipo().to_string(), inst.nome().to_string()));
     }
     let mut out = Vec::new();
     for inst in &m.instances {
@@ -126,7 +129,7 @@ fn collect_ref_violations(
                     invariant_id: "no-unresolved-refs".into(),
                     kind: InvariantKind::Safety,
                     instance_tipo: inst.tipo().to_string(),
-                    instance_nome: inst.nome.clone(),
+                    instance_nome: inst.nome().to_string(),
                     message: format!(
                         "(ref {} {} {}) targets an undeclared instance",
                         r.tipo, r.nome, r.atributo
@@ -175,7 +178,7 @@ fn no_public_ingress_without_tags(m: &TeiaManifest) -> Vec<Violation> {
                 invariant_id: "no-public-ingress-without-tags".into(),
                 kind: InvariantKind::Compliance,
                 instance_tipo: tipo.to_string(),
-                instance_nome: inst.nome.clone(),
+                instance_nome: inst.nome().to_string(),
                 message: "public-ingress security group needs :owner or :team tag".into(),
             });
         }
@@ -192,7 +195,7 @@ fn cidr_block_format_hint(m: &TeiaManifest) -> Vec<Violation> {
                     invariant_id: "cidr-block-looks-valid".into(),
                     kind: InvariantKind::Hint,
                     instance_tipo: inst.tipo().to_string(),
-                    instance_nome: inst.nome.clone(),
+                    instance_nome: inst.nome().to_string(),
                     message: format!(":cidr-block {s:?} does not look like IPv4/CIDR"),
                 });
             }
