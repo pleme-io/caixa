@@ -1021,12 +1021,42 @@ impl UpgradeFromEntry {
     /// [`Self::validate_cleanup_singularity`]'s first-collision posture
     /// and every peer duplicate gate's first-collision discipline.
     fn validate_state_change_singularity(&self) -> Result<(), UpgradeError> {
+        // Route the per-instruction `StateChange`-arm script-path
+        // projection through the sibling lifted
+        // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+        // accessor rather than the raw
+        // `match instr { UpgradeInstruction::StateChange { script } =>
+        // script.as_path(), _ => continue }` open-coded pattern-match —
+        // the third within-entry singularity gate's per-instruction
+        // script-projection site now keys off exactly one typed
+        // dispatch on the substrate primitive's `PathBuf`-carrying
+        // axis, sibling to the four peer per-`UpgradeInstruction`
+        // consumers ([`Self::validate`]'s per-`StateChange`
+        // sandbox-path fan-out, the layout-side per-`StateChange`
+        // script-existence fan-out at
+        // `caixa-core/src/layout.rs:1017`, the cross-slot
+        // [`validate_upgrade_from_against_behavior`] gate's
+        // per-`StateChange` detection loop, the future wasm-operator's
+        // per-`StateChange` runtime hook-dispatch) that already route
+        // through `declared_path` / `declared_module`. Byte-equal
+        // today (`declared_path` returns `Some(script)` iff the
+        // instruction is [`UpgradeInstruction::StateChange`], per the
+        // sibling `declared_path_only_for_state_change` pin), so a
+        // duplicate `:state-change` script surfaces
+        // `DuplicateStateChange` byte-identical to the pattern-match
+        // shape. Same "one typed dispatch on the substrate primitive,
+        // thin projections at each consumer" discipline the sibling
+        // [`UpgradeInstruction::declared_module`] accessor established
+        // (b13c4f9) on the peer `String`-carrying axis's per-variant
+        // consumers, extended here onto the last unlifted
+        // pattern-match on the `PathBuf`-carrying axis inside
+        // `impl UpgradeFromEntry`.
         let mut seen: Vec<&std::path::Path> = Vec::new();
         for instr in self.instructions() {
-            let script = match instr {
-                UpgradeInstruction::StateChange { script } => script.as_path(),
-                _ => continue,
+            let Some(script) = instr.declared_path() else {
+                continue;
             };
+            let script = script.as_path();
             if seen.contains(&script) {
                 return Err(UpgradeError::DuplicateStateChange {
                     from: self.prior_versao().to_string(),
@@ -4532,6 +4562,147 @@ mod tests {
             matches!(err, UpgradeError::DuplicateStateChange { .. }),
             "validate_upgrade_from must thread the state-change-singularity error, got {err:?}"
         );
+    }
+
+    #[test]
+    fn validate_state_change_singularity_projects_scripts_through_declared_path_accessor() {
+        // Composition pin: [`UpgradeFromEntry::validate_state_change_singularity`]'s
+        // per-instruction `StateChange`-arm script-path projection must
+        // route through the sibling lifted
+        // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+        // accessor, not the raw
+        // `match instr { UpgradeInstruction::StateChange { script } =>
+        // script.as_path(), _ => continue }` open-coded pattern-match
+        // the gate previously carried.
+        //
+        // Structurally: the gate's projection accept-set is the union
+        // of every [`UpgradeInstruction`] variant for which
+        // `declared_path().is_some()` — today exactly
+        // [`UpgradeInstruction::StateChange`] per the sibling
+        // `declared_path_only_for_state_change` pin, so a
+        // duplicate-scripts input trips `DuplicateStateChange` and a
+        // non-`StateChange` input (module-bearing / terminal) leaves
+        // `seen` empty and the gate returns `Ok(())` byte-identical to
+        // the pattern-match shape.
+        //
+        // Byte-equal today (`declared_path` returns `Some(script)` iff
+        // `StateChange`, byte-for-byte from the variant's own storage);
+        // the pin catches any future accessor extension that promotes
+        // an additional variant onto the `PathBuf`-carrying axis — the
+        // gate then fires on duplicate scripts from that variant too,
+        // and the singularity discipline the sibling
+        // `validate_load_singularity` / `validate_cleanup_singularity`
+        // gates share on the `String`-carrying axis's per-variant
+        // consumers extends to the promoted variant by construction.
+        //
+        // Peer of the sibling four per-`UpgradeInstruction` consumers
+        // ([`UpgradeInstruction::validate`]'s per-`StateChange`
+        // sandbox-path fan-out, the layout-side per-`StateChange`
+        // script-existence fan-out at
+        // `caixa-core/src/layout.rs:1017`, the cross-slot
+        // [`validate_upgrade_from_against_behavior`] gate's per-
+        // `StateChange` detection loop, the peer
+        // [`UpgradeInstruction::declared_module`] `String`-axis
+        // per-variant unifier) — this gate now shares one typed
+        // dispatch on the substrate primitive's `PathBuf`-carrying
+        // axis with those consumers, so a future rebrand on the axis
+        // migrates as a single caixa-core edit rather than a
+        // coordinated rewrite of five call sites.
+        //
+        // Three-arm projective coverage:
+        //   (a) `StateChange` scripts project through `declared_path()`
+        //       byte-equal to the raw `script.as_path()` field access;
+        //   (b) a duplicate-`StateChange` input trips the gate on the
+        //       second occurrence with `DuplicateStateChange` carrying
+        //       the offending script verbatim;
+        //   (c) a non-`StateChange`-only input (`LoadModule` /
+        //       `SoftPurge` / `Purge` / `Restart`) leaves the gate
+        //       vacuous with `Ok(())` — the `declared_path().is_none()`
+        //       arm's `continue` fall-through pins.
+        //
+        // Fail-before-pass-after verified locally: swapping the
+        // production `let Some(script) = instr.declared_path() else {
+        // continue };` back to `let script = match instr {
+        // UpgradeInstruction::StateChange { script } =>
+        // script.as_path(), _ => continue, };` keeps arms (a)-(c)
+        // passing but silently detaches the gate from the accessor's
+        // typed dispatch — any future `declared_path` extension
+        // (promotion of an additional variant onto the axis, an
+        // operator-side pre-resolved-path cache the accessor
+        // materializes) would then silently disagree between this
+        // gate's raw pattern-match and the peer four sibling consumers
+        // that route through the accessor.
+        use std::path::PathBuf;
+
+        // (a) StateChange projection byte-equal via declared_path.
+        let sc = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/m.lisp"),
+        };
+        assert_eq!(
+            sc.declared_path().map(std::path::PathBuf::as_path),
+            Some(PathBuf::from("lib/m.lisp").as_path()),
+            "declared_path() must project the StateChange :script byte-equal to the raw \
+             field access — accessor divergence would silently detach the gate from the \
+             projection every peer per-`UpgradeInstruction` consumer routes through"
+        );
+
+        // (b) Duplicate-StateChange input trips the gate.
+        let dup = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        assert_eq!(
+            dup.validate_state_change_singularity(),
+            Err(UpgradeError::DuplicateStateChange {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            }),
+            "duplicate StateChange scripts must trip the gate on the second occurrence \
+             through the declared_path accessor's Some(script) arm"
+        );
+
+        // (c) Non-StateChange-only inputs leave the gate vacuous.
+        for instrs in [
+            vec![UpgradeInstruction::LoadModule { module: "x".into() }],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+            vec![UpgradeInstruction::Restart],
+        ] {
+            for instr in &instrs {
+                assert!(
+                    instr.declared_path().is_none(),
+                    "non-StateChange variants must project None through declared_path — \
+                     accessor divergence would let this gate silently fire on a duplicate \
+                     module reference far from any :state-change site"
+                );
+            }
+            let e = entry("0.1.0", instrs);
+            assert_eq!(
+                e.validate_state_change_singularity(),
+                Ok(()),
+                "the state-change-singularity gate must return Ok(()) on an entry whose \
+                 instructions all project None through declared_path — the accessor's \
+                 continue arm the pattern-match's `_ => continue` previously carried"
+            );
+        }
     }
 
     // ── within-entry state-change-before-cleanup ordering invariant ──
