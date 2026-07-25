@@ -18921,6 +18921,100 @@ pub fn require_valid_dns_1123_label<E>(
     Ok(())
 }
 
+/// Bracket a sandboxed-relative `.lisp`-terminating path axis with the
+/// shared "empty → absolute → parent-escape → non-`.lisp`-extension"
+/// four-arm gate every author-supplied M2 tatara-lisp source-path slot
+/// on the caixa surface carries. Delegates to
+/// [`is_sandboxed_relative_path`] for the three structural arms and to
+/// [`is_lisp_extension`] for the extension arm; returns each arm's
+/// caller-owned error variant via the four `FnOnce` closures.
+///
+/// The arm ordering (`Empty → Absolute → ParentEscape → NonLisp`) is
+/// canonical across every existing per-axis site — a path that is
+/// *both* sandbox-escaping and non-`.lisp` surfaces the more
+/// fundamental sandbox-shape diagnostic first (the `.lisp` remediation
+/// would be misleading when the offending path can never resolve under
+/// the caixa root anyway; the canonical fix collapses both into "pin a
+/// relative `.lisp` path under the caixa root"). Same
+/// smallest-scope-arm-fires-last posture the peer
+/// [`require_positive_bounded_u32`] /
+/// [`require_positive_canonical_bounded_duration`] chains follow on the
+/// integer / duration axes, and the same posture every per-axis inline
+/// pre-lift block already applied by hand
+/// ([`crate::behavior::BehaviorError`]'s `EmptyPath` → `AbsolutePath`
+/// → `ParentEscape` → `NonLispExtension` chain,
+/// [`crate::upgrade::UpgradeError`]'s `EmptyScript` → `AbsoluteScript`
+/// → `ParentEscapeScript` → `NonLispExtensionScript` chain).
+///
+/// Two identical-shape call sites collapse onto this helper — one for
+/// each M2 typed path-slot the wasm-engine reads through
+/// `tatara_lisp::read`:
+///
+///   * [`crate::behavior::BehaviorSpec::validate`] on
+///     `:behavior :on-*` callback paths — every arm carries the slot
+///     name verbatim through the closure's caller-side capture (empty
+///     → [`crate::behavior::BehaviorError::EmptyPath`], absolute →
+///     [`crate::behavior::BehaviorError::AbsolutePath`], parent-escape
+///     → [`crate::behavior::BehaviorError::ParentEscape`], non-`.lisp`
+///     → [`crate::behavior::BehaviorError::NonLispExtension`]);
+///   * [`crate::upgrade::UpgradeInstruction::validate`]'s `StateChange`
+///     arm on `:upgrade-from :state-change :script` (empty →
+///     [`crate::upgrade::UpgradeError::EmptyScript`], absolute →
+///     [`crate::upgrade::UpgradeError::AbsoluteScript`], parent-escape
+///     → [`crate::upgrade::UpgradeError::ParentEscapeScript`],
+///     non-`.lisp` →
+///     [`crate::upgrade::UpgradeError::NonLispExtensionScript`]).
+///
+/// Peer of the sibling `require_positive_bounded_u32` /
+/// `require_positive_bounded_u64` /
+/// `require_positive_canonical_bounded_duration` /
+/// `require_valid_versao_requirement` / `require_valid_dns_1123_label`
+/// helpers on the same closure-based caller-error-variant discipline —
+/// the caller owns the enum variant + its self-locating discriminator
+/// fields (`slot`, `path`, `script`), this helper only sequences the
+/// four gate arms in canonical order and invokes the caller's closure
+/// on the offending arm.
+///
+/// PRIME DIRECTIVE promotion: the two-consumer duplication budget
+/// (THEORY.md §I.3.5: "every recurring shape becomes a generator
+/// before it becomes a pattern; every pattern becomes a library before
+/// it becomes duplicated code. The duplication budget is zero.")
+/// promotes the four-step cascade to a typed substrate-side helper on
+/// the same trajectory the [`is_sandboxed_relative_path`] /
+/// [`is_lisp_extension`] primitives already follow. A future third
+/// consumer — the `:bibliotecas` per-entry tatara-lisp source-file
+/// axis, the `:exe` `:kind Binario` entry-point axis, the M2.5
+/// wasm-engine pre-warm hook axis, the future `mesh.pleme.io/v1alpha1/Caixa`
+/// CR materializer's per-path validator — lands as a thin
+/// four-closure wrapper rather than re-inlining the same four-arm
+/// cascade.
+///
+/// # Errors
+///
+/// Returns `on_empty()` when `path` is empty; returns `on_absolute()`
+/// when `path` is absolute; returns `on_parent_escape()` when `path`
+/// carries a [`std::path::Component::ParentDir`] component anywhere;
+/// returns `on_non_lisp()` when `path`'s terminating extension is not
+/// exactly [`LISP_SOURCE_EXTENSION`]; returns `Ok(())` otherwise.
+pub fn require_sandboxed_lisp_path<E>(
+    path: &Path,
+    on_empty: impl FnOnce() -> E,
+    on_absolute: impl FnOnce() -> E,
+    on_parent_escape: impl FnOnce() -> E,
+    on_non_lisp: impl FnOnce() -> E,
+) -> Result<(), E> {
+    match is_sandboxed_relative_path(path) {
+        Ok(()) => {}
+        Err(PathShapeViolation::Empty) => return Err(on_empty()),
+        Err(PathShapeViolation::Absolute) => return Err(on_absolute()),
+        Err(PathShapeViolation::ParentEscape) => return Err(on_parent_escape()),
+    }
+    if !is_lisp_extension(path) {
+        return Err(on_non_lisp());
+    }
+    Ok(())
+}
+
 /// Bracket a per-list uniqueness gate with the shared "insert into
 /// `seen`; caller-shaped `Err` on the second occurrence" gate every
 /// declaration-order-preserving `Vec`-authored slot in caixa-core
@@ -32250,6 +32344,178 @@ mod tests {
                 other => panic!("expected Invalid for {bad:?}, got {other:?}"),
             }
         }
+    }
+
+    // ── require_sandboxed_lisp_path ─────────────────────────────────────
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum LispPathTestErr {
+        Empty,
+        Absolute,
+        ParentEscape,
+        NonLisp,
+    }
+
+    fn call_require_sandboxed_lisp_path(path: &Path) -> Result<(), LispPathTestErr> {
+        require_sandboxed_lisp_path(
+            path,
+            || LispPathTestErr::Empty,
+            || LispPathTestErr::Absolute,
+            || LispPathTestErr::ParentEscape,
+            || LispPathTestErr::NonLisp,
+        )
+    }
+
+    #[test]
+    fn require_sandboxed_lisp_path_accepts_canonical_forms() {
+        // Every sandboxed-relative `.lisp`-terminating path the substrate
+        // accepts on either M2 tatara-lisp source-path axis (`:behavior :on-*`
+        // callback paths, `:upgrade-from :state-change :script`) must pass
+        // the shared gate. Pin the canonical set here so a future tightening
+        // surfaces as a test failure rather than a silent narrowing at one
+        // of the two consumer sites.
+        for form in [
+            "lib/init.lisp",                     // canonical example
+            "lib/handlers.lisp",                 // multi-callback shape
+            "lib/migrations/v01-to-v02.lisp",    // nested-directory shape
+            "a.lisp",                            // one-byte stem
+            "lib/deep/nested/path/to/file.lisp", // deeply nested
+        ] {
+            assert_eq!(
+                call_require_sandboxed_lisp_path(Path::new(form)),
+                Ok(()),
+                "canonical sandboxed `.lisp` form {form:?} must pass the gate",
+            );
+        }
+    }
+
+    #[test]
+    fn require_sandboxed_lisp_path_rejects_empty_before_all_later_arms() {
+        // The empty-first arm strictly precedes every downstream arm — a
+        // literal `""` (which the is_absolute check would return false on,
+        // which carries no ParentDir component, and whose extension is
+        // absent) routes through the `on_empty` closure so the caller's
+        // narrower self-locating `_Empty` / `_EmptyScript` diagnostic fires,
+        // not a misleading `_Absolute` / `_ParentEscape` / `_NonLisp` miss
+        // downstream. Peer of every zero-first arm ordering the sibling
+        // require_positive_bounded_* helpers already carry.
+        assert_eq!(
+            call_require_sandboxed_lisp_path(Path::new("")),
+            Err(LispPathTestErr::Empty),
+        );
+    }
+
+    #[test]
+    fn require_sandboxed_lisp_path_rejects_absolute_before_parent_escape_and_non_lisp() {
+        // The absolute arm strictly precedes the parent-escape and
+        // non-`.lisp`-extension arms — an absolute path (regardless of
+        // whether it also carries `..` components or a non-`.lisp`
+        // extension) routes through the `on_absolute` closure so the
+        // caller's `_Absolute` / `_AbsoluteScript` diagnostic fires with
+        // its "must be relative to the caixa root" remediation, not the
+        // misleading later arms. Pin the ordering across the value grid
+        // covering "absolute + parent-escape" and "absolute + non-`.lisp`"
+        // compound-violation shapes so a future arm-reorder silently
+        // narrowing the accepted set would surface at build time.
+        for absolute in [
+            "/etc/passwd",       // canonical absolute
+            "/lib/init.lisp",    // absolute + `.lisp` (extension arm never reached)
+            "/lib/../init.lisp", // absolute + parent-escape (later arm never reached)
+            "/etc/init.txt",     // absolute + non-`.lisp`
+        ] {
+            assert_eq!(
+                call_require_sandboxed_lisp_path(Path::new(absolute)),
+                Err(LispPathTestErr::Absolute),
+                "absolute path {absolute:?} must route through Absolute arm",
+            );
+        }
+    }
+
+    #[test]
+    fn require_sandboxed_lisp_path_rejects_parent_escape_before_non_lisp() {
+        // The parent-escape arm strictly precedes the non-`.lisp`-extension
+        // arm — a relative path carrying any `..` component routes through
+        // the `on_parent_escape` closure so the caller's `_ParentEscape` /
+        // `_ParentEscapeScript` diagnostic fires with its "must not
+        // traverse above the caixa root" remediation, not the misleading
+        // extension-shape arm. Pin the ordering across leading / mid-path
+        // / trailing parent-escape positions plus the compound
+        // "parent-escape + non-`.lisp`" shape.
+        for escape in [
+            "../sibling/x.lisp",  // leading `..`
+            "lib/../other.lisp",  // mid-path `..`
+            "lib/handlers/../..", // trailing `..`
+            "../sibling/x.txt",   // parent-escape + non-`.lisp`
+        ] {
+            assert_eq!(
+                call_require_sandboxed_lisp_path(Path::new(escape)),
+                Err(LispPathTestErr::ParentEscape),
+                "parent-escaping path {escape:?} must route through ParentEscape arm",
+            );
+        }
+    }
+
+    #[test]
+    fn require_sandboxed_lisp_path_rejects_non_lisp_only_after_all_path_shape_arms_accept() {
+        // The non-`.lisp`-extension arm fires only when every prior arm
+        // (empty / absolute / parent-escape) accepts the path — a
+        // sandboxed relative path whose only violation is a non-`.lisp`
+        // terminating extension routes through the `on_non_lisp` closure
+        // so the caller's `_NonLispExtension` / `_NonLispExtensionScript`
+        // diagnostic fires with its `.lisp`-remediation prose. Pin the
+        // downstream-most-arm reachability across the canonical
+        // `.txt`/`.rs`/no-extension/double-extension-shadow shape set the
+        // two consumer sites' error variants each document.
+        for bad_ext in [
+            "lib/init.txt",      // wrong extension
+            "lib/init.rs",       // Rust source leaked into caixa
+            "lib/init.lisp.bak", // double-extension shadow
+            "lib/init",          // no extension
+            "lib/migrations",    // no extension, no dot
+            "lib/init.LISP",     // uppercase — case-sensitive gate
+        ] {
+            assert_eq!(
+                call_require_sandboxed_lisp_path(Path::new(bad_ext)),
+                Err(LispPathTestErr::NonLisp),
+                "non-`.lisp` path {bad_ext:?} must route through NonLisp arm",
+            );
+        }
+    }
+
+    #[test]
+    fn require_sandboxed_lisp_path_ordering_matches_inline_pre_lift_cascade() {
+        // Byte-for-byte the same `Empty → Absolute → ParentEscape → NonLisp`
+        // arm-ordering the two consumer sites (`validate_callback_path` in
+        // `caixa-core::behavior`, `UpgradeInstruction::validate`'s
+        // `StateChange` arm in `caixa-core::upgrade`) each formerly inlined
+        // verbatim. This pin catches any future reorder that would
+        // silently reshape the diagnostic dispatch at either site — the
+        // helper's ordering IS the two sites' ordering, not a re-derived
+        // convention. Pins the same
+        // smallest-scope-arm-fires-last three-path drift-detection
+        // posture the peer `require_positive_bounded_*` /
+        // `require_positive_canonical_bounded_duration` helpers already
+        // carry on their own arm sets.
+        assert_eq!(
+            call_require_sandboxed_lisp_path(Path::new("")),
+            Err(LispPathTestErr::Empty),
+        );
+        assert_eq!(
+            call_require_sandboxed_lisp_path(Path::new("/abs/x.lisp")),
+            Err(LispPathTestErr::Absolute),
+        );
+        assert_eq!(
+            call_require_sandboxed_lisp_path(Path::new("../x.lisp")),
+            Err(LispPathTestErr::ParentEscape),
+        );
+        assert_eq!(
+            call_require_sandboxed_lisp_path(Path::new("lib/x.txt")),
+            Err(LispPathTestErr::NonLisp),
+        );
+        assert_eq!(
+            call_require_sandboxed_lisp_path(Path::new("lib/x.lisp")),
+            Ok(()),
+        );
     }
 
     #[test]
