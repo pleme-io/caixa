@@ -1392,100 +1392,35 @@ impl UpgradeInstruction {
             return validate_module(self.lisp_form(), module);
         }
         if let Some(script) = self.declared_path() {
-            // Delegate the three structural checks (non-empty /
-            // relative / no-parent-escape) to the lifted
-            // [`crate::render::is_sandboxed_relative_path`]
-            // predicate — same Empty → Absolute → ParentEscape
+            // Delegate the four-arm cascade (empty / absolute /
+            // parent-escape / non-`.lisp`-extension) to the lifted
+            // [`crate::render::require_sandboxed_lisp_path`] helper —
+            // same `Empty → Absolute → ParentEscape → NonLispExtension`
             // arm-ordering this method previously inlined verbatim,
             // now shared with [`crate::BehaviorSpec::validate`]'s
-            // per-`:on-*`-callback gate so every author-supplied path
-            // on every M2 typed slot consults one gate, not two-and-
-            // counting verbatim copies. Each arm wraps the tag in
+            // per-`:on-*`-callback gate so every author-supplied
+            // tatara-lisp source path on every M2 typed slot consults
+            // one gate, not two-and-counting verbatim copies of the
+            // same four-arm cascade. Each closure wraps the tag in
             // the same `*Script` variant the original inline code
             // raised, so the diagnostic shape every caller depends
             // on (the `:state-change :script` self-locating error)
-            // is preserved by construction.
-            match crate::render::is_sandboxed_relative_path(script) {
-                Ok(()) => {}
-                Err(crate::render::PathShapeViolation::Empty) => {
-                    return Err(UpgradeError::EmptyScript);
-                }
-                Err(crate::render::PathShapeViolation::Absolute) => {
-                    return Err(UpgradeError::AbsoluteScript {
-                        script: script.clone(),
-                    });
-                }
-                Err(crate::render::PathShapeViolation::ParentEscape) => {
-                    return Err(UpgradeError::ParentEscapeScript {
-                        script: script.clone(),
-                    });
-                }
-            }
-            // File-type contract on the `:upgrade-from :state-change
-            // :script` axis: every typed migration script is
-            // consumed by the M2.5 wasm-engine instantiator (the
-            // `ABSORPTION-ROADMAP` names the runtime substrate that
-            // executes appup hot-upgrades) as a tatara-lisp source
-            // file the engine reads through `tatara_lisp::read` at
-            // hot-upgrade migration time — the same downstream
-            // consumer the peer `:behavior :on-*` axis routes
-            // through at instance-start time (c97815a). The author
-            // surface already documents the `.lisp` extension as
-            // the canonical shape (the in-module example
-            // `(:state-change "lib/migrations/v01-to-v02.lisp")`
-            // and every in-tree test fixture use `lib/<name>.lisp`)
-            // and the per-`UpgradeFromEntry` `:from`-keyed migration
-            // directory invariant assumes the same `.lisp`
-            // extension verbatim; until this gate landed the typed
-            // slot accepted any path that passed the structural-shape
-            // checks (empty / absolute / parent-escape), so a
-            // programmatic struct literal
-            // (`UpgradeInstruction::StateChange { script:
-            // PathBuf::from("lib/migrations.txt") }` /
-            // `PathBuf::from("lib/migrations.rs")` / the equivalent
-            // author-surface `(:state-change "lib/migrations.lisp.bak")`
-            // / `(:state-change "lib/migrations")` / any "I dragged
-            // the wrong file from the workspace tree" typo landing
-            // in the slot) round-tripped cleanly through serde and
-            // the per-script CSE invariant (no value the wasm-engine
-            // can't honor as tatara-lisp source) was a runtime, not
-            // build-time, contract. The wasm-engine's
-            // `tatara_lisp::read` failed at hot-upgrade migration
-            // time with a parser-shaped diagnostic far from the
-            // source caixa.lisp, with no field naming the offending
-            // `(:state-change …)` instruction — the canonical
-            // "declared-but-unloadable migration" footgun the
-            // sibling `:upgrade-from` path-shape arms close on the
-            // peer "sandbox-escaping" / "empty" / "parent-escape"
-            // shapes, and the peer `BehaviorError::NonLispExtension`
-            // (c97815a) closes on the `:behavior :on-*` axis's
-            // identical "tatara-lisp source file the engine reads
-            // through `tatara_lisp::read`" file-type contract: both
-            // are "the consumer substrate's accepted set is
-            // narrower than the structural-shape gate alone" lifts,
-            // surfacing the engine's load-bearing type-contract at
-            // validate time rather than at apply time.
-            //
-            // The path-shape arms strictly precede this extension
-            // arm so a path that is *both* sandbox-escaping and
-            // non-`.lisp` surfaces the more fundamental sandbox-shape
-            // diagnostic first (the `.lisp` remediation would be
-            // misleading when the offending path can never resolve
-            // under the caixa root anyway — the canonical fix
-            // collapses both into "pin a relative `.lisp` path
-            // under the caixa root"). Same posture every peer
-            // zero-then-shape-then-cap chain uses on this surface
-            // (`MemoryZero` → `MemoryBelowWasm32Page` →
-            // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`,
-            // the smallest-scope arm fires last) and the same
-            // posture the sibling `BehaviorError` chain follows
-            // (`EmptyPath` → `AbsolutePath` → `ParentEscape` →
-            // `NonLispExtension`).
-            if !crate::render::is_lisp_extension(script) {
-                return Err(UpgradeError::NonLispExtensionScript {
+            // is preserved by construction. See
+            // [`crate::render::require_sandboxed_lisp_path`] for the
+            // smallest-scope-arm-fires-last ordering rationale.
+            crate::render::require_sandboxed_lisp_path(
+                script,
+                || UpgradeError::EmptyScript,
+                || UpgradeError::AbsoluteScript {
                     script: script.clone(),
-                });
-            }
+                },
+                || UpgradeError::ParentEscapeScript {
+                    script: script.clone(),
+                },
+                || UpgradeError::NonLispExtensionScript {
+                    script: script.clone(),
+                },
+            )?;
         }
         // `Restart` (the only variant with no `Option<&…>`-carrying
         // scalar) falls through both accessor gates and returns

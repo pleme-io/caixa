@@ -747,103 +747,39 @@ impl BehaviorSpec {
 }
 
 fn validate_callback_path(slot: &'static str, path: &Path) -> Result<(), BehaviorError> {
-    // Delegate the three structural checks (non-empty / relative /
-    // no-parent-escape) to the lifted [`crate::render::is_sandboxed_relative_path`]
-    // predicate — same Empty → Absolute → ParentEscape arm-ordering
+    // Delegate the four-arm cascade (empty / absolute / parent-escape /
+    // non-`.lisp`-extension) to the lifted
+    // [`crate::render::require_sandboxed_lisp_path`] helper — same
+    // `Empty → Absolute → ParentEscape → NonLispExtension` arm-ordering
     // this function previously inlined verbatim, now shared with
-    // [`crate::UpgradeInstruction::StateChange`]'s `:script` arm so
-    // every author-supplied path on every M2 typed slot consults one
-    // gate, not two-and-counting verbatim copies. Each arm wraps the
-    // tag in the same `*Path` / `*Escape` variant the original inline
-    // code raised, so the diagnostic shape every caller depends on
-    // (the per-slot diagnostic naming `:behavior :on-init`, etc.) is
-    // preserved by construction.
-    match crate::render::is_sandboxed_relative_path(path) {
-        Ok(()) => {}
-        Err(crate::render::PathShapeViolation::Empty) => {
-            return Err(BehaviorError::EmptyPath { slot });
-        }
-        Err(crate::render::PathShapeViolation::Absolute) => {
-            return Err(BehaviorError::AbsolutePath {
-                slot,
-                path: path.to_path_buf(),
-            });
-        }
-        Err(crate::render::PathShapeViolation::ParentEscape) => {
-            return Err(BehaviorError::ParentEscape {
-                slot,
-                path: path.to_path_buf(),
-            });
-        }
-    }
-    // File-type contract on the `:behavior :on-*` axis: every typed
-    // callback path is consumed by the M2.5 wasm-engine instantiator
-    // (the `ABSORPTION-ROADMAP` names the runtime substrate) as a
-    // tatara-lisp source file the engine reads through
-    // `tatara_lisp::read` at instance-start time. The author surface
-    // already documents the `.lisp` extension as the canonical shape
-    // (the in-module example and every in-tree test fixture use
-    // `lib/<name>.lisp`), and the layout's `:kind Biblioteca` default
-    // (`lib/<nome>.lisp` at `layout.rs:793`) plus the `:bibliotecas` /
-    // `:exe` directory invariants all assume the same `.lisp` extension
-    // verbatim; until this gate landed the typed slot accepted any
-    // path that passed the structural-shape checks (empty / absolute /
-    // parent-escape), so a programmatic struct literal
-    // (`BehaviorSpec { on_init: Some(PathBuf::from("lib/init.txt")), .. }`
-    // or `Some(PathBuf::from("lib/init.rs"))` or the equivalent
-    // author-surface `(:behavior (:on-init "lib/init.lisp.bak"))` /
-    // `(:on-init "lib/init")` / any "I dragged the wrong file from the
-    // workspace tree" typo landing in the slot) round-tripped cleanly
-    // through serde and the per-callback CSE invariant (no value the
-    // wasm-engine can't honor as tatara-lisp source) was a runtime,
-    // not build-time, contract. The wasm-engine's `tatara_lisp::read`
-    // failed at instance-start time with a parser-shaped diagnostic
-    // far from the source caixa.lisp, with no field naming the
-    // offending `:on-*` slot — the canonical "declared-but-unloadable
-    // callback" footgun the sibling `:behavior` path-shape arms close
-    // on the peer "sandbox-escaping" / "empty" / "parent-escape"
-    // shapes, and the peer `LimitsError::MemoryNotPageMultiple`
-    // (ec266d8) closes on the `:limits :memory` axis's "engine-
-    // quantization-granularity-mismatch" shape: both are "the consumer
-    // substrate's accepted set is narrower than the structural-shape
-    // gate alone" lifts, surfacing the engine's load-bearing
-    // type-contract at validate time rather than at apply time.
-    //
-    // Strict `.lisp` (lowercase, case-sensitive): the byte-size and
-    // duration codecs are case-sensitive on unit suffixes (`MiB`,
-    // `ms`, `s`, `m`, `h`) and every layout invariant compares
-    // extensions via `PathBuf` equality (case-sensitive on every
-    // filesystem the substrate targets — Linux/macOS volume defaults,
-    // every container image filesystem), so a strict `.lisp` shape
-    // matches the downstream accepted set without case-folding drift.
-    // An uppercase `.LISP` shape that the layout's existence check
-    // would (case-insensitively, on case-insensitive volumes) match
-    // the on-disk file would still mismatch the canonical-form codec
-    // emits, breaking the THEORY.md §V.2.7 render-determinism
-    // contract every typed slot carries. Same canonical-form
-    // discipline `is_canonical_rate_limit_window` (808017c) applies
-    // to the rate-limit window axis and every shape-gate predicate
-    // in `render.rs` (case-sensitive on unit / scheme / label
-    // boundaries).
-    //
-    // The path-shape arms strictly precede this extension arm so a
-    // path that is *both* sandbox-escaping and non-`.lisp` surfaces
-    // the more fundamental sandbox-shape diagnostic first (the
-    // `.lisp` remediation would be misleading when the offending
-    // path can never be loaded under the caixa root anyway — the
-    // canonical fix collapses both into "pin a relative `.lisp` path
-    // under the caixa root"). Same posture every peer
-    // zero-then-shape-then-cap chain uses on this surface
-    // (`MemoryZero` → `MemoryBelowWasm32Page` →
-    // `MemoryExceedsWasm32Cap` → `MemoryNotPageMultiple`, the
-    // smallest-scope arm fires last).
-    if !crate::render::is_lisp_extension(path) {
-        return Err(BehaviorError::NonLispExtension {
+    // [`crate::UpgradeInstruction::validate`]'s `StateChange` arm so
+    // every author-supplied tatara-lisp source path on every M2 typed
+    // slot consults one gate, not two-and-counting verbatim copies of
+    // the same four-arm cascade. Each closure wraps the tag in the
+    // same per-slot `BehaviorError` variant the original inline code
+    // raised, so the diagnostic shape every caller depends on (the
+    // per-slot diagnostic naming `:behavior :on-init`, etc., with the
+    // offending `path` threaded through each non-`Empty` arm) is
+    // preserved by construction. See
+    // [`crate::render::require_sandboxed_lisp_path`] for the
+    // smallest-scope-arm-fires-last ordering rationale and the
+    // three-path drift-detection posture the helper's docstring pins.
+    crate::render::require_sandboxed_lisp_path(
+        path,
+        || BehaviorError::EmptyPath { slot },
+        || BehaviorError::AbsolutePath {
             slot,
             path: path.to_path_buf(),
-        });
-    }
-    Ok(())
+        },
+        || BehaviorError::ParentEscape {
+            slot,
+            path: path.to_path_buf(),
+        },
+        || BehaviorError::NonLispExtension {
+            slot,
+            path: path.to_path_buf(),
+        },
+    )
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
