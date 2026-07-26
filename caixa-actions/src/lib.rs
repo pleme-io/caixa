@@ -30,7 +30,7 @@
 //! **not built** in this pass.
 
 use caixa_core::{Caixa, CaixaKind};
-use canteiro_types::{CiRun, DecomposeError, decompose};
+use canteiro_types::{DecomposeError, decompose};
 use thiserror::Error;
 
 /// Errors `caixa-actions` can raise.
@@ -42,13 +42,19 @@ pub enum Error {
     /// verbatim with `caixa-helm`/`caixa-flux`/`caixa-mesh`.
     #[error("{0}")]
     NotAnAcao(#[from] caixa_core::KindMismatch),
-    /// The caixa's `:kind` is `Acao` but it declares no `:ci` slot — the
-    /// layout invariant [`caixa_core::LayoutError::MissingCi`] catches
-    /// this at `feira build` time too; this is the renderer's own
-    /// independent gate for callers that invoke [`validate`] without
-    /// having run [`caixa_core::LayoutInvariants::verify`] first.
-    #[error("caixa {nome:?}: :kind Acao requires a :ci slot")]
-    MissingCi { nome: String },
+    /// The caixa's `:kind` is `Acao` but it declares no `:ci` slot —
+    /// the layout invariant [`caixa_core::LayoutError::MissingCi`]
+    /// catches this at `feira build` time too; this is the renderer's
+    /// own independent gate for callers that invoke [`validate`]
+    /// without having run [`caixa_core::LayoutInvariants::verify`]
+    /// first. Wraps [`caixa_core::MissingCiSlot`] via `#[from]` so the
+    /// diagnostic naming the offending caixa's `:nome` shares one
+    /// typed view with every other per-`Acao` consumer that reaches
+    /// for the sibling [`caixa_core::require_ci`] predicate — matching
+    /// the peer [`Self::NotAnAcao`] `#[from]` shape on the
+    /// [`caixa_core::KindMismatch`] view above.
+    #[error("{0}")]
+    MissingCi(#[from] caixa_core::MissingCiSlot),
     /// The declared `:ci` run is structurally illegal — a duplicate
     /// node name, a dependency on an undeclared node, or a dependency
     /// cycle. Wraps [`canteiro_types::DecomposeError`] verbatim so the
@@ -98,17 +104,15 @@ pub struct RenderedAcao {
 /// `:nome` and the specific axis that failed.
 pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     caixa_core::require_kind(caixa, CaixaKind::Acao)?;
-
-    let ci: &CiRun = caixa.ci().ok_or_else(|| Error::MissingCi {
-        nome: caixa.nome().to_string(),
-    })?;
+    let ci = caixa_core::require_ci(caixa)?;
+    let nome = caixa.nome().to_string();
 
     let cd = decompose(ci).map_err(|source| Error::Decompose {
-        nome: caixa.nome().to_string(),
+        nome: nome.clone(),
         source,
     })?;
     let topo = cd.topo_order().map_err(|_| Error::Decompose {
-        nome: caixa.nome().to_string(),
+        nome: nome.clone(),
         source: DecomposeError::Cycle,
     })?;
 
@@ -119,7 +123,7 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     let edge_count = ci.nodes.iter().map(|n| n.deps.len()).sum();
 
     Ok(RenderedAcao {
-        nome: caixa.nome().to_string(),
+        nome,
         node_names_topo,
         edge_count,
     })
@@ -128,7 +132,7 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use canteiro_types::{ActionRef, CiNode, EnvClass};
+    use canteiro_types::{ActionRef, CiNode, CiRun, EnvClass};
 
     fn action(name: &str) -> ActionRef {
         ActionRef {
@@ -219,8 +223,55 @@ mod tests {
         let err = validate(&c).expect_err("Acao caixa with no :ci must be rejected");
 
         match err {
-            Error::MissingCi { nome } => assert_eq!(nome, "hello-acao"),
+            Error::MissingCi(missing) => assert_eq!(missing.nome, "hello-acao"),
             other => panic!("expected Error::MissingCi, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_missing_ci_gate_wraps_caixa_core_typed_view() {
+        // Fail-before-pass-after pin on the [`Error::MissingCi`]
+        // `#[from]` on [`caixa_core::MissingCiSlot`]: pre-lift the
+        // gate constructed a hand-authored `Error::MissingCi { nome:
+        // String }` at this crate's own [`validate`] call site with no
+        // compile-time link to any typed named-caixa view the sibling
+        // per-renderer entry-gate axes carry. Converging the arm on
+        // the substrate-canonical [`caixa_core::MissingCiSlot`] typed
+        // view (constructed by the peer [`caixa_core::require_ci`]
+        // predicate) closes the drift potential structurally: every
+        // future per-`Acao` consumer (the deferred
+        // `sui-supercacheci::canteiro::emit_gha` workflow renderer
+        // named in this crate's own docs, the future per-`Acao` CR
+        // materializer) reaches for the same one-liner + `#[from]` arm
+        // and gets the diagnostic-naming-the-offending-caixa contract
+        // for free — matching the peer [`Error::NotAnAcao`] `#[from]`
+        // on [`caixa_core::KindMismatch`] shape.
+        let c = acao_caixa(None);
+        let err = validate(&c).expect_err("Acao caixa with no :ci must be rejected");
+        match err {
+            Error::MissingCi(missing) => {
+                // The typed view carries the offending caixa's :nome
+                // verbatim, byte-identical to what
+                // `caixa_core::require_ci` constructed via the lifted
+                // `Caixa::nome` accessor's `.to_string()` extension.
+                assert_eq!(missing.nome, c.nome());
+                // The Display impl routes through the caixa_core-owned
+                // MissingCiSlot Display, so a future format edit lands
+                // in exactly one place (caixa-core::render), not
+                // duplicated across every per-Acao consumer.
+                let msg = format!("{missing}");
+                assert!(
+                    msg.contains("hello-acao"),
+                    "MissingCiSlot Display must name the offending caixa's :nome \
+                     (got: {msg:?})"
+                );
+                assert!(
+                    msg.contains(":ci"),
+                    "MissingCiSlot Display must name the missing `:ci` slot \
+                     (got: {msg:?})"
+                );
+            }
+            other => panic!("expected Error::MissingCi(MissingCiSlot), got {other:?}"),
         }
     }
 
