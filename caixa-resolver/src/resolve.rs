@@ -411,6 +411,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         };
 
         let cache_root = td.path().join("cache");

@@ -375,6 +375,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
+name = "caixa-actions"
+version = "0.1.0"
+dependencies = [
+ "caixa-core",
+ "canteiro-types",
+ "pretty_assertions",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "caixa-arch"
 version = "0.1.0"
 dependencies = [
@@ -402,8 +414,9 @@ dependencies = [
 name = "caixa-core"
 version = "0.1.0"
 dependencies = [
- "gen-platform",
- "gen-types",
+ "canteiro-types",
+ "gen-platform 0.1.9",
+ "gen-types 0.1.9",
  "pretty_assertions",
  "semver",
  "serde",
@@ -689,6 +702,17 @@ name = "caixa-theme"
 version = "0.1.0"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "canteiro-types"
+version = "0.1.152"
+source = "git+https://github.com/pleme-io/sui#8e60d93de33b4fba1c8b1f298a850b9bf4c381d8"
+dependencies = [
+ "serde",
+ "shigoto-dag",
+ "shigoto-types",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1095,6 +1119,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
+name = "fixedbitset"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1220,12 +1250,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "gen-macros"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df4f90adfe20ca2d9ad6a54c7cf69806d9e29de9b91ad44876ba4b3d1c0a3fee"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "gen-platform"
 version = "0.1.9"
 source = "git+https://github.com/pleme-io/gen#6d82c9d3885c781e923ec46330d05d7eca469a3b"
 dependencies = [
- "gen-macros",
- "gen-types",
+ "gen-macros 0.1.9",
+ "gen-types 0.1.9",
+ "inventory",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gen-platform"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7df52eeea52b35bc15466b0b23c691760f0c44a90787e6b93197f9d1d0e28fe"
+dependencies = [
+ "gen-macros 0.1.26",
+ "gen-types 0.1.26",
  "inventory",
  "serde",
  "serde_json",
@@ -1236,6 +1291,21 @@ dependencies = [
 name = "gen-types"
 version = "0.1.9"
 source = "git+https://github.com/pleme-io/gen#6d82c9d3885c781e923ec46330d05d7eca469a3b"
+dependencies = [
+ "blake3",
+ "chrono",
+ "indexmap",
+ "inventory",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "gen-types"
+version = "0.1.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f562c51744f701b3cb3dccfaa642694bc3e37af829f7faa85e780cf84494a58f"
 dependencies = [
  "blake3",
  "chrono",
@@ -2325,6 +2395,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "petgraph"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3099,6 +3179,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "shigoto-dag"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbbe43dd5995d8e725ccae03a49fb65e273802598625f909c5605c5b9c8d3fef"
+dependencies = [
+ "petgraph",
+ "serde",
+ "shigoto-types",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "shigoto-types"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa6ae794f6d1a61085d54b49c37135ab7dd89fb60a69a1097aaefb50cd4f07fd"
+dependencies = [
+ "async-trait",
+ "blake3",
+ "chrono",
+ "gen-platform 0.1.26",
+ "gen-types 0.1.26",
+ "hex",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "shikumi"
 version = "0.1.2"
 source = "git+https://github.com/pleme-io/shikumi?branch=main#61e5f97ad2f61205599b8679a4ff7b2075506003"
@@ -3106,8 +3216,8 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "figment",
- "gen-platform",
- "gen-types",
+ "gen-platform 0.1.9",
+ "gen-types 0.1.9",
  "notify",
  "serde",
  "serde_json",

@@ -1032,6 +1032,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         }
     }
 

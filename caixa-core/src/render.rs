@@ -7156,6 +7156,20 @@ pub const CAIXA_KIND_LABEL_SUPERVISOR: &str = "supervisor";
 /// peer split establishes.
 pub const CAIXA_KIND_LABEL_APLICACAO: &str = "aplicacao";
 
+/// Canonical human-readable label the [`crate::CaixaKind::Acao`] arm
+/// surfaces under [`crate::CaixaKind::as_str`] and (routed through it)
+/// [`std::fmt::Display`]. Sixth peer of [`CAIXA_KIND_LABEL_BIBLIOTECA`] /
+/// [`CAIXA_KIND_LABEL_BINARIO`] / [`CAIXA_KIND_LABEL_SERVICO`] /
+/// [`CAIXA_KIND_LABEL_SUPERVISOR`] / [`CAIXA_KIND_LABEL_APLICACAO`] on
+/// the same closed [`crate::CaixaKind`] enum surface; see
+/// [`CAIXA_KIND_LABEL_BIBLIOTECA`] for the shared lift rationale.
+///
+/// No layout-leaf-kind peer today (mirroring [`CAIXA_KIND_LABEL_SUPERVISOR`])
+/// — the `:kind Acao` slot's sole payload is the `:ci` field
+/// (a `canteiro_types::CiRun`), which is not a code-surface
+/// path-existence check the way `:bibliotecas`/`:exe`/`:servicos` are.
+pub const CAIXA_KIND_LABEL_ACAO: &str = "acao";
+
 /// Canonical caixa-root-relative directory name housing every
 /// [`crate::CaixaKind::Biblioteca`] caixa's `lib/<nome>.lisp` entry
 /// (and every `:bibliotecas ("lib/foo.lisp" …)` per-entry source
@@ -20141,6 +20155,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         }
     }
 

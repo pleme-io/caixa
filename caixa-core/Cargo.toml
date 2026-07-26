@@ -18,6 +18,7 @@ tatara-lisp = { workspace = true }
 tatara-lisp-derive = { workspace = true }
 gen-platform = { workspace = true }
 gen-types = { workspace = true }
+canteiro-types = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

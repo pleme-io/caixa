@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "cargo_lock_sha256": "ea005bfb4f7249b76853662356ca26b94b3710d8fab200bc8531324c047a4b02",
+  "cargo_lock_sha256": "a82f969c530f9eac5116bb247e6c9d7e99085483d636b9d837d14e5eeb531c28",
   "target_resolves": {
     "base": {
       "ahash-0.7.8": {
@@ -871,6 +871,64 @@
           "std"
         ]
       },
+      "caixa-actions-0.1.0": {
+        "runtime_dependencies": [
+          {
+            "name": "caixa_core",
+            "package_key": "caixa-core-0.1.0",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "canteiro_types",
+            "package_key": "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde",
+            "package_key": "serde-1.0.228",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde_json",
+            "package_key": "serde_json-1.0.150",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "thiserror",
+            "package_key": "thiserror-2.0.18",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
       "caixa-arch-0.1.0": {
         "runtime_dependencies": [
           {
@@ -989,6 +1047,16 @@
       },
       "caixa-core-0.1.0": {
         "runtime_dependencies": [
+          {
+            "name": "canteiro_types",
+            "package_key": "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
           {
             "name": "gen_platform",
             "package_key": "gen-platform-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b",
@@ -2778,6 +2846,54 @@
         "build_dependencies": [],
         "features": []
       },
+      "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8": {
+        "runtime_dependencies": [
+          {
+            "name": "serde",
+            "package_key": "serde-1.0.228",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "shigoto_dag",
+            "package_key": "shigoto-dag-0.1.10",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "shigoto_types",
+            "package_key": "shigoto-types-0.1.10",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "thiserror",
+            "package_key": "thiserror-2.0.18",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
       "cc-1.2.62": {
         "runtime_dependencies": [
           {
@@ -3820,6 +3936,11 @@
         "build_dependencies": [],
         "features": []
       },
+      "fixedbitset-0.4.2": {
+        "runtime_dependencies": [],
+        "build_dependencies": [],
+        "features": []
+      },
       "fnv-1.0.7": {
         "runtime_dependencies": [],
         "build_dependencies": [],
@@ -4200,6 +4321,45 @@
           "std"
         ]
       },
+      "gen-macros-0.1.26": {
+        "runtime_dependencies": [
+          {
+            "name": "proc_macro2",
+            "package_key": "proc-macro2-1.0.106",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "quote",
+            "package_key": "quote-1.0.45",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "syn",
+            "package_key": "syn-2.0.117",
+            "kind": "normal",
+            "features": [
+              "extra-traits",
+              "full"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
       "gen-macros-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": {
         "runtime_dependencies": [
           {
@@ -4239,6 +4399,74 @@
         "build_dependencies": [],
         "features": []
       },
+      "gen-platform-0.1.26": {
+        "runtime_dependencies": [
+          {
+            "name": "gen_macros",
+            "package_key": "gen-macros-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "host"
+          },
+          {
+            "name": "gen_types",
+            "package_key": "gen-types-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "inventory",
+            "package_key": "inventory-0.3.24",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde",
+            "package_key": "serde-1.0.228",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde_json",
+            "package_key": "serde_json-1.0.150",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "thiserror",
+            "package_key": "thiserror-2.0.18",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
       "gen-platform-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": {
         "runtime_dependencies": [
           {
@@ -4256,6 +4484,88 @@
             "package_key": "gen-types-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b",
             "kind": "normal",
             "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "inventory",
+            "package_key": "inventory-0.3.24",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde",
+            "package_key": "serde-1.0.228",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde_json",
+            "package_key": "serde_json-1.0.150",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "thiserror",
+            "package_key": "thiserror-2.0.18",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
+      "gen-types-0.1.26": {
+        "runtime_dependencies": [
+          {
+            "name": "blake3",
+            "package_key": "blake3-1.8.5",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "chrono",
+            "package_key": "chrono-0.4.44",
+            "kind": "normal",
+            "features": [
+              "serde"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "indexmap",
+            "package_key": "indexmap-2.14.0",
+            "kind": "normal",
+            "features": [
+              "serde"
+            ],
             "uses_default_features": true,
             "optional": false,
             "target": null,
@@ -8204,6 +8514,37 @@
           "default"
         ]
       },
+      "petgraph-0.6.5": {
+        "runtime_dependencies": [
+          {
+            "name": "fixedbitset",
+            "package_key": "fixedbitset-0.4.2",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": false,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "indexmap",
+            "package_key": "indexmap-2.14.0",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": [
+          "default",
+          "graphmap",
+          "matrix_graph",
+          "stable_graph"
+        ]
+      },
       "pin-project-1.1.13": {
         "runtime_dependencies": [
           {
@@ -10144,6 +10485,166 @@
           {
             "name": "lazy_static",
             "package_key": "lazy_static-1.5.0",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
+      "shigoto-dag-0.1.10": {
+        "runtime_dependencies": [
+          {
+            "name": "petgraph",
+            "package_key": "petgraph-0.6.5",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde",
+            "package_key": "serde-1.0.228",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "shigoto_types",
+            "package_key": "shigoto-types-0.1.10",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "thiserror",
+            "package_key": "thiserror-2.0.18",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          }
+        ],
+        "build_dependencies": [],
+        "features": []
+      },
+      "shigoto-types-0.1.10": {
+        "runtime_dependencies": [
+          {
+            "name": "async_trait",
+            "package_key": "async-trait-0.1.89",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "host"
+          },
+          {
+            "name": "blake3",
+            "package_key": "blake3-1.8.5",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "chrono",
+            "package_key": "chrono-0.4.44",
+            "kind": "normal",
+            "features": [
+              "serde"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "gen_platform",
+            "package_key": "gen-platform-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "gen_types",
+            "package_key": "gen-types-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "hex",
+            "package_key": "hex-0.4.3",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "schemars",
+            "package_key": "schemars-0.8.22",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde",
+            "package_key": "serde-1.0.228",
+            "kind": "normal",
+            "features": [
+              "derive"
+            ],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "serde_json",
+            "package_key": "serde_json-1.0.150",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "thiserror",
+            "package_key": "thiserror-2.0.18",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -16783,6 +17284,13 @@
     "bytes-1.11.1": {
       "edition": "2021"
     },
+    "caixa-actions-0.1.0": {
+      "edition": "2024",
+      "lib_target": {
+        "name": "caixa_actions",
+        "path": "src/lib.rs"
+      }
+    },
     "caixa-arch-0.1.0": {
       "edition": "2024",
       "lib_target": {
@@ -16942,6 +17450,9 @@
         "path": "src/lib.rs"
       }
     },
+    "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8": {
+      "edition": "2024"
+    },
     "cc-1.2.62": {
       "edition": "2018"
     },
@@ -17085,6 +17596,9 @@
     "find-msvc-tools-0.1.9": {
       "edition": "2018"
     },
+    "fixedbitset-0.4.2": {
+      "edition": "2015"
+    },
     "fnv-1.0.7": {
       "edition": "2015",
       "lib_target": {
@@ -17129,11 +17643,21 @@
     "futures-util-0.3.32": {
       "edition": "2018"
     },
+    "gen-macros-0.1.26": {
+      "edition": "2024",
+      "proc_macro": true
+    },
     "gen-macros-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": {
       "edition": "2024",
       "proc_macro": true
     },
+    "gen-platform-0.1.26": {
+      "edition": "2024"
+    },
     "gen-platform-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": {
+      "edition": "2024"
+    },
+    "gen-types-0.1.26": {
       "edition": "2024"
     },
     "gen-types-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": {
@@ -17445,6 +17969,9 @@
     "pest_meta-2.8.6": {
       "edition": "2021"
     },
+    "petgraph-0.6.5": {
+      "edition": "2018"
+    },
     "pin-project-1.1.13": {
       "edition": "2021"
     },
@@ -17681,6 +18208,12 @@
     },
     "sharded-slab-0.1.7": {
       "edition": "2018"
+    },
+    "shigoto-dag-0.1.10": {
+      "edition": "2024"
+    },
+    "shigoto-types-0.1.10": {
+      "edition": "2024"
     },
     "shikumi-0.1.2-61e5f97ad2f61205599b8679a4ff7b2075506003": {
       "edition": "2024"
@@ -17996,6 +18529,7 @@
     }
   },
   "git_nar_sha256": {
+    "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8": "sha256-cujtP0rcAXcmkSMgb/xobzT6ykNduIM2AbrIDBEwUQ4=",
     "gen-macros-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": "sha256-KkZmHxQBwz3Q4XNaJVLdl6TLLPiR+erMbGOrrvPRE0A=",
     "gen-platform-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": "sha256-KkZmHxQBwz3Q4XNaJVLdl6TLLPiR+erMbGOrrvPRE0A=",
     "gen-types-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": "sha256-KkZmHxQBwz3Q4XNaJVLdl6TLLPiR+erMbGOrrvPRE0A=",

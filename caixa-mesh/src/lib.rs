@@ -3320,6 +3320,7 @@ mod tests {
                 paths: vec!["/api/cart".into()],
                 port: 8080,
             }),
+            ci: None,
         }
     }
 

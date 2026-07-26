@@ -66,6 +66,7 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
             "Servico" => CaixaKind::Servico,
             "Supervisor" => CaixaKind::Supervisor,
             "Aplicacao" => CaixaKind::Aplicacao,
+            "Acao" => CaixaKind::Acao,
             _ => CaixaKind::Biblioteca,
         },
         edicao: None,
@@ -91,6 +92,12 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
         politicas: None,
         placement: None,
         entrada: None,
+        // The CR carries no `:ci` projection today (same "trailing
+        // optional metadata" loss the doc comment above already names
+        // for autores/etiquetas/etc.) — an Acao caixa's `:ci` slot is
+        // authored + validated from `caixa.lisp` directly, not
+        // round-tripped through this CR.
+        ci: None,
     }
 }
 
@@ -194,6 +201,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         };
         let cr = caixa_into_cr(
             &c,
@@ -248,6 +256,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         };
         let cr = caixa_into_cr(
             &c,
@@ -301,6 +310,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         };
         let cr = caixa_into_cr(
             &c,

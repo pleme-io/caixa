@@ -1,0 +1,23 @@
+[package]
+name = "caixa-actions"
+description = "caixa-actions — typed renderer that validates a Caixa's :kind Acao :ci slot (a canteiro_types::CiRun) by decomposing it into a shigoto DAG. M0 is validate-only; full GitHub Actions workflow emission (emit_gha) is a named next step, deliberately deferred (see crate docs)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "caixa_actions"
+path = "src/lib.rs"
+
+[dependencies]
+caixa-core = { workspace = true }
+canteiro-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
