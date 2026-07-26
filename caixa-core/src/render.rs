@@ -210,6 +210,70 @@ pub fn require_ci(caixa: &Caixa) -> Result<&canteiro_types::CiRun, MissingCiSlot
     })
 }
 
+/// Typed `:ci`-decompose-failure view: the canonical surface every
+/// per-`Acao` consumer raises when [`canteiro_types::decompose`] refuses
+/// the caixa's declared `:ci` run (a duplicate node name, a dependency
+/// on an undeclared node, a dependency cycle — every failure mode the
+/// sibling [`canteiro_types::DecomposeError`] enumerates). Carries the
+/// offending caixa's `:nome` alongside the borrowed
+/// [`canteiro_types::DecomposeError`] source so the diagnostic reads
+/// `caixa "<nome>": :ci decompose failed: <source>` — naming which
+/// `caixa.lisp` needs author attention, not just the axis the consumer
+/// rejected.
+///
+/// Lifted from `caixa-actions`' inline `Error::Decompose { nome: String,
+/// #[source] source: DecomposeError }` variant so a future per-`Acao`
+/// consumer (the deferred `sui-supercacheci::canteiro::emit_gha`
+/// workflow renderer named in the `caixa-actions` crate docs, the
+/// future per-`Acao` CR materializer that mirrors the sibling
+/// per-`Servico` / per-`Aplicacao` materializers the M4 roadmap
+/// acknowledges) reaches for the same typed view via `#[from]` instead
+/// of re-inlining the same `nome: String, #[source] source:
+/// DecomposeError` construction on its own call site — the second
+/// typed named-caixa diagnostic axis on the per-`Acao` consumer surface
+/// after the peer [`MissingCiSlot`] presence-gate axis.
+///
+/// Peer of [`MissingCiSlot`] on the per-`Acao` `:ci`-slot diagnostic
+/// axis (the presence gate reaches for [`MissingCiSlot`] via
+/// [`require_ci`]; the decompose gate reaches for [`CiDecomposeFailure`]
+/// on the borrowed [`canteiro_types::CiRun`] the presence gate returns).
+/// Peer of [`KindMismatch`] / [`ServicoCountMismatch`] on the sibling
+/// per-renderer entry-gate diagnostic axes — extends the same "one
+/// typed view per axis, carrying the offending caixa's `:nome` +
+/// axis-specific detail, wrapped by every consumer via `#[from]`"
+/// discipline onto the [`canteiro_types::decompose`] axis on the
+/// per-`Acao` consumer surface.
+///
+/// The `source` field carries the borrowed
+/// [`canteiro_types::DecomposeError`] verbatim (rather than collapsing
+/// to a single opaque axis) so a future consumer that wants to fan on
+/// the specific decompose-failure arm — a `feira lint` sub-diagnostic
+/// that offers a `:deps`-repair suggestion on the `MissingDependency`
+/// arm but not the `Cycle` arm, a future per-`Acao` CR materializer's
+/// admission webhook that surfaces the cycle path on rejection —
+/// reaches for `err.source` directly rather than re-parsing the Display
+/// bytes.
+///
+/// [`DecomposeError`]: canteiro_types::DecomposeError
+#[derive(Debug, Error)]
+#[error("caixa {nome:?}: :ci decompose failed: {source}")]
+pub struct CiDecomposeFailure {
+    /// The offending caixa's `:nome` — names which `caixa.lisp` the
+    /// consumer was handed, so the diagnostic doesn't require the user
+    /// to grep for it. Constructed via the lifted [`crate::Caixa::nome`]
+    /// accessor's `.to_string()` extension, matching the peer
+    /// [`MissingCiSlot::nome`] / [`KindMismatch::nome`] /
+    /// [`ServicoCountMismatch::nome`] `nome`-carrying axes.
+    pub nome: String,
+    /// The [`canteiro_types::decompose`] error the caixa's `:ci` run
+    /// tripped on — carried verbatim so a consumer that fans on the
+    /// specific arm (`Cycle` / `MissingDependency` / `DuplicateNode` /
+    /// …) reaches for the typed source rather than re-parsing the
+    /// Display bytes.
+    #[source]
+    pub source: canteiro_types::DecomposeError,
+}
+
 /// Typed `:servicos`-count-mismatch view: the canonical surface every
 /// per-Servico `caixa-<target>` renderer raises when it's handed a
 /// [`Caixa`] whose `:servicos` list doesn't carry exactly one entry —
@@ -27676,6 +27740,91 @@ mod tests {
             msg.contains(":ci"),
             "Display must name the missing `:ci` slot (got: {msg:?})"
         );
+    }
+
+    // ── CiDecomposeFailure — per-`Acao` decompose-failure diagnostic axis ─
+
+    #[test]
+    fn ci_decompose_failure_carries_offending_nome_and_source_verbatim() {
+        // Fail-before-pass-after pin on the [`CiDecomposeFailure`] typed
+        // view: the constructor writes the offending caixa's `:nome`
+        // (routed through the lifted [`crate::Caixa::nome`] accessor's
+        // `.to_string()` extension by every consumer) alongside the
+        // borrowed [`canteiro_types::DecomposeError`] source verbatim,
+        // so a per-`Acao` consumer that fans on the specific
+        // decompose-failure arm reaches for `err.source` directly
+        // rather than re-parsing the Display bytes. Peer of the sibling
+        // [`MissingCiSlot`] typed view's `nome`-carrying pin — extends
+        // the same "one typed view per axis, carrying the offending
+        // caixa's `:nome` + axis-specific detail" discipline onto the
+        // second per-`Acao` diagnostic axis after the presence-gate
+        // axis.
+        let err = CiDecomposeFailure {
+            nome: "hello-acao".into(),
+            source: canteiro_types::DecomposeError::Cycle,
+        };
+        assert_eq!(err.nome, "hello-acao");
+        assert_eq!(err.source, canteiro_types::DecomposeError::Cycle);
+    }
+
+    #[test]
+    fn ci_decompose_failure_display_names_offending_caixa_nome_and_source() {
+        // The Display impl is the load-bearing surface every per-`Acao`
+        // consumer's `#[error("{0}")] Decompose(#[from]
+        // CiDecomposeFailure)` arm prints through. Pinning the exact
+        // rendered form so a future format change is a one-line edit +
+        // a one-line test update, not a silent regression of the
+        // diagnostic clarity — same shape every peer per-axis lift
+        // carries.
+        let err = CiDecomposeFailure {
+            nome: "hello-acao".into(),
+            source: canteiro_types::DecomposeError::Cycle,
+        };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-acao"),
+            "Display must name the offending caixa nome (got: {msg:?})"
+        );
+        assert!(
+            msg.contains(":ci"),
+            "Display must name the `:ci` slot the decompose failed on \
+             (got: {msg:?})"
+        );
+        assert!(
+            msg.contains("decompose"),
+            "Display must name the decompose axis (got: {msg:?})"
+        );
+    }
+
+    #[test]
+    fn ci_decompose_failure_exposes_source_via_error_trait() {
+        // Pin: the [`CiDecomposeFailure`] type routes its
+        // [`canteiro_types::DecomposeError`] carrier through the
+        // `#[source]` [`thiserror::Error`] derive so downstream
+        // `std::error::Error::source()`-consuming diagnostic frameworks
+        // (`anyhow`'s chain formatter, `tracing`'s `error!` event
+        // capture, the future `feira lint` sub-diagnostic emitter) see
+        // the underlying `DecomposeError` arm through the standard
+        // trait rather than only through the flattened Display bytes.
+        // Peer of the sibling per-slot `#[source]` wiring the caixa-*
+        // renderers already carry on their own typed-view error
+        // wrappers.
+        let err = CiDecomposeFailure {
+            nome: "hello-acao".into(),
+            source: canteiro_types::DecomposeError::Cycle,
+        };
+        let src = std::error::Error::source(&err)
+            .expect("CiDecomposeFailure must expose its DecomposeError via Error::source()");
+        // The `Error::source()` trait method returns a `&dyn Error`
+        // borrow of the underlying `DecomposeError`, so its Display
+        // bytes must equal the source arm's own Display bytes — a
+        // future accidental collapse of the `#[source]` wiring (which
+        // would erase the source chain and force downstream
+        // `anyhow::Chain` consumers back onto Display re-parsing) trips
+        // here at caixa-core build time.
+        let src_msg = format!("{src}");
+        let expected_msg = format!("{}", canteiro_types::DecomposeError::Cycle);
+        assert_eq!(src_msg, expected_msg);
     }
 
     // ── require_single_servico / ServicoCountMismatch — V0 Servico-shape ─
