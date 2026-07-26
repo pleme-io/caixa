@@ -22,6 +22,7 @@ members = [
     "caixa-flux",
     "caixa-mesh",
     "caixa-tatara",
+    "caixa-actions",
 ]
 
 [workspace.package]
@@ -51,6 +52,7 @@ caixa-arch = { path = "caixa-arch", version = "0.1.0" }
 caixa-helm = { path = "caixa-helm", version = "0.1.0" }
 caixa-flux = { path = "caixa-flux", version = "0.1.0" }
 caixa-mesh = { path = "caixa-mesh", version = "0.1.0" }
+caixa-actions = { path = "caixa-actions", version = "0.1.0" }
 
 # Third-party.
 serde = { version = "1", features = ["derive"] }
@@ -78,6 +80,7 @@ caixa-tatara = { path = "caixa-tatara" }
 iac-forge = { git = "https://github.com/pleme-io/iac-forge" }
 gen-platform = { git = "https://github.com/pleme-io/gen" }
 gen-types = { git = "https://github.com/pleme-io/gen" }
+canteiro-types = { git = "https://github.com/pleme-io/sui", package = "canteiro-types" }
 
 pretty_assertions = "1"
 tempfile = "3"

@@ -647,7 +647,7 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
-        // Supervisors and Aplicacaos don't run code; reject
+        // Supervisors, Aplicacaos, and Acaos don't run code; reject
         // bibliotecas/exe/servicos declarations BEFORE checking those
         // paths exist (which would otherwise produce a less-helpful
         // "missing entry" error first).
@@ -659,6 +659,14 @@ impl LayoutInvariants for StandardLayout {
         }
         if caixa.kind().is_aplicacao() && has_code {
             return Err(LayoutError::AplicacaoOwnsCode(caixa.nome().to_string()));
+        }
+        // An Acao's sole payload is its `:ci` slot (CANTEIRO §7.1-C) —
+        // like Supervisor/Aplicacao it runs no code of its own, so a
+        // declared :bibliotecas/:exe/:servicos is the same "silently
+        // ignored" footgun the two gates above already close for the
+        // other two no-code kinds.
+        if caixa.kind().is_acao() && has_code {
+            return Err(LayoutError::AcaoOwnsCode(caixa.nome().to_string()));
         }
 
         // Kind ↔ slot coherence: the M3 mesh slots (:membros,
@@ -741,6 +749,26 @@ impl LayoutInvariants for StandardLayout {
                     slots: servico_slots.join(" "),
                 });
             }
+        }
+
+        // Kind ↔ slot coherence (mirror of the three gates above on the
+        // Acao `:ci` slot, CANTEIRO §7.1-C): `:ci` carries a typed CI
+        // run — a canteiro_types::CiRun — that only the caixa-actions
+        // renderer decomposes + validates, and only for a :kind Acao.
+        // On any *other* kind a declared `:ci` is the manifest field's
+        // documented "ignored otherwise": it silently passes verify and
+        // then vanishes (never decomposed, never rendered), far from the
+        // source caixa.lisp. Reject it here — beside the mesh-,
+        // supervisor-, and servico-slot gates — naming the offending
+        // kind. Unlike its three siblings this axis is a single
+        // `Option` field, not a Vec-of-named-slots, so the gate reads
+        // `caixa.ci().is_some()` directly rather than reaching for a
+        // `declared_*_slots()` helper.
+        if caixa.ci().is_some() && !caixa.kind().is_acao() {
+            return Err(LayoutError::CiOnNonAcao {
+                caixa: caixa.nome().to_string(),
+                kind: caixa.kind(),
+            });
         }
 
         // Kind ↔ slot coherence on the fourth and final axis — the
@@ -833,6 +861,18 @@ impl LayoutInvariants for StandardLayout {
             return Err(LayoutError::ServicoWithoutServicos(
                 caixa.nome().to_string(),
             ));
+        }
+
+        // Required-slot gate on the fifth [`CaixaKind`] arm — mirror of
+        // the `BinarioWithoutExe` / `ServicoWithoutServicos` pair above.
+        // An `Acao`'s sole payload is its `:ci` slot; an `Acao` caixa
+        // that doesn't declare one has no CI run to decompose or
+        // validate, so `feira build` refuses it here rather than
+        // letting a downstream `caixa-actions::validate` call fail with
+        // a less-helpful "no :ci" surprise far from the source
+        // caixa.lisp.
+        if caixa.kind().requires_ci() && caixa.ci().is_none() {
+            return Err(LayoutError::MissingCi(caixa.nome().to_string()));
         }
 
         for p in caixa.bibliotecas() {
@@ -1254,6 +1294,10 @@ pub enum LayoutError {
     )]
     AplicacaoOwnsCode(String),
     #[error(
+        "acao caixa '{0}' must not declare :bibliotecas, :exe, or :servicos — acaos carry a typed CI run (:ci), they don't run code themselves"
+    )]
+    AcaoOwnsCode(String),
+    #[error(
         "caixa '{caixa}' is :kind {kind:?} but declares Aplicacao-only mesh slot(s): {slots} — \
          :membros / :contratos / :politicas / :placement / :entrada compose a :kind Aplicacao's \
          typed graph (MESH-COMPOSITION §III.1) and are silently ignored on every other kind \
@@ -1302,6 +1346,16 @@ pub enum LayoutError {
         kind: CaixaKind,
         slots: String,
     },
+    #[error("caixa '{0}' is an Acao but has no :ci slot")]
+    MissingCi(String),
+    #[error(
+        "caixa '{caixa}' is :kind {kind:?} but declares the Acao-only :ci slot — \
+         :ci carries a typed CI run (canteiro_types::CiRun, CANTEIRO §7.1-C) that only the \
+         caixa-actions renderer validates for :kind Acao, and is silently ignored on every \
+         other kind (never decomposed, never rendered); move it to a :kind Acao caixa or \
+         remove it"
+    )]
+    CiOnNonAcao { caixa: String, kind: CaixaKind },
 }
 
 #[cfg(test)]
@@ -1340,6 +1394,7 @@ mod tests {
             politicas: None,
             placement: None,
             entrada: None,
+            ci: None,
         }
     }
 
@@ -5018,6 +5073,78 @@ mod tests {
         });
         let err = layout.verify(&c, &root).unwrap_err();
         assert!(matches!(err, LayoutError::AplicacaoOwnsCode(_)));
+    }
+
+    #[test]
+    fn acao_must_not_have_bibliotecas() {
+        // Mirror of `supervisor_must_not_have_bibliotecas` /
+        // `aplicacao_must_not_have_bibliotecas` on the third no-code
+        // kind. `has_code` fires before the `:ci`-presence gates below
+        // it, so this must surface `AcaoOwnsCode` even though the
+        // caixa also lacks a `:ci` slot (which would otherwise surface
+        // as `MissingCi`) — the more-fundamental "this kind runs no
+        // code at all" diagnostic wins.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Acao);
+        c.bibliotecas = vec!["lib/code.lisp".into()];
+        let err = layout.verify(&c, &root).unwrap_err();
+        assert!(matches!(err, LayoutError::AcaoOwnsCode(_)));
+    }
+
+    #[test]
+    fn acao_without_ci_errors() {
+        // Mirror of `binario_without_exe_errors` on the fifth required-
+        // slot axis.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let err = layout.verify(&caixa(CaixaKind::Acao), &root).unwrap_err();
+        assert!(matches!(err, LayoutError::MissingCi(_)));
+    }
+
+    #[test]
+    fn acao_with_ci_passes() {
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest);
+        let mut c = caixa(CaixaKind::Acao);
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        });
+        layout
+            .verify(&c, &root)
+            .expect("an Acao caixa with a declared :ci slot passes layout verify");
+    }
+
+    #[test]
+    fn ci_on_non_acao_errors() {
+        // Mirror of `mesh_slots_on_non_aplicacao_lists_slots_in_canonical_order`
+        // on the Acao-only `:ci` axis — declaring `:ci` on any other
+        // kind is the same "silently ignored" footgun the sibling
+        // mesh-/supervisor-/servico-slot gates already close.
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_clone = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_clone);
+        let mut c = caixa(CaixaKind::Biblioteca);
+        c.ci = Some(canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        });
+        let err = layout.verify(&c, &root).unwrap_err();
+        match err {
+            LayoutError::CiOnNonAcao { caixa, kind } => {
+                assert_eq!(caixa, "demo");
+                assert_eq!(kind, CaixaKind::Biblioteca);
+            }
+            other => panic!("expected CiOnNonAcao, got {other:?}"),
+        }
     }
 
     // ── ForeignCodeSlot — kind ↔ code-surface coherence ────────────────

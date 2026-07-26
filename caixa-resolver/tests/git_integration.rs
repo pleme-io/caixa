@@ -108,6 +108,7 @@ fn resolve_single_dep_against_local_bare_remote() {
         politicas: None,
         placement: None,
         entrada: None,
+        ci: None,
     };
 
     let cache = CacheDir::at(root.join("cache"));
@@ -184,6 +185,7 @@ fn resolve_transitive_two_level() {
         politicas: None,
         placement: None,
         entrada: None,
+        ci: None,
     };
 
     let cache = CacheDir::at(root.join("cache"));
@@ -246,6 +248,7 @@ fn lacre_round_trips_through_lisp_after_resolution() {
         politicas: None,
         placement: None,
         entrada: None,
+        ci: None,
     };
 
     let cache = CacheDir::at(root.join("cache"));

@@ -1,0 +1,243 @@
+//! caixa-actions — typed renderer for `:kind Acao` caixas.
+//!
+//! An `Acao` caixa's sole payload is its `:ci` slot — a
+//! [`canteiro_types::CiRun`] (CANTEIRO §7.1-C, `pleme-io/sui`'s
+//! `canteiro-types` crate): a repo's CI run as a flat list of typed
+//! [`canteiro_types::CiNode`]s plus their `deps` edges.
+//!
+//! ## M0 contract — validate-only
+//!
+//! [`validate`] is this crate's *only* entry point today. It gates the
+//! input on `:kind Acao`, then hands the declared `:ci` to
+//! [`canteiro_types::decompose`] — the same DAG-construction morphism
+//! canteiro's own execution engine runs — and turns a successful
+//! decomposition into a small typed [`RenderedAcao`] artifact (the
+//! topological node order + the edge count). An illegal `CiRun` shape
+//! (a duplicate node name, a dependency on an undeclared node, a
+//! dependency cycle) surfaces as a typed [`Error::Decompose`], never a
+//! silently-accepted bad DAG.
+//!
+//! This crate deliberately does **not** emit a GitHub Actions workflow
+//! (`emit_gha` in canteiro-speak). That emitter lives in
+//! `sui-supercacheci::canteiro`'s heavier execution tree (tokio,
+//! shigoto-scheduler, axum, sea-orm) — pulling it in here would defeat
+//! the entire point of the `canteiro-types` lean-crate fork (CANTEIRO
+//! §7.1-C, option B): a caixa consumer that wants only the pure,
+//! wire-serializable types + DAG algebra, not canteiro's execution
+//! runtime. Emitting a real `.github/workflows/*.yml` from a validated
+//! [`RenderedAcao`] is the named next step for this crate (a peer of
+//! [`caixa_flux`]/[`caixa_helm`]'s `render_*` functions), tracked but
+//! **not built** in this pass.
+
+use caixa_core::{Caixa, CaixaKind};
+use canteiro_types::{CiRun, DecomposeError, decompose};
+use thiserror::Error;
+
+/// Errors `caixa-actions` can raise.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// The caixa's `:kind` isn't `Acao` — this renderer only validates
+    /// `:kind Acao` caixas' `:ci` slot. Wraps [`caixa_core::KindMismatch`]
+    /// so the diagnostic names the offending caixa's `:nome`, shared
+    /// verbatim with `caixa-helm`/`caixa-flux`/`caixa-mesh`.
+    #[error("{0}")]
+    NotAnAcao(#[from] caixa_core::KindMismatch),
+    /// The caixa's `:kind` is `Acao` but it declares no `:ci` slot — the
+    /// layout invariant [`caixa_core::LayoutError::MissingCi`] catches
+    /// this at `feira build` time too; this is the renderer's own
+    /// independent gate for callers that invoke [`validate`] without
+    /// having run [`caixa_core::LayoutInvariants::verify`] first.
+    #[error("caixa {nome:?}: :kind Acao requires a :ci slot")]
+    MissingCi { nome: String },
+    /// The declared `:ci` run is structurally illegal — a duplicate
+    /// node name, a dependency on an undeclared node, or a dependency
+    /// cycle. Wraps [`canteiro_types::DecomposeError`] verbatim so the
+    /// diagnostic names exactly which invariant the `CiRun` violates.
+    #[error("caixa {nome:?}: :ci decompose failed: {source}")]
+    Decompose {
+        nome: String,
+        #[source]
+        source: DecomposeError,
+    },
+}
+
+/// The validated artifact [`validate`] returns on success — a minimal
+/// typed reflection of the decomposed DAG, not a rendered workflow (see
+/// crate docs for why full GitHub Actions emission is deliberately out
+/// of scope for M0).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct RenderedAcao {
+    /// The caixa's `:nome`, carried through so a consumer that holds
+    /// only a [`RenderedAcao`] can still name which caixa it came from.
+    pub nome: String,
+    /// Every declared node's name, in topological order (parents
+    /// before children — [`canteiro_types::CanteiroDag::topo_order`]).
+    /// A node that depends on another always appears strictly after it.
+    pub node_names_topo: Vec<String>,
+    /// Total declared dependency edges across every node (the sum of
+    /// each [`canteiro_types::CiNode::deps`] length) — one per `deps`
+    /// entry, exactly as [`canteiro_types::decompose`] wires them.
+    pub edge_count: usize,
+}
+
+/// Validate a `:kind Acao` caixa's `:ci` slot by decomposing it into a
+/// shigoto DAG via [`canteiro_types::decompose`].
+///
+/// Gate order mirrors every other per-kind `caixa-<target>` renderer's
+/// entry-point convention ([`caixa_core::require_kind`] first, naming
+/// the offending caixa on a kind mismatch before spending a diagnostic
+/// on the `:ci` slot's own shape):
+///
+/// 1. `caixa.kind() == CaixaKind::Acao` ([`Error::NotAnAcao`]).
+/// 2. `caixa.ci()` is present ([`Error::MissingCi`]).
+/// 3. The declared [`CiRun`] decomposes cleanly ([`Error::Decompose`]).
+///
+/// # Errors
+///
+/// See the [`Error`] variants above — each names the offending caixa's
+/// `:nome` and the specific axis that failed.
+pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
+    caixa_core::require_kind(caixa, CaixaKind::Acao)?;
+
+    let ci: &CiRun = caixa.ci().ok_or_else(|| Error::MissingCi {
+        nome: caixa.nome().to_string(),
+    })?;
+
+    let cd = decompose(ci).map_err(|source| Error::Decompose {
+        nome: caixa.nome().to_string(),
+        source,
+    })?;
+    let topo = cd.topo_order().map_err(|_| Error::Decompose {
+        nome: caixa.nome().to_string(),
+        source: DecomposeError::Cycle,
+    })?;
+
+    let node_names_topo = topo
+        .iter()
+        .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+        .collect();
+    let edge_count = ci.nodes.iter().map(|n| n.deps.len()).sum();
+
+    Ok(RenderedAcao {
+        nome: caixa.nome().to_string(),
+        node_names_topo,
+        edge_count,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use canteiro_types::{ActionRef, CiNode, EnvClass};
+
+    fn action(name: &str) -> ActionRef {
+        ActionRef {
+            name: name.to_string(),
+            command: "true".to_string(),
+            args: vec![],
+        }
+    }
+
+    fn acao_caixa(ci: Option<CiRun>) -> Caixa {
+        let mut c = Caixa::from_lisp(
+            r#"(defcaixa
+                  :nome "hello-acao"
+                  :versao "0.1.0"
+                  :kind Acao)"#,
+        )
+        .expect("minimal Acao caixa parses");
+        c.ci = ci;
+        c
+    }
+
+    #[test]
+    fn validate_decomposes_a_two_node_build_then_test_run() {
+        let ci = CiRun {
+            workspace: "pleme-io".to_string(),
+            repo: "caixa".to_string(),
+            nodes: vec![
+                CiNode::new("build", EnvClass::None, action("build"), vec![]),
+                CiNode::new(
+                    "test",
+                    EnvClass::None,
+                    action("test"),
+                    vec!["build".to_string()],
+                ),
+            ],
+        };
+        let c = acao_caixa(Some(ci));
+
+        let rendered = validate(&c).expect("valid two-node CiRun decomposes");
+
+        assert_eq!(rendered.nome, "hello-acao");
+        assert_eq!(rendered.edge_count, 1);
+        // Topological order: build's dependent (test) never precedes it.
+        let build_ix = rendered
+            .node_names_topo
+            .iter()
+            .position(|n| n == "build")
+            .expect("build present in topo order");
+        let test_ix = rendered
+            .node_names_topo
+            .iter()
+            .position(|n| n == "test")
+            .expect("test present in topo order");
+        assert!(
+            build_ix < test_ix,
+            "build must precede test in topological order: {:?}",
+            rendered.node_names_topo
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_cyclic_ci_run() {
+        let ci = CiRun {
+            workspace: "pleme-io".to_string(),
+            repo: "caixa".to_string(),
+            nodes: vec![
+                CiNode::new("a", EnvClass::None, action("a"), vec!["b".to_string()]),
+                CiNode::new("b", EnvClass::None, action("b"), vec!["a".to_string()]),
+            ],
+        };
+        let c = acao_caixa(Some(ci));
+
+        let err = validate(&c).expect_err("cyclic CiRun must be rejected");
+
+        match err {
+            Error::Decompose { nome, source } => {
+                assert_eq!(nome, "hello-acao");
+                assert_eq!(source, DecomposeError::Cycle);
+            }
+            other => panic!("expected Error::Decompose(Cycle), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_missing_ci_slot() {
+        let c = acao_caixa(None);
+
+        let err = validate(&c).expect_err("Acao caixa with no :ci must be rejected");
+
+        match err {
+            Error::MissingCi { nome } => assert_eq!(nome, "hello-acao"),
+            other => panic!("expected Error::MissingCi, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_non_acao_kind() {
+        let mut c = acao_caixa(None);
+        c.kind = CaixaKind::Servico;
+        c.servicos = vec!["servicos/hello.computeunit.yaml".to_string()];
+
+        let err = validate(&c).expect_err("non-Acao kind must be rejected");
+
+        match err {
+            Error::NotAnAcao(mismatch) => {
+                assert_eq!(mismatch.expected, CaixaKind::Acao);
+                assert_eq!(mismatch.actual, CaixaKind::Servico);
+            }
+            other => panic!("expected Error::NotAnAcao, got {other:?}"),
+        }
+    }
+}

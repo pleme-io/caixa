@@ -185,6 +185,19 @@ pub struct Caixa {
     /// only for public Aplicacaos.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entrada: Option<crate::aplicacao::Entrada>,
+
+    // ── Acao slot (CANTEIRO §7.1-C) ──────────────────────────────────────
+    //
+    // Required when :kind Acao; ignored otherwise (mirrors the M2/
+    // supervisor-tree/M3 slot triads above — a declared-but-foreign `:ci`
+    // is a `LayoutError::CiOnNonAcao` build error, not a silent drop).
+    /// Typed CI run — a repo's CI run as a set of typed nodes + their
+    /// dependency edges. Required for `:kind Acao`; validated (not
+    /// rendered) by the `caixa-actions` renderer via
+    /// `canteiro_types::decompose`. See `caixa-actions`' crate docs for
+    /// the M0 validate-only contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ci: Option<canteiro_types::CiRun>,
 }
 
 impl Caixa {
@@ -2304,6 +2317,26 @@ impl Caixa {
     #[must_use]
     pub fn entrada(&self) -> Option<&crate::aplicacao::Entrada> {
         self.entrada.as_ref()
+    }
+
+    /// Substrate-canonical per-`Caixa` `:ci` slot accessor — returns the
+    /// author-declared typed CI run (`canteiro_types::CiRun`) verbatim as
+    /// an `Option<&CiRun>`, borrowed from the typed slot's own
+    /// `Option<CiRun>` storage. `None` when the slot is absent (every
+    /// non-`Acao` kind, and an `Acao` caixa that hasn't declared `:ci`
+    /// yet — the latter is caught by [`crate::LayoutError::MissingCi`],
+    /// not silently accepted).
+    ///
+    /// Named `ci()` to match the storage field's name and the
+    /// tatara-lisp author surface (`:ci`); mirrors the sibling
+    /// `Option<&Composite>` accessors on this same `Caixa` altitude
+    /// ([`Self::limits`], [`Self::behavior`], [`Self::politicas`],
+    /// [`Self::placement`], [`Self::entrada`]) — one typed dispatch on
+    /// the substrate primitive rather than an open-coded `self.ci.as_ref()`
+    /// at every consumer.
+    #[must_use]
+    pub fn ci(&self) -> Option<&canteiro_types::CiRun> {
+        self.ci.as_ref()
     }
 
     /// Substrate-canonical per-`Caixa` `:estrategia` M2 supervisor-tree-

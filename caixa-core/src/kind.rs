@@ -34,6 +34,16 @@ pub enum CaixaKind {
     /// (`AplicacaoSpec`) and `theory/MESH-COMPOSITION.md` for the
     /// design frame.
     Aplicacao,
+    /// Typed CI run — carries a `:ci` slot of
+    /// `canteiro_types::CiRun` (a repo's CI run as a set of typed
+    /// nodes + their dependency edges). Runs no code of its own and
+    /// owns no `lib`/`exe`/`servicos`/`children`/`membros` code
+    /// surface — its sole payload is the `ci` field on [`crate::Caixa`].
+    /// See CANTEIRO §7.1-C (`pleme-io/sui`'s `canteiro-types` crate)
+    /// for the DAG algebra (`decompose`/`affected_set`/`affected_waves`)
+    /// this slot feeds, and the `caixa-actions` renderer (currently
+    /// validate-only — see its crate docs) for the M0 consumer.
+    Acao,
 }
 
 impl CaixaKind {
@@ -66,6 +76,16 @@ impl CaixaKind {
     #[must_use]
     pub const fn requires_membros(self) -> bool {
         matches!(self, Self::Aplicacao)
+    }
+
+    /// An `Acao` is expected to carry a `:ci` slot (a typed
+    /// `canteiro_types::CiRun`). Mirror of the sibling
+    /// [`Self::requires_lib`]/[`Self::requires_exe`]/
+    /// [`Self::requires_servicos`]/[`Self::requires_membros`] required-
+    /// slot predicates on the fifth [`CaixaKind`] arm.
+    #[must_use]
+    pub const fn requires_ci(self) -> bool {
+        matches!(self, Self::Acao)
     }
 
     /// The canonical human-readable name.
@@ -110,6 +130,7 @@ impl CaixaKind {
             Self::Servico => crate::render::CAIXA_KIND_LABEL_SERVICO,
             Self::Supervisor => crate::render::CAIXA_KIND_LABEL_SUPERVISOR,
             Self::Aplicacao => crate::render::CAIXA_KIND_LABEL_APLICACAO,
+            Self::Acao => crate::render::CAIXA_KIND_LABEL_ACAO,
         }
     }
 }
@@ -193,6 +214,8 @@ mod tests {
         assert!(CaixaKind::Servico.requires_servicos());
         assert!(CaixaKind::Supervisor.requires_children());
         assert!(!CaixaKind::Servico.requires_children());
+        assert!(CaixaKind::Acao.requires_ci());
+        assert!(!CaixaKind::Servico.requires_ci());
     }
 
     #[test]
@@ -248,6 +271,7 @@ mod tests {
                 CaixaKind::Aplicacao,
                 crate::render::CAIXA_KIND_LABEL_APLICACAO,
             ),
+            (CaixaKind::Acao, crate::render::CAIXA_KIND_LABEL_ACAO),
         ] {
             assert_eq!(
                 variant.as_str(),
@@ -286,6 +310,7 @@ mod tests {
             CaixaKind::Servico,
             CaixaKind::Supervisor,
             CaixaKind::Aplicacao,
+            CaixaKind::Acao,
         ] {
             assert_eq!(
                 variant.to_string(),
@@ -325,6 +350,7 @@ mod tests {
             CaixaKind::Servico,
             CaixaKind::Supervisor,
             CaixaKind::Aplicacao,
+            CaixaKind::Acao,
         ] {
             let wire = serde_json::to_string(&variant).unwrap();
             let unquoted = wire
@@ -379,6 +405,7 @@ mod tests {
         assert_eq!(crate::render::CAIXA_KIND_LABEL_SERVICO, "servico");
         assert_eq!(crate::render::CAIXA_KIND_LABEL_SUPERVISOR, "supervisor");
         assert_eq!(crate::render::CAIXA_KIND_LABEL_APLICACAO, "aplicacao");
+        assert_eq!(crate::render::CAIXA_KIND_LABEL_ACAO, "acao");
     }
 
     #[test]
@@ -408,12 +435,28 @@ mod tests {
         // the same one-typed-dispatch-per-variant discipline onto the
         // fourth (and structurally most fundamental — every caixa
         // carries a `:kind`) closed-set typed-enum discriminator axis.
-        let rows: [(CaixaKind, [bool; 5]); 5] = [
-            (CaixaKind::Biblioteca, [true, false, false, false, false]),
-            (CaixaKind::Binario, [false, true, false, false, false]),
-            (CaixaKind::Servico, [false, false, true, false, false]),
-            (CaixaKind::Supervisor, [false, false, false, true, false]),
-            (CaixaKind::Aplicacao, [false, false, false, false, true]),
+        let rows: [(CaixaKind, [bool; 6]); 6] = [
+            (
+                CaixaKind::Biblioteca,
+                [true, false, false, false, false, false],
+            ),
+            (
+                CaixaKind::Binario,
+                [false, true, false, false, false, false],
+            ),
+            (
+                CaixaKind::Servico,
+                [false, false, true, false, false, false],
+            ),
+            (
+                CaixaKind::Supervisor,
+                [false, false, false, true, false, false],
+            ),
+            (
+                CaixaKind::Aplicacao,
+                [false, false, false, false, true, false],
+            ),
+            (CaixaKind::Acao, [false, false, false, false, false, true]),
         ];
         for (variant, expected) in rows {
             let observed = [
@@ -422,12 +465,13 @@ mod tests {
                 variant.is_servico(),
                 variant.is_supervisor(),
                 variant.is_aplicacao(),
+                variant.is_acao(),
             ];
             assert_eq!(
                 observed, expected,
                 "CaixaKind::{variant:?} is_* predicates must partition \
                  the arm set (biblioteca, binario, servico, supervisor, \
-                 aplicacao); got {observed:?}"
+                 aplicacao, acao); got {observed:?}"
             );
         }
     }
@@ -450,11 +494,13 @@ mod tests {
         const IS_SERVICO: bool = CaixaKind::Servico.is_servico();
         const IS_SUPERVISOR: bool = CaixaKind::Supervisor.is_supervisor();
         const IS_BINARIO: bool = CaixaKind::Binario.is_binario();
+        const IS_ACAO: bool = CaixaKind::Acao.is_acao();
         assert!(IS_APLICACAO);
         assert!(IS_BIBLIOTECA);
         assert!(IS_SERVICO);
         assert!(IS_SUPERVISOR);
         assert!(IS_BINARIO);
+        assert!(IS_ACAO);
     }
 
     #[test]
@@ -475,6 +521,7 @@ mod tests {
             crate::render::CAIXA_KIND_LABEL_SERVICO,
             crate::render::CAIXA_KIND_LABEL_SUPERVISOR,
             crate::render::CAIXA_KIND_LABEL_APLICACAO,
+            crate::render::CAIXA_KIND_LABEL_ACAO,
         ];
         for (i, a) in all.iter().enumerate() {
             for (j, b) in all.iter().enumerate() {
