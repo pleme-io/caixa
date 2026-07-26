@@ -127,6 +127,89 @@ pub fn require_kind(caixa: &Caixa, expected: CaixaKind) -> Result<(), KindMismat
     }
 }
 
+/// Typed `:ci`-slot-absence view: the canonical surface every per-`Acao`
+/// consumer raises when it's handed a `:kind Acao` [`Caixa`] whose `:ci`
+/// slot is absent. Carries the offending caixa's `:nome` so the diagnostic
+/// reads `caixa "<nome>": :kind Acao requires a :ci slot` — naming which
+/// `caixa.lisp` needs author attention, not just the axis the consumer
+/// rejected.
+///
+/// Lifted from `caixa-actions`' inline
+/// `.ok_or_else(|| Error::MissingCi { nome: caixa.nome().to_string() })`
+/// gate so a future per-`Acao` consumer (the deferred
+/// `sui-supercacheci::canteiro::emit_gha` workflow renderer, the future
+/// per-`Acao` CR materializer that mirrors the sibling per-`Servico` and
+/// per-`Aplicacao` materializers the M4 roadmap acknowledges) reaches for
+/// the same typed view via `#[from]` instead of re-inlining the same
+/// `.ok_or_else(...)` construction.
+///
+/// Peer of [`KindMismatch`] on the per-renderer kind-gate axis and
+/// [`ServicoCountMismatch`] on the per-Servico V0-count-gate axis — the
+/// third typed named-caixa entry-gate view every per-kind
+/// `caixa-<target>` renderer wraps via `#[from]` in its own
+/// [`thiserror`] `Error` enum.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("caixa {nome:?}: :kind Acao requires a :ci slot")]
+pub struct MissingCiSlot {
+    /// The offending caixa's `:nome` — names which `caixa.lisp` the
+    /// consumer was handed, so the diagnostic doesn't require the user
+    /// to grep for it.
+    pub nome: String,
+}
+
+/// Predicate: assert that `caixa.ci().is_some()`, returning the borrowed
+/// [`canteiro_types::CiRun`] on success and a typed [`MissingCiSlot`] view
+/// (carrying [`Caixa::nome`]) on rejection. The canonical entry-point
+/// every per-`Acao` consumer wraps in its own [`thiserror`] `Error`
+/// variant via `#[from]` — the call site becomes a single
+/// `let ci = caixa_core::require_ci(caixa)?;` in place of the prior
+/// two-line
+/// `let ci = caixa.ci().ok_or_else(|| Error::MissingCi { nome: caixa.nome().to_string() })?;`
+/// block.
+///
+/// Returns `&CiRun` (rather than `()` like the peer [`require_kind`] and
+/// [`require_single_servico`] predicates on the same substrate entry-gate
+/// axis) because every caller then reaches for the borrowed `:ci` slot's
+/// [`canteiro_types::CiRun`] to decompose / render / emit — projecting
+/// the successful borrow through the same `?` step folds the check and
+/// the bind onto one call site, matching how every present + roadmapped
+/// per-`Acao` consumer uses the slot.
+///
+/// Lifted to a single helper so the `:ci`-slot-presence gate — the same
+/// axis the [`crate::LayoutError::MissingCi`] emission gates on at
+/// `feira build` time — lives in exactly one place across every future
+/// per-`Acao` consumer: a future `sui-supercacheci::canteiro::emit_gha`
+/// workflow renderer (the deferred `caixa-actions` next step named in
+/// its own crate docs), a future per-`Acao` CR materializer, and every
+/// consumer downstream reaches for the same typed helper and gets the
+/// same named-the-offending-caixa diagnostic for free.
+///
+/// Same trajectory as [`require_kind`] / [`KindMismatch`] on the peer
+/// per-renderer kind-gate axis and [`require_single_servico`] /
+/// [`ServicoCountMismatch`] on the peer per-Servico V0-count-gate axis:
+/// one `caixa_core::require_*` helper per typed entry-gate axis, so the
+/// diagnostic shape (named caixa, named field) is uniform across the
+/// substrate, and every per-kind renderer's `Error::From<*>` `#[from]`
+/// arm gets the diagnostic-naming-the-offending-caixa contract for free.
+///
+/// # Errors
+///
+/// Returns [`MissingCiSlot`] when `caixa.ci().is_none()` — every
+/// non-`Acao` kind lands here (the sibling
+/// [`crate::LayoutError::CiOnNonAcao`] gate refuses a declared `:ci` on
+/// any other kind at `feira build` time, so a callsite that gates on
+/// `:kind Acao` first via [`require_kind`] will only ever surface this
+/// arm for a `:kind Acao` caixa that hasn't declared its `:ci` yet).
+/// The error carries the caixa's `:nome` so the diagnostic names the
+/// offending `caixa.lisp` — same shape every consumer's
+/// `Error::From<MissingCiSlot>` converts into the consumer's local error
+/// type.
+pub fn require_ci(caixa: &Caixa) -> Result<&canteiro_types::CiRun, MissingCiSlot> {
+    caixa.ci().ok_or_else(|| MissingCiSlot {
+        nome: caixa.nome().to_string(),
+    })
+}
+
 /// Typed `:servicos`-count-mismatch view: the canonical surface every
 /// per-Servico `caixa-<target>` renderer raises when it's handed a
 /// [`Caixa`] whose `:servicos` list doesn't carry exactly one entry —
@@ -27479,6 +27562,120 @@ mod tests {
         assert_eq!(err.expected, CaixaKind::Supervisor);
         assert_eq!(err.actual, CaixaKind::Aplicacao);
         require_kind(&c, CaixaKind::Aplicacao).unwrap();
+    }
+
+    // ── require_ci / MissingCiSlot — Acao `:ci`-slot-presence gate ────
+
+    fn bare_acao_without_ci() -> Caixa {
+        let mut c = bare_servico();
+        c.kind = CaixaKind::Acao;
+        c.servicos = vec![];
+        c.ci = None;
+        c
+    }
+
+    fn sample_ci_run() -> canteiro_types::CiRun {
+        canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![],
+        }
+    }
+
+    #[test]
+    fn require_ci_accepts_present_slot_and_returns_borrowed_ci_run() {
+        // The happy path: an Acao-kind caixa that declares its `:ci`
+        // slot passes `require_ci`, and the borrowed
+        // [`canteiro_types::CiRun`] projected through the successful
+        // return is the same author-declared value the caller was about
+        // to bind — folding the check and the bind onto one call site,
+        // matching how every present + roadmapped per-`Acao` consumer
+        // uses the slot.
+        let mut c = bare_acao_without_ci();
+        c.ci = Some(sample_ci_run());
+        let ci = require_ci(&c).expect("Acao with declared :ci passes");
+        assert_eq!(ci.workspace, "pleme-io");
+        assert_eq!(ci.repo, "caixa");
+    }
+
+    #[test]
+    fn require_ci_rejects_absent_slot_with_typed_view() {
+        // The fail-before-pass-after pin: pre-lift `caixa-actions`'
+        // inline `.ok_or_else(|| Error::MissingCi { nome:
+        // caixa.nome().to_string() })` gate constructed an
+        // `Error::MissingCi { nome: String }` at exactly one crate's
+        // call site with no compile-time link to any typed named-caixa
+        // view the sibling per-renderer entry-gate axes carry. A future
+        // per-`Acao` consumer (the deferred `sui-supercacheci::canteiro
+        // ::emit_gha` workflow renderer named in the `caixa-actions`
+        // crate docs, the future per-`Acao` CR materializer) would
+        // re-inline the same `.ok_or_else(...)` construction on its own
+        // call site and open a second untracked `nome: String`-carry
+        // path — exactly the "feira verb whose error path doesn't name
+        // the offending caixa" punch-list item the compounding-mandate
+        // protocol calls out. Lifting the gate onto the typed
+        // [`MissingCiSlot`] view + [`require_ci`] predicate closes the
+        // drift potential structurally: every future per-`Acao`
+        // consumer reaches for the same one-liner + `#[from]` and gets
+        // the diagnostic-naming-the-offending-caixa contract for free.
+        let c = bare_acao_without_ci();
+        let err = require_ci(&c).unwrap_err();
+        assert_eq!(err.nome, "hello-rio");
+    }
+
+    #[test]
+    fn require_ci_routes_offending_nome_via_caixa_nome_accessor() {
+        // Pin: the [`MissingCiSlot::nome`] `String` the constructor
+        // writes must be a byte-identical copy of what the lifted
+        // [`crate::Caixa::nome`] accessor returns for the same
+        // [`Caixa`] input — the same routing pin discipline the peer
+        // [`require_kind`] / [`require_single_servico`] typed views
+        // already carry, so a future regression that re-inlines a raw
+        // `caixa.nome.clone()` `String::clone()` of the underlying
+        // field at the constructor site (which would silently ignore
+        // any future `CaixaNome` newtype the [`crate::Caixa::nome`]
+        // accessor upgrades to project the display byte-string of)
+        // trips here before the drift lands on a per-consumer `#[from]`
+        // arm.
+        let mut c = bare_acao_without_ci();
+        c.nome = "missing-ci-pin".into();
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "missing-ci-pin",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before the `:ci` gate fires",
+        );
+        let err = require_ci(&c).unwrap_err();
+        assert_eq!(
+            err.nome, expected_nome_via_accessor,
+            "the MissingCiSlot's `nome` field must equal \
+             `caixa.nome().to_string()` — the typed-view constructor \
+             must route through the lifted [`Caixa::nome`] accessor's \
+             `.to_string()` extension, not the raw `caixa.nome.clone()` \
+             `String::clone()` of the underlying field",
+        );
+    }
+
+    #[test]
+    fn missing_ci_slot_display_names_offending_caixa_nome() {
+        // The Display impl is the load-bearing surface every per-
+        // `Acao` consumer's `#[error("{0}")] MissingCi(#[from]
+        // MissingCiSlot)` arm prints through. Pinning the exact rendered
+        // form so a future format change is a one-line edit + a one-line
+        // test update, not a silent regression of the diagnostic
+        // clarity. Same shape every peer per-axis lift carries.
+        let err = MissingCiSlot {
+            nome: "hello-acao".into(),
+        };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("hello-acao"),
+            "Display must name the offending caixa nome (got: {msg:?})"
+        );
+        assert!(
+            msg.contains(":ci"),
+            "Display must name the missing `:ci` slot (got: {msg:?})"
+        );
     }
 
     // ── require_single_servico / ServicoCountMismatch — V0 Servico-shape ─
