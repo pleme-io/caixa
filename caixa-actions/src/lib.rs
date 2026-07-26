@@ -29,7 +29,7 @@
 //! [`caixa_flux`]/[`caixa_helm`]'s `render_*` functions), tracked but
 //! **not built** in this pass.
 
-use caixa_core::{Caixa, CaixaKind};
+use caixa_core::{Caixa, CaixaKind, CiDecomposeFailure};
 use canteiro_types::{DecomposeError, decompose};
 use thiserror::Error;
 
@@ -57,14 +57,16 @@ pub enum Error {
     MissingCi(#[from] caixa_core::MissingCiSlot),
     /// The declared `:ci` run is structurally illegal — a duplicate
     /// node name, a dependency on an undeclared node, or a dependency
-    /// cycle. Wraps [`canteiro_types::DecomposeError`] verbatim so the
-    /// diagnostic names exactly which invariant the `CiRun` violates.
-    #[error("caixa {nome:?}: :ci decompose failed: {source}")]
-    Decompose {
-        nome: String,
-        #[source]
-        source: DecomposeError,
-    },
+    /// cycle. Wraps [`caixa_core::CiDecomposeFailure`] via `#[from]`
+    /// so the diagnostic naming the offending caixa's `:nome` +
+    /// carrying the borrowed [`canteiro_types::DecomposeError`] source
+    /// shares one typed view with every other per-`Acao` consumer that
+    /// runs [`canteiro_types::decompose`] on a borrowed `:ci` slot —
+    /// matching the peer [`Self::NotAnAcao`] / [`Self::MissingCi`]
+    /// `#[from]` shape on the sibling [`caixa_core::KindMismatch`] /
+    /// [`caixa_core::MissingCiSlot`] typed views above.
+    #[error("{0}")]
+    Decompose(#[from] CiDecomposeFailure),
 }
 
 /// The validated artifact [`validate`] returns on success — a minimal
@@ -107,11 +109,11 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     let ci = caixa_core::require_ci(caixa)?;
     let nome = caixa.nome().to_string();
 
-    let cd = decompose(ci).map_err(|source| Error::Decompose {
+    let cd = decompose(ci).map_err(|source| CiDecomposeFailure {
         nome: nome.clone(),
         source,
     })?;
-    let topo = cd.topo_order().map_err(|_| Error::Decompose {
+    let topo = cd.topo_order().map_err(|_| CiDecomposeFailure {
         nome: nome.clone(),
         source: DecomposeError::Cycle,
     })?;
@@ -208,11 +210,86 @@ mod tests {
         let err = validate(&c).expect_err("cyclic CiRun must be rejected");
 
         match err {
-            Error::Decompose { nome, source } => {
-                assert_eq!(nome, "hello-acao");
-                assert_eq!(source, DecomposeError::Cycle);
+            Error::Decompose(failure) => {
+                assert_eq!(failure.nome, "hello-acao");
+                assert_eq!(failure.source, DecomposeError::Cycle);
             }
             other => panic!("expected Error::Decompose(Cycle), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_decompose_gate_wraps_caixa_core_typed_view() {
+        // Fail-before-pass-after pin on the [`Error::Decompose`]
+        // `#[from]` on [`caixa_core::CiDecomposeFailure`]: pre-lift the
+        // arm carried the `nome: String, #[source] source: DecomposeError`
+        // shape open-coded at this crate's own [`validate`] call site,
+        // constructed twice at each `.map_err(...)` site with no
+        // compile-time link to any typed named-caixa view the sibling
+        // per-`Acao` diagnostic axes carry. Converging the arm on the
+        // substrate-canonical [`caixa_core::CiDecomposeFailure`] typed
+        // view closes the drift potential structurally: every future
+        // per-`Acao` consumer that runs [`canteiro_types::decompose`]
+        // on a borrowed `:ci` slot (the deferred
+        // `sui-supercacheci::canteiro::emit_gha` workflow renderer named
+        // in this crate's own docs, the future per-`Acao` CR
+        // materializer) reaches for the same typed view + `#[from]` arm
+        // and gets the diagnostic-naming-the-offending-caixa contract
+        // for free — matching the peer [`Error::NotAnAcao`] `#[from]`
+        // on [`caixa_core::KindMismatch`] and [`Error::MissingCi`]
+        // `#[from]` on [`caixa_core::MissingCiSlot`] shapes above.
+        let ci = CiRun {
+            workspace: "pleme-io".to_string(),
+            repo: "caixa".to_string(),
+            nodes: vec![
+                CiNode::new("a", EnvClass::None, action("a"), vec!["b".to_string()]),
+                CiNode::new("b", EnvClass::None, action("b"), vec!["a".to_string()]),
+            ],
+        };
+        let c = acao_caixa(Some(ci));
+
+        let err = validate(&c).expect_err("cyclic CiRun must be rejected");
+
+        match err {
+            Error::Decompose(failure) => {
+                // The typed view carries the offending caixa's :nome
+                // verbatim, byte-identical to what the lifted
+                // [`caixa_core::Caixa::nome`] accessor returns for the
+                // same fixture.
+                assert_eq!(failure.nome, c.nome());
+                // The Display impl routes through the caixa_core-owned
+                // CiDecomposeFailure Display, so a future format edit
+                // lands in exactly one place (caixa-core::render), not
+                // duplicated across every per-`Acao` consumer.
+                let msg = format!("{failure}");
+                assert!(
+                    msg.contains("hello-acao"),
+                    "CiDecomposeFailure Display must name the offending \
+                     caixa's :nome (got: {msg:?})"
+                );
+                assert!(
+                    msg.contains(":ci"),
+                    "CiDecomposeFailure Display must name the `:ci` slot \
+                     the decompose failed on (got: {msg:?})"
+                );
+                // The `#[source]`-wired `DecomposeError` carrier is
+                // reachable through the standard `std::error::Error::source()`
+                // trait method, so downstream diagnostic frameworks
+                // (`anyhow`'s chain formatter, `tracing`'s `error!` event
+                // capture) walk the underlying arm rather than only
+                // seeing the flattened Display bytes — same shape every
+                // peer per-axis `#[source]`-carrying view exposes.
+                let src = std::error::Error::source(&failure).expect(
+                    "CiDecomposeFailure must expose its DecomposeError via Error::source()",
+                );
+                assert_eq!(
+                    format!("{src}"),
+                    format!("{}", DecomposeError::Cycle),
+                    "Error::source() must borrow the underlying \
+                     DecomposeError arm verbatim"
+                );
+            }
+            other => panic!("expected Error::Decompose(CiDecomposeFailure), got {other:?}"),
         }
     }
 
