@@ -195,6 +195,88 @@ impl TeiaRefRepr {
     pub fn nome(&self) -> &str {
         self.nome.as_str()
     }
+
+    /// Substrate-canonical per-`(ref …)` `:atributo` per-reference
+    /// target-attribute-projection scalar accessor every downstream
+    /// IaC-facing consumer of the produced [`TeiaValue::Ref`] carrier
+    /// keys off — returns the author-declared `:atributo` byte-string
+    /// verbatim as a `&str`, borrowed from the typed slot's own
+    /// [`String`] storage.
+    ///
+    /// The `:atributo` slot on the per-`(ref …)` carrier holds the
+    /// per-target attribute projection (`id`, `arn`, `vpc_id`, whatever
+    /// the target [`crate::TeiaInstance`]'s provider exposes on the
+    /// referenced resource) — the shape [`crate::manifest::parse_teia_source`]
+    /// admits at the ref-form fourth slot via its [`caixa_ast::NodeKind::Symbol`]
+    /// projection at `manifest.rs`:`build_ref` — and every downstream
+    /// consumer that reads the attribute projection keys off this scalar
+    /// (the substrate primitive's own [`TeiaValue::to_hcl_string`]
+    /// per-`Ref` `${<tf>.<nome>.<attr>}` HCL interpolation emit, the
+    /// `caixa-arch::invariants` `no-unresolved-refs` per-`Ref` refusal
+    /// `(ref <tipo> <nome> <attr>)` Display interpolation, the
+    /// `caixa-pangea::manifest_bridge` `value_to_json` per-`Ref`
+    /// Terraform-JSON `${<tf>.<nome>.<attr>}` interpolation lower — all
+    /// three production sites across three crates).
+    ///
+    /// Prior to this lift the `.atributo` field on the ref carrier was
+    /// accessed inline at three caixa-monorepo sites — the substrate
+    /// primitive's own [`TeiaValue::to_hcl_string`] `${<tf>.<nome>.<attr>}`
+    /// interpolation's `r.atributo` emit (one site), the
+    /// `caixa-arch::invariants` `no-unresolved-refs` per-refusal
+    /// `Violation::message` `(ref <tipo> <nome> <attr>)` Display
+    /// interpolation (one site), and the `caixa-pangea::manifest_bridge`
+    /// `value_to_json` `${<tf>.<nome>.<attr>}` Terraform-JSON lower's
+    /// `r.atributo` emit (one site) — each expressed no compile-time
+    /// link back to the typed slot. A future extension of the ref
+    /// carrier's `:atributo` axis to a richer author surface — a
+    /// per-provider attribute-alias table the future `iac-forge`
+    /// schema-resolution pass routes through so a `(ref aws/vpc main
+    /// cidr-block)` reference emits the provider-canonical
+    /// `cidr_block` at Terraform-JSON emit time, a per-tenant
+    /// attribute-rewrite the future M4 `mesh.pleme.io/v1alpha1/Aplicacao`
+    /// CR materializer resolves per-CR, a promotion of the plain
+    /// byte-string to a typed provider-scoped attribute-name newtype
+    /// once the substrate's IaC-side attribute discipline converges
+    /// with the CAIXA-SDLC-side identity shape — would have had to be
+    /// threaded through every open-coded copy in lockstep, or the
+    /// `no-unresolved-refs` refusal Display interpolation and the
+    /// `caixa-pangea` `${<tf>.<nome>.<attr>}` Terraform-JSON
+    /// interpolation would silently disagree on which per-target
+    /// attribute a given `(ref …)` carrier projects to; the invariant
+    /// checker's refusal message reading `id` while the Terraform-JSON
+    /// emit path silently read `arn` would silently split the
+    /// build-time unresolved-ref refusal diagnostic from the runtime
+    /// plan-and-apply pipeline, one gate disagreeing with the artifact
+    /// the substrate's teia → pangea pipeline actually materializes.
+    /// Lifting the resolution rule to a typed method on the substrate
+    /// primitive means every downstream consumer reaches for exactly
+    /// one typed dispatch — the resolver's accept-set migrates as a
+    /// unit on any future axis addition.
+    ///
+    /// Third and final `&str`-return accessor on the outer `TeiaRefRepr`
+    /// — folds on the outer-`TeiaRefRepr` scalar projection pattern the
+    /// sibling [`Self::tipo`] (a856d67) accessor opened and the sibling
+    /// [`Self::nome`] (15bcdef) accessor extended, and closes the
+    /// outer-`TeiaRefRepr` universal-axis scalar sub-family across all
+    /// three positional slots (`:tipo` / `:nome` / `:atributo`) the
+    /// parser's own `build_ref` slot-projection admits. Same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline as the sibling [`Self::tipo`]
+    /// (a856d67), [`Self::nome`] (15bcdef), [`crate::TeiaInstance::tipo`]
+    /// (e58baa7), [`crate::TeiaInstance::nome`] (3e2d578),
+    /// [`caixa_core::Dep::nome`] (eba2cde), per-`:membros`
+    /// [`caixa_core::aplicacao::Membro::nome`] (4a32abf), and outer
+    /// [`caixa_core::Caixa::nome`] (e6b7d97 and its convergence family)
+    /// accessors, extended onto the substrate's IaC-side per-`(ref …)`
+    /// reference-target-attribute-projection axis. Named `atributo()`
+    /// to match the storage field's name — the accessor's identity
+    /// name maps onto the author-declared `(ref <tipo> <nome>
+    /// <atributo>)` positional-slot vocabulary the parser's own
+    /// `build_ref` slot-projection already keys off.
+    #[must_use]
+    pub fn atributo(&self) -> &str {
+        self.atributo.as_str()
+    }
 }
 
 impl TeiaValue {
@@ -229,17 +311,19 @@ impl TeiaValue {
                 // future rebrand on the typed slot's raw-slot reader
                 // lands at exactly one place.
                 let tipo = r.tipo().replace('/', "_");
-                // Same discipline for the per-`Ref` `<nome>` carry —
-                // route through the lifted [`TeiaRefRepr::nome`] scalar
-                // accessor rather than the raw `r.nome` field access.
-                // The substrate primitive's own `${<tf>.<nome>.<attr>}`
-                // per-`Ref` interpolation emit path now keys off the
-                // canonical raw-slot surface every downstream
-                // `caixa-arch` / `caixa-pangea` per-`TeiaRefRepr`
-                // `:nome` consumer routes through, so any future
-                // rebrand on the typed slot's raw-slot reader lands at
-                // exactly one place.
-                format!("${{{tipo}.{}.{}}}", r.nome(), r.atributo)
+                // Same discipline for the per-`Ref` `<nome>` and
+                // `<attr>` carries — route through the lifted
+                // [`TeiaRefRepr::nome`] / [`TeiaRefRepr::atributo`]
+                // scalar accessors rather than the raw `r.nome` /
+                // `r.atributo` field accesses. The substrate
+                // primitive's own `${<tf>.<nome>.<attr>}` per-`Ref`
+                // interpolation emit path now keys off the canonical
+                // raw-slot surface every downstream `caixa-arch` /
+                // `caixa-pangea` per-`TeiaRefRepr` `:nome` / `:atributo`
+                // consumer routes through, so any future rebrand on
+                // either typed slot's raw-slot reader lands at exactly
+                // one place.
+                format!("${{{tipo}.{}.{}}}", r.nome(), r.atributo())
             }
         }
     }
@@ -386,6 +470,89 @@ mod tests {
             "${aws_vpc.primary.id}",
             "to_hcl_string must carry <nome> through the \
              TeiaRefRepr::nome() accessor",
+        );
+    }
+
+    #[test]
+    fn atributo_returns_declared_atributo_verbatim() {
+        // The accessor is a projection, not a gate. Every author-declared
+        // per-`(ref …)` `:atributo` byte-string — the canonical `id`
+        // shape, a snake_cased `vpc_id`, a kebab-cased `cidr-block`, a
+        // provider-scoped `arn`, an empty `""` sentinel — round-trips
+        // as-is through `TeiaRefRepr::atributo()`. Pins the "verbatim
+        // projection" contract every downstream consumer (`caixa-arch::
+        // invariants` `no-unresolved-refs` per-`Ref` refusal
+        // `(ref <tipo> <nome> <attr>)` Display interpolation,
+        // `caixa-pangea::manifest_bridge` per-`Ref`
+        // `${<tf>.<nome>.<attr>}` Terraform-JSON interpolation, the
+        // substrate primitive's own `TeiaValue::to_hcl_string` per-`Ref`
+        // `${<tf>.<nome>.<attr>}` HCL interpolation) depends on.
+        for fixture in ["id", "vpc_id", "cidr-block", "arn", ""] {
+            let r = TeiaRefRepr {
+                tipo: "aws/vpc".into(),
+                nome: "main".into(),
+                atributo: fixture.into(),
+            };
+            assert_eq!(
+                r.atributo(),
+                fixture,
+                "TeiaRefRepr::atributo must return the author-declared \
+                 :atributo byte-string verbatim (fixture: {fixture:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn atributo_is_by_borrow_pointer_identity() {
+        // Zero-copy pin — `r.atributo()` must borrow from the typed
+        // slot's own [`String`] storage, not clone into a fresh buffer.
+        // Fails at build time if a future rewrite regresses to an
+        // owned-buffer shape (`self.atributo.clone()` in the body would
+        // type-check but silently allocate on every call — the pointer
+        // identity check catches it).
+        let r = TeiaRefRepr {
+            tipo: "aws/vpc".into(),
+            nome: "main".into(),
+            atributo: "id".into(),
+        };
+        let via_accessor: &str = r.atributo();
+        assert_eq!(
+            via_accessor.as_ptr(),
+            r.atributo.as_ptr(),
+            "TeiaRefRepr::atributo must borrow from the .atributo \
+             String's backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            r.atributo.len(),
+            "TeiaRefRepr::atributo and .atributo.as_str() must \
+             byte-equal in length (same slice)",
+        );
+    }
+
+    #[test]
+    fn to_hcl_string_reader_routes_through_atributo_accessor() {
+        // Coherence pin: the substrate primitive's own
+        // `TeiaValue::to_hcl_string` per-`Ref` interpolation reader and
+        // every downstream `caixa-arch` / `caixa-pangea` per-`:atributo`
+        // consumer share the same accessor. Regresses if a future
+        // detour re-inlines the raw `r.atributo` field access at the
+        // `${<tf>.<nome>.<attr>}` interpolation emit path — this
+        // fixture pins the `<attr>` slot as `cidr-block` (a
+        // hyphenated attribute name preserved verbatim by the
+        // projection, unlike the `<tipo>` slot's `/` → `_` mint) so a
+        // future rewrite that accidentally sanitizes the attribute
+        // through the type-name mint pipeline surfaces at build time.
+        let v = TeiaValue::Ref(TeiaRefRepr {
+            tipo: "aws/vpc".into(),
+            nome: "main".into(),
+            atributo: "cidr-block".into(),
+        });
+        assert_eq!(
+            v.to_hcl_string(),
+            "${aws_vpc.main.cidr-block}",
+            "to_hcl_string must carry <attr> through the \
+             TeiaRefRepr::atributo() accessor verbatim (no sanitizer)",
         );
     }
 

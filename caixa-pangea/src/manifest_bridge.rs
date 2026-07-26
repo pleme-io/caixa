@@ -72,18 +72,20 @@ fn value_to_json(v: &TeiaValue) -> Value {
             // refusal-message Display interpolation now key off the same
             // substrate-canonical resolver.
             let tf = r.tipo().replace(['/', '-'], "_");
-            // Same discipline for the per-`Ref` `<nome>` carry — route
-            // through the lifted [`caixa_teia::TeiaRefRepr::nome`]
-            // scalar accessor rather than the raw `r.nome` field
-            // access. The Terraform-JSON `${<tf>.<nome>.<attr>}` per-
-            // `Ref` interpolation lower now keys off the same
-            // substrate-canonical per-`Ref` `:nome` resolver the
-            // `caixa-arch::invariants` `no-unresolved-refs` declared-set
-            // lookup key + refusal-message Display interpolation and
-            // the substrate primitive's own `TeiaValue::to_hcl_string`
-            // per-`Ref` `${<tf>.<nome>.<attr>}` HCL emit path route
-            // through.
-            Value::String(format!("${{{tf}.{}.{}}}", r.nome(), r.atributo))
+            // Same discipline for the per-`Ref` `<nome>` and
+            // `<attr>` carries — route through the lifted
+            // [`caixa_teia::TeiaRefRepr::nome`] /
+            // [`caixa_teia::TeiaRefRepr::atributo`] scalar accessors
+            // rather than the raw `r.nome` / `r.atributo` field
+            // accesses. The Terraform-JSON `${<tf>.<nome>.<attr>}`
+            // per-`Ref` interpolation lower now keys off the same
+            // substrate-canonical per-`Ref` `:nome` / `:atributo`
+            // resolvers the `caixa-arch::invariants`
+            // `no-unresolved-refs` refusal-message Display
+            // interpolation and the substrate primitive's own
+            // `TeiaValue::to_hcl_string` per-`Ref`
+            // `${<tf>.<nome>.<attr>}` HCL emit path route through.
+            Value::String(format!("${{{tf}.{}.{}}}", r.nome(), r.atributo()))
         }
     }
 }

@@ -125,19 +125,23 @@ fn collect_ref_violations(
     match v {
         TeiaValue::Ref(r) => {
             // Read the per-`TeiaRefRepr` `:tipo` provider-qualified
-            // resource-type identity and the per-`TeiaRefRepr` `:nome`
-            // per-reference target-instance-identity through the lifted
-            // [`caixa_teia::TeiaRefRepr::tipo`] / [`caixa_teia
-            // ::TeiaRefRepr::nome`] scalar accessors rather than the
-            // raw `r.tipo` / `r.nome` field accesses — the declared-set
-            // `(tipo, nome)` lookup key + the `(ref <tipo> <nome> …)`
-            // refusal-message Display interpolation both key off the
-            // substrate-canonical per-`Ref` `:tipo` / `:nome`
-            // resolvers, so a future rebrand on either typed slot's
+            // resource-type identity, the per-`TeiaRefRepr` `:nome`
+            // per-reference target-instance-identity, and the
+            // per-`TeiaRefRepr` `:atributo` per-target
+            // attribute-projection through the lifted
+            // [`caixa_teia::TeiaRefRepr::tipo`] /
+            // [`caixa_teia::TeiaRefRepr::nome`] /
+            // [`caixa_teia::TeiaRefRepr::atributo`] scalar accessors
+            // rather than the raw `r.tipo` / `r.nome` / `r.atributo`
+            // field accesses — the declared-set `(tipo, nome)` lookup
+            // key + the `(ref <tipo> <nome> <attr>)` refusal-message
+            // Display interpolation both key off the substrate-
+            // canonical per-`Ref` `:tipo` / `:nome` / `:atributo`
+            // resolvers, so a future rebrand on any typed slot's
             // raw-slot reader lands at exactly one place and the
             // `no-unresolved-refs` gate stays lockstep with the
             // `caixa-pangea` `${<tf>.<nome>.<attr>}` Terraform-JSON
-            // emit path's `<tf>` / `<nome>` mints.
+            // emit path's `<tf>` / `<nome>` / `<attr>` mints.
             if !declared.contains(&(r.tipo().to_string(), r.nome().to_string())) {
                 out.push(Violation {
                     invariant_id: "no-unresolved-refs".into(),
@@ -148,7 +152,7 @@ fn collect_ref_violations(
                         "(ref {} {} {}) targets an undeclared instance",
                         r.tipo(),
                         r.nome(),
-                        r.atributo
+                        r.atributo()
                     ),
                 });
             }
