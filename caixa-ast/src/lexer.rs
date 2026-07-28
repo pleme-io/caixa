@@ -299,6 +299,17 @@ mod tests {
             .collect()
     }
 
+    // `3.14` below is the *expected lex output* for the input string
+    // `"3.14"` — a float-literal round-trip fixture, not an approximation
+    // of `f64::consts::PI` used in a computation. `clippy::approx_constant`
+    // is deny-by-default (correctness group), so without this scoped allow
+    // `cargo clippy` aborts this crate with a hard error and never reports
+    // the rest of the workspace at all. Substituting `PI` here would break
+    // the round-trip the assertion exists to prove.
+    #[allow(
+        clippy::approx_constant,
+        reason = "float-literal lex fixture, not a PI approximation"
+    )]
     #[test]
     fn basic_atoms() {
         assert_eq!(kinds("42"), vec![TokenKind::Int(42)]);

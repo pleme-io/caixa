@@ -6,8 +6,29 @@ on:
   workflow_dispatch: {}
 
 jobs:
+  # Until 2026-07-27 this workflow went straight to `build` and published
+  # three platform binaries plus a GitHub release with NOTHING verified
+  # first — and it was the only workflow GitHub was reading, because ci.yml
+  # sat in .github/workflows.disabled. So every tag since 2026-04-22 shipped
+  # artifacts from a 22-crate workspace that no gate had looked at. This job
+  # closes that: a tag cannot publish unless the same checks ci.yml runs pass.
+  gate:
+    name: verify before publishing
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: python3 tools/clippy_ratchet.py
+      - run: cargo test --workspace --all-features --all-targets
+      - run: cargo test --workspace --all-features --doc
+
   build:
     name: ${{ matrix.slug }}
+    needs: gate
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

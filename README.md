@@ -44,6 +44,11 @@ shape the `:kind` selects:
   limits, circuit breakers), placement strategy (single-node /
   replicated / sharded), and external entry. Rendered to: programs.yaml
   fan-out + Cilium NetworkPolicies + K8s Gateway/HTTPRoute.
+- **`Acao`** — a typed CI run: a `:ci` slot carrying a
+  `canteiro_types::CiRun` (typed CI nodes + their dependency edges). Runs
+  no code and owns no `lib`/`exe`/`servicos` surface. Rendered to:
+  nothing yet — `caixa-actions` is validate-only at M0, decomposing the
+  DAG and rejecting duplicate names, dangling deps, and cycles.
 
 The runtime substrate (the wasm-engine + wasm-operator + lareira-tatara-stack
 on Kubernetes, with Cilium for identity-based mesh authorization)
@@ -130,6 +135,9 @@ for the canonical demonstration.
 | [`caixa-lacre`](caixa-lacre/) | typed Lacre (BLAKE3 closure) types |
 | [`caixa-provedor`](caixa-provedor/) | provider abstraction layer |
 | [`caixa-theme`](caixa-theme/) | Nord palette for Lisp output |
+| [`caixa-tatara`](caixa-tatara/) | renderer: Aplicacao → tatara `Process` CR (ephemeral lifetime) |
+| [`caixa-actions`](caixa-actions/) | renderer: `:kind Acao` `:ci` slot → canteiro DAG (validate-only at M0) |
+| [`tools/`](tools/) | `clippy_ratchet.py` + `clippy-baseline.txt` — the CI clippy debt gate |
 | [`operator-chart/`](operator-chart/) | Helm chart deploying caixa-operator (CRDs + RBAC) |
 | [`operator-flux/`](operator-flux/) | FluxCD manifests for in-cluster caixa-operator reconciliation |
 | [`examples/`](examples/) | canonical example caixas (checkout-aplicacao, pangea-tatara-akeyless) |
