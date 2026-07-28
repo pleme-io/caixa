@@ -1,0 +1,61 @@
+# Replaces .github/workflows.disabled/ci.yml, which was parked 2026-04-22.
+# GitHub only ever reads .github/workflows/, so that file never ran once —
+# a 22-crate workspace took three months of commits with nothing checking.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  clippy:
+    name: cargo clippy (baseline ratchet)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # NOT `-D warnings`. When this gate was wired (2026-07-27) the workspace
+      # carried 805 pre-existing warnings, accumulated over the 96 days ci.yml
+      # spent in workflows.disabled; `-D warnings` would be red forever on
+      # debt that predates the gate — which gets muted,
+      # and a muted gate is no better than the parked one it replaces. The
+      # ratchet fails only on NEW warnings, and on any error-level
+      # (deny-by-default) lint, which is never baselined. Full rationale and
+      # the honest statement of what it does not catch: tools/clippy_ratchet.py
+      - run: python3 tools/clippy_ratchet.py
+
+  test:
+    name: cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Two invocations, deliberately. `--all-targets` EXCLUDES doctests, so
+      # a single `--all-targets` run silently skips them and 3048 green tests
+      # say nothing about the doc examples. Spelling both out means neither
+      # can be lost to a future flag edit.
+      - run: cargo test --workspace --all-features --all-targets
+      - run: cargo test --workspace --all-features --doc

@@ -11,7 +11,7 @@ generate every cluster artifact mechanically. The companion CLI is
 [`caixa-mesh`](caixa-mesh/)) emit Helm charts, FluxCD bundles, and
 mesh primitives respectively.
 
-## ★★ The five typed kinds
+## ★★ The six typed kinds
 
 `:kind <Kind>` selects the runtime contract. Every caixa is exactly one of:
 
@@ -22,6 +22,13 @@ mesh primitives respectively.
 | `Servico` | as a wasm component | `servicos/<nome>.computeunit.yaml` + source | OCI image + ComputeUnit CR + `lareira-<nome>` Helm chart |
 | `Supervisor` | nothing — supervises children | `:children` + `:estrategia` | hierarchical reconciliation |
 | `Aplicacao` | nothing — composes Servicos | `:membros` + `:contratos` + `:politicas` + `:placement` + `:entrada` | programs.yaml fan-out + Cilium NetworkPolicies + Gateway/HTTPRoute |
+| `Acao` | nothing — owns no code surface | `:ci` (a `canteiro_types::CiRun` — typed CI nodes + dependency edges) | `caixa-actions` (**validate-only** today; no artifact is emitted yet) |
+
+> `Acao` is the source of truth for the count: `CaixaKind` in
+> [`caixa-core/src/kind.rs`](caixa-core/src/kind.rs) has six variants.
+> This heading read "five typed kinds" until 2026-07-27 — `Acao` landed in
+> commit `1718c61` and the table was never updated, which is precisely the
+> drift a repo accumulates when nothing checks it.
 
 ## ★ M2 typed slots (every Servico can declare)
 
@@ -82,8 +89,49 @@ in [`theory/MESH-COMPOSITION.md`](https://github.com/pleme-io/theory/blob/main/M
 | `caixa-lacre` | typed Lacre (BLAKE3 closure) types |
 | `caixa-provedor` | provider abstraction |
 | `caixa-theme` | Nord palette for Lisp output |
+| `caixa-tatara` | renderer: Aplicacao → tatara `Process` CR (`intent.aplicacao` + `lifetime.ephemeral`). Also the flake's default `member`. |
+| `caixa-actions` | renderer: `:kind Acao`'s `:ci` slot → `canteiro_types::decompose`. **Validate-only at M0** — emits no GitHub Actions workflow. |
 | `operator-chart/` | Helm chart that deploys `caixa-operator` (CRDs + RBAC) |
 | `operator-flux/` | FluxCD manifests for in-cluster `caixa-operator` reconciliation |
+
+## ★★ This repo's own CI — and the clippy debt ratchet
+
+Two workflows, both live: `ci.yml` (fmt · clippy-ratchet · test, on PR and
+push-to-main) and `release.yml` (tag-triggered, now gated on the same checks
+before it publishes anything).
+
+**History worth knowing, because it explains the shape.** `ci.yml` sat in
+`.github/workflows.disabled/` from 2026-04-22 to 2026-07-27. GitHub only reads
+`.github/workflows/`, so it never ran once — 96 days of commits against a
+22-crate workspace with nothing checking, while `release.yml` kept publishing
+binaries ungated. Measured on restore: `cargo fmt` clean, **3048 tests green**,
+**805 clippy warnings**, and one deny-by-default `clippy::approx_constant` that
+was aborting `cargo clippy` outright so it could not even finish reporting.
+
+| gate | command | shape |
+|---|---|---|
+| fmt | `cargo fmt --all -- --check` | strict — it was already clean |
+| test | `cargo test --workspace --all-features --all-targets` **and** `--doc` | strict — both spelled out because `--all-targets` *excludes* doctests |
+| clippy | `python3 tools/clippy_ratchet.py` | **baseline ratchet**, not `-D warnings` |
+
+**Working with the ratchet.** `tools/clippy-baseline.txt` enumerates every
+pre-existing warning as `<count>\t<lint>\t<file>`. New warnings fail; baselined
+ones do not; **error-level lints are never baselined** and always fail, because
+a deny lint aborts its crate and blinds the gate to everything downstream.
+Fixed a batch? Run `python3 tools/clippy_ratchet.py --update-baseline` to shrink
+the file — the gate reports rows that dropped so debt cannot be silently
+re-permitted. The goal is an empty baseline. Never relax a lint level to fit.
+The one thing it does not catch, stated honestly: fixing one instance of a lint
+and adding another of the *same* lint in the *same* file leaves the count
+unchanged. That is the accepted cost of not keying on line numbers, which would
+false-positive on every insertion.
+
+**Deliberately not wired: the `nix build` job.** The parked ci.yml also carried
+`nix flake check --no-build` + `nix build .#default`. `nix flake check` was run
+locally on 2026-07-27 and **fails** (`shikumi-3913d35.drv is not valid`, plus a
+devenv assertion). Wiring a job known to be red would recreate the defect this
+whole change removes, so it is left out until the flake evaluates. That is a
+real, open gap — not a decision that it does not matter.
 
 ## ★ Reusable CI workflows (in pleme-io/substrate)
 
