@@ -148,19 +148,36 @@ fn dep_into_ref(d: &Dep) -> DepRef {
     DepRef {
         nome: d.nome().to_owned(),
         versao: d.versao_requirement().to_owned(),
+        // Route the per-`DepSource::Git`-arm `git_ref` sole-set-pin
+        // projection through the lifted [`DepSource::sole_pin`]
+        // substrate accessor rather than the raw
+        // `rev.clone().or(tag.clone()).or(branch.clone())` cascade —
+        // the two pre-lift consumers of the sole-set-pin projection
+        // (this crate's `dep_into_ref` `CaixaSource.git_ref` fill,
+        // caixa-resolver's `fetch_git` `git checkout` target) now key
+        // off exactly one typed dispatch on the substrate primitive,
+        // so any future rebrand on the precedence axis (a `:commit`
+        // pin peer once signed-commit-verification lands, a `:ref` pin
+        // the M4 operator resolves per-cluster, a promotion of the
+        // plain `Option<String>` pins to a typed `GitPin` newtype)
+        // migrates as a single caixa-core edit rather than a
+        // coordinated rewrite of both consumer sites. The
+        // `.unwrap_or_else(|| "main".into())` fallback remains here
+        // because caixa-crd's `git_ref` fill is required (the CRD
+        // schema declares `git_ref: String` — not `Option<String>`);
+        // the fallback fires on the unpinned-git shape
+        // [`DepSource::default_github`] materializes (which
+        // caixa-core's [`DepSource::validate`] rejects), so an
+        // in-workspace validated `Dep` never lands on the fallback,
+        // but the CRD round-trip via `dep_from_ref` emits the shape
+        // with `tag: None, rev: Some(git_ref), branch: None` and
+        // survives the round-trip byte-for-byte.
         source: d.fonte().and_then(|s| match s {
-            DepSource::Git {
-                repo,
-                tag,
-                rev,
-                branch,
-            } => Some(CaixaSource {
+            DepSource::Git { repo, .. } => Some(CaixaSource {
                 repo: repo.clone(),
-                git_ref: rev
-                    .clone()
-                    .or(tag.clone())
-                    .or(branch.clone())
-                    .unwrap_or_else(|| "main".to_string()),
+                git_ref: s
+                    .sole_pin()
+                    .map_or_else(|| "main".to_string(), str::to_owned),
             }),
             DepSource::Path { caminho } => Some(CaixaSource {
                 repo: format!("path:{caminho}"),

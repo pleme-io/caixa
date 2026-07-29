@@ -167,20 +167,22 @@ fn fetch_dep(
 
     match &fonte {
         DepSource::Path { caminho } => fetch_path(dep, caminho),
-        DepSource::Git {
-            repo,
-            tag,
-            rev,
-            branch,
-        } => fetch_git(
-            dep,
-            repo,
-            tag.as_deref(),
-            rev.as_deref(),
-            branch.as_deref(),
-            cache,
-            fonte.clone(),
-        ),
+        // Route the per-`DepSource::Git`-arm sole-set-pin projection
+        // through the lifted [`DepSource::sole_pin`] substrate
+        // accessor rather than passing broken-out `tag`/`rev`/`branch`
+        // `Option<&str>` triples down for `fetch_git` to re-inline the
+        // `rev.or(tag).or(branch)` cascade on — the two pre-lift
+        // consumers of the sole-set-pin projection (this crate's
+        // `fetch_git` `git checkout` target, caixa-crd's
+        // `dep_into_ref` `CaixaSource.git_ref` fill) now key off
+        // exactly one typed dispatch on the substrate primitive, so
+        // any future rebrand on the precedence axis (a `:commit` pin
+        // peer once signed-commit-verification lands, a `:ref` pin the
+        // M4 operator resolves per-cluster, a promotion of the plain
+        // `Option<String>` pins to a typed `GitPin` newtype) migrates
+        // as a single caixa-core edit rather than a coordinated
+        // rewrite of both consumer sites.
+        DepSource::Git { repo, .. } => fetch_git(dep, repo, fonte.sole_pin(), cache, fonte.clone()),
     }
 }
 
@@ -228,18 +230,13 @@ fn fetch_path(dep: &Dep, caminho: &str) -> Result<FetchedDep, ResolveError> {
 fn fetch_git(
     dep: &Dep,
     repo: &str,
-    tag: Option<&str>,
-    rev: Option<&str>,
-    branch: Option<&str>,
+    sole_pin: Option<&str>,
     cache: &CacheDir,
     original_fonte: DepSource,
 ) -> Result<FetchedDep, ResolveError> {
-    let gitref = rev
-        .or(tag)
-        .or(branch)
-        .ok_or_else(|| ResolveError::MissingPin {
-            nome: dep.nome().to_string(),
-        })?;
+    let gitref = sole_pin.ok_or_else(|| ResolveError::MissingPin {
+        nome: dep.nome().to_string(),
+    })?;
     let full_url = expand_shorthand(repo);
     let key_bytes = format!("{full_url}#{gitref}");
     let key = hash_bytes(key_bytes.as_bytes());
