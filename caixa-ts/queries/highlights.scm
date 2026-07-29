@@ -6,6 +6,7 @@
 
 ; ── Comments + literals ───────────────────────────────────────────────
 
+(shebang)      @keyword.directive
 (line_comment) @comment
 (string)       @string
 (number)       @number
@@ -51,6 +52,10 @@
 ",@" @operator
 "("  @punctuation.bracket
 ")"  @punctuation.bracket
+"{"  @punctuation.bracket
+"}"  @punctuation.bracket
+"["  @punctuation.bracket
+"]"  @punctuation.bracket
 
 ; ── Fall-through for other identifiers ────────────────────────────────
 
