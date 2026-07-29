@@ -41,14 +41,43 @@ pub fn caixa_into_cr(caixa: &Caixa, source: CaixaSource) -> CaixaCr {
         // `.versao.clone()` raw-field-access `String`-carry axis in the
         // K8s-CR conversion crate.
         versao: caixa.versao().to_owned(),
-        kind: format!("{:?}", caixa.kind),
+        // Route the outer-`Caixa` `:kind` closed-set discriminator
+        // through the typed [`caixa_core::Caixa::kind`] `CaixaKind`-return
+        // accessor so the `CaixaSpec.kind` `String`-carry projection —
+        // the axis every `caixa_from_cr` reverse-lookup `match` arm keys
+        // off — routes through one typed dispatch. Any future extension
+        // of the accessor's semantics (a canonicalizing rename overlay,
+        // a per-`Acao` roll-out gate the M4 CR materializer resolves at
+        // admission time, a promotion of `CaixaKind` through a
+        // discriminant-carrying newtype) reaches this emit site by
+        // construction. Peer of the sibling per-`Caixa` `:nome` /
+        // `:versao` converges above on the same axis family; closes the
+        // per-`Caixa` `:kind` universal-axis raw-field-access site.
+        kind: format!("{:?}", caixa.kind()),
         source,
         reconcile: Some(ReconcilePolicy {
             interval_seconds: Some(300),
             auto_resolve: false,
             include_dev: false,
         }),
-        deps: caixa.deps.iter().map(dep_into_ref).collect(),
+        // Route the outer-`Caixa` `:deps` `Vec<Dep>` slot through the
+        // typed [`caixa_core::Caixa::deps`] `&[Dep]`-return accessor so
+        // the `CaixaSpec.deps` per-entry fan-out — the axis every
+        // `caixa_from_cr` reverse projection re-lifts through
+        // `dep_from_ref` — routes through one typed dispatch on the
+        // substrate primitive. Any future extension of the accessor's
+        // semantics (a per-cluster canary-dep overlay the operator pins
+        // through a future `:placement`-scoped slot, a lacre-projected
+        // concrete-source rewrite, an M4 dep-alias table the CR
+        // materializer resolves per-CR) reaches this fan-out surface
+        // through exactly one caixa-core edit rather than a coordinated
+        // rewrite. Peer of the sibling per-`:deps` entry accessor
+        // converges in `dep_into_ref` on the inner per-entry axes, and
+        // of the outer top-level [`caixa_core::Caixa::deps`] (5ce1b94)
+        // caixa-resolver converge; closes the last unlifted per-`Caixa`
+        // `:deps` universal-axis raw-field-access site in the K8s-CR
+        // conversion crate.
+        deps: caixa.deps().iter().map(dep_into_ref).collect(),
     };
     CaixaCr::new(caixa.nome(), spec)
 }
@@ -394,5 +423,190 @@ mod tests {
         assert_eq!(r.versao, none.versao_requirement());
         assert!(none.fonte().is_none());
         assert!(r.source.is_none());
+    }
+
+    /// Pin that the outer-`Caixa` `:kind` closed-set discriminator
+    /// projection in [`caixa_into_cr`] — the `CaixaSpec.kind` `String`-
+    /// carry emit-site every `caixa_from_cr` reverse `match` arm keys
+    /// off — routes through the typed [`Caixa::kind`] `CaixaKind`-return
+    /// accessor rather than the raw `.kind` field access. Byte-equal
+    /// today (accessor returns `self.kind`); catches any future emit-
+    /// site regression that reintroduces a raw field read on any of the
+    /// six [`CaixaKind`] arms the round-trip `caixa_from_cr` reverse
+    /// lookup consumes. Peer of the sibling
+    /// `caixa_into_cr_nome_routes_through_caixa_nome_accessor` /
+    /// `caixa_into_cr_versao_routes_through_caixa_versao_accessor` pins
+    /// on the outer-`Caixa` altitude — same "accessor is the sole read
+    /// path across every arm" discipline extended onto the last
+    /// unlifted per-`Caixa` universal-axis raw-field-access site in the
+    /// K8s-CR conversion crate.
+    #[test]
+    fn caixa_into_cr_kind_routes_through_caixa_kind_accessor() {
+        // Sweep every [`CaixaKind`] arm the round-trip reverse lookup
+        // consumes — a future silent detour that re-inlined `caixa.kind`
+        // on any arm's format-projected `String` byte-carry would
+        // surface here as a byte-equal miss (the reverse `caixa_from_cr`
+        // `match` arm would silently fall through to the
+        // `_ => CaixaKind::Biblioteca` default arm without the accessor-
+        // routed emit-site the six-arm accept-set requires).
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let c = Caixa {
+                nome: "demo".into(),
+                versao: "0.1.0".into(),
+                kind,
+                edicao: None,
+                descricao: None,
+                repositorio: None,
+                licenca: None,
+                autores: vec![],
+                etiquetas: vec![],
+                deps: vec![],
+                deps_dev: vec![],
+                exe: vec![],
+                bibliotecas: vec![],
+                servicos: vec![],
+                limits: None,
+                behavior: None,
+                upgrade_from: vec![],
+                estrategia: None,
+                max_restarts: None,
+                restart_window: None,
+                children: vec![],
+                membros: vec![],
+                contratos: vec![],
+                politicas: None,
+                placement: None,
+                entrada: None,
+                ci: None,
+            };
+            // `caixa_into_cr` reads only the six per-`Caixa` axes it
+            // projects (`nome`, `versao`, `kind`, `deps`, plus the
+            // caller-supplied `source`); no per-arm layout invariant
+            // fires at this altitude, so the discriminant sweep needs
+            // no per-arm layout surface tweak.
+            let cr = caixa_into_cr(
+                &c,
+                CaixaSource {
+                    repo: "github:pleme-io/demo".into(),
+                    git_ref: "v0.1.0".into(),
+                },
+            );
+            assert_eq!(
+                cr.spec.kind,
+                format!("{:?}", c.kind()),
+                "CaixaSpec.kind emit-site must byte-equal the typed \
+                 `Caixa::kind` accessor's `Debug` projection — a \
+                 regression that re-inlines `caixa.kind` at the emit \
+                 site silently splits the per-arm reverse `caixa_from_cr` \
+                 lookup input from the accessor-routed source of truth"
+            );
+        }
+    }
+
+    /// Pin that the outer-`Caixa` `:deps` per-entry fan-out in
+    /// [`caixa_into_cr`] — the `CaixaSpec.deps` `Vec<DepRef>` emit-site
+    /// every `caixa_from_cr` reverse projection re-lifts through
+    /// `dep_from_ref` — routes through the typed [`Caixa::deps`]
+    /// `&[Dep]`-return accessor rather than the raw `.deps` field
+    /// access. Byte-equal today (accessor returns `self.deps.as_slice()`);
+    /// catches any future emit-site regression that reintroduces a raw
+    /// field read on the fan-out traversal head. Peer of the sibling
+    /// `dep_into_ref_routes_through_dep_accessors` per-entry pin on the
+    /// inner `Dep::nome` / `Dep::versao_requirement` / `Dep::fonte`
+    /// axes, of the outer top-level
+    /// `caixa_into_cr_nome_routes_through_caixa_nome_accessor` /
+    /// `caixa_into_cr_versao_routes_through_caixa_versao_accessor`
+    /// pins on the outer-`Caixa` altitude, and of the sibling
+    /// [`caixa_core::Caixa::deps`] (5ce1b94) caixa-resolver converge on
+    /// the same axis in the sibling resolver crate.
+    #[test]
+    fn caixa_into_cr_deps_routes_through_caixa_deps_accessor() {
+        // Fixture: two `:deps` entries, one Git-source arm and one
+        // author-omitted `:fonte` arm — the per-entry fan-out must
+        // preserve both order (a `Vec<DepRef>` is order-sensitive; the
+        // reverse `caixa_from_cr` projection walks it index-by-index)
+        // and byte-content across every axis the accessor exposes. A
+        // future silent detour that re-inlined `caixa.deps.iter()` at
+        // the fan-out head would still satisfy the round-trip pin
+        // today (accessor is byte-equal to the raw field), but any
+        // future accessor extension (per-cluster canary overlay,
+        // lacre-projected concrete-source rewrite, M4 dep-alias table)
+        // would silently split the fan-out from the accessor-routed
+        // source of truth.
+        let c = Caixa {
+            nome: "demo".into(),
+            versao: "0.1.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![
+                Dep {
+                    nome: "caixa-teia".into(),
+                    versao: "^0.1".into(),
+                    fonte: Some(DepSource::Git {
+                        repo: "github:pleme-io/caixa-teia".into(),
+                        tag: Some("v0.1.0".into()),
+                        rev: None,
+                        branch: None,
+                    }),
+                    opcional: false,
+                    caracteristicas: vec![],
+                },
+                Dep::simple("caixa-lacre", "^0.2"),
+            ],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+            ci: None,
+        };
+        let cr = caixa_into_cr(
+            &c,
+            CaixaSource {
+                repo: "github:pleme-io/demo".into(),
+                git_ref: "v0.1.0".into(),
+            },
+        );
+        // Fan-out length matches the accessor-projected slice length.
+        assert_eq!(
+            cr.spec.deps.len(),
+            c.deps().len(),
+            "CaixaSpec.deps fan-out length must byte-equal the typed \
+             `Caixa::deps` accessor's slice length — a regression that \
+             re-inlines `caixa.deps.iter()` at the fan-out head silently \
+             splits the fan-out sizing from the accessor-routed source \
+             of truth"
+        );
+        // Per-entry projection round-trips through the accessor at both
+        // ends: the emit-side `DepRef.nome` / `DepRef.versao` byte-strings
+        // agree with the accessor-routed per-entry `Dep::nome()` /
+        // `Dep::versao_requirement()` projections.
+        for (dep, dep_ref) in c.deps().iter().zip(cr.spec.deps.iter()) {
+            assert_eq!(dep_ref.nome, dep.nome());
+            assert_eq!(dep_ref.versao, dep.versao_requirement());
+        }
     }
 }
