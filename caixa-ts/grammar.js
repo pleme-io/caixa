@@ -76,7 +76,18 @@ module.exports = grammar({
     // and dotted names appear throughout the corpus.
     keyword: $ => /:[A-Za-z_+\-*/=<>?!%&~.][A-Za-z0-9_+\-*/=<>?!%&~.]*/,
 
-    symbol: $ => /[A-Za-z_+\-*/=<>?!%&~.][A-Za-z0-9_+\-*/=<>?!%&~.]*/,
+    // `:` is legal INSIDE a symbol but never leading — that one asymmetry is
+    // what separates a namespaced call `(bm:log …)` from a keyword argument
+    // `:log`. 1382 corpus call sites across 29 prefixes (bm, ferrite,
+    // handoff, semver, cartorio, gate, supercache, …) use the namespaced
+    // form, and without an internal `:` they lexed as symbol(bm) +
+    // keyword(:log) — two tokens, so the FUNCTION NAME was painted as a
+    // keyword-argument. It parsed cleanly, which is why corpus coverage
+    // never caught it; only the colours were wrong. tree-sitter's
+    // longest-match then prefers the single 6-char symbol over the 2-char
+    // one, and a bare `:log` still cannot match `symbol` because the first
+    // character class excludes `:`. This also admits `Health::harmed_since`.
+    symbol: $ => /[A-Za-z_+\-*/=<>?!%&~.][A-Za-z0-9_+\-*/=<>?!%&~.:]*/,
 
     // MUST be token(). Built from separate sub-rules, tree-sitter lets
     // `extras` interleave BETWEEN them — so a `;` inside a string literal
