@@ -92,6 +92,94 @@ impl DepSource {
         }
     }
 
+    /// Substrate-canonical per-`:fonte` sole-set git-pin scalar accessor
+    /// every consumer that reads "which single git ref does this source
+    /// resolve to?" keys off — returns the author-declared `:tag` /
+    /// `:rev` / `:branch` byte-string verbatim as an `Option<&str>`,
+    /// borrowed from the typed slot's own `Option<String>` storage; `None`
+    /// on [`Self::Path`] (a path source carries no git-ref) and on a
+    /// [`Self::Git`] variant whose `tag`, `rev`, and `branch` are all
+    /// `None` (the [`Self::default_github`] shorthand shape the resolver
+    /// materializes when the author omits `:fonte` — rejected by
+    /// [`Self::validate`], but the accessor's return is defined on this
+    /// arm too so pre-validate consumers reach for the same typed dispatch
+    /// as post-validate ones).
+    ///
+    /// **Precedence: rev > tag > branch.** The canonical precedence every
+    /// per-`:fonte` git-ref consumer already applies: caixa-resolver's
+    /// per-fetch `git checkout <ref>` reads through the same
+    /// `rev.or(tag).or(branch)` cascade at caixa-resolver/src/resolve.rs,
+    /// and caixa-crd's `dep_into_ref` `CaixaSource.git_ref` fill reads
+    /// through the same cascade at caixa-crd/src/conversion.rs. The
+    /// [`Self::validate`] gate enforces "exactly one pin set" — under
+    /// that invariant every accepted [`Self::Git`] carries exactly one
+    /// non-`None` pin and the precedence is unobservable, but the
+    /// precedence remains defined for pre-validate consumers (the
+    /// resolver's `MissingPin` diagnostic path, the caixa-crd
+    /// round-trip's default `"main"` fallback the author never sees a
+    /// diagnostic on) and defense-in-depth for a hypothetical future
+    /// state where multiple pins survive the gate. The precedence is
+    /// **rev before tag** because `:rev` (a git commit OID) is the
+    /// reproducibility-strongest identifier — an OID resolves to exactly
+    /// one commit regardless of which refname points at it, whereas
+    /// `:tag` and `:branch` are refnames the remote can silently move
+    /// (a tag re-push, a branch head advance); the resolver's freeze
+    /// step at fetch time promotes the resolved commit to `:rev` for
+    /// exactly this reason. **Tag before branch** because `:tag` is
+    /// conventionally immutable (a release tag) whereas `:branch` is
+    /// conventionally mutable (a tracking ref) — a caixa carrying both
+    /// a release tag and a tracking branch reads as "prefer the release
+    /// pin, fall through to the tracking pin only if the release is
+    /// missing". The cascade order also matches the byte-order every
+    /// per-`:tag`/`:rev`/`:branch` diagnostic tuple this crate emits
+    /// (`(":tag", tag), (":rev", rev), (":branch", branch)` — see
+    /// [`Self::validate`]'s `pins` array).
+    ///
+    /// Prior to this lift the "sole set pin" projection sat twice in the
+    /// workspace — inline at caixa-resolver's `fetch_git` (`let gitref =
+    /// rev.or(tag).or(branch).ok_or_else(|| ResolveError::MissingPin
+    /// { … })?;`) and at caixa-crd's `dep_into_ref`
+    /// (`git_ref: rev.clone().or(tag.clone()).or(branch.clone())
+    /// .unwrap_or_else(|| "main".to_string())`) — two open-coded copies
+    /// of the same precedence cascade with no compile-time link back to
+    /// the typed slot. A future extension of the pin axis to a richer
+    /// author surface (a `:commit` pin peer of `:rev` once the substrate
+    /// grows a signed-commit-verification pin, a `:ref` pin the M4
+    /// substrate operator resolves per-cluster ahead of fetch, a
+    /// promotion of the plain `Option<String>` pins to a typed
+    /// `GitPin::{Rev(Oid), Tag(RefName), Branch(RefName)}` newtype
+    /// once the sibling [`crate::render::is_git_oid`] /
+    /// [`crate::render::is_git_ref_name`] gates land as typed
+    /// constructors) would have had to be threaded through both
+    /// open-coded copies in lockstep or the resolver's `git checkout`
+    /// target would silently disagree with the CRD's `git_ref` fill —
+    /// an author's `(:fonte (:tipo git :repo "…" :rev "deadbeef" :tag
+    /// "v1"))` would ship with the resolver checking out `deadbeef`
+    /// while the CRD round-trip re-emitted a Dep pointing at `v1`, one
+    /// lacre closure disagreeing with the emitted K8s CR the operator
+    /// reads. Lifting the resolution to a typed method on the substrate
+    /// primitive means both downstream consumers reach for exactly one
+    /// typed dispatch — the resolver's accept-set migrates as a unit on
+    /// any future pin-axis addition.
+    ///
+    /// Peer of the sibling outer-`Dep` [`Dep::fonte`] (d65d1bf)
+    /// `Option<&DepSource>` composite-reference accessor on the outer-
+    /// `Dep` `:fonte`-slot axis — extended one nesting level down onto
+    /// the per-[`Self::Git`]-variant sole-set-pin projection axis every
+    /// git-fetching consumer runs after the outer `:fonte` slot resolves
+    /// to a [`Self::Git`] shape. Same "one typed dispatch on the
+    /// substrate primitive, thin projections at each consumer" discipline
+    /// the outer accessor family already carries.
+    #[must_use]
+    pub fn sole_pin(&self) -> Option<&str> {
+        match self {
+            Self::Git {
+                tag, rev, branch, ..
+            } => rev.as_deref().or(tag.as_deref()).or(branch.as_deref()),
+            Self::Path { .. } => None,
+        }
+    }
+
     /// Validate the `:fonte` value-shape: every author-surface
     /// `:fonte (:tipo git …)` must carry a non-empty `:repo` and
     /// exactly one of `:tag` / `:rev` / `:branch` set to a non-empty
@@ -15331,6 +15419,150 @@ mod tests {
                  the storage-side default-fill the [`Dep::simple`] / \
                  [`Dep::git`] constructor pair carries",
             );
+        }
+    }
+
+    // ── DepSource::sole_pin — sole-set git-pin accessor ─────────────────
+
+    #[test]
+    fn sole_pin_returns_none_for_path_source() {
+        // A path source carries no git-ref, so `sole_pin()` returns
+        // `None` structurally — the sibling arm every git-fetching
+        // consumer partitions off before reaching for a git-ref. Pins
+        // the Path-arm branch of the accessor against a future silent
+        // detour that treats a `Self::Path` as an unpinned-git source
+        // and returns the wrong "no pin" signal (e.g. the empty string,
+        // or a hard-coded `Some("HEAD")` matching the caixa-crd
+        // path-arm `git_ref` fill).
+        let s = DepSource::Path {
+            caminho: "../local-caixa".to_string(),
+        };
+        assert_eq!(s.sole_pin(), None);
+    }
+
+    #[test]
+    fn sole_pin_returns_none_for_unpinned_git_source() {
+        // The [`DepSource::default_github`] shorthand shape carries no
+        // pin — every `tag`/`rev`/`branch` is `None`, and `sole_pin()`
+        // returns `None`. This is the shape caixa-resolver's `fetch_dep`
+        // materializes when the author omits `:fonte` entirely, then
+        // hands to `fetch_git` which raises `ResolveError::MissingPin`
+        // on the `None` arm — the accessor's return matches the arm
+        // the resolver's diagnostic keys off.
+        let s = DepSource::default_github("pleme-io", "caixa-teia");
+        assert_eq!(s.sole_pin(), None);
+    }
+
+    #[test]
+    fn sole_pin_returns_rev_when_only_rev_is_set() {
+        let s = DepSource::Git {
+            repo: "github:o/x".into(),
+            tag: None,
+            rev: Some("deadbeefcafebabe1234567890abcdef12345678".into()),
+            branch: None,
+        };
+        assert_eq!(
+            s.sole_pin(),
+            Some("deadbeefcafebabe1234567890abcdef12345678")
+        );
+    }
+
+    #[test]
+    fn sole_pin_returns_tag_when_only_tag_is_set() {
+        let s = DepSource::Git {
+            repo: "github:o/x".into(),
+            tag: Some("v0.1.0".into()),
+            rev: None,
+            branch: None,
+        };
+        assert_eq!(s.sole_pin(), Some("v0.1.0"));
+    }
+
+    #[test]
+    fn sole_pin_returns_branch_when_only_branch_is_set() {
+        let s = DepSource::Git {
+            repo: "github:o/x".into(),
+            tag: None,
+            rev: None,
+            branch: Some("main".into()),
+        };
+        assert_eq!(s.sole_pin(), Some("main"));
+    }
+
+    #[test]
+    fn sole_pin_precedence_rev_beats_tag_and_branch() {
+        // Precedence: rev > tag > branch. Validate() rejects
+        // multiple-pin shapes, but the accessor's precedence is defined
+        // for pre-validate consumers (the resolver's `MissingPin`
+        // diagnostic path, the caixa-crd round-trip's default `"main"`
+        // fallback) and as defense-in-depth if the gate is ever
+        // bypassed. Pins the same precedence caixa-resolver's
+        // `fetch_git` and caixa-crd's `dep_into_ref` already apply
+        // inline.
+        let s = DepSource::Git {
+            repo: "github:o/x".into(),
+            tag: Some("v1".into()),
+            rev: Some("deadbeefcafebabe1234567890abcdef12345678".into()),
+            branch: Some("main".into()),
+        };
+        assert_eq!(
+            s.sole_pin(),
+            Some("deadbeefcafebabe1234567890abcdef12345678")
+        );
+    }
+
+    #[test]
+    fn sole_pin_precedence_tag_beats_branch_when_no_rev() {
+        let s = DepSource::Git {
+            repo: "github:o/x".into(),
+            tag: Some("v1".into()),
+            rev: None,
+            branch: Some("main".into()),
+        };
+        assert_eq!(s.sole_pin(), Some("v1"));
+    }
+
+    #[test]
+    fn sole_pin_byte_equals_inline_rev_or_tag_or_branch_cascade() {
+        // Fail-before-pass-after byte-parity pin: the substrate accessor
+        // must return byte-identical to the inline
+        // `rev.as_deref().or(tag.as_deref()).or(branch.as_deref())`
+        // cascade both caixa-resolver's `fetch_git` and caixa-crd's
+        // `dep_into_ref` open-coded pre-lift. Trips at caixa-core build
+        // time if the accessor's precedence silently drifts from the
+        // consumer-side cascade — the exact drift this lift converges
+        // to one substrate primitive to close structurally.
+        //
+        // Iterates through the 2^3 = 8 combinations of (tag, rev,
+        // branch) each-either-`None`-or-`Some`, so every arm of the
+        // precedence cascade lands under the pin. `validate()` refuses
+        // the 4 multi-pin combinations, but the accessor's return is
+        // defined on all 8.
+        let vals = [Some("R".to_string()), None];
+        for tag in &vals {
+            for rev in &vals {
+                for branch in &vals {
+                    let s = DepSource::Git {
+                        repo: "github:o/x".into(),
+                        tag: tag.clone(),
+                        rev: rev.clone(),
+                        branch: branch.clone(),
+                    };
+                    // The exact inline cascade the two pre-lift
+                    // consumer sites hand-rolled, byte-for-byte.
+                    let expected = rev.as_deref().or(tag.as_deref()).or(branch.as_deref());
+                    assert_eq!(
+                        s.sole_pin(),
+                        expected,
+                        "sole_pin() must byte-equal \
+                         rev.or(tag).or(branch) for \
+                         (tag={tag:?}, rev={rev:?}, branch={branch:?}) — \
+                         a drift would silently split caixa-resolver's \
+                         fetch_git checkout target from caixa-crd's \
+                         dep_into_ref git_ref fill",
+                    );
+                }
+            }
         }
     }
 }
