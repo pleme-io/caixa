@@ -532,6 +532,122 @@ where
     Ok(())
 }
 
+/// Compound per-Aplicacao entry gate: the canonical three-line
+/// `require_kind(caixa, CaixaKind::Aplicacao)? +
+/// caixa.aplicacao_view().expect(…) + spec.validate()?` prelude every
+/// per-Aplicacao `caixa-<target>` renderer runs at its entry-point,
+/// collapsed onto one call the caller reads as intent ("gate the input
+/// on the V0 Aplicacao shape and hand back a validated
+/// [`crate::aplicacao::AplicacaoSpec`]") rather than three hand-spelled
+/// steps.
+///
+/// The cascade names one contract with three axes: `:kind` is
+/// `Aplicacao` (this is a per-Aplicacao renderer's input, not a
+/// `Biblioteca` / `Binario` / `Servico` / `Supervisor` / `Acao`
+/// mis-hand-off), the [`Caixa::aplicacao_view`] fold-in succeeds (which
+/// [`require_kind`]-on-`Aplicacao` guarantees per its own doc pin —
+/// [`Caixa::aplicacao_view`] returns `Some` iff `caixa.kind().is_aplicacao()`),
+/// *and* the folded [`crate::aplicacao::AplicacaoSpec`] passes its own
+/// M3 typed-shape validation ([`crate::aplicacao::AplicacaoSpec::validate`]:
+/// non-empty `:membros`, DNS-1123 member names, semver-valid `:versao`
+/// requirements, `:contratos` referencing only declared members,
+/// `:placement Sharded` carrying `:shard-key`, `:placement`
+/// `Replicated`/`SingleNode` carrying `:clusters`, and so on across
+/// every M3 typed slot). All three axes must hold together — a
+/// `:kind Servico` caixa carrying a well-formed `:membros`/`:contratos`
+/// stanza (the manifest field's documented "silently ignored" case)
+/// and a `:kind Aplicacao` caixa with an empty `:membros` are equally
+/// invalid at every per-Aplicacao renderer's entry-point — so lifting
+/// the three-arm cascade onto one helper names the compound contract
+/// at each call site the way the sibling per-Servico
+/// [`require_v0_servico_shape`] compound gate already names the
+/// two-axis compound V0 Servico-shape contract.
+///
+/// Three production call sites in `caixa-mesh` previously funneled
+/// through the crate-local `typed_view` wrapper which itself carried
+/// the three-line cascade inline:
+///
+///   * `caixa-mesh`'s [`programs_for_aplicacao`][mesh-programs] (the
+///     `lareira-fleet-programs`-aggregator programs.yaml fan-out
+///     emitter);
+///   * `caixa-mesh`'s [`cilium_network_policies`][mesh-cnp] (the
+///     per-`(:de, :para)` L7 Cilium CRD emitter);
+///   * `caixa-mesh`'s [`gateway_routes`][mesh-gw] (the per-`:entrada`
+///     K8s Gateway API v1 Gateway + HTTPRoute emitter).
+///
+/// The crate-local `caixa_mesh::typed_view` wrapper now reads as a
+/// one-liner `caixa_core::require_aplicacao_view::<Error>(caixa)`. A
+/// future per-Aplicacao renderer (`caixa-tatara`'s per-Aplicacao
+/// [`process_for_aplicacao`][tatara] downstream axes when they grow a
+/// spec-consuming validate arm, the deferred
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission
+/// webhook, a future `feira validate --aplicacao` per-caixa admission
+/// verb) gets the compound three-arm gate for free with one call,
+/// instead of re-inlining the three-line cascade — and a future change
+/// to the V0 Aplicacao contract (e.g. adding a `:kind Aplicacao`-only
+/// `:membros`-cross-cluster-uniqueness gate when the M4 federated-app
+/// boundary lands) is one edit here, not a coordinated rewrite of
+/// every per-Aplicacao renderer's inline cascade.
+///
+/// The generic error type `E` accepts every per-Aplicacao renderer's
+/// local [`thiserror`] `Error` enum that carries both [`KindMismatch`]
+/// and [`crate::aplicacao::AplicacaoError`] via `#[from]`
+/// (`caixa_mesh::Error`, and every future per-Aplicacao renderer that
+/// wires both `#[from]` arms as the diagnostic-naming-the-offending-
+/// caixa contract already requires). Type inference at the call site
+/// resolves `E` from the caller's `?` return type, though a caller
+/// that assigns the result directly to a `Result<AplicacaoSpec,
+/// Error>` binding may need a turbofish
+/// (`::<Error>`) — matching the sibling `require_v0_servico_shape::<Error>`
+/// turbofish convention the peer per-Servico call sites already read.
+///
+/// Peer to [`require_v0_servico_shape`] on the sibling per-Servico
+/// entry-gate axis and [`require_kind`] / [`require_ci`] /
+/// [`decompose_ci`] on the sibling per-`Acao` entry-gate axis — every
+/// per-kind renderer's entry-gate cascade now lives in exactly one
+/// substrate primitive.
+///
+/// [mesh-programs]: https://docs.rs/caixa-mesh
+/// [mesh-cnp]: https://docs.rs/caixa-mesh
+/// [mesh-gw]: https://docs.rs/caixa-mesh
+/// [tatara]: https://docs.rs/caixa-tatara
+///
+/// # Errors
+///
+/// Returns the caller's `E` wrapping a [`KindMismatch`] when
+/// `caixa.kind != CaixaKind::Aplicacao`, or a
+/// [`crate::aplicacao::AplicacaoError`] when the folded
+/// [`crate::aplicacao::AplicacaoSpec`] fails its typed-shape
+/// validation. Order matches the three-line cascade this replaces: the
+/// kind gate fires first, so a `:kind Servico` caixa with a
+/// well-formed `:membros` stanza surfaces the kind mismatch (the more
+/// actionable diagnostic — the author has the wrong `:kind`) rather
+/// than the `AplicacaoError` (which the [`Caixa::aplicacao_view`]
+/// fold-in never even reaches on a non-`Aplicacao` kind).
+///
+/// # Panics
+///
+/// Never in practice — the internal [`Caixa::aplicacao_view`] unwrap
+/// is guarded by the preceding [`require_kind`]-on-`Aplicacao` gate,
+/// and [`Caixa::aplicacao_view`]'s own doc pin guarantees
+/// `Some`-return iff `caixa.kind().is_aplicacao()`. A future
+/// [`Caixa::aplicacao_view`] refactor that decouples `Some`-return
+/// from `caixa.kind().is_aplicacao()` would trip this panic at the
+/// first per-Aplicacao renderer call site, not silently return `Err(E)`
+/// at every one — the panic message names the substrate invariant so
+/// the offending edit is obvious.
+pub fn require_aplicacao_view<E>(caixa: &Caixa) -> Result<crate::aplicacao::AplicacaoSpec, E>
+where
+    E: From<KindMismatch> + From<crate::aplicacao::AplicacaoError>,
+{
+    require_kind(caixa, CaixaKind::Aplicacao)?;
+    let spec = caixa
+        .aplicacao_view()
+        .expect("require_kind(Aplicacao) guarantees Caixa::aplicacao_view returns Some");
+    spec.validate()?;
+    Ok(spec)
+}
+
 /// One rendered artifact — a `(path, contents)` pair every per-target
 /// `caixa-<target>` renderer emits at every leaf of its output tree.
 /// Carries the sandboxed relative path the substrate writes the artifact
@@ -28336,6 +28452,215 @@ mod tests {
                 "compound helper must match two-line pair on kind={kind:?} servicos.len()={}",
                 c.servicos.len(),
             );
+        }
+    }
+
+    // ── require_aplicacao_view — compound per-Aplicacao entry gate ───
+
+    /// Local `thiserror`-shaped renderer-error stand-in that mirrors
+    /// `caixa-mesh::Error`'s two `#[from]` arms at the compound
+    /// helper's `E: From<KindMismatch> + From<AplicacaoError>` bound.
+    /// Same discipline as the sibling [`RendererStandIn`] stand-in on
+    /// the peer per-Servico [`require_v0_servico_shape`] gate: pins
+    /// the compound helper's type-inference contract inside caixa-core
+    /// without a workspace-crate dependency (which would bloat the
+    /// build graph).
+    #[derive(Debug, thiserror::Error)]
+    enum AplicacaoRendererStandIn {
+        #[error("{0}")]
+        NotAnAplicacao(#[from] KindMismatch),
+        #[error("{0}")]
+        InvalidAplicacao(#[from] crate::aplicacao::AplicacaoError),
+    }
+
+    fn bare_aplicacao() -> Caixa {
+        let mut c = bare_servico();
+        c.nome = "checkout".into();
+        c.kind = CaixaKind::Aplicacao;
+        c.servicos = vec![];
+        c.membros = vec![
+            crate::aplicacao::Membro {
+                caixa: "cart".into(),
+                versao: "^0.1".into(),
+            },
+            crate::aplicacao::Membro {
+                caixa: "catalog".into(),
+                versao: "^0.1".into(),
+            },
+        ];
+        // `:placement` needs at least one named cluster (every strategy
+        // uses the list as a hosting/takeover/shard pool per
+        // MESH-COMPOSITION §II.1/§II.4); the fold-through
+        // [`Caixa::aplicacao_view`] uses `Placement::default()` which
+        // carries an empty `:clusters` and would trip
+        // `AplicacaoError::PlacementWithoutClusters` at
+        // `AplicacaoSpec::validate` — the peer per-Aplicacao
+        // renderer fixtures (`caixa-mesh::aplicacao_caixa`) pin the
+        // same non-empty `:clusters` shape.
+        c.placement = Some(crate::aplicacao::Placement {
+            estrategia: crate::aplicacao::PlacementStrategy::SingleNode,
+            clusters: vec!["default".into()],
+            affinity: None,
+            shard_key: None,
+        });
+        c
+    }
+
+    #[test]
+    fn require_aplicacao_view_accepts_valid_aplicacao() {
+        // Happy path: a `:kind Aplicacao` caixa with a well-formed
+        // `:membros` stanza — the canonical V0 shape every
+        // per-Aplicacao renderer's entry-point sees — passes the
+        // compound three-arm gate and returns a validated
+        // [`AplicacaoSpec`]. Same outcome as the three-line cascade
+        // the compound helper replaces: [`require_kind`] passes,
+        // [`Caixa::aplicacao_view`] returns `Some(spec)`, and
+        // [`AplicacaoSpec::validate`] passes. Peer to
+        // `require_v0_servico_shape_accepts_v0_servico` on the
+        // sibling per-Servico compound gate.
+        let c = bare_aplicacao();
+        let spec: crate::aplicacao::AplicacaoSpec =
+            require_aplicacao_view::<AplicacaoRendererStandIn>(&c)
+                .expect("valid aplicacao shape accepted");
+        assert_eq!(spec.membros.len(), 2);
+        assert_eq!(spec.membros[0].caixa, "cart");
+        assert_eq!(spec.membros[1].caixa, "catalog");
+    }
+
+    #[test]
+    fn require_aplicacao_view_forwards_kind_mismatch_first() {
+        // Order pin: the kind gate fires before the aplicacao_view
+        // fold-in + [`AplicacaoSpec::validate`], so a `:kind Servico`
+        // caixa carrying a well-formed `:membros` stanza (the manifest
+        // field's documented "silently ignored" case on a non-Aplicacao
+        // kind) surfaces the [`KindMismatch`] arm — the more actionable
+        // diagnostic — rather than any spec-side arm the manifest
+        // author never intended to hit. Reversing the order would flip
+        // every current caller's diagnostic on a mis-kinded input.
+        // Peer to `require_v0_servico_shape_forwards_kind_mismatch_first`
+        // on the sibling per-Servico compound gate.
+        let mut c = bare_aplicacao();
+        c.kind = CaixaKind::Servico;
+        c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
+        let err: AplicacaoRendererStandIn = require_aplicacao_view(&c).unwrap_err();
+        match err {
+            AplicacaoRendererStandIn::NotAnAplicacao(k) => {
+                assert_eq!(k.nome, "checkout");
+                assert_eq!(k.expected, CaixaKind::Aplicacao);
+                assert_eq!(k.actual, CaixaKind::Servico);
+            }
+            AplicacaoRendererStandIn::InvalidAplicacao(_) => {
+                panic!("kind gate must fire before aplicacao-view fold-in on mis-kinded input")
+            }
+        }
+    }
+
+    #[test]
+    fn require_aplicacao_view_forwards_aplicacao_error_on_kind_match() {
+        // A `:kind Aplicacao` caixa that passes the kind gate but
+        // fails [`AplicacaoSpec::validate`] (empty `:membros` here —
+        // the [`AplicacaoError::NoMembros`] arm every Aplicacao must
+        // satisfy per MESH-COMPOSITION §III.1) lands on the
+        // [`AplicacaoError`] arm through the compound helper's
+        // `E: From<AplicacaoError>` bound. Same diagnostic the
+        // three-line cascade the compound helper replaces surfaces at
+        // `spec.validate()?`. Peer to
+        // `require_v0_servico_shape_forwards_count_mismatch_on_kind_match`
+        // on the sibling per-Servico compound gate.
+        let mut c = bare_aplicacao();
+        c.membros = vec![]; // trips AplicacaoError::NoMembros
+        let err: AplicacaoRendererStandIn = require_aplicacao_view(&c).unwrap_err();
+        match err {
+            AplicacaoRendererStandIn::InvalidAplicacao(
+                crate::aplicacao::AplicacaoError::NoMembros,
+            ) => {}
+            AplicacaoRendererStandIn::InvalidAplicacao(other) => {
+                panic!("expected NoMembros arm, got {other:?}")
+            }
+            AplicacaoRendererStandIn::NotAnAplicacao(_) => {
+                panic!("spec-validate arm must fire when kind gate passes")
+            }
+        }
+    }
+
+    #[test]
+    fn require_aplicacao_view_matches_three_line_cascade_semantic() {
+        // Equivalence pin: on every input, the compound helper's
+        // Ok/Err discrimination matches the three-line cascade
+        // verbatim — the lift is a behavioral no-op at the caller
+        // boundary. Peer to the sibling
+        // `require_v0_servico_shape_matches_two_line_pair_semantic`
+        // equivalence pin on the per-Servico compound gate.
+        //
+        // Four axes covered: Aplicacao shape (Ok/Ok), kind gate fires
+        // (Err/Ok on the cascade — cascade short-circuits at the kind
+        // gate), spec-validate arm fires (Ok/Err on the cascade —
+        // cascade reaches [`AplicacaoSpec::validate`]), and a
+        // mis-kinded caixa with a spec-invalid `:membros` stanza (both
+        // invariants violated — the kind gate must still fire first).
+        let cases: Vec<(CaixaKind, Vec<crate::aplicacao::Membro>)> = vec![
+            (
+                CaixaKind::Aplicacao,
+                vec![
+                    crate::aplicacao::Membro {
+                        caixa: "cart".into(),
+                        versao: "^0.1".into(),
+                    },
+                    crate::aplicacao::Membro {
+                        caixa: "catalog".into(),
+                        versao: "^0.1".into(),
+                    },
+                ],
+            ),
+            (CaixaKind::Servico, vec![]),
+            (CaixaKind::Aplicacao, vec![]),
+            (
+                CaixaKind::Biblioteca,
+                vec![crate::aplicacao::Membro {
+                    caixa: "cart".into(),
+                    versao: "^0.1".into(),
+                }],
+            ),
+        ];
+        for (kind, membros) in cases {
+            let mut c = bare_aplicacao();
+            c.kind = kind;
+            c.membros = membros.clone();
+            if kind == CaixaKind::Servico {
+                c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
+            } else {
+                c.servicos = vec![];
+            }
+            let cascade: Result<crate::aplicacao::AplicacaoSpec, AplicacaoRendererStandIn> =
+                (|| {
+                    require_kind(&c, CaixaKind::Aplicacao)?;
+                    let spec = c.aplicacao_view().expect(
+                        "require_kind(Aplicacao) guarantees Caixa::aplicacao_view returns Some",
+                    );
+                    spec.validate()?;
+                    Ok(spec)
+                })();
+            let compound: Result<crate::aplicacao::AplicacaoSpec, AplicacaoRendererStandIn> =
+                require_aplicacao_view(&c);
+            assert_eq!(
+                cascade.is_ok(),
+                compound.is_ok(),
+                "compound helper must match three-line cascade on kind={kind:?} membros.len()={}",
+                membros.len(),
+            );
+            // Compound helper's Ok-arm return matches cascade's
+            // Ok-arm return byte-for-byte (via serde YAML round-trip
+            // — the `AplicacaoSpec` derives `Serialize`, so equal-
+            // rendering values are the substrate-canonical equality
+            // signal the peer downstream renderers key off).
+            if let (Ok(cascade_spec), Ok(compound_spec)) = (cascade, compound) {
+                assert_eq!(
+                    serde_yaml::to_string(&cascade_spec).expect("cascade AplicacaoSpec serializes"),
+                    serde_yaml::to_string(&compound_spec)
+                        .expect("compound AplicacaoSpec serializes"),
+                    "compound helper's Ok arm must return byte-equal AplicacaoSpec to cascade"
+                );
+            }
         }
     }
 
