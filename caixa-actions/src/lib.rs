@@ -116,9 +116,19 @@ pub struct RenderedAcao {
 /// See the [`Error`] variants above — each names the offending caixa's
 /// `:nome` and the specific axis that failed.
 pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
-    caixa_core::require_kind(caixa, CaixaKind::Acao)?;
-    let ci = caixa_core::require_ci(caixa)?;
-    let cd = caixa_core::decompose_ci(caixa, ci)?;
+    // Compound V0 per-`Acao` entry gate: gates the input on
+    // `:kind Acao` + `:ci`-slot presence + `canteiro_types::decompose`
+    // in one substrate primitive, matching the peer per-Servico
+    // [`caixa_core::require_v0_servico_shape`] and per-Aplicacao
+    // [`caixa_core::require_aplicacao_view`] compound gates. Every
+    // per-`Acao` consumer downstream (the deferred
+    // `sui-supercacheci::canteiro::emit_gha` workflow renderer named
+    // in this crate's own docs, the future per-`Acao` CR
+    // materializer's admission webhook, a future `feira validate
+    // --acao` per-caixa admission verb) reaches for the same
+    // one-liner + three `#[from]` arms and gets the diagnostic-
+    // naming-the-offending-caixa contract for free.
+    let (ci, cd) = caixa_core::require_acao_view::<Error>(caixa)?;
 
     // Post-`decompose_ci`, `topo_order()` is infallible by construction:
     // the substrate primitive already refused every `canteiro_types::
@@ -637,6 +647,169 @@ mod tests {
                 assert_eq!(mismatch.actual, CaixaKind::Servico);
             }
             other => panic!("expected Error::NotAnAcao, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_routes_entry_gate_through_caixa_core_require_acao_view_helper() {
+        // Fail-before-pass-after pin on the [`validate`] entry-gate axis:
+        // pre-lift the function ran the three-line prelude
+        //
+        //   caixa_core::require_kind(caixa, CaixaKind::Acao)?;
+        //   let ci = caixa_core::require_ci(caixa)?;
+        //   let cd = caixa_core::decompose_ci(caixa, ci)?;
+        //
+        // inline at this crate's own [`validate`] call site — the
+        // exact same three-arm prelude the peer per-Servico and
+        // per-Aplicacao renderers open-coded before the sibling
+        // [`caixa_core::require_v0_servico_shape`] (per-Servico) and
+        // [`caixa_core::require_aplicacao_view`] (per-Aplicacao)
+        // compound-gate lifts closed the drift potential on those
+        // axes. Converging the arm on the substrate-canonical
+        // [`caixa_core::require_acao_view`] compound gate closes the
+        // per-`Acao` axis: every future per-`Acao` consumer (the
+        // deferred `sui-supercacheci::canteiro::emit_gha` workflow
+        // renderer named in this crate's own docs, the future
+        // per-`Acao` CR materializer's admission webhook, a future
+        // `feira validate --acao` per-caixa admission verb) reaches
+        // for the one-liner + three `#[from]` arms and gets the
+        // diagnostic-naming-the-offending-caixa contract for free —
+        // peer of the sibling `caixa-mesh::typed_view` /
+        // `caixa-flux::require_v0_servico_shape` call sites the
+        // per-Aplicacao / per-Servico compound gates already close.
+        //
+        // Four-axis byte-for-byte parity assertion: on every fixture
+        // this pin sweeps (valid Acao, mis-kinded Servico, missing
+        // `:ci` slot, cyclic `:ci` run), [`validate`]'s Ok/Err
+        // discrimination must match the three-line prelude verbatim,
+        // and on the Ok arm the substrate primitive's returned
+        // [`canteiro_types::CanteiroDag`] must produce the same
+        // topological-order node-name projection [`validate`] uses to
+        // build [`RenderedAcao::node_names_topo`]. Trips at
+        // caixa-actions build time if [`validate`] re-inlines the
+        // three-line prelude and drifts from the substrate primitive.
+
+        // Valid two-node acyclic fixture — the Ok-arm branch.
+        let ok_fixture = || {
+            let ci = CiRun {
+                workspace: "pleme-io".to_string(),
+                repo: "caixa".to_string(),
+                nodes: vec![
+                    CiNode::new("build", EnvClass::None, action("build"), vec![]),
+                    CiNode::new(
+                        "test",
+                        EnvClass::None,
+                        action("test"),
+                        vec!["build".to_string()],
+                    ),
+                ],
+            };
+            acao_caixa(Some(ci))
+        };
+        let ok_caixa = ok_fixture();
+        let via_validate = validate(&ok_caixa).expect("valid Acao passes validate");
+        let via_primitive =
+            caixa_core::require_acao_view::<Error>(&ok_caixa).expect("valid Acao passes compound");
+        let (via_primitive_ci, via_primitive_cd) = via_primitive;
+        // The substrate primitive's returned `(&CiRun, CanteiroDag)`
+        // projects the same topological-order node-name list
+        // [`validate`] builds — so the compound helper's Ok arm is
+        // the exact source of truth `validate` reads off, no
+        // reconstruction path a future edit could drift onto.
+        let topo = via_primitive_cd
+            .topo_order()
+            .expect("acyclic CanteiroDag returns a valid topo_order");
+        let expected_node_names: Vec<String> = topo
+            .iter()
+            .filter_map(|id| via_primitive_cd.nodes.get(id).map(|n| n.name.clone()))
+            .collect();
+        assert_eq!(
+            via_validate.node_names_topo, expected_node_names,
+            "validate's node_names_topo must equal the compound helper's \
+             topo-order-projected node names byte-for-byte"
+        );
+        // The substrate primitive's borrowed `:ci` slot backs the
+        // same `edge_count` projection [`validate`] reads off — pins
+        // the pair-return contract of `require_acao_view` on the
+        // `&CiRun` arm.
+        let expected_edge_count: usize = via_primitive_ci.nodes.iter().map(|n| n.deps.len()).sum();
+        assert_eq!(
+            via_validate.edge_count, expected_edge_count,
+            "validate's edge_count must equal the compound helper's \
+             borrowed-CiRun edge sum byte-for-byte"
+        );
+
+        // Mis-kinded Servico — the KindMismatch arm.
+        let mut mis_kinded = ok_fixture();
+        mis_kinded.kind = CaixaKind::Servico;
+        mis_kinded.servicos = vec!["servicos/hello.computeunit.yaml".to_string()];
+        let via_validate_err = validate(&mis_kinded).expect_err("mis-kinded Acao must be rejected");
+        let via_primitive_err = caixa_core::require_acao_view::<Error>(&mis_kinded)
+            .expect_err("mis-kinded Acao must be rejected by compound");
+        assert_eq!(
+            format!("{via_validate_err}"),
+            format!("{via_primitive_err}"),
+            "validate's mis-kinded Display bytes must equal the compound \
+             helper's Display bytes — a future kind-gate format edit lands \
+             in exactly one place, not duplicated across every per-`Acao` \
+             consumer"
+        );
+        match (via_validate_err, via_primitive_err) {
+            (Error::NotAnAcao(a), Error::NotAnAcao(b)) => {
+                assert_eq!(a.nome, b.nome);
+                assert_eq!(a.expected, b.expected);
+                assert_eq!(a.actual, b.actual);
+            }
+            (v, p) => panic!("expected both Error::NotAnAcao, got validate={v:?} primitive={p:?}"),
+        }
+
+        // Missing `:ci` slot past kind gate — the MissingCiSlot arm.
+        let missing_ci = acao_caixa(None);
+        let via_validate_err =
+            validate(&missing_ci).expect_err("Acao with no :ci must be rejected");
+        let via_primitive_err = caixa_core::require_acao_view::<Error>(&missing_ci)
+            .expect_err("Acao with no :ci must be rejected by compound");
+        assert_eq!(
+            format!("{via_validate_err}"),
+            format!("{via_primitive_err}"),
+            "validate's missing-:ci Display bytes must equal the compound \
+             helper's Display bytes — the substrate primitive is the sole \
+             MissingCiSlot constructor across every per-`Acao` consumer"
+        );
+        match (via_validate_err, via_primitive_err) {
+            (Error::MissingCi(a), Error::MissingCi(b)) => {
+                assert_eq!(a.nome, b.nome);
+            }
+            (v, p) => panic!("expected both Error::MissingCi, got validate={v:?} primitive={p:?}"),
+        }
+
+        // Cyclic `:ci` run past presence gate — the CiDecomposeFailure arm.
+        let cyclic_ci = CiRun {
+            workspace: "pleme-io".to_string(),
+            repo: "caixa".to_string(),
+            nodes: vec![
+                CiNode::new("a", EnvClass::None, action("a"), vec!["b".to_string()]),
+                CiNode::new("b", EnvClass::None, action("b"), vec!["a".to_string()]),
+            ],
+        };
+        let cyclic = acao_caixa(Some(cyclic_ci));
+        let via_validate_err = validate(&cyclic).expect_err("cyclic Acao must be rejected");
+        let via_primitive_err = caixa_core::require_acao_view::<Error>(&cyclic)
+            .expect_err("cyclic Acao must be rejected by compound");
+        assert_eq!(
+            format!("{via_validate_err}"),
+            format!("{via_primitive_err}"),
+            "validate's decompose-failure Display bytes must equal the \
+             compound helper's Display bytes — the substrate primitive is \
+             the sole CiDecomposeFailure constructor across every \
+             per-`Acao` consumer"
+        );
+        match (via_validate_err, via_primitive_err) {
+            (Error::Decompose(a), Error::Decompose(b)) => {
+                assert_eq!(a.nome, b.nome);
+                assert_eq!(a.source, b.source);
+            }
+            (v, p) => panic!("expected both Error::Decompose, got validate={v:?} primitive={p:?}"),
         }
     }
 }
