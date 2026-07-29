@@ -30,7 +30,6 @@
 //! **not built** in this pass.
 
 use caixa_core::{Caixa, CaixaKind, CiDecomposeFailure};
-use canteiro_types::DecomposeError;
 use thiserror::Error;
 
 /// Errors `caixa-actions` can raise.
@@ -65,6 +64,18 @@ pub enum Error {
     /// matching the peer [`Self::NotAnAcao`] / [`Self::MissingCi`]
     /// `#[from]` shape on the sibling [`caixa_core::KindMismatch`] /
     /// [`caixa_core::MissingCiSlot`] typed views above.
+    ///
+    /// Every [`CiDecomposeFailure`] this arm carries is constructed by
+    /// exactly one substrate primitive — [`caixa_core::decompose_ci`]
+    /// at `caixa-core/src/render.rs:342`. [`validate`] holds no `Err(_)`
+    /// path that constructs a [`CiDecomposeFailure`] on its own; the
+    /// only downstream call that could raise on the decompose axis is
+    /// the sibling `?` on `decompose_ci`'s result, which passes the
+    /// substrate-constructed view through unchanged. That leaves the
+    /// substrate primitive as the sole author of the failure's `:nome`
+    /// projection + `#[source] DecomposeError` arm, so a future edit to
+    /// the diagnostic's shape (naming, source-arm carrying, byte-form)
+    /// lands in exactly one place and propagates to every consumer.
     #[error("{0}")]
     Decompose(#[from] CiDecomposeFailure),
 }
@@ -108,12 +119,28 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     caixa_core::require_kind(caixa, CaixaKind::Acao)?;
     let ci = caixa_core::require_ci(caixa)?;
     let cd = caixa_core::decompose_ci(caixa, ci)?;
-    let nome = caixa.nome().to_string();
 
-    let topo = cd.topo_order().map_err(|_| CiDecomposeFailure {
-        nome: nome.clone(),
-        source: DecomposeError::Cycle,
-    })?;
+    // Post-`decompose_ci`, `topo_order()` is infallible by construction:
+    // the substrate primitive already refused every `canteiro_types::
+    // DecomposeError` arm (duplicate node, missing dep, cycle) that
+    // could otherwise surface here, so no reachable path lands on the
+    // `Err(_)` branch. Documented on the substrate side in
+    // `caixa_core::render::tests::decompose_ci_accepts_valid_ci_run_
+    // and_returns_canteiro_dag` (render.rs:28107 — "The topo_order()
+    // call on a successful decompose is infallible by construction (no
+    // cycles present)"). The pre-lift code hand-authored a
+    // `CiDecomposeFailure { nome, source: DecomposeError::Cycle }` on
+    // this axis, which (a) re-inlined the substrate-primitive-only
+    // constructor outside `caixa_core::render::decompose_ci` — the
+    // exact anti-pattern every peer per-`Acao` typed-view pin warns
+    // against — and (b) hard-coded `DecomposeError::Cycle` regardless
+    // of which underlying arm would have failed, so the (unreachable)
+    // diagnostic would misname the failure mode. Panicking here surfaces
+    // any future substrate-contract regression at the call site rather
+    // than silently misdiagnosing it.
+    let topo = cd
+        .topo_order()
+        .expect("acyclic CanteiroDag returns a valid topo_order — decompose_ci gated the input");
 
     let node_names_topo = topo
         .iter()
@@ -122,7 +149,7 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     let edge_count = ci.nodes.iter().map(|n| n.deps.len()).sum();
 
     Ok(RenderedAcao {
-        nome,
+        nome: caixa.nome().to_string(),
         node_names_topo,
         edge_count,
     })
@@ -131,7 +158,7 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use canteiro_types::{ActionRef, CiNode, CiRun, EnvClass};
+    use canteiro_types::{ActionRef, CiNode, CiRun, DecomposeError, EnvClass};
 
     fn action(name: &str) -> ActionRef {
         ActionRef {
@@ -190,6 +217,182 @@ mod tests {
             "build must precede test in topological order: {:?}",
             rendered.node_names_topo
         );
+    }
+
+    #[test]
+    fn validate_topo_order_axis_is_pass_through_after_decompose_ci_gate() {
+        // Fail-before-pass-after pin on the post-`decompose_ci`
+        // `topo_order()` axis: pre-lift, [`validate`] carried an inline
+        // `.map_err(|_| CiDecomposeFailure { nome: nome.clone(), source:
+        // DecomposeError::Cycle })?` on this axis — the last surviving
+        // [`CiDecomposeFailure`] constructor outside
+        // [`caixa_core::decompose_ci`] (the substrate primitive at
+        // caixa-core/src/render.rs:342). That construction re-inlined
+        // the substrate-primitive-only typed view outside its owning
+        // primitive — the exact anti-pattern the peer per-`Acao` axes
+        // pinned by [`validate_decompose_gate_wraps_caixa_core_typed_view`]
+        // and [`validate_missing_ci_gate_wraps_caixa_core_typed_view`]
+        // warn against — and, worse, hard-coded the failure kind as
+        // `DecomposeError::Cycle` regardless of which underlying arm
+        // ([`DecomposeError::DuplicateNodeName`],
+        // [`DecomposeError::MissingDependency`], [`DecomposeError::Cycle`])
+        // the (unreachable) `topo_order()` `Err` would have carried, so
+        // any future substrate-contract regression would surface as a
+        // silently misdiagnosed `Cycle` rather than the real cause. The
+        // post-lift shape converges on `.expect(...)`, which:
+        //
+        //   1. leaves [`caixa_core::decompose_ci`] as the sole
+        //      [`CiDecomposeFailure`] constructor in the workspace —
+        //      matching the peer `Error::MissingCi` /
+        //      `Error::NotAnAcao` arms' shape, where every construction
+        //      of the wrapped typed view happens exactly once, inside
+        //      its owning substrate primitive; and
+        //   2. surfaces any future substrate-contract regression as a
+        //      panic at the call site, rather than a silently
+        //      misdiagnosed `Cycle` diagnostic.
+        //
+        // This pin asserts the observable side of that contract: for
+        // every fixture the substrate primitive
+        // [`caixa_core::decompose_ci`] accepts (regardless of DAG shape
+        // — linear-chain, diamond, wide-fanout, singleton), [`validate`]
+        // must return `Ok(_)` with a fully-populated topological order
+        // whose length matches the fixture's declared node count. A
+        // future regression that re-inlines a `.map_err(...)` +
+        // hand-authored [`CiDecomposeFailure`] on the `topo_order()`
+        // axis trips this test on the singleton fixture the moment the
+        // decompose gate's contract is misread as fallible, before the
+        // drift reaches any downstream per-`Acao` consumer.
+        let fixtures: [(&'static str, fn() -> CiRun, usize); 3] = [
+            (
+                "singleton",
+                || CiRun {
+                    workspace: "pleme-io".to_string(),
+                    repo: "caixa".to_string(),
+                    nodes: vec![CiNode::new("solo", EnvClass::None, action("solo"), vec![])],
+                },
+                1_usize,
+            ),
+            (
+                "linear-chain",
+                || CiRun {
+                    workspace: "pleme-io".to_string(),
+                    repo: "caixa".to_string(),
+                    nodes: vec![
+                        CiNode::new("a", EnvClass::None, action("a"), vec![]),
+                        CiNode::new("b", EnvClass::None, action("b"), vec!["a".to_string()]),
+                        CiNode::new("c", EnvClass::None, action("c"), vec!["b".to_string()]),
+                    ],
+                },
+                3_usize,
+            ),
+            (
+                "diamond",
+                || CiRun {
+                    workspace: "pleme-io".to_string(),
+                    repo: "caixa".to_string(),
+                    nodes: vec![
+                        CiNode::new("root", EnvClass::None, action("root"), vec![]),
+                        CiNode::new(
+                            "left",
+                            EnvClass::None,
+                            action("left"),
+                            vec!["root".to_string()],
+                        ),
+                        CiNode::new(
+                            "right",
+                            EnvClass::None,
+                            action("right"),
+                            vec!["root".to_string()],
+                        ),
+                        CiNode::new(
+                            "sink",
+                            EnvClass::None,
+                            action("sink"),
+                            vec!["left".to_string(), "right".to_string()],
+                        ),
+                    ],
+                },
+                4_usize,
+            ),
+        ];
+        for (label, build_ci, expected_node_count) in fixtures {
+            // Two independent instances of the same fixture — one
+            // handed to acao_caixa (moved into the fixture Caixa's
+            // `:ci` slot), one borrowed directly by decompose_ci — so
+            // the pin makes no assumption about `CiRun: Clone`.
+            let c = acao_caixa(Some(build_ci()));
+            let ci_for_primitive = build_ci();
+            // The substrate primitive's own contract: decompose_ci
+            // accepts this fixture (no duplicate, no missing dep, no
+            // cycle) — pinned here so the fixture inventory doubles as
+            // a regression pin on the primitive itself.
+            let cd = caixa_core::decompose_ci(&c, &ci_for_primitive).unwrap_or_else(|e| {
+                panic!(
+                    "fixture `{label}` must be accepted by caixa_core::decompose_ci — \
+                     the substrate primitive is the pass-through-on-success gate this test \
+                     pins the post-decompose axis of; got: {e}"
+                )
+            });
+            // Post-decompose invariant: topo_order() is infallible.
+            // Reads the DAG's own algebra directly, no second gate,
+            // matching the discipline documented in
+            // caixa-core/src/render.rs:28107-28116. Captured once and
+            // reused so the pin makes no assumption about topo_order()'s
+            // receiver kind (`&self` / `self` / `&mut self`).
+            let topo = cd.topo_order().unwrap_or_else(|_| {
+                panic!(
+                    "fixture `{label}`: caixa_core::decompose_ci returned Ok(_) but \
+                     CanteiroDag::topo_order returned Err(_) — the substrate contract \
+                     documented at caixa-core/src/render.rs:28107 has regressed; \
+                     the pre-lift map_err+CiDecomposeFailure shape would silently \
+                     misdiagnose this as DecomposeError::Cycle regardless of the \
+                     actual arm, which is precisely the drift this pin closes"
+                )
+            });
+            // The substrate-primitive-projected node names, computed
+            // via the exact same accessor chain the post-lift
+            // [`validate`] impl uses (topo.iter().filter_map(|id|
+            // cd.nodes.get(id).map(|n| n.name.clone())).collect()).
+            // Materialized here so the byte-parity assertion below
+            // pins that `validate` reads through the CanteiroDag's
+            // algebra directly, with no reconstruction path a future
+            // edit could drift onto.
+            let expected_node_names: Vec<String> = topo
+                .iter()
+                .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
+                .collect();
+            assert_eq!(
+                expected_node_names.len(),
+                expected_node_count,
+                "fixture `{label}`: substrate-projected topo-order node-name list length \
+                 must equal declared node count — pins the substrate primitive's \
+                 pass-through-on-success contract at the topo_order axis",
+            );
+            // The observable pin: validate() must return Ok(_) on every
+            // fixture decompose_ci accepts — no Err(_) may leak on the
+            // topo_order axis. A future regression that re-inlines a
+            // `.map_err(|_| CiDecomposeFailure { source: DecomposeError::
+            // Cycle, .. })?` and treats topo_order as fallible would
+            // still pass on these fixtures today (topo_order is
+            // infallible post-decompose), but the byte-parity assertion
+            // below on the node-name projection pins the specific
+            // shape of the pass-through — a future regression that
+            // silently swaps to an `.unwrap_or_default()` or drops a
+            // node on the Err arm would trip here.
+            let rendered = validate(&c).unwrap_or_else(|e| {
+                panic!(
+                    "fixture `{label}`: validate() must return Ok on every fixture \
+                     caixa_core::decompose_ci accepts — got Err: {e}"
+                )
+            });
+            assert_eq!(
+                rendered.node_names_topo, expected_node_names,
+                "fixture `{label}`: validate()'s node_names_topo must equal the substrate \
+                 primitive's topo-order-projected node names byte-for-byte — pins that \
+                 the post-decompose axis reads through the CanteiroDag's algebra directly, \
+                 with no reconstruction path a future edit could drift",
+            );
+        }
     }
 
     #[test]
