@@ -565,18 +565,47 @@ impl UpgradeFromEntry {
     fn validate_purge_ordering(&self) -> Result<(), UpgradeError> {
         let mut loaded = false;
         for instr in self.instructions() {
-            match instr {
-                UpgradeInstruction::LoadModule { .. } => loaded = true,
-                UpgradeInstruction::SoftPurge { module } | UpgradeInstruction::Purge { module }
-                    if !loaded =>
-                {
-                    return Err(UpgradeError::PurgeWithoutPriorLoad {
-                        from: self.prior_versao().to_string(),
-                        kind: instr.lisp_form(),
-                        module: module.clone(),
-                    });
-                }
-                _ => {}
+            // Route the per-instruction cleanup-family arm-discriminator
+            // through the lifted [`UpgradeInstruction::is_cleanup`] typed
+            // predicate rather than the raw
+            // `UpgradeInstruction::SoftPurge { module } |
+            // UpgradeInstruction::Purge { module }` open-coded per-arm
+            // union pattern-match — the first of three within-entry cross-
+            // instruction cleanup-facing gates now keys off exactly one
+            // typed dispatch on the substrate primitive, so any future
+            // fifth cleanup-shaped variant (a `Discard` variant the
+            // `code:delete/1` peer inspires) added to
+            // [`UpgradeInstruction`] + a composing `|| self.is_discard()`
+            // term at [`UpgradeInstruction::is_cleanup`] reaches this gate
+            // through the accessor's one body. The paired cleanup-arm
+            // `:module` scalar is routed through the sibling
+            // [`UpgradeInstruction::declared_module`] accessor rather than
+            // the raw pattern-bound `module` binding — same substrate-
+            // primitive-owns-the-scalar discipline every peer
+            // per-`UpgradeInstruction` scalar-value axis already routes
+            // through, with the `is_cleanup`-implies-`declared_module`-is-
+            // `Some` composition pin at
+            // [`tests::upgrade_instruction_is_cleanup_implies_declared_module_is_some`]
+            // making the `.expect(…)` structurally infallible at build
+            // time. Peer of the sibling
+            // [`UpgradeFromEntry::validate_restart_exclusive`]
+            // paired positive / negated
+            // [`UpgradeInstruction::is_restart`] routing (915a934) on the
+            // per-arm terminal-fallback partition — same closed-set-typed-
+            // enum arm-discriminator dispatch discipline extended from
+            // the single-arm terminal-fallback family onto the two-arm
+            // cleanup family here.
+            if matches!(instr, UpgradeInstruction::LoadModule { .. }) {
+                loaded = true;
+            } else if instr.is_cleanup() && !loaded {
+                return Err(UpgradeError::PurgeWithoutPriorLoad {
+                    from: self.prior_versao().to_string(),
+                    kind: instr.lisp_form(),
+                    module: instr
+                        .declared_module()
+                        .expect("is_cleanup() implies declared_module() is Some")
+                        .to_string(),
+                });
             }
         }
         Ok(())
@@ -685,23 +714,41 @@ impl UpgradeFromEntry {
     fn validate_state_change_before_cleanup(&self) -> Result<(), UpgradeError> {
         let mut prior_cleanup: Option<(&str, &'static str)> = None;
         for instr in self.instructions() {
-            match instr {
-                UpgradeInstruction::SoftPurge { module } | UpgradeInstruction::Purge { module } => {
-                    if prior_cleanup.is_none() {
-                        prior_cleanup = Some((module.as_str(), instr.lisp_form()));
-                    }
-                }
-                UpgradeInstruction::StateChange { script } => {
-                    if let Some((prior_module, prior_kind)) = prior_cleanup {
-                        return Err(UpgradeError::StateChangeAfterCleanup {
-                            from: self.prior_versao().to_string(),
-                            script: script.clone(),
-                            prior_cleanup_kind: prior_kind,
-                            prior_cleanup_module: prior_module.to_string(),
-                        });
-                    }
-                }
-                _ => {}
+            // Route the per-instruction cleanup-family arm-discriminator
+            // through the lifted [`UpgradeInstruction::is_cleanup`] typed
+            // predicate rather than the raw
+            // `UpgradeInstruction::SoftPurge { module } |
+            // UpgradeInstruction::Purge { module }` open-coded per-arm
+            // union pattern-match — the second of three within-entry
+            // cross-instruction cleanup-facing gates the peer
+            // [`Self::validate_purge_ordering`] routing already lifted;
+            // both now key off exactly one typed dispatch on the substrate
+            // primitive so the "which arms belong to the cleanup family"
+            // question resolves at exactly one caixa-core edit. The
+            // sticky-once latch's `:module` scalar is routed through the
+            // sibling [`UpgradeInstruction::declared_module`] accessor
+            // rather than the raw pattern-bound `module.as_str()`
+            // projection, with the `is_cleanup`-implies-`declared_module`-
+            // is-`Some` composition pin at
+            // [`tests::upgrade_instruction_is_cleanup_implies_declared_module_is_some`]
+            // making the `.expect(…)` structurally infallible at build
+            // time.
+            if instr.is_cleanup() && prior_cleanup.is_none() {
+                prior_cleanup = Some((
+                    instr
+                        .declared_module()
+                        .expect("is_cleanup() implies declared_module() is Some"),
+                    instr.lisp_form(),
+                ));
+            } else if let UpgradeInstruction::StateChange { script } = instr
+                && let Some((prior_module, prior_kind)) = prior_cleanup
+            {
+                return Err(UpgradeError::StateChangeAfterCleanup {
+                    from: self.prior_versao().to_string(),
+                    script: script.clone(),
+                    prior_cleanup_kind: prior_kind,
+                    prior_cleanup_module: prior_module.to_string(),
+                });
             }
         }
         Ok(())
@@ -796,17 +843,39 @@ impl UpgradeFromEntry {
     fn validate_cleanup_singularity(&self) -> Result<(), UpgradeError> {
         let mut seen: Vec<(&str, &'static str)> = Vec::new();
         for instr in self.instructions() {
-            let (module, kind) = match instr {
-                UpgradeInstruction::SoftPurge { module } => (
-                    module.as_str(),
-                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
-                ),
-                UpgradeInstruction::Purge { module } => (
-                    module.as_str(),
-                    crate::render::M2_UPGRADE_INSTRUCTION_KIND_PURGE,
-                ),
-                _ => continue,
-            };
+            // Route the per-instruction cleanup-family arm-discriminator
+            // through the lifted [`UpgradeInstruction::is_cleanup`] typed
+            // predicate rather than the raw two-arm
+            // `UpgradeInstruction::SoftPurge { module } => (module.as_str(),
+            // M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE)` /
+            // `UpgradeInstruction::Purge { module } => (module.as_str(),
+            // M2_UPGRADE_INSTRUCTION_KIND_PURGE)` / `_ => continue`
+            // per-arm dispatch — the third of three within-entry cross-
+            // instruction cleanup-facing gates the peer
+            // [`Self::validate_purge_ordering`] +
+            // [`Self::validate_state_change_before_cleanup`] routing
+            // already lifted; all three now key off exactly one typed
+            // dispatch on the substrate primitive, structurally. The
+            // cleanup-target `(module, kind)` pair is projected through
+            // the peer [`UpgradeInstruction::declared_module`] /
+            // [`UpgradeInstruction::lisp_form`] accessors rather than
+            // the per-arm-hand-rolled scalar-value + kind-const pair,
+            // with the `is_cleanup`-implies-`declared_module`-is-`Some`
+            // composition pin at
+            // [`tests::upgrade_instruction_is_cleanup_implies_declared_module_is_some`]
+            // making the `.expect(…)` structurally infallible at build
+            // time. Any future fifth cleanup-shaped variant added under
+            // the `is_cleanup` predicate + registered through the peer
+            // `lisp_form` per-arm kebab-case-const dispatch reaches this
+            // dedup gate through the accessor's one body rather than a
+            // fourth per-arm-hand-rolled scalar/kind projection here.
+            if !instr.is_cleanup() {
+                continue;
+            }
+            let module = instr
+                .declared_module()
+                .expect("is_cleanup() implies declared_module() is Some");
+            let kind = instr.lisp_form();
             if let Some(prior_idx) = seen.iter().position(|(m, _)| *m == module) {
                 let prior_kind = seen[prior_idx].1;
                 return Err(UpgradeError::DuplicateCleanup {
@@ -1581,6 +1650,105 @@ impl UpgradeInstruction {
             Self::StateChange { script } => Some(script),
             _ => None,
         }
+    }
+
+    /// Substrate-canonical per-`UpgradeInstruction` OTP-appup cleanup-
+    /// family arm-discriminator predicate every within-entry cross-
+    /// instruction cleanup-facing gate keys off — true iff `self` is
+    /// [`Self::SoftPurge`] (`code:soft_purge/1` analog: drain the
+    /// named module until no process is running it, then GC) or
+    /// [`Self::Purge`] (`code:purge/1` analog: discard the named
+    /// module immediately, without waiting for drain), the two OTP
+    /// two-phase-code-load cleanup arms the closed-set enum's
+    /// non-terminal / non-migration / non-load variants exhaust.
+    /// Every non-cleanup arm ([`Self::LoadModule`] on the paired
+    /// two-phase-load half, [`Self::StateChange`] on the
+    /// `gen_server:code_change/3`-analog migration axis,
+    /// [`Self::Restart`] on the OTP terminal-fallback shape)
+    /// returns `false`.
+    ///
+    /// Prior to this lift the `Self::SoftPurge { module } |
+    /// Self::Purge { module }` two-arm cleanup-family pattern-
+    /// match sat inline at three within-entry cross-instruction
+    /// gate sites, each hand-rolling its own copy of the union
+    /// with no compile-time link back to the substrate primitive's
+    /// closed-set arm-family: [`UpgradeFromEntry::validate_purge_ordering`]
+    /// at caixa-core/src/upgrade.rs:570 (guarded arm firing
+    /// [`UpgradeError::PurgeWithoutPriorLoad`] on any cleanup
+    /// arriving before a preceding [`Self::LoadModule`]),
+    /// [`UpgradeFromEntry::validate_state_change_before_cleanup`]
+    /// at caixa-core/src/upgrade.rs:689 (sticky-once latch
+    /// recording the first-encountered cleanup so a subsequent
+    /// [`Self::StateChange`] fires [`UpgradeError::StateChangeAfterCleanup`]),
+    /// and [`UpgradeFromEntry::validate_cleanup_singularity`] at
+    /// caixa-core/src/upgrade.rs:800 (per-module cleanup-target
+    /// dedup ejecting [`UpgradeError::DuplicateCleanup`] on the
+    /// second cleanup targeting the same `:module`). Three open-
+    /// coded per-arm-union pattern-matches that expressed no
+    /// compile-time link back to the substrate primitive. A future
+    /// fifth cleanup-shaped variant (a `Discard` variant the
+    /// `code:delete/1` peer inspires that folds under the same
+    /// two-phase-load cleanup partition, an M4 `SoftPurge` split
+    /// into `SoftPurgeCoop` / `SoftPurgeForce` peers as the drain-
+    /// cool-down policy grows a two-arm shape, an operator-side
+    /// pre-resolved cleanup-decision cache the predicate could
+    /// route through the same `bool` return contract) would have
+    /// had to be threaded through every open-coded per-arm-union
+    /// pattern-match in lockstep or one gate would silently
+    /// classify the new arm outside the cleanup family while the
+    /// peer gates classified it in (or vice versa) — a
+    /// classification split across the three within-entry cross-
+    /// instruction gates at build time that lands far from the
+    /// source [`UpgradeInstruction`] declaration with no field
+    /// naming which gate carries the drifted arm-set. Lifting the
+    /// resolution to a typed predicate on the substrate primitive
+    /// means every downstream cleanup-facing consumer of the
+    /// [`UpgradeInstruction`] closed-set enum reaches for exactly
+    /// one typed dispatch — the resolver's arm-set migrates as a
+    /// unit on any future arm addition composing under this
+    /// predicate's `||` chain.
+    ///
+    /// Sibling in shape to the peer [`gen_platform::IsVariant`]-
+    /// derive-generated [`Self::is_restart`] terminal-fallback
+    /// arm-discriminator predicate on the same closed-set
+    /// [`UpgradeInstruction`] enum (each names an OTP-appup arm-
+    /// family partition as one typed dispatch on the substrate
+    /// primitive; `is_restart` on the single-arm terminal-
+    /// fallback family, `is_cleanup` on the two-arm cleanup
+    /// family), extended here from the single-arm case onto the
+    /// two-arm arm-family union case. Composes through the
+    /// [`gen_platform::IsVariant`]-derive-generated
+    /// [`Self::is_soft_purge`] / [`Self::is_purge`] per-variant
+    /// predicates rather than an open-coded raw `matches!`
+    /// pattern-match, so a future rebrand on either underlying
+    /// per-arm classifier flows through this predicate's one
+    /// body without a coordinated per-consumer rewrite across
+    /// the three within-entry cross-instruction gates that route
+    /// through it. Peer of the sibling per-`:contratos`
+    /// shape-family union predicates [`crate::WitContract::is_http`] /
+    /// [`crate::WitContract::is_pubsub`] / [`crate::WitContract::is_store`]
+    /// on the M3 mesh-slot per-`:wit` world-ref axis (each unions a
+    /// per-shape WIT-prefix rule the substrate primitive's arm-
+    /// family partition names as one typed dispatch) — the same
+    /// "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline extended onto the
+    /// M2 `:upgrade-from :instructions` per-`UpgradeInstruction`
+    /// cleanup-family axis.
+    ///
+    /// The name `is_cleanup` maps directly onto the canonical
+    /// OTP-appup vocabulary (INSPIRATIONS §II.4 verbatim: "2.
+    /// `code:soft_purge/1` — wait until no process is running v1,
+    /// then discard. (`code:purge/1` kills v1 immediately if you
+    /// don't care.)" — the two `code:*_purge/1` operations are
+    /// the two-phase-load contract's cleanup half, paired under
+    /// one concept), and the peer [`Self::validate_cleanup_singularity`]
+    /// / [`UpgradeError::DuplicateCleanup`] / [`UpgradeError::PurgeWithoutPriorLoad`]
+    /// / [`UpgradeError::StateChangeAfterCleanup`] surface already
+    /// reaches for the same "cleanup" vocabulary in identifier +
+    /// diagnostic form.
+    #[must_use]
+    pub const fn is_cleanup(&self) -> bool {
+        self.is_soft_purge() || self.is_purge()
     }
 }
 
@@ -2597,6 +2765,148 @@ mod tests {
                  IsVariant-derived predicate are the same axis, \
                  one typed dispatch"
             );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_is_cleanup_predicate_partitions_the_arm_set() {
+        // The fail-before-pass-after pin on the lifted
+        // [`UpgradeInstruction::is_cleanup`] two-arm cleanup-family
+        // arm-discriminator predicate:
+        // [`UpgradeInstruction::SoftPurge`] and
+        // [`UpgradeInstruction::Purge`] are the two OTP-appup two-
+        // phase-code-load cleanup arms that satisfy `.is_cleanup()`;
+        // every non-cleanup arm ([`UpgradeInstruction::LoadModule`]
+        // on the paired two-phase-load half,
+        // [`UpgradeInstruction::StateChange`] on the
+        // `gen_server:code_change/3`-analog migration axis,
+        // [`UpgradeInstruction::Restart`] on the OTP terminal-
+        // fallback shape) returns `false`. This pin makes the
+        // partition invariant load-bearing at caixa-core test time
+        // so a future accessor regression (a hole that returns
+        // `false` for `SoftPurge` or `Purge`, or a byte-collision
+        // that flips `LoadModule` / `StateChange` / `Restart` to
+        // `true`) trips here rather than laundering the arm at the
+        // three within-entry cross-instruction cleanup-facing gates
+        // ([`UpgradeFromEntry::validate_purge_ordering`],
+        // [`UpgradeFromEntry::validate_state_change_before_cleanup`],
+        // [`UpgradeFromEntry::validate_cleanup_singularity`]) — a
+        // hole would silently accept a cleanup-shaped entry the
+        // three gates should refuse; a collision would fire a
+        // `PurgeWithoutPriorLoad` / `StateChangeAfterCleanup` /
+        // `DuplicateCleanup` refusal on a well-shaped
+        // [`UpgradeInstruction::LoadModule`] / `StateChange` /
+        // `Restart` arm the three gates should pass through. Peer
+        // of the sibling
+        // [`upgrade_instruction_is_restart_predicate_partitions_the_arm_set`]
+        // pin on the single-arm terminal-fallback partition —
+        // extended here from the single-arm case onto the two-arm
+        // cleanup-family union case.
+        let cases: &[(UpgradeInstruction, bool)] = &[
+            (UpgradeInstruction::LoadModule { module: "a".into() }, false),
+            (UpgradeInstruction::SoftPurge { module: "b".into() }, true),
+            (UpgradeInstruction::Purge { module: "c".into() }, true),
+            (
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                false,
+            ),
+            (UpgradeInstruction::Restart, false),
+        ];
+        for (variant, expected) in cases {
+            assert_eq!(
+                variant.is_cleanup(),
+                *expected,
+                "UpgradeInstruction::{variant:?}.is_cleanup() must \
+                 return {expected} (partition invariant on the \
+                 lifted OTP-appup two-arm cleanup-family arm-\
+                 discriminator predicate)"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_is_cleanup_composes_through_is_soft_purge_or_is_purge() {
+        // Byte-identity pin on the [`UpgradeInstruction::is_cleanup`]
+        // composition against the two [`gen_platform::IsVariant`]-
+        // derive-generated per-variant classifiers it routes through
+        // — the accessor's one body must byte-equal
+        // `self.is_soft_purge() || self.is_purge()` across every arm
+        // of the closed-set enum, so a future silent detour that
+        // reintroduced a raw `matches!` pattern or that stopped
+        // composing through the derive-generated per-variant
+        // predicates (an accidental `self.is_soft_purge()` on its
+        // own — silently dropping the `Purge` arm; an accidental
+        // `self.is_purge() || self.is_state_change()` — silently
+        // folding the migration arm into the cleanup family; a
+        // typo `&&` for the union `||` — silently classifying no
+        // arm as cleanup) trips here at caixa-core test time
+        // rather than laundering the arm at the three within-entry
+        // cross-instruction cleanup-facing gates. Same peer-shape
+        // pin the sibling
+        // [`validate_restart_exclusive_routes_through_is_restart_predicate`]
+        // carries on the paired terminal-fallback axis.
+        let cases: Vec<UpgradeInstruction> = vec![
+            UpgradeInstruction::LoadModule { module: "a".into() },
+            UpgradeInstruction::SoftPurge { module: "b".into() },
+            UpgradeInstruction::Purge { module: "c".into() },
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            UpgradeInstruction::Restart,
+        ];
+        for instr in &cases {
+            let via_predicate = instr.is_cleanup();
+            let via_composition = instr.is_soft_purge() || instr.is_purge();
+            assert_eq!(
+                via_predicate, via_composition,
+                "UpgradeInstruction::{instr:?}: is_cleanup() must \
+                 byte-equal is_soft_purge() || is_purge() — the \
+                 lifted union predicate and its per-variant \
+                 composition are the same axis, one typed dispatch"
+            );
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_is_cleanup_implies_declared_module_is_some() {
+        // Composition-pin the load-bearing invariant every consumer
+        // that routes through `is_cleanup()` + `declared_module()`
+        // relies on: any [`UpgradeInstruction`] value whose
+        // `.is_cleanup()` returns `true` must have a `Some(_)`
+        // `.declared_module()`. This makes the three within-entry
+        // cross-instruction cleanup-facing gates' `.expect("is_cleanup()
+        // implies declared_module() is Some")` structurally
+        // infallible at build time — a future refactor that added
+        // a cleanup-shaped variant carrying no `:module` would trip
+        // here rather than panic at
+        // [`UpgradeFromEntry::validate_purge_ordering`] /
+        // [`UpgradeFromEntry::validate_state_change_before_cleanup`] /
+        // [`UpgradeFromEntry::validate_cleanup_singularity`] at
+        // runtime on the offending author's caixa.lisp.
+        let cases: Vec<UpgradeInstruction> = vec![
+            UpgradeInstruction::LoadModule { module: "a".into() },
+            UpgradeInstruction::SoftPurge { module: "b".into() },
+            UpgradeInstruction::Purge { module: "c".into() },
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            UpgradeInstruction::Restart,
+        ];
+        for instr in &cases {
+            if instr.is_cleanup() {
+                assert!(
+                    instr.declared_module().is_some(),
+                    "UpgradeInstruction::{instr:?}: is_cleanup() \
+                     must imply declared_module().is_some() — the \
+                     three within-entry cross-instruction cleanup-\
+                     facing gates rely on this invariant to route \
+                     the cleanup-target :module scalar through the \
+                     sibling declared_module accessor without a \
+                     pattern-bound `module` binding"
+                );
+            }
         }
     }
 
