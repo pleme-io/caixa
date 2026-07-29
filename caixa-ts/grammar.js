@@ -22,10 +22,17 @@ module.exports = grammar({
   word: $ => $.symbol,
 
   rules: {
-    source_file: $ => repeat($._form),
+    // A `.tlisp` script may open with a shebang (`#!/usr/bin/env
+    // tatara-script`). Without this rule the very first byte is an ERROR
+    // and the whole file loses highlighting.
+    source_file: $ => seq(optional($.shebang), repeat($._form)),
+
+    shebang: $ => token(seq('#!', /.*/)),
 
     _form: $ => choice(
       $.list,
+      $.map,
+      $.vector,
       $.quote,
       $.quasiquote,
       $.unquote,
@@ -44,23 +51,38 @@ module.exports = grammar({
       ')',
     ),
 
+    // The brace/vector dialect is REAL SYNTAX, per decision D4 in
+    // theory/TATARA-LISP-CONSOLIDATION.md. 62 live caixa.lisp manifests
+    // author nested maps (`:package { :name "…" }`); they are consumed by
+    // pleme-doc-gen. Without these rules a third of the corpus fails to
+    // parse.
+    map: $ => seq('{', repeat($._form), '}'),
+
+    vector: $ => seq('[', repeat($._form), ']'),
+
     quote: $ => seq('\'', $._form),
     quasiquote: $ => seq('`', $._form),
     unquote: $ => seq(',', $._form),
     unquote_splicing: $ => seq(',@', $._form),
 
-    keyword: $ => /:[A-Za-z_+\-*/=<>?!%&~][A-Za-z0-9_+\-*/=<>?!%&~]*/,
+    // `.` is legal inside an identifier: module-qualified heads (`fs.read`)
+    // and dotted names appear throughout the corpus.
+    keyword: $ => /:[A-Za-z_+\-*/=<>?!%&~.][A-Za-z0-9_+\-*/=<>?!%&~.]*/,
 
-    symbol: $ => /[A-Za-z_+\-*/=<>?!%&~][A-Za-z0-9_+\-*/=<>?!%&~]*/,
+    symbol: $ => /[A-Za-z_+\-*/=<>?!%&~.][A-Za-z0-9_+\-*/=<>?!%&~.]*/,
 
-    string: $ => seq(
+    // MUST be token(). Built from separate sub-rules, tree-sitter lets
+    // `extras` interleave BETWEEN them — so a `;` inside a string literal
+    // opened a line_comment and destroyed the parse for the rest of the
+    // file. This one word moved corpus coverage from 72.2% to 99.4%.
+    string: $ => token(seq(
       '"',
       repeat(choice(
         /[^"\\]/,
         /\\./,
       )),
       '"',
-    ),
+    )),
 
     number: $ => token(seq(
       optional(choice('-', '+')),
