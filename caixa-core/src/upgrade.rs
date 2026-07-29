@@ -595,7 +595,35 @@ impl UpgradeFromEntry {
             // enum arm-discriminator dispatch discipline extended from
             // the single-arm terminal-fallback family onto the two-arm
             // cleanup family here.
-            if matches!(instr, UpgradeInstruction::LoadModule { .. }) {
+            //
+            // Route the paired load-family arm-discriminator through the
+            // `gen_platform::IsVariant`-derive-generated
+            // [`UpgradeInstruction::is_load_module`] predicate rather than
+            // the raw `matches!(instr, UpgradeInstruction::LoadModule
+            // { .. })` open-coded pattern-match — closes the last
+            // unlifted `matches!`-based per-variant arm-discriminator
+            // axis on the [`UpgradeInstruction`] closed-set typed enum,
+            // sibling of the [`UpgradeInstruction::is_restart`] terminal-
+            // fallback routing (915a934) and the
+            // [`UpgradeInstruction::is_cleanup`] two-arm cleanup-family
+            // routing (0bc469f) that already lifted the paired
+            // arm-discriminator sites in this method. Every arm-family
+            // partition the gate keys off — load-family (`LoadModule`),
+            // cleanup-family (`SoftPurge | Purge`), terminal-fallback
+            // (`Restart`) — now consults exactly one typed dispatch on
+            // the substrate primitive, so a future sixth arm added to
+            // [`UpgradeInstruction`] (an `AwaitReadiness` gate, a
+            // `Downgrade` reverse-axis variant OTP's `relup` acknowledges,
+            // a `CanaryTraffic` split-traffic variant the M4 CR
+            // materializer could resolve per-CR — INSPIRATIONS §II.4)
+            // migrates as a single enum-declaration edit through the
+            // derive rather than a scattered per-consumer rewrite. The
+            // partition invariant is pinned by
+            // [`tests::upgrade_instruction_is_load_module_predicate_partitions_the_arm_set`]
+            // and the byte-identity of this dispatch against the pre-lift
+            // `matches!` pattern by
+            // [`tests::validate_purge_ordering_routes_through_is_load_module_predicate`].
+            if instr.is_load_module() {
                 loaded = true;
             } else if instr.is_cleanup() && !loaded {
                 return Err(UpgradeError::PurgeWithoutPriorLoad {
@@ -2907,6 +2935,98 @@ mod tests {
                      pattern-bound `module` binding"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn upgrade_instruction_is_load_module_predicate_partitions_the_arm_set() {
+        // The fail-before-pass-after pin on the `gen_platform::IsVariant`
+        // derive's [`UpgradeInstruction::is_load_module`] arm-discriminator
+        // predicate: [`UpgradeInstruction::LoadModule`] is the only
+        // variant that satisfies `.is_load_module()`; every cleanup arm
+        // (`SoftPurge` / `Purge`), the migration arm (`StateChange`),
+        // and the terminal-fallback arm (`Restart`) all return `false`.
+        // This pin makes the partition invariant load-bearing at
+        // caixa-core test time so a future derive regression (a hole
+        // that returns `false` for `LoadModule` too, or a byte-collision
+        // that flips a second variant to `true`) trips here rather than
+        // laundering the arm at
+        // [`Self::validate_purge_ordering`]'s load-family sticky-latch
+        // dispatch — a hole would silently keep `loaded = false` through
+        // a well-shaped [`UpgradeInstruction::LoadModule`] prefix and
+        // false-fire `PurgeWithoutPriorLoad` on the trailing cleanup;
+        // a collision would flip `loaded = true` on a well-shaped
+        // cleanup-only entry and silently swallow the load-less
+        // `PurgeWithoutPriorLoad` refusal. Peer of the sibling
+        // [`upgrade_instruction_is_restart_predicate_partitions_the_arm_set`]
+        // and
+        // [`upgrade_instruction_is_cleanup_predicate_partitions_the_arm_set`]
+        // pins on the paired terminal-fallback and cleanup-family
+        // arm-discriminator axes — closes the last unlifted `matches!`-
+        // based arm-discriminator axis on the OTP-appup closed-set
+        // typed enum.
+        let cases: &[(UpgradeInstruction, bool)] = &[
+            (UpgradeInstruction::LoadModule { module: "a".into() }, true),
+            (UpgradeInstruction::SoftPurge { module: "b".into() }, false),
+            (UpgradeInstruction::Purge { module: "c".into() }, false),
+            (
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                false,
+            ),
+            (UpgradeInstruction::Restart, false),
+        ];
+        for (variant, expected) in cases {
+            assert_eq!(
+                variant.is_load_module(),
+                *expected,
+                "UpgradeInstruction::{variant:?}.is_load_module() must \
+                 return {expected} (partition invariant on the \
+                 IsVariant-derived arm-discriminator predicate)"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_purge_ordering_routes_through_is_load_module_predicate() {
+        // Byte-identity pin on the [`Self::validate_purge_ordering`]
+        // load-family sticky-latch dispatch against the pre-lift
+        // `matches!(instr, UpgradeInstruction::LoadModule { .. })`
+        // predicate the site previously open-coded. Asserts the two
+        // projections agree byte-for-byte on every arm of the enum, so
+        // a future derive regression that flipped the predicate's
+        // arm-set would surface here at caixa-core test time rather
+        // than at [`Self::validate_purge_ordering`]'s per-entry
+        // load-before-cleanup ordering scan far from the derive site.
+        // Same peer-shape pin the sibling
+        // [`validate_restart_exclusive_routes_through_is_restart_predicate`]
+        // carries on the paired terminal-fallback axis and the
+        // [`upgrade_instruction_is_cleanup_composes_through_is_soft_purge_or_is_purge`]
+        // carries on the two-arm cleanup-family axis — the third and
+        // final byte-identity pin closes the substrate primitive's
+        // arm-discriminator dispatch discipline on the OTP-appup
+        // closed-set typed enum.
+        let cases: Vec<UpgradeInstruction> = vec![
+            UpgradeInstruction::LoadModule { module: "a".into() },
+            UpgradeInstruction::SoftPurge { module: "b".into() },
+            UpgradeInstruction::Purge { module: "c".into() },
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            UpgradeInstruction::Restart,
+        ];
+        for instr in &cases {
+            let via_predicate = instr.is_load_module();
+            let via_matches = matches!(instr, UpgradeInstruction::LoadModule { .. });
+            assert_eq!(
+                via_predicate, via_matches,
+                "UpgradeInstruction::{instr:?}: is_load_module() must \
+                 byte-equal matches!(_, UpgradeInstruction::LoadModule \
+                 {{ .. }}) — the pre-lift open-coded pattern and the \
+                 IsVariant-derived predicate are the same axis, one \
+                 typed dispatch"
+            );
         }
     }
 
