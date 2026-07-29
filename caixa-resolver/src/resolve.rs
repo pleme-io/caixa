@@ -207,7 +207,20 @@ fn fetch_path(dep: &Dep, caminho: &str) -> Result<FetchedDep, ResolveError> {
         resolved_fonte: DepSource::Path {
             caminho: caminho.to_string(),
         },
-        concrete_versao: target.versao.clone(),
+        // Route the fetched child's `:versao` `String`-carry projection
+        // through the typed [`Caixa::versao`] `&str`-return accessor —
+        // sibling to the paired `target.deps().to_vec()` accessor-route
+        // above; a `.to_string()` on the accessor's borrowed `&str`
+        // allocates exactly one `String` byte-equal to the prior raw
+        // `target.versao.clone()` read. Closes the last unlifted per-
+        // `Caixa` universal-axis raw-field-access `String`-carry site on
+        // the caixa-resolver closure-walker's per-fetched-target
+        // [`FetchedDep`] emit surface, sibling to the peer per-`Caixa`
+        // universal-axis converges every peer per-kind renderer (caixa-
+        // helm eb912de, caixa-flux 2fc5f81, caixa-mesh 980c059, caixa-
+        // tatara e73b19f, caixa-crd 41ab9a3) already routes its `:versao`
+        // `String`-carry through.
+        concrete_versao: target.versao().to_string(),
         conteudo: format!("path:{caminho}"),
     })
 }
@@ -268,7 +281,13 @@ fn fetch_git(
         // [`resolve_lacre`] queue-seeding read.
         child_deps: target.deps().to_vec(),
         resolved_fonte: resolved,
-        concrete_versao: target.versao.clone(),
+        // Sibling `:versao` `String`-carry converge to the paired
+        // [`fetch_path`] arm above — the git-fetched child's `:versao`
+        // scalar routes through the typed [`Caixa::versao`] `&str`-
+        // return accessor rather than the raw `.versao.clone()` field
+        // access, so both fetch-arm branches of the closure walker land
+        // the concrete-versao carry through the same typed dispatch.
+        concrete_versao: target.versao().to_string(),
         conteudo,
     })
 }
@@ -470,6 +489,133 @@ mod tests {
             names_with_dev.contains(&"devchild"),
             "include_dev=true closure must surface `devchild` via \
              root.deps_dev() — got {names_with_dev:?}"
+        );
+    }
+
+    /// Pin that both fetch-arm branches of the closure walker's per-
+    /// fetched-target [`FetchedDep`] emit surface — the [`fetch_path`]
+    /// arm and the [`fetch_git`] arm — carry each target's `:versao`
+    /// scalar into the resulting [`crate::LacreEntry`] via the typed
+    /// [`caixa_core::Caixa::versao`] `&str`-return accessor rather than a
+    /// raw `target.versao.clone()` field access. Byte-equal today
+    /// (`Caixa::versao` is `&self.versao`); catches any future emit-side
+    /// regression that reintroduces a raw field read and pins the two
+    /// [`FetchedDep::concrete_versao`] construction sites against a
+    /// hermetic tempdir-hosted three-caixa closure whose `:versao` bytes
+    /// distinguish each layer (root `"0.9.0"` → child `"0.5.2"` →
+    /// grandchild `"0.1.3"`), so a stub-that-hardcodes-a-fixed-string
+    /// regression trips on any layer.
+    ///
+    /// Peer of the sibling [`resolve_lacre_routes_dep_slot_family_through_caixa_accessors`]
+    /// per-`Caixa` `:deps` / `:deps-dev` slot-family pin on the sibling
+    /// per-`Caixa` `&[Dep]` slice-return accessor axis — same "the
+    /// emit path must route through the substrate-primitive typed
+    /// dispatch" discipline extended onto the outer top-level [`Caixa`]
+    /// `:versao` `&str`-return universal-axis at the closure-resolver's
+    /// per-fetched-target [`FetchedDep`] emit surface. Sibling to the
+    /// peer per-`Caixa` universal-axis converges every peer per-kind
+    /// renderer (caixa-helm eb912de, caixa-flux 2fc5f81, caixa-mesh
+    /// 980c059, caixa-tatara e73b19f, caixa-crd 41ab9a3) already routes
+    /// its `:versao` `String`-carry through.
+    #[test]
+    fn resolve_lacre_fetched_target_versao_routes_through_caixa_versao_accessor() {
+        let td = tempdir().expect("tempdir");
+        // Grandchild caixa on disk — `:versao "0.1.3"`.
+        let grandchild_path = td.path().join("grandchild");
+        std::fs::create_dir_all(&grandchild_path).unwrap();
+        std::fs::write(
+            grandchild_path.join("caixa.lisp"),
+            r#"(defcaixa
+                  :nome "grandchild"
+                  :versao "0.1.3"
+                  :kind Biblioteca
+                  :bibliotecas ("lib/grandchild.lisp"))"#,
+        )
+        .unwrap();
+
+        // Child caixa on disk — `:versao "0.5.2"`, depends on grandchild
+        // via Path so the closure walker traverses through
+        // [`fetch_path`] on both edges.
+        let child_path = td.path().join("child");
+        std::fs::create_dir_all(&child_path).unwrap();
+        let child_lisp = format!(
+            r#"(defcaixa
+                  :nome "child"
+                  :versao "0.5.2"
+                  :kind Biblioteca
+                  :bibliotecas ("lib/child.lisp")
+                  :deps ((:nome "grandchild" :versao "0.1.3"
+                          :fonte (:tipo path :caminho "{}"))))"#,
+            grandchild_path.display()
+        );
+        std::fs::write(child_path.join("caixa.lisp"), child_lisp).unwrap();
+
+        let root = Caixa {
+            nome: "root".into(),
+            versao: "0.9.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![Dep {
+                nome: "child".into(),
+                versao: "0.5.2".into(),
+                fonte: Some(DepSource::Path {
+                    caminho: child_path.to_string_lossy().into_owned(),
+                }),
+                opcional: false,
+                caracteristicas: vec![],
+            }],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+            ci: None,
+        };
+
+        let cache_root = td.path().join("cache");
+        std::fs::create_dir_all(&cache_root).unwrap();
+        let cache = CacheDir::at(&cache_root);
+        let cfg = ResolverConfig::default();
+        let lacre = resolve_lacre(&root, &cfg, &cache).expect("resolve closure");
+
+        // Every fetched target's `:versao` scalar must land in the
+        // resulting `LacreEntry.versao` byte-verbatim to what
+        // `Caixa::versao()` returns for the source caixa on disk. A
+        // regression that hardcoded a fixed string on either fetch-arm
+        // side of the closure walker trips on the layer whose byte-shape
+        // it drifted off.
+        let pairs: Vec<(&str, &str)> = lacre
+            .entradas
+            .iter()
+            .map(|e| (e.nome.as_str(), e.versao.as_str()))
+            .collect();
+        assert!(
+            pairs.contains(&("child", "0.5.2")),
+            "child entry must carry `:versao \"0.5.2\"` verbatim through \
+             fetch_path -> Caixa::versao() -> FetchedDep::concrete_versao \
+             -> LacreEntry.versao — got {pairs:?}"
+        );
+        assert!(
+            pairs.contains(&("grandchild", "0.1.3")),
+            "grandchild entry must carry `:versao \"0.1.3\"` verbatim \
+             through the transitive walk's Caixa::versao() accessor route \
+             — got {pairs:?}"
         );
     }
 }
