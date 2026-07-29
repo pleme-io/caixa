@@ -3376,9 +3376,32 @@ mod tests {
             RestartStrategy::RestForOne,
             RestartStrategy::SimpleOneForOne,
         ] {
+            // Route the `SimpleOneForOne ↔ non-SimpleOneForOne` fixture-
+            // shape partition through the [`gen_platform::IsVariant`]
+            // derive-generated [`RestartStrategy::is_simple_one_for_one`]
+            // predicate rather than the raw
+            // `matches!(strat, RestartStrategy::SimpleOneForOne)`
+            // open-coded pattern-match — same closed-set-typed-enum
+            // arm-discriminator dispatch discipline the sibling
+            // [`crate::upgrade::UpgradeInstruction::is_restart`] convergence
+            // (915a934) extended onto its two paired positive / negated
+            // `matches!` filter sites, and the sibling
+            // [`crate::aplicacao::PlacementStrategy`] `IsVariant`-derived
+            // predicate convergence (766ec63) extended onto the M3 mesh-
+            // slot per-`:placement` distribution-strategy `matches!`
+            // discriminator axis. See the sibling
+            // `supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations`
+            // fixture and the peer `manifest::tests::
+            // caixa_estrategia_and_supervisor_view_reads_through_lifted_estrategia_accessor`
+            // fixture — all three sites (the last unlifted
+            // `matches!`-based arm-discriminator axis on the OTP-shape
+            // supervisor sibling-restart-strategy closed-set typed enum,
+            // acknowledged in 915a934's Prior-commits footnote as the
+            // outstanding follow-up) now consult one typed dispatch on
+            // the substrate primitive.
             let s = SupervisorSpec {
                 estrategia: strat,
-                children: if matches!(strat, RestartStrategy::SimpleOneForOne) {
+                children: if strat.is_simple_one_for_one() {
                     vec![]
                 } else {
                     vec![child("w", "^0.1", RestartPolicy::Permanent)]
@@ -3402,6 +3425,90 @@ mod tests {
             let json = serde_json::to_string(&c).unwrap();
             let back: ChildSpec = serde_json::from_str(&json).unwrap();
             assert_eq!(c, back);
+        }
+    }
+
+    #[test]
+    fn restart_strategy_is_simple_one_for_one_predicate_partitions_the_arm_set() {
+        // The fail-before-pass-after pin on the `gen_platform::IsVariant`
+        // derive's [`RestartStrategy::is_simple_one_for_one`] arm-
+        // discriminator predicate: [`RestartStrategy::SimpleOneForOne`]
+        // is the only variant that satisfies `.is_simple_one_for_one()`;
+        // every static-children-bearing arm (`OneForOne` / `OneForAll`
+        // / `RestForOne`) returns `false`. This pin makes the partition
+        // invariant load-bearing at caixa-core test time so a future
+        // derive regression (a hole that returns `false` for
+        // `SimpleOneForOne` too, or a byte-collision that flips a second
+        // variant to `true`) trips here rather than laundering the arm
+        // at the three test-fixture builder sites (a hole flips the
+        // `SimpleOneForOne` fixture to carry a non-empty children list
+        // and the subsequent `SupervisorSpec::validate` would refuse the
+        // fixture with [`SupervisorError::SimpleOneForOneWithStaticChildren`];
+        // a collision flips a peer strategy's fixture to carry an empty
+        // children list and the subsequent `validate` would refuse with
+        // [`SupervisorError::NoChildren`] — either way, the pin fires
+        // here, at the derive site, rather than at the fixture-refusal
+        // site far away). Peer of the sibling
+        // [`crate::upgrade::tests::upgrade_instruction_is_restart_predicate_partitions_the_arm_set`]
+        // (915a934) pin on the M2 OTP-appup axis and the sibling
+        // [`crate::kind::tests::caixa_kind_is_variant_predicates_partition_the_arm_set`]
+        // pin on the M0 `:kind` axis.
+        let cases: &[(RestartStrategy, bool)] = &[
+            (RestartStrategy::OneForOne, false),
+            (RestartStrategy::OneForAll, false),
+            (RestartStrategy::RestForOne, false),
+            (RestartStrategy::SimpleOneForOne, true),
+        ];
+        for (variant, expected) in cases {
+            assert_eq!(
+                variant.is_simple_one_for_one(),
+                *expected,
+                "RestartStrategy::{variant:?}.is_simple_one_for_one() must \
+                 return {expected} (partition invariant on the \
+                 IsVariant-derived arm-discriminator predicate — every \
+                 test-fixture site that partitions the `:children` slot \
+                 shape on `SimpleOneForOne ↔ non-SimpleOneForOne` keys \
+                 off this typed dispatch, so a derive regression must \
+                 surface here rather than at the fixture-refusal site)"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_fixture_partition_routes_through_is_simple_one_for_one_predicate() {
+        // Byte-identity pin on the `SimpleOneForOne ↔ non-SimpleOneForOne`
+        // fixture-shape partition against the pre-lift
+        // `matches!(strat, RestartStrategy::SimpleOneForOne)` open-coded
+        // pattern-match every test-fixture builder site previously
+        // coupled to inline. Asserts the two projections agree byte-for-
+        // byte on every arm of the enum, so a future derive regression
+        // that flipped either predicate's arm-set would surface here at
+        // caixa-core test time rather than at the three fixture-builder
+        // sites (`supervisor::tests::round_trip_all_strategies`,
+        // `supervisor::tests::supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations`,
+        // `manifest::tests::caixa_estrategia_and_supervisor_view_reads_through_lifted_estrategia_accessor`)
+        // far from the derive site. Same peer-shape byte-identity pin
+        // every sibling `IsVariant`-derive-routed convergence carries on
+        // the substrate's closed-set typed-enum surface (peer of
+        // [`crate::upgrade::tests::validate_restart_exclusive_routes_through_is_restart_predicate`]
+        // on the M2 OTP-appup axis).
+        let cases = [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ];
+        for strat in cases {
+            let via_predicate = strat.is_simple_one_for_one();
+            let via_matches = matches!(strat, RestartStrategy::SimpleOneForOne);
+            assert_eq!(
+                via_predicate, via_matches,
+                "RestartStrategy::{strat:?}: is_simple_one_for_one() must \
+                 byte-equal matches!(_, RestartStrategy::SimpleOneForOne) — \
+                 the pre-lift open-coded pattern and the \
+                 IsVariant-derived predicate are the same axis, \
+                 one typed dispatch"
+            );
         }
     }
 
@@ -5228,7 +5335,25 @@ mod tests {
             // keeping the fixture validate-clean means a future extension
             // of the pin to exercise `validate` end-to-end does not have
             // to re-author the children shape.
-            let children = if matches!(estrategia, RestartStrategy::SimpleOneForOne) {
+            //
+            // Route the `SimpleOneForOne ↔ non-SimpleOneForOne` fixture-
+            // shape partition through the [`gen_platform::IsVariant`]
+            // derive-generated
+            // [`RestartStrategy::is_simple_one_for_one`] predicate rather
+            // than the raw `matches!(estrategia, RestartStrategy::
+            // SimpleOneForOne)` open-coded pattern-match — same closed-
+            // set-typed-enum arm-discriminator dispatch discipline the
+            // sibling [`crate::upgrade::UpgradeInstruction::is_restart`]
+            // convergence (915a934) extended onto its two paired positive
+            // / negated `matches!` sites and the peer
+            // [`crate::aplicacao::PlacementStrategy`] `IsVariant`-derived
+            // predicate convergence (766ec63) extended onto the M3 mesh-
+            // slot per-`:placement` distribution-strategy discriminator
+            // axis. See the sibling `round_trip_all_strategies` and the
+            // peer `manifest::tests::
+            // caixa_estrategia_and_supervisor_view_reads_through_lifted_estrategia_accessor`
+            // fixture for the two peer sites the same lift closes on.
+            let children = if estrategia.is_simple_one_for_one() {
                 Vec::new()
             } else {
                 vec![ChildSpec {
