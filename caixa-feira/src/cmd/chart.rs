@@ -141,7 +141,7 @@ pub(crate) fn first_servico_path(caixa: &Caixa, root: &std::path::Path) -> Resul
     if !p.exists() {
         bail!(
             "caixa {:?}: declared :servicos entry not found on disk: {}",
-            caixa.nome,
+            caixa.nome(),
             p.display()
         );
     }
@@ -320,6 +320,71 @@ mod tests {
             .expect("ServicoCountMismatch must be reachable through the chain");
         assert_eq!(scm.nome, "two-servicos");
         assert_eq!(scm.count, 2);
+    }
+
+    #[test]
+    fn first_servico_path_missing_file_diagnostic_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the `first_servico_path` helper's
+        // file-existence `bail!` diagnostic's terminal `{:?}` `:nome`
+        // scalar must derive through the typed
+        // [`caixa_core::Caixa::nome`] accessor byte-for-byte. Before
+        // this converge the emit site at :144 carried a raw
+        // `caixa.nome` field-access into the inline `bail!(...)`
+        // template, bypassing the typed dispatch every peer `feira`
+        // verb's `:nome` emit-site already routes through (ef83332
+        // `feira build`, 3219a42 `feira app`, 4b05240 `feira deploy`).
+        // This helper sits shared between `feira chart` and
+        // `feira deploy` (both verbs route their per-Servico
+        // entry-point through it), so a re-inlined raw field-access
+        // here silently splits the offending-caixa diagnostic each
+        // verb surfaces from the byte-string the paired downstream
+        // artefacts already carry under the accessor — with the
+        // failure surfacing as an operator hitting the file-existence
+        // gate on either verb and reading a `:nome` scalar that
+        // disagrees with the `Chart.yaml` / `programs.yaml` emit at
+        // the same caixa's downstream artefact site far from the
+        // regression's source.
+        //
+        // Byte-equal today (both paths return the same String bytes);
+        // the pin catches any future accessor extension (a SemVer-2
+        // build-metadata canonicalization on `Caixa::nome`, a per-
+        // edition per-`:nome` overlay dispatch through the sibling
+        // [`caixa_core::Caixa::edicao`] axis) whose `first_servico_path`
+        // diagnostic regresses to the raw field and silently splits
+        // the offending-caixa scalar from the paired downstream
+        // accessor-derived emits. Peer with the sibling
+        // [`super::build::tests::build_summary_line_routes_through_caixa_nome_and_versao_accessors`] /
+        // [`super::deploy::tests::deploy_summary_line_routes_through_caixa_nome_and_versao_accessors`] /
+        // [`super::app::tests::graph_header_line_routes_through_caixa_nome_and_versao_accessors`]
+        // pins on the peer `feira build` / `feira deploy` / `feira app`
+        // verb-emit surfaces.
+        let dir = tempdir().expect("tempdir");
+        let caixa = parse(
+            r#"(defcaixa
+                 :nome "missing-file-nome"
+                 :kind Servico
+                 :versao "0.1.0"
+                 :servicos ("servicos/missing-file-nome.computeunit.yaml"))"#,
+        );
+        let err = first_servico_path(&caixa, dir.path()).expect_err("missing file must reject");
+        let missing_path = dir
+            .path()
+            .join("servicos/missing-file-nome.computeunit.yaml");
+        assert_eq!(
+            format!("{err}"),
+            format!(
+                "caixa {:?}: declared :servicos entry not found on disk: {}",
+                caixa.nome(),
+                missing_path.display()
+            ),
+            "first_servico_path's file-existence bail! diagnostic must \
+             derive its :nome scalar through the typed Caixa::nome \
+             accessor — a regression that re-inlines the raw caixa.nome \
+             field-access at the emit site silently splits the offending-\
+             caixa diagnostic both `feira chart` and `feira deploy` route \
+             through this helper from the peer accessor-derived \
+             substrate-side emit"
+        );
     }
 
     #[test]
