@@ -274,6 +274,81 @@ pub struct CiDecomposeFailure {
     pub source: canteiro_types::DecomposeError,
 }
 
+/// Predicate: decompose a borrowed [`canteiro_types::CiRun`] into its
+/// typed [`canteiro_types::CanteiroDag`] via
+/// [`canteiro_types::decompose`], wrapping any
+/// [`canteiro_types::DecomposeError`] in a typed [`CiDecomposeFailure`]
+/// view (carrying [`Caixa::nome`]) on rejection. The canonical
+/// entry-point every per-`Acao` consumer wraps in its own
+/// [`thiserror`] `Error` variant via `#[from]` — the call site becomes
+/// a single `let cd = caixa_core::decompose_ci(caixa, ci)?;` in place
+/// of the prior inline
+/// `let cd = canteiro_types::decompose(ci).map_err(|source| CiDecomposeFailure { nome: caixa.nome().to_string(), source })?;`
+/// block.
+///
+/// Takes the borrowed [`canteiro_types::CiRun`] as a separate argument
+/// (rather than re-borrowing it through [`require_ci`] internally) so
+/// the axis stays single-purpose — the sibling [`require_ci`] presence
+/// gate returns the borrowed slot, this predicate consumes it, and the
+/// two together form the substrate-canonical two-line per-`Acao` prelude
+/// `let ci = caixa_core::require_ci(caixa)?; let cd = caixa_core::decompose_ci(caixa, ci)?;`
+/// every present + roadmapped per-`Acao` consumer runs at its
+/// entry-point (matching how the sibling per-Servico entry-gate axes
+/// keep [`require_kind`] and [`require_single_servico`] as separate
+/// primitives, then compose them into the V0-shape
+/// [`require_v0_servico_shape`] helper — the compound `require + decompose`
+/// helper is a peer-lift for a later commit when a second per-`Acao`
+/// consumer arrives). The `caixa: &Caixa` argument is what makes the
+/// diagnostic name the offending `caixa.lisp` — the borrowed
+/// [`Caixa::nome`] accessor projects through the typed-view
+/// constructor unchanged, matching the peer [`require_ci`] /
+/// [`require_kind`] / [`require_single_servico`] typed-view constructors.
+///
+/// Lifted to a single helper so the [`canteiro_types::decompose`]
+/// axis — the same axis every per-`Acao` consumer runs on its declared
+/// `:ci` slot — lives in exactly one place across every future
+/// per-`Acao` consumer: a future `sui-supercacheci::canteiro::emit_gha`
+/// workflow renderer (the deferred `caixa-actions` next step named in
+/// its own crate docs), a future per-`Acao` CR materializer's admission
+/// webhook, a future `feira lint` sub-diagnostic that offers a
+/// `:deps`-repair suggestion on the [`canteiro_types::DecomposeError::MissingDependency`]
+/// arm but not the [`canteiro_types::DecomposeError::Cycle`] arm — every
+/// consumer reaches for the same one-liner + `#[from]` and gets the
+/// diagnostic-naming-the-offending-caixa contract for free.
+///
+/// Same trajectory as [`require_kind`] / [`KindMismatch`] on the peer
+/// per-renderer kind-gate axis, [`require_single_servico`] /
+/// [`ServicoCountMismatch`] on the peer per-Servico V0-count-gate
+/// axis, and [`require_ci`] / [`MissingCiSlot`] on the peer per-`Acao`
+/// presence-gate axis: one `caixa_core::require_*`/`decompose_ci`
+/// helper per typed axis, so the diagnostic shape (named caixa, named
+/// field) is uniform across the substrate, and every consumer's
+/// `Error::From<*>` `#[from]` arm gets the diagnostic-naming-the-
+/// offending-caixa contract for free.
+///
+/// # Errors
+///
+/// Returns [`CiDecomposeFailure`] when [`canteiro_types::decompose`]
+/// refuses the borrowed `:ci` run — every failure mode the sibling
+/// [`canteiro_types::DecomposeError`] enumerates (a duplicate node
+/// name, a dependency on an undeclared node, a dependency cycle) lands
+/// on this arm. The error carries the caixa's `:nome` + the underlying
+/// [`canteiro_types::DecomposeError`] verbatim so the diagnostic names
+/// the offending `caixa.lisp` and a consumer that fans on the specific
+/// arm reaches for `err.source` directly rather than re-parsing the
+/// Display bytes — same shape every consumer's
+/// `Error::From<CiDecomposeFailure>` converts into the consumer's local
+/// error type.
+pub fn decompose_ci(
+    caixa: &Caixa,
+    ci: &canteiro_types::CiRun,
+) -> Result<canteiro_types::CanteiroDag, CiDecomposeFailure> {
+    canteiro_types::decompose(ci).map_err(|source| CiDecomposeFailure {
+        nome: caixa.nome().to_string(),
+        source,
+    })
+}
+
 /// Typed `:servicos`-count-mismatch view: the canonical surface every
 /// per-Servico `caixa-<target>` renderer raises when it's handed a
 /// [`Caixa`] whose `:servicos` list doesn't carry exactly one entry —
@@ -27825,6 +27900,171 @@ mod tests {
         let src_msg = format!("{src}");
         let expected_msg = format!("{}", canteiro_types::DecomposeError::Cycle);
         assert_eq!(src_msg, expected_msg);
+    }
+
+    // ── decompose_ci — per-`Acao` decompose-axis predicate ────────────
+
+    fn cyclic_ci_run() -> canteiro_types::CiRun {
+        // A minimal two-node cycle: `a` depends on `b`, `b` depends on
+        // `a`. Every failure mode `canteiro_types::decompose` refuses
+        // (duplicate node name, missing dependency, cycle) would work as
+        // a fixture; the cycle arm is the same one the `caixa-actions`
+        // per-`Acao` renderer's own `validate_rejects_a_cyclic_ci_run`
+        // test already reads for, so both the substrate primitive's own
+        // pin and the consumer's byte-parity pin share one canonical
+        // fixture shape.
+        canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "a",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "a".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["b".into()],
+                ),
+                canteiro_types::CiNode::new(
+                    "b",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "b".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["a".into()],
+                ),
+            ],
+        }
+    }
+
+    fn linear_ci_run() -> canteiro_types::CiRun {
+        // A minimal two-node acyclic run: `test` depends on `build`.
+        // Same shape as the `caixa-actions` `validate_decomposes_a_two_
+        // node_build_then_test_run` happy-path test — one shared
+        // canonical fixture for every downstream substrate consumer.
+        canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "build",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "build".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+                canteiro_types::CiNode::new(
+                    "test",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "test".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["build".into()],
+                ),
+            ],
+        }
+    }
+
+    #[test]
+    fn decompose_ci_accepts_valid_ci_run_and_returns_canteiro_dag() {
+        // The happy path: a valid two-node acyclic run decomposes
+        // cleanly through `decompose_ci`, returning the owned
+        // `canteiro_types::CanteiroDag` the sibling `canteiro_types::
+        // decompose` returns — the substrate primitive is a
+        // pass-through on success, only wrapping the error arm in a
+        // typed named-caixa view. Matches the peer `require_ci`
+        // presence-axis happy path (accept-with-borrowed-CiRun) —
+        // extends the "one primitive per axis, pass-through on success"
+        // discipline onto the decompose axis.
+        let c = bare_acao_without_ci();
+        let ci = linear_ci_run();
+        let cd = decompose_ci(&c, &ci).expect("valid acyclic CiRun decomposes cleanly");
+        // The topo_order() call on a successful decompose is infallible
+        // by construction (no cycles present), so a downstream consumer
+        // reaches for the DAG's own algebra directly rather than a
+        // second gate. Iterating the returned order (rather than
+        // asserting on a concrete container shape) keeps the pin
+        // agnostic to whether topo_order returns Vec<NodeId>,
+        // SmallVec<NodeId>, or any future returned collection.
+        let topo = cd
+            .topo_order()
+            .expect("acyclic CanteiroDag returns a valid topo_order");
+        assert_eq!(
+            topo.iter().count(),
+            2,
+            "topo_order on a two-node acyclic run must yield two node ids"
+        );
+    }
+
+    #[test]
+    fn decompose_ci_rejects_cyclic_ci_run_with_typed_view() {
+        // The fail-before-pass-after pin: pre-lift `caixa-actions`'
+        // inline `.map_err(|source| CiDecomposeFailure { nome: nome
+        // .clone(), source })` gate constructed a `CiDecomposeFailure`
+        // at exactly one crate's call site with no compile-time link to
+        // any typed named-caixa predicate the sibling per-`Acao` /
+        // per-renderer entry-gate axes carry. A future per-`Acao`
+        // consumer (the deferred `sui-supercacheci::canteiro::emit_gha`
+        // workflow renderer named in the `caixa-actions` crate docs, a
+        // future per-`Acao` CR materializer's admission webhook) would
+        // re-inline the same `.map_err(...)` construction on its own
+        // call site and open a second untracked
+        // `caixa.nome().to_string()` re-projection path — exactly the
+        // "feira verb whose error path doesn't name the offending
+        // caixa" punch-list item the compounding-mandate protocol calls
+        // out. Lifting the gate onto the typed `decompose_ci` predicate
+        // closes the drift potential structurally: every future
+        // per-`Acao` consumer reaches for the same one-liner + `#[from]`
+        // and gets the diagnostic-naming-the-offending-caixa contract
+        // for free.
+        let c = bare_acao_without_ci();
+        let ci = cyclic_ci_run();
+        let err = decompose_ci(&c, &ci).unwrap_err();
+        assert_eq!(err.nome, "hello-rio");
+        assert_eq!(err.source, canteiro_types::DecomposeError::Cycle);
+    }
+
+    #[test]
+    fn decompose_ci_routes_offending_nome_via_caixa_nome_accessor() {
+        // Pin: the `CiDecomposeFailure::nome` `String` the constructor
+        // writes must be a byte-identical copy of what the lifted
+        // `crate::Caixa::nome` accessor returns for the same `Caixa`
+        // input — the same routing pin discipline the peer
+        // `require_kind` / `require_single_servico` / `require_ci`
+        // typed views already carry, so a future regression that
+        // re-inlines a raw `caixa.nome.clone()` `String::clone()` of
+        // the underlying field at the constructor site (which would
+        // silently ignore any future `CaixaNome` newtype the
+        // `crate::Caixa::nome` accessor upgrades to project the display
+        // byte-string of) trips here before the drift lands on a
+        // per-consumer `#[from]` arm.
+        let mut c = bare_acao_without_ci();
+        c.nome = "decompose-ci-pin".into();
+        let expected_nome_via_accessor = c.nome().to_string();
+        assert_eq!(
+            expected_nome_via_accessor, "decompose-ci-pin",
+            "the mutated fixture's `:nome` must be observable through \
+             the accessor before the decompose gate fires",
+        );
+        let ci = cyclic_ci_run();
+        let err = decompose_ci(&c, &ci).unwrap_err();
+        assert_eq!(
+            err.nome, expected_nome_via_accessor,
+            "the CiDecomposeFailure's `nome` field must equal \
+             `caixa.nome().to_string()` — the `decompose_ci` predicate \
+             must route through the lifted `Caixa::nome` accessor's \
+             `.to_string()` extension, not a raw `caixa.nome.clone()` \
+             `String::clone()` of the underlying field",
+        );
     }
 
     // ── require_single_servico / ServicoCountMismatch — V0 Servico-shape ─

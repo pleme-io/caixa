@@ -30,7 +30,7 @@
 //! **not built** in this pass.
 
 use caixa_core::{Caixa, CaixaKind, CiDecomposeFailure};
-use canteiro_types::{DecomposeError, decompose};
+use canteiro_types::DecomposeError;
 use thiserror::Error;
 
 /// Errors `caixa-actions` can raise.
@@ -107,12 +107,9 @@ pub struct RenderedAcao {
 pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
     caixa_core::require_kind(caixa, CaixaKind::Acao)?;
     let ci = caixa_core::require_ci(caixa)?;
+    let cd = caixa_core::decompose_ci(caixa, ci)?;
     let nome = caixa.nome().to_string();
 
-    let cd = decompose(ci).map_err(|source| CiDecomposeFailure {
-        nome: nome.clone(),
-        source,
-    })?;
     let topo = cd.topo_order().map_err(|_| CiDecomposeFailure {
         nome: nome.clone(),
         source: DecomposeError::Cycle,
@@ -290,6 +287,77 @@ mod tests {
                 );
             }
             other => panic!("expected Error::Decompose(CiDecomposeFailure), got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_decompose_call_routes_through_caixa_core_decompose_ci_helper() {
+        // Fail-before-pass-after pin on the [`validate`] first-axis
+        // `.map_err` on [`canteiro_types::decompose`]: pre-lift the arm
+        // constructed a hand-authored `CiDecomposeFailure { nome:
+        // nome.clone(), source }` at this crate's own [`validate`] call
+        // site with no compile-time link to any typed named-caixa
+        // predicate the sibling per-`Acao` presence-gate axis (lifted
+        // at c0eaf3d via [`caixa_core::require_ci`]) carries.
+        // Converging the arm on the substrate-canonical
+        // [`caixa_core::decompose_ci`] predicate (peer of the sibling
+        // [`caixa_core::require_ci`] presence gate on the per-`Acao`
+        // `:ci`-slot diagnostic surface) closes the drift potential
+        // structurally: every future per-`Acao` consumer that runs
+        // [`canteiro_types::decompose`] on a borrowed `:ci` slot reaches
+        // for one substrate primitive + `#[from]` arm and gets the
+        // diagnostic-naming-the-offending-caixa contract for free —
+        // matching the peer [`Error::MissingCi`] `#[from]` on
+        // [`caixa_core::MissingCiSlot`] via [`caixa_core::require_ci`]
+        // shape three lines above.
+        //
+        // Byte-for-byte parity assertion: [`validate`]'s first-axis
+        // diagnostic (on the same fixture) must equal the
+        // [`caixa_core::decompose_ci`] primitive's diagnostic —
+        // otherwise the crate's own [`validate`] has drifted from the
+        // substrate primitive and re-inlined the wrap. Trips at the
+        // caller's build time, not silently at the diagnostic emission
+        // site.
+        let ci = CiRun {
+            workspace: "pleme-io".to_string(),
+            repo: "caixa".to_string(),
+            nodes: vec![
+                CiNode::new("a", EnvClass::None, action("a"), vec!["b".to_string()]),
+                CiNode::new("b", EnvClass::None, action("b"), vec!["a".to_string()]),
+            ],
+        };
+        let c = acao_caixa(Some(ci));
+        let via_validate = validate(&c).expect_err("cyclic CiRun must be rejected");
+        let ci_borrowed = c.ci().expect("fixture carries :ci");
+        let via_primitive = caixa_core::decompose_ci(&c, ci_borrowed)
+            .expect_err("cyclic CiRun must be rejected by decompose_ci");
+        match via_validate {
+            Error::Decompose(failure) => {
+                assert_eq!(
+                    failure.nome, via_primitive.nome,
+                    "validate's decompose-axis :nome must equal \
+                     caixa_core::decompose_ci's :nome on the same fixture — \
+                     otherwise validate has re-inlined the CiDecomposeFailure \
+                     construction and lost the substrate primitive"
+                );
+                assert_eq!(
+                    failure.source, via_primitive.source,
+                    "validate's decompose-axis DecomposeError arm must equal \
+                     caixa_core::decompose_ci's DecomposeError arm on the same \
+                     fixture — pins the pass-through-on-error contract"
+                );
+                let via_validate_msg = format!("{failure}");
+                let via_primitive_msg = format!("{via_primitive}");
+                assert_eq!(
+                    via_validate_msg, via_primitive_msg,
+                    "validate's decompose-axis Display bytes must equal \
+                     caixa_core::decompose_ci's Display bytes — a future \
+                     format edit lands in exactly one place \
+                     (caixa-core::render::CiDecomposeFailure), not \
+                     duplicated across every per-`Acao` consumer"
+                );
+            }
+            other => panic!("expected Error::Decompose, got {other:?}"),
         }
     }
 
