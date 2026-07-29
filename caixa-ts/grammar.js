@@ -1,18 +1,25 @@
 /**
- * tree-sitter-caixa — grammar for tatara-lisp / caixa sources.
+ * tree-sitter-tatara-lisp — grammar for the tatara-lisp language.
  *
- * Mirrors the surface of `caixa_ast::parser` (which is the authoritative
- * Rust grammar used by fmt/lint/LSP). Keep both in lockstep; when one
- * changes, the other follows.
+ * NAME. The grammar is `tatara_lisp`, not `caixa`: it parses the whole
+ * language (1121 .tlisp/.lisp files across the fleet), of which caixa
+ * manifests are one dialect. `name` below is the dlsym symbol
+ * (`tree_sitter_tatara_lisp`) AND the `queries/<name>/` directory nvim
+ * looks in — renaming it after consumers exist fails at runtime with
+ * "symbol not found", so it is settled here, before any consumer.
+ *
+ * Mirrors the surface of `caixa_ast::parser` (the authoritative Rust
+ * grammar used by fmt/lint/LSP). Keep both in lockstep; when one changes,
+ * the other follows.
  *
  * The grammar is deliberately minimal — homoiconic Lisp plus the four
- * reader macros (quote, quasiquote, unquote, unquote-splicing). Semantic
- * flavors (defcaixa, defteia, etc.) are not separate rules; they surface
- * via query captures in queries/highlights.scm.
+ * reader macros (quote, quasiquote, unquote, unquote-splicing) and the
+ * map/vector dialect. Semantic flavors (defcaixa, defteia, …) are not
+ * separate rules; they surface via query captures in highlights.scm.
  */
 
 module.exports = grammar({
-  name: 'caixa',
+  name: 'tatara_lisp',
 
   extras: $ => [
     /\s/,

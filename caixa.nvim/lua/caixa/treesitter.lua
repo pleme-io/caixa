@@ -1,7 +1,10 @@
--- Tree-sitter parser registration for the caixa grammar.
+-- Tree-sitter parser registration for the tatara-lisp grammar.
 --
--- If nvim-treesitter is present, register the grammar source and map the
--- "caixa" filetype to the parser.
+-- The grammar is `tatara_lisp` (it parses the whole language; caixa
+-- manifests are one dialect of it) and the filetype is `tlisp`. Both
+-- names are load-bearing: the grammar name is the dlsym symbol AND the
+-- `queries/<name>/` directory nvim looks in, and the filetype is what
+-- nvim keys highlight/indent/fold on.
 
 local M = {}
 
@@ -11,14 +14,14 @@ function M.setup()
     return -- nvim-treesitter not installed; silent no-op
   end
   local parser_config = parsers.get_parser_configs()
-  parser_config.caixa = {
+  parser_config.tatara_lisp = {
     install_info = {
       url = "https://github.com/pleme-io/caixa",
       files = { "src/parser.c" },
       location = "caixa-ts",
       branch = "main",
     },
-    filetype = "caixa",
+    filetype = "tlisp",
     maintainers = { "@pleme-io" },
   }
 end
