@@ -250,7 +250,7 @@ impl LayoutInvariants for StandardLayout {
         // typed Caixa surface (`:children :caixa` ad4abf1,
         // `:membros :caixa` and this dep-graph gate together cover
         // every typed-name-graph axis the substrate carries).
-        crate::dep::validate_no_self_dep(&caixa.deps, &caixa.deps_dev, &caixa.nome).map_err(
+        crate::dep::validate_no_self_dep(caixa.deps(), caixa.deps_dev(), caixa.nome()).map_err(
             |err| LayoutError::DepsViolation {
                 caixa: caixa.nome().to_string(),
                 issue: err.to_string(),
@@ -1010,11 +1010,11 @@ impl LayoutInvariants for StandardLayout {
         // arm-ordering posture every peer cross-axis gate uses
         // (`*_invalid_fires_before_duplicate_check` /
         // `*_takes_precedence_over_*` pins on every typed-graph axis).
-        crate::upgrade::validate_upgrade_from_against_versao(caixa.upgrade_from(), &caixa.versao)
+        crate::upgrade::validate_upgrade_from_against_versao(caixa.upgrade_from(), caixa.versao())
             .map_err(|err| LayoutError::UpgradeViolation {
-            caixa: caixa.nome().to_string(),
-            issue: err.to_string(),
-        })?;
+                caixa: caixa.nome().to_string(),
+                issue: err.to_string(),
+            })?;
         // Cross-slot composition gate: every `:upgrade-from` entry whose
         // `:instructions` list carries a `(:state-change …)` instruction
         // must also have `:behavior :on-state-change` declared on the
@@ -3993,13 +3993,15 @@ mod tests {
 
     #[test]
     fn cross_slot_self_edge_gates_route_parent_nome_through_lifted_accessor() {
-        // Composition pin: both cross-slot self-edge gates fired from
+        // Composition pin: every cross-slot self-edge gate fired from
         // `LayoutInvariants::verify` — the supervision-tree arm's
-        // `crate::supervisor::validate_no_self_supervision` call and the
+        // `crate::supervisor::validate_no_self_supervision` call, the
         // Aplicacao arm's `crate::aplicacao::validate_no_self_membership`
-        // call — must key their `parent_nome` arg off the typed
-        // [`Caixa::nome`] accessor, not the raw `&caixa.nome`
-        // `&String`-borrow of the underlying field.
+        // call, and the dep-graph arm's
+        // `crate::dep::validate_no_self_dep` call — must key its
+        // `parent_nome` arg off the typed [`Caixa::nome`] accessor, not
+        // the raw `&caixa.nome` `&String`-borrow of the underlying
+        // field.
         //
         // Structurally: a rename of the storage field or a hypothetical
         // accessor rebrand (a per-cluster alias table pinned through a
@@ -4011,14 +4013,15 @@ mod tests {
         // routes through `caixa.nome()` (the caixa-mesh 980c059,
         // caixa-helm 22461ef, caixa-flux 162e2e2, caixa-crd 61d3429,
         // caixa-feira ef83332 raw-borrow converges), reintroducing the
-        // drift surface the sibling converges closed. Both arms fire
-        // their per-kind `LayoutError` variant (`SupervisorViolation` /
-        // `AplicacaoViolation`) whose `caixa` field carries the offending
-        // parent name verbatim through `caixa.nome().clone()`; asserting
-        // the field equals `caixa.nome()` on the mutated fixture pins
-        // the accessor-routed parent-nome projection at both call sites
-        // — a future silent detour that had the gate observe a stale /
-        // aliased name at the arg boundary would surface here as a
+        // drift surface the sibling converges closed. Each arm fires
+        // its per-kind `LayoutError` variant (`SupervisorViolation` /
+        // `AplicacaoViolation` / `DepsViolation`) whose `caixa` field
+        // carries the offending parent name verbatim through
+        // `caixa.nome().clone()`; asserting the field equals
+        // `caixa.nome()` on the mutated fixture pins the accessor-
+        // routed parent-nome projection at every call site — a future
+        // silent detour that had the gate observe a stale / aliased
+        // name at the arg boundary would surface here as a
         // `caixa != "demo"` inequality.
         //
         // Peer of the sibling per-caixa-crate `nome`-arg raw-borrow
@@ -4026,9 +4029,9 @@ mod tests {
         // renderer crates; ef83332 on the CLI) — extends the "one typed
         // dispatch per `:nome` consumer" discipline onto the substrate's
         // own [`LayoutInvariants::verify`] cross-slot self-edge gate
-        // wire-up on both typed-name-graph kinds.
+        // wire-up on all three typed-name-graph kinds.
         use crate::{
-            ChildSpec, Membro, Placement, PlacementStrategy, RestartPolicy, RestartStrategy,
+            ChildSpec, Dep, Membro, Placement, PlacementStrategy, RestartPolicy, RestartStrategy,
         };
         let root = PathBuf::from("/tmp/x");
         let manifest = root.join("caixa.lisp");
@@ -4098,6 +4101,133 @@ mod tests {
              `parent_nome` arg must route through the lifted \
              [`Caixa::nome`] accessor, not the raw `&caixa.nome` \
              `&String`-borrow of the underlying field",
+        );
+
+        // Dep-graph arm — third typed-name-graph kind on the
+        // `parent_nome` arg boundary. Same discipline as the peer
+        // supervision-tree and Aplicacao-membership arms above.
+        // Constructed alongside so any future accessor drift lands on
+        // all three arms in the same pin. Needs a distinct layout
+        // fixture from the supervisor / aplicacao arms above because
+        // the `Biblioteca` kind's code-path existence gate demands the
+        // canonical `lib/<nome>.lisp` path also `exists`, so the shim
+        // covers both `caixa.lisp` and `lib/demo.lisp`.
+        let default_lib = root.join("lib").join("demo.lisp");
+        let manifest_dep = manifest.clone();
+        let default_lib_clone = default_lib.clone();
+        let layout_dep = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest_dep || p == default_lib_clone);
+        let mut lib = caixa(CaixaKind::Biblioteca);
+        lib.deps = vec![Dep::simple("demo", "^0.1")];
+        let parent_nome_via_accessor = lib.nome();
+        assert_eq!(
+            parent_nome_via_accessor, "demo",
+            "the caixa() fixture helper's `:nome` must be \"demo\" on \
+             the Biblioteca arm too — same accessor-ground-truth as the \
+             sibling supervisor + Aplicacao arms above",
+        );
+        let err = layout_dep.verify(&lib, &root).unwrap_err();
+        let LayoutError::DepsViolation { caixa: c_nome, .. } = err else {
+            panic!("expected DepsViolation for self-referential :deps entry, got {err:?}");
+        };
+        assert_eq!(
+            c_nome, parent_nome_via_accessor,
+            "the DepsViolation's `caixa` field must equal \
+             `lib.nome()` — the cross-slot self-dep gate's `parent_nome` \
+             arg must route through the lifted [`Caixa::nome`] accessor, \
+             not the raw `&caixa.nome` `&String`-borrow of the underlying \
+             field",
+        );
+    }
+
+    #[test]
+    fn upgrade_against_versao_gate_routes_current_versao_through_lifted_accessor() {
+        // Composition pin: the cross-slot `:upgrade-from :from` ↔
+        // `:versao` precedence gate fired from
+        // `LayoutInvariants::verify` — the
+        // `crate::upgrade::validate_upgrade_from_against_versao` call —
+        // must key its `versao` arg off the typed [`Caixa::versao`]
+        // accessor, not the raw `&caixa.versao` `&String`-borrow of
+        // the underlying field.
+        //
+        // Same "arg-boundary reads through the lifted accessor"
+        // discipline as the sibling
+        // [`cross_slot_self_edge_gates_route_parent_nome_through_lifted_accessor`]
+        // pin above on the `:nome`-arg axis of the three typed-name-
+        // graph self-edge gates — extended here onto the `:versao`-arg
+        // axis of the substrate's remaining `LayoutInvariants::verify`
+        // cross-slot arg-carrying call site. Structurally byte-equal
+        // today (the accessor is `pub fn versao(&self) -> &str { &self.versao }`,
+        // so both paths coerce to the same `&str`); the pin catches a
+        // future silent detour (an accessor rebrand that no longer
+        // shipped the raw slot verbatim — a per-`:edicao` overlay,
+        // a promotion of `:versao` to a `CaixaVersion` newtype with a
+        // canonicalizing accessor, an M4 CR-materializer-side pinning
+        // through a resolver-annotated `:versao-resolved` slot) that
+        // would silently split the substrate's own precedence gate
+        // from every peer consumer already routing `:versao` reads
+        // through the lifted accessor.
+        //
+        // The gate fires an `UpgradeViolation { caixa, issue }` when a
+        // `:upgrade-from` entry's `:from` is not strictly less than
+        // the top-level `:versao` — the `issue` string names both the
+        // offending prior version and the current version verbatim,
+        // so asserting the substring `caixa.versao()` appears in the
+        // fired diagnostic pins the accessor-routed current-versao
+        // projection at the arg boundary. A raw-borrow bypass would
+        // still surface the same bytes today, but the presence of
+        // this pin makes any future divergence between the accessor's
+        // return and the raw slot's contents a build-time failure at
+        // this call site.
+        use crate::{UpgradeFromEntry, UpgradeInstruction};
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let servico_path = root.join("servicos").join("demo.computeunit.yaml");
+        let manifest_clone = manifest.clone();
+        let servico_clone = servico_path.clone();
+        let layout = StandardLayout::new()
+            .with_path_exists(move |p| p == manifest_clone || p == servico_clone);
+        let mut svc = caixa(CaixaKind::Servico);
+        svc.versao = "0.1.0".into();
+        svc.servicos = vec!["servicos/demo.computeunit.yaml".into()];
+        // `:from` >= current `:versao` — trips the precedence gate the
+        // `validate_upgrade_from_against_versao` cross-slot call
+        // enforces. `:load-module` carries no on-disk path so the
+        // path-existence gate downstream stays inert; the precedence
+        // gate is what fires. No `:on-state-change` needed because the
+        // instruction list carries no `:state-change` entry, so the
+        // sibling `validate_upgrade_from_against_behavior` gate is
+        // inert too.
+        svc.upgrade_from = vec![UpgradeFromEntry {
+            from: "0.2.0".into(),
+            instructions: vec![UpgradeInstruction::LoadModule {
+                module: "demo".into(),
+            }],
+        }];
+        let current_versao_via_accessor = svc.versao().to_string();
+        assert_eq!(
+            current_versao_via_accessor, "0.1.0",
+            "the mutated fixture's `:versao` must be observable through \
+             the accessor before layout verification fires — a drift on \
+             `Caixa::versao` would surface here as a `!= \"0.1.0\"` \
+             inequality",
+        );
+        let err = layout.verify(&svc, &root).unwrap_err();
+        let LayoutError::UpgradeViolation {
+            caixa: c_nome,
+            issue,
+        } = err
+        else {
+            panic!("expected UpgradeViolation for :from >= :versao, got {err:?}");
+        };
+        assert_eq!(c_nome, svc.nome(), "wrap envelope names the caixa");
+        assert!(
+            issue.contains(&current_versao_via_accessor),
+            "the UpgradeViolation's `issue` must quote the current \
+             `:versao` byte-string verbatim — the cross-slot precedence \
+             gate's `versao` arg must route through the lifted \
+             [`Caixa::versao`] accessor, not the raw `&caixa.versao` \
+             `&String`-borrow of the underlying field. issue: {issue}",
         );
     }
 
