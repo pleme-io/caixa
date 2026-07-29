@@ -5568,16 +5568,41 @@ impl AplicacaoSpec {
             // the canonical edge-direction order the existing
             // membership lookup, self-edge check, target dispatch,
             // and diagnostic strings already use.
-            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, &c.de)?;
-            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, &c.para)?;
+            // Route the per-`:contratos` per-arm DNS-1123 shape-gate arg
+            // + the paired [`AplicacaoError::ContratoMemberMissing`]
+            // diagnostic's `caixa:` carrier through the lifted
+            // [`WitContract::source`] / [`WitContract::destination`]
+            // scalar accessors rather than the raw `&c.de` / `&c.para`
+            // `&String`-borrow arg site + the raw `c.de.clone()` /
+            // `c.para.clone()` field-access `String`-carry sites — the
+            // last unlifted per-`:contratos` raw-field-access sites in
+            // the M3 mesh-slot validator's per-edge per-arm shape-gate
+            // arg + phantom-name diagnostic wrap-envelope emit surface.
+            // `c.source()` is byte-identical to `&c.de` (pinned by the
+            // sibling `wit_contract_source_returns_de_byte_equal_across_permutations`
+            // + `wit_contract_source_borrows_from_de_storage` accessor
+            // tests) and `c.destination()` is byte-identical to `&c.para`
+            // (pinned by the sibling
+            // `wit_contract_destination_returns_para_byte_equal_across_permutations`
+            // + `wit_contract_destination_borrows_from_para_storage`
+            // accessor tests) — so a future rebrand of either underlying
+            // storage flows through the accessor's one body without a
+            // coordinated per-consumer rewrite across the M3 mesh
+            // validator's per-edge shape-gate + phantom-name refusal
+            // arms. Peer of the sibling per-`:contratos` self-loop
+            // arm's `.source().to_string()` / `.world_ref().to_string()`
+            // `String`-carry sites the earlier convergence lifted onto
+            // the same accessor pair.
+            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_DE, c.source())?;
+            validate_contrato_caixa(crate::render::CONTRATO_AUTHOR_KEY_PARA, c.destination())?;
             if !names.contains(c.source()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
-                    caixa: c.de.clone(),
+                    caixa: c.source().to_string(),
                 });
             }
             if !names.contains(c.destination()) {
                 return Err(AplicacaoError::ContratoMemberMissing {
-                    caixa: c.para.clone(),
+                    caixa: c.destination().to_string(),
                 });
             }
             // A `:contratos` entry is an *inter*-Servico contract
@@ -7806,6 +7831,122 @@ mod tests {
         let err = s.validate().unwrap_err();
         assert!(
             matches!(err, AplicacaoError::ContratoMemberMissing { caixa } if caixa == "phantom")
+        );
+    }
+
+    #[test]
+    fn contrato_unknown_de_diagnostic_routes_caixa_field_through_source_accessor() {
+        // The read-path pin: the phantom-`:de` refusal arm's
+        // `ContratoMemberMissing.caixa` carrier must be observed through
+        // the lifted [`WitContract::source`] accessor, not the raw
+        // `.de.clone()` field-access `String`-carry. Peer of the sibling
+        // per-`:contratos` self-loop arm's `.source().to_string()` /
+        // `.world_ref().to_string()` `String`-carry sites the earlier
+        // convergence lifted onto the same accessor pair. A future
+        // silent detour that reintroduced the raw `.de.clone()` at the
+        // wrap envelope while the shape-gate and membership lookup
+        // routed through the accessor would surface here as a byte-equal
+        // miss between the fired diagnostic's `caixa:` field and the
+        // offending edge's `.source()` — pinning the accessor as the
+        // sole read path across the phantom-name refusal arm's arg +
+        // wrap-envelope emit surface.
+        let mut s = three_member_spec();
+        let phantom = contract_http("phantom", "catalog", "/x");
+        s.contratos.push(phantom.clone());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ContratoMemberMissing { caixa } = err else {
+            panic!("expected ContratoMemberMissing on phantom :de, got {err:?}");
+        };
+        assert_eq!(
+            caixa,
+            phantom.source(),
+            "ContratoMemberMissing.caixa on the phantom-:de arm must \
+             byte-equal WitContract::source — the wrap envelope must \
+             route through the lifted accessor rather than the raw \
+             .de.clone() field-access String-carry"
+        );
+    }
+
+    #[test]
+    fn contrato_unknown_para_diagnostic_routes_caixa_field_through_destination_accessor() {
+        // The symmetric read-path pin on the `:para` phantom-name
+        // refusal arm — same shape as the sibling `:de` pin above but
+        // on the callee-Servico axis. Pins the wrap envelope's
+        // `caixa:` field is observed through the lifted
+        // [`WitContract::destination`] accessor, not the raw
+        // `.para.clone()` field-access `String`-carry.
+        let mut s = three_member_spec();
+        let phantom = contract_http("cart", "phantom", "/x");
+        s.contratos.push(phantom.clone());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ContratoMemberMissing { caixa } = err else {
+            panic!("expected ContratoMemberMissing on phantom :para, got {err:?}");
+        };
+        assert_eq!(
+            caixa,
+            phantom.destination(),
+            "ContratoMemberMissing.caixa on the phantom-:para arm must \
+             byte-equal WitContract::destination — the wrap envelope \
+             must route through the lifted accessor rather than the raw \
+             .para.clone() field-access String-carry"
+        );
+    }
+
+    #[test]
+    fn contrato_malformed_de_diagnostic_routes_caixa_field_through_source_accessor() {
+        // The read-path pin on the `:de` DNS-1123-malformed shape-gate
+        // refusal arm — the `validate_contrato_caixa` arg must be
+        // observed through the lifted [`WitContract::source`] accessor,
+        // not the raw `&c.de` `&String`-borrow. A `BAD_NAME` `:de`
+        // value routes through the shared
+        // [`crate::render::require_valid_dns_1123_label`] floor with the
+        // accessor-projected value; the fired
+        // `AplicacaoError::ContratoCaixaInvalid.caixa` carrier byte-equals
+        // the offending edge's `.source()`, pinning that the arg + the
+        // downstream `caixa: caixa.to_string()` wrap route through the
+        // same accessor's read path.
+        let mut s = three_member_spec();
+        let malformed = contract_http("BAD_NAME", "catalog", "/x");
+        s.contratos.push(malformed.clone());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ContratoCaixaInvalid { slot, caixa, .. } = err else {
+            panic!("expected ContratoCaixaInvalid on malformed :de, got {err:?}");
+        };
+        assert_eq!(slot, crate::render::CONTRATO_AUTHOR_KEY_DE);
+        assert_eq!(
+            caixa,
+            malformed.source(),
+            "ContratoCaixaInvalid.caixa on the malformed-:de arm must \
+             byte-equal WitContract::source — the shape-gate arg + wrap \
+             envelope must route through the lifted accessor rather \
+             than the raw &c.de &String-borrow"
+        );
+    }
+
+    #[test]
+    fn contrato_malformed_para_diagnostic_routes_caixa_field_through_destination_accessor() {
+        // Symmetric arm to the sibling `:de` malformed-shape pin above,
+        // on the `:para` axis. Pins the shape-gate arg + wrap envelope
+        // route through the lifted [`WitContract::destination`]
+        // accessor. `:para` runs after the `:de` shape gate in the
+        // canonical edge-direction order, so the `:de` value must be
+        // well-shaped for the `:para` gate to fire — the `cart` :de is
+        // canonical.
+        let mut s = three_member_spec();
+        let malformed = contract_http("cart", "BAD_NAME", "/x");
+        s.contratos.push(malformed.clone());
+        let err = s.validate().unwrap_err();
+        let AplicacaoError::ContratoCaixaInvalid { slot, caixa, .. } = err else {
+            panic!("expected ContratoCaixaInvalid on malformed :para, got {err:?}");
+        };
+        assert_eq!(slot, crate::render::CONTRATO_AUTHOR_KEY_PARA);
+        assert_eq!(
+            caixa,
+            malformed.destination(),
+            "ContratoCaixaInvalid.caixa on the malformed-:para arm must \
+             byte-equal WitContract::destination — the shape-gate arg + \
+             wrap envelope must route through the lifted accessor \
+             rather than the raw &c.para &String-borrow"
         );
     }
 
