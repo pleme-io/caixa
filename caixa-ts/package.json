@@ -1,5 +1,5 @@
 {
-  "name": "tree-sitter-caixa",
+  "name": "tree-sitter-tatara-lisp",
   "version": "0.1.0",
   "description": "Tree-sitter grammar for tatara-lisp / caixa sources",
   "main": "bindings/node",
@@ -32,11 +32,10 @@
   },
   "tree-sitter": [
     {
-      "scope": "source.caixa",
+      "scope": "source.tatara-lisp",
       "file-types": [
-        "caixa",
-        "lisp",
-        "lsp"
+        "tlisp",
+        "caixa"
       ],
       "highlights": [
         "queries/highlights.scm"
