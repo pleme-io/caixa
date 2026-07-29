@@ -1361,8 +1361,41 @@ pub fn validate_upgrade_from_against_behavior(
         return Ok(());
     }
     for entry in entries {
+        // Route the per-instruction `StateChange`-arm script-path
+        // projection through the sibling lifted
+        // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+        // accessor rather than the raw
+        // `if let UpgradeInstruction::StateChange { script } = instr`
+        // open-coded pattern-match — the cross-slot
+        // `:upgrade-from ↔ :behavior` composition gate's per-instruction
+        // script-projection site now keys off exactly one typed dispatch
+        // on the substrate primitive's `PathBuf`-carrying axis, sibling
+        // to the four peer per-`UpgradeInstruction` consumers
+        // ([`UpgradeInstruction::validate`]'s per-`StateChange`
+        // sandbox-path fan-out, the layout-side per-`StateChange`
+        // script-existence fan-out at
+        // [`crate::layout::StandardLayout::verify`] (caixa-core/src/layout.rs:1058),
+        // the within-entry [`UpgradeFromEntry::validate_state_change_singularity`]
+        // (2bf3ce5) per-`StateChange` script-projection fan-out, the
+        // peer [`UpgradeInstruction::declared_module`] `String`-axis
+        // per-variant unifier) that already route through
+        // `declared_path` / `declared_module`. Byte-equal today
+        // (`declared_path` returns `Some(script)` iff the instruction is
+        // [`UpgradeInstruction::StateChange`], per the sibling
+        // `declared_path_only_for_state_change` pin), so a
+        // `:state-change`-without-`:on-state-change`-callback
+        // composition surfaces `StateChangeWithoutOnStateChangeCallback`
+        // byte-identical to the pattern-match shape. Fourth (and last)
+        // per-`UpgradeInstruction`-consumer of the `PathBuf`-carrying
+        // axis now routed through the accessor — closes the last
+        // unlifted `if let UpgradeInstruction::StateChange { script } = instr`
+        // site outside `impl UpgradeFromEntry`, so the peer four
+        // consumer set named in the sibling
+        // `validate_state_change_singularity_projects_scripts_through_declared_path_accessor`
+        // pin (caixa-core/src/upgrade.rs:4598) is now structurally
+        // closed.
         for instr in entry.instructions() {
-            if let UpgradeInstruction::StateChange { script } = instr {
+            if let Some(script) = instr.declared_path() {
                 return Err(UpgradeError::StateChangeWithoutOnStateChangeCallback {
                     from: entry.prior_versao().to_string(),
                     script: script.clone(),
@@ -1523,6 +1556,25 @@ impl UpgradeInstruction {
     /// `Option<&…>` accessors, so [`Self::validate`]'s value-shape
     /// gates dispatch on the accessor return rather than a per-variant
     /// pattern match on the enum shape itself.
+    ///
+    /// Four per-`UpgradeInstruction` consumers now key off this
+    /// accessor's `PathBuf`-carrying axis:
+    /// [`Self::validate`]'s per-`StateChange` sandbox-path fan-out,
+    /// [`crate::layout::StandardLayout::verify`]'s per-`StateChange`
+    /// script-existence fan-out at `caixa-core/src/layout.rs:1058`, the
+    /// within-entry
+    /// [`UpgradeFromEntry::validate_state_change_singularity`] (2bf3ce5)
+    /// per-`StateChange` script-projection fan-out, and the cross-slot
+    /// [`validate_upgrade_from_against_behavior`] `:upgrade-from ↔
+    /// :behavior` composition gate's per-`StateChange` detection loop
+    /// — every downstream consumer of the `PathBuf`-carrying axis
+    /// reaches through this one dispatch, so a future accessor
+    /// extension (an M4 typed sub-slot the script path is derived from,
+    /// an operator-side pre-resolved-path cache the accessor
+    /// materializes behind the same `Option<&PathBuf>` return contract,
+    /// a fifth `PathBuf`-bearing OTP-appup variant the enum grows)
+    /// migrates as a single caixa-core edit rather than a coordinated
+    /// rewrite of four call sites.
     #[must_use]
     pub fn declared_path(&self) -> Option<&PathBuf> {
         match self {
@@ -5472,6 +5524,150 @@ mod tests {
         )];
         let b = behavior_with_state_change_callback();
         validate_upgrade_from_against_behavior(&entries, Some(&b)).unwrap();
+    }
+
+    #[test]
+    fn validate_upgrade_from_against_behavior_projects_scripts_through_declared_path_accessor() {
+        // Composition pin: [`validate_upgrade_from_against_behavior`]'s
+        // per-instruction `StateChange`-arm script-path projection must
+        // route through the sibling lifted
+        // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+        // accessor, not the raw
+        // `if let UpgradeInstruction::StateChange { script } = instr`
+        // open-coded pattern-match the cross-slot gate previously
+        // carried at caixa-core/src/upgrade.rs:1365.
+        //
+        // Structurally: the gate's projection accept-set is the union
+        // of every [`UpgradeInstruction`] variant for which
+        // `declared_path().is_some()` — today exactly
+        // [`UpgradeInstruction::StateChange`] per the sibling
+        // `declared_path_only_for_state_change` pin, so a
+        // `:state-change`-carrying entry without an `:on-state-change`
+        // callback trips `StateChangeWithoutOnStateChangeCallback` and
+        // a non-`StateChange` entry (load-only / cleanup-only /
+        // restart-only / empty-`:instructions`) leaves the per-entry
+        // walk continuing past every non-projecting instruction
+        // byte-identical to the pattern-match shape.
+        //
+        // Byte-equal today (`declared_path` returns `Some(script)` iff
+        // `StateChange`, byte-for-byte from the variant's own storage);
+        // the pin catches any future accessor extension that promotes
+        // an additional variant onto the `PathBuf`-carrying axis — the
+        // gate then fires on scripts from that variant too, and the
+        // cross-slot composition discipline the sibling per-
+        // `UpgradeInstruction` consumers share on the `PathBuf`-
+        // carrying axis extends to the promoted variant by
+        // construction.
+        //
+        // Peer of the sibling four per-`UpgradeInstruction` consumers
+        // ([`UpgradeInstruction::validate`]'s per-`StateChange`
+        // sandbox-path fan-out, the layout-side per-`StateChange`
+        // script-existence fan-out at
+        // `caixa-core/src/layout.rs:1058`, the within-entry
+        // [`UpgradeFromEntry::validate_state_change_singularity`]
+        // (2bf3ce5) per-`StateChange` script-projection fan-out, the
+        // peer [`UpgradeInstruction::declared_module`] `String`-axis
+        // per-variant unifier) — the fourth (and last) per-
+        // `UpgradeInstruction`-consumer of the `PathBuf`-carrying axis
+        // to now route through the accessor. Same shape as the
+        // sibling
+        // `validate_state_change_singularity_projects_scripts_through_declared_path_accessor`
+        // pin extended onto the cross-slot composition gate.
+        //
+        // Three-arm projective coverage:
+        //   (a) `StateChange` scripts project through `declared_path()`
+        //       byte-equal to the raw `script.clone()` field access
+        //       the diagnostic previously carried;
+        //   (b) a `:state-change`-carrying entry with `behavior: None`
+        //       trips the gate with `StateChangeWithoutOnStateChangeCallback`
+        //       carrying the offending script verbatim;
+        //   (c) a non-`StateChange`-only entry (`LoadModule` /
+        //       `SoftPurge` / `Purge` / `Restart`) leaves the gate
+        //       vacuous with `Ok(())` — the `declared_path().is_none()`
+        //       arm's fall-through pins.
+        //
+        // Fail-before-pass-after verified structurally: swapping the
+        // production
+        //   `if let Some(script) = instr.declared_path() { … }`
+        // back to
+        //   `if let UpgradeInstruction::StateChange { script } = instr { … }`
+        // keeps arms (a)-(c) passing but silently detaches the gate
+        // from the accessor's typed dispatch — any future
+        // `declared_path` extension (promotion of an additional
+        // variant onto the axis, an operator-side pre-resolved-path
+        // cache the accessor materializes) would then silently
+        // disagree between this cross-slot gate's raw pattern-match
+        // and the peer four sibling consumers that route through the
+        // accessor.
+
+        // (a) StateChange projection byte-equal via declared_path.
+        let sc = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/m.lisp"),
+        };
+        assert_eq!(
+            sc.declared_path().cloned(),
+            Some(PathBuf::from("lib/m.lisp")),
+            "declared_path() must project the StateChange :script byte-equal to the raw \
+             field access — accessor divergence would silently detach this cross-slot \
+             composition gate from the projection every peer per-`UpgradeInstruction` \
+             consumer routes through"
+        );
+
+        // (b) StateChange-carrying entry with behavior: None trips gate.
+        let entries = vec![entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        )];
+        assert_eq!(
+            validate_upgrade_from_against_behavior(&entries, None),
+            Err(UpgradeError::StateChangeWithoutOnStateChangeCallback {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            }),
+            "a :state-change-carrying entry with behavior: None must trip the gate through \
+             the declared_path accessor's Some(script) arm — carrying the offending script \
+             verbatim byte-identical to the pattern-match shape"
+        );
+
+        // (c) Non-StateChange-only inputs leave the gate vacuous.
+        for instrs in [
+            vec![UpgradeInstruction::LoadModule { module: "x".into() }],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+            vec![UpgradeInstruction::Restart],
+        ] {
+            for instr in &instrs {
+                assert!(
+                    instr.declared_path().is_none(),
+                    "non-StateChange variants must project None through declared_path — \
+                     accessor divergence would let this cross-slot composition gate silently \
+                     fire on a module reference far from any :state-change site"
+                );
+            }
+            let entries = vec![entry("0.1.0", instrs)];
+            assert_eq!(
+                validate_upgrade_from_against_behavior(&entries, None),
+                Ok(()),
+                "the cross-slot composition gate must return Ok(()) on an entry whose \
+                 instructions all project None through declared_path — the accessor's \
+                 None arm the pattern-match's implicit fall-through previously carried"
+            );
+        }
     }
 
     #[test]
