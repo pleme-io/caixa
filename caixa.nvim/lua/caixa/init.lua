@@ -22,12 +22,28 @@ local defaults = {
   feira_cmd = nil,
   ---Enable tree-sitter parser registration (requires nvim-treesitter).
   treesitter = true,
-  ---Enable LSP auto-start on caixa filetype.
+  ---Enable LSP auto-start on the tlisp filetype.
   lsp = true,
   ---Blackmatter colorscheme variant: "dark" | "light".
   theme = "dark",
-  ---Format on save.
-  format_on_save = true,
+  ---Format on save. DEFAULT OFF, deliberately.
+  ---
+  ---This routes to vim.lsp.buf.format -> caixa-lsp -> caixa-fmt, and
+  ---caixa-fmt DELETES COMMENTS INSIDE FORMS. Reproduction:
+  ---
+  ---  (defcaixa demo          ->   (defcaixa demo :versao "0.1.0")
+  ---    ;; why this version
+  ---    :versao "0.1.0")
+  ---
+  ---printer.rs calls emit_leading only from the top-level loop, so trivia
+  ---on nested nodes is dropped. The crate's proptest cannot catch it: it
+  ---compares to_tatara_sexp() trees, which are trivia-blind by
+  ---construction, so the invariant is vacuous on exactly the property it
+  ---appears to guard. Measured on examples/checkout-aplicacao/caixa.lisp:
+  ---24 comment lines in, 20 out.
+  ---
+  ---Turn this back on when caixa-fmt round-trips comments, not before.
+  format_on_save = false,
 }
 
 local function deep_merge(base, over)
@@ -40,17 +56,22 @@ end
 function M.setup(user)
   M.config = deep_merge(defaults, user or {})
 
-  -- Filetype registration — "caixa" is the canonical ft.
+  -- Filetype registration — `tlisp` is the canonical ft. caixa manifests
+  -- are a dialect of tatara-lisp, not a language of their own.
+  --
+  -- Bare `*.lisp` and `*.lsp` are deliberately NOT claimed. This block used
+  -- to map BOTH unconditionally, with no content sniff, which silently
+  -- stole every Common Lisp and every `.lsp` buffer on the machine. Only
+  -- the manifests we own are taken, by exact filename.
   vim.filetype.add({
     extension = {
-      caixa = "caixa",
-      lisp = function(_, _) return "caixa" end,
-      lsp = function(_, _) return "caixa" end,
+      caixa = "tlisp",
+      tlisp = "tlisp",
     },
     filename = {
-      ["caixa.lisp"] = "caixa",
-      ["lacre.lisp"] = "caixa",
-      ["flake.lisp"] = "caixa",
+      ["caixa.lisp"] = "tlisp",
+      ["lacre.lisp"] = "tlisp",
+      ["flake.lisp"] = "tlisp",
     },
   })
 
@@ -68,9 +89,9 @@ function M.setup(user)
 
   if M.config.format_on_save then
     vim.api.nvim_create_autocmd("BufWritePre", {
-      pattern = { "*.lisp", "caixa.lisp", "lacre.lisp", "flake.lisp" },
+      pattern = { "*.lisp", "*.tlisp", "caixa.lisp", "lacre.lisp", "flake.lisp" },
       callback = function()
-        if vim.bo.filetype == "caixa" then
+        if vim.bo.filetype == "tlisp" then
           vim.lsp.buf.format({ async = false })
         end
       end,

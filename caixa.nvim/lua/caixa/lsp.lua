@@ -1,6 +1,9 @@
 -- LSP client wiring for caixa-lsp.
 -- Works with or without nvim-lspconfig — we register the server directly
--- via vim.lsp.start() on the caixa filetype.
+-- via vim.lsp.start() on the tlisp filetype.
+--
+-- NOTE the server is named caixa-lsp but serves the whole tatara-lisp
+-- language, so it attaches to `tlisp`, not to a caixa-specific filetype.
 
 local M = {}
 
@@ -18,14 +21,14 @@ function M.setup(cfg)
   end
 
   vim.api.nvim_create_autocmd("FileType", {
-    pattern = "caixa",
+    pattern = "tlisp",
     callback = function(args)
       local root = vim.fs.root(args.buf, { "caixa.lisp", ".git" })
         or vim.fn.getcwd()
       vim.lsp.start({
         name = "caixa-lsp",
         cmd = { cmd },
-        filetypes = { "caixa" },
+        filetypes = { "tlisp" },
         root_dir = root,
         settings = {},
       })
