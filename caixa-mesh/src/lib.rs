@@ -214,14 +214,24 @@ pub fn programs_for_aplicacao(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, E
 
 /// Compose a single typed view of the entire Aplicacao for downstream
 /// renderers (Cilium, Gateway, observability). Convenience wrapper that
-/// validates first.
+/// routes the compound `require_kind + aplicacao_view + validate`
+/// cascade through the canonical substrate primitive
+/// [`caixa_core::require_aplicacao_view`], sibling to the
+/// per-Servico [`caixa_core::require_v0_servico_shape`] compound entry
+/// gate every `caixa-helm` / `caixa-flux` renderer already routes
+/// through. The wrapper stays for turbofish elision at this crate's
+/// three call sites (`programs_for_aplicacao` /
+/// `cilium_network_policies` / `gateway_routes`), matching the shape
+/// the sibling `caixa-flux` / `caixa-helm` renderers read the compound
+/// V0-Servico gate as, and every future per-Aplicacao consumer
+/// (`caixa-tatara`'s spec-consuming validate arm when it lands, the
+/// deferred `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// admission webhook) gets the compound three-arm gate for free with
+/// one call rather than re-inlining the cascade — same discipline the
+/// peer [`caixa_core::require_v0_servico_shape`] lift closed on the
+/// per-Servico renderer axis.
 pub fn typed_view(caixa: &Caixa) -> Result<AplicacaoSpec, Error> {
-    caixa_core::require_kind(caixa, CaixaKind::Aplicacao)?;
-    let spec = caixa
-        .aplicacao_view()
-        .expect("Aplicacao kind has an aplicacao_view");
-    spec.validate()?;
-    Ok(spec)
+    caixa_core::require_aplicacao_view::<Error>(caixa)
 }
 
 /// Default namespace for emitted cluster objects when the Aplicacao
@@ -7004,6 +7014,126 @@ mod tests {
             "programs_for_aplicacao and typed_view must agree on the \
              kind-mismatch diagnostic — divergence indicates one path \
              skipped the shared `require_kind` gate"
+        );
+    }
+
+    #[test]
+    fn typed_view_routes_through_caixa_core_require_aplicacao_view_helper() {
+        // Fail-before-pass-after pin on the [`typed_view`] delegation
+        // to the lifted [`caixa_core::require_aplicacao_view`]
+        // primitive: pre-lift the wrapper carried the three-line
+        // `require_kind + aplicacao_view + AplicacaoSpec::validate`
+        // cascade inline at this crate's own [`typed_view`] body with
+        // no compile-time link to any substrate-canonical compound
+        // entry-gate the sibling per-Servico renderers already route
+        // through ([`caixa_core::require_v0_servico_shape`]).
+        // Converging the wrapper on the substrate-canonical
+        // [`caixa_core::require_aplicacao_view`] compound gate closes
+        // the drift potential structurally: every future per-Aplicacao
+        // consumer (the deferred `mesh.pleme.io/v1alpha1/Aplicacao`
+        // CR materializer's admission webhook the M4 roadmap names,
+        // `caixa-tatara`'s spec-consuming validate arm when it grows
+        // beyond the `require_kind`-only entry gate it carries today
+        // at caixa-tatara/src/lib.rs:203, a future `feira validate
+        // --aplicacao` per-caixa admission verb) reaches for one
+        // `caixa_core::require_aplicacao_view::<Error>(caixa)?`
+        // one-liner and gets the compound three-arm gate for free —
+        // matching the peer [`caixa_core::require_v0_servico_shape`]
+        // discipline every per-Servico renderer already routes
+        // through.
+        //
+        // Byte-for-byte parity assertion: [`typed_view`]'s
+        // Ok/Err discrimination on every fixture must equal
+        // [`caixa_core::require_aplicacao_view`]'s discrimination on
+        // the same fixture (Ok arm — same serialized `AplicacaoSpec`;
+        // Err arm — same Display bytes). Trips at the caller's build
+        // time, not silently at the diagnostic-emission site. Peer to
+        // the sibling `programs_for_aplicacao_routes_entry_gate_
+        // through_typed_view` drift-detection pin already in place on
+        // this crate's per-renderer entry-gate axis.
+        let ok_cases: Vec<Caixa> = vec![aplicacao_caixa()];
+        for c in ok_cases {
+            let via_wrapper = typed_view(&c).expect("valid aplicacao passes typed_view");
+            let via_primitive = caixa_core::require_aplicacao_view::<Error>(&c)
+                .expect("valid aplicacao passes require_aplicacao_view");
+            assert_eq!(
+                serde_yaml::to_string(&via_wrapper).expect("typed_view spec serializes"),
+                serde_yaml::to_string(&via_primitive)
+                    .expect("require_aplicacao_view spec serializes"),
+                "typed_view's Ok-arm AplicacaoSpec must equal \
+                 caixa_core::require_aplicacao_view's Ok-arm AplicacaoSpec \
+                 byte-for-byte on the same fixture — otherwise typed_view \
+                 has drifted from the substrate primitive"
+            );
+        }
+
+        // Kind-mismatch axis: mis-kinded input surfaces the same
+        // [`KindMismatch`]-carrying diagnostic through both paths.
+        let mut c = aplicacao_caixa();
+        c.kind = CaixaKind::Supervisor;
+        c.servicos = vec![];
+        c.children = vec![];
+        let wrapper_err = typed_view(&c).unwrap_err();
+        let primitive_err = caixa_core::require_aplicacao_view::<Error>(&c).unwrap_err();
+        assert_eq!(
+            format!("{wrapper_err}"),
+            format!("{primitive_err}"),
+            "typed_view's kind-mismatch Display bytes must equal \
+             caixa_core::require_aplicacao_view's kind-mismatch Display \
+             bytes — a future format edit lands in exactly one place \
+             (caixa-core::render), not duplicated across every \
+             per-Aplicacao renderer"
+        );
+        assert!(
+            matches!(wrapper_err, Error::NotAnAplicacao(_)),
+            "typed_view must forward the KindMismatch through the \
+             Error::NotAnAplicacao #[from] arm"
+        );
+        assert!(
+            matches!(primitive_err, Error::NotAnAplicacao(_)),
+            "caixa_core::require_aplicacao_view must forward the \
+             KindMismatch through the Error::NotAnAplicacao #[from] arm \
+             — same discipline as the sibling require_v0_servico_shape \
+             `E: From<KindMismatch>` bound"
+        );
+
+        // Invalid-aplicacao axis: a valid-kind but spec-invalid caixa
+        // (a `:contratos` entry referencing a non-member) surfaces
+        // the same [`caixa_core::AplicacaoError`]-carrying diagnostic
+        // through both paths — the peer `programs_for_aplicacao_
+        // routes_entry_gate_through_typed_view` pin already covers
+        // this axis on the outer renderer surface; extending it onto
+        // the wrapper-vs-primitive surface here closes the drift
+        // potential at both altitudes.
+        let mut c = aplicacao_caixa();
+        c.contratos.push(WitContract {
+            de: "cart".into(),
+            para: "phantom".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/x".into()),
+            subject: None,
+            slot: None,
+        });
+        let wrapper_err = typed_view(&c).unwrap_err();
+        let primitive_err = caixa_core::require_aplicacao_view::<Error>(&c).unwrap_err();
+        assert_eq!(
+            format!("{wrapper_err}"),
+            format!("{primitive_err}"),
+            "typed_view's invalid-aplicacao Display bytes must equal \
+             caixa_core::require_aplicacao_view's invalid-aplicacao \
+             Display bytes on the same non-member `:contratos :para` \
+             fixture"
+        );
+        assert!(
+            matches!(wrapper_err, Error::InvalidAplicacao(_)),
+            "typed_view must forward the AplicacaoError through the \
+             Error::InvalidAplicacao #[from] arm"
+        );
+        assert!(
+            matches!(primitive_err, Error::InvalidAplicacao(_)),
+            "caixa_core::require_aplicacao_view must forward the \
+             AplicacaoError through the Error::InvalidAplicacao \
+             #[from] arm"
         );
     }
 
