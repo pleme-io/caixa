@@ -73,9 +73,9 @@ ropey = "1"
 
 # Pleme-io sibling-directory path deps — match sui-eval's convention.
 # Consumers outside pleme-io drive the Nix flake, which pins tatara via inputs.
-tatara-lisp = { git = "https://github.com/pleme-io/tatara" }
-tatara-lisp-derive = { git = "https://github.com/pleme-io/tatara" }
-tatara-process = { git = "https://github.com/pleme-io/tatara" }
+tatara-lisp = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
+tatara-lisp-derive = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
+tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
 caixa-tatara = { path = "caixa-tatara" }
 iac-forge = { git = "https://github.com/pleme-io/iac-forge" }
 gen-platform = { git = "https://github.com/pleme-io/gen" }
