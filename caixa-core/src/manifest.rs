@@ -14191,7 +14191,27 @@ mod tests {
         ] {
             let mut c = caixa_with_estrategia(Some(estrategia));
             c.kind = CaixaKind::Supervisor;
-            c.children = if matches!(estrategia, RestartStrategy::SimpleOneForOne) {
+            // Route the `SimpleOneForOne ↔ non-SimpleOneForOne` fixture-
+            // shape partition through the [`gen_platform::IsVariant`]
+            // derive-generated
+            // [`RestartStrategy::is_simple_one_for_one`] predicate rather
+            // than the raw `matches!(estrategia, RestartStrategy::
+            // SimpleOneForOne)` open-coded pattern-match — same closed-
+            // set-typed-enum arm-discriminator dispatch discipline the
+            // sibling [`crate::upgrade::UpgradeInstruction::is_restart`]
+            // convergence (915a934) extended onto its two paired positive
+            // / negated `matches!` sites and the peer
+            // [`crate::aplicacao::PlacementStrategy`] `IsVariant`-derived
+            // predicate convergence (766ec63) extended onto the M3 mesh-
+            // slot per-`:placement` distribution-strategy discriminator
+            // axis. See the sibling `supervisor::tests::
+            // round_trip_all_strategies` and
+            // `supervisor::tests::supervisor_spec_estrategia_returns_estrategia_verbatim_across_permutations`
+            // fixtures — the three sites (all test-only,
+            // acknowledged in 915a934's Prior-commits footnote as the
+            // outstanding follow-up) now consult one typed dispatch on
+            // the substrate primitive.
+            c.children = if estrategia.is_simple_one_for_one() {
                 Vec::new()
             } else {
                 vec![ChildSpec {
