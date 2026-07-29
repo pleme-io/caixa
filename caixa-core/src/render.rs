@@ -648,6 +648,108 @@ where
     Ok(spec)
 }
 
+/// Compound per-`Acao` entry gate: the canonical three-line
+/// `require_kind(caixa, CaixaKind::Acao)? + require_ci(caixa)? +
+/// decompose_ci(caixa, ci)?` prelude every per-`Acao` `caixa-<target>`
+/// consumer runs at its entry-point, collapsed onto one call the caller
+/// reads as intent ("gate the input on the V0 Acao shape and hand back
+/// the borrowed [`canteiro_types::CiRun`] + the decomposed
+/// [`canteiro_types::CanteiroDag`]") rather than three hand-spelled
+/// steps.
+///
+/// The cascade names one contract with three axes: `:kind` is `Acao`
+/// (this is a per-`Acao` consumer's input, not a `Biblioteca` /
+/// `Binario` / `Servico` / `Supervisor` / `Aplicacao` mis-hand-off),
+/// the `:ci` slot is present ([`require_ci`] returns the borrowed
+/// [`canteiro_types::CiRun`]), *and* the declared run decomposes
+/// cleanly through [`canteiro_types::decompose`] (a duplicate node
+/// name, a missing dep, a cycle — every [`canteiro_types::DecomposeError`]
+/// arm — surfaces via [`CiDecomposeFailure`]). All three axes must
+/// hold together — so lifting the three-arm cascade onto one helper
+/// names the compound contract at each call site the way the sibling
+/// per-Servico [`require_v0_servico_shape`] compound gate already
+/// names the two-axis compound V0 Servico-shape contract and the
+/// sibling per-Aplicacao [`require_aplicacao_view`] compound gate
+/// names the three-arm compound per-Aplicacao entry-gate contract.
+///
+/// Returns the borrowed [`canteiro_types::CiRun`] paired with the
+/// owned [`canteiro_types::CanteiroDag`] `decompose_ci` produced —
+/// both are the load-bearing artifacts every per-`Acao` consumer
+/// reads past the gate: the borrowed run for
+/// per-[`canteiro_types::CiNode`] axes (`ci.nodes.iter().map(|n|
+/// n.deps.len()).sum()` for the declared edge count, the deferred
+/// `sui-supercacheci::canteiro::emit_gha` per-node YAML emit
+/// surface), the owned DAG for topological order (`cd.topo_order()`,
+/// which the substrate's own [`decompose_ci`] pass-through-on-success
+/// contract at [`decompose_ci_accepts_valid_ci_run_and_returns_canteiro_dag`]
+/// pins as infallible on the accepted arm).
+///
+/// The current single production call site — `caixa-actions::validate` —
+/// previously carried the three-line prelude inline:
+///
+/// ```ignore
+/// caixa_core::require_kind(caixa, CaixaKind::Acao)?;
+/// let ci = caixa_core::require_ci(caixa)?;
+/// let cd = caixa_core::decompose_ci(caixa, ci)?;
+/// ```
+///
+/// It now reads as a one-liner
+/// `let (ci, cd) = caixa_core::require_acao_view::<Error>(caixa)?;`.
+/// Every deferred per-`Acao` consumer named in the `caixa-actions` crate
+/// docs (the `sui-supercacheci::canteiro::emit_gha` workflow renderer, a
+/// future `acao.pleme.io/v1alpha1/Acao` CR materializer's admission
+/// webhook, a future `feira validate --acao` per-caixa admission verb)
+/// gets the compound three-arm gate for free with one call, instead of
+/// re-inlining the three-line prelude — and a future change to the V0
+/// Acao contract (an M4 [`canteiro_types::CiRun`] `:workspace`-scoped
+/// admission gate the CR materializer resolves at admission time, a
+/// per-`:ci` cross-node capability-audit prelude the Pony-inspired
+/// capability-typing roadmap acknowledges) is one edit here on the
+/// compound helper, not a coordinated rewrite across every per-`Acao`
+/// consumer's inline three-line prelude.
+///
+/// The generic error type `E` accepts every per-`Acao` consumer's
+/// local [`thiserror`] `Error` enum that carries all three of
+/// [`KindMismatch`], [`MissingCiSlot`], and [`CiDecomposeFailure`]
+/// via `#[from]` (`caixa_actions::Error` today, and every future
+/// per-`Acao` consumer that wires the same three `#[from]` arms as
+/// the diagnostic-naming-the-offending-caixa contract already
+/// requires). Type inference at the call site resolves `E` from the
+/// caller's `?` return type, though a caller that assigns the result
+/// directly to a `Result<(&CiRun, CanteiroDag), Error>` binding may
+/// need a turbofish (`::<Error>`) — matching the sibling
+/// `require_aplicacao_view::<Error>` turbofish convention the peer
+/// per-Aplicacao call site already reads.
+///
+/// Peer to [`require_v0_servico_shape`] on the sibling per-Servico
+/// entry-gate axis and [`require_aplicacao_view`] on the sibling
+/// per-Aplicacao entry-gate axis — every per-kind renderer's
+/// entry-gate cascade now lives in exactly one substrate primitive.
+///
+/// # Errors
+///
+/// Returns the caller's `E` wrapping a [`KindMismatch`] when
+/// `caixa.kind != CaixaKind::Acao`, a [`MissingCiSlot`] when the
+/// caixa's `:ci` slot is absent past the kind gate, or a
+/// [`CiDecomposeFailure`] when [`canteiro_types::decompose`] refuses
+/// the borrowed run. Order matches the three-line prelude this
+/// replaces: the kind gate fires first (so a `:kind Servico` caixa
+/// carrying a well-formed `:ci` stanza — the manifest field's
+/// documented "silently ignored" case on a non-`Acao` kind —
+/// surfaces the kind mismatch, the more actionable diagnostic), then
+/// the presence gate, then the decompose gate.
+pub fn require_acao_view<E>(
+    caixa: &Caixa,
+) -> Result<(&canteiro_types::CiRun, canteiro_types::CanteiroDag), E>
+where
+    E: From<KindMismatch> + From<MissingCiSlot> + From<CiDecomposeFailure>,
+{
+    require_kind(caixa, CaixaKind::Acao)?;
+    let ci = require_ci(caixa)?;
+    let cd = decompose_ci(caixa, ci)?;
+    Ok((ci, cd))
+}
+
 /// One rendered artifact — a `(path, contents)` pair every per-target
 /// `caixa-<target>` renderer emits at every leaf of its output tree.
 /// Carries the sandboxed relative path the substrate writes the artifact
@@ -28659,6 +28761,246 @@ mod tests {
                     serde_yaml::to_string(&compound_spec)
                         .expect("compound AplicacaoSpec serializes"),
                     "compound helper's Ok arm must return byte-equal AplicacaoSpec to cascade"
+                );
+            }
+        }
+    }
+
+    // ── require_acao_view — compound per-`Acao` entry gate ───────────
+
+    /// Local `thiserror`-shaped renderer-error stand-in that mirrors
+    /// `caixa-actions::Error`'s three `#[from]` arms at the compound
+    /// helper's `E: From<KindMismatch> + From<MissingCiSlot> +
+    /// From<CiDecomposeFailure>` bound. Same discipline as the sibling
+    /// [`RendererStandIn`] / [`AplicacaoRendererStandIn`] stand-ins on
+    /// the peer per-Servico [`require_v0_servico_shape`] and
+    /// per-Aplicacao [`require_aplicacao_view`] compound gates: pins
+    /// the compound helper's type-inference contract inside caixa-core
+    /// without a workspace-crate dependency (which would bloat the
+    /// build graph).
+    #[derive(Debug, thiserror::Error)]
+    enum AcaoRendererStandIn {
+        #[error("{0}")]
+        NotAnAcao(#[from] KindMismatch),
+        #[error("{0}")]
+        MissingCi(#[from] MissingCiSlot),
+        #[error("{0}")]
+        Decompose(#[from] CiDecomposeFailure),
+    }
+
+    #[test]
+    fn require_acao_view_accepts_valid_acao() {
+        // Happy path: a `:kind Acao` caixa with a well-formed `:ci`
+        // stanza — the canonical V0 shape every per-`Acao` consumer's
+        // entry-point sees — passes the compound three-arm gate and
+        // returns the borrowed [`canteiro_types::CiRun`] paired with
+        // the owned [`canteiro_types::CanteiroDag`] the substrate
+        // primitive produced. Same outcome as the three-line prelude
+        // the compound helper replaces: [`require_kind`] passes,
+        // [`require_ci`] returns the borrowed slot, [`decompose_ci`]
+        // accepts the run. Peer to
+        // `require_aplicacao_view_accepts_valid_aplicacao` and
+        // `require_v0_servico_shape_accepts_v0_servico` on the sibling
+        // per-Aplicacao / per-Servico compound gates.
+        let mut c = bare_acao_without_ci();
+        c.ci = Some(linear_ci_run());
+        let (ci, cd) = require_acao_view::<AcaoRendererStandIn>(&c)
+            .expect("valid Acao shape accepted by compound helper");
+        assert_eq!(ci.workspace, "pleme-io");
+        assert_eq!(ci.nodes.len(), 2);
+        // `topo_order()` is infallible on the DAG the compound helper
+        // returns, mirroring the substrate-side pass-through pin at
+        // [`decompose_ci_accepts_valid_ci_run_and_returns_canteiro_dag`].
+        let topo = cd
+            .topo_order()
+            .expect("acyclic CanteiroDag returns a valid topo_order");
+        assert_eq!(
+            topo.iter().count(),
+            2,
+            "topo_order on the compound helper's returned DAG must yield \
+             two node ids on a two-node acyclic run"
+        );
+    }
+
+    #[test]
+    fn require_acao_view_forwards_kind_mismatch_first() {
+        // Order pin: the kind gate fires before the presence gate + the
+        // decompose gate, so a `:kind Servico` caixa carrying a
+        // well-formed `:ci` stanza (the manifest field's documented
+        // "silently ignored" case on a non-`Acao` kind) surfaces the
+        // [`KindMismatch`] arm — the more actionable diagnostic —
+        // rather than either downstream arm the manifest author never
+        // intended to hit. Reversing the order would flip every
+        // current caller's diagnostic on a mis-kinded input. Peer to
+        // `require_aplicacao_view_forwards_kind_mismatch_first` and
+        // `require_v0_servico_shape_forwards_kind_mismatch_first` on
+        // the sibling per-Aplicacao / per-Servico compound gates.
+        let mut c = bare_acao_without_ci();
+        c.kind = CaixaKind::Servico;
+        c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
+        c.ci = Some(linear_ci_run());
+        let err: AcaoRendererStandIn = require_acao_view(&c).unwrap_err();
+        match err {
+            AcaoRendererStandIn::NotAnAcao(k) => {
+                assert_eq!(k.nome, "hello-rio");
+                assert_eq!(k.expected, CaixaKind::Acao);
+                assert_eq!(k.actual, CaixaKind::Servico);
+            }
+            AcaoRendererStandIn::MissingCi(_) => {
+                panic!("kind gate must fire before presence gate on mis-kinded input")
+            }
+            AcaoRendererStandIn::Decompose(_) => {
+                panic!("kind gate must fire before decompose gate on mis-kinded input")
+            }
+        }
+    }
+
+    #[test]
+    fn require_acao_view_forwards_missing_ci_slot_on_kind_match() {
+        // A `:kind Acao` caixa that passes the kind gate but declares
+        // no `:ci` slot lands on the [`MissingCiSlot`] arm through the
+        // compound helper's `E: From<MissingCiSlot>` bound — the same
+        // typed view the peer [`require_ci`] presence gate produces at
+        // the single-axis primitive, propagated through the compound
+        // gate's second arm.
+        let c = bare_acao_without_ci();
+        let err: AcaoRendererStandIn = require_acao_view(&c).unwrap_err();
+        match err {
+            AcaoRendererStandIn::MissingCi(m) => {
+                assert_eq!(m.nome, "hello-rio");
+            }
+            AcaoRendererStandIn::NotAnAcao(_) => {
+                panic!("presence gate must fire when kind gate passes")
+            }
+            AcaoRendererStandIn::Decompose(_) => {
+                panic!("presence gate must fire before decompose gate on missing `:ci` input")
+            }
+        }
+    }
+
+    #[test]
+    fn require_acao_view_forwards_decompose_failure_on_ci_present() {
+        // A `:kind Acao` caixa that passes the kind + presence gates
+        // but carries a cyclic `:ci` run lands on the
+        // [`CiDecomposeFailure`] arm through the compound helper's
+        // `E: From<CiDecomposeFailure>` bound — the same typed view
+        // the peer [`decompose_ci`] gate produces at the single-axis
+        // primitive, propagated through the compound gate's third
+        // arm.
+        let mut c = bare_acao_without_ci();
+        c.ci = Some(cyclic_ci_run());
+        let err: AcaoRendererStandIn = require_acao_view(&c).unwrap_err();
+        match err {
+            AcaoRendererStandIn::Decompose(f) => {
+                assert_eq!(f.nome, "hello-rio");
+                assert_eq!(f.source, canteiro_types::DecomposeError::Cycle);
+            }
+            AcaoRendererStandIn::NotAnAcao(_) => {
+                panic!("decompose gate must fire when kind + presence gates pass")
+            }
+            AcaoRendererStandIn::MissingCi(_) => {
+                panic!("decompose gate must fire when presence gate passes")
+            }
+        }
+    }
+
+    #[test]
+    fn require_acao_view_matches_three_line_prelude_semantic() {
+        // Equivalence pin: on every input, the compound helper's
+        // Ok/Err discrimination matches the three-line prelude
+        // verbatim — the lift is a behavioral no-op at the caller
+        // boundary. Peer to the sibling
+        // `require_aplicacao_view_matches_three_line_cascade_semantic`
+        // and `require_v0_servico_shape_matches_two_line_pair_semantic`
+        // equivalence pins on the per-Aplicacao / per-Servico compound
+        // gates.
+        //
+        // Five axes covered: valid Acao (Ok/Ok), kind gate fires
+        // (Err/Err on the prelude — prelude short-circuits at the kind
+        // gate), presence gate fires (Ok/Err on the prelude — prelude
+        // reaches [`require_ci`]), decompose gate fires (Ok/Err on the
+        // prelude — prelude reaches [`decompose_ci`]), and a
+        // mis-kinded caixa with a well-formed `:ci` (both invariants
+        // relevant — the kind gate must still fire first).
+        let cases: Vec<(CaixaKind, Option<canteiro_types::CiRun>)> = vec![
+            (CaixaKind::Acao, Some(linear_ci_run())),
+            (CaixaKind::Servico, Some(linear_ci_run())),
+            (CaixaKind::Acao, None),
+            (CaixaKind::Acao, Some(cyclic_ci_run())),
+            (CaixaKind::Biblioteca, None),
+        ];
+        for (kind, ci) in cases {
+            let mut c = bare_acao_without_ci();
+            c.kind = kind;
+            c.ci = ci.clone();
+            if kind == CaixaKind::Servico {
+                c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
+            } else {
+                c.servicos = vec![];
+            }
+            let prelude: Result<
+                (&canteiro_types::CiRun, canteiro_types::CanteiroDag),
+                AcaoRendererStandIn,
+            > = (|| {
+                require_kind(&c, CaixaKind::Acao)?;
+                let ci_borrowed = require_ci(&c)?;
+                let cd = decompose_ci(&c, ci_borrowed)?;
+                Ok((ci_borrowed, cd))
+            })();
+            let compound: Result<
+                (&canteiro_types::CiRun, canteiro_types::CanteiroDag),
+                AcaoRendererStandIn,
+            > = require_acao_view(&c);
+            assert_eq!(
+                prelude.is_ok(),
+                compound.is_ok(),
+                "compound helper must match three-line prelude on kind={kind:?} ci.is_some()={}",
+                ci.is_some(),
+            );
+            // Compound helper's Ok-arm return matches prelude's
+            // Ok-arm return byte-for-byte on both projections: the
+            // borrowed `&CiRun`'s node count + workspace / repo
+            // identity, and the owned `CanteiroDag`'s
+            // topological-order node-name projection (the substrate-
+            // canonical equality signal every downstream per-`Acao`
+            // consumer keys off).
+            if let (Ok((prelude_ci, prelude_cd)), Ok((compound_ci, compound_cd))) =
+                (prelude, compound)
+            {
+                assert_eq!(
+                    prelude_ci.workspace, compound_ci.workspace,
+                    "compound helper's borrowed CiRun's workspace must \
+                     equal prelude's byte-for-byte"
+                );
+                assert_eq!(
+                    prelude_ci.repo, compound_ci.repo,
+                    "compound helper's borrowed CiRun's repo must equal \
+                     prelude's byte-for-byte"
+                );
+                assert_eq!(
+                    prelude_ci.nodes.len(),
+                    compound_ci.nodes.len(),
+                    "compound helper's borrowed CiRun's node count must \
+                     equal prelude's"
+                );
+                let prelude_topo = prelude_cd
+                    .topo_order()
+                    .expect("prelude's DAG produces a valid topo_order");
+                let compound_topo = compound_cd
+                    .topo_order()
+                    .expect("compound's DAG produces a valid topo_order");
+                let prelude_names: Vec<String> = prelude_topo
+                    .iter()
+                    .filter_map(|id| prelude_cd.nodes.get(id).map(|n| n.name.clone()))
+                    .collect();
+                let compound_names: Vec<String> = compound_topo
+                    .iter()
+                    .filter_map(|id| compound_cd.nodes.get(id).map(|n| n.name.clone()))
+                    .collect();
+                assert_eq!(
+                    prelude_names, compound_names,
+                    "compound helper's DAG must produce byte-equal \
+                     topological-order node-name projection to prelude's"
                 );
             }
         }
