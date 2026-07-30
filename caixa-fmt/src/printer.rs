@@ -531,9 +531,8 @@ impl Printer<'_> {
                     // flag one line above its value. Found by the corpus:
                     // `"--apply"` plus a 74-character nix expression.
                     let flat = render_inline(&args[start..start + len]);
-                    let fits =
-                        child_indent + flat.chars().count() + self.pending_close
-                            <= self.cfg.line_width;
+                    let fits = child_indent + flat.chars().count() + self.pending_close
+                        <= self.cfg.line_width;
                     for k in 0..len {
                         if k > 0 {
                             if fits {
