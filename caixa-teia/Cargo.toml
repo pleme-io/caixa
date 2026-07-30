@@ -13,7 +13,6 @@ caixa-ast = { workspace = true }
 caixa-core = { workspace = true }
 iac-forge = { workspace = true }
 tatara-lisp = { workspace = true }
-tatara-lisp-derive = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

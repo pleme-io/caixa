@@ -12,7 +12,6 @@ authors.workspace = true
 caixa-ast = { workspace = true }
 caixa-theme = { workspace = true }
 tatara-lisp = { workspace = true }
-tatara-lisp-derive = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
