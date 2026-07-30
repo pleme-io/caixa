@@ -7672,8 +7672,27 @@ mod tests {
     #[test]
     fn typed_view_returns_validated_spec() {
         let spec = typed_view(&aplicacao_caixa()).unwrap();
-        assert_eq!(spec.membros.len(), 3);
-        assert_eq!(spec.contratos.len(), 2);
+        // Route the per-`:membros` / per-`:contratos` list-length probes and
+        // the per-`:placement` distribution-target-list length probe through
+        // the lifted [`caixa_core::AplicacaoSpec::membros`] /
+        // [`caixa_core::AplicacaoSpec::contratos`] slice-return accessors and
+        // the paired [`caixa_core::AplicacaoSpec::placement`] +
+        // [`caixa_core::Placement::clusters`] outer-then-inner accessors
+        // rather than the raw `spec.<field>` / `spec.placement.clusters`
+        // field accesses — sibling to the peer per-`:entrada` presence-bit
+        // probe below that already routes through
+        // [`caixa_core::AplicacaoSpec::entrada`] (9e8630e). Every accessor
+        // projects its backing slot verbatim (byte-equal to the raw field
+        // access), pinned in caixa-core at
+        // `aplicacao_spec_membros_returns_membros_slice_byte_equal_across_permutations`,
+        // `aplicacao_spec_contratos_returns_contratos_slice_byte_equal_across_permutations`,
+        // `aplicacao_spec_placement_returns_placement_ref_byte_equal_across_permutations`,
+        // and
+        // `placement_clusters_returns_clusters_slice_byte_equal_across_permutations`.
+        // Closes the last unlifted per-`AplicacaoSpec` raw-field-access
+        // sites in the caixa-mesh `typed_view_returns_validated_spec` test.
+        assert_eq!(spec.membros().len(), 3);
+        assert_eq!(spec.contratos().len(), 2);
         // Route the per-`:entrada` presence-bit probe through the lifted
         // [`caixa_core::AplicacaoSpec::entrada`] accessor rather than the
         // raw `spec.entrada.is_some()` field access — sibling to the
@@ -7685,7 +7704,7 @@ mod tests {
         // on both sides is byte-equal — pinned in caixa-core at
         // `aplicacao_spec_entrada_returns_entrada_option_ref_byte_equal_across_permutations`.
         assert!(spec.entrada().is_some());
-        assert_eq!(spec.placement.clusters.len(), 2);
+        assert_eq!(spec.placement().clusters().len(), 2);
     }
 
     #[test]
