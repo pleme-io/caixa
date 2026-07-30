@@ -49,7 +49,7 @@ pub fn format_nodes(nodes: &[Node], cfg: &FmtConfig) -> String {
                         p.out.push(';');
                         p.out.push_str(text);
                     }
-                    TriviaKind::BlankLine => {}
+                    TriviaKind::BlankLine | TriviaKind::Shebang(_) => {}
                 }
             }
         }
@@ -126,6 +126,14 @@ impl Printer<'_> {
                 TriviaKind::BlankLine => {
                     self.out.push('\n');
                 }
+                // Verbatim, unindented, no `;`. Prefixing it would stop
+                // the kernel recognising the line and the script would
+                // cease to be executable — the one piece of trivia whose
+                // exact bytes are load-bearing.
+                TriviaKind::Shebang(text) => {
+                    self.out.push_str(text);
+                    self.out.push('\n');
+                }
             }
         }
     }
@@ -186,6 +194,8 @@ impl Printer<'_> {
                     self.out.push_str(text);
                 }
                 TriviaKind::BlankLine => self.out.push('\n'),
+                // Only ever at offset 0, so never a child of a form.
+                TriviaKind::Shebang(_) => {}
             }
         }
     }
@@ -513,9 +523,25 @@ impl Printer<'_> {
                     self.emit_child_trivia(&args[start].leading, child_indent);
                     self.out.push('\n');
                     push_spaces(&mut self.out, child_indent);
+                    // Keeping a flag with its value is the point of this
+                    // shape — but WIDTH OUTRANKS SHAPE, exactly as it does
+                    // for a Special header. A group that cannot fit splits
+                    // onto separate lines rather than overflowing the
+                    // budget, because an 89-column line is worse than a
+                    // flag one line above its value. Found by the corpus:
+                    // `"--apply"` plus a 74-character nix expression.
+                    let flat = render_inline(&args[start..start + len]);
+                    let fits =
+                        child_indent + flat.chars().count() + self.pending_close
+                            <= self.cfg.line_width;
                     for k in 0..len {
                         if k > 0 {
-                            self.out.push(' ');
+                            if fits {
+                                self.out.push(' ');
+                            } else {
+                                self.out.push('\n');
+                                push_spaces(&mut self.out, child_indent);
+                            }
                         }
                         let is_last = start + k + 1 == args.len();
                         self.emit_child(&args[start + k], child_indent, is_last);

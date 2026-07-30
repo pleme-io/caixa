@@ -31,6 +31,8 @@ use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
+    /// A verbatim `#!…` first line. See [`crate::trivia::TriviaKind::Shebang`].
+    Shebang(String),
     LParen,
     RParen,
     LBrace,
@@ -225,12 +227,20 @@ fn lex_string_body(lex: &mut Lexer<LogosKind>) -> Result<String, LexError> {
                 Some((_, 'r')) => out.push('\r'),
                 Some((_, '"')) => out.push('"'),
                 Some((_, '\\')) => out.push('\\'),
-                Some((_, other)) => {
-                    return Err(LexError::BadEscape(
-                        span_start + 1 + u32::try_from(i).unwrap_or(0),
-                        other,
-                    ));
-                }
+                // An UNKNOWN escape yields the character itself, dropping
+                // the backslash — matching the canonical reader exactly
+                // (`tatara-lisp/src/reader.rs`: `other => other`).
+                //
+                // Rejecting these was a real divergence, not strictness:
+                // `actions/db-migrate/run.tlisp` carries a grep pattern
+                // written `'Applied\|migration\|up to date'`, which the
+                // canonical reader accepts and this lexer refused, so the
+                // formatter could not read a file the runtime runs. Two
+                // readers disagreeing about what the language IS is the
+                // concrete cost of the fleet's 13 independent
+                // S-expression readers; here the canonical one is the
+                // oracle and this one conforms.
+                Some((_, other)) => out.push(other),
                 None => {
                     return Err(LexError::BadEscape(
                         span_start + 1 + u32::try_from(i).unwrap_or(0),
@@ -271,12 +281,28 @@ fn count_newlines(lex: &mut Lexer<LogosKind>) -> u32 {
 /// preserved — the parser filters what it doesn't need.
 pub fn tokenize(src: &str) -> Result<Vec<Token>, LexError> {
     let mut out = Vec::new();
-    let mut lex = LogosKind::lexer(src);
+
+    // A leading `#!` line is a shebang, not source. Emitted as its own
+    // token so it survives formatting verbatim; logos never sees it, since
+    // `#` is not otherwise part of the grammar. Only at offset 0 — a `#!`
+    // anywhere else is genuinely invalid and must still be an error.
+    let body_start = if src.starts_with("#!") {
+        let end = src.find('\n').unwrap_or(src.len());
+        out.push(Token {
+            kind: TokenKind::Shebang(src[..end].to_string()),
+            span: Span::new(0, u32::try_from(end).unwrap_or(u32::MAX)),
+        });
+        end
+    } else {
+        0
+    };
+
+    let mut lex = LogosKind::lexer(&src[body_start..]);
 
     while let Some(result) = lex.next() {
         let span = lex.span();
-        let span_start = u32::try_from(span.start).unwrap_or(u32::MAX);
-        let span_end = u32::try_from(span.end).unwrap_or(u32::MAX);
+        let span_start = u32::try_from(span.start + body_start).unwrap_or(u32::MAX);
+        let span_end = u32::try_from(span.end + body_start).unwrap_or(u32::MAX);
         let span = Span::new(span_start, span_end);
 
         match result {
