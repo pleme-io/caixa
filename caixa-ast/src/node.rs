@@ -22,6 +22,12 @@ pub enum NodeKind {
     Float(f64),
     Bool(bool),
     List(Vec<Node>),
+    /// `{ :k v … }` — the brace dialect. REAL SYNTAX per
+    /// theory/TATARA-LISP-CONSOLIDATION.md D4; 62 live caixa.lisp
+    /// manifests author nested maps and are consumed today.
+    Map(Vec<Node>),
+    /// `[ a b … ]` — the vector dialect, D4's sibling.
+    Vector(Vec<Node>),
     Quote(Box<Node>),
     Quasiquote(Box<Node>),
     Unquote(Box<Node>),
@@ -53,6 +59,20 @@ impl Node {
             NodeKind::Float(f) => Sexp::Atom(Atom::Float(*f)),
             NodeKind::Bool(b) => Sexp::Atom(Atom::Bool(*b)),
             NodeKind::List(items) => Sexp::List(items.iter().map(Node::to_tatara_sexp).collect()),
+            // `tatara_lisp::Sexp` has no Map/Vector variant yet — adding
+            // them is a LANGUAGE change, sequenced as Phase 2 of
+            // theory/TATARA-LISP-CONSOLIDATION.md D4 and gated on its own
+            // differential run over the 1,123-file corpus (correction C4).
+            // Until that lands, both lower to a plain list: the elements
+            // survive in order, only the brace-ness is dropped. That is
+            // strictly closer to intent than today's behaviour, where the
+            // delimiters lowered as literal `{` / `}` SYMBOLS inside the
+            // list. This projection is used only by the round-trip
+            // equivalence tests, which stay honest because formatting
+            // re-emits the delimiters and re-parsing recovers the node.
+            NodeKind::Map(items) | NodeKind::Vector(items) => {
+                Sexp::List(items.iter().map(Node::to_tatara_sexp).collect())
+            }
             NodeKind::Quote(inner) => Sexp::Quote(Box::new(inner.to_tatara_sexp())),
             NodeKind::Quasiquote(inner) => Sexp::Quasiquote(Box::new(inner.to_tatara_sexp())),
             NodeKind::Unquote(inner) => Sexp::Unquote(Box::new(inner.to_tatara_sexp())),

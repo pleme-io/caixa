@@ -11,7 +11,12 @@ pub trait Visitor {
 
 pub fn walk<V: Visitor + ?Sized>(v: &mut V, node: &Node) {
     match &node.kind {
-        NodeKind::List(items) => {
+        // Map and Vector are compound and MUST recurse. The `_` arm
+        // below is a silent trap for new compound variants: it makes a
+        // missing recursion compile cleanly and simply not visit the
+        // children, so every lint that walks the tree would quietly stop
+        // seeing anything nested inside `{ … }` or `[ … ]`.
+        NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => {
             for item in items {
                 v.visit_node(item);
             }

@@ -90,6 +90,29 @@ fn node_to_value(n: &Node) -> Result<TeiaValue, TeiaError> {
             }
             Ok(TeiaValue::List(out))
         }
+        // `{ :k v … }` is an object BY CONSTRUCTION — that is what the
+        // braces mean. A parenthesised list only becomes one when
+        // `is_kwargs` sniffs the alternating shape; a map needs no
+        // sniffing, and `build_object` rejects a non-keyword key loudly
+        // instead of silently degrading to a positional list.
+        //
+        // Before caixa-ast learned these delimiters, a brace map reached
+        // here as a List whose first and last elements were the literal
+        // SYMBOLS `{` and `}`. That is an odd-length run with a
+        // non-keyword head, so `is_kwargs` rejected it and every nested
+        // map in every manifest silently became a positional
+        // `TeiaValue::List` of stringified braces.
+        NodeKind::Map(items) => build_object(items),
+        // `[ a b … ]` is a list by construction, with no kwargs sniffing:
+        // a vector of `:keyword` atoms (`:workflows [ :auto-release ]`)
+        // is a LIST OF KEYWORDS, not a half-written object.
+        NodeKind::Vector(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                out.push(node_to_value(item)?);
+            }
+            Ok(TeiaValue::List(out))
+        }
         NodeKind::Quote(inner)
         | NodeKind::Quasiquote(inner)
         | NodeKind::Unquote(inner)
