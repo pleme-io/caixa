@@ -38,6 +38,21 @@ pub fn format_nodes(nodes: &[Node], cfg: &FmtConfig) -> String {
             p.emit_leading(leading, 0);
         }
         p.emit(n, 0);
+        if cfg.preserve_comments && !n.after.is_empty() {
+            // Trivia that followed this form at top level. A line comment
+            // stays on the SAME line, which is where the author put it;
+            // relocating it to its own line would change the document.
+            for t in &n.after {
+                match &t.kind {
+                    TriviaKind::LineComment(text) => {
+                        p.out.push(' ');
+                        p.out.push(';');
+                        p.out.push_str(text);
+                    }
+                    TriviaKind::BlankLine => {}
+                }
+            }
+        }
     }
     if cfg.trailing_newline && !p.out.ends_with('\n') {
         p.out.push('\n');

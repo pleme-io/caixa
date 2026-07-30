@@ -8,8 +8,25 @@ pub struct Node {
     pub span: Span,
     /// Comments / blank lines immediately before this node.
     pub leading: Vec<Trivia>,
-    /// Comments trailing this node on the same line (rare; rest end up leading on the next).
+    /// For a compound node: trivia sitting between its last child and its
+    /// closing delimiter, with no child to attach to. Emitted INSIDE the
+    /// form, before the `)`.
+    ///
+    /// Note this slot is overloaded relative to its original meaning
+    /// ("trailing on the same line"); `sequence()` claimed it for the
+    /// dangling case. That is why [`Self::after`] exists rather than this
+    /// being reused again.
     pub trailing: Vec<Trivia>,
+    /// Trivia that follows this node at its own level — OUTSIDE any
+    /// delimiter it owns.
+    ///
+    /// The distinction from [`Self::trailing`] is load-bearing, not
+    /// pedantry: `(define x 1) ; why` and `(define x 1 ; why\n)` are
+    /// different documents, and a single slot cannot represent both. With
+    /// only the two original slots the top-level case had nowhere to go
+    /// and was DISCARDED at EOF — measurably: one mass-format destroyed 44
+    /// trailing comments in `pleme-io/actions` alone.
+    pub after: Vec<Trivia>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +59,7 @@ impl Node {
             span,
             leading: Vec::new(),
             trailing: Vec::new(),
+            after: Vec::new(),
         }
     }
 

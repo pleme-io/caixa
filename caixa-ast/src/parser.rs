@@ -28,10 +28,46 @@ pub fn parse(src: &str) -> Result<Vec<Node>, ParseError> {
         tokens: &tokens,
         pos: 0,
     };
-    let mut out = Vec::new();
+    let mut out: Vec<Node> = Vec::new();
     loop {
-        let leading = p.consume_trivia();
+        let mut leading = p.consume_trivia();
+
+        // A comment on the SAME LINE as the preceding form belongs to that
+        // form, not to whatever comes next. Without this split, `; first`
+        // in
+        //
+        //     (define a 1) ; first
+        //     (define b 2)
+        //
+        // became the LEADING trivia of `(define b 2)` and was re-emitted on
+        // its own line above it — so a note about `a` silently turned into
+        // a note about `b`. The comment survived; its meaning did not.
+        // Deciding by an actual newline in the source (rather than by
+        // guessing) keeps this exact and total.
+        if let Some(prev_end) = out.last().map(|n: &Node| n.span.end as usize) {
+            let own_line = leading
+                .iter()
+                .position(|t| {
+                    let start = t.span.start as usize;
+                    start >= prev_end && src[prev_end..start].contains('\n')
+                })
+                .unwrap_or(leading.len());
+            if own_line > 0 {
+                let same_line: Vec<_> = leading.drain(..own_line).collect();
+                if let Some(last) = out.last_mut() {
+                    last.after.extend(same_line);
+                }
+            }
+        }
+
         if p.peek().is_none() {
+            // Trivia before EOF has no following node to lead, so it used
+            // to be DROPPED here — silently deleting any comment at the
+            // end of a file, and any comment trailing the final form.
+            // Park it after the last node so it survives the round trip.
+            if let Some(last) = out.last_mut() {
+                last.after.extend(leading);
+            }
             break;
         }
         let mut node = p.node()?;
