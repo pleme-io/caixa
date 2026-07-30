@@ -7674,7 +7674,17 @@ mod tests {
         let spec = typed_view(&aplicacao_caixa()).unwrap();
         assert_eq!(spec.membros.len(), 3);
         assert_eq!(spec.contratos.len(), 2);
-        assert!(spec.entrada.is_some());
+        // Route the per-`:entrada` presence-bit probe through the lifted
+        // [`caixa_core::AplicacaoSpec::entrada`] accessor rather than the
+        // raw `spec.entrada.is_some()` field access — sibling to the
+        // production `gateway_routes` reader at :2806 that already routes
+        // its `Some(_)` / `None` early-return partition through the same
+        // accessor. The accessor projects the raw `Option<Entrada>` slot's
+        // presence bit through the reference-return unchanged (`entrada()
+        // -> Option<&Entrada>` = `self.entrada.as_ref()`), so `is_some()`
+        // on both sides is byte-equal — pinned in caixa-core at
+        // `aplicacao_spec_entrada_returns_entrada_option_ref_byte_equal_across_permutations`.
+        assert!(spec.entrada().is_some());
         assert_eq!(spec.placement.clusters.len(), 2);
     }
 
@@ -8674,7 +8684,7 @@ mod tests {
                 entrada.port = port;
                 let spec =
                     typed_view(&caixa).expect("aplicacao_caixa fixture must be a valid Aplicacao");
-                let entrada_ref = spec.entrada.as_ref().expect("entrada present in spec");
+                let entrada_ref = spec.entrada().expect("entrada present in spec");
                 spec.port_for_destination(entrada_ref.destination())
             };
             let docs = gateway_routes(&caixa).unwrap();
@@ -8736,8 +8746,7 @@ mod tests {
         let caixa = aplicacao_caixa();
         let spec = typed_view(&caixa).expect("aplicacao_caixa fixture must be a valid Aplicacao");
         let apex_destination = spec
-            .entrada
-            .as_ref()
+            .entrada()
             .expect("aplicacao_caixa carries a typed `:entrada` block")
             .destination()
             .to_string();
@@ -10071,5 +10080,92 @@ mod tests {
                 "authentication.mode must be a YAML string (got: {mode:?})"
             );
         }
+    }
+
+    /// Byte-parity converge pin on the per-`:entrada` outer-composite
+    /// `Option<&Entrada>` accessor axis: [`AplicacaoSpec::entrada`] must
+    /// agree with the raw `spec.entrada.as_ref()` field access on the
+    /// `aplicacao_caixa` fixture across both the `Some(_)` presence-bit
+    /// arm and the projected `Entrada` composite's per-axis `:host`,
+    /// `:para`, `:paths`, `:port` scalar reads, and on the mutated
+    /// `entrada = None` `None` arm the sibling `gateway_skips_when_no_entrada`
+    /// test exercises. Peer of the caixa-core-side
+    /// `aplicacao_spec_entrada_returns_entrada_option_ref_byte_equal_across_permutations`
+    /// pin (the substrate-primitive accessor definition — `entrada(&self)
+    /// -> Option<&Entrada>` = `self.entrada.as_ref()`) — this pin lands
+    /// the sibling drift-detection gate at the caixa-mesh boundary so a
+    /// future extension of the `:entrada` slot (a per-cluster ingress
+    /// alias table pinned through a future `:entrada-overrides` overlay
+    /// the MESH-COMPOSITION §V federation roadmap acknowledges, an M4
+    /// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's admission-
+    /// webhook per-tenant `:host` rewrite, a canonicalization pass that
+    /// lowercases the DNS-1123 label post-parse) that landed on the
+    /// accessor without a lockstep edit on the raw field access — or vice
+    /// versa — surfaces at caixa-mesh build time rather than at cluster-
+    /// apply time. The three prior caixa-mesh test-side raw
+    /// `spec.entrada.<field>` sites (the `typed_view_returns_validated_spec`
+    /// presence-bit probe, the
+    /// `httproute_backend_ref_port_routes_through_lifted_port_for_destination_resolver`
+    /// per-permutation `entrada_ref` bind, and the
+    /// `httproute_backend_ref_port_and_cnp_l4_port_share_port_for_destination_resolver_at_emit_site`
+    /// apex-destination bind) are the consumers this pin protects — the
+    /// converge routed each onto the substrate primitive; the pin here
+    /// guards the primitive's byte-parity contract against silent
+    /// divergence.
+    #[test]
+    fn spec_entrada_accessor_byte_equal_to_raw_field_access() {
+        // `Some(_)` arm — the aplicacao_caixa fixture carries a typed
+        // `:entrada` block, so the accessor projects `Some(&Entrada)`
+        // byte-equal to the raw `self.entrada.as_ref()`.
+        let spec = typed_view(&aplicacao_caixa()).expect("fixture is a valid Aplicacao");
+        let via_accessor: Option<&Entrada> = spec.entrada();
+        let via_raw: Option<&Entrada> = spec.entrada.as_ref();
+        assert_eq!(
+            via_accessor.is_some(),
+            via_raw.is_some(),
+            "AplicacaoSpec::entrada() must project the raw \
+             Option<Entrada> slot's presence bit byte-equal to \
+             self.entrada.as_ref() — drift would let the accessor's \
+             Some/None partition disagree with the raw field's on a \
+             fixture the substrate contract pins as Some(_)"
+        );
+        let acc = via_accessor.expect("accessor Some arm");
+        let raw = via_raw.expect("raw Some arm");
+        assert_eq!(
+            acc.hostname(),
+            raw.hostname(),
+            "accessor and raw must agree on Entrada::hostname()"
+        );
+        assert_eq!(
+            acc.destination(),
+            raw.destination(),
+            "accessor and raw must agree on Entrada::destination()"
+        );
+        assert_eq!(
+            acc.port(),
+            raw.port(),
+            "accessor and raw must agree on Entrada::port()"
+        );
+        assert_eq!(
+            acc.paths(),
+            raw.paths(),
+            "accessor and raw must agree on Entrada::paths()"
+        );
+
+        // `None` arm — mutate the fixture to drop `:entrada`, matching
+        // the sibling `gateway_skips_when_no_entrada` early-return
+        // partition. The accessor and the raw field must both project
+        // `None`.
+        let mut no_entrada = aplicacao_caixa();
+        no_entrada.entrada = None;
+        let spec_none = typed_view(&no_entrada).expect("fixture without :entrada is still valid");
+        assert!(
+            spec_none.entrada().is_none(),
+            "accessor must project None on a fixture with no :entrada"
+        );
+        assert!(
+            spec_none.entrada.is_none(),
+            "raw field must project None on a fixture with no :entrada"
+        );
     }
 }
