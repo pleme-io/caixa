@@ -96,8 +96,12 @@ impl<'a> Parser<'a> {
         let tok = self.peek().ok_or(ParseError::Eof)?;
         let span = tok.span;
         match &tok.kind {
-            TokenKind::LParen => self.list(),
-            TokenKind::RParen => Err(ParseError::UnmatchedClose(span)),
+            TokenKind::LParen => self.sequence(&TokenKind::RParen, NodeKind::List),
+            TokenKind::LBrace => self.sequence(&TokenKind::RBrace, NodeKind::Map),
+            TokenKind::LBracket => self.sequence(&TokenKind::RBracket, NodeKind::Vector),
+            TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket => {
+                Err(ParseError::UnmatchedClose(span))
+            }
             TokenKind::Quote => self.reader_macro("quote", |n| NodeKind::Quote(Box::new(n))),
             TokenKind::Quasiquote => {
                 self.reader_macro("quasiquote", |n| NodeKind::Quasiquote(Box::new(n)))
@@ -147,19 +151,29 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn list(&mut self) -> Result<Node, ParseError> {
-        let open = self.bump().expect("lparen").span;
+    /// Parse a delimited sequence: `(…)`, `{…}` or `[…]`.
+    ///
+    /// One routine for all three because they differ only in their
+    /// closing token and the `NodeKind` they build — the trivia rules,
+    /// the dangling-comment handling and the EOF error are identical, and
+    /// duplicating them per delimiter is how the three drift apart.
+    fn sequence(
+        &mut self,
+        close_kind: &TokenKind,
+        wrap: fn(Vec<Node>) -> NodeKind,
+    ) -> Result<Node, ParseError> {
+        let open = self.bump().expect("opening delimiter").span;
         let mut items = Vec::new();
         loop {
             let leading = self.consume_trivia();
             let next = self.peek();
             match next {
                 None => return Err(ParseError::Eof),
-                Some(tok) if matches!(tok.kind, TokenKind::RParen) => {
-                    let close = self.bump().expect("rparen").span;
+                Some(tok) if tok.kind == *close_kind => {
+                    let close = self.bump().expect("closing delimiter").span;
                     let span = open.union(close);
-                    let mut node = Node::new(NodeKind::List(items), span);
-                    // list's leading trivia handled at caller
+                    let mut node = Node::new(wrap(items), span);
+                    // the sequence's own leading trivia is handled at the caller
                     node.leading = Vec::new();
                     // Trivia sitting between the last item and the closer has
                     // no child to attach to. It used to be dropped here, which
@@ -217,6 +231,69 @@ mod tests {
         };
         assert_eq!(items.len(), 3);
         assert!(matches!(items[0].kind, NodeKind::Symbol(ref s) if s == "a"));
+    }
+
+    /// The brace/vector dialect (D4). Before caixa-ast had these tokens
+    /// they fell through to the Symbol regex, so `{` and `}` parsed as
+    /// ordinary symbols and every nested map became a flat odd-length run.
+    #[test]
+    fn parse_map_and_vector() {
+        let nodes =
+            parse(r#"(defcaixa demo :package { :name "d" } :workflows [ :a :b ])"#).unwrap();
+        let NodeKind::List(items) = &nodes[0].kind else {
+            panic!("expected list")
+        };
+        // head, name, :package, {…}, :workflows, [ … ]  — SIX items, not
+        // the eleven you get when the delimiters are their own symbols.
+        assert_eq!(items.len(), 6, "got {items:#?}");
+
+        let NodeKind::Map(m) = &items[3].kind else {
+            panic!("expected map, got {:?}", items[3].kind)
+        };
+        assert_eq!(m.len(), 2);
+        assert!(matches!(&m[0].kind, NodeKind::Keyword(k) if k == "name"));
+
+        let NodeKind::Vector(v) = &items[5].kind else {
+            panic!("expected vector, got {:?}", items[5].kind)
+        };
+        assert_eq!(v.len(), 2);
+        assert!(matches!(&v[0].kind, NodeKind::Keyword(k) if k == "a"));
+    }
+
+    /// Delimiters terminate atoms, so no whitespace is required around
+    /// them. `{:name` must be LBrace + Keyword, never one symbol.
+    #[test]
+    fn delimiters_terminate_atoms_without_whitespace() {
+        let nodes = parse(r#"{:a 1}"#).unwrap();
+        let NodeKind::Map(m) = &nodes[0].kind else {
+            panic!("expected map, got {:?}", nodes[0].kind)
+        };
+        assert_eq!(m.len(), 2);
+        assert!(matches!(&m[0].kind, NodeKind::Keyword(k) if k == "a"));
+        assert!(matches!(m[1].kind, NodeKind::Int(1)));
+
+        let nodes = parse(r#"[a b]"#).unwrap();
+        let NodeKind::Vector(v) = &nodes[0].kind else {
+            panic!("expected vector")
+        };
+        assert_eq!(v.len(), 2);
+        assert!(matches!(&v[1].kind, NodeKind::Symbol(s) if s == "b"));
+    }
+
+    #[test]
+    fn unmatched_closing_delimiters_are_rejected() {
+        for src in ["}", "]", ")"] {
+            assert!(
+                matches!(parse(src), Err(ParseError::UnmatchedClose(_))),
+                "{src:?} must be an unmatched-close error"
+            );
+        }
+        for src in ["{", "[", "("] {
+            assert!(
+                matches!(parse(src), Err(ParseError::Eof)),
+                "{src:?} must be an EOF error"
+            );
+        }
     }
 
     #[test]

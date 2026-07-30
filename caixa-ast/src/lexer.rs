@@ -33,6 +33,10 @@ use crate::span::Span;
 pub enum TokenKind {
     LParen,
     RParen,
+    LBrace,
+    RBrace,
+    LBracket,
+    RBracket,
     Quote,
     Quasiquote,
     Unquote,
@@ -98,6 +102,31 @@ enum LogosKind {
     #[token(")")]
     RParen,
 
+    // The brace/vector dialect. `{ :k v }` and `[ a b ]` are REAL
+    // SYNTAX, not sugar — theory/TATARA-LISP-CONSOLIDATION.md D4, on the
+    // evidence of 62 live caixa.lisp manifests that author nested maps
+    // (`:package { :name "…" :version "…" }`) and are consumed today.
+    //
+    // Until now these four bytes had no token here at all: they fell
+    // through to the Symbol regex below, so a map lexed as a flat run of
+    // atoms with `{` and `}` as ordinary symbols. That made every real
+    // manifest an odd-length list to the printer, which is why `feira
+    // fmt` abandoned the key/value shape and exploded them one atom per
+    // line. caixa-ts/grammar.js has had `map` and `vector` rules from the
+    // start and its header says the two grammars are kept in lockstep —
+    // this closes the gap on the Rust side.
+    #[token("{")]
+    LBrace,
+
+    #[token("}")]
+    RBrace,
+
+    #[token("[")]
+    LBracket,
+
+    #[token("]")]
+    RBracket,
+
     #[token("'")]
     Quote,
 
@@ -133,8 +162,9 @@ enum LogosKind {
     )]
     Float(f64),
 
-    // Keyword: `:` followed by atom chars.
-    #[regex(":[^\\s()'`,\";]+", |lex| lex.slice()[1..].to_string())]
+    // Keyword: `:` followed by atom chars. `{}[]` terminate it, or
+    // `:version "0.3.0"}` would lex the closing brace into the keyword.
+    #[regex(":[^\\s()'`,\";\\{\\}\\[\\]]+", |lex| lex.slice()[1..].to_string())]
     Keyword(String),
 
     // Line comment: `;` to end of line. The leading `;` is NOT
@@ -165,7 +195,15 @@ enum LogosKind {
     // appears inside a tatara-lisp symbol. Excluding `#` here lets
     // adjacent forms like `#t#f` tokenize as two booleans rather
     // than a single `#t#f` symbol.
-    #[regex("[^\\s()'`,\";#][^\\s()'`,\";#]*", |lex| lex.slice().to_string())]
+    // `{}[]` join the terminator set for the same reason `()` are in it:
+    // they are structural delimiters now, so `{:name` must lex as LBrace
+    // + Keyword rather than as one symbol `{:name`. caixa-ts states the
+    // same set as an ALLOW-list (`[A-Za-z_+\-*/=<>?!%&~.]…`), which
+    // already excluded braces — this is the Rust side catching up.
+    #[regex(
+        "[^\\s()'`,\";#\\{\\}\\[\\]][^\\s()'`,\";#\\{\\}\\[\\]]*",
+        |lex| lex.slice().to_string()
+    )]
     Symbol(String),
 }
 
@@ -246,6 +284,10 @@ pub fn tokenize(src: &str) -> Result<Vec<Token>, LexError> {
                 let public = match kind {
                     LogosKind::LParen => TokenKind::LParen,
                     LogosKind::RParen => TokenKind::RParen,
+                    LogosKind::LBrace => TokenKind::LBrace,
+                    LogosKind::RBrace => TokenKind::RBrace,
+                    LogosKind::LBracket => TokenKind::LBracket,
+                    LogosKind::RBracket => TokenKind::RBracket,
                     LogosKind::Quote => TokenKind::Quote,
                     LogosKind::Quasiquote => TokenKind::Quasiquote,
                     LogosKind::Unquote => TokenKind::Unquote,
