@@ -962,12 +962,58 @@ fn emit_string(s: &str, out: &mut String) {
     out.push('"');
 }
 
+/// Render a float as the SHORTEST text that reads back as the identical
+/// value — bit for bit — preferring plain decimal and falling back to
+/// exponent notation.
+///
+/// WHY THIS IS NOT COSMETIC. Rust's `{}` is shortest-round-trip only in
+/// the ordinary range; at the extremes it expands. `1e-300` came out as a
+/// 307-character decimal and `f64::MIN_POSITIVE` as 331, and neither read
+/// back — the value was destroyed by being written down. `1e300` went out
+/// as a 301-digit integer expansion that then failed to lex at all. The
+/// lexer has always accepted exponent notation (`1e300`, `6.02e23`,
+/// `-1.5e-3` all parse); nothing ever EMITTED it. So this is an emit-side
+/// defect, and it is a data-loss one: a document is only homoiconic if
+/// writing it and reading it back is the identity.
+///
+/// The rule is fixed, so the output is deterministic: build both
+/// candidates, keep those that round-trip exactly, and take the shorter —
+/// ties going to plain decimal, which is the more readable of the two.
+///
+/// A float must also read back AS A FLOAT. `2.0` would round-trip through
+/// `2` numerically while changing kind, so the integral case keeps its
+/// `.0`, and an exponent form is only accepted when it survives that same
+/// check.
 fn format_float(f: f64) -> String {
-    if f == f.trunc() && f.is_finite() {
-        // Preserve float-ness with a trailing ".0" to disambiguate from int.
+    if !f.is_finite() {
+        // NaN / ±inf have no literal syntax in this language. Emitting
+        // `NaN` would produce a symbol on re-read — a silent type change.
+        // Preserved verbatim so the value is visible rather than
+        // corrupted; the parser rejecting it is the correct outcome.
+        return format!("{f}");
+    }
+
+    let plain = if f == f.trunc() {
         format!("{f:.1}")
     } else {
         format!("{f}")
+    };
+    let exp = format!("{f:e}");
+
+    let round_trips = |s: &str| -> bool {
+        // Bit-exact, so -0.0 and 0.0 stay distinct, and any precision loss
+        // is caught rather than tolerated.
+        s.parse::<f64>().is_ok_and(|b| b.to_bits() == f.to_bits())
+    };
+
+    match (round_trips(&plain), round_trips(&exp)) {
+        (true, true) if exp.len() < plain.len() => exp,
+        (true, _) => plain,
+        (false, true) => exp,
+        // Neither survives — emit plain so the value is at least visible
+        // and a round-trip test can name it, rather than silently
+        // substituting something that parses but is not the same number.
+        (false, false) => plain,
     }
 }
 
