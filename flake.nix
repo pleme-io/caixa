@@ -27,13 +27,27 @@
         src = ./.;
         member = "caixa-feira";
       };
-      feiraSystems = [ "aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux" ];
-      withFeira = nixpkgs.lib.genAttrs feiraSystems (system:
+
+      # `caixa-lsp` — the tatara-lisp language server (stdio; diagnostics from
+      # caixa-lint, formatting from caixa-fmt, symbols + hover from caixa-ast).
+      # Grafted by the same rule as `feira` above. It was already referenced as
+      # a `flakeOutput` in deploy.yaml and guarded on `caixaPkgs ? caixa-lsp` in
+      # caixa-feira/module/default.nix — both were dangling, because the output
+      # had never actually been added. Editors could only reach the server by
+      # `cargo build`ing it out of a checkout.
+      lspBase = substrate.rust.workspace {
+        src = ./.;
+        member = "caixa-lsp";
+      };
+
+      graftSystems = [ "aarch64-darwin" "x86_64-darwin" "x86_64-linux" "aarch64-linux" ];
+      grafted = nixpkgs.lib.genAttrs graftSystems (system:
         (base.packages.${system} or { }) // {
           feira = feiraBase.packages.${system}.default;
+          caixa-lsp = lspBase.packages.${system}.default;
         });
     in
     base // {
-      packages = withFeira;
+      packages = grafted;
     };
 }
