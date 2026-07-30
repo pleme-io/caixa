@@ -58,6 +58,34 @@ struct Printer<'a> {
     cfg: &'a FmtConfig,
 }
 
+/// The delimiter pair for a compound form.
+///
+/// `(…)`, `{…}` and `[…]` differ ONLY in these two bytes — the wrapping,
+/// the kwargs-pair layout, the comment handling and the width budget are
+/// identical. Carrying the pair as data is what lets one `emit_seq` serve
+/// all three; a per-delimiter copy is how the map printer would drift
+/// away from the list printer that is already correct.
+#[derive(Clone, Copy)]
+struct Delims {
+    open: char,
+    close: char,
+}
+
+impl Delims {
+    const PAREN: Self = Self {
+        open: '(',
+        close: ')',
+    };
+    const BRACE: Self = Self {
+        open: '{',
+        close: '}',
+    };
+    const BRACKET: Self = Self {
+        open: '[',
+        close: ']',
+    };
+}
+
 impl Printer<'_> {
     fn emit_leading(&mut self, trivia: &[Trivia], indent: usize) {
         for t in trivia {
@@ -104,7 +132,9 @@ impl Printer<'_> {
                 self.out.push_str(",@");
                 self.emit(inner, indent);
             }
-            NodeKind::List(items) => self.emit_list(items, &n.trailing, indent),
+            NodeKind::List(items) => self.emit_seq(items, &n.trailing, indent, Delims::PAREN),
+            NodeKind::Map(items) => self.emit_seq(items, &n.trailing, indent, Delims::BRACE),
+            NodeKind::Vector(items) => self.emit_seq(items, &n.trailing, indent, Delims::BRACKET),
         }
     }
 
@@ -133,12 +163,13 @@ impl Printer<'_> {
         }
     }
 
-    fn emit_list(&mut self, items: &[Node], dangling: &[Trivia], indent: usize) {
+    fn emit_seq(&mut self, items: &[Node], dangling: &[Trivia], indent: usize, delims: Delims) {
         let keep_comments = self.cfg.preserve_comments;
         let has_dangling_comment = keep_comments && contains_comment_trivia(dangling);
 
         if items.is_empty() && !has_dangling_comment {
-            self.out.push_str("()");
+            self.out.push(delims.open);
+            self.out.push(delims.close);
             return;
         }
 
@@ -153,15 +184,15 @@ impl Printer<'_> {
             let inline = render_inline(items);
             let current_col = current_column(&self.out);
             if inline.len() + 2 + current_col <= self.cfg.line_width {
-                self.out.push('(');
+                self.out.push(delims.open);
                 self.out.push_str(&inline);
-                self.out.push(')');
+                self.out.push(delims.close);
                 return;
             }
         }
 
-        // Multi-line: open paren, then body, then close.
-        self.out.push('(');
+        // Multi-line: open delimiter, then body, then close.
+        self.out.push(delims.open);
         let child_indent = indent + self.cfg.indent;
 
         // The kwargs shape only applies when the leading symbols carry no
@@ -209,7 +240,7 @@ impl Printer<'_> {
             self.out.push('\n');
             push_spaces(&mut self.out, indent);
         }
-        self.out.push(')');
+        self.out.push(delims.close);
     }
 }
 
@@ -303,12 +334,16 @@ fn render_node_inline(n: &Node, out: &mut String) {
             out.push_str(",@");
             render_node_inline(inner, out);
         }
-        NodeKind::List(items) => {
-            out.push('(');
-            out.push_str(&render_inline(items));
-            out.push(')');
-        }
+        NodeKind::List(items) => render_seq_inline(items, Delims::PAREN, out),
+        NodeKind::Map(items) => render_seq_inline(items, Delims::BRACE, out),
+        NodeKind::Vector(items) => render_seq_inline(items, Delims::BRACKET, out),
     }
+}
+
+fn render_seq_inline(items: &[Node], delims: Delims, out: &mut String) {
+    out.push(delims.open);
+    out.push_str(&render_inline(items));
+    out.push(delims.close);
 }
 
 fn emit_string(s: &str, out: &mut String) {
@@ -467,6 +502,52 @@ mod tests {
         let out = fmt("(a ;; note\n b)\n");
         assert!(out.contains(";; note"), "got:\n{out}");
         assert!(parse(&out).is_ok(), "a re-parse must still succeed:\n{out}");
+    }
+
+    /// The whole reason format-on-save was unsafe: a real caixa.lisp is
+    /// mostly nested maps, and until caixa-ast learned `{}`/`[]` the
+    /// printer saw an odd-length list of brace SYMBOLS, abandoned the
+    /// key/value shape, and rewrote the manifest one atom per line.
+    #[test]
+    fn real_manifest_shape_survives() {
+        let src = r#"(defcaixa todoku-go :kind :Biblioteca :package { :name "todoku-go" :version "0.3.0" :license "MIT" :description "long enough that this form must break across several lines" } :workflows [ :auto-release ] :publish-to-git true)"#;
+        let out = fmt(src);
+        assert!(out.starts_with("(defcaixa todoku-go\n"), "got:\n{out}");
+        assert!(out.contains("  :kind :Biblioteca\n"), "got:\n{out}");
+        // the map keeps its braces AND its pair layout
+        assert!(out.contains(":package {"), "got:\n{out}");
+        assert!(out.contains("\"todoku-go\""), "got:\n{out}");
+        // the vector stays a vector
+        assert!(out.contains(":workflows [:auto-release]"), "got:\n{out}");
+        // and no delimiter ever appears as a lone atom on its own line
+        for line in out.lines() {
+            let t = line.trim();
+            assert!(
+                !matches!(t, "{" | "}" | "[" | "]"),
+                "delimiter stranded on its own line:\n{out}"
+            );
+        }
+    }
+
+    #[test]
+    fn empty_compound_forms_keep_their_delimiters() {
+        assert_eq!(fmt("()"), "()\n");
+        assert_eq!(fmt("{}"), "{}\n");
+        assert_eq!(fmt("[]"), "[]\n");
+        assert_eq!(fmt("(:stacks [] :deps {})"), "(:stacks [] :deps {})\n");
+    }
+
+    #[test]
+    fn map_and_vector_round_trip_semantics() {
+        let src = r#"(defcaixa d :package { :a 1 :b [ 2 3 ] } :v [ { :c 4 } ])"#;
+        let a = parse(src).unwrap();
+        let out = format_nodes(&a, &FmtConfig::default());
+        let b = parse(&out).unwrap();
+        let sa: Vec<_> = a.iter().map(Node::to_tatara_sexp).collect();
+        let sb: Vec<_> = b.iter().map(Node::to_tatara_sexp).collect();
+        assert_eq!(sa, sb, "formatting changed meaning; output was:\n{out}");
+        // and the delimiters really did survive the round trip
+        assert!(out.contains('{') && out.contains('['), "got:\n{out}");
     }
 
     #[test]
