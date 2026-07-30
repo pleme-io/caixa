@@ -2,11 +2,15 @@
 //!
 //! ```lisp
 //! (deffmt-config
-//!   :line-width 100
+//!   :line-width 80
 //!   :indent 2
+//!   :max-inline-items 3
 //!   :trailing-newline #t
 //!   :preserve-comments #t)
 //! ```
+//!
+//! Every field is optional and falls back to [`FmtConfig::default`], which
+//! is the house style: 80 columns, stack down rather than across.
 
 use serde::{Deserialize, Serialize};
 use tatara_lisp::DeriveTataraDomain;
@@ -25,6 +29,11 @@ pub struct FmtConfigLisp {
     pub trailing_newline: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preserve_comments: Option<bool>,
+    /// Max children an s-expression may hold and still render flat.
+    /// See [`FmtConfig::max_inline_items`] — bounds sideways sprawl by
+    /// arity, which width alone cannot do.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_inline_items: Option<i64>,
 }
 
 impl FmtConfigLisp {
@@ -48,7 +57,10 @@ impl FmtConfigLisp {
     pub fn into_runtime(self) -> FmtConfig {
         let mut out = FmtConfig::default();
         if let Some(w) = self.line_width {
-            out.line_width = usize::try_from(w).unwrap_or(100);
+            out.line_width = usize::try_from(w).unwrap_or(80);
+        }
+        if let Some(n) = self.max_inline_items {
+            out.max_inline_items = usize::try_from(n).unwrap_or(3);
         }
         if let Some(i) = self.indent {
             out.indent = usize::try_from(i).unwrap_or(2);
