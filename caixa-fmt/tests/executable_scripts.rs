@@ -22,7 +22,8 @@ fn a_shebang_survives_verbatim_and_stays_first() {
 #[test]
 fn unknown_escapes_match_the_canonical_reader() {
     let src = r#"(x "Applied\|migration\|up to date")"#;
-    let out = format_source(src, &FmtConfig::default()).expect("must lex like the canonical reader");
+    let out =
+        format_source(src, &FmtConfig::default()).expect("must lex like the canonical reader");
     let again = format_source(&out, &FmtConfig::default()).unwrap();
     assert_eq!(out, again, "not idempotent:\n{out}");
 }
@@ -39,7 +40,9 @@ fn the_previously_unparseable_corpus_files_parse() {
         "nix/scripts/tlisp/ci-watch.tlisp",
         "nix/scripts/tlisp/rollout-attach.tlisp",
     ] {
-        let Ok(src) = std::fs::read_to_string(root.join(rel)) else { continue };
+        let Ok(src) = std::fs::read_to_string(root.join(rel)) else {
+            continue;
+        };
         let out = format_source(&src, &FmtConfig::default())
             .unwrap_or_else(|e| panic!("{rel} still unparseable: {e}"));
         if src.starts_with("#!") {
