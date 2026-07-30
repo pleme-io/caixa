@@ -9,10 +9,13 @@ fn assert_round_trips(v: f64, label: &str) {
     let out = format_source(&format!("(x {v:?})"), &FmtConfig::default())
         .unwrap_or_else(|e| panic!("{label}: emitted text does not re-lex: {e}"));
     let nodes = caixa_ast::parse(&out).unwrap_or_else(|e| panic!("{label}: reparse failed: {e}"));
-    let NodeKind::List(items) = &nodes[0].kind else { panic!("{label}: shape changed") };
+    let NodeKind::List(items) = &nodes[0].kind else {
+        panic!("{label}: shape changed")
+    };
     match &items[1].kind {
         NodeKind::Float(b) => assert_eq!(
-            b.to_bits(), v.to_bits(),
+            b.to_bits(),
+            v.to_bits(),
             "{label}: value changed — wrote {v:e}, read back {b:e}\n{out}"
         ),
         other => panic!("{label}: a float read back as {other:?} — kind changed\n{out}"),
@@ -53,5 +56,8 @@ fn ordinary_values_are_unchanged_and_still_readable() {
 #[test]
 fn extremes_are_compact_not_three_hundred_characters() {
     let out = format_source(&format!("(x {:?})", 1e-300f64), &FmtConfig::default()).unwrap();
-    assert!(out.trim().len() < 20, "still expanding to a wall of digits:\n{out}");
+    assert!(
+        out.trim().len() < 20,
+        "still expanding to a wall of digits:\n{out}"
+    );
 }

@@ -6,9 +6,16 @@ use caixa_fmt::{FmtConfig, format_source};
 /// idempotent: delete once, and it is stable forever.
 fn assert_no_comment_lost(src: &str, label: &str) {
     let out = format_source(src, &FmtConfig::default()).unwrap();
-    let want: Vec<&str> = src.lines().filter_map(|l| l.split_once(';').map(|(_, c)| c.trim())).filter(|c| !c.is_empty()).collect();
+    let want: Vec<&str> = src
+        .lines()
+        .filter_map(|l| l.split_once(';').map(|(_, c)| c.trim()))
+        .filter(|c| !c.is_empty())
+        .collect();
     for c in &want {
-        assert!(out.contains(c), "{label}: LOST comment {c:?}\n--- in ---\n{src}\n--- out ---\n{out}");
+        assert!(
+            out.contains(c),
+            "{label}: LOST comment {c:?}\n--- in ---\n{src}\n--- out ---\n{out}"
+        );
     }
 }
 

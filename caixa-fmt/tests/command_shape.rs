@@ -32,5 +32,8 @@ fn a_flag_never_separates_from_its_value() {
 
 #[test]
 fn a_short_command_still_fits_on_one_line() {
-    assert_eq!(fmt(r#"(exec-capture "mkdir" "-p" dir)"#).trim(), r#"(exec-capture "mkdir" "-p" dir)"#);
+    assert_eq!(
+        fmt(r#"(exec-capture "mkdir" "-p" dir)"#).trim(),
+        r#"(exec-capture "mkdir" "-p" dir)"#
+    );
 }
