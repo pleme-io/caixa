@@ -189,7 +189,18 @@ impl Printer<'_> {
         let force_break =
             has_dangling_comment || (keep_comments && items.iter().any(contains_comment));
 
-        if !force_break {
+        // ── STACK DOWN, NOT ACROSS ───────────────────────────────────
+        //
+        // Width alone is not enough to get the house shape. A form with
+        // many small children can satisfy any column budget and still read
+        // as a wall of sideways text, so flatness is bounded by ARITY too:
+        // past `max_inline_items` a form stacks no matter how short it is.
+        // Both bounds are fixed numbers consulted in a fixed order, so this
+        // stays a pure function of (tree, config) — the determinism the
+        // group-break rule above depends on is preserved, not weakened.
+        let too_many_items = inline_slot_count(items) > self.cfg.max_inline_items;
+
+        if !force_break && !too_many_items {
             let inline = render_inline(items);
             let current_col = current_column(&self.out);
             if inline.len() + 2 + current_col <= self.cfg.line_width {
@@ -711,5 +722,83 @@ mod tests {
         let once = fmt(src);
         let twice = fmt(&once);
         assert_eq!(once, twice, "not idempotent; first pass was:\n{once}");
+    }
+}
+
+/// Count the layout SLOTS in a sequence: a `:key value` kwarg pair is one
+/// slot, any other node is one slot.
+///
+/// The arity bound exists to stop sideways sprawl, and sprawl is a function
+/// of how many IDEAS a form carries, not how many nodes. `(:x 1 :y 2)` is
+/// four nodes and two ideas; counting nodes would stack it, which reads
+/// worse than the single line it replaces. Pair-aware counting is what lets
+/// the bound be aggressive on genuinely wide forms without punishing the
+/// small kwarg forms that make up most of the corpus.
+///
+/// Total and allocation-free, so it cannot perturb the printer's
+/// determinism: same slice in, same count out.
+fn inline_slot_count(items: &[Node]) -> usize {
+    let mut slots = 0usize;
+    let mut i = 0usize;
+    while i < items.len() {
+        let is_pair = matches!(items[i].kind, NodeKind::Keyword(_)) && i + 1 < items.len();
+        i += if is_pair { 2 } else { 1 };
+        slots += 1;
+    }
+    slots
+}
+
+#[cfg(test)]
+mod house_style_tests {
+    use super::*;
+    use crate::config::FmtConfig;
+
+    /// Format `src` twice and assert byte-equality, then return the output.
+    /// Determinism is the property the whole printer rests on, so every
+    /// case below re-proves it rather than assuming it.
+    fn fmt2(src: &str) -> String {
+        let a = format_source(src, &FmtConfig::default()).expect("fmt a");
+        let b = format_source(src, &FmtConfig::default()).expect("fmt b");
+        assert_eq!(a, b, "formatter is not deterministic for:\n{src}");
+        let c = format_source(&a, &FmtConfig::default()).expect("fmt c");
+        assert_eq!(a, c, "formatter is not idempotent for:\n{src}");
+        a
+    }
+
+    #[test]
+    fn every_line_respects_the_eighty_column_ceiling() {
+        // A wide form that a 100-col budget would have left flat.
+        let src = "(defcaixa :name \"a-fairly-long-package-name\" :kind :Biblioteca \
+                   :ecosystem :tlisp-library :version \"0.1.0\" :license \"MIT\")";
+        let out = fmt2(src);
+        for (i, line) in out.lines().enumerate() {
+            assert!(
+                line.chars().count() <= 80,
+                "line {} is {} cols (>80):\n{}",
+                i + 1,
+                line.chars().count(),
+                line
+            );
+        }
+    }
+
+    #[test]
+    fn a_wide_but_short_form_stacks_rather_than_sprawling() {
+        // Nine tiny items: ~30 columns, so a width-only rule keeps it flat.
+        // The arity bound is what makes it go down instead of across.
+        let src = "(list 1 2 3 4 5 6 7 8 9)";
+        let out = fmt2(src);
+        assert!(
+            out.lines().count() > 1,
+            "expected vertical stacking, got one line:\n{out}"
+        );
+    }
+
+    #[test]
+    fn a_genuinely_small_form_stays_inline() {
+        // The bound must not flatten everything into a column — a head plus
+        // two operands is still one line, or the style is unreadable.
+        let out = fmt2("(+ 1 2)");
+        assert_eq!(out.trim(), "(+ 1 2)");
     }
 }
