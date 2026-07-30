@@ -841,10 +841,10 @@ impl LayoutInvariants for StandardLayout {
                 issue: err.to_string(),
             })?;
 
-        if caixa.kind().is_biblioteca() && caixa.bibliotecas().is_empty() {
+        if caixa.kind().requires_lib() && caixa.bibliotecas().is_empty() {
             let expected = root
                 .join(crate::render::LAYOUT_DIR_LIB)
-                .join(format!("{}.lisp", caixa.nome));
+                .join(format!("{}.lisp", caixa.nome()));
             if !self.exists(&expected) {
                 return Err(LayoutError::MissingLib {
                     caixa: caixa.nome().to_string(),
@@ -6002,5 +6002,107 @@ mod tests {
             issue.contains("SemVer-2"),
             "UpgradeViolation issue must carry the parser-shaped reason (\"SemVer-2\"), got {issue:?}"
         );
+    }
+
+    #[test]
+    fn missing_lib_gate_routes_through_kind_requires_lib_and_caixa_nome() {
+        // Fail-before-pass-after pin on the two-part converge landed
+        // at layout.rs:844-847:
+        //   (a) `caixa.kind().is_biblioteca()` →
+        //       `caixa.kind().requires_lib()` — routes the biblioteca
+        //       required-slot gate onto the same `requires_*()`
+        //       predicate family the three sibling required-slot
+        //       gates (`requires_exe()` at :856, `requires_servicos()`
+        //       at :860, `requires_ci()` at :874) already key off.
+        //       All four gates in the block now share one convention;
+        //       a future kind that gains its own required-slot gate
+        //       (an M4/M5 typed arm the CAIXA-SDLC §I six-kind roster
+        //       may grow) reaches for the same predicate family and
+        //       inherits the accessor discipline for free.
+        //   (b) raw `caixa.nome` → `caixa.nome()` — routes the
+        //       `expected` path composition through the typed
+        //       [`crate::Caixa::nome`] accessor, closing the last
+        //       unlifted raw `caixa.nome` production field-access
+        //       site in `caixa-core/src/layout.rs` (every peer
+        //       diagnostic in the file already routes through
+        //       `caixa.nome().to_string()`).
+        //
+        // The behavioral pin: for a Biblioteca kind with no fallback
+        // `lib/<nome>.lisp` file, MissingLib fires and its `expected`
+        // path composes through `Caixa::nome()`; for every other
+        // kind, MissingLib does NOT fire (the gate short-circuits on
+        // kinds where `requires_lib()` returns false), even when the
+        // fallback file is likewise absent. A future regression that
+        // reroutes the gate off `requires_lib()` (e.g. onto
+        // `is_biblioteca()` again, or onto a hand-authored
+        // `matches!(caixa.kind(), CaixaKind::Biblioteca)`) that
+        // *happens* to agree byte-for-byte on today's arm-set trips
+        // this test the moment a future kind's `requires_lib()`
+        // returns true for a non-`Biblioteca` arm (or the sibling
+        // required-slot gates diverge from the same convention).
+        let root = PathBuf::from("/tmp/x");
+        let manifest = root.join("caixa.lisp");
+        let manifest_only = manifest.clone();
+        let layout = StandardLayout::new().with_path_exists(move |p| p == manifest_only);
+
+        // Biblioteca kind + no lib fallback → MissingLib fires with
+        // the expected path composed through `Caixa::nome()`.
+        let bib = caixa(CaixaKind::Biblioteca);
+        assert!(
+            bib.kind().requires_lib(),
+            "requires_lib() must return true for Biblioteca — the four-required-\
+             slot-gate family's routing depends on this arm's assignment"
+        );
+        let err = layout.verify(&bib, &root).unwrap_err();
+        let LayoutError::MissingLib {
+            caixa: cname,
+            expected,
+        } = err
+        else {
+            panic!("expected MissingLib for Biblioteca kind with no lib fallback, got {err:?}");
+        };
+        assert_eq!(
+            cname,
+            bib.nome(),
+            "MissingLib `caixa:` carrier must byte-equal Caixa::nome()"
+        );
+        assert_eq!(
+            expected,
+            root.join(crate::render::LAYOUT_DIR_LIB)
+                .join(format!("{}.lisp", bib.nome())),
+            "MissingLib `expected:` path must compose through Caixa::nome() \
+             verbatim — a raw-field-access regression would silently drift \
+             the composed path on any future `:nome` axis extension \
+             (namespace-qualified rewrite, per-cluster alias overlay)"
+        );
+
+        // Non-Biblioteca kinds → the MissingLib gate short-circuits.
+        // Different kinds fail on their own required-slot gate
+        // (BinarioWithoutExe, ServicoWithoutServicos, MissingCi) or
+        // on downstream M2/M3 invariants; none of them may surface as
+        // MissingLib, because `requires_lib()` returns false for each.
+        for kind in [
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            assert!(
+                !kind.requires_lib(),
+                "requires_lib() must return false for {kind:?} — the \
+                 four-required-slot-gate family's arm assignment pins \
+                 exactly one kind (Biblioteca) as the arm that requires \
+                 a `lib/` entry"
+            );
+            let c = caixa(kind);
+            let result = layout.verify(&c, &root);
+            assert!(
+                !matches!(result, Err(LayoutError::MissingLib { .. })),
+                "MissingLib gate at layout.rs:844 must short-circuit for \
+                 kinds where requires_lib() returns false; unexpectedly \
+                 fired for {kind:?}: {result:?}"
+            );
+        }
     }
 }
