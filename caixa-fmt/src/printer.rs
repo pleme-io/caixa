@@ -279,7 +279,17 @@ impl Printer<'_> {
         };
         let too_many_items = slots > self.cfg.max_inline_items;
 
-        if !force_break && !too_many_items {
+        // A GRID ALWAYS RENDERS AS A GRID, even when it would fit on one
+        // line. `[[1 22 333] [4444 5 66] [7 888 9]]` is legal flat and
+        // tells the reader nothing; stacked and aligned it is visibly a
+        // 3x3 matrix. The alignment IS the information, so collapsing it
+        // to save a line throws away the entire reason the shape exists —
+        // and it would mean a table has two renderings depending on its
+        // size, which is exactly the "only one way" property this
+        // formatter is built to have.
+        let is_grid = matches!(shape, FormShape::Grid);
+
+        if !force_break && !too_many_items && !is_grid {
             let inline = render_inline(items);
             let current_col = current_column(&self.out);
             if inline.len() + 2 + current_col + self.pending_close <= self.cfg.line_width {
@@ -339,6 +349,64 @@ impl Printer<'_> {
                     self.out.push('\n');
                     push_spaces(&mut self.out, child_indent);
                     self.emit_child(item, child_indent, k == last);
+                }
+            }
+            FormShape::Grid => {
+                // Rows one per line, cells padded to their column width.
+                // The first row shares the opening line so the bracket sits
+                // flush against the table, which is what makes the columns
+                // read as a block rather than a hanging list.
+                //
+                // Falls back to plain stacking if any aligned row would
+                // exceed the budget — width outranks beauty, and the
+                // fallback keeps the shape total.
+                let rows = grid_rows(items).expect("classified Grid");
+                let cols = grid_columns(&rows);
+                let widest = cols.iter().sum::<usize>() + cols.len().saturating_sub(1) + 2;
+                if child_indent + widest + self.pending_close > self.cfg.line_width {
+                    let last = items.len() - 1;
+                    for (k, item) in items.iter().enumerate() {
+                        self.emit_child_trivia(&item.leading, child_indent);
+                        self.out.push('\n');
+                        push_spaces(&mut self.out, child_indent);
+                        self.emit_child(item, child_indent, k == last);
+                    }
+                } else {
+                    let row_indent = indent + 1;
+                    for (r, cells) in rows.iter().enumerate() {
+                        if r > 0 {
+                            self.out.push('\n');
+                            push_spaces(&mut self.out, row_indent);
+                        }
+                        let open = match items[r].kind {
+                            NodeKind::Vector(_) => '[',
+                            _ => '(',
+                        };
+                        let close = if open == '[' { ']' } else { ')' };
+                        self.out.push(open);
+                        for (c, cell) in cells.iter().enumerate() {
+                            if c > 0 {
+                                self.out.push(' ');
+                            }
+                            let text = render_inline(&cells[c..=c]);
+                            let pad = cols[c].saturating_sub(text.chars().count());
+                            // Numbers right-align so digits stack and an
+                            // outlier is visible; text left-aligns so the
+                            // eye can read down the column. The LAST column
+                            // never left-pads on the right — trailing
+                            // whitespace is not a layout decision.
+                            if is_numeric(cell) {
+                                push_spaces(&mut self.out, pad);
+                                self.out.push_str(&text);
+                            } else {
+                                self.out.push_str(&text);
+                                if c + 1 < cells.len() {
+                                    push_spaces(&mut self.out, pad);
+                                }
+                            }
+                        }
+                        self.out.push(close);
+                    }
                 }
             }
             FormShape::Tabular => {
@@ -497,6 +565,27 @@ enum FormShape {
     /// block or a test condition is ONE idea, and splitting it is what
     /// turns `(define (f a b c) …)` into a five-line staircase.
     Special { distinguished: usize },
+    /// A homogeneous table — every row a compound of the same arity whose
+    /// cells are all atoms. Rendered as an ALIGNED GRID: each column padded
+    /// to its widest cell, numbers right-aligned, everything else left.
+    ///
+    /// ```text
+    /// [("us-east-1"   3 "healthy")
+    ///  ("us-west-2"  12 "degraded")
+    ///  ("eu-west-1"   1 "healthy")]
+    /// ```
+    ///
+    /// This is the one shape where layout does real work beyond legibility:
+    /// aligned columns let the eye scan a column for outliers, which is
+    /// what `12` above is. Same bytes, same determinism — the grid is a
+    /// pure function of the cell widths — but the reader stops parsing and
+    /// starts seeing.
+    ///
+    /// The cost, accepted deliberately: alignment is diff-noisy. One new
+    /// row with a wider cell reflows the whole block. This is the same
+    /// trade `gofmt` takes and `rustfmt` refuses; here the tables are data
+    /// and the scan matters more than the diff.
+    Grid,
 }
 
 /// Special forms and how many leading operands belong to the header.
@@ -575,6 +664,11 @@ fn classify(items: &[Node], delims: Delims, keep_comments: bool) -> FormShape {
     // LIST of keywords, not a half-written plist, so it must never be
     // pair-folded.
     if delims.open == '[' {
+        // A grid is the aligned refinement of Tabular. Comment-free only:
+        // a `; …` inside a row cannot survive being padded into a column.
+        if !(keep_comments && items.iter().any(contains_comment)) && grid_rows(items).is_some() {
+            return FormShape::Grid;
+        }
         return FormShape::Tabular;
     }
 
@@ -681,6 +775,74 @@ fn command_arg_groups(args: &[Node]) -> Vec<(usize, usize)> {
         i += len;
     }
     groups
+}
+
+/// Is this node an atom — a leaf with no internal layout of its own?
+///
+/// Only atoms can be grid CELLS. A nested compound carries its own shape
+/// and width rules, so padding it into a column would fight its layout.
+fn is_atom(n: &Node) -> bool {
+    !matches!(
+        n.kind,
+        NodeKind::List(_) | NodeKind::Vector(_) | NodeKind::Map(_)
+    )
+}
+
+/// Does this cell hold a number? Numeric columns right-align, so the digits
+/// line up and an outlier is visible at a glance; everything else
+/// left-aligns, which is how the eye reads text.
+fn is_numeric(n: &Node) -> bool {
+    matches!(n.kind, NodeKind::Int(_) | NodeKind::Float(_))
+}
+
+/// The rows of a grid, if `items` forms one.
+///
+/// THE FORMAL CONDITIONS, all required:
+///   1. at least two rows — one row has nothing to align against;
+///   2. every row is a compound (list or vector);
+///   3. every row has the SAME arity — ragged rows have no columns;
+///   4. every cell is an atom (condition above);
+///   5. every row is non-empty.
+///
+/// Any failure means "not a grid", and the sequence falls back to the
+/// ordinary stacked layout. Total and side-effect-free, so grid-ness is a
+/// pure function of the tree — the same input is a grid every time or
+/// never.
+fn grid_rows(items: &[Node]) -> Option<Vec<&[Node]>> {
+    if items.len() < 2 {
+        return None;
+    }
+    let mut rows: Vec<&[Node]> = Vec::with_capacity(items.len());
+    let mut arity = None;
+    for it in items {
+        let cells = match &it.kind {
+            NodeKind::List(c) | NodeKind::Vector(c) => c,
+            _ => return None,
+        };
+        if cells.is_empty() || !cells.iter().all(is_atom) {
+            return None;
+        }
+        match arity {
+            None => arity = Some(cells.len()),
+            Some(a) if a == cells.len() => {}
+            Some(_) => return None,
+        }
+        rows.push(cells.as_slice());
+    }
+    Some(rows)
+}
+
+/// Per-column width: the widest rendered cell in that column.
+fn grid_columns(rows: &[&[Node]]) -> Vec<usize> {
+    let arity = rows[0].len();
+    (0..arity)
+        .map(|c| {
+            rows.iter()
+                .map(|r| render_inline(&r[c..=c]).chars().count())
+                .max()
+                .unwrap_or(0)
+        })
+        .collect()
 }
 
 /// Does any comment live anywhere in this node's subtree?
