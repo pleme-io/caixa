@@ -173,9 +173,18 @@ impl Printer<'_> {
             return;
         }
 
-        // A comment anywhere in this subtree forces the multi-line shape.
-        // `render_inline` flattens to a single line and has nowhere to put a
-        // `; …` (it would swallow the rest of the line), so inlining a
+        // ── BREAK PROPAGATION ────────────────────────────────────────
+        //
+        // A group renders flat if it fits the width budget, and breaks
+        // otherwise — and a break propagates UPWARD, because a child that
+        // cannot fit makes its parent's flat rendering impossible too.
+        // That is the Oppen/Wadler group-break rule, and it is what makes
+        // the layout a function of the tree and the width alone: there is
+        // no per-site discretion to disagree about.
+        //
+        // A comment anywhere in the subtree also forces the break.
+        // `render_inline` flattens to one line and has nowhere to put a
+        // `; …` — it would swallow the rest of the line — so inlining a
         // commented form is exactly how comments used to disappear.
         let force_break =
             has_dangling_comment || (keep_comments && items.iter().any(contains_comment));
@@ -195,44 +204,63 @@ impl Printer<'_> {
         self.out.push(delims.open);
         let child_indent = indent + self.cfg.indent;
 
-        // The kwargs shape only applies when the leading symbols carry no
-        // comments — they share the opening line, which has no room for one.
-        let head_len = kwargs_head_len(items).filter(|n| {
-            !keep_comments
-                || !items[..*n]
-                    .iter()
-                    .any(|i| contains_comment_trivia(&i.leading))
-        });
-
-        if let Some(head_len) = head_len {
-            // Head symbols (`defcaixa`, and the name it defines) share the
-            // opening line; the `:key value` pairs are indented below it.
-            for (k, item) in items[..head_len].iter().enumerate() {
-                if k > 0 {
-                    self.out.push(' ');
+        // ── THE LAYOUT SPACE IS A CLOSED SET ─────────────────────────
+        //
+        // `classify` is TOTAL and the match below is EXHAUSTIVE, so the
+        // set of ways this language may be laid out is finite, named, and
+        // checked by rustc. Adding a syntax form cannot silently inherit
+        // some other form's layout: it fails to compile until it is given
+        // a shape. That is the property a formatter needs in order to have
+        // no configuration — there is nothing to configure, because every
+        // situation already has exactly one answer.
+        match classify(items, delims, keep_comments) {
+            FormShape::Plist { head } => {
+                // Head symbols (`defcaixa`, and the name it defines) share
+                // the opening line; the `:key value` pairs indent below it.
+                // The pair is emitted as ONE unit so a key can never be
+                // separated from its value by a line break — that split is
+                // what silently shifts the kwargs parity of every slot
+                // after it.
+                for (k, item) in items[..head].iter().enumerate() {
+                    if k > 0 {
+                        self.out.push(' ');
+                    }
+                    self.emit(item, indent);
                 }
-                self.emit(item, indent);
+                let mut i = head;
+                while i + 1 < items.len() {
+                    self.emit_child_trivia(&items[i].leading, child_indent);
+                    self.out.push('\n');
+                    push_spaces(&mut self.out, child_indent);
+                    self.emit(&items[i], child_indent);
+                    self.out.push(' ');
+                    self.emit(&items[i + 1], child_indent);
+                    i += 2;
+                }
             }
-            let mut i = head_len;
-            while i + 1 < items.len() {
-                self.emit_child_trivia(&items[i].leading, child_indent);
-                self.out.push('\n');
-                push_spaces(&mut self.out, child_indent);
-                // key
-                self.emit(&items[i], child_indent);
-                self.out.push(' ');
-                // value
-                self.emit(&items[i + 1], child_indent);
-                i += 2;
+            FormShape::Positional => {
+                // A call form: the head names the operation and stays on
+                // the opening line; the operands align one per line under
+                // it.
+                self.emit(&items[0], indent + 1);
+                for item in &items[1..] {
+                    self.emit_child_trivia(&item.leading, child_indent);
+                    self.out.push('\n');
+                    push_spaces(&mut self.out, child_indent);
+                    self.emit(item, child_indent);
+                }
             }
-        } else {
-            // Head on the opening line, rest indented.
-            self.emit(&items[0], indent + 1);
-            for item in &items[1..] {
-                self.emit_child_trivia(&item.leading, child_indent);
-                self.out.push('\n');
-                push_spaces(&mut self.out, child_indent);
-                self.emit(item, child_indent);
+            FormShape::Tabular => {
+                // No distinguished head — a vector, or a map whose keys are
+                // not all keywords. Every element is a peer, so every
+                // element gets its own line and none is privileged by
+                // sharing the opening one.
+                for item in items {
+                    self.emit_child_trivia(&item.leading, child_indent);
+                    self.out.push('\n');
+                    push_spaces(&mut self.out, child_indent);
+                    self.emit(item, child_indent);
+                }
             }
         }
         if has_dangling_comment {
@@ -242,6 +270,76 @@ impl Printer<'_> {
         }
         self.out.push(delims.close);
     }
+}
+
+/// ── THE TYPESCAPED LAYOUT SPACE ──────────────────────────────────────
+///
+/// Every compound form in tatara-lisp lays out in exactly one of these
+/// ways. The set is CLOSED, which is the whole point: a formatter with no
+/// configuration needs the property that every syntactic situation has
+/// exactly one answer, and the way to hold that property is to make the
+/// situations themselves a finite named type rather than a pile of `if`s
+/// scattered through the printer.
+///
+/// Two consequences fall out for free:
+///
+///   * `classify` is total and the dispatch is an exhaustive `match`, so
+///     adding a syntax form is a COMPILE ERROR until someone decides how
+///     it lays out. A new form cannot silently inherit another's shape.
+///   * There is nothing to configure. A `--style` flag would have to name
+///     a variant of this enum, and every variant is already reachable
+///     from the tree alone.
+///
+/// Tier-honest: this makes an UNCLASSIFIED form unrepresentable (rustc
+/// enforces it). It does NOT make an ugly layout unrepresentable — the
+/// choice of layout per shape is still a judgement call, encoded once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FormShape {
+    /// `(head name? :k v :k v …)` / `{ :k v … }` — `head` leading symbols
+    /// share the opening line, then keyword/value pairs one per line.
+    Plist { head: usize },
+    /// `(f a b c)` — head on the opening line, operands beneath it.
+    Positional,
+    /// `[ a b c ]`, or any sequence with no distinguished head — every
+    /// element is a peer on its own line.
+    Tabular,
+}
+
+/// TOTAL. Every non-empty item slice maps to exactly one shape.
+///
+/// `keep_comments` participates because the plist shape puts its head
+/// symbols on the opening line, and a line already carrying a `(` and a
+/// head symbol has nowhere to put a `; …`. A commented head therefore
+/// degrades to `Positional` rather than losing the comment.
+fn classify(items: &[Node], delims: Delims, keep_comments: bool) -> FormShape {
+    debug_assert!(
+        !items.is_empty(),
+        "classify is only called on non-empty forms"
+    );
+
+    // A vector is a sequence of peers by construction — `[ :a :b :c ]` is a
+    // LIST of keywords, not a half-written plist, so it must never be
+    // pair-folded.
+    if delims.open == '[' {
+        return FormShape::Tabular;
+    }
+
+    if let Some(head) = kwargs_head_len(items) {
+        let head_is_commented = keep_comments
+            && items[..head]
+                .iter()
+                .any(|i| contains_comment_trivia(&i.leading));
+        if !head_is_commented {
+            return FormShape::Plist { head };
+        }
+    }
+
+    // A brace map that is not plist-shaped has no head worth privileging.
+    if delims.open == '{' {
+        return FormShape::Tabular;
+    }
+
+    FormShape::Positional
 }
 
 /// Does any comment live anywhere in this node's subtree?
@@ -527,6 +625,63 @@ mod tests {
                 "delimiter stranded on its own line:\n{out}"
             );
         }
+    }
+
+    /// `classify` is TOTAL — every non-empty form in the language lands
+    /// on exactly one shape, and the shape is a function of the tree
+    /// alone. This is what lets the formatter have no configuration:
+    /// there is no situation without an answer, so there is nothing left
+    /// to ask the operator.
+    #[test]
+    fn classify_is_total_and_names_the_expected_shape() {
+        let shape_of = |src: &str| {
+            let nodes = parse(src).unwrap();
+            let (items, delims) = match &nodes[0].kind {
+                NodeKind::List(i) => (i, Delims::PAREN),
+                NodeKind::Map(i) => (i, Delims::BRACE),
+                NodeKind::Vector(i) => (i, Delims::BRACKET),
+                other => panic!("expected a compound form, got {other:?}"),
+            };
+            classify(items, delims, true)
+        };
+
+        // plists, with 0 / 1 / 2 leading symbols
+        assert_eq!(shape_of("(:k v)"), FormShape::Plist { head: 0 });
+        assert_eq!(shape_of("(defteia :k v)"), FormShape::Plist { head: 1 });
+        assert_eq!(
+            shape_of("(defcaixa demo :k v)"),
+            FormShape::Plist { head: 2 }
+        );
+        assert_eq!(shape_of("{:a 1 :b 2}"), FormShape::Plist { head: 0 });
+
+        // a call form has a head worth privileging
+        assert_eq!(shape_of("(f a b c)"), FormShape::Positional);
+        assert_eq!(shape_of("(ref aws/vpc main id)"), FormShape::Positional);
+
+        // a vector is peers by construction — NEVER pair-folded, or
+        // `[:a :b]` would render as a key/value pair it is not
+        assert_eq!(shape_of("[:a :b]"), FormShape::Tabular);
+        assert_eq!(shape_of("[1 2 3]"), FormShape::Tabular);
+
+        // a brace map that is not plist-shaped has no privileged head
+        assert_eq!(shape_of("{1 2 3}"), FormShape::Tabular);
+    }
+
+    /// A commented head degrades out of the plist shape rather than
+    /// losing the comment: the opening line already carries `(` and the
+    /// head symbol, so there is nowhere to put a `; …`.
+    #[test]
+    fn commented_head_degrades_out_of_the_plist_shape() {
+        let nodes = parse("(defcaixa\n  ;; why\n  demo :k v)").unwrap();
+        let NodeKind::List(items) = &nodes[0].kind else {
+            panic!("list")
+        };
+        assert_eq!(classify(items, Delims::PAREN, true), FormShape::Positional);
+        // ...and with comments off it is a plist again
+        assert_eq!(
+            classify(items, Delims::PAREN, false),
+            FormShape::Plist { head: 2 }
+        );
     }
 
     #[test]
