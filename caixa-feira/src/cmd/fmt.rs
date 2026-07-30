@@ -41,13 +41,21 @@ impl Fmt {
                 .with_context(|| format!("reading {}", path.display()))?;
             let formatted = format_source(&src, &cfg)
                 .with_context(|| format!("formatting {}", path.display()))?;
+            // `--stdout` is a filter: it must emit the document every time,
+            // including when it was already formatted. The unchanged-file
+            // skip below used to run first, so `feira fmt --stdout` on a
+            // clean file printed nothing and exited 0 — which silently
+            // truncates the buffer of any editor wired to capture stdout.
+            if self.stdout {
+                print!("{formatted}");
+                any_changed |= formatted != src;
+                continue;
+            }
             if formatted == src {
                 continue;
             }
             any_changed = true;
-            if self.stdout {
-                print!("{formatted}");
-            } else if self.check {
+            if self.check {
                 eprintln!("would reformat {}", path.display());
             } else {
                 std::fs::write(path, &formatted)

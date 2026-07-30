@@ -161,8 +161,13 @@ impl<'a> Parser<'a> {
                     let mut node = Node::new(NodeKind::List(items), span);
                     // list's leading trivia handled at caller
                     node.leading = Vec::new();
-                    // discard the leading we just collected (could be trailing of last item)
-                    let _ = leading;
+                    // Trivia sitting between the last item and the closer has
+                    // no child to attach to. It used to be dropped here, which
+                    // silently deleted the last comment of every form the
+                    // formatter round-tripped. Park it on the list's own
+                    // `trailing` — the one slot the parser never otherwise
+                    // fills — so the printer can re-emit it before the `)`.
+                    node.trailing = leading;
                     return Ok(node);
                 }
                 Some(_) => {
