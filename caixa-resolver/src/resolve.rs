@@ -51,14 +51,36 @@ pub fn resolve_lacre(
     // opened on the outer-`Caixa` slot, extended here onto the
     // caixa-resolver top-level closure resolver's outermost
     // queue-seeding walks.
+    //
+    // The paired parent-`:nome` label carried on the queue's `from`
+    // arm — the byte-string the cycle-diagnostic re-labeler's
+    // `ResolveError::Cycle(from.clone())` map_err arm surfaces on any
+    // future extension that promotes the closure walker's per-target
+    // cycle-collapse into a first-class refusal — routes through the
+    // typed [`caixa_core::Caixa::nome`] `&str`-return accessor rather
+    // than the raw `root.nome.clone()` `String`-carry read. Byte-equal
+    // today (`Caixa::nome` is `&self.nome`; `.to_string()` on the
+    // borrowed `&str` allocates exactly one `String` byte-equal to the
+    // prior raw `.nome.clone()` read); the queue's per-transitive-target
+    // sibling push at line 77 already routes through the peer
+    // [`caixa_core::Dep::nome`] accessor (`dep.nome().to_string()`), so
+    // this converge closes the last unlifted parent-`:nome` field-read
+    // in the closure walker's queue-carried `from` axis. Peer with every
+    // prior per-`Caixa` universal-axis converge on the outer-`Caixa`
+    // `:nome` scalar (caixa-helm 22461ef / a7420bd, caixa-flux 4a363bf /
+    // 162e2e2, caixa-mesh 54bf2f3 / 980c059, caixa-crd 61d3429,
+    // caixa-tatara e73b19f, caixa-feira 5131203 / 4b05240 / 3219a42 /
+    // 5bc5178) and sibling to 5ce1b94's `Caixa::deps` / `Caixa::deps_dev`
+    // converge in this same crate on the paired outer-`Caixa`
+    // dependency-slot axis.
     let mut queue: VecDeque<(Dep, String)> = VecDeque::new();
     let mut seen: HashSet<String> = HashSet::new();
     for dep in root.deps() {
-        queue.push_back((dep.clone(), root.nome.clone()));
+        queue.push_back((dep.clone(), root.nome().to_string()));
     }
     if cfg.include_dev {
         for dep in root.deps_dev() {
-            queue.push_back((dep.clone(), root.nome.clone()));
+            queue.push_back((dep.clone(), root.nome().to_string()));
         }
     }
 
@@ -613,6 +635,172 @@ mod tests {
             "grandchild entry must carry `:versao \"0.1.3\"` verbatim \
              through the transitive walk's Caixa::versao() accessor route \
              — got {pairs:?}"
+        );
+    }
+
+    /// Pin that the closure-walker's queue-seeding parent-`:nome` label
+    /// axis — the `String` carried on the queue's `from` arm at both the
+    /// outer `for dep in root.deps()` runtime seed and the
+    /// `cfg.include_dev`-gated `for dep in root.deps_dev()` dev-only
+    /// seed inside [`resolve_lacre`] — routes through the typed
+    /// [`caixa_core::Caixa::nome`] `&str`-return accessor rather than a
+    /// raw `root.nome.clone()` field read. The queue's per-transitive-
+    /// target sibling push already routes the paired parent-`:nome`
+    /// label through the peer [`caixa_core::Dep::nome`] accessor
+    /// (`dep.nome().to_string()` at the transitive-walk head), so this
+    /// pin closes the last unlifted parent-`:nome` field-read axis in
+    /// the closure walker's queue-carried `from` surface.
+    ///
+    /// Byte-equal today (`Caixa::nome` is `&self.nome`; `.to_string()`
+    /// on the borrowed `&str` allocates exactly one `String` byte-equal
+    /// to the prior raw `.nome.clone()` read); pin catches any future
+    /// silent detour that reintroduces a raw field read at either queue-
+    /// seeding site. The hermetic tempdir fixture uses a byte-
+    /// distinctive `:nome` on the root (`"root-abc"` — pairing DNS-1123
+    /// legality with three ASCII bytes distinct from every child's
+    /// `:nome` so a stub-that-hardcodes-a-fixed-string regression on
+    /// either seeding site can only pass by accident), and asserts
+    /// [`caixa_core::Caixa::nome`] returns byte-verbatim to what
+    /// [`resolve_lacre`]'s queue-seed reads. The end-to-end assertion
+    /// on the resulting [`crate::LacreEntry`] set pins that both
+    /// `:deps` and `:deps-dev` walks reach their transitive targets
+    /// after the accessor-route substitution, so a regression that
+    /// broke the queue-seeding shape by dropping the second push arm
+    /// (e.g. mis-collapsing the two guarded arms onto one) surfaces
+    /// as a missing child in the resolved closure.
+    ///
+    /// Peer of the sibling [`resolve_lacre_routes_dep_slot_family_through_caixa_accessors`]
+    /// per-`:deps` / `:deps-dev` slot-family pin above and of the
+    /// [`resolve_lacre_fetched_target_versao_routes_through_caixa_versao_accessor`]
+    /// per-`:versao` axis pin (0556249) on the same
+    /// closure-walker emit surface — same "the emit path must route
+    /// through the substrate-primitive typed dispatch" discipline the
+    /// per-`Caixa` `.nome` universal-axis converges every peer per-kind
+    /// renderer already carry, extended onto the outer top-level
+    /// [`Caixa`] `:nome` `&str`-return universal-axis at the closure-
+    /// resolver's queue-seeded per-transitive-target `from` label.
+    #[test]
+    fn resolve_lacre_queue_seed_parent_nome_routes_through_caixa_nome_accessor() {
+        let td = tempdir().expect("tempdir");
+        // Runtime-child caixa on disk — no deps of its own, distinct
+        // `:nome` bytes so it can be identified in the resolved closure.
+        let child_path = td.path().join("child");
+        std::fs::create_dir_all(&child_path).unwrap();
+        std::fs::write(
+            child_path.join("caixa.lisp"),
+            r#"(defcaixa
+                  :nome "child"
+                  :versao "0.1.0"
+                  :kind Biblioteca
+                  :bibliotecas ("lib/child.lisp"))"#,
+        )
+        .unwrap();
+
+        // Dev-only sibling — distinct `:nome`, guards the second
+        // seeding-arm branch.
+        let devchild_path = td.path().join("devchild");
+        std::fs::create_dir_all(&devchild_path).unwrap();
+        std::fs::write(
+            devchild_path.join("caixa.lisp"),
+            r#"(defcaixa
+                  :nome "devchild"
+                  :versao "0.1.0"
+                  :kind Biblioteca
+                  :bibliotecas ("lib/devchild.lisp"))"#,
+        )
+        .unwrap();
+
+        let root = Caixa {
+            nome: "root-abc".into(),
+            versao: "0.9.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![Dep {
+                nome: "child".into(),
+                versao: "0.1.0".into(),
+                fonte: Some(DepSource::Path {
+                    caminho: child_path.to_string_lossy().into_owned(),
+                }),
+                opcional: false,
+                caracteristicas: vec![],
+            }],
+            deps_dev: vec![Dep {
+                nome: "devchild".into(),
+                versao: "0.1.0".into(),
+                fonte: Some(DepSource::Path {
+                    caminho: devchild_path.to_string_lossy().into_owned(),
+                }),
+                opcional: false,
+                caracteristicas: vec![],
+            }],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+            ci: None,
+        };
+
+        // Substrate-primitive byte-parity pin: `Caixa::nome()` returns
+        // the raw `:nome` byte-string verbatim. Both queue-seeded push
+        // arms compose `root.nome().to_string()` off this accessor, so
+        // a future accessor extension (a canonicalization pass, an
+        // aliasing overlay) reaches both call sites through one edit.
+        assert_eq!(
+            root.nome(),
+            "root-abc",
+            "Caixa::nome() must return the :nome byte-string verbatim — \
+             pins the substrate contract both queue-seeded push arms \
+             compose the parent-`:nome` label off of"
+        );
+        assert_eq!(
+            root.nome().to_string(),
+            "root-abc",
+            "root.nome().to_string() must equal the raw :nome byte-string \
+             verbatim — pins the accessor-routed String-carry the queue's \
+             `from` arm receives at both seeding sites"
+        );
+
+        // End-to-end pin on the closure walker's two-arm seeding surface:
+        // both `:deps` and `:deps-dev` walks must reach their transitive
+        // targets after the accessor-route substitution. A regression
+        // that dropped either arm's queue-seed push surfaces here as a
+        // missing child in the resolved lacre.
+        let cache_root = td.path().join("cache");
+        std::fs::create_dir_all(&cache_root).unwrap();
+        let cache = CacheDir::at(&cache_root);
+        let cfg_with_dev = ResolverConfig {
+            include_dev: true,
+            ..Default::default()
+        };
+        let lacre =
+            resolve_lacre(&root, &cfg_with_dev, &cache).expect("resolve closure with dev deps");
+        let names: Vec<&str> = lacre.entradas.iter().map(|e| e.nome.as_str()).collect();
+        assert!(
+            names.contains(&"child"),
+            "resolve_lacre with the accessor-routed queue-seed must \
+             surface `child` via the runtime `:deps` arm — got {names:?}"
+        );
+        assert!(
+            names.contains(&"devchild"),
+            "resolve_lacre with the accessor-routed queue-seed must \
+             surface `devchild` via the `cfg.include_dev`-gated \
+             `:deps-dev` arm — got {names:?}"
         );
     }
 }
