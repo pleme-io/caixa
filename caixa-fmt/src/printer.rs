@@ -21,6 +21,7 @@ pub fn format_nodes(nodes: &[Node], cfg: &FmtConfig) -> String {
     let mut p = Printer {
         out: String::new(),
         cfg,
+        pending_close: 0,
     };
     for (i, n) in nodes.iter().enumerate() {
         if i > 0 {
@@ -56,6 +57,17 @@ fn trim_leading_blanks(trivia: &[Trivia]) -> &[Trivia] {
 struct Printer<'a> {
     out: String,
     cfg: &'a FmtConfig,
+    /// How many ancestor close-delimiters will land on this line directly
+    /// after the node currently being emitted.
+    ///
+    /// A form rendered inline deep in a tree is followed on the SAME line
+    /// by the closing paren of every ancestor that also ends there — the
+    /// `0))))))))))))))` tail. Without counting them a fit check is a lie:
+    /// it measures the form and ignores the suffix it is about to sit in
+    /// front of, which is how a "fits in 80" decision produced an 86-column
+    /// line. Threading the count keeps the budget honest, and it stays a
+    /// pure function of position in the tree, so determinism is untouched.
+    pending_close: usize,
 }
 
 /// The delimiter pair for a compound form.
@@ -163,6 +175,61 @@ impl Printer<'_> {
         }
     }
 
+    /// Emit a special form's HEADER operand — a signature, a parameter
+    /// list, a binding block, a test condition.
+    ///
+    /// Flattened to one line whenever it fits the remaining width, even if
+    /// its arity would otherwise stack it. The arity bound exists to stop
+    /// a BODY sprawling sideways; a header is a single idea whose parts
+    /// are meaningless apart, so the bound is the wrong tool for it.
+    /// Width is still respected absolutely — an over-long header falls
+    /// back to the ordinary rules rather than overflowing.
+    ///
+    /// A commented subtree also falls back, since `render_inline` has
+    /// nowhere to put a `; …` and would swallow it.
+    fn emit_header_operand(&mut self, n: &Node, indent: usize) {
+        let inlineable = match &n.kind {
+            NodeKind::List(items) | NodeKind::Vector(items) | NodeKind::Map(items) => {
+                !(self.cfg.preserve_comments && (contains_comment(n) || items.iter().any(contains_comment)))
+            }
+            _ => false,
+        };
+        if inlineable {
+            let (items, delims) = match &n.kind {
+                NodeKind::List(i) => (i, Delims::PAREN),
+                NodeKind::Vector(i) => (i, Delims::BRACKET),
+                NodeKind::Map(i) => (i, Delims::BRACE),
+                _ => unreachable!("guarded by `inlineable` above"),
+            };
+            if !items.is_empty() {
+                let flat = render_inline(items);
+                if current_column(&self.out) + flat.len() + 2 + self.pending_close
+                    <= self.cfg.line_width
+                {
+                    self.out.push(delims.open);
+                    self.out.push_str(&flat);
+                    self.out.push(delims.close);
+                    return;
+                }
+            }
+        }
+        self.emit(n, indent + 1);
+    }
+
+    /// Emit `n` as the child of a form, telling it how many close-delims
+    /// will follow it on the same line.
+    ///
+    /// `is_last` is the whole point: only the final child of a form is
+    /// immediately followed by that form's `)`, and therefore by every
+    /// ancestor `)` that also lands there. A middle child is followed by a
+    /// newline, so its pending count is zero.
+    fn emit_child(&mut self, n: &Node, indent: usize, is_last: bool) {
+        let saved = self.pending_close;
+        self.pending_close = if is_last { saved + 1 } else { 0 };
+        self.emit(n, indent);
+        self.pending_close = saved;
+    }
+
     fn emit_seq(&mut self, items: &[Node], dangling: &[Trivia], indent: usize, delims: Delims) {
         let keep_comments = self.cfg.preserve_comments;
         let has_dangling_comment = keep_comments && contains_comment_trivia(dangling);
@@ -215,7 +282,7 @@ impl Printer<'_> {
         if !force_break && !too_many_items {
             let inline = render_inline(items);
             let current_col = current_column(&self.out);
-            if inline.len() + 2 + current_col <= self.cfg.line_width {
+            if inline.len() + 2 + current_col + self.pending_close <= self.cfg.line_width {
                 self.out.push(delims.open);
                 self.out.push_str(&inline);
                 self.out.push(delims.close);
@@ -257,7 +324,7 @@ impl Printer<'_> {
                     push_spaces(&mut self.out, child_indent);
                     self.emit(&items[i], child_indent);
                     self.out.push(' ');
-                    self.emit(&items[i + 1], child_indent);
+                    self.emit_child(&items[i + 1], child_indent, i + 2 >= items.len());
                     i += 2;
                 }
             }
@@ -266,11 +333,12 @@ impl Printer<'_> {
                 // the opening line; the operands align one per line under
                 // it.
                 self.emit(&items[0], indent + 1);
-                for item in &items[1..] {
+                let last = items.len() - 1;
+                for (k, item) in items.iter().enumerate().skip(1) {
                     self.emit_child_trivia(&item.leading, child_indent);
                     self.out.push('\n');
                     push_spaces(&mut self.out, child_indent);
-                    self.emit(item, child_indent);
+                    self.emit_child(item, child_indent, k == last);
                 }
             }
             FormShape::Tabular => {
@@ -278,11 +346,55 @@ impl Printer<'_> {
                 // not all keywords. Every element is a peer, so every
                 // element gets its own line and none is privileged by
                 // sharing the opening one.
-                for item in items {
+                let last = items.len() - 1;
+                for (k, item) in items.iter().enumerate() {
                     self.emit_child_trivia(&item.leading, child_indent);
                     self.out.push('\n');
                     push_spaces(&mut self.out, child_indent);
-                    self.emit(item, child_indent);
+                    self.emit_child(item, child_indent, k == last);
+                }
+            }
+            FormShape::Special { distinguished } => {
+                // Header on the opening line, body indented beneath.
+                //
+                // The header operands are rendered INLINE whenever they fit
+                // the width, deliberately bypassing the arity bound: a
+                // signature, a parameter list or a binding block is one
+                // idea. Letting the bound apply turned
+                // `(define (f a b c) …)` into a five-line staircase with
+                // one parameter per line, which is the single ugliest
+                // output this formatter produced.
+                // The header shares the opening line only IF IT FITS.
+                // Width is absolute and outranks the shape: a `deftest`
+                // whose name is a 66-character sentence cannot put that
+                // name on the head line without blowing the budget, so it
+                // degrades to the ordinary head-alone layout rather than
+                // overflowing. Measured on the corpus, this is the single
+                // largest source of over-long lines.
+                let header_flat = render_inline(&items[..=distinguished]);
+                let header_fits = current_column(&self.out) + header_flat.len()
+                    <= self.cfg.line_width;
+
+                self.emit(&items[0], indent + 1);
+                if header_fits {
+                    for item in &items[1..=distinguished] {
+                        self.out.push(' ');
+                        self.emit_header_operand(item, indent);
+                    }
+                } else {
+                    for item in &items[1..=distinguished] {
+                        self.emit_child_trivia(&item.leading, child_indent);
+                        self.out.push('\n');
+                        push_spaces(&mut self.out, child_indent);
+                        self.emit(item, child_indent);
+                    }
+                }
+                let last = items.len() - 1;
+                for (k, item) in items.iter().enumerate().skip(distinguished + 1) {
+                    self.emit_child_trivia(&item.leading, child_indent);
+                    self.out.push('\n');
+                    push_spaces(&mut self.out, child_indent);
+                    self.emit_child(item, child_indent, k == last);
                 }
             }
             FormShape::Command => {
@@ -317,7 +429,8 @@ impl Printer<'_> {
                         if k > 0 {
                             self.out.push(' ');
                         }
-                        self.emit(&args[start + k], child_indent);
+                        let is_last = start + k + 1 == args.len();
+                        self.emit_child(&args[start + k], child_indent, is_last);
                     }
                 }
             }
@@ -374,7 +487,54 @@ enum FormShape {
     /// shape rather than `Positional`: `Positional` would put `"-m"` and
     /// `"5"` on separate lines and lose that.
     Command,
+    /// `(define (f a b) body…)`, `(if test then else)`, `(let (binds) body)`
+    /// — a special form whose first `distinguished` operands are part of
+    /// its HEADER and share the opening line; everything after is body,
+    /// indented one step.
+    ///
+    /// The header operand renders inline whenever it fits the width, even
+    /// if its arity would otherwise stack it: a parameter list, a binding
+    /// block or a test condition is ONE idea, and splitting it is what
+    /// turns `(define (f a b c) …)` into a five-line staircase.
+    Special { distinguished: usize },
 }
+
+/// Special forms and how many leading operands belong to the header.
+///
+/// A CLOSED TABLE, like [`COMMAND_HEADS`] — same reason. This is the
+/// pleme-io spelling of what Emacs calls `lisp-indent-function` and
+/// Clojure calls an indent spec: the long-standing observation that a
+/// handful of forms carry a header distinct from their body, and that
+/// rendering them like ordinary calls is what makes Lisp look bad.
+///
+/// Frequencies measured across 583 `.tlisp` files (2026-07-30) — every
+/// entry below is earned, not speculative:
+///   define 2716 · cond 904 · if 594 · let 571 · deftest 382 · let* 255
+///   lambda 172
+///
+/// `cond` is deliberately ABSENT: its clauses are all body, which is
+/// exactly `Positional`, and it already renders correctly.
+const SPECIAL_HEADS: &[(&str, usize)] = &[
+    // Definition: the signature is the header.
+    ("define", 1),
+    ("defn", 1),
+    ("defmacro", 1),
+    ("deftest", 1),
+    // Abstraction: the parameter list is the header.
+    ("lambda", 1),
+    ("fn", 1),
+    // Binding: the binding block is the header.
+    ("let", 1),
+    ("let*", 1),
+    ("letrec", 1),
+    // Control: the scrutinee/test is the header.
+    ("if", 1),
+    ("when", 1),
+    ("unless", 1),
+    ("while", 1),
+    ("case", 1),
+    ("match", 1),
+];
 
 /// Head symbols that introduce a subprocess invocation.
 ///
@@ -425,6 +585,20 @@ fn classify(items: &[Node], delims: Delims, keep_comments: bool) -> FormShape {
         return FormShape::Command;
     }
 
+    // A special form's header shares the opening line. Checked before the
+    // plist test for the same reason as `Command`: `(if :ok a :no b)` would
+    // otherwise fold as kwargs and hide the test.
+    if delims.open == '(' {
+        if let Some(distinguished) = special_head_arity(items) {
+            // Only if the header operands actually exist — `(if)` alone is
+            // a degenerate form and falls through to the ordinary shapes
+            // rather than indexing past the end.
+            if items.len() > distinguished {
+                return FormShape::Special { distinguished };
+            }
+        }
+    }
+
     if let Some(head) = kwargs_head_len(items) {
         let head_is_commented = keep_comments
             && items[..head]
@@ -456,6 +630,18 @@ fn command_slot_count(items: &[Node]) -> usize {
         1 => 1,
         _ => 2 + command_arg_groups(&items[2..]).len(),
     }
+}
+
+/// How many leading operands belong to this form's header, if its head is
+/// in [`SPECIAL_HEADS`].
+fn special_head_arity(items: &[Node]) -> Option<usize> {
+    let NodeKind::Symbol(head) = &items[0].kind else {
+        return None;
+    };
+    SPECIAL_HEADS
+        .iter()
+        .find(|(name, _)| *name == head.as_str())
+        .map(|(_, n)| *n)
 }
 
 /// Is this form's head symbol one of the [`COMMAND_HEADS`]?
