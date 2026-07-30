@@ -156,7 +156,7 @@ pub fn validate(caixa: &Caixa) -> Result<RenderedAcao, Error> {
         .iter()
         .filter_map(|id| cd.nodes.get(id).map(|n| n.name.clone()))
         .collect();
-    let edge_count = ci.nodes.iter().map(|n| n.deps.len()).sum();
+    let edge_count = caixa_core::ci_declared_edge_count(ci);
 
     Ok(RenderedAcao {
         nome: caixa.nome().to_string(),
@@ -731,8 +731,13 @@ mod tests {
         // The substrate primitive's borrowed `:ci` slot backs the
         // same `edge_count` projection [`validate`] reads off — pins
         // the pair-return contract of `require_acao_view` on the
-        // `&CiRun` arm.
-        let expected_edge_count: usize = via_primitive_ci.nodes.iter().map(|n| n.deps.len()).sum();
+        // `&CiRun` arm, routed through the sibling substrate primitive
+        // [`caixa_core::ci_declared_edge_count`] so both `validate`'s
+        // production emit and this byte-parity pin consult one typed
+        // dispatch on the borrowed [`canteiro_types::CiRun`] rather
+        // than open-coding `.nodes.iter().map(|n| n.deps.len()).sum()`
+        // at two sites in lockstep.
+        let expected_edge_count: usize = caixa_core::ci_declared_edge_count(via_primitive_ci);
         assert_eq!(
             via_validate.edge_count, expected_edge_count,
             "validate's edge_count must equal the compound helper's \

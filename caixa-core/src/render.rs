@@ -349,6 +349,88 @@ pub fn decompose_ci(
     })
 }
 
+/// Substrate-canonical per-`Acao` declared-edge-count projection every
+/// consumer of a borrowed [`canteiro_types::CiRun`] that needs the total
+/// number of author-declared `deps` edges across every
+/// [`canteiro_types::CiNode`] keys off — returns the plain [`usize`] sum
+/// `ci.nodes.iter().map(|n| n.deps.len()).sum()` verbatim, without
+/// running [`canteiro_types::decompose`] again (the count is a property
+/// of the borrowed run's shape, not of the owned
+/// [`canteiro_types::CanteiroDag`] the sibling [`decompose_ci`] returns
+/// — an author-declared cycle carries the same edge count as an
+/// author-declared linear DAG of the same node-and-dep list).
+///
+/// The declared-edge-count axis carries the "how many `deps` edges did
+/// this repo's CI author write?" projection every per-`Acao` consumer
+/// downstream fans on: the `caixa_actions::RenderedAcao::edge_count`
+/// artifact the M0 renderer's `validate` returns (paired with the
+/// topological node-name list from `cd.topo_order()`), the deferred
+/// `sui-supercacheci::canteiro::emit_gha` workflow renderer's
+/// per-workflow `jobs.<job>.needs` count reconciliation pass (each
+/// `needs` entry maps 1:1 to a `deps` edge, so a renderer that emits N
+/// edges must have consumed exactly `declared_edge_count` `needs`
+/// entries across the fan-out), a future `feira lint --acao` per-caixa
+/// admission verb's per-repo declared-edge summary, a future M4
+/// `acao.pleme.io/v1alpha1/Acao` CR materializer's admission webhook
+/// spanning the declared edge count against a per-tenant complexity cap.
+///
+/// Prior to this lift the `ci.nodes.iter().map(|n| n.deps.len()).sum()`
+/// expression was inlined at two sites — `caixa_actions::validate`'s
+/// `edge_count` field construction at `caixa-actions/src/lib.rs:159`
+/// (the M0 per-`Acao` renderer's sole production consumer) and its own
+/// [`require_acao_view`] byte-parity pin at `caixa-actions/src/lib.rs:735`
+/// (which reconstructs the same sum through the compound helper's
+/// returned `&CiRun` to pin that the two paths agree) — two open-coded
+/// arithmetic expressions that expressed no compile-time link back to
+/// the typed [`canteiro_types::CiRun`] axis, so a future refactor of
+/// the declared-edge-count shape (a promotion of the plain [`usize`]
+/// sum to a `{intra_workspace, cross_workspace}` split once
+/// [`canteiro_types::CiNode`] grows a workspace-scoped edge kind, a
+/// per-`:ci` `deps`-edge-canonicalization pass that collapses duplicate
+/// edges once the canteiro-types axis grows a set-shaped `deps`
+/// representation, a per-env-class edge-weight overlay once the M4
+/// `EnvClass` axis grows a per-edge cost model) would have had to be
+/// threaded through both open-coded copies in lockstep or the M0
+/// renderer's `edge_count` artifact would silently disagree with its
+/// own byte-parity pin. Lifting the projection to a typed method on the
+/// substrate primitive means every downstream consumer of the `Acao`'s
+/// declared-edge-count surface reaches for exactly one typed
+/// dispatch — the resolver's accept-set migrates as a unit on any
+/// future axis addition.
+///
+/// The docstring on [`require_acao_view`] already named this expression
+/// verbatim ("the borrowed run for per-[`canteiro_types::CiNode`] axes
+/// (`ci.nodes.iter().map(|n| n.deps.len()).sum()` for the declared edge
+/// count …)") but the substrate carried no primitive for it — the
+/// citation was documentation-only, and the two open-coded call sites
+/// re-expressed the arithmetic each time. This lift closes that gap:
+/// the docstring now cites the substrate primitive by name and every
+/// consumer reaches for the same [`ci_declared_edge_count`] one-liner.
+///
+/// Peer of the sibling [`require_ci`] / [`decompose_ci`] /
+/// [`require_acao_view`] per-`Acao` primitives on the substrate's
+/// per-kind renderer entry-gate surface, extended onto the "borrowed
+/// [`canteiro_types::CiRun`] scalar projection" axis (the two prior
+/// primitives return borrowed / owned structural artifacts; this one
+/// returns a plain [`usize`] scalar over the borrowed run's node-list
+/// shape). Same "one typed dispatch on the substrate primitive, thin
+/// projections at each consumer" discipline the peer per-`Aplicacao`
+/// [`crate::aplicacao::AplicacaoSpec::port_for_destination`] scalar
+/// projection carries on the per-Aplicacao `:entrada` port-resolution
+/// axis, extended onto the per-`Acao` `:ci` declared-edge-count axis.
+///
+/// Named `ci_declared_edge_count` (rather than `declared_edge_count`)
+/// to keep the substrate-side helper namespace explicit that the input
+/// axis is a `:ci` slot — matching the peer [`require_ci`] /
+/// [`decompose_ci`] `ci_`-prefix-shaped naming convention the sibling
+/// per-`Acao` substrate primitives already carry, so a caller reading
+/// `caixa_core::ci_declared_edge_count(ci)` sees the axis at the
+/// helper name rather than at a lifted-out `use` alias.
+#[must_use]
+pub fn ci_declared_edge_count(ci: &canteiro_types::CiRun) -> usize {
+    ci.nodes.iter().map(|n| n.deps.len()).sum()
+}
+
 /// Typed `:servicos`-count-mismatch view: the canonical surface every
 /// per-Servico `caixa-<target>` renderer raises when it's handed a
 /// [`Caixa`] whose `:servicos` list doesn't carry exactly one entry —
@@ -676,9 +758,9 @@ where
 /// owned [`canteiro_types::CanteiroDag`] `decompose_ci` produced —
 /// both are the load-bearing artifacts every per-`Acao` consumer
 /// reads past the gate: the borrowed run for
-/// per-[`canteiro_types::CiNode`] axes (`ci.nodes.iter().map(|n|
-/// n.deps.len()).sum()` for the declared edge count, the deferred
-/// `sui-supercacheci::canteiro::emit_gha` per-node YAML emit
+/// per-[`canteiro_types::CiNode`] axes (the substrate primitive
+/// [`ci_declared_edge_count`] for the declared edge count, the
+/// deferred `sui-supercacheci::canteiro::emit_gha` per-node YAML emit
 /// surface), the owned DAG for topological order (`cd.topo_order()`,
 /// which the substrate's own [`decompose_ci`] pass-through-on-success
 /// contract at [`decompose_ci_accepts_valid_ci_run_and_returns_canteiro_dag`]
@@ -28283,6 +28365,169 @@ mod tests {
              `.to_string()` extension, not a raw `caixa.nome.clone()` \
              `String::clone()` of the underlying field",
         );
+    }
+
+    // ── ci_declared_edge_count — per-`Acao` declared-edge-count axis ─
+
+    #[test]
+    fn ci_declared_edge_count_returns_zero_for_leaf_only_run() {
+        // The empty-edges arm: a `CiRun` whose every node carries an
+        // empty `deps` list has zero declared edges. Pins the
+        // `usize::sum()` accumulator's starting value on the
+        // no-fan-out shape a `caixa-init`-scaffolded `:kind Acao` a
+        // caixa's stub `:ci` slot lands as before the author wires
+        // any `deps`. Fail-before-pass-after guard: pre-lift there was
+        // no substrate primitive, so an author-scaffolded no-deps run
+        // would have had its `edge_count = 0` re-derived at every
+        // consumer site through the same open-coded arithmetic. This
+        // test now anchors the projection to `ci_declared_edge_count`.
+        let ci = canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "build",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "build".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+                canteiro_types::CiNode::new(
+                    "lint",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "lint".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+            ],
+        };
+        assert_eq!(
+            ci_declared_edge_count(&ci),
+            0,
+            "a two-leaf-node `:ci` run with empty `deps` lists carries \
+             zero declared edges — the substrate primitive's `usize` \
+             accumulator must start at zero and pass through untouched",
+        );
+    }
+
+    #[test]
+    fn ci_declared_edge_count_returns_deps_sum_across_nodes() {
+        // The multi-arity arm: a `CiRun` whose nodes carry `deps`
+        // lists of arities 0/1/2 has declared-edge-count 3 (0+1+2).
+        // Pins that the substrate primitive routes the sum through
+        // *every* node's `deps.len()` rather than only the first
+        // node's (a future regression that collapsed the `map(...)`
+        // + `sum()` fold onto a `first()` / `next()` shape would
+        // silently under-count the declared edges — the arity-3
+        // fixture surfaces it here before the drift lands on the
+        // `caixa-actions::validate` production `edge_count` artifact).
+        let ci = canteiro_types::CiRun {
+            workspace: "pleme-io".into(),
+            repo: "caixa".into(),
+            nodes: vec![
+                canteiro_types::CiNode::new(
+                    "build",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "build".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec![],
+                ),
+                canteiro_types::CiNode::new(
+                    "test",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "test".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["build".into()],
+                ),
+                canteiro_types::CiNode::new(
+                    "publish",
+                    canteiro_types::EnvClass::None,
+                    canteiro_types::ActionRef {
+                        name: "publish".into(),
+                        command: "true".into(),
+                        args: vec![],
+                    },
+                    vec!["build".into(), "test".into()],
+                ),
+            ],
+        };
+        assert_eq!(
+            ci_declared_edge_count(&ci),
+            3,
+            "declared-edge-count on a 0/1/2-arity node list is the sum \
+             (0 + 1 + 2 = 3) — the primitive must fold over every node, \
+             not just the first / last / any-single-index shape",
+        );
+    }
+
+    #[test]
+    fn ci_declared_edge_count_counts_edges_before_decompose_gate() {
+        // The count-is-shape-only arm: an author-declared *cyclic*
+        // `:ci` run — the exact fixture `decompose_ci` refuses at the
+        // sibling axis — still carries its declared edge count as a
+        // property of the *borrowed run's shape*, not of the owned
+        // `CanteiroDag` `decompose_ci` (would have) returned. Pins
+        // that a future consumer that wants the declared-edge summary
+        // *before* running `decompose_ci` (a `feira lint --acao`
+        // per-caixa pre-flight report that names the declared edge
+        // count on both accept + reject arms of the sibling
+        // `decompose_ci` gate) reads a stable count on both arms.
+        // The two-node cycle `a → b → a` from `cyclic_ci_run()`
+        // carries exactly 2 declared edges (one per node's singleton
+        // `deps`), so the primitive returns 2 without ever routing
+        // through `canteiro_types::decompose`.
+        let ci = cyclic_ci_run();
+        assert_eq!(
+            ci_declared_edge_count(&ci),
+            2,
+            "the two-node cycle carries 2 declared `deps` edges (one \
+             per node's singleton `deps`) — the primitive must read the \
+             count off the borrowed run's node-list shape, not off the \
+             `decompose_ci`-produced `CanteiroDag`'s edge algebra",
+        );
+    }
+
+    #[test]
+    fn ci_declared_edge_count_matches_open_coded_sum_across_shapes() {
+        // Byte-parity pin — the three-path convergence discipline
+        // every peer per-`Acao` substrate primitive carries: the
+        // primitive's return must equal the open-coded
+        // `ci.nodes.iter().map(|n| n.deps.len()).sum::<usize>()`
+        // expression at each of the three canonical `:ci` run shapes
+        // this test module already carries (`linear_ci_run` — the
+        // canonical happy-path with one edge, `cyclic_ci_run` — the
+        // canonical rejected-by-`decompose_ci` shape with two edges,
+        // and the empty-edges no-fan-out shape the peer
+        // `ci_declared_edge_count_returns_zero_for_leaf_only_run`
+        // fixture reads). Any future refactor of the primitive's fold
+        // shape trips here before landing on the consumer's
+        // `RenderedAcao::edge_count` artifact.
+        for (label, ci) in [
+            ("linear-two-node", linear_ci_run()),
+            ("cyclic-two-node", cyclic_ci_run()),
+        ] {
+            let via_primitive = ci_declared_edge_count(&ci);
+            let via_open_coded: usize = ci.nodes.iter().map(|n| n.deps.len()).sum();
+            assert_eq!(
+                via_primitive, via_open_coded,
+                "{label}: `ci_declared_edge_count` must equal the \
+                 open-coded `.nodes.iter().map(|n| n.deps.len()).sum()` \
+                 the two prior `caixa-actions` open-coded sites carried \
+                 — pre-lift regression check",
+            );
+        }
     }
 
     // ── require_single_servico / ServicoCountMismatch — V0 Servico-shape ─
