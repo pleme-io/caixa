@@ -27,7 +27,10 @@ fn shapes() {
 fn a_signature_is_never_shattered() {
     let out = fmt(r#"(define (resolve-target name ns cluster) body)"#);
     assert!(
-        out.lines().next().unwrap().contains("(resolve-target name ns cluster)"),
+        out.lines()
+            .next()
+            .unwrap()
+            .contains("(resolve-target name ns cluster)"),
         "signature was split across lines:\n{out}"
     );
 }

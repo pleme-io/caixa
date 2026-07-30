@@ -23,11 +23,31 @@ fn line_is_unbreakable(line: &str) -> bool {
     let (mut cur, mut in_str, mut esc) = (0usize, false, false);
     for c in t.chars() {
         match () {
-            _ if esc => { esc = false; cur += 1; }
-            _ if in_str && c == '\\' => { esc = true; cur += 1; }
-            _ if c == '"' => { in_str = !in_str; cur += 1; if !in_str { longest = longest.max(cur); cur = 0; } }
+            _ if esc => {
+                esc = false;
+                cur += 1;
+            }
+            _ if in_str && c == '\\' => {
+                esc = true;
+                cur += 1;
+            }
+            _ if c == '"' => {
+                in_str = !in_str;
+                cur += 1;
+                if !in_str {
+                    longest = longest.max(cur);
+                    cur = 0;
+                }
+            }
             _ if in_str => cur += 1,
-            _ if c.is_whitespace() || c == '(' || c == ')' || c == '[' || c == ']' || c == '{' || c == '}' => {
+            _ if c.is_whitespace()
+                || c == '('
+                || c == ')'
+                || c == '['
+                || c == ']'
+                || c == '{'
+                || c == '}' =>
+            {
                 longest = longest.max(cur);
                 cur = 0;
             }
@@ -40,7 +60,11 @@ fn line_is_unbreakable(line: &str) -> bool {
     // floor for a line is indent + its longest unbreakable atom + that
     // tail, and a line at or above the budget for THAT reason is not a
     // layout failure.
-    let tail = t.chars().rev().take_while(|c| matches!(c, ')' | ']' | '}')).count();
+    let tail = t
+        .chars()
+        .rev()
+        .take_while(|c| matches!(c, ')' | ']' | '}'))
+        .count();
     // A `:key value` pair is ONE unit by the printer's own invariant (a
     // key is never separated from its value by a line break), so the key
     // prefix is mandatory-adjacent to the atom and counts toward the
@@ -64,8 +88,13 @@ fn fleet_corpus_respects_the_invariants() {
     let (mut ok, mut parse_skip, mut over) = (0usize, 0usize, Vec::new());
     for rel in list.lines() {
         let path = std::path::Path::new("/Users/drzzln/code/github/pleme-io").join(rel);
-        let Ok(src) = std::fs::read_to_string(&path) else { continue };
-        let Ok(a) = format_source(&src, &FmtConfig::default()) else { parse_skip += 1; continue };
+        let Ok(src) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(a) = format_source(&src, &FmtConfig::default()) else {
+            parse_skip += 1;
+            continue;
+        };
         let b = format_source(&a, &FmtConfig::default()).expect("reformat");
         assert_eq!(a, b, "NOT IDEMPOTENT: {rel}");
         for (i, l) in a.lines().enumerate() {
@@ -78,6 +107,8 @@ fn fleet_corpus_respects_the_invariants() {
         ok += 1;
     }
     println!("swept={ok} unparseable={parse_skip} over80={}", over.len());
-    for o in over.iter().take(12) { println!("  OVER: {o}"); }
+    for o in over.iter().take(12) {
+        println!("  OVER: {o}");
+    }
     assert!(over.is_empty(), "{} lines exceed 80 columns", over.len());
 }

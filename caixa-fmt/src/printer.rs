@@ -205,7 +205,8 @@ impl Printer<'_> {
     fn emit_header_operand(&mut self, n: &Node, indent: usize) {
         let inlineable = match &n.kind {
             NodeKind::List(items) | NodeKind::Vector(items) | NodeKind::Map(items) => {
-                !(self.cfg.preserve_comments && (contains_comment(n) || items.iter().any(contains_comment)))
+                !(self.cfg.preserve_comments
+                    && (contains_comment(n) || items.iter().any(contains_comment)))
             }
             _ => false,
         };
@@ -455,8 +456,8 @@ impl Printer<'_> {
                 // overflowing. Measured on the corpus, this is the single
                 // largest source of over-long lines.
                 let header_flat = render_inline(&items[..=distinguished]);
-                let header_fits = current_column(&self.out) + header_flat.len()
-                    <= self.cfg.line_width;
+                let header_fits =
+                    current_column(&self.out) + header_flat.len() <= self.cfg.line_width;
 
                 self.emit(&items[0], indent + 1);
                 if header_fits {
@@ -503,7 +504,11 @@ impl Printer<'_> {
                     self.out.push(' ');
                     self.emit(&items[1], indent + 1);
                 }
-                let args = if has_program { &items[2..] } else { &items[1..] };
+                let args = if has_program {
+                    &items[2..]
+                } else {
+                    &items[1..]
+                };
                 for (start, len) in command_arg_groups(args) {
                     self.emit_child_trivia(&args[start].leading, child_indent);
                     self.out.push('\n');
