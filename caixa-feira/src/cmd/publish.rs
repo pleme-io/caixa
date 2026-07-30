@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Result, bail};
-use caixa_core::{DEFAULT_GIT_REMOTE, DEFAULT_PUBLISH_TAG_PREFIX};
+use caixa_core::{Caixa, DEFAULT_GIT_REMOTE, DEFAULT_PUBLISH_TAG_PREFIX};
 use clap::Args;
 
 use super::load::{caixa_root, load_caixa};
@@ -69,7 +69,7 @@ impl Publish {
         let root = caixa_root(self.path.as_deref());
         let caixa = load_caixa(&root)?;
 
-        let versao = self.versao.clone().unwrap_or(caixa.versao.clone());
+        let versao = publish_effective_versao(self.versao.as_deref(), &caixa);
         let tag = format!("{}{versao}", self.prefix);
 
         // Refuse to publish if the working tree is dirty.
@@ -79,7 +79,7 @@ impl Publish {
         }
 
         // Create tag at HEAD.
-        let msg = format!("caixa {} {tag}", caixa.nome);
+        let msg = publish_tag_message(&caixa, &tag);
         exec_git(&root, ["tag", "-a", &tag, "-m", &msg])?;
 
         if !self.no_push {
@@ -90,6 +90,46 @@ impl Publish {
         }
         Ok(())
     }
+}
+
+/// Resolve the effective `:versao` the `feira publish` verb tags HEAD
+/// against. When the operator passes `--versao <v>` the CLI override
+/// wins verbatim; otherwise the fallback derives through the typed
+/// [`Caixa::versao`] `&str`-return universal-axis accessor so the
+/// writer-side per-`Caixa` `:versao` byte-string every peer per-kind
+/// renderer already emits (caixa-helm `Chart.yaml` `version:` /
+/// `appVersion:` per eb912de / 05a7701, caixa-flux `programs.yaml`
+/// `versao:` fold + `cluster_bundle` `GitRepository` `spec.ref.tag`
+/// per 2fc5f81, caixa-crd `CaixaSpec.versao` per 41ab9a3, caixa-tatara
+/// `Process` CR `AplicacaoIntent.version` per e73b19f, caixa-resolver
+/// `FetchedDep::concrete_versao` per 0556249) shares one canonical
+/// read-side surface with the tag this verb writes to `origin`. Peer
+/// with [`publish_tag_message`] on the paired annotated-tag body
+/// surface — the two writer-side emit sites (`tag`, `-m <message>`)
+/// share one accessor rather than two raw field-accesses in lockstep.
+pub(crate) fn publish_effective_versao(cli_versao: Option<&str>, caixa: &Caixa) -> String {
+    cli_versao
+        .map(str::to_string)
+        .unwrap_or_else(|| caixa.versao().to_string())
+}
+
+/// Compose the `git tag -a -m <message>` annotation body `feira publish`
+/// stamps onto HEAD past the working-tree-clean gate. Derives its
+/// terminal `{nome}` scalar through the typed [`Caixa::nome`] accessor
+/// so a future tag-history reader (a future `feira publish rollback`
+/// that scans annotation bodies for the `caixa <nome> v<versao>`
+/// shape, a Git-tag-history audit walker projecting the caixa identity
+/// out of the annotation axis, a future FluxCD `GitRepository.ref.tag`-
+/// side reconciler that validates the annotation against the paired
+/// `HelmRelease` `chart.spec.chart` name) reads a byte-string identical
+/// to the one the paired downstream caixa-flux
+/// `cluster_bundle::for_caixa` `GitRefSpec::Tag(v<versao>)` +
+/// caixa-helm `Chart.yaml` `name: lareira-<nome>` emits already carry
+/// under one accessor. Peer with [`publish_effective_versao`] on the
+/// paired tag-value surface — the two writer-side emit sites share one
+/// accessor rather than two raw field-accesses in lockstep.
+pub(crate) fn publish_tag_message(caixa: &Caixa, tag: &str) -> String {
+    format!("caixa {} {tag}", caixa.nome())
 }
 
 fn exec_git<'a, I: IntoIterator<Item = &'a str>>(cwd: &std::path::Path, args: I) -> Result<()> {
@@ -208,6 +248,134 @@ mod tests {
              `feira app deploy --apply` `push_origin` helpers silently \
              emits a `git push` against the wrong remote on one verb \
              while the others still target the canonical one"
+        );
+    }
+
+    fn fixture_caixa(nome: &str, versao: &str) -> Caixa {
+        let src = format!(
+            "(defcaixa :nome \"{nome}\" :versao \"{versao}\" \
+             :kind Biblioteca :bibliotecas ())"
+        );
+        Caixa::from_lisp(&src).expect("fixture caixa parses")
+    }
+
+    #[test]
+    fn publish_effective_versao_routes_through_caixa_versao_accessor() {
+        // Fail-before-pass-after pin: the `feira publish` no-`--versao`
+        // fallback must resolve the tagged version through the typed
+        // [`Caixa::versao`] accessor, not the raw `caixa.versao.clone()`
+        // field-access this converge lifts. A regression that re-inlines
+        // the raw field at the resolution site silently splits the
+        // `origin`-pushed git tag from the per-`Caixa` `:versao`
+        // byte-string every paired downstream substrate-side renderer
+        // already emits (the caixa-flux `cluster_bundle`
+        // `GitRepository.spec.ref.tag` per 2fc5f81, the caixa-helm
+        // `Chart.yaml` `version:` / `appVersion:` per eb912de / 05a7701,
+        // the caixa-crd `CaixaSpec.versao` per 41ab9a3, the caixa-tatara
+        // `Process` CR `AplicacaoIntent.version` per e73b19f, the
+        // caixa-resolver `FetchedDep::concrete_versao` per 0556249) —
+        // every FluxCD `GitRepository` reconciler pinned on `v<versao>`
+        // would silently miss the newly-published release.
+        //
+        // Peer with the sibling
+        // [`super::deploy::deploy_summary_line_routes_through_caixa_nome_and_versao_accessors`]
+        // pin on the peer `feira deploy` verb's operator-facing stderr-
+        // notice surface, and with the sibling
+        // [`super::app::deploy_commit_message_routes_through_caixa_nome_and_versao_accessors`]
+        // pin on the peer `feira app deploy` verb's k8s-repo git-commit-
+        // message surface.
+        let caixa = fixture_caixa("checkout", "0.4.2");
+        assert_eq!(
+            publish_effective_versao(None, &caixa),
+            caixa.versao(),
+            "publish_effective_versao with no CLI override must \
+             byte-equal the typed Caixa::versao accessor — a regression \
+             that re-inlines the raw `caixa.versao.clone()` field-access \
+             at this site silently splits the origin-pushed git tag \
+             from the paired substrate-side renderer emit"
+        );
+        assert_eq!(publish_effective_versao(None, &caixa), "0.4.2");
+    }
+
+    #[test]
+    fn publish_effective_versao_carries_cli_override_verbatim() {
+        // Paired inversion pin: when the operator passes `--versao <v>`
+        // the CLI override must win verbatim over the per-`Caixa`
+        // `:versao` byte-string on disk. Pin the `Some(_)` arm so a
+        // future refactor of the resolution cascade (e.g. promoting the
+        // override to a typed `enum EffectiveVersao { CliOverride,
+        // Manifest }` discriminant once the sibling `feira app
+        // deploy` grows the same axis) reaches this resolver through
+        // one canonical form rather than re-rolling a parallel cascade.
+        let caixa = fixture_caixa("cart", "1.0.0");
+        assert_eq!(
+            publish_effective_versao(Some("2.0.0-rc.1"), &caixa),
+            "2.0.0-rc.1",
+            "publish_effective_versao with --versao <v> must carry the \
+             CLI override verbatim, ignoring the manifest's :versao"
+        );
+    }
+
+    #[test]
+    fn publish_tag_message_routes_through_caixa_nome_accessor() {
+        // Fail-before-pass-after pin: the `feira publish` annotated-tag
+        // body's terminal `{nome}` scalar must resolve through the
+        // typed [`Caixa::nome`] accessor, not the raw `caixa.nome`
+        // field-access this converge lifts. A regression that re-inlines
+        // the raw field at the emit site silently splits the annotated-
+        // tag body a future Git-tag-history reader greps against (a
+        // future `feira publish rollback` scanning annotation bodies
+        // for the `caixa <nome> v<versao>` shape, a FluxCD
+        // `GitRepository`-side audit walker projecting the caixa identity
+        // out of the annotation axis, a future `feira publish --verify`
+        // that keys off the annotation body against the paired
+        // `caixa-flux` `cluster_bundle` bundle name) from the identity
+        // every paired downstream substrate-side artefact already
+        // carries under one accessor (the caixa-helm `Chart.yaml`
+        // `name: lareira-<nome>` per eb912de, the caixa-flux
+        // `programs.yaml` `name:` fold + `cluster_bundle`
+        // `HelmRelease.metadata.name` per 4a363bf, the caixa-mesh
+        // per-Aplicacao `programs.yaml` fan-out per 54bf2f3, the
+        // caixa-crd `CaixaSpec.nome` per 61d3429).
+        //
+        // Peer with the sibling
+        // [`super::deploy::deploy_summary_line_routes_through_caixa_nome_and_versao_accessors`]
+        // pin on the peer `feira deploy` verb's stderr-notice surface,
+        // and with the sibling
+        // [`super::app::deploy_commit_message_routes_through_caixa_nome_and_versao_accessors`]
+        // pin on the peer `feira app deploy` verb's commit-message
+        // surface — the three writer-side emit surfaces (`git push`,
+        // `git commit`, `git tag -a -m`) now share one accessor axis.
+        let caixa = fixture_caixa("checkout", "0.4.2");
+        let tag = "v0.4.2";
+        let rendered = publish_tag_message(&caixa, tag);
+        assert_eq!(
+            rendered,
+            format!("caixa {} {tag}", caixa.nome()),
+            "publish_tag_message must derive its {{nome}} slot through \
+             the typed Caixa::nome accessor — a regression that re-\
+             inlines caixa.nome at the emit site silently splits the \
+             annotated-tag body from the paired substrate-side renderer \
+             emit"
+        );
+        assert_eq!(rendered, "caixa checkout v0.4.2");
+    }
+
+    #[test]
+    fn publish_tag_message_carries_arbitrary_tag_verbatim() {
+        // Paired pin on the `tag` slot: the composer must carry the
+        // resolved tag byte-string verbatim into the annotation body,
+        // regardless of the prefix / versao axes' independent resolution
+        // upstream. Pin a non-default prefix + CLI-override versao
+        // composition so a future refactor that folds the prefix into
+        // the composer (e.g. promoting `prefix` from a `&str` arg to a
+        // typed `TagShape` newtype once the CAIXA-SDLC §I SemVer-2 pin
+        // grows a `release/<versao>` slash-namespaced peer) reaches
+        // this site through one canonical form.
+        let caixa = fixture_caixa("payment", "0.1.0");
+        assert_eq!(
+            publish_tag_message(&caixa, "release/2.0.0-rc.1"),
+            "caixa payment release/2.0.0-rc.1"
         );
     }
 }
