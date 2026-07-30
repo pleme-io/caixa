@@ -198,7 +198,19 @@ impl Printer<'_> {
         // Both bounds are fixed numbers consulted in a fixed order, so this
         // stays a pure function of (tree, config) — the determinism the
         // group-break rule above depends on is preserved, not weakened.
-        let too_many_items = inline_slot_count(items) > self.cfg.max_inline_items;
+        // Classified ONCE, then used for both the arity bound and the
+        // dispatch below — the two must agree on what this form is, or a
+        // command could be counted as a plist and break inconsistently.
+        let shape = classify(items, delims, keep_comments);
+        let slots = match shape {
+            // A command's slots are its verb, its program, and one per
+            // argument GROUP — so `(exec-capture "mkdir" "-p" dir)` counts
+            // 3, not 4, and stays on one line. Same principle as the kwarg
+            // pair: count ideas, not nodes.
+            FormShape::Command => command_slot_count(items),
+            _ => inline_slot_count(items),
+        };
+        let too_many_items = slots > self.cfg.max_inline_items;
 
         if !force_break && !too_many_items {
             let inline = render_inline(items);
@@ -224,7 +236,7 @@ impl Printer<'_> {
         // a shape. That is the property a formatter needs in order to have
         // no configuration — there is nothing to configure, because every
         // situation already has exactly one answer.
-        match classify(items, delims, keep_comments) {
+        match shape {
             FormShape::Plist { head } => {
                 // Head symbols (`defcaixa`, and the name it defines) share
                 // the opening line; the `:key value` pairs indent below it.
@@ -273,6 +285,42 @@ impl Printer<'_> {
                     self.emit(item, child_indent);
                 }
             }
+            FormShape::Command => {
+                // A subprocess invocation, laid out the way a human writes
+                // one by hand with backslash continuations: the verb and
+                // the program on the opening line, then one argument GROUP
+                // per line beneath.
+                //
+                // A group is a `-flag` together with the value it governs.
+                // Keeping the two on one line is the entire point — the
+                // `Positional` shape would put `"-m"` and `"5"` on separate
+                // lines, which is exactly what makes a long command
+                // unscannable.
+                //
+                // The verb always shares the line with the program name
+                // (`items[0]` and `items[1]`) so the reader sees WHAT is
+                // being run before any flags. A bare `(exec-capture prog)`
+                // with no arguments has already been rendered inline by the
+                // width test above, so `items[1..]` is safe to index here.
+                self.emit(&items[0], indent + 1);
+                let has_program = items.len() > 1;
+                if has_program {
+                    self.out.push(' ');
+                    self.emit(&items[1], indent + 1);
+                }
+                let args = if has_program { &items[2..] } else { &items[1..] };
+                for (start, len) in command_arg_groups(args) {
+                    self.emit_child_trivia(&args[start].leading, child_indent);
+                    self.out.push('\n');
+                    push_spaces(&mut self.out, child_indent);
+                    for k in 0..len {
+                        if k > 0 {
+                            self.out.push(' ');
+                        }
+                        self.emit(&args[start + k], child_indent);
+                    }
+                }
+            }
         }
         if has_dangling_comment {
             self.emit_child_trivia(dangling, child_indent);
@@ -314,7 +362,42 @@ enum FormShape {
     /// `[ a b c ]`, or any sequence with no distinguished head — every
     /// element is a peer on its own line.
     Tabular,
+    /// `(exec-capture "curl" "-sf" "-m" "5" url)` — a subprocess
+    /// invocation. The verb and the program share the opening line, then
+    /// each argument GROUP takes a line, where a `-flag` and the value it
+    /// governs are one group.
+    ///
+    /// This is the shape a human already writes by hand with backslash
+    /// continuations, because a flag and its value are one idea and
+    /// splitting them across lines is what makes a long command
+    /// unreadable. Grouping them is the whole reason this is a distinct
+    /// shape rather than `Positional`: `Positional` would put `"-m"` and
+    /// `"5"` on separate lines and lose that.
+    Command,
 }
+
+/// Head symbols that introduce a subprocess invocation.
+///
+/// A CLOSED SET, deliberately — the same discipline as `FormShape` itself.
+/// Detection by a fixed table means "is this a command?" has one answer
+/// that does not depend on argument shape, so the layout stays a pure
+/// function of the tree. A heuristic ("looks like it has flags") would
+/// make formatting depend on content and could flip a form's shape when
+/// an unrelated argument changed.
+///
+/// Measured against the corpus (583 `.tlisp` files, 2026-07-30):
+/// `exec-capture` appears in 170 of them, `run`-family in 37, `cmd` in 9.
+const COMMAND_HEADS: &[&str] = &[
+    "exec-capture",
+    "exec-capture!",
+    "exec",
+    "exec!",
+    "cmd",
+    "cmd!",
+    "run-cmd",
+    "sh",
+    "shell-out",
+];
 
 /// TOTAL. Every non-empty item slice maps to exactly one shape.
 ///
@@ -335,6 +418,13 @@ fn classify(items: &[Node], delims: Delims, keep_comments: bool) -> FormShape {
         return FormShape::Tabular;
     }
 
+    // A subprocess invocation, checked BEFORE the plist test: a command's
+    // `"-X" "PUT"` reads as a keyword-ish pair to a plist scanner, and
+    // folding it that way would indent flags as if they were kwargs.
+    if delims.open == '(' && head_symbol_is_command(items) {
+        return FormShape::Command;
+    }
+
     if let Some(head) = kwargs_head_len(items) {
         let head_is_commented = keep_comments
             && items[..head]
@@ -351,6 +441,60 @@ fn classify(items: &[Node], delims: Delims, keep_comments: bool) -> FormShape {
     }
 
     FormShape::Positional
+}
+
+/// Slot count for a command form: the verb, the program, and one per
+/// argument GROUP.
+///
+/// `(exec-capture "mkdir" "-p" dir)` is four nodes but three ideas — run,
+/// mkdir, and the `-p dir` pair — so it stays inline, while a curl with
+/// five flag groups does not. Mirrors [`inline_slot_count`]'s kwarg-pair
+/// rule: the arity bound counts ideas, never nodes.
+fn command_slot_count(items: &[Node]) -> usize {
+    match items.len() {
+        0 => 0,
+        1 => 1,
+        _ => 2 + command_arg_groups(&items[2..]).len(),
+    }
+}
+
+/// Is this form's head symbol one of the [`COMMAND_HEADS`]?
+fn head_symbol_is_command(items: &[Node]) -> bool {
+    matches!(&items[0].kind, NodeKind::Symbol(s) if COMMAND_HEADS.contains(&s.as_str()))
+}
+
+/// Does this node render as a `-flag` / `--flag` token?
+///
+/// Only a STRING LITERAL counts. A bare symbol is a variable whose value
+/// is unknown at format time, and letting layout depend on a runtime value
+/// would make it non-deterministic — the same source could format two ways
+/// depending on what the variable happened to hold.
+fn is_flag_token(n: &Node) -> bool {
+    matches!(&n.kind, NodeKind::Str(s) if s.starts_with('-') && s.len() > 1)
+}
+
+/// Split a command's arguments into layout GROUPS: a `-flag` followed by a
+/// non-flag operand is one group of two; everything else is a group of one.
+///
+/// Returns the group boundaries as (start, len) pairs. Total, allocation-
+/// light, and a pure function of the slice, so the same arguments always
+/// group the same way.
+///
+/// `("-m" "5")` and `("--profile" aws-profile)` are the cases this exists
+/// for: a flag and the value it governs are one idea, and a layout that
+/// splits them is precisely what makes a long invocation hard to scan.
+/// A trailing flag with nothing after it is its own group rather than
+/// swallowing the close paren.
+fn command_arg_groups(args: &[Node]) -> Vec<(usize, usize)> {
+    let mut groups = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        let pairs = is_flag_token(&args[i]) && i + 1 < args.len() && !is_flag_token(&args[i + 1]);
+        let len = if pairs { 2 } else { 1 };
+        groups.push((i, len));
+        i += len;
+    }
+    groups
 }
 
 /// Does any comment live anywhere in this node's subtree?
