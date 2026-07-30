@@ -105,6 +105,13 @@ impl<'a> Parser<'a> {
         let mut out = Vec::new();
         while let Some(tok) = self.peek() {
             match &tok.kind {
+                TokenKind::Shebang(s) => {
+                    out.push(Trivia {
+                        kind: TriviaKind::Shebang(s.clone()),
+                        span: tok.span,
+                    });
+                    self.pos += 1;
+                }
                 TokenKind::LineComment(s) => {
                     out.push(Trivia {
                         kind: TriviaKind::LineComment(s.clone()),
