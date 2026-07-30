@@ -16,7 +16,6 @@ thiserror = { workspace = true }
 blake3 = { workspace = true }
 hex = { workspace = true }
 tatara-lisp = { workspace = true }
-tatara-lisp-derive = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

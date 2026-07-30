@@ -71,10 +71,13 @@ tower-lsp = "0.20"
 dashmap = "5"
 ropey = "1"
 
-# Pleme-io sibling-directory path deps — match sui-eval's convention.
-# Consumers outside pleme-io drive the Nix flake, which pins tatara via inputs.
-tatara-lisp = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
-tatara-lisp-derive = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
+# tatara-lisp — the canonical Lisp crate, from crates.io. Depend ONLY on the
+# lib: it exact-pins and re-exports its own proc-macros as `DeriveTataraDomain`
+# / `DeriveKeywordSexp`, so naming `tatara-lisp-derive` here would let the
+# lib↔derive pair drift apart (the split-brain the 0.3.x consolidation sealed).
+tatara-lisp = "0.3.3"
+# Remaining pleme-io git deps. Consumers outside pleme-io drive the Nix flake,
+# which pins these via inputs.
 tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
 caixa-tatara = { path = "caixa-tatara" }
 iac-forge = { git = "https://github.com/pleme-io/iac-forge" }

@@ -406,7 +406,7 @@ dependencies = [
  "logos",
  "pretty_assertions",
  "serde",
- "tatara-lisp",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -422,8 +422,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -471,7 +470,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "tatara-lisp",
+ "tatara-lisp 0.3.3",
  "tatara-process",
  "tempfile",
  "thiserror 2.0.18",
@@ -486,8 +485,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -511,8 +509,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "serde",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -539,8 +536,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -553,8 +549,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -571,7 +566,7 @@ dependencies = [
  "ropey",
  "serde",
  "serde_json",
- "tatara-lisp",
+ "tatara-lisp 0.3.3",
  "tokio",
  "tower-lsp",
 ]
@@ -651,7 +646,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_yaml",
- "tatara-lisp",
+ "tatara-lisp 0.3.3",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -679,8 +674,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.3.3",
  "thiserror 2.0.18",
 ]
 
@@ -3353,7 +3347,7 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 [[package]]
 name = "tatara-core"
 version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara#fb6dfcc1bad6880c06b774164882ad845522e84a"
+source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3375,19 +3369,43 @@ dependencies = [
 [[package]]
 name = "tatara-lisp"
 version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara#fb6dfcc1bad6880c06b774164882ad845522e84a"
+source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
 dependencies = [
  "blake3",
  "serde",
  "serde_json",
- "tatara-lisp-derive",
+ "tatara-lisp-derive 0.2.4",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "tatara-lisp"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27a7c753fd91475ae3385fcac0840599eff0649166f6a832f50bb1c573660d5c"
+dependencies = [
+ "blake3",
+ "serde",
+ "serde_json",
+ "tatara-lisp-derive 0.3.3",
  "thiserror 2.0.18",
 ]
 
 [[package]]
 name = "tatara-lisp-derive"
 version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara#fb6dfcc1bad6880c06b774164882ad845522e84a"
+source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "tatara-lisp-derive"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c928e303f68959965bec794883acfebb93cd3267e4641502d28454bf73440baa"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3397,7 +3415,7 @@ dependencies = [
 [[package]]
 name = "tatara-process"
 version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara#fb6dfcc1bad6880c06b774164882ad845522e84a"
+source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3411,8 +3429,8 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tatara-core",
- "tatara-lisp",
- "tatara-lisp-derive",
+ "tatara-lisp 0.2.4",
+ "tatara-lisp-derive 0.2.4",
  "thiserror 2.0.18",
  "tracing",
 ]
