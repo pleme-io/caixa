@@ -542,14 +542,13 @@ mod tests {
         let c = acao_caixa(Some(ci));
         let via_validate = validate(&c).expect_err("cyclic CiRun must be rejected");
         let ci_borrowed = c.ci().expect("fixture carries :ci");
-        // `expect_err` needs `T: Debug`; the Ok half carries
-        // `canteiro_types::CanteiroDag`, which does not derive it at the
-        // pinned sui rev, so this test target failed to COMPILE. A let-else
-        // asserts the same thing without borrowing a bound from a foreign
-        // type we do not own.
-        let Err(via_primitive) = caixa_core::decompose_ci(&c, ci_borrowed) else {
-            panic!("cyclic CiRun must be rejected by decompose_ci");
-        };
+        // `expect_err` is usable again as of sui 96a811e: `CanteiroDag` now
+        // derives `Debug`, and so does the `shigoto_dag::Dag` it wraps
+        // (shigoto 0.1.12). Before that this whole test TARGET failed to
+        // compile, which is worse than a failing test — the suite went
+        // absent while the repo still looked green.
+        let via_primitive = caixa_core::decompose_ci(&c, ci_borrowed)
+            .expect_err("cyclic CiRun must be rejected by decompose_ci");
         match via_validate {
             Error::Decompose(failure) => {
                 assert_eq!(
@@ -755,16 +754,10 @@ mod tests {
         mis_kinded.kind = CaixaKind::Servico;
         mis_kinded.servicos = vec!["servicos/hello.computeunit.yaml".to_string()];
         let via_validate_err = validate(&mis_kinded).expect_err("mis-kinded Acao must be rejected");
-        // `expect_err` needs `T: Debug`; the Ok half carries
-        // `canteiro_types::CanteiroDag`, which does not derive it at the
-        // pinned sui rev, so this test target failed to COMPILE. A let-else
-        // asserts the same thing without borrowing a bound from a foreign
-        // type we do not own.
-        let Err(via_primitive_err): Result<_, Error> =
-            caixa_core::require_acao_view(&mis_kinded)
-        else {
-            panic!("mis-kinded Acao must be rejected by compound");
-        };
+        // `expect_err` is usable again as of sui 96a811e (CanteiroDag derives
+        // Debug, and so does the shigoto_dag::Dag it wraps, 0.1.12).
+        let via_primitive_err = caixa_core::require_acao_view(&mis_kinded)
+                .expect_err("mis-kinded Acao must be rejected by compound");
         assert_eq!(
             format!("{via_validate_err}"),
             format!("{via_primitive_err}"),
@@ -786,16 +779,10 @@ mod tests {
         let missing_ci = acao_caixa(None);
         let via_validate_err =
             validate(&missing_ci).expect_err("Acao with no :ci must be rejected");
-        // `expect_err` needs `T: Debug`; the Ok half carries
-        // `canteiro_types::CanteiroDag`, which does not derive it at the
-        // pinned sui rev, so this test target failed to COMPILE. A let-else
-        // asserts the same thing without borrowing a bound from a foreign
-        // type we do not own.
-        let Err(via_primitive_err): Result<_, Error> =
-            caixa_core::require_acao_view(&missing_ci)
-        else {
-            panic!("Acao with no :ci must be rejected by compound");
-        };
+        // `expect_err` is usable again as of sui 96a811e (CanteiroDag derives
+        // Debug, and so does the shigoto_dag::Dag it wraps, 0.1.12).
+        let via_primitive_err = caixa_core::require_acao_view(&missing_ci)
+                .expect_err("Acao with no :ci must be rejected by compound");
         assert_eq!(
             format!("{via_validate_err}"),
             format!("{via_primitive_err}"),
@@ -821,16 +808,10 @@ mod tests {
         };
         let cyclic = acao_caixa(Some(cyclic_ci));
         let via_validate_err = validate(&cyclic).expect_err("cyclic Acao must be rejected");
-        // `expect_err` needs `T: Debug`; the Ok half carries
-        // `canteiro_types::CanteiroDag`, which does not derive it at the
-        // pinned sui rev, so this test target failed to COMPILE. A let-else
-        // asserts the same thing without borrowing a bound from a foreign
-        // type we do not own.
-        let Err(via_primitive_err): Result<_, Error> =
-            caixa_core::require_acao_view(&cyclic)
-        else {
-            panic!("cyclic Acao must be rejected by compound");
-        };
+        // `expect_err` is usable again as of sui 96a811e (CanteiroDag derives
+        // Debug, and so does the shigoto_dag::Dag it wraps, 0.1.12).
+        let via_primitive_err = caixa_core::require_acao_view(&cyclic)
+                .expect_err("cyclic Acao must be rejected by compound");
         assert_eq!(
             format!("{via_validate_err}"),
             format!("{via_primitive_err}"),

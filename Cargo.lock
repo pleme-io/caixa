@@ -701,7 +701,7 @@ dependencies = [
 [[package]]
 name = "canteiro-types"
 version = "0.1.152"
-source = "git+https://github.com/pleme-io/sui#8e60d93de33b4fba1c8b1f298a850b9bf4c381d8"
+source = "git+https://github.com/pleme-io/sui#96a811e51a7ea58f0e8c0eb29d0916f5d5cfa364"
 dependencies = [
  "serde",
  "shigoto-dag",
@@ -3174,9 +3174,9 @@ dependencies = [
 
 [[package]]
 name = "shigoto-dag"
-version = "0.1.10"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fbbe43dd5995d8e725ccae03a49fb65e273802598625f909c5605c5b9c8d3fef"
+checksum = "5cb362990519e7b8d021e5fd76eaaebb950fdcee8d345299996b76bb8544bfe4"
 dependencies = [
  "petgraph",
  "serde",
@@ -3186,9 +3186,9 @@ dependencies = [
 
 [[package]]
 name = "shigoto-types"
-version = "0.1.10"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa6ae794f6d1a61085d54b49c37135ab7dd89fb60a69a1097aaefb50cd4f07fd"
+checksum = "196e256bfcbc81364a058deac6121acfd9a2beed9f158b62c0d7f49140b9fb3f"
 dependencies = [
  "async-trait",
  "blake3",
