@@ -7,6 +7,7 @@ pub mod app;
 pub mod build;
 pub mod chart;
 pub mod deploy;
+pub mod dialeto;
 pub mod ephemeral;
 pub mod ephemeral_runtime;
 pub mod fmt;
@@ -37,6 +38,9 @@ pub enum Command {
     Fmt(fmt::Fmt),
     /// Lint a caixa.lisp source (via caixa-lint, Nord-themed output).
     Lint(lint::Lint),
+    /// Classify every caixa manifest in a tree by dialect, and fail on an
+    /// unclassifiable or wrong-dialect manifest. Default-on, hard.
+    Dialeto(dialeto::Dialeto),
     /// Emit a flake.nix for the caixa.
     Nix(nix::Nix),
     /// Render a per-program lareira-<name> Helm chart (via caixa-helm).
@@ -70,6 +74,7 @@ impl Command {
             Self::Build(c) => c.run(),
             Self::Fmt(c) => c.run(),
             Self::Lint(c) => c.run(),
+            Self::Dialeto(c) => c.run(),
             Self::Nix(c) => c.run(),
             Self::Chart(c) => c.run(),
             Self::Deploy(c) => c.run(),

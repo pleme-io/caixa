@@ -200,26 +200,116 @@ pub struct Caixa {
     pub ci: Option<canteiro_types::CiRun>,
 }
 
+/// Why reading a manifest into a [`Caixa`] failed.
+///
+/// Split from [`ManifestError`] (which reports a *parsed* manifest that is
+/// semantically wrong) because the two answer different questions, and the
+/// distinction is the whole point of this type: `ManifestError` means "your
+/// caixa is wrong", `LeituraError::DialetoEstrangeiro` means "this file is not
+/// a caixa".
+#[derive(Debug, thiserror::Error)]
+pub enum LeituraError {
+    /// The source is not readable as a `(defcaixa …)` package manifest — bad
+    /// syntax, a wrong head symbol, an unknown or mistyped slot.
+    ///
+    /// `#[source]`, not `#[error(transparent)]`. Transparent delegates
+    /// `source()` past the inner error to ITS source, which drops the
+    /// `LispError` off the cause chain — and `feira`'s
+    /// `load_caixa_parse_error_preserves_underlying_lisp_error_on_chain`
+    /// pins that a caller can `downcast_ref::<tatara_lisp::LispError>()`
+    /// through an anyhow context to read the typed payload. That pin caught
+    /// this exact regression when the variant first landed transparent.
+    #[error("{0}")]
+    Leitura(#[source]
+        #[from]
+        tatara_lisp::LispError),
+
+    /// The source IS a well-formed `(defcaixa …)` form, but of a different
+    /// declaration than this crate's.
+    ///
+    /// The variant that did not exist before, and whose absence is the defect.
+    /// A `(defcaixa :name "x" :ecosystem :go …)` used to reach the derive's
+    /// `parse_kwargs_strict` and come back as an unknown-keyword rejection —
+    /// byte-identical in shape to a typo in a real manifest. Measured over the
+    /// org checkout on 2026-07-31, that shape is the MAJORITY of the corpus, so
+    /// the confusing error was also the common one.
+    ///
+    /// Carrying the dialect means a consumer can branch on "not mine" without
+    /// re-parsing, and a census can count it.
+    #[error(
+        "this is a `{palavra_canonica}` declaration ({descricao}), read by \
+         {consumidor} — not a caixa-core package manifest. `defcaixa` is the \
+         tatara-lisp package manifest (`:nome :versao :kind :deps …`); the two \
+         are different declarations that shared one keyword until 2026-07-31"
+    )]
+    DialetoEstrangeiro {
+        /// Which declaration this actually is.
+        dialeto: crate::dialeto::CaixaDialeto,
+        /// The keyword it should be written with.
+        palavra_canonica: &'static str,
+        /// Who reads it.
+        consumidor: &'static str,
+        /// One-line schema description.
+        descricao: &'static str,
+    },
+
+    /// Not a manifest declaration at all.
+    #[error(transparent)]
+    Dialeto(#[from] crate::dialeto::DialetoError),
+}
+
 impl Caixa {
     /// Parse a `caixa.lisp` source string to a typed `Caixa`.
     ///
-    /// Delegates to the TataraDomain derive; the first top-level form must be
-    /// `(defcaixa …)` — any other shape is an error.
-    pub fn from_lisp(src: &str) -> Result<Self, tatara_lisp::LispError> {
+    /// Classifies the dialect **before** parsing. A `(defcaixa …)` of another
+    /// declaration is [`LeituraError::DialetoEstrangeiro`], naming what it is
+    /// and who reads it, instead of an unknown-keyword rejection that reads as
+    /// "your manifest is broken".
+    ///
+    /// The ordering is load-bearing. Handing a foreign dialect to the derive
+    /// first and interpreting the failure afterwards would mean guessing from
+    /// an error message, and the guess would be wrong for every file whose
+    /// first unknown slot happens to be one both schemas could plausibly carry.
+    pub fn from_lisp(src: &str) -> Result<Self, LeituraError> {
         use tatara_lisp::domain::TataraDomain;
-        let forms = tatara_lisp::read(src)?;
+        let forms = tatara_lisp::read(src).map_err(LeituraError::Leitura)?;
         let first = forms
             .first()
-            .ok_or_else(|| tatara_lisp::LispError::Compile {
-                form: "defcaixa".into(),
-                message: "empty manifest".into(),
-            })?;
-        Self::compile_from_sexp(first)
+            .ok_or(crate::dialeto::DialetoError::Vazio)?;
+
+        match crate::dialeto::classify_form(first)? {
+            crate::dialeto::CaixaDialeto::Pacote => {}
+            // `Desconhecido` deliberately falls through to the derive rather
+            // than short-circuiting: a `(defcaixa …)` matching neither schema
+            // is most likely a genuine package manifest with a typo in
+            // `:nome`, and the derive's diagnostic — which names the offending
+            // keyword and suggests the nearest slot — is far better than
+            // anything this classifier could say.
+            crate::dialeto::CaixaDialeto::Desconhecido => {}
+            foreign => {
+                return Err(LeituraError::DialetoEstrangeiro {
+                    dialeto: foreign,
+                    palavra_canonica: foreign.palavra_canonica(),
+                    consumidor: foreign.consumidor(),
+                    descricao: foreign.descricao(),
+                });
+            }
+        }
+
+        Self::compile_from_sexp(first).map_err(LeituraError::Leitura)
     }
 
     /// Register `Caixa` with the global tatara-lisp domain registry so
     /// `defcaixa` is dispatchable from any tatara-lisp binary that seeds
     /// the registry (e.g. `tatara-check`).
+    ///
+    /// `pending-fallible-register`: upstream `tatara_lisp::domain::register`
+    /// became `-> Result<(), KeywordCollision>` on 2026-07-31, so a second type
+    /// claiming `defcaixa` in one process is refused and named instead of
+    /// silently displacing this one. This workspace pins
+    /// `tatara-lisp = "0.3.3"`, which predates that, so the result cannot be
+    /// checked here yet. Propagate it — `pub fn register() -> Result<(),
+    /// tatara_lisp::KeywordCollision>` — in the same commit that bumps the pin.
     pub fn register() {
         tatara_lisp::domain::register::<Self>();
     }

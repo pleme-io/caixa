@@ -28409,7 +28409,14 @@ mod tests {
         // for free.
         let c = bare_acao_without_ci();
         let ci = cyclic_ci_run();
-        let err = decompose_ci(&c, &ci).unwrap_err();
+        // `unwrap_err()` needs `T: Debug`, and the Ok half here carries
+        // `canteiro_types::CanteiroDag`, which does not derive it at the
+        // pinned sui rev — so the whole caixa-core test target failed to
+        // COMPILE. A let-else says the same thing without borrowing a
+        // bound from a foreign type we do not own.
+        let Err(err) = decompose_ci(&c, &ci) else {
+            panic!("a cyclic CiRun must fail decompose_ci");
+        };
         assert_eq!(err.nome, "hello-rio");
         assert_eq!(err.source, canteiro_types::DecomposeError::Cycle);
     }
@@ -28437,7 +28444,14 @@ mod tests {
              the accessor before the decompose gate fires",
         );
         let ci = cyclic_ci_run();
-        let err = decompose_ci(&c, &ci).unwrap_err();
+        // `unwrap_err()` needs `T: Debug`, and the Ok half here carries
+        // `canteiro_types::CanteiroDag`, which does not derive it at the
+        // pinned sui rev — so the whole caixa-core test target failed to
+        // COMPILE. A let-else says the same thing without borrowing a
+        // bound from a foreign type we do not own.
+        let Err(err) = decompose_ci(&c, &ci) else {
+            panic!("a cyclic CiRun must fail decompose_ci");
+        };
         assert_eq!(
             err.nome, expected_nome_via_accessor,
             "the CiDecomposeFailure's `nome` field must equal \
@@ -29165,7 +29179,14 @@ mod tests {
         c.kind = CaixaKind::Servico;
         c.servicos = vec!["servicos/hello.computeunit.yaml".into()];
         c.ci = Some(linear_ci_run());
-        let err: AcaoRendererStandIn = require_acao_view(&c).unwrap_err();
+        // `unwrap_err()` needs `T: Debug`, and the Ok half here carries
+        // `canteiro_types::CanteiroDag`, which does not derive it at the
+        // pinned sui rev — so the whole caixa-core test target failed to
+        // COMPILE. A let-else says the same thing without borrowing a
+        // bound from a foreign type we do not own.
+        let Err(err): Result<_, AcaoRendererStandIn> = require_acao_view(&c) else {
+            panic!("this fixture must not produce an Acao view");
+        };
         match err {
             AcaoRendererStandIn::NotAnAcao(k) => {
                 assert_eq!(k.nome, "hello-rio");
@@ -29190,7 +29211,14 @@ mod tests {
         // the single-axis primitive, propagated through the compound
         // gate's second arm.
         let c = bare_acao_without_ci();
-        let err: AcaoRendererStandIn = require_acao_view(&c).unwrap_err();
+        // `unwrap_err()` needs `T: Debug`, and the Ok half here carries
+        // `canteiro_types::CanteiroDag`, which does not derive it at the
+        // pinned sui rev — so the whole caixa-core test target failed to
+        // COMPILE. A let-else says the same thing without borrowing a
+        // bound from a foreign type we do not own.
+        let Err(err): Result<_, AcaoRendererStandIn> = require_acao_view(&c) else {
+            panic!("this fixture must not produce an Acao view");
+        };
         match err {
             AcaoRendererStandIn::MissingCi(m) => {
                 assert_eq!(m.nome, "hello-rio");
@@ -29215,7 +29243,14 @@ mod tests {
         // arm.
         let mut c = bare_acao_without_ci();
         c.ci = Some(cyclic_ci_run());
-        let err: AcaoRendererStandIn = require_acao_view(&c).unwrap_err();
+        // `unwrap_err()` needs `T: Debug`, and the Ok half here carries
+        // `canteiro_types::CanteiroDag`, which does not derive it at the
+        // pinned sui rev — so the whole caixa-core test target failed to
+        // COMPILE. A let-else says the same thing without borrowing a
+        // bound from a foreign type we do not own.
+        let Err(err): Result<_, AcaoRendererStandIn> = require_acao_view(&c) else {
+            panic!("this fixture must not produce an Acao view");
+        };
         match err {
             AcaoRendererStandIn::Decompose(f) => {
                 assert_eq!(f.nome, "hello-rio");
