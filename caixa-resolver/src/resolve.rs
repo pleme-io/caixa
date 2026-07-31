@@ -21,6 +21,16 @@ pub enum ResolveError {
     Git(#[from] GitError),
     #[error("lisp: {0}")]
     Lisp(#[from] tatara_lisp::LispError),
+    /// A resolved dep's `caixa.lisp` did not read as a package manifest.
+    ///
+    /// Distinct from [`Self::Lisp`] because the interesting case is
+    /// `LeituraError::DialetoEstrangeiro`: a dep whose manifest is a
+    /// repo-surface declaration rather than a package manifest is not a
+    /// syntax error in that dep, it is the wrong KIND of file, and a resolver
+    /// that flattened both into "lisp: …" would send the author hunting for a
+    /// typo that is not there.
+    #[error("manifest: {0}")]
+    Manifesto(#[from] caixa_core::LeituraError),
     #[error("dep '{nome}' expected a pin (:tag or :rev); got neither")]
     MissingPin { nome: String },
     #[error("dep '{nome}' path source {path} does not exist")]

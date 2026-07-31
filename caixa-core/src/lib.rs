@@ -15,6 +15,7 @@ extern crate self as caixa_core;
 pub mod aplicacao;
 pub mod behavior;
 pub mod dep;
+pub mod dialeto;
 pub mod kind;
 pub mod layout;
 pub mod limits;
@@ -32,13 +33,14 @@ pub use aplicacao::{
 };
 pub use behavior::{BehaviorError, BehaviorSpec};
 pub use dep::{Dep, DepError, DepSource};
+pub use dialeto::{CaixaDialeto, DialetoError, classify as classify_dialeto};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};
 pub use limits::{
     LIMITS_CPU_MILLICORES_MAX, LIMITS_FUEL_MAX, LIMITS_MEMORY_WASM32_MAX_BYTES,
     LIMITS_MEMORY_WASM32_PAGE_BYTES, LIMITS_WALL_CLOCK_MAX, LimitsError, LimitsSpec,
 };
-pub use manifest::{Caixa, ManifestError};
+pub use manifest::{Caixa, LeituraError, ManifestError};
 pub use render::{
     CAIXA_KEY_DEPS, CAIXA_KEY_DEPS_DEV, CAIXA_KIND_LABEL_ACAO, CAIXA_KIND_LABEL_APLICACAO,
     CAIXA_KIND_LABEL_BIBLIOTECA, CAIXA_KIND_LABEL_BINARIO, CAIXA_KIND_LABEL_SERVICO,
