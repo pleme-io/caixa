@@ -43,17 +43,43 @@ pub fn caixa_into_cr(caixa: &Caixa, source: CaixaSource) -> CaixaCr {
         versao: caixa.versao().to_owned(),
         // Route the outer-`Caixa` `:kind` closed-set discriminator
         // through the typed [`caixa_core::Caixa::kind`] `CaixaKind`-return
-        // accessor so the `CaixaSpec.kind` `String`-carry projection —
-        // the axis every `caixa_from_cr` reverse-lookup `match` arm keys
-        // off — routes through one typed dispatch. Any future extension
-        // of the accessor's semantics (a canonicalizing rename overlay,
-        // a per-`Acao` roll-out gate the M4 CR materializer resolves at
-        // admission time, a promotion of `CaixaKind` through a
-        // discriminant-carrying newtype) reaches this emit site by
-        // construction. Peer of the sibling per-`Caixa` `:nome` /
-        // `:versao` converges above on the same axis family; closes the
-        // per-`Caixa` `:kind` universal-axis raw-field-access site.
-        kind: format!("{:?}", caixa.kind()),
+        // accessor + its lifted [`caixa_core::CaixaKind::wire_name`]
+        // PascalCase-wire byte-string projector, rather than the
+        // pre-lift `format!("{:?}", caixa.kind())` `Debug`-format
+        // detour. Two axes converge on one typed dispatch: the
+        // `Caixa::kind` accessor names the substrate primitive's
+        // typed discriminator (any future rebrand of the accessor's
+        // semantics — a canonicalizing rename overlay, a per-`Acao`
+        // roll-out gate the M4 CR materializer resolves at admission
+        // time, a promotion of `CaixaKind` through a discriminant-
+        // carrying newtype — reaches this emit site by construction);
+        // the `CaixaKind::wire_name` projector names the substrate
+        // primitive's canonical PascalCase wire byte-shape (the
+        // paired [`caixa_core::render::CAIXA_KIND_WIRE_*`] lifted
+        // consts pin each per-arm byte-string, and the load-bearing
+        // [`caixa_core::kind::tests::
+        // caixa_kind_wire_name_matches_serialize_wire_byte_string`]
+        // pin makes the byte-agreement with the un-`rename`d
+        // `Serialize` derive an at-caixa-core-build-time invariant).
+        //
+        // Prior to this lift the emit-site reached for `format!("{:?}",
+        // kind)`, which coupled the K8s-CR wire byte-shape to
+        // `Debug`'s stability guarantee — which Rust's own conventions
+        // give as *no guarantee at all*: a `#[derive(Debug)]` swap for
+        // a hand-rolled `impl Debug` that pretty-prints the variant
+        // with extra context is a permitted mechanical edit whose
+        // apply-time symptom would be every downstream K8s Caixa CR
+        // carrying a stale wire byte-string that the paired
+        // [`caixa_from_cr`] reverse-parser silently fell back to
+        // `CaixaKind::Biblioteca` on, far from the derive-attribute
+        // commit that caused the drift. Routing through the typed
+        // [`CaixaKind::wire_name`] accessor closes the drift footgun
+        // by construction — the emit-side and the paired reverse-
+        // parse-side [`caixa_from_cr`]'s [`CaixaKind::from_wire`] both
+        // walk the same substrate-lifted six-arm accept-set. Peer of
+        // the sibling per-`Caixa` `:nome` / `:versao` / `:deps`
+        // converges above on the same axis family.
+        kind: caixa.kind().wire_name().to_owned(),
         source,
         reconcile: Some(ReconcilePolicy {
             interval_seconds: Some(300),
@@ -89,15 +115,31 @@ pub fn caixa_from_cr(cr: &CaixaCr) -> Caixa {
     Caixa {
         nome: cr.spec.nome.clone(),
         versao: cr.spec.versao.clone(),
-        kind: match cr.spec.kind.as_str() {
-            "Biblioteca" => CaixaKind::Biblioteca,
-            "Binario" => CaixaKind::Binario,
-            "Servico" => CaixaKind::Servico,
-            "Supervisor" => CaixaKind::Supervisor,
-            "Aplicacao" => CaixaKind::Aplicacao,
-            "Acao" => CaixaKind::Acao,
-            _ => CaixaKind::Biblioteca,
-        },
+        // Route the reverse-parse of the CR-carried `:kind` wire
+        // byte-string through the lifted [`CaixaKind::from_wire`]
+        // typed dispatch rather than the pre-lift six-arm hand-rolled
+        // `match cr.spec.kind.as_str() { "Biblioteca" => …, …, _ =>
+        // CaixaKind::Biblioteca }` cascade — the paired reverse-half of
+        // the [`caixa_into_cr`] `CaixaKind::wire_name` forward-emit
+        // converge, so both halves of the K8s-CR `:kind`-wire round-trip
+        // now walk the same substrate-lifted six-arm accept-set the
+        // [`caixa_core::render::CAIXA_KIND_WIRE_*`] const family pins.
+        // A future arm addition to [`CaixaKind`] (a virtual-actor `Actor`
+        // arm the `theory/ABSORPTION-ROADMAP.md` M5 Orleans-inspired
+        // kind reaches through, a per-cluster kind-alias table the M4
+        // CR materializer resolves per-CR) reaches both halves through
+        // exactly one caixa-core edit rather than a coordinated rewrite
+        // across every hand-rolled `match cr.spec.kind.as_str()` at
+        // every downstream consumer site. The `.unwrap_or(CaixaKind::
+        // Biblioteca)` fallback is preserved verbatim from the pre-lift
+        // cascade's terminal `_ => …` arm — every wire byte-string the
+        // forward emit would ever land here round-trips cleanly, so
+        // the fallback fires only on the operator-visible-drift path
+        // (a stale CR carrying a wire byte-string the current caixa-
+        // core `wire_name` accept-set no longer recognizes) that the
+        // pre-lift cascade also silently defaulted; behavioral swap is
+        // byte-equal on today's call site.
+        kind: CaixaKind::from_wire(cr.spec.kind.as_str()).unwrap_or(CaixaKind::Biblioteca),
         edicao: None,
         descricao: None,
         repositorio: Some(cr.spec.source.repo.clone()),
@@ -444,28 +486,37 @@ mod tests {
 
     /// Pin that the outer-`Caixa` `:kind` closed-set discriminator
     /// projection in [`caixa_into_cr`] — the `CaixaSpec.kind` `String`-
-    /// carry emit-site every `caixa_from_cr` reverse `match` arm keys
-    /// off — routes through the typed [`Caixa::kind`] `CaixaKind`-return
-    /// accessor rather than the raw `.kind` field access. Byte-equal
-    /// today (accessor returns `self.kind`); catches any future emit-
-    /// site regression that reintroduces a raw field read on any of the
-    /// six [`CaixaKind`] arms the round-trip `caixa_from_cr` reverse
-    /// lookup consumes. Peer of the sibling
+    /// carry emit-site every `caixa_from_cr` reverse-parse re-projects
+    /// through the paired [`CaixaKind::from_wire`] accessor — routes
+    /// through the typed [`Caixa::kind`] + [`CaixaKind::wire_name`]
+    /// accessor pair rather than the pre-lift `format!("{:?}", …)`
+    /// `Debug`-format detour or a raw `.kind` field read. Byte-equal
+    /// today (the load-bearing
+    /// [`caixa_core::kind::tests::caixa_kind_wire_name_matches_serialize_wire_byte_string`]
+    /// pin makes `wire_name`'s per-arm byte-shape agree with the
+    /// un-`rename`d `Serialize` derive's wire scalar, which coincides
+    /// with the pre-lift `Debug` byte-shape for the six unit variants);
+    /// catches any future emit-site regression that reintroduces a raw
+    /// field read on any of the six [`CaixaKind`] arms, or reroutes
+    /// through `format!("{:?}", …)` (which couples the wire byte-shape
+    /// to `Debug`'s stability guarantee, which Rust's conventions give
+    /// as *no guarantee at all*). Peer of the sibling
     /// `caixa_into_cr_nome_routes_through_caixa_nome_accessor` /
     /// `caixa_into_cr_versao_routes_through_caixa_versao_accessor` pins
     /// on the outer-`Caixa` altitude — same "accessor is the sole read
     /// path across every arm" discipline extended onto the last
-    /// unlifted per-`Caixa` universal-axis raw-field-access site in the
-    /// K8s-CR conversion crate.
+    /// unlifted per-`Caixa` universal-axis raw-field-access site in
+    /// the K8s-CR conversion crate.
     #[test]
     fn caixa_into_cr_kind_routes_through_caixa_kind_accessor() {
         // Sweep every [`CaixaKind`] arm the round-trip reverse lookup
         // consumes — a future silent detour that re-inlined `caixa.kind`
-        // on any arm's format-projected `String` byte-carry would
-        // surface here as a byte-equal miss (the reverse `caixa_from_cr`
-        // `match` arm would silently fall through to the
-        // `_ => CaixaKind::Biblioteca` default arm without the accessor-
-        // routed emit-site the six-arm accept-set requires).
+        // on any arm's `wire_name`-projected `String` byte-carry would
+        // surface here as a byte-equal miss (the reverse
+        // `caixa_from_cr`'s [`CaixaKind::from_wire`] parser would
+        // silently fall through to the `.unwrap_or(CaixaKind::Biblioteca)`
+        // default arm without the accessor-routed emit-site the
+        // six-arm accept-set requires).
         for kind in [
             CaixaKind::Biblioteca,
             CaixaKind::Binario,
@@ -517,12 +568,94 @@ mod tests {
             );
             assert_eq!(
                 cr.spec.kind,
-                format!("{:?}", c.kind()),
+                c.kind().wire_name(),
                 "CaixaSpec.kind emit-site must byte-equal the typed \
-                 `Caixa::kind` accessor's `Debug` projection — a \
-                 regression that re-inlines `caixa.kind` at the emit \
-                 site silently splits the per-arm reverse `caixa_from_cr` \
-                 lookup input from the accessor-routed source of truth"
+                 `Caixa::kind` + `CaixaKind::wire_name` accessor pair's \
+                 projection — a regression that re-inlines `caixa.kind` \
+                 or reroutes through `format!(\"{{:?}}\", …)` at the \
+                 emit site silently splits the per-arm reverse \
+                 `caixa_from_cr` `CaixaKind::from_wire` parser's \
+                 accept-set input from the accessor-routed source of \
+                 truth"
+            );
+        }
+    }
+
+    /// Pin that the K8s-CR `:kind`-wire round-trip through
+    /// [`caixa_into_cr`] + [`caixa_from_cr`] preserves every
+    /// [`CaixaKind`] arm — the emit-side [`CaixaKind::wire_name`]
+    /// projection and the reverse-side [`CaixaKind::from_wire`] parser
+    /// form a total round-trip on the six-arm closed-set discriminator.
+    /// Guards against future arm additions to [`CaixaKind`] whose
+    /// [`CaixaKind::wire_name`] arm lands but whose paired
+    /// [`CaixaKind::from_wire`] arm is forgotten (or vice versa): the
+    /// round-trip on the new arm silently falls through to the
+    /// `.unwrap_or(CaixaKind::Biblioteca)` fallback — a K8s CR that
+    /// declares `:kind Actor` (a hypothetical M5 Orleans-inspired
+    /// virtual-actor arm) then round-trips through `caixa_from_cr` as
+    /// `Biblioteca`, silently binding the CR to the wrong runtime
+    /// contract. Peer of the caixa-core-side
+    /// [`caixa_core::kind::tests::caixa_kind_wire_round_trips_through_from_wire`]
+    /// pin that locks the (wire_name, from_wire) accessor pair on the
+    /// substrate primitive; this pin locks the round-trip across the
+    /// K8s-CR wire boundary the two accessors compose over.
+    #[test]
+    fn caixa_kind_round_trips_through_cr_wire() {
+        for kind in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let c = Caixa {
+                nome: "demo".into(),
+                versao: "0.1.0".into(),
+                kind,
+                edicao: None,
+                descricao: None,
+                repositorio: None,
+                licenca: None,
+                autores: vec![],
+                etiquetas: vec![],
+                deps: vec![],
+                deps_dev: vec![],
+                exe: vec![],
+                bibliotecas: vec![],
+                servicos: vec![],
+                limits: None,
+                behavior: None,
+                upgrade_from: vec![],
+                estrategia: None,
+                max_restarts: None,
+                restart_window: None,
+                children: vec![],
+                membros: vec![],
+                contratos: vec![],
+                politicas: None,
+                placement: None,
+                entrada: None,
+                ci: None,
+            };
+            let cr = caixa_into_cr(
+                &c,
+                CaixaSource {
+                    repo: "github:pleme-io/demo".into(),
+                    git_ref: "v0.1.0".into(),
+                },
+            );
+            let back = caixa_from_cr(&cr);
+            assert_eq!(
+                back.kind(),
+                kind,
+                "K8s-CR `:kind`-wire round-trip through \
+                 caixa_into_cr + caixa_from_cr must preserve \
+                 CaixaKind::{kind:?} — a mismatch means either the \
+                 forward-emit [`CaixaKind::wire_name`] arm-set or the \
+                 reverse-parse [`CaixaKind::from_wire`] arm-set drifted \
+                 out of lockstep, silently binding the CR to \
+                 `.unwrap_or(CaixaKind::Biblioteca)` on the drifted arm"
             );
         }
     }
