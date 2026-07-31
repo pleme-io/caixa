@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "503be6d4dae1a42706bb138c4a906c317a077c73552f0baf3adbca5b37ccdc97",
+  "cargo_lock_sha256": "c3ea4d3d95d164a2bc69639c25e862ec04e860a716433b6a8c44721c254b8c6b",
   "manifest_sha256": {
     "Cargo.toml": "82e74a52dd20b849a162b41e0535f63e8f72ea50ebdfe12f983e3bee166486b5",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
@@ -910,7 +910,7 @@
           },
           {
             "name": "canteiro_types",
-            "package_key": "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8",
+            "package_key": "canteiro-types-0.1.152-96a811e51a7ea58f0e8c0eb29d0916f5d5cfa364",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1074,7 +1074,7 @@
         "runtime_dependencies": [
           {
             "name": "canteiro_types",
-            "package_key": "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8",
+            "package_key": "canteiro-types-0.1.152-96a811e51a7ea58f0e8c0eb29d0916f5d5cfa364",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2811,7 +2811,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8": {
+      "canteiro-types-0.1.152-96a811e51a7ea58f0e8c0eb29d0916f5d5cfa364": {
         "runtime_dependencies": [
           {
             "name": "serde",
@@ -2827,7 +2827,7 @@
           },
           {
             "name": "shigoto_dag",
-            "package_key": "shigoto-dag-0.1.10",
+            "package_key": "shigoto-dag-0.1.12",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2837,7 +2837,7 @@
           },
           {
             "name": "shigoto_types",
-            "package_key": "shigoto-types-0.1.10",
+            "package_key": "shigoto-types-0.1.12",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -10461,7 +10461,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "shigoto-dag-0.1.10": {
+      "shigoto-dag-0.1.12": {
         "runtime_dependencies": [
           {
             "name": "petgraph",
@@ -10487,7 +10487,7 @@
           },
           {
             "name": "shigoto_types",
-            "package_key": "shigoto-types-0.1.10",
+            "package_key": "shigoto-types-0.1.12",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -10509,7 +10509,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "shigoto-types-0.1.10": {
+      "shigoto-types-0.1.12": {
         "runtime_dependencies": [
           {
             "name": "async_trait",
@@ -17513,7 +17513,7 @@
         "path": "src/lib.rs"
       }
     },
-    "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8": {
+    "canteiro-types-0.1.152-96a811e51a7ea58f0e8c0eb29d0916f5d5cfa364": {
       "edition": "2024"
     },
     "cc-1.2.62": {
@@ -18272,10 +18272,10 @@
     "sharded-slab-0.1.7": {
       "edition": "2018"
     },
-    "shigoto-dag-0.1.10": {
+    "shigoto-dag-0.1.12": {
       "edition": "2024"
     },
-    "shigoto-types-0.1.10": {
+    "shigoto-types-0.1.12": {
       "edition": "2024"
     },
     "shikumi-0.1.2-61e5f97ad2f61205599b8679a4ff7b2075506003": {
@@ -18599,7 +18599,7 @@
     }
   },
   "git_nar_sha256": {
-    "canteiro-types-0.1.152-8e60d93de33b4fba1c8b1f298a850b9bf4c381d8": "sha256-cujtP0rcAXcmkSMgb/xobzT6ykNduIM2AbrIDBEwUQ4=",
+    "canteiro-types-0.1.152-96a811e51a7ea58f0e8c0eb29d0916f5d5cfa364": "sha256-yFcFoZUJNl9EfAIwHfDrXQTvbDIBhtyBLd/iUtCjzXU=",
     "gen-macros-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": "sha256-KkZmHxQBwz3Q4XNaJVLdl6TLLPiR+erMbGOrrvPRE0A=",
     "gen-platform-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": "sha256-KkZmHxQBwz3Q4XNaJVLdl6TLLPiR+erMbGOrrvPRE0A=",
     "gen-types-0.1.9-6d82c9d3885c781e923ec46330d05d7eca469a3b": "sha256-KkZmHxQBwz3Q4XNaJVLdl6TLLPiR+erMbGOrrvPRE0A=",
