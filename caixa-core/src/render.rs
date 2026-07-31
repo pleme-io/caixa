@@ -7692,6 +7692,87 @@ pub const CAIXA_KIND_LABEL_APLICACAO: &str = "aplicacao";
 /// path-existence check the way `:bibliotecas`/`:exe`/`:servicos` are.
 pub const CAIXA_KIND_LABEL_ACAO: &str = "acao";
 
+/// Canonical PascalCase wire byte-string the [`crate::CaixaKind::Biblioteca`]
+/// arm serializes as under the un-`rename`d `#[derive(Serialize)]` on
+/// [`crate::CaixaKind`] — the exact byte-shape every wire surface that
+/// carries a Caixa's `:kind` outside the caixa-core boundary consumes
+/// (the [`caixa_crd::caixa_cr::CaixaSpec`] `kind:` field the K8s
+/// `Caixa` CR persists between apply and reconcile passes, the
+/// tatara-lisp author-surface `:kind Biblioteca` symbol the sexp parser
+/// binds into the typed [`crate::CaixaKind`] enum, the future M4
+/// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-CR admission-
+/// webhook wire binding).
+///
+/// Peer of the sibling [`CAIXA_KIND_LABEL_BIBLIOTECA`] lowercase-Portuguese
+/// diagnostic-form const on the sibling axis — the two byte-strings are
+/// *intentionally distinct* by design (see the two-axis-split docstring
+/// on [`crate::CaixaKind::as_str`] + the load-bearing pin
+/// [`crate::kind::tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+/// on the split). This wire const names the substrate's PascalCase
+/// wire form; the sibling `_LABEL_*` const names the substrate's
+/// lowercase-Portuguese diagnostic form. Six-arm parallel of the
+/// same closed [`crate::CaixaKind`] enum surface — same "one canonical
+/// byte-string per arm, per axis, next to the axis" discipline every
+/// peer typed-enum const family carries.
+///
+/// Prior to this lift, every consumer that needed the PascalCase wire
+/// byte-shape reached for one of two fragile paths: `format!("{:?}",
+/// kind)` (couples the wire format to `Debug`'s stability guarantee,
+/// which is *no guarantee at all* by Rust's own conventions — a
+/// `#[derive(Debug)]` swap for a hand-rolled `impl Debug` that pretty-
+/// prints the variant with extra context is a permitted mechanical
+/// edit whose apply-time symptom would be every downstream K8s CR
+/// carrying a stale wire byte-string), or `serde_json::to_string(&k)`
+/// then string-trim of the outer quotes (introduces an allocation +
+/// error-handling path for a byte-shape the compiler knows verbatim at
+/// build time). Lifting the six arms onto peer consts routes the
+/// substrate's wire byte-shape through one canonical declaration per
+/// arm the paired [`crate::CaixaKind::wire_name`] +
+/// [`crate::CaixaKind::from_wire`] typed dispatch consumers key off.
+pub const CAIXA_KIND_WIRE_BIBLIOTECA: &str = "Biblioteca";
+
+/// Canonical PascalCase wire byte-string the [`crate::CaixaKind::Binario`]
+/// arm serializes as under the un-`rename`d `#[derive(Serialize)]` on
+/// [`crate::CaixaKind`]. Peer of [`CAIXA_KIND_WIRE_BIBLIOTECA`] on the
+/// same closed [`crate::CaixaKind`] enum surface; see the sibling
+/// [`CAIXA_KIND_WIRE_BIBLIOTECA`] docstring for the shared lift
+/// rationale.
+pub const CAIXA_KIND_WIRE_BINARIO: &str = "Binario";
+
+/// Canonical PascalCase wire byte-string the [`crate::CaixaKind::Servico`]
+/// arm serializes as under the un-`rename`d `#[derive(Serialize)]` on
+/// [`crate::CaixaKind`]. Peer of [`CAIXA_KIND_WIRE_BIBLIOTECA`] on the
+/// same closed [`crate::CaixaKind`] enum surface; see the sibling
+/// [`CAIXA_KIND_WIRE_BIBLIOTECA`] docstring for the shared lift
+/// rationale.
+pub const CAIXA_KIND_WIRE_SERVICO: &str = "Servico";
+
+/// Canonical PascalCase wire byte-string the [`crate::CaixaKind::Supervisor`]
+/// arm serializes as under the un-`rename`d `#[derive(Serialize)]` on
+/// [`crate::CaixaKind`]. Peer of [`CAIXA_KIND_WIRE_BIBLIOTECA`] on the
+/// same closed [`crate::CaixaKind`] enum surface; see the sibling
+/// [`CAIXA_KIND_WIRE_BIBLIOTECA`] docstring for the shared lift
+/// rationale.
+pub const CAIXA_KIND_WIRE_SUPERVISOR: &str = "Supervisor";
+
+/// Canonical PascalCase wire byte-string the [`crate::CaixaKind::Aplicacao`]
+/// arm serializes as under the un-`rename`d `#[derive(Serialize)]` on
+/// [`crate::CaixaKind`]. Peer of [`CAIXA_KIND_WIRE_BIBLIOTECA`] on the
+/// same closed [`crate::CaixaKind`] enum surface; see the sibling
+/// [`CAIXA_KIND_WIRE_BIBLIOTECA`] docstring for the shared lift
+/// rationale.
+pub const CAIXA_KIND_WIRE_APLICACAO: &str = "Aplicacao";
+
+/// Canonical PascalCase wire byte-string the [`crate::CaixaKind::Acao`]
+/// arm serializes as under the un-`rename`d `#[derive(Serialize)]` on
+/// [`crate::CaixaKind`]. Sixth peer of [`CAIXA_KIND_WIRE_BIBLIOTECA`] /
+/// [`CAIXA_KIND_WIRE_BINARIO`] / [`CAIXA_KIND_WIRE_SERVICO`] /
+/// [`CAIXA_KIND_WIRE_SUPERVISOR`] / [`CAIXA_KIND_WIRE_APLICACAO`] on
+/// the same closed [`crate::CaixaKind`] enum surface; see the sibling
+/// [`CAIXA_KIND_WIRE_BIBLIOTECA`] docstring for the shared lift
+/// rationale.
+pub const CAIXA_KIND_WIRE_ACAO: &str = "Acao";
+
 /// Canonical caixa-root-relative directory name housing every
 /// [`crate::CaixaKind::Biblioteca`] caixa's `lib/<nome>.lisp` entry
 /// (and every `:bibliotecas ("lib/foo.lisp" …)` per-entry source

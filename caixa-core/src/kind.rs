@@ -88,6 +88,145 @@ impl CaixaKind {
         matches!(self, Self::Acao)
     }
 
+    /// Substrate-canonical per-[`CaixaKind`] PascalCase wire byte-string
+    /// every consumer that emits the Caixa's `:kind` axis onto a wire
+    /// surface outside the caixa-core boundary keys off — returns the
+    /// per-arm byte-string the paired
+    /// [`crate::render::CAIXA_KIND_WIRE_BIBLIOTECA`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_BINARIO`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_SERVICO`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_SUPERVISOR`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_APLICACAO`] /
+    /// [`crate::render::CAIXA_KIND_WIRE_ACAO`] lifted consts pin, and
+    /// [`Self::from_wire`] parses back into the typed [`CaixaKind`]
+    /// discriminator.
+    ///
+    /// Byte-identical to the un-`rename`d `Serialize` derive's per-arm
+    /// wire scalar (`serde_json::to_string(&kind).unwrap()` unquoted),
+    /// with the pin test
+    /// [`tests::caixa_kind_wire_name_matches_serialize_wire_byte_string`]
+    /// making the two paths' byte-agreement load-bearing so a future
+    /// `#[serde(rename_all = "…")]` attribute drift at the derive
+    /// surface trips at caixa-core build time rather than silently
+    /// splitting the wire byte-shape from every consumer that reaches
+    /// for this typed dispatch. The paired [`Self::from_wire`] returns
+    /// `Some` on every string [`Self::wire_name`] emits and `None` on
+    /// every other input — the round-trip pin
+    /// [`tests::caixa_kind_wire_round_trips_through_from_wire`] locks
+    /// the two paths' accept-sets together by construction.
+    ///
+    /// Distinct axis from the sibling [`Self::as_str`] — which returns
+    /// the lowercase Portuguese diagnostic byte-string (`"biblioteca"`
+    /// / `"binario"` / …) every consumer that formats the caixa's
+    /// typed shape as user-facing text lands on — by design, not by
+    /// drift: the two-axis split the load-bearing pin
+    /// [`tests::caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+    /// already encodes. This wire accessor closes the third axis on
+    /// the [`CaixaKind`] closed-set discriminator (wire byte-string),
+    /// peer of [`Self::as_str`] (human-readable byte-string) and the
+    /// [`std::fmt::Display`] impl (routed through [`Self::as_str`]).
+    ///
+    /// Prior to this lift, the six [`caixa-crd::conversion`] +
+    /// [`caixa-feira`] + future-M4-CR-materializer consumers that
+    /// needed the PascalCase wire byte-shape reached for one of two
+    /// fragile paths: `format!("{:?}", kind)` (couples the wire format
+    /// to `Debug`'s stability guarantee, which Rust's own conventions
+    /// give as *no guarantee at all* — a `#[derive(Debug)]` swap for
+    /// a hand-rolled `impl Debug` that pretty-prints the variant with
+    /// extra context is a permitted mechanical edit whose apply-time
+    /// symptom would be every downstream K8s CR carrying a stale wire
+    /// byte-string), or `serde_json::to_string(&kind)` + string-trim of
+    /// the outer quotes (introduces an allocation + error-handling
+    /// path for a byte-shape the compiler knows verbatim at build
+    /// time). Lifting the resolver to a typed method on the substrate
+    /// primitive means every downstream consumer of the Caixa's
+    /// `:kind` wire surface reaches for exactly one typed dispatch —
+    /// the resolver's accept-set migrates as a unit on any future arm
+    /// addition (a future virtual-actor `Actor` arm the
+    /// `theory/ABSORPTION-ROADMAP.md` M5 Orleans-inspired kind reaches
+    /// through, a per-cluster kind-alias table the M4 CR materializer
+    /// resolves per-CR).
+    #[must_use]
+    pub const fn wire_name(self) -> &'static str {
+        match self {
+            Self::Biblioteca => crate::render::CAIXA_KIND_WIRE_BIBLIOTECA,
+            Self::Binario => crate::render::CAIXA_KIND_WIRE_BINARIO,
+            Self::Servico => crate::render::CAIXA_KIND_WIRE_SERVICO,
+            Self::Supervisor => crate::render::CAIXA_KIND_WIRE_SUPERVISOR,
+            Self::Aplicacao => crate::render::CAIXA_KIND_WIRE_APLICACAO,
+            Self::Acao => crate::render::CAIXA_KIND_WIRE_ACAO,
+        }
+    }
+
+    /// Substrate-canonical inverse of [`Self::wire_name`] — parses a
+    /// PascalCase wire byte-string into the typed [`CaixaKind`]
+    /// discriminator, returning `None` on any string not in the six-arm
+    /// accept-set the sibling [`Self::wire_name`] emits.
+    ///
+    /// The pair `(wire_name, from_wire)` forms a total round-trip
+    /// discipline on the six [`CaixaKind`] arms — every
+    /// [`Self::wire_name`] output parses back through this accessor
+    /// (pinned load-bearing by the sibling
+    /// [`tests::caixa_kind_wire_round_trips_through_from_wire`] test),
+    /// so consumers that emit a wire byte-string through
+    /// [`Self::wire_name`] and later re-parse it here (the K8s
+    /// [`caixa_crd`] `CaixaSpec.kind` `String`-carry round-trip through
+    /// `caixa_into_cr` + `caixa_from_cr`, the future M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission-time
+    /// wire re-parse, the future `feira` CLI verb that accepts a
+    /// `--kind <Biblioteca|Servico|…>` arg and binds it into the typed
+    /// enum) reach for one typed dispatch on the substrate primitive
+    /// instead of the hand-rolled per-arm `match` cascade every
+    /// pre-lift consumer previously carried verbatim. A future arm
+    /// addition (a virtual-actor `Actor` arm the M5 Orleans-inspired
+    /// kind reaches through) lands one caixa-core edit — the parser's
+    /// arm-set migrates as a unit — rather than a coordinated rewrite
+    /// across every hand-rolled `match cr.spec.kind.as_str()` at every
+    /// downstream consumer site.
+    ///
+    /// Prior to this lift, the sole in-tree consumer of the reverse
+    /// parse — [`caixa_crd::conversion::caixa_from_cr`] — carried a
+    /// six-arm `match cr.spec.kind.as_str() { "Biblioteca" => …,
+    /// "Binario" => …, "Servico" => …, "Supervisor" => …, "Aplicacao"
+    /// => …, "Acao" => …, _ => CaixaKind::Biblioteca }` cascade that
+    /// hard-coded every wire byte-string as a per-arm string literal
+    /// with no compile-time link back to the typed
+    /// [`crate::CaixaKind`] enum. A future variant rename or a serde
+    /// attribute drift on the derive would silently split the wire
+    /// format the forward `caixa_into_cr` emits from the reverse
+    /// parser's arm-set — the CR would round-trip through JSON cleanly
+    /// but land on the `_ => CaixaKind::Biblioteca` silent fallback
+    /// on every non-Biblioteca variant, far from the derive-attribute
+    /// commit that caused the drift. Lifting the resolver to a typed
+    /// method on the substrate primitive closes the drift footgun by
+    /// construction: the parser's accept-set is the same set the
+    /// [`Self::wire_name`] emitter walks, so both halves of the
+    /// round-trip migrate through one caixa-core edit on any future
+    /// arm addition.
+    ///
+    /// Returns `Option<CaixaKind>` rather than `Result<CaixaKind, _>`
+    /// because the existing in-tree consumer [`caixa_from_cr`] carries
+    /// a hard-coded silent fallback (`_ => CaixaKind::Biblioteca`) —
+    /// the fallback's shape is preserved verbatim by the caller's
+    /// `.unwrap_or(CaixaKind::Biblioteca)` on the return value, so
+    /// this lift is a byte-equal behavioral swap on today's call site
+    /// (the CR round-trip is invariant), and future callers that want
+    /// a typed error (a future `feira --kind …` arg-parse that
+    /// surfaces `unknown kind: <arg>` at the CLI) can build one on top
+    /// without disturbing the existing consumer's contract.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            crate::render::CAIXA_KIND_WIRE_BIBLIOTECA => Some(Self::Biblioteca),
+            crate::render::CAIXA_KIND_WIRE_BINARIO => Some(Self::Binario),
+            crate::render::CAIXA_KIND_WIRE_SERVICO => Some(Self::Servico),
+            crate::render::CAIXA_KIND_WIRE_SUPERVISOR => Some(Self::Supervisor),
+            crate::render::CAIXA_KIND_WIRE_APLICACAO => Some(Self::Aplicacao),
+            crate::render::CAIXA_KIND_WIRE_ACAO => Some(Self::Acao),
+            _ => None,
+        }
+    }
+
     /// The canonical human-readable name.
     ///
     /// The five arms route through the paired
@@ -501,6 +640,246 @@ mod tests {
         assert!(IS_SUPERVISOR);
         assert!(IS_BINARIO);
         assert!(IS_ACAO);
+    }
+
+    #[test]
+    fn caixa_kind_wire_name_returns_lifted_peer_const() {
+        // Fail-before-pass-after pin: the six [`CaixaKind::wire_name`]
+        // match arms each return one of the paired
+        // [`crate::render::CAIXA_KIND_WIRE_*`] lifted consts, and a
+        // future rebrand touching either endpoint (a per-consumer
+        // disambiguation of the `:kind` vocabulary, a rename lands on
+        // one arm's byte-string without touching the peer axis) would
+        // silently desynchronize the emitter from the paired
+        // [`CaixaKind::from_wire`] parser's accept-set. Pinning the six
+        // arms to the six lifted consts makes any future drift a
+        // caixa-core-build-time failure — peer of the sibling
+        // [`caixa_kind_as_str_returns_lifted_peer_const`] pin on the
+        // human-readable-label axis.
+        for (variant, expected) in [
+            (
+                CaixaKind::Biblioteca,
+                crate::render::CAIXA_KIND_WIRE_BIBLIOTECA,
+            ),
+            (CaixaKind::Binario, crate::render::CAIXA_KIND_WIRE_BINARIO),
+            (CaixaKind::Servico, crate::render::CAIXA_KIND_WIRE_SERVICO),
+            (
+                CaixaKind::Supervisor,
+                crate::render::CAIXA_KIND_WIRE_SUPERVISOR,
+            ),
+            (
+                CaixaKind::Aplicacao,
+                crate::render::CAIXA_KIND_WIRE_APLICACAO,
+            ),
+            (CaixaKind::Acao, crate::render::CAIXA_KIND_WIRE_ACAO),
+        ] {
+            assert_eq!(
+                variant.wire_name(),
+                expected,
+                "CaixaKind::{variant:?}.wire_name() must return the \
+                 lifted CAIXA_KIND_WIRE_* const"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_wire_name_matches_serialize_wire_byte_string() {
+        // Load-bearing pin on the derive-to-const identity: the six
+        // [`CaixaKind::wire_name`] outputs must byte-equal the
+        // un-`rename`d `Serialize` derive's per-arm wire scalar (the
+        // JSON quoted-string with its outer quotes stripped). A future
+        // accidental `#[serde(rename_all = "…")]` attribute drift at
+        // the derive surface would silently split the wire byte-shape
+        // every K8s-CR / tatara-lisp author-surface / future-M4-CR
+        // materializer consumer emits through this typed dispatch from
+        // the shape the un-`rename`d derive projects — the drift's
+        // apply-time symptom (a K8s Caixa CR whose `spec.kind` no
+        // longer round-trips through `caixa_from_cr` because the
+        // reverse [`CaixaKind::from_wire`] parser rejects the new
+        // rename-transformed byte-string) would surface far from the
+        // derive attribute's commit. Pinning the identity here makes
+        // any such drift a caixa-core-build-time failure. Peer of the
+        // sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin — that one keeps `Display` structurally *distinct* from
+        // the wire byte-shape (by design); this one keeps
+        // [`CaixaKind::wire_name`] structurally *aligned* with the
+        // wire byte-shape (by design).
+        for variant in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let json = serde_json::to_string(&variant).unwrap();
+            let unquoted = json
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized CaixaKind is a JSON string");
+            assert_eq!(
+                variant.wire_name(),
+                unquoted,
+                "CaixaKind::{variant:?}.wire_name() must byte-equal the \
+                 un-renamed Serialize derive's wire scalar — a mismatch \
+                 means either the derive attributes drifted or the \
+                 CAIXA_KIND_WIRE_* const family drifted; either way \
+                 downstream K8s-CR round-trip through caixa_from_cr \
+                 silently splits from the accessor-routed source of \
+                 truth"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_wire_round_trips_through_from_wire() {
+        // Total-round-trip pin on the (wire_name, from_wire) pair:
+        // every arm's [`CaixaKind::wire_name`] output must parse back
+        // through [`CaixaKind::from_wire`] to the same variant. Any
+        // future accessor extension that adds a new arm to one side of
+        // the pair without extending the other — a new `CaixaKind`
+        // variant whose `wire_name` arm lands but whose `from_wire`
+        // arm is forgotten, or a rename that touches `wire_name`'s
+        // per-arm const without threading through `from_wire`'s peer
+        // arm — trips here at caixa-core build time rather than
+        // surfacing as a downstream K8s-CR round-trip miss (a
+        // `caixa_into_cr` emit that lands a `spec.kind` byte-string
+        // the paired `caixa_from_cr`'s `CaixaKind::from_wire` cannot
+        // parse, silently falling through to the caller's
+        // `.unwrap_or(CaixaKind::Biblioteca)` fallback).
+        for variant in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            let wire = variant.wire_name();
+            let parsed = CaixaKind::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "CaixaKind::from_wire({wire:?}) must accept every \
+                     CaixaKind::wire_name output — got None for the \
+                     wire byte-string of {variant:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "CaixaKind::from_wire(CaixaKind::{variant:?}.wire_name()) \
+                 must return CaixaKind::{variant:?} — the (wire_name, \
+                 from_wire) pair must form a total round-trip on the \
+                 closed six-arm CaixaKind arm-set"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_from_wire_rejects_unknown_byte_strings() {
+        // Rejection pin on the parser's accept-set: any string outside
+        // the six-arm [`CaixaKind::wire_name`] output set must return
+        // `None`. A future accidental widening of the accept-set (a
+        // case-insensitive match that accepts `"biblioteca"` on the
+        // wire axis, a hand-rolled Levenshtein-forgiving arm-lookup
+        // that admits `"Biblioteka"` typos) would silently drift the
+        // parser's accept-set from the emitter's — a K8s CR carrying
+        // a malformed `spec.kind` byte-string that today's parser
+        // rejects (letting the caller's `.unwrap_or(Biblioteca)`
+        // fallback fire on the operator-visible-drift path) would then
+        // land on a plausibly-wrong typed arm the caller does not
+        // route through the fallback, silently binding the CR to the
+        // wrong runtime contract. Also rejects the sibling
+        // lowercase-Portuguese diagnostic-form strings (`"biblioteca"`
+        // / `"servico"`), which are the *human-readable* form the
+        // [`CaixaKind::as_str`] axis emits — the two-axis split
+        // documented on the sibling
+        // [`caixa_kind_display_matches_as_str_and_not_serialize_wire`]
+        // pin explicitly forbids accepting one axis's byte-shapes as
+        // parseable on the other axis.
+        for bad in [
+            "",
+            "biblioteca",
+            "servico",
+            "aplicacao",
+            "ACao",
+            "unknown",
+            "actor",
+            "Biblioteka",
+        ] {
+            assert!(
+                CaixaKind::from_wire(bad).is_none(),
+                "CaixaKind::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the six CaixaKind::wire_name \
+                 outputs; a widening would silently split the parser's \
+                 accept-set from the emitter's"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_wire_name_is_const_fn() {
+        // Const-context pin: [`CaixaKind::wire_name`] must remain
+        // `const fn` (its match arms return `pub const` byte-strings,
+        // so no non-const operation exists on the resolution path).
+        // Downstream consumers reaching for the accessor from a
+        // `const` context (a future substrate-wide const-fold-driven
+        // audit table that materializes every kind's wire byte-string
+        // at build time, a `const` gate on a per-arm CR-schema
+        // registration) rely on the const-ness. A future accidental
+        // downgrade to non-`const` (an added runtime helper reachable
+        // only from a non-`const` context, a manual hand-rolled `impl`
+        // that shadows this method) trips at caixa-core build time
+        // rather than surfacing as a downstream `const`-context
+        // regression far from the accessor declaration. Peer of the
+        // sibling [`caixa_kind_is_variant_predicates_are_const_fn`]
+        // pin on the [`gen_platform::IsVariant`] derive's per-arm
+        // predicates.
+        const BIBLIOTECA_WIRE: &str = CaixaKind::Biblioteca.wire_name();
+        const BINARIO_WIRE: &str = CaixaKind::Binario.wire_name();
+        const SERVICO_WIRE: &str = CaixaKind::Servico.wire_name();
+        const SUPERVISOR_WIRE: &str = CaixaKind::Supervisor.wire_name();
+        const APLICACAO_WIRE: &str = CaixaKind::Aplicacao.wire_name();
+        const ACAO_WIRE: &str = CaixaKind::Acao.wire_name();
+        assert_eq!(BIBLIOTECA_WIRE, "Biblioteca");
+        assert_eq!(BINARIO_WIRE, "Binario");
+        assert_eq!(SERVICO_WIRE, "Servico");
+        assert_eq!(SUPERVISOR_WIRE, "Supervisor");
+        assert_eq!(APLICACAO_WIRE, "Aplicacao");
+        assert_eq!(ACAO_WIRE, "Acao");
+    }
+
+    #[test]
+    fn caixa_kind_wire_consts_are_pairwise_distinct() {
+        // Distinctness pin: the six [`crate::render::CAIXA_KIND_WIRE_*`]
+        // consts must be pairwise distinct — an accidental copy-paste
+        // flip that reroutes one arm's byte-string to also match
+        // another silently collapses two per-kind wire arms onto one,
+        // so a downstream K8s CR carrying the collapsed byte-string
+        // round-trips through [`CaixaKind::from_wire`] to whichever
+        // arm the parser's match cascade lands on first (the collapse
+        // makes the outcome match-arm-ordering-dependent). Peer of the
+        // sibling [`caixa_kind_label_consts_are_pairwise_distinct`]
+        // pin on the human-readable-label axis.
+        let all = [
+            crate::render::CAIXA_KIND_WIRE_BIBLIOTECA,
+            crate::render::CAIXA_KIND_WIRE_BINARIO,
+            crate::render::CAIXA_KIND_WIRE_SERVICO,
+            crate::render::CAIXA_KIND_WIRE_SUPERVISOR,
+            crate::render::CAIXA_KIND_WIRE_APLICACAO,
+            crate::render::CAIXA_KIND_WIRE_ACAO,
+        ];
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "CAIXA_KIND_WIRE_* consts must be pairwise \
+                         distinct — found duplicate byte-string {a:?} \
+                         at indices {i} and {j}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
