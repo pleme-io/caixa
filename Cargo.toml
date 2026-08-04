@@ -75,7 +75,7 @@ ropey = "1"
 # lib: it exact-pins and re-exports its own proc-macros as `DeriveTataraDomain`
 # / `DeriveKeywordSexp`, so naming `tatara-lisp-derive` here would let the
 # lib↔derive pair drift apart (the split-brain the 0.3.x consolidation sealed).
-tatara-lisp = "0.3.3"
+tatara-lisp = "0.3.26"
 # Remaining pleme-io git deps. Consumers outside pleme-io drive the Nix flake,
 # which pins these via inputs.
 tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
