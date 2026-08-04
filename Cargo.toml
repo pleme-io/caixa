@@ -82,12 +82,14 @@ ropey = "1"
 tatara-lisp = "0.3.26"
 # Remaining pleme-io git deps. Consumers outside pleme-io drive the Nix flake,
 # which pins these via inputs.
-tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a", version = "0.1" }
+# tatara-process not on crates.io yet — optional, off by default.
+tatara-process = { version = "0.2", optional = true }
 caixa-tatara = { path = "caixa-tatara", version = "0.1.0" }
-iac-forge = { git = "https://github.com/pleme-io/iac-forge", version = "0.1" }
-gen-platform = { git = "https://github.com/pleme-io/gen", version = "0.1" }
-gen-types = { git = "https://github.com/pleme-io/gen", version = "0.1" }
-canteiro-types = { git = "https://github.com/pleme-io/sui", package = "canteiro-types", version = "0.1" }
+# iac-forge not on crates.io yet — optional, off by default.
+iac-forge = { version = "0.1", optional = true }
+gen-platform = "0.1"
+gen-types = "0.1"
+canteiro-types = "0.1"
 
 pretty_assertions = "1"
 tempfile = "3"
