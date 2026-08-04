@@ -26,7 +26,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.89.0"
 license = "MIT"
@@ -39,24 +39,24 @@ keywords = ["caixa", "tatara-lisp", "pleme-io", "helm", "packaging"]
 
 [workspace.dependencies]
 # Workspace-internal crates (path deps).
-caixa-core = { path = "caixa-core", version = "0.1.2" }
-caixa-lacre = { path = "caixa-lacre", version = "0.1.2" }
-caixa-ast = { path = "caixa-ast", version = "0.1.2" }
-caixa-theme = { path = "caixa-theme", version = "0.1.2" }
-caixa-fmt = { path = "caixa-fmt", version = "0.1.2" }
-caixa-lint = { path = "caixa-lint", version = "0.1.2" }
-caixa-resolver = { path = "caixa-resolver", version = "0.1.2" }
-caixa-teia = { path = "caixa-teia", version = "0.1.2" }
-caixa-teia-forge = { path = "caixa-teia-forge", version = "0.1.2" }
-caixa-provedor = { path = "caixa-provedor", version = "0.1.2" }
-caixa-flake = { path = "caixa-flake", version = "0.1.2" }
-caixa-crd = { path = "caixa-crd", version = "0.1.2" }
-caixa-pangea = { path = "caixa-pangea", version = "0.1.2" }
-caixa-arch = { path = "caixa-arch", version = "0.1.2" }
-caixa-helm = { path = "caixa-helm", version = "0.1.2" }
-caixa-flux = { path = "caixa-flux", version = "0.1.2" }
-caixa-mesh = { path = "caixa-mesh", version = "0.1.2" }
-caixa-actions = { path = "caixa-actions", version = "0.1.2" }
+caixa-core = { path = "caixa-core", version = "0.1.3" }
+caixa-lacre = { path = "caixa-lacre", version = "0.1.3" }
+caixa-ast = { path = "caixa-ast", version = "0.1.3" }
+caixa-theme = { path = "caixa-theme", version = "0.1.3" }
+caixa-fmt = { path = "caixa-fmt", version = "0.1.3" }
+caixa-lint = { path = "caixa-lint", version = "0.1.3" }
+caixa-resolver = { path = "caixa-resolver", version = "0.1.3" }
+caixa-teia = { path = "caixa-teia", version = "0.1.3" }
+caixa-teia-forge = { path = "caixa-teia-forge", version = "0.1.3" }
+caixa-provedor = { path = "caixa-provedor", version = "0.1.3" }
+caixa-flake = { path = "caixa-flake", version = "0.1.3" }
+caixa-crd = { path = "caixa-crd", version = "0.1.3" }
+caixa-pangea = { path = "caixa-pangea", version = "0.1.3" }
+caixa-arch = { path = "caixa-arch", version = "0.1.3" }
+caixa-helm = { path = "caixa-helm", version = "0.1.3" }
+caixa-flux = { path = "caixa-flux", version = "0.1.3" }
+caixa-mesh = { path = "caixa-mesh", version = "0.1.3" }
+caixa-actions = { path = "caixa-actions", version = "0.1.3" }
 
 # Third-party.
 serde = { version = "1", features = ["derive"] }
@@ -108,7 +108,7 @@ tatara-lisp = "0.3.26"
 # nothing about what is built — it only stops the resolver wandering into that
 # inconsistency. Unpin when tatara's own versions agree again.
 tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a", version = "0.2" }
-caixa-tatara = { path = "caixa-tatara", version = "0.1.2" }
+caixa-tatara = { path = "caixa-tatara", version = "0.1.3" }
 iac-forge = { git = "https://github.com/pleme-io/iac-forge", version = "0.1" }
 gen-platform = "0.1"
 gen-types = "0.1"
