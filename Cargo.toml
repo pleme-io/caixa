@@ -80,36 +80,26 @@ ropey = "1"
 # / `DeriveKeywordSexp`, so naming `tatara-lisp-derive` here would let the
 # lib↔derive pair drift apart (the split-brain the 0.3.x consolidation sealed).
 tatara-lisp = "0.3.26"
-# Remaining pleme-io git deps. Consumers outside pleme-io drive the Nix flake,
-# which pins these via inputs.
+# tatara-process is the ONE remaining git dep, and its rev pin is load-bearing
+# rather than cautious: the registry's tatara-process is 0.2.157 while this
+# workspace resolves the pinned 0.2.4, and the two generate DIFFERENT derive
+# output — moving to the registry loses `UnknownConditionKind`,
+# `UnknownCalmClassification` and ~10 more from caixa's own modules. That is a
+# real version upgrade to sequence on its own, not a dep swap, so it is left
+# pinned deliberately. Measured 2026-08-04.
 #
-# These two keep the git+version form because NEITHER IS ON crates.io — both
-# 404 as of 2026-08-04. `optional = true` was tried as a way to declare that
-# and is not one, in two separate ways:
-#
-#   1. `optional` is REJECTED on a workspace dependency, so the manifest
-#      stopped parsing at all. `cargo metadata` fails → `gen build` fails →
-#      a HARD EVAL FAILURE for every nix consumer of caixa, which is how this
-#      was found (a `darwinConfigurations.cid.system` build, not a caixa one).
-#   2. Nothing was optional about them anyway: six members take
-#      `iac-forge = { workspace = true }` and two take `tatara-process` the
-#      same way, all unconditionally.
-#
-# The `version` beside `git` is what keeps a future registry release honest —
-# cargo resolves from git locally and emits the registry version on release.
-# So caixa's own release stays blocked until these two land on crates.io.
-# That is a real constraint to carry openly, not one to encode as a manifest
-# that does not parse.
-# The rev pin is load-bearing, not caution: tatara's main has moved to a
-# `tatara-process` that requires `tatara-lisp ^0.3` while the same workspace
-# publishes 0.2.x, so resolving unpinned fails outright with "failed to select
-# a version for the requirement `tatara-lisp = ^0.3`". This rev is the one
-# Cargo.lock already resolves (tatara-process 0.2.4), so pinning here changes
-# nothing about what is built — it only stops the resolver wandering into that
-# inconsistency. Unpin when tatara's own versions agree again.
+# The `version` beside `git` is what a future release emits, so caixa's own
+# publish stays blocked until this one moves — stated openly rather than
+# encoded as a manifest that cannot parse, which is what an earlier attempt at
+# `optional = true` did (cargo rejects `optional` on a workspace dependency).
 tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a", version = "0.2" }
 caixa-tatara = { path = "caixa-tatara", version = "0.1.4" }
-iac-forge = { git = "https://github.com/pleme-io/iac-forge", version = "0.1" }
+# Registry, at last. This was a git dep only because `iac-forge` had never
+# reached crates.io — its release reported SUCCESS while publishing nothing,
+# on the substrate's green `dep-missing` defer (fixed at
+# pleme-io/actions@aacea54). Published 0.1.5 today once that stopped lying and
+# an invalid `code-generators` category slug was corrected.
+iac-forge = "0.1"
 gen-platform = "0.1"
 gen-types = "0.1"
 canteiro-types = "0.1"
