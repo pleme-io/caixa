@@ -31,7 +31,11 @@ edition = "2024"
 rust-version = "1.89.0"
 license = "MIT"
 repository = "https://github.com/pleme-io/caixa"
+homepage = "https://github.com/pleme-io/caixa"
 authors = ["pleme-io"]
+readme = "README.md"
+categories = ["development-tools", "api-bindings"]
+keywords = ["caixa", "tatara-lisp", "pleme-io", "helm", "packaging"]
 
 [workspace.dependencies]
 # Workspace-internal crates (path deps).
@@ -78,12 +82,12 @@ ropey = "1"
 tatara-lisp = "0.3.26"
 # Remaining pleme-io git deps. Consumers outside pleme-io drive the Nix flake,
 # which pins these via inputs.
-tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a" }
-caixa-tatara = { path = "caixa-tatara" }
-iac-forge = { git = "https://github.com/pleme-io/iac-forge" }
-gen-platform = { git = "https://github.com/pleme-io/gen" }
-gen-types = { git = "https://github.com/pleme-io/gen" }
-canteiro-types = { git = "https://github.com/pleme-io/sui", package = "canteiro-types" }
+tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a", version = "0.1" }
+caixa-tatara = { path = "caixa-tatara", version = "0.1.0" }
+iac-forge = { git = "https://github.com/pleme-io/iac-forge", version = "0.1" }
+gen-platform = { git = "https://github.com/pleme-io/gen", version = "0.1" }
+gen-types = { git = "https://github.com/pleme-io/gen", version = "0.1" }
+canteiro-types = { git = "https://github.com/pleme-io/sui", package = "canteiro-types", version = "0.1" }
 
 pretty_assertions = "1"
 tempfile = "3"
