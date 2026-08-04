@@ -26,7 +26,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.89.0"
 license = "MIT"
@@ -39,24 +39,24 @@ keywords = ["caixa", "tatara-lisp", "pleme-io", "helm", "packaging"]
 
 [workspace.dependencies]
 # Workspace-internal crates (path deps).
-caixa-core = { path = "caixa-core", version = "0.1.0" }
-caixa-lacre = { path = "caixa-lacre", version = "0.1.0" }
-caixa-ast = { path = "caixa-ast", version = "0.1.0" }
-caixa-theme = { path = "caixa-theme", version = "0.1.0" }
-caixa-fmt = { path = "caixa-fmt", version = "0.1.0" }
-caixa-lint = { path = "caixa-lint", version = "0.1.0" }
-caixa-resolver = { path = "caixa-resolver", version = "0.1.0" }
-caixa-teia = { path = "caixa-teia", version = "0.1.0" }
-caixa-teia-forge = { path = "caixa-teia-forge", version = "0.1.0" }
-caixa-provedor = { path = "caixa-provedor", version = "0.1.0" }
-caixa-flake = { path = "caixa-flake", version = "0.1.0" }
-caixa-crd = { path = "caixa-crd", version = "0.1.0" }
-caixa-pangea = { path = "caixa-pangea", version = "0.1.0" }
-caixa-arch = { path = "caixa-arch", version = "0.1.0" }
-caixa-helm = { path = "caixa-helm", version = "0.1.0" }
-caixa-flux = { path = "caixa-flux", version = "0.1.0" }
-caixa-mesh = { path = "caixa-mesh", version = "0.1.0" }
-caixa-actions = { path = "caixa-actions", version = "0.1.0" }
+caixa-core = { path = "caixa-core", version = "0.1.1" }
+caixa-lacre = { path = "caixa-lacre", version = "0.1.1" }
+caixa-ast = { path = "caixa-ast", version = "0.1.1" }
+caixa-theme = { path = "caixa-theme", version = "0.1.1" }
+caixa-fmt = { path = "caixa-fmt", version = "0.1.1" }
+caixa-lint = { path = "caixa-lint", version = "0.1.1" }
+caixa-resolver = { path = "caixa-resolver", version = "0.1.1" }
+caixa-teia = { path = "caixa-teia", version = "0.1.1" }
+caixa-teia-forge = { path = "caixa-teia-forge", version = "0.1.1" }
+caixa-provedor = { path = "caixa-provedor", version = "0.1.1" }
+caixa-flake = { path = "caixa-flake", version = "0.1.1" }
+caixa-crd = { path = "caixa-crd", version = "0.1.1" }
+caixa-pangea = { path = "caixa-pangea", version = "0.1.1" }
+caixa-arch = { path = "caixa-arch", version = "0.1.1" }
+caixa-helm = { path = "caixa-helm", version = "0.1.1" }
+caixa-flux = { path = "caixa-flux", version = "0.1.1" }
+caixa-mesh = { path = "caixa-mesh", version = "0.1.1" }
+caixa-actions = { path = "caixa-actions", version = "0.1.1" }
 
 # Third-party.
 serde = { version = "1", features = ["derive"] }
@@ -84,7 +84,7 @@ tatara-lisp = "0.3.26"
 # which pins these via inputs.
 # tatara-process not on crates.io yet — optional, off by default.
 tatara-process = { version = "0.2", optional = true }
-caixa-tatara = { path = "caixa-tatara", version = "0.1.0" }
+caixa-tatara = { path = "caixa-tatara", version = "0.1.1" }
 # iac-forge not on crates.io yet — optional, off by default.
 iac-forge = { version = "0.1", optional = true }
 gen-platform = "0.1"
