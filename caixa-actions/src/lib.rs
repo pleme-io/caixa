@@ -757,7 +757,7 @@ mod tests {
         // `expect_err` is usable again as of sui 96a811e (CanteiroDag derives
         // Debug, and so does the shigoto_dag::Dag it wraps, 0.1.12).
         let via_primitive_err = caixa_core::require_acao_view(&mis_kinded)
-                .expect_err("mis-kinded Acao must be rejected by compound");
+            .expect_err("mis-kinded Acao must be rejected by compound");
         assert_eq!(
             format!("{via_validate_err}"),
             format!("{via_primitive_err}"),
@@ -782,7 +782,7 @@ mod tests {
         // `expect_err` is usable again as of sui 96a811e (CanteiroDag derives
         // Debug, and so does the shigoto_dag::Dag it wraps, 0.1.12).
         let via_primitive_err = caixa_core::require_acao_view(&missing_ci)
-                .expect_err("Acao with no :ci must be rejected by compound");
+            .expect_err("Acao with no :ci must be rejected by compound");
         assert_eq!(
             format!("{via_validate_err}"),
             format!("{via_primitive_err}"),
@@ -811,7 +811,7 @@ mod tests {
         // `expect_err` is usable again as of sui 96a811e (CanteiroDag derives
         // Debug, and so does the shigoto_dag::Dag it wraps, 0.1.12).
         let via_primitive_err = caixa_core::require_acao_view(&cyclic)
-                .expect_err("cyclic Acao must be rejected by compound");
+            .expect_err("cyclic Acao must be rejected by compound");
         assert_eq!(
             format!("{via_validate_err}"),
             format!("{via_primitive_err}"),

@@ -270,7 +270,10 @@ mod tests {
 
     #[test]
     fn the_positional_arity_is_recognised() {
-        assert_eq!(classify(MOLDE_POSICIONAL), Ok(CaixaDialeto::MoldePosicional));
+        assert_eq!(
+            classify(MOLDE_POSICIONAL),
+            Ok(CaixaDialeto::MoldePosicional)
+        );
     }
 
     #[test]
