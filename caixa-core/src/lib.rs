@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 //! `caixa-core` — manifest types, layout invariants, and version contract
 //! for the caixa tatara-lisp package system.
 //!
