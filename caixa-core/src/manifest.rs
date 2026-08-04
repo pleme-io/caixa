@@ -220,9 +220,11 @@ pub enum LeituraError {
     /// through an anyhow context to read the typed payload. That pin caught
     /// this exact regression when the variant first landed transparent.
     #[error("{0}")]
-    Leitura(#[source]
+    Leitura(
+        #[source]
         #[from]
-        tatara_lisp::LispError),
+        tatara_lisp::LispError,
+    ),
 
     /// The source IS a well-formed `(defcaixa …)` form, but of a different
     /// declaration than this crate's.
@@ -273,9 +275,7 @@ impl Caixa {
     pub fn from_lisp(src: &str) -> Result<Self, LeituraError> {
         use tatara_lisp::domain::TataraDomain;
         let forms = tatara_lisp::read(src).map_err(LeituraError::Leitura)?;
-        let first = forms
-            .first()
-            .ok_or(crate::dialeto::DialetoError::Vazio)?;
+        let first = forms.first().ok_or(crate::dialeto::DialetoError::Vazio)?;
 
         match crate::dialeto::classify_form(first)? {
             crate::dialeto::CaixaDialeto::Pacote => {}

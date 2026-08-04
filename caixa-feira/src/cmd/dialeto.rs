@@ -86,9 +86,7 @@ impl Dialeto {
         for path in files {
             let src = std::fs::read_to_string(&path)
                 .with_context(|| format!("reading {}", path.display()))?;
-            let palavra_legada = !src
-                .lines()
-                .any(|l| l.trim_start().starts_with("(defmolde"));
+            let palavra_legada = !src.lines().any(|l| l.trim_start().starts_with("(defmolde"));
             linhas.push(Linha {
                 manifesto_de_pacote: path
                     .file_name()
@@ -129,7 +127,8 @@ impl Dialeto {
             }
 
             if let Ok(d) = &l.verdict {
-                if l.palavra_legada && matches!(d, CaixaDialeto::Molde | CaixaDialeto::MoldePosicional)
+                if l.palavra_legada
+                    && matches!(d, CaixaDialeto::Molde | CaixaDialeto::MoldePosicional)
                 {
                     legado += 1;
                     if self.strict_palavra {
@@ -274,14 +273,21 @@ mod tests {
     fn an_unclassifiable_defcaixa_fails() {
         let dir = tempdir().expect("tempdir");
         write(dir.path(), "a/caixa.lisp", PACOTE);
-        write(dir.path(), "b/weird.caixa.lisp", r#"(defcaixa :licenca "MIT")"#);
+        write(
+            dir.path(),
+            "b/weird.caixa.lisp",
+            r#"(defcaixa :licenca "MIT")"#,
+        );
         let cmd = Dialeto {
             path: dir.path().to_path_buf(),
             list: false,
             strict_palavra: false,
         };
         let err = cmd.run().expect_err("a third dialect must fail");
-        assert!(err.to_string().contains("1 dialect violation"), "got: {err}");
+        assert!(
+            err.to_string().contains("1 dialect violation"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -300,7 +306,10 @@ mod tests {
             strict_palavra: true,
         };
         let err = strict.run().expect_err("--strict-palavra must refuse it");
-        assert!(err.to_string().contains("1 dialect violation"), "got: {err}");
+        assert!(
+            err.to_string().contains("1 dialect violation"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -312,8 +321,13 @@ mod tests {
             list: false,
             strict_palavra: false,
         };
-        let err = cmd.run().expect_err("wrong declaration under caixa.lisp must fail");
-        assert!(err.to_string().contains("1 dialect violation"), "got: {err}");
+        let err = cmd
+            .run()
+            .expect_err("wrong declaration under caixa.lisp must fail");
+        assert!(
+            err.to_string().contains("1 dialect violation"),
+            "got: {err}"
+        );
     }
 
     #[test]
