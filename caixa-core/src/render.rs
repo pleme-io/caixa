@@ -28964,9 +28964,101 @@ mod tests {
         let spec: crate::aplicacao::AplicacaoSpec =
             require_aplicacao_view::<AplicacaoRendererStandIn>(&c)
                 .expect("valid aplicacao shape accepted");
-        assert_eq!(spec.membros.len(), 2);
-        assert_eq!(spec.membros[0].caixa, "cart");
-        assert_eq!(spec.membros[1].caixa, "catalog");
+        // Route the per-Aplicacao `:membros` slice-projection through
+        // the substrate-canonical [`AplicacaoSpec::membros`] `&[Membro]`-
+        // return accessor rather than the raw `spec.membros` `Vec<Membro>`
+        // field access, and the per-member `:caixa` scalar-projection
+        // through the sibling [`crate::aplicacao::Membro::nome`] `&str`-
+        // return accessor rather than the raw `.caixa` `String`-field
+        // borrow, so a future rebrand of either storage (a per-cluster
+        // `:membros`-overlay the caixa-operator reconciles ahead of
+        // dispatch, an M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR
+        // materializer's per-member alias table, a promotion of the
+        // per-`Membro` `caixa: String` slot to a typed `ServicoName`
+        // newtype the accessor materializes behind the same `&str`
+        // return contract) reaches this per-fixture happy-path
+        // acceptance-shape probe through the one accessor edit at the
+        // canonical caixa-core declaration rather than a coordinated
+        // rewrite that would include this render-side test-fixture
+        // navigation too. Peer to the sibling caixa-flux
+        // [`sample_caixa_nome_accessor_byte_equals_raw_field`] (2ffdb44)
+        // / caixa-crd `round_trip_preserves_core_fields` (1a160cd) /
+        // caixa-feira load.rs (e853d45) test-side accessor
+        // convergences on the peer per-`Caixa` scalar-axis field —
+        // extended here onto the render-side per-`AplicacaoSpec`
+        // `:membros` slice + per-`Membro` `:caixa` scalar axes.
+        let membros = spec.membros();
+        assert_eq!(membros.len(), 2);
+        assert_eq!(membros[0].nome(), "cart");
+        assert_eq!(membros[1].nome(), "catalog");
+    }
+
+    #[test]
+    fn require_aplicacao_view_accepts_valid_aplicacao_membros_accessor_byte_equals_raw_field() {
+        // Byte-parity pin: [`AplicacaoSpec::membros`]'s `&[Membro]`-
+        // return accessor must project the same slice-length and
+        // per-entry `:caixa` bytes as the raw `spec.membros`
+        // `Vec<Membro>` + per-`Membro` `caixa: String` field access
+        // on the shared per-test [`bare_aplicacao`] fixture the sibling
+        // [`require_aplicacao_view_accepts_valid_aplicacao`] happy-
+        // path acceptance pin navigates through. Guards the paired
+        // per-fixture convergence that just routed the three raw
+        // `spec.membros.len()` / `spec.membros[0].caixa` /
+        // `spec.membros[1].caixa` sites through the accessor pair: a
+        // future implementation of [`AplicacaoSpec::membros`] that
+        // returned a differently-shaped view (a filter over
+        // storage-dropping optional members, a cached
+        // `Cow<[Membro]>` materialization, an operator-side per-CR
+        // alias-rewritten membership overlay), or a future
+        // [`crate::aplicacao::Membro::nome`] projection that read a
+        // canonicalized rewrite (a per-tenant namespace prefix, an
+        // ASCII-lowered normalization) rather than the raw storage-
+        // side `.caixa` bytes, would silently split every render-
+        // side test-fixture navigation that routes through the
+        // accessors from the storage-side field the peer
+        // [`AplicacaoSpec::validate`] production membership-lookup
+        // path still reads through the same accessor pair — this
+        // pin surfaces the drift at caixa-core build time rather
+        // than at a downstream per-Aplicacao renderer's
+        // membership-lookup diagnostic on the fleet.
+        //
+        // Same byte-parity-pin discipline the sibling caixa-flux
+        // `sample_caixa_nome_accessor_byte_equals_raw_field` (2ffdb44)
+        // + caixa-crd `round_trip_preserves_core_fields` accessor
+        // convergence (1a160cd) + caixa-feira load.rs (e853d45)
+        // per-`Caixa` scalar-axis byte-parity pins added to lock the
+        // peer per-`Caixa` scalar-accessor family against the raw
+        // field-access at each crate's fixture — extended here onto
+        // the render-side per-`AplicacaoSpec` `:membros` slice + per-
+        // `Membro` `:caixa` scalar axes' shared test fixture.
+        let c = bare_aplicacao();
+        let spec: crate::aplicacao::AplicacaoSpec =
+            require_aplicacao_view::<AplicacaoRendererStandIn>(&c)
+                .expect("valid aplicacao shape accepted");
+        assert_eq!(
+            spec.membros().len(),
+            spec.membros.len(),
+            "AplicacaoSpec::membros() slice-length must byte-equal \
+             the raw `membros: Vec<Membro>` field storage's `.len()`; \
+             any implementation drift here silently splits every \
+             render-side test-fixture navigation that routes through \
+             the accessor from the storage-side field the peer \
+             AplicacaoSpec::validate production membership-lookup \
+             path still reads through the same accessor"
+        );
+        for (i, m) in spec.membros().iter().enumerate() {
+            assert_eq!(
+                m.nome(),
+                spec.membros[i].caixa.as_str(),
+                "Membro::nome() must borrow the same bytes as the raw \
+                 `caixa: String` field storage at member index {i}; \
+                 any implementation drift here silently splits every \
+                 render-side test-fixture navigation that routes \
+                 through the accessor from the storage-side field the \
+                 peer AplicacaoSpec::validate production membership-\
+                 lookup path still reads through the same accessor"
+            );
+        }
     }
 
     #[test]
