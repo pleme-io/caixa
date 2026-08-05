@@ -68,6 +68,38 @@ impl Default for RestartStrategy {
 }
 
 impl RestartStrategy {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed four-arm [`RestartStrategy`] discriminator set (the future
+    /// M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+    /// admission-webhook rejection body naming the accepted-`:estrategia`
+    /// list, a future `feira supervisor --estrategia …` CLI arg-parse's
+    /// "did you mean" hint via a [`Self::from_wire`]-scan over the slice,
+    /// the future `feira app graph` per-supervisor `:estrategia` column,
+    /// any future round-trip fuzz harness that sweeps every arm). A
+    /// future arm addition (an OTP-`rest_for_all` arm the theory
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// might reach for once the four canonical OTP strategies stop
+    /// covering the substrate's discovered load-shape) extends this
+    /// slice as one edit and every consumer picks up the new entry by
+    /// construction; the compiler-checked exhaustiveness on the sibling
+    /// method `match` arms ([`Self::as_str`] / [`Self::from_wire`]) is
+    /// the build-time guarantee that no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::CaixaKind::ALL`] (6b1f4fb) /
+    /// [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+    /// surfaces — the fifth (and the first M2 OTP-shape) closed-set
+    /// typed enum on the caixa surface to converge onto the same
+    /// one-canonical-arm-list-per-enum discipline.
+    pub const ALL: &'static [Self] = &[
+        Self::OneForOne,
+        Self::OneForAll,
+        Self::RestForOne,
+        Self::SimpleOneForOne,
+    ];
+
     /// Canonical PascalCase discriminator scalar this variant serializes
     /// as under [`crate::render::SUPERVISOR_KEY_ESTRATEGIA`]. The four arms
     /// return the paired [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`]
@@ -92,6 +124,78 @@ impl RestartStrategy {
             Self::OneForAll => crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL,
             Self::RestForOne => crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE,
             Self::SimpleOneForOne => crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE,
+        }
+    }
+
+    /// Substrate-canonical reverse projection on the `:supervisor
+    /// :estrategia` closed-set axis — parses the `PascalCase`
+    /// discriminator scalar back to the typed variant, or `None` when
+    /// `s` is outside
+    /// the closed-set arm-string set [`Self::as_str`] emits. Dispatches
+    /// on the same lifted
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE`] /
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL`] /
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE`] /
+    /// [`crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE`]
+    /// constants the [`Self::as_str`] emitter walks, so the parse and
+    /// emit halves of the round-trip migrate through one caixa-core
+    /// edit on any future arm addition.
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection on the OTP sibling-restart axis (the
+    /// [`Self::as_str`] emitter, the [`std::fmt::Display`] impl routed
+    /// through it, the `Serialize` derive that emits the same
+    /// byte-string under [`crate::render::SUPERVISOR_KEY_ESTRATEGIA`])
+    /// plus the kebab-case dispatcher-catalog identity via
+    /// [`Self::discriminant`] — every non-serde consumer that wanted to
+    /// parse a wire-form `PascalCase` strategy scalar had to re-inline
+    /// a four-arm `match s { "OneForOne" => …, "OneForAll" => …,
+    /// "RestForOne" => …, "SimpleOneForOne" => …, _ => … }` cascade
+    /// that expressed no compile-time link back to the typed variant's
+    /// canonical lifted constant. A future variant rename or per-arm
+    /// serde-attribute drift would silently split the wire byte-string
+    /// one non-serde consumer parsed from the one the emitter wrote,
+    /// with the failure surfacing at parse time far from the rebrand
+    /// commit.
+    ///
+    /// Distinct axis from the [`std::str::FromStr`] impl the
+    /// [`gen_platform::FromStrKind`] derive already installs on this
+    /// enum by design, not by drift: `FromStr` parses the *kebab-case*
+    /// dispatcher-catalog identity (`"one-for-one"` / `"one-for-all"` /
+    /// `"rest-for-one"` / `"simple-one-for-one"` — the inverse of
+    /// [`Self::discriminant`]), while this method inverts the
+    /// `PascalCase` wire byte-string [`Self::as_str`] emits. The
+    /// two-axis split lets the dispatcher-catalog identity live in
+    /// kebab-case
+    /// (where every peer catalog identifier already lives) without
+    /// forcing a wire-format rename on the tatara-lisp author surface
+    /// (`:estrategia OneForOne`, `PascalCase`) — the same two-axis
+    /// distinction the sibling [`crate::CaixaKind::from_wire`] (2aa6d23)
+    /// / [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342)
+    /// carry on their peer closed-set typed-enum wire round-trips.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::from_suffix`] typed enums
+    /// carry on the peer wire-side `str → Self` axes — extended onto
+    /// the M2 OTP-shape sibling-restart-strategy closed-set axis, the
+    /// fifth substrate-side closed-set typed enum to converge on the
+    /// two-way `str ↔ Self` round-trip. Method-named `from_wire` (not
+    /// `from_str`) to match the peer [`crate::CaixaKind::from_wire`]
+    /// shape verbatim and side-step the [`std::str::FromStr`] impl the
+    /// derive already installs on the sibling kebab-case axis. Returns
+    /// `Option<Self>` (rather than `Result<Self, _>`) to match the peer
+    /// shapes: the caller picks the diagnostic form appropriate for
+    /// its use site.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE => Some(Self::OneForOne),
+            crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL => Some(Self::OneForAll),
+            crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE => Some(Self::RestForOne),
+            crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE => Some(Self::SimpleOneForOne),
+            _ => None,
         }
     }
 }
@@ -3370,12 +3474,7 @@ mod tests {
 
     #[test]
     fn round_trip_all_strategies() {
-        for strat in [
-            RestartStrategy::OneForOne,
-            RestartStrategy::OneForAll,
-            RestartStrategy::RestForOne,
-            RestartStrategy::SimpleOneForOne,
-        ] {
+        for &strat in RestartStrategy::ALL {
             // Route the `SimpleOneForOne ↔ non-SimpleOneForOne` fixture-
             // shape partition through the [`gen_platform::IsVariant`]
             // derive-generated [`RestartStrategy::is_simple_one_for_one`]
@@ -3492,13 +3591,7 @@ mod tests {
         // the substrate's closed-set typed-enum surface (peer of
         // [`crate::upgrade::tests::validate_restart_exclusive_routes_through_is_restart_predicate`]
         // on the M2 OTP-appup axis).
-        let cases = [
-            RestartStrategy::OneForOne,
-            RestartStrategy::OneForAll,
-            RestartStrategy::RestForOne,
-            RestartStrategy::SimpleOneForOne,
-        ];
-        for strat in cases {
+        for &strat in RestartStrategy::ALL {
             let via_predicate = strat.is_simple_one_for_one();
             let via_matches = matches!(strat, RestartStrategy::SimpleOneForOne);
             assert_eq!(
@@ -4524,12 +4617,7 @@ mod tests {
         // caixa-core build time. Peer of the M3
         // `placement_strategy_display_routes_through_as_str_helper`
         // (cc8f749) which the M3 axis converged first.
-        for variant in [
-            RestartStrategy::OneForOne,
-            RestartStrategy::OneForAll,
-            RestartStrategy::RestForOne,
-            RestartStrategy::SimpleOneForOne,
-        ] {
+        for &variant in RestartStrategy::ALL {
             assert_eq!(
                 variant.to_string(),
                 variant.as_str(),
@@ -4566,12 +4654,7 @@ mod tests {
         // silent per-consumer dispatch miss. Peer of the M3
         // `placement_strategy_display_matches_serialized_wire_byte_string`
         // (cc8f749) which the M3 axis converged first.
-        for variant in [
-            RestartStrategy::OneForOne,
-            RestartStrategy::OneForAll,
-            RestartStrategy::RestForOne,
-            RestartStrategy::SimpleOneForOne,
-        ] {
+        for &variant in RestartStrategy::ALL {
             let wire = serde_json::to_string(&variant).unwrap();
             let unquoted = wire
                 .strip_prefix('"')
@@ -4584,6 +4667,261 @@ mod tests {
                  Serialize derive's wire byte-string (three-path convergence: \
                  Display + as_str + Serialize all resolve to the same \
                  SUPERVISOR_ESTRATEGIA_* const)"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_all_enumerates_every_variant_exactly_once() {
+        // Fail-before-pass-after pin on the [`RestartStrategy::ALL`]
+        // exhaustive-iteration surface: every variant appears exactly
+        // once, and the slice length matches the arm count of the
+        // closed set. Every consumer that walks the accepted-strategy
+        // set (a future `feira supervisor --estrategia …` CLI-side
+        // arg-parse's "did you mean" hint, a future M4 admission-
+        // webhook's rejection body naming the accepted-`:estrategia`
+        // list, the [`RestartStrategy::from_wire`] reverse-projection
+        // consumers that iterate the accept-set for diagnostic
+        // rendering) reads through this slice, so a future arm addition
+        // that grows the enum but forgets to grow [`Self::ALL`]
+        // silently truncates every downstream consumer's accept-set at
+        // the same pre-addition boundary — this pin fails at caixa-core
+        // build time on the pairwise-distinct + arm-count invariants.
+        //
+        // Peer of the sibling [`crate::CaixaKind::ALL`] (6b1f4fb) /
+        // [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+        // [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+        // [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+        // pins on the peer closed-set typed-enum axes.
+        let all: &[RestartStrategy] = RestartStrategy::ALL;
+        assert_eq!(
+            all.len(),
+            4,
+            "RestartStrategy::ALL must enumerate every variant of the \
+             four-arm closed set (OneForOne, OneForAll, RestForOne, \
+             SimpleOneForOne); got {all:?}"
+        );
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "RestartStrategy::ALL must carry every variant exactly \
+                         once — got duplicate {a:?} at indices {i} and {j}"
+                    );
+                }
+            }
+        }
+        for variant in [
+            RestartStrategy::OneForOne,
+            RestartStrategy::OneForAll,
+            RestartStrategy::RestForOne,
+            RestartStrategy::SimpleOneForOne,
+        ] {
+            assert!(
+                all.contains(&variant),
+                "RestartStrategy::ALL must contain {variant:?} — a future arm \
+                 addition that grows the enum but forgets to grow the ALL slice \
+                 silently truncates every downstream consumer's accept-set at \
+                 the pre-addition boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_wire_accepts_every_lifted_constant() {
+        // Fail-before-pass-after pin on the forward accept-set of the
+        // [`RestartStrategy::from_wire`] reverse projection: every
+        // canonical [`crate::render::SUPERVISOR_ESTRATEGIA_*`]
+        // constant the [`RestartStrategy::as_str`] emitter walks parses
+        // back to its paired variant. Any future arm addition that
+        // grows the emitter's `as_str` match but forgets to grow the
+        // parser's `from_wire` match silently splits the two halves of
+        // the round-trip — the wire byte-string one non-serde consumer
+        // parses from the one the emitter wrote — with the failure
+        // surfacing at parse time far from the rebrand commit. Pinning
+        // the four-arm accept-set here catches the drift at caixa-core
+        // build time.
+        //
+        // Peer of the sibling [`crate::CaixaKind::from_wire`] (2aa6d23)
+        // + [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342)
+        // accept-set pins on the peer closed-set typed-enum `str → Self`
+        // axes.
+        for (wire, expected) in [
+            (
+                crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ONE,
+                RestartStrategy::OneForOne,
+            ),
+            (
+                crate::render::SUPERVISOR_ESTRATEGIA_ONE_FOR_ALL,
+                RestartStrategy::OneForAll,
+            ),
+            (
+                crate::render::SUPERVISOR_ESTRATEGIA_REST_FOR_ONE,
+                RestartStrategy::RestForOne,
+            ),
+            (
+                crate::render::SUPERVISOR_ESTRATEGIA_SIMPLE_ONE_FOR_ONE,
+                RestartStrategy::SimpleOneForOne,
+            ),
+        ] {
+            let parsed = RestartStrategy::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "RestartStrategy::from_wire({wire:?}) must accept every \
+                     SUPERVISOR_ESTRATEGIA_* constant — got None for the \
+                     lifted canonical byte-string that RestartStrategy::{expected:?} \
+                     serializes as under SUPERVISOR_KEY_ESTRATEGIA"
+                )
+            });
+            assert_eq!(
+                parsed, expected,
+                "RestartStrategy::from_wire({wire:?}) must return \
+                 RestartStrategy::{expected:?}; got RestartStrategy::{parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_wire_round_trips_through_as_str() {
+        // Fail-before-pass-after pin on the closed round-trip between
+        // the forward [`RestartStrategy::as_str`] emitter and the
+        // reverse [`RestartStrategy::from_wire`] parser: for every
+        // variant in [`RestartStrategy::ALL`], parsing the emitter's
+        // output must return exactly the same variant. Any per-arm
+        // divergence — a future arm added to `as_str` but not
+        // `from_wire`, an accidental copy-paste flip in one but not
+        // the other — silently splits the emit and parse halves and
+        // the failure surfaces at consumer parse time far from the
+        // drift site. The `ALL`-iterating shape means a future arm
+        // addition picks up the coverage by construction.
+        //
+        // Peer of the sibling
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_round_trips_through_as_str`]
+        // (18c7342) round-trip pin on
+        // [`crate::aplicacao::PlacementStrategy::from_wire`] and
+        // [`crate::kind::tests::caixa_kind_wire_round_trips_through_from_wire`]
+        // (6b1f4fb) round-trip pin on [`crate::CaixaKind::from_wire`].
+        for &variant in RestartStrategy::ALL {
+            let wire = variant.as_str();
+            let parsed = RestartStrategy::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "RestartStrategy::from_wire(RestartStrategy::{variant:?}.as_str()) \
+                     must be Some({variant:?}) — the two halves of the round-trip \
+                     dispatch on the same lifted SUPERVISOR_ESTRATEGIA_* consts; \
+                     got None on wire byte-string {wire:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "RestartStrategy::from_wire(RestartStrategy::{variant:?}.as_str()) \
+                 must round-trip to the same variant; got {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_wire_rejects_unknown_byte_strings() {
+        // Fail-before-pass-after pin on the closed-set refusal
+        // discipline of [`RestartStrategy::from_wire`]: every
+        // byte-string outside the four-arm accept-set returns `None`
+        // rather than silently collapsing onto the [`Default`]
+        // (`OneForOne`) arm or an arbitrary neighbor. The refusal set
+        // exercised here sweeps the load-bearing drift shapes: the
+        // empty string (a stripped serde-attribute drift), all-
+        // whitespace strings (the canonical text-editor accidental
+        // padding shape), the kebab-case dispatcher-catalog identities
+        // (`"one-for-one"` / `"one-for-all"` / `"rest-for-one"` /
+        // `"simple-one-for-one"` — the [`gen_platform::FromStrKind`]-
+        // derived [`std::str::FromStr`] accept-set, which parses the
+        // *other* axis of this enum's two-axis split and must not leak
+        // into the `from_wire` PascalCase-wire accept-set), the
+        // lowercased single-word forms (`"oneforone"`), the padded
+        // canonical scalar (`" OneForOne "`), the trailing-newline
+        // shapes (`"OneForOne\n"`), and neighboring-but-unknown arms
+        // (`"AllForOne"` — the canonical typo direction).
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_from_wire_rejects_unknown_byte_strings`]
+        // (2aa6d23) +
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_rejects_unknown_byte_strings`]
+        // (18c7342) refusal pins on the peer closed-set typed-enum
+        // axes.
+        for bad in [
+            "",
+            " ",
+            "\n",
+            "\t",
+            "one-for-one",
+            "one-for-all",
+            "rest-for-one",
+            "simple-one-for-one",
+            "oneforone",
+            "OneForOnes",
+            "one_for_one",
+            "one for one",
+            "ONEFORONE",
+            "OneForOne ",
+            " OneForOne",
+            " SimpleOneForOne ",
+            "OneForOne\n",
+            "restforone",
+            "REST_FOR_ONE",
+            "AllForOne",
+            "Simple",
+            "?",
+        ] {
+            assert!(
+                RestartStrategy::from_wire(bad).is_none(),
+                "RestartStrategy::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the four RestartStrategy::as_str \
+                 outputs (OneForOne, OneForAll, RestForOne, SimpleOneForOne), \
+                 and this byte-string is outside that closed set"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_strategy_from_wire_matches_serialize_derive_wire_byte_string() {
+        // Fail-before-pass-after pin on the fourth path of the four-path
+        // convergence: `from_wire` (the reverse projection) inverts the
+        // `Serialize` derive's wire byte-string on every variant.
+        // Together with the pre-existing three-path convergence
+        // (`Display` + `as_str` + `Serialize` all resolve to the same
+        // lifted [`crate::render::SUPERVISOR_ESTRATEGIA_*`] const,
+        // pinned by
+        // [`restart_strategy_display_matches_serialized_wire_byte_string`])
+        // this closes the round-trip: the wire byte-string the
+        // `Serialize` derive emits parses back to the same variant
+        // through `from_wire`, so any future serde-attribute or variant-
+        // rename drift on the emit half now surfaces as a matched drift
+        // on the parse half at caixa-core build time — the two halves
+        // migrate as a unit through the lifted consts on any future
+        // rename, and the round-trip cannot silently split.
+        //
+        // Peer of the sibling
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_matches_serialize_derive_wire_byte_string`]
+        // (18c7342) wire-format pin on
+        // [`crate::aplicacao::PlacementStrategy::from_wire`].
+        for &variant in RestartStrategy::ALL {
+            let wire = serde_json::to_string(&variant).unwrap();
+            let unquoted = wire
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized RestartStrategy is a JSON string");
+            let parsed = RestartStrategy::from_wire(unquoted).unwrap_or_else(|| {
+                panic!(
+                    "RestartStrategy::from_wire({unquoted:?}) must accept the \
+                     Serialize derive's wire byte-string for \
+                     RestartStrategy::{variant:?} — the four-path convergence \
+                     (Display + as_str + Serialize + from_wire) resolves through \
+                     the same lifted SUPERVISOR_ESTRATEGIA_* const; got None"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "RestartStrategy::from_wire of the Serialize derive's wire \
+                 byte-string for RestartStrategy::{variant:?} must round-trip \
+                 to the same variant; got {parsed:?}"
             );
         }
     }
@@ -5319,12 +5657,7 @@ mod tests {
         // the raw field access verbatim across every author-declared
         // value" discipline extended onto the M2 supervisor-slot
         // per-`:supervisor` sibling-restart-strategy axis.
-        for estrategia in [
-            RestartStrategy::OneForOne,
-            RestartStrategy::OneForAll,
-            RestartStrategy::RestForOne,
-            RestartStrategy::SimpleOneForOne,
-        ] {
+        for &estrategia in RestartStrategy::ALL {
             // `SimpleOneForOne` requires `children.is_empty()`; the peer
             // three strategies require a non-empty static children list.
             // Build each shape coherently so the pin's fixture would
