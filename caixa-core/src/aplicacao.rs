@@ -2489,87 +2489,227 @@ impl RateLimit {
     pub const fn window(&self) -> Duration {
         self.window
     }
+
+    /// Recognize this rate-limit's `:window` as a canonical
+    /// [`RateLimitUnit`] arm — `Some(RateLimitUnit)` when the window
+    /// exactly matches one of the three closed-set arm-Durations
+    /// (`1s` / `60s` / `3600s`), `None` when the window carries a
+    /// non-canonical magnitude the codec's round-trip would break on
+    /// (sub-second residue, or a second-magnitude outside the set
+    /// [`RateLimitUnit::ALL`] enumerates).
+    ///
+    /// Every validated [`RateLimit`] past [`AplicacaoSpec::validate_politicas`]
+    /// returns `Some` here — the validate gate's
+    /// [`AplicacaoError::PolicyRateLimitWindowNotCanonical`] arm
+    /// rejects every window this accessor returns `None` on. Downstream
+    /// consumers past validate (the codec's [`rate_limit_codec::render`]
+    /// path, the future M4 per-Aplicacao Envoy config reconciler's
+    /// materialization pass, the future per-`:contratos`-edge rate-limit-
+    /// override overlay the MESH-COMPOSITION §III.2 #3 roadmap
+    /// acknowledges) that read the typed unit off a validated slot can
+    /// pattern-match on the returned `Some` without re-checking
+    /// canonicality at the consumer layer — the typed enum surface is
+    /// the load-bearing carrier of the canonicality invariant.
+    ///
+    /// Preferred over the free [`is_canonical_rate_limit_window`]
+    /// module-private helper at any call site that has the typed
+    /// [`RateLimit`] in hand (the codec's `render` arm at
+    /// [`rate_limit_codec::render`], the validate gate's canonical-form
+    /// arm in [`AplicacaoSpec::validate_politicas`], any future
+    /// per-`:contratos` edge-override overlay resolver): those consumers
+    /// reach for the typed enum without going through the
+    /// `.window()` scalar-projection layer, and get the enum value
+    /// directly (which the codec's render arm can then format via
+    /// [`RateLimitUnit::as_suffix`] / [`std::fmt::Display`]). Same
+    /// "typed sub-struct scalar accessor, one dispatch on the substrate
+    /// primitive" discipline the sibling [`RateLimit::rate`] and
+    /// [`RateLimit::window`] accessors carry on the peer per-sub-struct
+    /// scalar-value axes, extended onto the per-`RateLimit` typed-unit
+    /// projection axis (the third scalar accessor on the [`RateLimit`]
+    /// axis, first typed-enum-return projection).
+    #[must_use]
+    pub fn canonical_unit(&self) -> Option<RateLimitUnit> {
+        RateLimitUnit::from_window(self.window)
+    }
 }
 
-/// Canonical `(unit-suffix, seconds-per-window)` bijection every
-/// consumer of the `:politicas :rate-limit` unit table reads from —
-/// [`rate_limit_codec::parse`]'s `unit → Duration` dispatch,
-/// [`rate_limit_codec::render`]'s `Duration → unit` projection, and the
-/// [`is_canonical_rate_limit_window`] predicate the
-/// [`AplicacaoSpec::validate_politicas`] gate keys off. Until this table
-/// landed the `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection was
-/// scattered across four peer sites — the codec's `match unit` parse
-/// arm, the codec's `if secs == 1 { "s" } else if …` render cascade,
-/// and the predicate's `secs == 1 || secs == 60 || secs == 3600`
-/// disjunction — each carrying its own hand-written copy of the same
-/// three (str, u64) pairs with no compile-time link between them. A
-/// future rate-limit-unit addition (a `"d"` day suffix, a `"ms"`
-/// sub-second window once Envoy's `rate_limit_action` grows fractional
-/// support) would have to be threaded through all three sites in
-/// lockstep or a drift would silently split the accepted-window set: a
-/// unit accepted by parse but unknown to render would round-trip
-/// through the codec to the fallback `<n>/<k>s` shape (breaking the
-/// THEORY.md §V.2.7 render-determinism contract every typed slot
-/// carries), and a unit accepted by parse but unknown to the predicate
-/// would silently pass validate and land at the renderer as a
-/// non-canonical fallback.
+/// Typed closed-set enum for the three canonical `:politicas :rate-limit`
+/// `:window` units — `Second` / `Minute` / `Hour` — the `rate_limit_codec`
+/// round-trips losslessly (`"<n>/s"` / `"<n>/m"` / `"<n>/h"`).
 ///
-/// Lifting the pairs to one `const` collapses the three call sites onto
-/// one canonical projection each ([`rate_limit_window_unit`] for the
-/// `Duration → unit` direction, [`rate_limit_window_from_unit`] for the
-/// inverse), so a future unit addition is exactly one row appended
-/// here — every consumer picks it up by construction. Same
-/// "one canonical table, thin projections at each consumer" discipline
-/// [`PlacementStrategy::as_str`] (cc8f749) applies on the sibling M3
-/// typed-enum axis, and [`WitTarget::payload_pair`] (6788ed6) applies
-/// on the peer typed-contract-payload axis.
-const RATE_LIMIT_UNIT_TABLE: &[(&str, u64)] = &[("s", 1), ("m", 60), ("h", 3600)];
+/// The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection every consumer of
+/// the `:politicas :rate-limit` unit surface reads from
+/// ([`rate_limit_codec::parse`]'s `unit → Duration` dispatch,
+/// [`rate_limit_codec::render`]'s `Duration → unit` projection, the
+/// [`is_canonical_rate_limit_window`] predicate the
+/// [`AplicacaoSpec::validate_politicas`] gate keys off, the future M4
+/// per-Aplicacao Envoy config reconciler's `local_rate_limit.token_bucket.fill_interval`
+/// projection) now lives inside this typed enum's `match self` arms — a
+/// future rate-limit-unit addition (a `"d"` day suffix once Envoy's
+/// `rate_limit_action` grows daily-bucket support) is one new variant
+/// plus the exhaustiveness arms on the four methods, so every consumer
+/// picks it up by compile-time construction rather than a runtime
+/// table-scan miss.
+///
+/// The prior `RATE_LIMIT_UNIT_TABLE: &[(&str, u64)]` slice-of-tuples was
+/// scanned via `find_map` at every projection call — an untyped runtime
+/// walk that carried no compile-time link between the parse arm's
+/// accepted suffixes, the render arm's emitted suffixes, and the
+/// validate gate's accepted windows. A future rate-limit-unit addition
+/// that landed one row without threading through the other consumers
+/// (or a copy-paste flip that collapsed two rows onto one suffix) would
+/// silently split the accepted-set across the three consumers — the
+/// parse arm accepts `"d"` and rejects `"s"`, the render arm emits `"h"`
+/// for a 24h window that parse can't round-trip, the validate gate
+/// misses one canonical window. Lifting the pairs onto a typed
+/// closed-set enum with exhaustive `match` arms makes any such
+/// half-landed extension a caixa-core build error (the compiler enforces
+/// arm coverage on every method), not a silent per-consumer drift
+/// surfacing at apply time. Same "closed-set typed-enum discriminator"
+/// discipline the sibling [`PlacementStrategy`] (cc8f749),
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::upgrade::UpgradeInstruction`], and [`crate::CaixaKind`]
+/// closed-set typed enums carry on their respective closed-set axes —
+/// extended onto the seventh closed-set typed-enum discriminator axis
+/// on the caixa typed surface (the `:politicas :rate-limit :window`
+/// canonical-unit axis).
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant,
+)]
+pub enum RateLimitUnit {
+    /// 1-second window — canonical author-surface suffix `"s"`
+    /// (`"<n>/s"`), maps onto Envoy's `local_rate_limit.token_bucket.fill_interval`
+    /// with a 1s magnitude.
+    Second,
+    /// 1-minute window — canonical author-surface suffix `"m"`
+    /// (`"<n>/m"`), maps onto Envoy's `local_rate_limit.token_bucket.fill_interval`
+    /// with a 60s magnitude.
+    Minute,
+    /// 1-hour window — canonical author-surface suffix `"h"`
+    /// (`"<n>/h"`), maps onto Envoy's `local_rate_limit.token_bucket.fill_interval`
+    /// with a 3600s magnitude.
+    Hour,
+}
+
+impl RateLimitUnit {
+    /// Exhaustive iteration surface for every consumer that reads the
+    /// full canonical-unit set (the byte-parity witness against the
+    /// prior `RATE_LIMIT_UNIT_TABLE` shape, the future M4 admission
+    /// webhook's accepted-suffix listing in its rejection body, any
+    /// future round-trip fuzz harness). A future variant addition to
+    /// [`RateLimitUnit`] extends this slice as a single edit and every
+    /// consumer picks up the new entry by construction — the compiler-
+    /// checked exhaustiveness on the sibling method `match` arms is the
+    /// build-time guarantee that no arm forgets to grow.
+    pub const ALL: &'static [Self] = &[Self::Second, Self::Minute, Self::Hour];
+
+    /// Canonical author-surface suffix — the `"s"` / `"m"` / `"h"` byte-
+    /// string every `<n>/<unit>` rate-limit shape carries after its
+    /// `/` separator. The single source of truth the codec's parse and
+    /// render arms both dispatch on: the parse arm matches an incoming
+    /// suffix against every [`RateLimitUnit::ALL`] entry's `as_suffix`
+    /// output; the render arm emits the entry's `as_suffix` verbatim
+    /// after the rate magnitude.
+    #[must_use]
+    pub const fn as_suffix(self) -> &'static str {
+        match self {
+            Self::Second => "s",
+            Self::Minute => "m",
+            Self::Hour => "h",
+        }
+    }
+
+    /// Canonical `Duration` for this unit — the token-bucket refill
+    /// period the [`RateLimit::window`] axis carries when the surrounding
+    /// slot's `:rate-limit` author surface named this unit.
+    #[must_use]
+    pub const fn window(self) -> Duration {
+        Duration::from_secs(match self {
+            Self::Second => 1,
+            Self::Minute => 60,
+            Self::Hour => 3_600,
+        })
+    }
+
+    /// Parse the `<n>/<unit>`-shaped suffix into the typed enum, or
+    /// `None` when `suffix` is outside the closed-set arm-string set
+    /// [`Self::as_suffix`] emits. The single `str → Self` projection
+    /// [`rate_limit_codec::parse`] consumes.
+    #[must_use]
+    pub fn from_suffix(suffix: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|u| u.as_suffix() == suffix)
+    }
+
+    /// Recognize a canonical rate-limit `Duration` as one of the three
+    /// arms, or `None` when `window` carries sub-second residue or a
+    /// second-magnitude outside the closed-set arm-window set
+    /// [`Self::window`] emits. The single `Duration → Self` projection
+    /// [`rate_limit_codec::render`] + [`is_canonical_rate_limit_window`]
+    /// both consume.
+    #[must_use]
+    pub fn from_window(window: Duration) -> Option<Self> {
+        if window.subsec_nanos() != 0 {
+            return None;
+        }
+        Self::ALL.iter().copied().find(|u| u.window() == window)
+    }
+}
+
+/// Route [`std::fmt::Display`] through [`RateLimitUnit::as_suffix`], so
+/// every consumer that formats a canonical rate-limit unit as user-
+/// facing text (future M4 admission-webhook rejection bodies naming
+/// the accepted-suffix set, future `feira app graph` per-`:politicas`
+/// unit column) lands on the same `"s"` / `"m"` / `"h"` byte-string the
+/// codec's parse arm accepts and the render arm emits. Same
+/// as_str-through-Display convergence discipline the sibling
+/// [`PlacementStrategy`], [`crate::CaixaKind`],
+/// [`crate::supervisor::RestartStrategy`], and
+/// [`crate::supervisor::RestartPolicy`] closed-set typed enums carry.
+impl std::fmt::Display for RateLimitUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_suffix())
+    }
+}
 
 /// Canonical rate-limit unit suffix for `window`, or `None` when
-/// `window` isn't one of the [`RATE_LIMIT_UNIT_TABLE`] entries (i.e.
-/// carries a non-canonical magnitude the codec's round-trip would break
-/// on). Reads the `Duration → unit` half of the lifted bijection so
-/// [`rate_limit_codec::render`] and [`is_canonical_rate_limit_window`]
-/// share the same projection — a future unit added to the table reaches
-/// both consumers by construction.
+/// `window` isn't a [`RateLimitUnit`] arm's `Duration` (i.e. carries
+/// sub-second residue or a second-magnitude outside the closed-set
+/// arm-window set). Thin delegate over [`RateLimitUnit::from_window`]
+/// composed with [`RateLimitUnit::as_suffix`] — the two consumers on
+/// the `Duration → &'static str` axis ([`rate_limit_codec::render`] and
+/// [`is_canonical_rate_limit_window`]) share this projection.
 #[must_use]
 fn rate_limit_window_unit(window: Duration) -> Option<&'static str> {
-    if window.subsec_nanos() != 0 {
-        return None;
-    }
-    let secs = window.as_secs();
-    RATE_LIMIT_UNIT_TABLE
-        .iter()
-        .find_map(|(unit, s)| (*s == secs).then_some(*unit))
+    RateLimitUnit::from_window(window).map(RateLimitUnit::as_suffix)
 }
 
 /// Canonical rate-limit `Duration` for a unit suffix, or `None` when
-/// the suffix isn't one of the [`RATE_LIMIT_UNIT_TABLE`] entries. Reads
-/// the `unit → Duration` half of the lifted bijection so
-/// [`rate_limit_codec::parse`] shares the same projection — a future
-/// unit added to the table reaches parse by construction.
+/// the suffix isn't a [`RateLimitUnit`] arm's `as_suffix` output. Thin
+/// delegate over [`RateLimitUnit::from_suffix`] composed with
+/// [`RateLimitUnit::window`] — the sole consumer on the
+/// `&'static str → Duration` axis ([`rate_limit_codec::parse`]) reads
+/// this projection.
 #[must_use]
 fn rate_limit_window_from_unit(unit: &str) -> Option<Duration> {
-    RATE_LIMIT_UNIT_TABLE
-        .iter()
-        .find_map(|(u, secs)| (*u == unit).then_some(Duration::from_secs(*secs)))
+    RateLimitUnit::from_suffix(unit).map(RateLimitUnit::window)
 }
 
 /// True when `window` is exactly one of the three canonical rate-limit
 /// windows the [`rate_limit_codec`] round-trips losslessly: 1 second
 /// (`"<n>/s"`), 1 minute (`"<n>/m"`), or 1 hour (`"<n>/h"`). Routes
-/// through [`rate_limit_window_unit`] — the single `Duration → unit`
+/// through [`RateLimitUnit::from_window`] — the single `Duration → Self`
 /// projection [`rate_limit_codec::render`] also consumes — so the
-/// canonical-window set lives in one lifted [`RATE_LIMIT_UNIT_TABLE`]
-/// entry per unit, drift between the codec's accepted unit set and the
-/// validate gate's accepted window set is a build error visible at the
-/// table, not a silent round-trip break at the codec layer. Same shape
-/// every other predicate-on-the-typed-slot helper carries
+/// canonical-window set lives in one typed enum's `match self` arms,
+/// drift between the codec's accepted unit set and the validate gate's
+/// accepted window set is a compiler-enforced build error at the enum,
+/// not a silent round-trip break at the codec layer. Same shape every
+/// other predicate-on-the-typed-slot helper carries
 /// ([`MeshPolicy::is_empty`], [`crate::LimitsSpec::is_empty`],
 /// [`crate::BehaviorSpec::is_empty`]).
 #[must_use]
 fn is_canonical_rate_limit_window(window: Duration) -> bool {
-    rate_limit_window_unit(window).is_some()
+    RateLimitUnit::from_window(window).is_some()
 }
 
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
@@ -13769,6 +13909,255 @@ mod tests {
         assert!(super::rate_limit_window_unit(Duration::from_secs(2)).is_none());
         assert!(super::rate_limit_window_unit(Duration::from_secs(86_400)).is_none());
         assert!(super::rate_limit_window_unit(Duration::from_millis(1500)).is_none());
+    }
+
+    #[test]
+    fn rate_limit_unit_all_enumerates_every_arm_once() {
+        // Fail-before-pass-after pin: [`RateLimitUnit::ALL`] must
+        // enumerate every arm of the closed-set enum exactly once, in
+        // the canonical shortest-to-longest window order (Second before
+        // Minute before Hour) — the same order the sibling
+        // [`crate::supervisor::RestartStrategy`] /
+        // [`crate::supervisor::RestartPolicy`] /
+        // [`crate::PlacementStrategy`] / [`crate::CaixaKind`] closed-set
+        // typed enums carry (the arm declared first is the arm listed
+        // first). A future variant addition that extends the enum
+        // without appending to [`RateLimitUnit::ALL`] leaves the
+        // exhaustive iteration surface silently short one arm — the
+        // codec's parse arm would then reject the new suffix even
+        // though the enum knows it. This pin closes the drift.
+        assert_eq!(
+            super::RateLimitUnit::ALL,
+            &[
+                super::RateLimitUnit::Second,
+                super::RateLimitUnit::Minute,
+                super::RateLimitUnit::Hour,
+            ],
+            "RateLimitUnit::ALL must enumerate every arm exactly once, \
+             in canonical shortest-to-longest window order"
+        );
+    }
+
+    #[test]
+    fn rate_limit_unit_from_suffix_and_as_suffix_round_trip() {
+        // Total round-trip pin on the `(from_suffix, as_suffix)` pair:
+        // every arm's [`RateLimitUnit::as_suffix`] output must parse
+        // back through [`RateLimitUnit::from_suffix`] to the same
+        // variant. A future arm addition that lands `as_suffix` but
+        // forgets `from_suffix` (`from_suffix` iterates
+        // [`RateLimitUnit::ALL`] so the peer arm's inclusion in `ALL`
+        // is the load-bearing carrier of the round-trip; the sibling
+        // `rate_limit_unit_all_enumerates_every_arm_once` pin covers
+        // the `ALL` half) trips here at caixa-core build time rather
+        // than surfacing as a codec round-trip miss (a `render` emit
+        // that lands a suffix the paired `parse` cannot decode).
+        for unit in super::RateLimitUnit::ALL {
+            let suffix = unit.as_suffix();
+            let parsed = super::RateLimitUnit::from_suffix(suffix).unwrap_or_else(|| {
+                panic!(
+                    "RateLimitUnit::from_suffix({suffix:?}) must accept every \
+                     RateLimitUnit::as_suffix output — got None for {unit:?}"
+                )
+            });
+            assert_eq!(
+                parsed, *unit,
+                "RateLimitUnit::from_suffix(RateLimitUnit::{unit:?}.as_suffix()) \
+                 must return RateLimitUnit::{unit:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_window_and_window_round_trip() {
+        // Total round-trip pin on the `(from_window, window)` pair:
+        // every arm's [`RateLimitUnit::window`] output must parse back
+        // through [`RateLimitUnit::from_window`] to the same variant.
+        // Sibling of `rate_limit_unit_from_suffix_and_as_suffix_round_trip`
+        // on the peer `Duration` axis — the two round-trip pins
+        // together enshrine that both projections of the typed
+        // canonical-unit bijection are total on the arm-set.
+        for unit in super::RateLimitUnit::ALL {
+            let window = unit.window();
+            let parsed = super::RateLimitUnit::from_window(window).unwrap_or_else(|| {
+                panic!(
+                    "RateLimitUnit::from_window({window:?}) must accept every \
+                     RateLimitUnit::window output — got None for {unit:?}"
+                )
+            });
+            assert_eq!(
+                parsed, *unit,
+                "RateLimitUnit::from_window(RateLimitUnit::{unit:?}.window()) \
+                 must return RateLimitUnit::{unit:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_projections_are_pairwise_distinct() {
+        // Distinctness pin: [`RateLimitUnit::as_suffix`] and
+        // [`RateLimitUnit::window`] outputs must be pairwise distinct
+        // across every arm — an accidental copy-paste flip that
+        // reroutes one arm's suffix or window to also match another
+        // silently collapses two arms onto one, so
+        // [`RateLimitUnit::from_suffix`] / [`RateLimitUnit::from_window`]
+        // (both using `find` on `Self::ALL`) would return whichever
+        // arm the linear scan lands on first — a match-arm-ordering-
+        // dependent outcome the closed-set typed-enum shape is meant
+        // to rule out structurally. Peer of the sibling
+        // `caixa_kind_wire_consts_are_pairwise_distinct` /
+        // `caixa_kind_label_consts_are_pairwise_distinct` pins on the
+        // other closed-set typed-enum discriminator axes.
+        let all = super::RateLimitUnit::ALL;
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a.as_suffix(),
+                        b.as_suffix(),
+                        "RateLimitUnit::{a:?}.as_suffix() and {b:?}.as_suffix() \
+                         must be distinct — a collision silently collapses two \
+                         arms onto one under from_suffix's linear scan"
+                    );
+                    assert_ne!(
+                        a.window(),
+                        b.window(),
+                        "RateLimitUnit::{a:?}.window() and {b:?}.window() \
+                         must be distinct — a collision silently collapses two \
+                         arms onto one under from_window's linear scan"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_display_routes_through_as_suffix() {
+        // Route pin: [`std::fmt::Display`] must byte-equal
+        // [`RateLimitUnit::as_suffix`] on every arm — the single
+        // source of truth for the canonical suffix. A future
+        // reimplementation that hand-rolls the arms instead of
+        // delegating to [`RateLimitUnit::as_suffix`] would silently
+        // desynchronize `format!("{u}")` from the codec's parse arm
+        // (which uses `as_suffix` to compare suffixes). Peer of the
+        // sibling `caixa_kind_display_routes_through_as_str_helper` /
+        // `placement_strategy_display_routes_through_as_str_helper`
+        // pins on the peer closed-set typed-enum Display axes.
+        for unit in super::RateLimitUnit::ALL {
+            assert_eq!(
+                unit.to_string(),
+                unit.as_suffix(),
+                "RateLimitUnit::{unit:?} Display must route through \
+                 as_suffix (single source of truth: the canonical suffix \
+                 the codec parses and renders)"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_unit_from_window_rejects_non_canonical() {
+        // Rejection pin on the parser's accept-set: any Duration
+        // outside the three-arm [`RateLimitUnit::window`] output set
+        // (sub-second residue, or a second-magnitude outside `{1, 60,
+        // 3600}`) must return `None`. A future accidental widening of
+        // the accept-set (rounding down sub-second residue to the
+        // nearest arm, admitting `Duration::from_secs(30)` as a
+        // half-minute unit) would silently drift the parser's accept-
+        // set from the emitter's — a validated slot with a
+        // non-canonical window would then round-trip through the
+        // codec to a canonical form the author never wrote.
+        assert!(super::RateLimitUnit::from_window(Duration::ZERO).is_none());
+        assert!(super::RateLimitUnit::from_window(Duration::from_secs(2)).is_none());
+        assert!(super::RateLimitUnit::from_window(Duration::from_secs(30)).is_none());
+        assert!(super::RateLimitUnit::from_window(Duration::from_secs(120)).is_none());
+        assert!(super::RateLimitUnit::from_window(Duration::from_secs(86_400)).is_none());
+        assert!(super::RateLimitUnit::from_window(Duration::from_millis(500)).is_none());
+        assert!(super::RateLimitUnit::from_window(Duration::from_millis(1500)).is_none());
+    }
+
+    #[test]
+    fn rate_limit_unit_from_suffix_rejects_unknown() {
+        // Rejection pin on the suffix parser's accept-set: any string
+        // outside the three-arm [`RateLimitUnit::as_suffix`] output
+        // set must return `None`. Peer of the sibling
+        // `caixa_kind_from_wire_rejects_unknown_byte_strings` pin on
+        // the [`crate::CaixaKind`] `from_wire` accept-set.
+        for bad in [
+            "", "S", "M", "H", "sec", "min", "hour", "d", "ms", "ns", "us", "week", "1s", "s/",
+            " s",
+        ] {
+            assert!(
+                super::RateLimitUnit::from_suffix(bad).is_none(),
+                "RateLimitUnit::from_suffix({bad:?}) must return None — the \
+                 parser's accept-set is exactly the three RateLimitUnit::as_suffix \
+                 outputs"
+            );
+        }
+    }
+
+    #[test]
+    fn rate_limit_canonical_unit_returns_typed_arm_on_validated_windows() {
+        // Fail-before-pass-after pin on [`RateLimit::canonical_unit`]:
+        // every canonical `:window` magnitude the validate gate
+        // accepts must map to the paired [`RateLimitUnit`] arm through
+        // this accessor. A future validate-gate rebrand that widened
+        // the accepted-window set without extending [`RateLimitUnit`]
+        // would silently split the accessor's `Some`-return set from
+        // the validate gate's accept-set — a slot that satisfies
+        // validate would land at the accessor with `None`, so a
+        // consumer past validate that pattern-matches on the returned
+        // `Some` would silently miss the newly-accepted magnitude.
+        for (window_secs, expected) in [
+            (1u64, super::RateLimitUnit::Second),
+            (60, super::RateLimitUnit::Minute),
+            (3600, super::RateLimitUnit::Hour),
+        ] {
+            let rl = RateLimit {
+                rate: 100,
+                window: Duration::from_secs(window_secs),
+            };
+            assert_eq!(
+                rl.canonical_unit(),
+                Some(expected),
+                "RateLimit {{ window: {window_secs}s, .. }}.canonical_unit() \
+                 must return Some({expected:?})"
+            );
+        }
+        // Non-canonical windows the validate gate rejects also return
+        // None here — the accessor is the typed-enum projection of
+        // the sibling `is_canonical_rate_limit_window` predicate.
+        let bad = RateLimit {
+            rate: 100,
+            window: Duration::from_secs(30),
+        };
+        assert!(
+            bad.canonical_unit().is_none(),
+            "RateLimit with a non-canonical window must return None from \
+             canonical_unit — the validate gate rejects the same set"
+        );
+    }
+
+    #[test]
+    fn rate_limit_unit_is_variant_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+        // derive: for each of the three variants, exactly one of the
+        // generated `is_second` / `is_minute` / `is_hour` predicates
+        // returns `true` and the other two return `false`. Peer of
+        // the sibling
+        // `caixa_kind_is_variant_predicates_partition_the_arm_set` /
+        // sibling `IsVariant`-derived closed-set typed-enum pins.
+        let rows: [(super::RateLimitUnit, [bool; 3]); 3] = [
+            (super::RateLimitUnit::Second, [true, false, false]),
+            (super::RateLimitUnit::Minute, [false, true, false]),
+            (super::RateLimitUnit::Hour, [false, false, true]),
+        ];
+        for (variant, expected) in rows {
+            let observed = [variant.is_second(), variant.is_minute(), variant.is_hour()];
+            assert_eq!(
+                observed, expected,
+                "RateLimitUnit::{variant:?} is_* predicates must partition \
+                 the arm set (second, minute, hour); got {observed:?}"
+            );
+        }
     }
 
     #[test]
