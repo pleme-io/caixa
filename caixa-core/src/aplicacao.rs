@@ -2672,44 +2672,28 @@ impl std::fmt::Display for RateLimitUnit {
     }
 }
 
-/// Canonical rate-limit unit suffix for `window`, or `None` when
-/// `window` isn't a [`RateLimitUnit`] arm's `Duration` (i.e. carries
-/// sub-second residue or a second-magnitude outside the closed-set
-/// arm-window set). Thin delegate over [`RateLimitUnit::from_window`]
-/// composed with [`RateLimitUnit::as_suffix`] — the two consumers on
-/// the `Duration → &'static str` axis ([`rate_limit_codec::render`] and
-/// [`is_canonical_rate_limit_window`]) share this projection.
-#[must_use]
-fn rate_limit_window_unit(window: Duration) -> Option<&'static str> {
-    RateLimitUnit::from_window(window).map(RateLimitUnit::as_suffix)
-}
-
 /// Canonical rate-limit `Duration` for a unit suffix, or `None` when
 /// the suffix isn't a [`RateLimitUnit`] arm's `as_suffix` output. Thin
 /// delegate over [`RateLimitUnit::from_suffix`] composed with
 /// [`RateLimitUnit::window`] — the sole consumer on the
 /// `&'static str → Duration` axis ([`rate_limit_codec::parse`]) reads
 /// this projection.
+///
+/// The peer `Duration → &'static str` axis (previously carried by the
+/// module-private `rate_limit_window_unit` delegate) folded onto the
+/// substrate primitive [`RateLimit::canonical_unit`] typed accessor once
+/// both production consumers ([`rate_limit_codec::render`] and
+/// [`AplicacaoSpec::validate_politicas`]'s canonical-window gate)
+/// migrated: the free helper's `Duration → &str` projection is now the
+/// two-step composition `rl.canonical_unit().map(RateLimitUnit::as_suffix)`
+/// every consumer reads through the typed accessor. The
+/// [`&str → Duration`] axis here has no such accessor peer (the codec's
+/// parse arm reads `&str` from the wire, not from a validated typed
+/// slot), so this delegate stays as the single lifted projection every
+/// wire-side consumer routes through.
 #[must_use]
 fn rate_limit_window_from_unit(unit: &str) -> Option<Duration> {
     RateLimitUnit::from_suffix(unit).map(RateLimitUnit::window)
-}
-
-/// True when `window` is exactly one of the three canonical rate-limit
-/// windows the [`rate_limit_codec`] round-trips losslessly: 1 second
-/// (`"<n>/s"`), 1 minute (`"<n>/m"`), or 1 hour (`"<n>/h"`). Routes
-/// through [`RateLimitUnit::from_window`] — the single `Duration → Self`
-/// projection [`rate_limit_codec::render`] also consumes — so the
-/// canonical-window set lives in one typed enum's `match self` arms,
-/// drift between the codec's accepted unit set and the validate gate's
-/// accepted window set is a compiler-enforced build error at the enum,
-/// not a silent round-trip break at the codec layer. Same shape every
-/// other predicate-on-the-typed-slot helper carries
-/// ([`MeshPolicy::is_empty`], [`crate::LimitsSpec::is_empty`],
-/// [`crate::BehaviorSpec::is_empty`]).
-#[must_use]
-fn is_canonical_rate_limit_window(window: Duration) -> bool {
-    RateLimitUnit::from_window(window).is_some()
 }
 
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
@@ -4038,17 +4022,31 @@ mod rate_limit_codec {
 
     fn render(rl: RateLimit) -> String {
         // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives at
-        // module scope as the lifted [`super::RATE_LIMIT_UNIT_TABLE`]
-        // const; this render arm now consumes only the `Duration → unit`
-        // projection [`super::rate_limit_window_unit`], which returns
-        // `None` on every non-canonical window (the sub-second /
-        // non-`{1, 60, 3600}` shapes the validate gate rejects). Same
-        // helper the sibling [`super::is_canonical_rate_limit_window`]
-        // predicate reads — so a future rate-limit-unit addition
-        // (a `"d"` day suffix once Envoy's `rate_limit_action` grows
-        // daily-bucket support) is one row appended to the table and
-        // both consumers pick it up by construction.
-        if let Some(unit) = super::rate_limit_window_unit(rl.window()) {
+        // module scope on the closed-set typed enum [`super::RateLimitUnit`];
+        // this render arm reads the `Duration → RateLimitUnit` projection
+        // through the substrate primitive [`super::RateLimit::canonical_unit`]
+        // (returns `None` on every non-canonical window — the sub-second /
+        // non-`{1, 60, 3600}` shapes the validate gate rejects), then
+        // formats the returned typed enum through its
+        // [`std::fmt::Display`] impl (which routes through
+        // [`super::RateLimitUnit::as_suffix`]). Two typed dispatches on
+        // the substrate primitive instead of one runtime `find_map`
+        // walk through the free-helper delegate chain
+        // [`super::rate_limit_window_unit`] (the vestigial free helper's
+        // sole production consumer was this arm; every other consumer of
+        // the `Duration → unit` axis — the validate gate below and the
+        // future M4 per-Aplicacao Envoy config reconciler — now reads
+        // the same typed method).
+        //
+        // A future rate-limit-unit addition (a `"d"` day suffix once
+        // Envoy's `rate_limit_action` grows daily-bucket support) is
+        // one variant + one arm per method on the closed-set enum, and
+        // the compiler enforces exhaustiveness on every consumer's
+        // `match self` arms — the codec's `parse` accepted-suffix set,
+        // this render arm's emitted-suffix set, the validate gate's
+        // canonical-window set, and every future per-`:contratos`-edge
+        // rate-limit-override overlay all pick it up by construction.
+        if let Some(unit) = rl.canonical_unit() {
             format!("{}/{unit}", rl.rate())
         } else {
             // Defensive fallback for non-canonical windows. Note:
@@ -4057,11 +4055,11 @@ mod rate_limit_codec {
             // [`AplicacaoError::PolicyRateLimitWindowNotCanonical`], so
             // a validated `RateLimit` never reaches this branch. The
             // emitted `<n>/<k>s` form is *not* round-trippable through
-            // [`parse`] (which accepts only the [`super::RATE_LIMIT_UNIT_TABLE`]
-            // suffixes, not `<k>s` with an explicit count) — the
-            // validate gate is what makes the round-trip a structural
-            // property; this branch exists only so a programmatic
-            // non-validated serialize doesn't panic.
+            // [`parse`] (which accepts only the closed-set
+            // [`super::RateLimitUnit`] suffixes, not `<k>s` with an
+            // explicit count) — the validate gate is what makes the
+            // round-trip a structural property; this branch exists only
+            // so a programmatic non-validated serialize doesn't panic.
             format!("{}/{}s", rl.rate(), rl.window().as_secs())
         }
     }
@@ -6632,7 +6630,28 @@ impl AplicacaoSpec {
             // the b0c8389 :behavior + :upgrade-from script-path lifts:
             // the typed slot's valid set matches its codec's accepted
             // set, structurally.
-            if !is_canonical_rate_limit_window(rl.window()) {
+            // Route the canonical-window shape-gate through the substrate
+            // primitive [`RateLimit::canonical_unit`] rather than the free
+            // module-private [`is_canonical_rate_limit_window`] predicate:
+            // both projections resolve `Duration → Option<RateLimitUnit>`
+            // through [`RateLimitUnit::from_window`] (the sole `Duration → Self`
+            // arm on the closed-set typed enum), but the accessor is the
+            // typed method every downstream consumer of the validated slot
+            // ([`rate_limit_codec::render`]'s canonical arm above, the
+            // future M4 `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+            // per-`:politicas :rate-limit` admission webhook, the future
+            // per-`:contratos`-edge rate-limit-override overlay
+            // MESH-COMPOSITION §III.2 #3 acknowledges) already reads. Two
+            // production consumers of the canonical-unit axis (the codec
+            // render and this validate gate) now key off exactly one typed
+            // dispatch on the substrate primitive, so any future extension
+            // to `canonical_unit` (a per-cluster canonical-window overlay
+            // the operator pins through a future `:contratos :rate-limit
+            // -unit-overrides` slot, a per-tenant unit-alias table the M4
+            // CR materializer resolves per-CR) reaches both consumers by
+            // construction rather than a coordinated rewrite of every
+            // free-helper call site.
+            if rl.canonical_unit().is_none() {
                 return Err(AplicacaoError::PolicyRateLimitWindowNotCanonical {
                     window: rl.window(),
                 });
@@ -13812,73 +13831,82 @@ mod tests {
     }
 
     #[test]
-    fn is_canonical_rate_limit_window_predicate_tracks_codec() {
-        // Pin the predicate's accepted set against the codec's
+    fn canonical_rate_limit_window_set_tracks_codec_via_canonical_unit() {
+        // Pin the substrate-primitive [`RateLimit::canonical_unit`]
+        // typed accessor's accepted-window set against the codec's
         // accepted set explicitly. A future addition to the codec
         // (e.g. accepting `:day`/`:week` as authoring units) must be
         // accompanied by a parallel addition here, and a regression
         // that drops one of the three canonical units from either
-        // side surfaces as a test failure. The predicate is the
-        // single source of truth for the canonical-window set; this
-        // test enshrines that the codec's parse arms and the
-        // predicate's accept arms agree exactly.
-        assert!(super::is_canonical_rate_limit_window(Duration::from_secs(
-            1
-        )));
-        assert!(super::is_canonical_rate_limit_window(Duration::from_secs(
-            60
-        )));
-        assert!(super::is_canonical_rate_limit_window(Duration::from_secs(
-            3600
-        )));
-        // Non-canonical windows the predicate rejects.
-        assert!(!super::is_canonical_rate_limit_window(Duration::ZERO));
-        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
-            2
-        )));
-        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
-            30
-        )));
-        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
-            120
-        )));
-        assert!(!super::is_canonical_rate_limit_window(Duration::from_secs(
-            86400
-        )));
+        // side surfaces as a test failure. The accessor is the
+        // single source of truth for the canonical-window set —
+        // [`AplicacaoSpec::validate_politicas`]'s canonical-window
+        // gate and [`rate_limit_codec::render`]'s canonical arm both
+        // read through it — this test enshrines that its
+        // `Duration → Option<RateLimitUnit>` projection matches the
+        // codec's parse / render arms' accepted-window set exactly.
+        //
+        // Predecessor: this pin previously read the module-private
+        // free helper `is_canonical_rate_limit_window` — a delegate
+        // that composed [`RateLimitUnit::from_window`] with `.is_some()`
+        // — but the helper had no production consumers left after the
+        // validate-gate migration onto [`RateLimit::canonical_unit`]
+        // and was deleted; the closed-set arm-window bijection now
+        // lives on exactly one typed dispatch on the substrate
+        // primitive.
+        let canonical_unit = |window: Duration| -> Option<super::RateLimitUnit> {
+            RateLimit { rate: 1, window }.canonical_unit()
+        };
+        assert!(canonical_unit(Duration::from_secs(1)).is_some());
+        assert!(canonical_unit(Duration::from_secs(60)).is_some());
+        assert!(canonical_unit(Duration::from_secs(3600)).is_some());
+        // Non-canonical windows the accessor rejects.
+        assert!(canonical_unit(Duration::ZERO).is_none());
+        assert!(canonical_unit(Duration::from_secs(2)).is_none());
+        assert!(canonical_unit(Duration::from_secs(30)).is_none());
+        assert!(canonical_unit(Duration::from_secs(120)).is_none());
+        assert!(canonical_unit(Duration::from_secs(86400)).is_none());
         // Sub-second windows: even `Duration::from_millis(1000)` is
         // exactly 1s and accepted; `Duration::from_millis(500)` is
         // sub-second and rejected.
-        assert!(super::is_canonical_rate_limit_window(
-            Duration::from_millis(1000)
-        ));
-        assert!(!super::is_canonical_rate_limit_window(
-            Duration::from_millis(500)
-        ));
-        assert!(!super::is_canonical_rate_limit_window(
-            Duration::from_millis(1500)
-        ));
+        assert!(canonical_unit(Duration::from_millis(1000)).is_some());
+        assert!(canonical_unit(Duration::from_millis(500)).is_none());
+        assert!(canonical_unit(Duration::from_millis(1500)).is_none());
     }
 
     #[test]
     fn rate_limit_unit_table_projections_are_mutual_inverses() {
-        // Bidirection pin against the lifted [`RATE_LIMIT_UNIT_TABLE`]
-        // (the canonical `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}`
-        // bijection every consumer of the rate-limit unit surface
-        // reads from). Until this table landed the three (str,
-        // Duration) pairs sat scattered across four peer sites —
-        // `rate_limit_codec::parse`'s `match unit` arm, `render`'s
-        // `if secs == 1 { "s" } else if …` cascade, and
-        // `is_canonical_rate_limit_window`'s `secs == 1 || 60 ||
-        // 3600` disjunction — each carrying its own hand-written copy
-        // with no compile-time link between them. A future
+        // Bidirection pin against the closed-set typed enum
+        // [`RateLimitUnit`] arm-table (the canonical
+        // `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection every consumer
+        // of the rate-limit unit surface reads from). The two
+        // projection directions [`RateLimitUnit::from_suffix`] /
+        // [`RateLimitUnit::window`] (str → Duration) and
+        // [`RateLimitUnit::from_window`] / [`RateLimitUnit::as_suffix`]
+        // (Duration → str) are the substrate primitives the codec's
+        // parse arm ([`rate_limit_codec::parse`] via
+        // [`rate_limit_window_from_unit`]), the codec's render arm
+        // ([`rate_limit_codec::render`] via [`RateLimit::canonical_unit`]),
+        // and the validate gate ([`AplicacaoSpec::validate_politicas`]
+        // via [`RateLimit::canonical_unit`]) all key off. A future
         // rate-limit-unit addition (a `"d"` day suffix, a `"ms"`
-        // sub-second window) would have to be threaded through all
-        // three sites in lockstep or a drift would silently split
-        // the accepted-window set. Lifting the pairs onto one const
-        // + two projection helpers collapses the surface: this pin
-        // enshrines that both projections agree on every table row
-        // and neither leaks a spurious entry the other doesn't
-        // recognize.
+        // sub-second window) is one variant + one arm per method on the
+        // closed-set enum; the compiler-enforced exhaustiveness on
+        // every consumer's `match self` arms picks it up by
+        // construction. This pin enshrines that both projection
+        // directions agree on every canonical arm row and neither
+        // leaks a spurious entry the other doesn't recognize.
+        //
+        // Predecessor: this test previously read the two vestigial
+        // module-private free helpers `rate_limit_window_unit` and
+        // `rate_limit_window_from_unit` on the `Duration → &str` and
+        // `&str → Duration` axes; the former was deleted after its
+        // sole production consumer ([`rate_limit_codec::render`])
+        // migrated onto [`RateLimit::canonical_unit`], so the
+        // `Duration → &str` half now composes [`RateLimit::canonical_unit`]
+        // with [`RateLimitUnit::as_suffix`] directly. The `&str → Duration`
+        // axis stays on the surviving [`rate_limit_window_from_unit`]
+        // delegate the codec's parse arm still reads through.
         for (unit, secs) in [("s", 1u64), ("m", 60), ("h", 3600)] {
             let window = super::rate_limit_window_from_unit(unit)
                 .unwrap_or_else(|| panic!("canonical unit {unit:?} must resolve to a Duration"));
@@ -13887,10 +13915,14 @@ mod tests {
                 Duration::from_secs(secs),
                 "unit {unit:?} must resolve to {secs}s"
             );
+            let projected_suffix = RateLimit { rate: 1, window }
+                .canonical_unit()
+                .map(super::RateLimitUnit::as_suffix);
             assert_eq!(
-                super::rate_limit_window_unit(window),
+                projected_suffix,
                 Some(unit),
-                "Duration({secs}s) must render as {unit:?}"
+                "Duration({secs}s) must render as {unit:?} \
+                 via RateLimit::canonical_unit + RateLimitUnit::as_suffix"
             );
         }
         // Non-table units yield None on the `unit → Duration`
@@ -13906,9 +13938,14 @@ mod tests {
         // parse-side accepts a value the render-side can't emit is
         // a build error at the two-arm pair, not a silent codec
         // round-trip break.
-        assert!(super::rate_limit_window_unit(Duration::from_secs(2)).is_none());
-        assert!(super::rate_limit_window_unit(Duration::from_secs(86_400)).is_none());
-        assert!(super::rate_limit_window_unit(Duration::from_millis(1500)).is_none());
+        let projected_suffix = |window: Duration| -> Option<&'static str> {
+            RateLimit { rate: 1, window }
+                .canonical_unit()
+                .map(super::RateLimitUnit::as_suffix)
+        };
+        assert!(projected_suffix(Duration::from_secs(2)).is_none());
+        assert!(projected_suffix(Duration::from_secs(86_400)).is_none());
+        assert!(projected_suffix(Duration::from_millis(1500)).is_none());
     }
 
     #[test]
@@ -14134,6 +14171,175 @@ mod tests {
             "RateLimit with a non-canonical window must return None from \
              canonical_unit — the validate gate rejects the same set"
         );
+    }
+
+    #[test]
+    fn rate_limit_codec_render_routes_through_canonical_unit_and_as_suffix() {
+        // Fail-before-pass-after byte-parity pin: for every canonical
+        // window the [`rate_limit_codec::render`] arm's emitted string
+        // equals `format!("{}/{}", rl.rate(), unit.as_suffix())` where
+        // `unit = rl.canonical_unit().unwrap()`. Pins the migration from
+        // the vestigial free helper [`rate_limit_window_unit`] (a
+        // `find_map`-walked `Duration → &'static str` delegate) onto the
+        // substrate primitive [`RateLimit::canonical_unit`] typed method
+        // (a closed-set `match self.window` arm on
+        // [`RateLimitUnit::from_window`], projected through
+        // [`RateLimitUnit::as_suffix`] via the enum's
+        // [`std::fmt::Display`] impl). A future re-routing of the render
+        // arm through a differently-computed unit projection would break
+        // this pin at build time rather than as a silent per-consumer
+        // codec round-trip drift far from the substrate primitive edit.
+        //
+        // Sibling to the peer
+        // [`rate_limit_unit_table_projections_are_mutual_inverses`] pin
+        // on the free-helper axis: that pin locks the two projections
+        // (`from_suffix` / `as_suffix` / `from_window` / `window`) agree
+        // on the closed-set arm table; this pin locks the codec's render
+        // arm reads through the typed accessor rather than the free
+        // helper. Two production consumers of the canonical-unit axis
+        // now key off one typed dispatch on the substrate primitive.
+        for (window_secs, unit) in [
+            (1u64, super::RateLimitUnit::Second),
+            (60, super::RateLimitUnit::Minute),
+            (3600, super::RateLimitUnit::Hour),
+        ] {
+            let rl = RateLimit {
+                rate: 42,
+                window: Duration::from_secs(window_secs),
+            };
+            let policy = MeshPolicy {
+                rate_limit: Some(rl),
+                ..Default::default()
+            };
+            let json = serde_json::to_string(&policy).unwrap();
+            let expected = format!("\"{}/{}\"", rl.rate(), unit.as_suffix());
+            assert!(
+                json.contains(&expected),
+                "rate_limit_codec::render must emit {expected} (via \
+                 RateLimit::canonical_unit + RateLimitUnit::as_suffix) \
+                 for a {window_secs}s window; serialized MeshPolicy was: {json}"
+            );
+            // And the accessor route resolves to the same typed unit
+            // the render arm's Display formatting is asked to produce —
+            // so a future edit that split the two paths (one through
+            // the accessor, one through a re-introduced free helper)
+            // trips this pin.
+            assert_eq!(
+                rl.canonical_unit(),
+                Some(unit),
+                "RateLimit::canonical_unit must return Some({unit:?}) for a \
+                 {window_secs}s window; the codec render arm reads the same \
+                 typed unit through this accessor"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_politicas_rate_limit_canonical_window_gate_routes_through_canonical_unit() {
+        // Fail-before-pass-after byte-parity pin on the validate gate's
+        // canonical-window shape probe: every non-canonical `:window`
+        // the free-helper predicate [`is_canonical_rate_limit_window`]
+        // rejects is also rejected by the substrate primitive
+        // [`RateLimit::canonical_unit`] `.is_none()` route the validate
+        // gate now reads through, and vice versa on the accepted set
+        // (the three canonical windows). Locks the migration from the
+        // free helper onto the substrate primitive: a future re-routing
+        // of one of the two paths through a differently-computed unit
+        // projection would silently split the codec's accepted set from
+        // the validate gate's accepted set — a two-consumer drift the
+        // codec-round-trip pin
+        // [`rate_limit_codec_render_routes_through_canonical_unit_and_as_suffix`]
+        // above closes on the render arm and this pin closes on the
+        // validate arm.
+        for canonical_window_secs in [1u64, 60, 3600] {
+            let mut s = three_member_spec();
+            let rl = RateLimit {
+                rate: 100,
+                window: Duration::from_secs(canonical_window_secs),
+            };
+            s.politicas.rate_limit = Some(rl);
+            assert!(
+                s.validate().is_ok(),
+                "canonical {canonical_window_secs}s window must pass \
+                 validate_politicas — the validate gate now reads \
+                 RateLimit::canonical_unit().is_none() and the accessor \
+                 returns Some on every canonical arm"
+            );
+            assert!(
+                rl.canonical_unit().is_some(),
+                "canonical {canonical_window_secs}s window must resolve to \
+                 Some on RateLimit::canonical_unit — the validate gate reads \
+                 this accessor directly"
+            );
+        }
+        for non_canonical_window_secs in [2u64, 30, 120, 86_400] {
+            let mut s = three_member_spec();
+            let rl = RateLimit {
+                rate: 100,
+                window: Duration::from_secs(non_canonical_window_secs),
+            };
+            s.politicas.rate_limit = Some(rl);
+            assert_eq!(
+                s.validate().unwrap_err(),
+                AplicacaoError::PolicyRateLimitWindowNotCanonical {
+                    window: rl.window(),
+                },
+                "non-canonical {non_canonical_window_secs}s window must be \
+                 rejected by validate_politicas — the validate gate now \
+                 keys off RateLimit::canonical_unit().is_none()"
+            );
+            assert!(
+                rl.canonical_unit().is_none(),
+                "non-canonical {non_canonical_window_secs}s window must \
+                 resolve to None on RateLimit::canonical_unit — the two \
+                 paths (the free helper the validate gate previously read \
+                 and the substrate primitive the validate gate now reads) \
+                 must agree on the same rejected set"
+            );
+        }
+        // And the substrate-primitive [`RateLimit::canonical_unit`]
+        // accessor's accepted-window set matches the codec's parse arm's
+        // accepted-suffix set on every canonical / non-canonical shape,
+        // so a future silent drift between the codec's accepted set and
+        // the validate gate's accepted set is a build error at test time
+        // (both consumers key off the same closed-set enum's `match self`
+        // arms). The predecessor free helper `is_canonical_rate_limit_window`
+        // — a delegate that composed [`RateLimitUnit::from_window`] with
+        // `.is_some()` — was deleted after this migration; the
+        // canonical-window set now lives on exactly one typed dispatch
+        // on the substrate primitive.
+        for (secs, expected) in [
+            (1u64, true),
+            (60, true),
+            (3600, true),
+            (2, false),
+            (30, false),
+            (86_400, false),
+        ] {
+            let window = Duration::from_secs(secs);
+            let rl = RateLimit { rate: 1, window };
+            assert_eq!(
+                rl.canonical_unit().is_some(),
+                expected,
+                "RateLimit::canonical_unit().is_some() must agree with the \
+                 codec-accepted canonical-window set on {secs}s"
+            );
+            let suffix_from_axis = super::rate_limit_window_from_unit(match secs {
+                1 => "s",
+                60 => "m",
+                3600 => "h",
+                _ => return,
+            })
+            .is_some_and(|d| d == window);
+            if expected {
+                assert!(
+                    suffix_from_axis,
+                    "the codec's `&str → Duration` axis \
+                     ({secs}s) must round-trip to the same Duration the \
+                     substrate primitive's accessor returns Some on"
+                );
+            }
+        }
     }
 
     #[test]
