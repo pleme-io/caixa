@@ -114,6 +114,44 @@ impl CaixaDialeto {
         Self::Desconhecido,
     ];
 
+    /// Substrate-canonical `PascalCase` variant-name byte-string every consumer
+    /// that formats the dialect as census-facing text lands on. Returns the
+    /// per-arm `PascalCase` name of the variant (`"Pacote"` / `"Molde"` /
+    /// `"MoldePosicional"` / `"Desconhecido"`) — the one canonical
+    /// byte-string the paired [`std::fmt::Display`] impl routes through so
+    /// every downstream consumer (the `feira dialeto` census counter output
+    /// line, a future `feira dialeto --list-dialects` CLI enumeration, a
+    /// future M4 `mesh.pleme.io/v1alpha1/Manifesto` CR materializer's
+    /// admission-webhook rejection body naming the accepted-dialect set)
+    /// reaches for the same substrate primitive rather than the pre-lift
+    /// hand-rolled four-arm literal-string match every [`std::fmt::Display`]
+    /// call previously routed through in place.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::CaixaKind::as_str`] / [`crate::supervisor::RestartStrategy::as_str`]
+    /// / [`crate::supervisor::RestartPolicy::as_str`] /
+    /// [`crate::aplicacao::PlacementStrategy::as_str`] /
+    /// [`crate::dep::DepList::as_str`] projections on the sibling closed-set
+    /// typed-enum discriminator axes — the seventh (and last unlifted)
+    /// closed-set fieldless typed enum on the caixa surface to converge
+    /// onto the same one-canonical-byte-string-per-arm-through-`as_str`
+    /// discipline the six siblings already carry. Unlike [`crate::CaixaKind`]
+    /// (which carries two axes: `as_str` returning lowercase Portuguese
+    /// diagnostic form vs `wire_name` returning `PascalCase` tatara-lisp
+    /// author-surface bytes), [`CaixaDialeto`] is an internal
+    /// classification with no wire surface — the `PascalCase` variant name
+    /// is the census-facing form every consumer reads, so `as_str`
+    /// suffices without a paired `wire_name` axis.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pacote => "Pacote",
+            Self::Molde => "Molde",
+            Self::MoldePosicional => "MoldePosicional",
+            Self::Desconhecido => "Desconhecido",
+        }
+    }
+
     /// The keyword an author should write for this dialect, once the
     /// migration named in [`Self::consumidor`] completes.
     #[must_use]
@@ -149,14 +187,37 @@ impl CaixaDialeto {
     }
 }
 
+/// [`std::fmt::Display`] routed through [`CaixaDialeto::as_str`], so the
+/// pretty-printed byte-string every consumer that formats the dialect as
+/// user-facing / census text lands on (the `feira dialeto` per-manifest
+/// `--list` row, the `feira dialeto` census summary line's per-arm
+/// counters, a future M4 admission-webhook's rejection body naming the
+/// accepted-dialect set) reaches for the same `PascalCase` per-arm
+/// byte-string the [`CaixaDialeto::as_str`] helper returns.
+///
+/// Prior to this lift the [`std::fmt::Display`] impl hand-rolled its own
+/// four-arm literal-string match — the one hand-rolled per-arm dispatch
+/// on the closed [`CaixaDialeto`] discriminator that had NO substrate
+/// primitive accessor to defer to (the sibling [`CaixaDialeto::palavra_canonica`] /
+/// [`CaixaDialeto::consumidor`] / [`CaixaDialeto::descricao`] projections
+/// carry distinct byte-shapes per axis, so none of them could serve as
+/// the Display source). A future variant addition (a fifth dialect the
+/// module doc's "third dialect" hazard actualises) would land one arm at
+/// the enum and per-arm returns at the paired accessors, but a hand-rolled
+/// [`std::fmt::Display`] match would silently drop the new arm to compile-
+/// fail-at-the-match-arm-site rather than through the shared substrate
+/// primitive. Routing [`std::fmt::Display`] through [`CaixaDialeto::as_str`]
+/// closes the last unlifted per-arm `PascalCase`-name projection on the
+/// caixa surface — the seventh (and last unlifted) closed-set fieldless
+/// typed enum on the caixa surface to converge onto the same
+/// `Display`-through-`as_str` discipline the six siblings
+/// ([`crate::CaixaKind`] / [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] /
+/// [`crate::aplicacao::PlacementStrategy`] / [`crate::aplicacao::RateLimitUnit`]
+/// / [`crate::dep::DepList`]) already carry.
 impl std::fmt::Display for CaixaDialeto {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Self::Pacote => "Pacote",
-            Self::Molde => "Molde",
-            Self::MoldePosicional => "MoldePosicional",
-            Self::Desconhecido => "Desconhecido",
-        })
+        f.write_str(self.as_str())
     }
 }
 
@@ -497,5 +558,100 @@ mod tests {
             assert!(!d.consumidor().is_empty(), "{d}");
             assert!(!d.descricao().is_empty(), "{d}");
         }
+    }
+
+    #[test]
+    fn caixa_dialeto_as_str_returns_pascal_case_variant_name() {
+        // Fail-before-pass-after per-arm shape pin: the four
+        // [`CaixaDialeto::as_str`] arms must return the canonical
+        // `PascalCase` byte-string that names the variant. Pre-lift this
+        // byte-string existed only inside the hand-rolled Display impl's
+        // four-arm literal-string match — every consumer that wanted the
+        // `PascalCase` name reached through `format!("{d}")`'s allocation
+        // path. Pinning the four arms explicitly here refuses a future
+        // regression that ever reroutes an arm to a distinct spelling
+        // (`"pacote"` lowercase, `"MoldePositional"` English rebrand,
+        // `"Unknown"` for `Desconhecido`) — the census output and the
+        // typed accessor would silently disagree until a downstream
+        // consumer surfaced the drift at census time. Peer of the sibling
+        // [`crate::supervisor::tests::restart_strategy_variants_serialize_to_lifted_scalar_values`]
+        // / `placement_strategy_variants_serialize_to_lifted_scalar_values`
+        // / `caixa_kind_as_str_returns_lifted_peer_const` shape on the
+        // sibling closed-set typed-enum discriminator axes — the seventh
+        // (and last unlifted) closed-set typed enum on the caixa surface
+        // to converge onto the same per-arm-shape-pin discipline.
+        for (variant, expected) in [
+            (CaixaDialeto::Pacote, "Pacote"),
+            (CaixaDialeto::Molde, "Molde"),
+            (CaixaDialeto::MoldePosicional, "MoldePosicional"),
+            (CaixaDialeto::Desconhecido, "Desconhecido"),
+        ] {
+            assert_eq!(
+                variant.as_str(),
+                expected,
+                "CaixaDialeto::{variant:?}.as_str() must return the \
+                 canonical `PascalCase` variant-name byte-string; drift here \
+                 splits the census-facing text from the substrate \
+                 primitive every downstream consumer will read"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_display_routes_through_as_str_helper() {
+        // Fail-before-pass-after convergence pin: for every arm in
+        // [`CaixaDialeto::ALL`], the [`std::fmt::Display`] rendered form
+        // must byte-equal [`CaixaDialeto::as_str`]'s return value. Pre-
+        // lift these two paths were structurally independent — the
+        // Display impl hand-rolled its own four-arm literal-string
+        // match with no compile-time link back to any substrate accessor
+        // — so a future variant rename could land at `Display` without
+        // touching a paired accessor (or vice versa), silently splitting
+        // the two paths on the renamed arm. Pinning the byte-equality
+        // here makes any such split a caixa-core build-time failure at
+        // this test rather than surfacing far from the rename commit as
+        // a downstream census consumer emitting one spelling while the
+        // typed accessor returned another. Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_display_routes_through_as_str_helper`]
+        // (which pins the same convergence on the [`crate::CaixaKind`]
+        // closed-set axis) — extends the discipline onto the seventh
+        // (and last unlifted) closed-set fieldless typed enum on the
+        // caixa surface.
+        for &variant in CaixaDialeto::ALL {
+            assert_eq!(
+                variant.to_string(),
+                variant.as_str(),
+                "CaixaDialeto::{variant:?} Display must route through \
+                 CaixaDialeto::as_str (single source of truth: the \
+                 lifted per-arm `PascalCase` variant-name byte-string)"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_as_str_is_const_fn() {
+        // Const-context pin: [`CaixaDialeto::as_str`] must remain
+        // `const fn` (its match arms return `pub const` byte-strings, so
+        // no non-const operation exists on the resolution path).
+        // Downstream consumers reaching for the accessor from a `const`
+        // context (a future substrate-wide const-fold-driven audit table
+        // that materializes every dialect's census label at build time,
+        // a per-arm CR-admission-webhook message registration in a
+        // `const` gate) rely on the const-ness. A future accidental
+        // downgrade to non-`const` (an added runtime helper reachable
+        // only from a non-`const` context, a manual hand-rolled `impl`
+        // that shadows this method) trips at caixa-core build time
+        // rather than surfacing as a downstream `const`-context
+        // regression far from the accessor declaration. Peer of the
+        // sibling [`crate::kind::tests::caixa_kind_wire_name_is_const_fn`]
+        // pin on the paired [`crate::CaixaKind`] byte-string axis.
+        const PACOTE: &str = CaixaDialeto::Pacote.as_str();
+        const MOLDE: &str = CaixaDialeto::Molde.as_str();
+        const MOLDE_POSICIONAL: &str = CaixaDialeto::MoldePosicional.as_str();
+        const DESCONHECIDO: &str = CaixaDialeto::Desconhecido.as_str();
+        assert_eq!(PACOTE, "Pacote");
+        assert_eq!(MOLDE, "Molde");
+        assert_eq!(MOLDE_POSICIONAL, "MoldePosicional");
+        assert_eq!(DESCONHECIDO, "Desconhecido");
     }
 }
