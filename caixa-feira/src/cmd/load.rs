@@ -499,10 +499,21 @@ mod tests {
     fn load_caixa_accepts_well_formed_manifest() {
         // The canonical happy-path — a well-formed `caixa.lisp` at
         // `<root>/caixa.lisp` loads cleanly and the typed Caixa
-        // round-trips its `:nome` + `:kind` slots. Peer with every
-        // `feira` verb's `Run::run` entry-point: each one used to
-        // open-code this four-line load before the lift, and now
-        // routes through the canonical helper.
+        // round-trips its `:nome` + `:kind` + `:versao` universal-axis
+        // slots. Peer with every `feira` verb's `Run::run` entry-point:
+        // each one used to open-code this four-line load before the
+        // lift, and now routes through the canonical helper. Each of
+        // the three round-trip assertions projects the parsed manifest
+        // through the substrate-canonical [`Caixa::nome`] /
+        // [`Caixa::kind`] / [`Caixa::versao`] accessors — the same
+        // typed-dispatch discipline every peer per-verb call-site
+        // reads the loaded manifest through (see e.g.
+        // `cmd/build.rs`:63-65, `cmd/nix.rs`, `cmd/publish.rs`,
+        // `cmd/deploy.rs`). Sibling of the peer caixa-flux
+        // `sample_caixa_nome_accessor_byte_equals_raw_field` pin
+        // (2ffdb44) and the caixa-crd `round_trip_preserves_core_fields`
+        // accessor convergence (1a160cd) on the sibling test-fixture-
+        // navigation surfaces.
         let dir = tempdir().expect("tempdir");
         std::fs::write(
             dir.path().join(CAIXA_MANIFEST_FILENAME),
@@ -514,9 +525,69 @@ mod tests {
         )
         .expect("write manifest");
         let caixa = load_caixa(dir.path()).expect("well-formed manifest must load");
-        assert_eq!(caixa.nome, "hello");
-        assert_eq!(caixa.kind, CaixaKind::Biblioteca);
-        assert_eq!(caixa.versao, "0.1.0");
+        assert_eq!(caixa.nome(), "hello");
+        assert_eq!(caixa.kind(), CaixaKind::Biblioteca);
+        assert_eq!(caixa.versao(), "0.1.0");
+    }
+
+    #[test]
+    fn load_caixa_scalar_accessors_byte_equal_raw_fields() {
+        // The byte-parity pin the just-landed accessor route the
+        // sibling `load_caixa_accepts_well_formed_manifest` case reads
+        // the parsed manifest's `:nome` / `:versao` universal-axis
+        // scalars through relies on. A future implementation of
+        // [`Caixa::nome`] / [`Caixa::versao`] that returned a
+        // differently-bytewidth projection (a cached `CaixaName`-newtype
+        // `Display` value, an operator-side normalized ASCII-lowered
+        // projection the caixa-operator reconciles ahead of dispatch)
+        // would silently split the test-fixture-navigation input from
+        // the storage-side field the peer `feira` verb-entry emit paths
+        // (`cmd/deploy.rs`, `cmd/publish.rs`, `cmd/nix.rs`) still read
+        // verbatim; this pin surfaces the drift at build-time rather
+        // than at a downstream `kubectl get helmrelease` / annotated-
+        // tag audit on the fleet. Same byte-parity discipline the peer
+        // caixa-crd `round_trip_preserves_core_fields` accessor
+        // convergence (1a160cd) added to lock its own per-`Caixa`
+        // scalar-accessor family, and the caixa-flux
+        // `sample_caixa_nome_accessor_byte_equals_raw_field` pin
+        // (2ffdb44) added on the sibling `sample_caixa()` fixture-
+        // navigation axis, extended here onto the caixa-feira
+        // per-verb `load_caixa` entry-point's parsed-manifest surface.
+        let dir = tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join(CAIXA_MANIFEST_FILENAME),
+            r#"(defcaixa
+                 :nome "hello"
+                 :kind Biblioteca
+                 :versao "0.1.0"
+                 :bibliotecas ())"#,
+        )
+        .expect("write manifest");
+        let caixa = load_caixa(dir.path()).expect("well-formed manifest must load");
+        assert_eq!(
+            caixa.nome(),
+            caixa.nome.as_str(),
+            "Caixa::nome accessor must project the underlying :nome storage \
+             byte-for-byte — a future implementation that returned a \
+             differently-bytewidth projection would silently split the \
+             load_caixa_accepts_well_formed_manifest fixture-navigation \
+             input from the storage-side field the peer per-verb emit \
+             paths still read verbatim"
+        );
+        assert_eq!(
+            caixa.versao(),
+            caixa.versao.as_str(),
+            "Caixa::versao accessor must project the underlying :versao \
+             storage byte-for-byte — the peer arm on the top-level \
+             `:versao` universal-axis SemVer-2 scalar surface"
+        );
+        assert_eq!(
+            caixa.kind(),
+            caixa.kind,
+            "Caixa::kind accessor must return the underlying :kind storage \
+             discriminant identically — the peer arm on the top-level \
+             `:kind` universal-axis typed-discriminant surface"
+        );
     }
 
     #[test]
