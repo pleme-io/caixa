@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
-use caixa_core::{Dep, DepSource};
+use anyhow::{Context, Result};
+use caixa_core::{Dep, DepList, DepSource};
 use clap::Args;
 
 use super::load::{caixa_manifest_path, caixa_root, load_caixa};
@@ -84,26 +84,39 @@ impl Add {
             caracteristicas: self.caracteristicas.clone(),
         };
 
-        let target = if self.dev {
-            &mut caixa.deps_dev
+        // Route the per-list dispatch + within-list dedup + push
+        // cascade through the substrate primitive [`Caixa::push_dep`]
+        // rather than the prior open-coded `&mut caixa.deps` / `&mut
+        // caixa.deps_dev` inline field-access + open-coded
+        // `.iter().any(|d| d.nome == …)` dup-check + open-coded
+        // `bail!("dep '{}' already declared", …)` string-diagnostic
+        // path — the two-arm [`DepList`] enum + the typed
+        // [`caixa_core::DepError::DuplicateNome`] carrier are the
+        // substrate's canonical closed-set-typed carrier for the
+        // "runtime-closure `:deps` vs dev-only-closure `:deps-dev`" +
+        // "within-list duplicate `:nome` refusal" axis pair every
+        // dep-list consumer already routes through. Same substrate-
+        // primitive-owns-the-resolver discipline the sibling
+        // [`Caixa::deps`] / [`Caixa::deps_dev`] read accessors carry
+        // on the peer per-list read axis — extended onto the
+        // outer-`Caixa` typed-mutation axis, the substrate's first
+        // typed-mutation dispatch on the top-level manifest surface.
+        let list = if self.dev {
+            DepList::Dev
         } else {
-            &mut caixa.deps
+            DepList::Prod
         };
-        if target.iter().any(|d| d.nome == self.nome) {
-            bail!("dep '{}' already declared", self.nome);
-        }
-        target.push(dep);
+        caixa.push_dep(list, dep)?;
 
         let emitted = caixa.to_lisp();
         std::fs::write(&manifest_path, &emitted)
             .with_context(|| format!("writing {}", manifest_path.display()))?;
 
-        let section = if self.dev { "deps-dev" } else { "deps" };
         eprintln!(
-            "added {} {} to :{} in {}",
+            "added {} {} to {} in {}",
             self.nome,
             self.versao,
-            section,
+            list,
             manifest_path.display()
         );
         Ok(())

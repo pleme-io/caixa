@@ -33,7 +33,7 @@ pub use aplicacao::{
     SERVICO_PORT_MIN, WitContract, WitTarget,
 };
 pub use behavior::{BehaviorError, BehaviorSpec};
-pub use dep::{Dep, DepError, DepSource};
+pub use dep::{Dep, DepError, DepList, DepSource};
 pub use dialeto::{CaixaDialeto, DialetoError, classify as classify_dialeto};
 pub use kind::CaixaKind;
 pub use layout::{LayoutError, LayoutInvariants, StandardLayout};

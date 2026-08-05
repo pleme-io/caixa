@@ -1737,6 +1737,79 @@ impl Caixa {
         self.deps_dev.as_slice()
     }
 
+    /// Substrate-canonical per-[`Caixa`] typed-mutation dispatch every
+    /// consumer that appends to one of the two dep-list axes keys off
+    /// — routes the `(list: DepList, dep: Dep)` tuple through one typed
+    /// method on the substrate primitive rather than the prior
+    /// `feira add`-side open-coded `if self.dev { &mut caixa.deps_dev }
+    /// else { &mut caixa.deps }` inline dispatch + open-coded
+    /// `.iter().any(|d| d.nome == …)` dup-check cascade. Refuses the
+    /// mutation with the canonical typed [`DepError::DuplicateNome`] on
+    /// a within-list name collision — the same `list: &'static str`
+    /// diagnostic shape [`Self::validate_deps`]'s per-list
+    /// [`crate::render::insert_first_seen`] walk raises on the peer
+    /// parse-time within-list dedup axis, so a future author reading a
+    /// `feira add` refusal and a `feira build` refusal reaches for the
+    /// same corrective surface without switching diagnostic idioms.
+    ///
+    /// The two-arm [`crate::dep::DepList`] enum is the substrate's
+    /// closed-set typed carrier for the "runtime-closure `:deps` vs
+    /// dev-only-closure `:deps-dev`" axis every dep-list consumer
+    /// dispatches on — the compiler-checked exhaustiveness on the
+    /// enum's `match` arms is the build-time guarantee that no future
+    /// per-list mutation-site regresses to a bare-`bool`-flag
+    /// (`is_dev: bool`) inline dispatch that a future third
+    /// dep-list axis (a `:deps-build` build-only closure once the
+    /// substrate grows cross-artifact heterogeneous dep-graphs, per
+    /// CAIXA-SDLC §I) would silently split at every consumer.
+    ///
+    /// Same "one typed dispatch on the substrate primitive, thin
+    /// projections at each consumer" discipline the sibling per-slot
+    /// read accessors ([`Self::deps`] ad34b4e, [`Self::deps_dev`],
+    /// [`Self::nome`] e6b7d97, [`Self::versao`], [`Self::kind`])
+    /// carry — extended onto the outer-[`Caixa`] typed-mutation surface,
+    /// the substrate's first typed-mutation dispatch on the top-level
+    /// manifest. The prior `feira add` open-coded `&mut caixa.deps` /
+    /// `&mut caixa.deps_dev` inline field-access + `bail!` string-
+    /// diagnostic path routed no through-line back to the typed slot,
+    /// so a future extension of either dep-list axis to a richer author
+    /// surface (a per-cluster override the operator pins through a
+    /// future `:placement`-scoped dep-list slot the CAIXA-SDLC §I
+    /// roadmap acknowledges, an M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's per-CR
+    /// admission-webhook that normalized the list at admission time)
+    /// would have had to be threaded through the `feira add` mutation
+    /// site in lockstep with every read consumer or one path would
+    /// silently disagree with the other on which list a given dep lands
+    /// in. Lifting the resolution rule to a typed method on the
+    /// substrate primitive means every downstream dep-list-mutating
+    /// consumer of the top-level manifest reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future axis addition.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DepError::DuplicateNome`] with `list = list.as_str()`
+    /// when another entry in the same list already carries the same
+    /// `:nome` — the mutation is refused and the caller can surface the
+    /// typed diagnostic to the author (the `feira add` verb routes the
+    /// error through `anyhow::Error::from`, which preserves the
+    /// canonical `#[error(...)]`-templated diagnostic body).
+    pub fn push_dep(&mut self, list: crate::dep::DepList, dep: Dep) -> Result<(), DepError> {
+        let target = match list {
+            crate::dep::DepList::Prod => &mut self.deps,
+            crate::dep::DepList::Dev => &mut self.deps_dev,
+        };
+        if target.iter().any(|d| d.nome() == dep.nome()) {
+            return Err(DepError::DuplicateNome {
+                nome: dep.nome().to_string(),
+                list: list.as_str(),
+            });
+        }
+        target.push(dep);
+        Ok(())
+    }
+
     /// Substrate-canonical per-`Caixa` `:limits` M2 typed-slot outer-
     /// composite Lunatic-per-process wasm32-sandboxing-composite optional-
     /// composite-reference accessor every consumer of the top-level
@@ -16449,5 +16522,242 @@ mod tests {
              canonical byte-sequences on the two-list dep-graph \
              renderer-side wire-key axis"
         );
+    }
+
+    // ── DepList / Caixa::push_dep pin ────────────────────────────────
+    //
+    // The compounding pin: the two-arm closed-set typed enum
+    // [`crate::dep::DepList`] carries the runtime-closure `:deps`
+    // (`Prod`) vs dev-only-closure `:deps-dev` (`Dev`) dispatch every
+    // consumer of the top-level manifest's dep-mutation surface reads
+    // through, and the typed dispatch [`Caixa::push_dep`] on the
+    // substrate primitive folds the "select list → check within-list
+    // dup → push" cascade onto one method call. Prior to this landing
+    // the two axes lived across two `&'static str` constants
+    // (`DEP_AUTHOR_KEY_DEPS`, `DEP_AUTHOR_KEY_DEPS_DEV`) with no closed-
+    // set type carrying the pair; the `feira add` mutation site's
+    // inline `if self.dev { &mut caixa.deps_dev } else { &mut
+    // caixa.deps }` dispatch expressed no compile-time link back to
+    // the substrate primitive, and a future third dep-list axis would
+    // have silently split at every open-coded mutation site.
+
+    #[test]
+    fn dep_list_as_str_routes_through_lifted_author_key_constants() {
+        // Every arm returns the same `&'static str` the substrate's
+        // canonical `DEP_AUTHOR_KEY_DEPS` / `DEP_AUTHOR_KEY_DEPS_DEV`
+        // constants carry. A future rebrand on either constant reaches
+        // the enum through one edit; a regression to inline literals
+        // (e.g. `Prod => ":deps"`) would silently split the diagnostic
+        // quotes from the wire-format constants every consumer routes
+        // through and this pin flags it at build time.
+        assert_eq!(
+            crate::dep::DepList::Prod.as_str(),
+            crate::render::DEP_AUTHOR_KEY_DEPS
+        );
+        assert_eq!(
+            crate::dep::DepList::Dev.as_str(),
+            crate::render::DEP_AUTHOR_KEY_DEPS_DEV
+        );
+    }
+
+    #[test]
+    fn dep_list_display_routes_through_as_str() {
+        // Same as-str-through-Display convergence discipline the
+        // sibling closed-set typed enums carry — a `format!("{list}")`
+        // call must land byte-for-byte on the accessor's return so a
+        // future consumer that formats the enum for a diagnostic line
+        // reaches the same wire-format constant the wire-format
+        // producers do.
+        assert_eq!(
+            format!("{}", crate::dep::DepList::Prod),
+            crate::dep::DepList::Prod.as_str()
+        );
+        assert_eq!(
+            format!("{}", crate::dep::DepList::Dev),
+            crate::dep::DepList::Dev.as_str()
+        );
+    }
+
+    #[test]
+    fn dep_list_all_enumerates_every_variant_once() {
+        // Exhaustive-iteration pin — every arm appears exactly once in
+        // `ALL`, matching the closed set the compiler enforces on the
+        // sibling `match self` arms. A future variant addition that
+        // extends only one method's match without extending `ALL`
+        // would silently drop the new arm from every consumer that
+        // iterates the slice.
+        let variants: &[crate::dep::DepList] = crate::dep::DepList::ALL;
+        assert!(variants.contains(&crate::dep::DepList::Prod));
+        assert!(variants.contains(&crate::dep::DepList::Dev));
+        assert_eq!(variants.len(), 2);
+    }
+
+    #[test]
+    fn push_dep_routes_to_deps_slot_on_prod_arm() {
+        // The `Prod` arm dispatches to the runtime-closure `:deps`
+        // slot every downstream lacre-pipeline consumer resolves at
+        // build time. A future arm that regressed to inline `&mut
+        // self.deps_dev` on the `Prod` path would silently reroute
+        // every runtime dep into the dev-only closure at publish time
+        // — this pin refuses that regression.
+        let src = Caixa::template("host");
+        let mut caixa = Caixa::from_lisp(&src).expect("template parses");
+        let before_deps = caixa.deps().len();
+        let before_deps_dev = caixa.deps_dev().len();
+        let dep = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        caixa
+            .push_dep(crate::dep::DepList::Prod, dep)
+            .expect("first push into :deps succeeds");
+        assert_eq!(caixa.deps().len(), before_deps + 1);
+        assert_eq!(caixa.deps_dev().len(), before_deps_dev);
+        assert_eq!(caixa.deps().last().unwrap().nome(), "caixa-teia");
+    }
+
+    #[test]
+    fn push_dep_routes_to_deps_dev_slot_on_dev_arm() {
+        // Peer of the sibling `Prod`-arm dispatch pin — the `Dev` arm
+        // must dispatch to the dev-only-closure `:deps-dev` slot every
+        // downstream test-facing artifact resolver reads. A future
+        // regression that inverted the two arms would silently route
+        // every dev-only dep into the runtime closure at publish time
+        // and this pin catches it before the drift ships.
+        let src = Caixa::template("host");
+        let mut caixa = Caixa::from_lisp(&src).expect("template parses");
+        let dep = Dep {
+            nome: "tatara-check".to_string(),
+            versao: "*".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        caixa
+            .push_dep(crate::dep::DepList::Dev, dep)
+            .expect("first push into :deps-dev succeeds");
+        assert!(caixa.deps().is_empty());
+        assert_eq!(caixa.deps_dev().len(), 1);
+        assert_eq!(caixa.deps_dev().last().unwrap().nome(), "tatara-check");
+    }
+
+    #[test]
+    fn push_dep_refuses_within_list_duplicate_nome_with_typed_error() {
+        // Within-list dup check routes through the canonical
+        // [`DepError::DuplicateNome`] carrier — the substrate's typed
+        // diagnostic for the same axis [`Caixa::validate_deps`]'s
+        // parse-time [`crate::render::insert_first_seen`] walk raises
+        // on. Prior to the lift the mutation site's inline
+        // `bail!("dep '{}' already declared", …)` string-diagnostic
+        // path expressed no through-line back to the typed error;
+        // routing every dep-list refusal through one carrier means an
+        // author reading a `feira add` refusal and a `feira build`
+        // refusal reaches for the same corrective surface without
+        // switching diagnostic idioms.
+        let src = Caixa::template("host");
+        let mut caixa = Caixa::from_lisp(&src).expect("template parses");
+        let dep = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        caixa
+            .push_dep(crate::dep::DepList::Prod, dep.clone())
+            .expect("first push succeeds");
+        let dup = Dep {
+            nome: "caixa-teia".to_string(),
+            versao: "^0.2".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        let err = caixa
+            .push_dep(crate::dep::DepList::Prod, dup)
+            .expect_err("second push with same :nome refuses");
+        assert_eq!(
+            err,
+            DepError::DuplicateNome {
+                nome: "caixa-teia".to_string(),
+                list: crate::render::DEP_AUTHOR_KEY_DEPS,
+            }
+        );
+        // The refused mutation must not corrupt the target list —
+        // exactly one entry lives past the refusal, matching the
+        // canonical single-source-of-truth invariant `Caixa::deps()`
+        // carries.
+        assert_eq!(caixa.deps().len(), 1);
+    }
+
+    #[test]
+    fn push_dep_refuses_dup_on_dev_list_arm_names_deps_dev_key() {
+        // Peer of the sibling `Prod`-arm dup-refusal pin — the `Dev`
+        // arm's refusal must carry `DEP_AUTHOR_KEY_DEPS_DEV` in the
+        // `list` payload so a future author reading the refusal grep's
+        // for the correct `:deps-dev` block in their `caixa.lisp`,
+        // not the sibling `:deps` block the runtime closure resolves.
+        let src = Caixa::template("host");
+        let mut caixa = Caixa::from_lisp(&src).expect("template parses");
+        let dep = Dep {
+            nome: "tatara-check".to_string(),
+            versao: "*".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        caixa
+            .push_dep(crate::dep::DepList::Dev, dep.clone())
+            .expect("first push succeeds");
+        let err = caixa
+            .push_dep(crate::dep::DepList::Dev, dep)
+            .expect_err("second push with same :nome refuses");
+        assert!(matches!(
+            err,
+            DepError::DuplicateNome {
+                ref nome,
+                list,
+            } if nome == "tatara-check"
+                && list == crate::render::DEP_AUTHOR_KEY_DEPS_DEV
+        ));
+    }
+
+    #[test]
+    fn push_dep_allows_same_nome_across_prod_and_dev_lists() {
+        // The within-list dup check is scoped to the target arm — a
+        // caixa may legitimately carry the same `:nome` under both
+        // `:deps` and `:deps-dev` (though the substrate's peer
+        // [`crate::Caixa::validate_deps`] walk still refuses the
+        // shape at parse time; the mutation-site refusal is scoped to
+        // the mutation-site's list to match the peer parse-time
+        // per-list [`crate::render::insert_first_seen`] discipline).
+        // The two arms hold independent seen-sets.
+        let src = Caixa::template("host");
+        let mut caixa = Caixa::from_lisp(&src).expect("template parses");
+        let dep_prod = Dep {
+            nome: "shared".to_string(),
+            versao: "^0.1".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        let dep_dev = Dep {
+            nome: "shared".to_string(),
+            versao: "*".to_string(),
+            fonte: None,
+            opcional: false,
+            caracteristicas: Vec::new(),
+        };
+        caixa
+            .push_dep(crate::dep::DepList::Prod, dep_prod)
+            .expect("push into :deps succeeds");
+        caixa
+            .push_dep(crate::dep::DepList::Dev, dep_dev)
+            .expect("push same :nome into :deps-dev succeeds");
+        assert_eq!(caixa.deps().len(), 1);
+        assert_eq!(caixa.deps_dev().len(), 1);
     }
 }
