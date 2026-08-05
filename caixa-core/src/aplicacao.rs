@@ -18223,7 +18223,7 @@ mod tests {
                 "entrada with in-accept-set :port must validate — the \
                  structural-floor gate reads through Entrada::port",
             );
-            let entrada_ref = spec.entrada.as_ref().expect(":entrada present");
+            let entrada_ref = spec.entrada().expect(":entrada present");
             assert_eq!(
                 spec.port_for_destination(entrada_ref.destination()),
                 entrada_ref.port(),
@@ -24144,12 +24144,11 @@ mod tests {
                 e.port = port;
             }
             let expected_port = spec
-                .entrada
-                .as_ref()
+                .entrada()
                 .expect("three_member_spec carries a typed `:entrada` block")
-                .port;
+                .port();
             let composed_port = {
-                let entrada = spec.entrada.as_ref().expect("entrada present");
+                let entrada = spec.entrada().expect("entrada present");
                 spec.port_for_destination(entrada.destination())
             };
             assert_eq!(
