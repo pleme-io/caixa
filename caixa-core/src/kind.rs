@@ -47,6 +47,42 @@ pub enum CaixaKind {
 }
 
 impl CaixaKind {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed six-arm [`CaixaKind`] discriminator set (the future M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission-webhook
+    /// rejection body naming the accepted-`:kind` list, a future
+    /// `feira --kind …` CLI arg-parse's "did you mean" hint via a
+    /// [`Self::from_wire`]-scan over the slice, the future
+    /// `feira app graph` per-Aplicacao `:kind`-histogram column, any
+    /// future round-trip fuzz harness that sweeps every arm). A future
+    /// variant addition (an `Actor` virtual-actor arm the
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// M5 Orleans-inspired kind reaches through — a candidate future
+    /// arm named in the sibling [`Self::from_wire`] doc block —
+    /// extends this slice as a single edit and every consumer picks up
+    /// the new entry by construction; the compiler-checked
+    /// exhaustiveness on the sibling method `match` arms
+    /// ([`Self::as_str`] / [`Self::wire_name`] / [`Self::from_wire`] /
+    /// the `requires_*` predicates) is the build-time guarantee that
+    /// no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+    /// surfaces — the fourth (and structurally most fundamental —
+    /// every caixa carries a `:kind`) closed-set typed enum on the
+    /// caixa surface to converge onto the same
+    /// one-canonical-arm-list-per-enum discipline.
+    pub const ALL: &'static [Self] = &[
+        Self::Biblioteca,
+        Self::Binario,
+        Self::Servico,
+        Self::Supervisor,
+        Self::Aplicacao,
+        Self::Acao,
+    ];
+
     /// A `Biblioteca` is expected to have at least one `lib/` entry.
     #[must_use]
     pub const fn requires_lib(self) -> bool {
@@ -443,14 +479,7 @@ mod tests {
         // [`crate::supervisor::tests::restart_policy_display_routes_through_as_str_helper`]
         // (15a1305) on the sibling M2 closed-set typed-enum
         // discriminator axes.
-        for variant in [
-            CaixaKind::Biblioteca,
-            CaixaKind::Binario,
-            CaixaKind::Servico,
-            CaixaKind::Supervisor,
-            CaixaKind::Aplicacao,
-            CaixaKind::Acao,
-        ] {
+        for &variant in CaixaKind::ALL {
             assert_eq!(
                 variant.to_string(),
                 variant.as_str(),
@@ -483,14 +512,7 @@ mod tests {
         // directly) would trip here at caixa-core build time rather
         // than silently merging the two axes at some future consumer's
         // dispatch step.
-        for variant in [
-            CaixaKind::Biblioteca,
-            CaixaKind::Binario,
-            CaixaKind::Servico,
-            CaixaKind::Supervisor,
-            CaixaKind::Aplicacao,
-            CaixaKind::Acao,
-        ] {
+        for &variant in CaixaKind::ALL {
             let wire = serde_json::to_string(&variant).unwrap();
             let unquoted = wire
                 .strip_prefix('"')
@@ -705,14 +727,7 @@ mod tests {
         // the wire byte-shape (by design); this one keeps
         // [`CaixaKind::wire_name`] structurally *aligned* with the
         // wire byte-shape (by design).
-        for variant in [
-            CaixaKind::Biblioteca,
-            CaixaKind::Binario,
-            CaixaKind::Servico,
-            CaixaKind::Supervisor,
-            CaixaKind::Aplicacao,
-            CaixaKind::Acao,
-        ] {
+        for &variant in CaixaKind::ALL {
             let json = serde_json::to_string(&variant).unwrap();
             let unquoted = json
                 .strip_prefix('"')
@@ -748,14 +763,7 @@ mod tests {
         // the paired `caixa_from_cr`'s `CaixaKind::from_wire` cannot
         // parse, silently falling through to the caller's
         // `.unwrap_or(CaixaKind::Biblioteca)` fallback).
-        for variant in [
-            CaixaKind::Biblioteca,
-            CaixaKind::Binario,
-            CaixaKind::Servico,
-            CaixaKind::Supervisor,
-            CaixaKind::Aplicacao,
-            CaixaKind::Acao,
-        ] {
+        for &variant in CaixaKind::ALL {
             let wire = variant.wire_name();
             let parsed = CaixaKind::from_wire(wire).unwrap_or_else(|| {
                 panic!(
@@ -914,5 +922,124 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn caixa_kind_all_enumerates_every_variant_exactly_once() {
+        // Fail-before-pass-after pin on the [`CaixaKind::ALL`]
+        // exhaustive-iteration surface: the slice length matches the
+        // arm count of the closed six-arm set, every variant appears
+        // at least once, and no variant appears twice. A future arm
+        // addition (an `Actor` virtual-actor arm the M5 Orleans-
+        // inspired kind reaches through, per the sibling
+        // [`CaixaKind::from_wire`] doc block) that grows the enum but
+        // forgets to grow [`Self::ALL`] silently truncates every
+        // downstream consumer's accept-set at the pre-addition
+        // boundary — a future `feira --kind …` CLI-side "did you
+        // mean" scan that iterates the slice, the future M4
+        // admission-webhook's rejection body naming the accepted-
+        // `:kind` list, any future round-trip fuzz harness — all read
+        // through this slice, so a truncation there silently splits
+        // every accept-set from the arm-set the paired
+        // [`gen_platform::IsVariant`] predicates + [`Self::wire_name`]
+        // / [`Self::as_str`] / [`Self::from_wire`] siblings walk.
+        // Pinning the exhaustive-enumeration invariant here catches
+        // the drift at caixa-core build time.
+        //
+        // Peer of the sibling
+        // [`crate::aplicacao::tests::placement_strategy_all_enumerates_every_variant_once`]
+        // (18c7342) / `rate_limit_unit_all_enumerates_every_variant_once`
+        // (6bce03d) / `dep_list_all_enumerates_every_variant_once`
+        // (45ee563) pins on the peer closed-set typed-enum axes.
+        let all: &[CaixaKind] = CaixaKind::ALL;
+        assert_eq!(
+            all.len(),
+            6,
+            "CaixaKind::ALL must enumerate every variant of the \
+             six-arm closed set (Biblioteca, Binario, Servico, \
+             Supervisor, Aplicacao, Acao); got {all:?}"
+        );
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "CaixaKind::ALL must carry every variant \
+                         exactly once — got duplicate {a:?} at \
+                         indices {i} and {j}"
+                    );
+                }
+            }
+        }
+        for variant in [
+            CaixaKind::Biblioteca,
+            CaixaKind::Binario,
+            CaixaKind::Servico,
+            CaixaKind::Supervisor,
+            CaixaKind::Aplicacao,
+            CaixaKind::Acao,
+        ] {
+            assert!(
+                all.contains(&variant),
+                "CaixaKind::ALL must contain {variant:?} — a future \
+                 variant addition that grows the enum but forgets to \
+                 grow the ALL slice silently truncates every \
+                 downstream consumer's accept-set at the pre-addition \
+                 boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_all_is_the_from_wire_accept_set() {
+        // Load-bearing pin on the two-axis identity: [`CaixaKind::ALL`]
+        // is exactly the variant image of the [`CaixaKind::from_wire`]
+        // accept-set — every arm in the slice parses back through
+        // `from_wire ∘ wire_name` to itself, and the paired
+        // [`caixa_kind_from_wire_rejects_unknown_byte_strings`] pin
+        // guarantees `from_wire` rejects everything outside the six-
+        // arm wire-string image. Together these two pins make the
+        // slice the authoritative arm-set every consumer of the
+        // closed six-arm [`CaixaKind`] discriminator reads through:
+        // the future M4 admission-webhook can enumerate accepted
+        // `:kind` values by walking [`Self::ALL`] and rendering each
+        // arm's `wire_name`, the future `feira --kind …` "did you
+        // mean" hint can score against the same slice, and no
+        // consumer needs to re-inline a six-arm literal list. Any
+        // future arm addition that grows one axis and forgets the
+        // other trips here at caixa-core build time.
+        for &variant in CaixaKind::ALL {
+            let wire = variant.wire_name();
+            assert_eq!(
+                CaixaKind::from_wire(wire),
+                Some(variant),
+                "CaixaKind::from_wire(CaixaKind::{variant:?}.wire_name() = \
+                 {wire:?}) must return Some({variant:?}) — CaixaKind::ALL \
+                 must be a subset of the from_wire accept-set"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_kind_all_is_const_and_matches_iteration_count() {
+        // Const-context pin: [`CaixaKind::ALL`] is a `pub const`
+        // slice, so it materializes at build time. Downstream
+        // consumers reaching for the slice from a `const` context (a
+        // future substrate-wide const-fold-driven audit table that
+        // materializes every kind's wire byte-string at build time, a
+        // per-arm CR-schema registration in a `const` gate) rely on
+        // the const-ness. A future accidental downgrade to a runtime
+        // `fn ALL() -> Vec<Self>` reachable only from a non-`const`
+        // context trips at caixa-core build time. Peer of the sibling
+        // [`caixa_kind_wire_name_is_const_fn`] +
+        // [`caixa_kind_is_variant_predicates_are_const_fn`] pins on
+        // the peer accessor axes.
+        const ALL: &[CaixaKind] = CaixaKind::ALL;
+        const LEN: usize = ALL.len();
+        assert_eq!(
+            LEN, 6,
+            "CaixaKind::ALL length must byte-equal the six-arm closed-set \
+             cardinality at const-fold time"
+        );
     }
 }
