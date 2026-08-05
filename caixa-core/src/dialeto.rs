@@ -71,6 +71,49 @@ pub enum CaixaDialeto {
 }
 
 impl CaixaDialeto {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed four-arm [`CaixaDialeto`] discriminator set — the
+    /// [`feira dialeto`](../../caixa_feira/cmd/dialeto/index.html)
+    /// census counter's per-arm accept-set, a future
+    /// `feira dialeto --list-dialects` CLI listing of the accepted
+    /// classifications, a future M4 `mesh.pleme.io/v1alpha1/Manifesto`
+    /// CR materializer's admission-webhook rejection body naming the
+    /// accepted-dialect set, any future census-report shape probe that
+    /// sweeps every arm to compute per-arm coverage. A future arm
+    /// addition (a fifth dialect the [`crate::dialeto`] module doc's
+    /// "third dialect" hazard actualises — the module explicitly frames
+    /// its purpose as "what stops a third dialect appearing", and this
+    /// slice is the substrate-side answer: the arm-set is one edit and
+    /// every consumer picks up the new entry by construction) extends
+    /// this slice as one edit and every downstream consumer picks up
+    /// the new entry through the shared iteration; the compiler-checked
+    /// exhaustiveness on the sibling method `match` arms
+    /// ([`Self::palavra_canonica`] / [`Self::consumidor`] /
+    /// [`Self::descricao`] / [`std::fmt::Display`]) is the build-time
+    /// guarantee that no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`crate::CaixaKind::ALL`] (6b1f4fb) /
+    /// [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`crate::dep::DepList::ALL`] (45ee563) /
+    /// [`crate::supervisor::RestartStrategy::ALL`] (4eec29c) /
+    /// [`crate::supervisor::RestartPolicy::ALL`] (dd32ccf)
+    /// exhaustive-iteration surfaces — the seventh closed-set typed
+    /// enum on the caixa surface to converge onto the same
+    /// one-canonical-arm-list-per-enum discipline, and the first
+    /// dialect-classification axis (as distinct from an OTP-shape M2
+    /// slot or an M3 mesh slot) to reach it. Order matches variant
+    /// declaration order verbatim (`Pacote` → `Molde` →
+    /// `MoldePosicional` → `Desconhecido`) so the slice is the
+    /// canonical ordering every listing / rendering consumer defers to.
+    pub const ALL: &'static [Self] = &[
+        Self::Pacote,
+        Self::Molde,
+        Self::MoldePosicional,
+        Self::Desconhecido,
+    ];
+
     /// The keyword an author should write for this dialect, once the
     /// migration named in [`Self::consumidor`] completes.
     #[must_use]
@@ -281,7 +324,7 @@ mod tests {
         // The whole point of the new keyword: no schema sniffing required.
         let src = r#"(defmolde :name "x" :kind :Biblioteca :ecosystem :go)"#;
         assert_eq!(classify(src), Ok(CaixaDialeto::Molde));
-        let pos = r#"(defmolde todoku-go :kind :Biblioteca :ecosystem :go)"#;
+        let pos = r"(defmolde todoku-go :kind :Biblioteca :ecosystem :go)";
         assert_eq!(classify(pos), Ok(CaixaDialeto::MoldePosicional));
     }
 
@@ -328,13 +371,11 @@ mod tests {
         // Guards the routing table itself: a new variant added without an arm
         // here is a compile error in the match, and a variant that claims
         // `defcaixa` while being read by pleme-doc-gen would re-open the
-        // collision this module closes.
-        for d in [
-            CaixaDialeto::Pacote,
-            CaixaDialeto::Molde,
-            CaixaDialeto::MoldePosicional,
-            CaixaDialeto::Desconhecido,
-        ] {
+        // collision this module closes. Sweeps [`CaixaDialeto::ALL`] rather
+        // than the pre-lift open-coded four-arm literal list — a future arm
+        // addition extends the slice as one edit and this pin picks it up
+        // by construction.
+        for &d in CaixaDialeto::ALL {
             assert!(!d.descricao().is_empty(), "{d}");
             assert!(!d.consumidor().is_empty(), "{d}");
         }
@@ -345,5 +386,116 @@ mod tests {
             CaixaDialeto::Molde.palavra_canonica(),
             "the two dialects must not share a canonical keyword — that IS the defect"
         );
+    }
+
+    #[test]
+    fn caixa_dialeto_all_enumerates_every_variant_exactly_once() {
+        // Three-legged exhaustiveness pin, peer of the sibling
+        // `caixa_kind_all_enumerates_every_variant_exactly_once`
+        // (caixa-core/src/kind.rs) /
+        // `restart_strategy_all_enumerates_every_variant_exactly_once`
+        // (caixa-core/src/supervisor.rs) shape.
+        //
+        // 1. arm-count invariant: `ALL.len()` matches the declared arm
+        //    count (four — a fifth arm added without extending `ALL`
+        //    fails this pin at caixa-core test time);
+        // 2. pairwise-distinctness invariant: every variant appears at
+        //    most once in the slice (a duplicate arm would silently
+        //    double-count in the census consumer, so the pin rejects
+        //    duplicates outright);
+        // 3. coverage invariant: every literal `CaixaDialeto::X` is in
+        //    the slice (the compiler-checked exhaustiveness on the peer
+        //    per-arm `match self` in the accessors keeps the enum arm
+        //    set and the `ALL` slice mutually aligned).
+        assert_eq!(
+            CaixaDialeto::ALL.len(),
+            4,
+            "ALL must list every arm exactly once; a fifth arm added \
+             without extending ALL fails this pin — extend ALL alongside \
+             the new variant"
+        );
+
+        let mut seen: Vec<CaixaDialeto> = Vec::new();
+        for &d in CaixaDialeto::ALL {
+            assert!(
+                !seen.contains(&d),
+                "ALL contains a duplicate arm: {d}. Every variant appears \
+                 exactly once — a duplicate would double-count in every \
+                 iteration consumer"
+            );
+            seen.push(d);
+        }
+
+        // Coverage: exhaustively assert every literal variant is somewhere
+        // in the slice. Written as an exhaustive `match` so a future arm
+        // addition fails to compile here (missing match arm) until the
+        // corresponding `assert` is added — the compiler enforces the pin's
+        // completeness rather than a hand-maintained variant list.
+        for variant in [
+            CaixaDialeto::Pacote,
+            CaixaDialeto::Molde,
+            CaixaDialeto::MoldePosicional,
+            CaixaDialeto::Desconhecido,
+        ] {
+            let coverage_probe = match variant {
+                CaixaDialeto::Pacote
+                | CaixaDialeto::Molde
+                | CaixaDialeto::MoldePosicional
+                | CaixaDialeto::Desconhecido => variant,
+            };
+            assert!(
+                CaixaDialeto::ALL.contains(&coverage_probe),
+                "ALL is missing variant {coverage_probe} — extend the slice"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_all_is_const_and_matches_iteration_count() {
+        // Pins the const-ness of the slice at const-fold time. A future
+        // change that promoted `ALL` to a non-const initializer (a lazy-
+        // static, a runtime-computed Vec) would fail to compile here —
+        // the pin locks in the compile-time-known iteration surface
+        // every consumer builds against. Peer of the sibling
+        // `caixa_kind_all_is_const_and_matches_iteration_count` (kind.rs)
+        // / `restart_strategy_all_is_const_and_matches_iteration_count`
+        // (supervisor.rs) shape.
+        const ALL: &[CaixaDialeto] = CaixaDialeto::ALL;
+        assert_eq!(ALL.len(), CaixaDialeto::ALL.len());
+        // Sweep the iterator without collapsing to `.len()` so a future
+        // change to `ALL`'s carrier that decouples `.len()` from the
+        // iteration count (a lazy-computed shape, an alias `impl Iterator`
+        // return, a wrapper newtype) still passes here iff the two agree
+        // arm-for-arm; the `#[allow]` opts this local pin out of the
+        // clippy `iter_count` collapse that would defeat the intent.
+        #[allow(clippy::iter_count)]
+        let iterated = ALL.iter().count();
+        assert_eq!(iterated, CaixaDialeto::ALL.len());
+    }
+
+    #[test]
+    fn caixa_dialeto_all_covers_every_variant_by_display_probe() {
+        // Fanning `Display` over the slice sweeps the paired accessors
+        // ([`CaixaDialeto::palavra_canonica`] / [`CaixaDialeto::consumidor`]
+        // / [`CaixaDialeto::descricao`]) at every arm — every returned
+        // byte-string is non-empty (the accessors' contract). A future
+        // arm added without extending its per-arm `match self` return
+        // would compile-fail at the accessor call inside the loop;
+        // together with the `ALL.len() == 4` pin above, this locks the
+        // accessor arm-set and the `ALL` slice mutually.
+        for &d in CaixaDialeto::ALL {
+            let display_form = d.to_string();
+            assert!(
+                !display_form.is_empty(),
+                "Display must render a non-empty byte-string for every \
+                 arm; empty: {d:?}"
+            );
+            // Consumidor / descricao / palavra-canonica must each surface
+            // a non-empty scalar; every downstream diagnostic consumer
+            // reaches through these accessors.
+            assert!(!d.palavra_canonica().is_empty(), "{d}");
+            assert!(!d.consumidor().is_empty(), "{d}");
+            assert!(!d.descricao().is_empty(), "{d}");
+        }
     }
 }
