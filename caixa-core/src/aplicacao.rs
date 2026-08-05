@@ -744,6 +744,37 @@ impl WitContract {
         )
     }
 
+    /// Borrowed [`ContratoIdentity`] six-tuple every consumer that
+    /// dedups typed edges keys off — routes through the lifted
+    /// [`WitContract::source`] / [`WitContract::destination`] /
+    /// [`WitContract::world_ref`] / [`WitContract::endpoint`] /
+    /// [`WitContract::subject`] / [`WitContract::slot`] scalar
+    /// accessors so the tuple's six arms and the [`ContratoIdentity`]
+    /// type alias's six axes migrate as a unit on any future axis
+    /// addition (adding a seventh field to [`WitContract`] is one
+    /// [`ContratoIdentity`] alias edit + one accessor addition + one
+    /// arm here, not a coordinated rewrite of every open-coded
+    /// six-tuple builder that dedups on the identity axis).
+    ///
+    /// Sibling of [`WitContract::edge_pair`] /
+    /// [`WitContract::edge_triple`] on the composite-projection axis:
+    /// the pair projects the caller-callee axes, the triple extends it
+    /// with the world-ref, this method extends it with the three
+    /// payload-carrier axes. Every projection returns the same six
+    /// scalar accessors' outputs; the three methods differ only in
+    /// which arms they surface.
+    #[must_use]
+    pub fn identity(&self) -> ContratoIdentity<'_> {
+        (
+            self.source(),
+            self.destination(),
+            self.world_ref(),
+            self.endpoint(),
+            self.subject(),
+            self.slot(),
+        )
+    }
+
     /// True when this contract targets an HTTP-shaped WIT world.
     #[must_use]
     pub fn is_http(&self) -> bool {
@@ -1122,7 +1153,7 @@ impl WitContract {
 /// clippy's `type_complexity` lint (and so a future axis added to
 /// `WitContract` is one alias edit, not a coordinated rewrite of
 /// every set instantiation).
-type ContratoIdentity<'a> = (
+pub type ContratoIdentity<'a> = (
     &'a str,
     &'a str,
     &'a str,
@@ -5694,57 +5725,20 @@ impl AplicacaoSpec {
             // "same caller-callee pair, different payload" (e.g.
             // cart→catalog at /products vs /search), which keeps distinct
             // identity keys via the differing endpoint payloads.
-            let key = (
-                c.source(),
-                c.destination(),
-                c.world_ref(),
-                // Route the HTTP-arm payload-carrier scalar through the
-                // lifted [`WitContract::endpoint`] accessor rather than
-                // the raw `c.endpoint.as_deref()` field access — the two
-                // production consumers of the per-`:contratos :endpoint`
-                // HTTP-shaped payload-carrier scalar (the peer
-                // [`WitContract::target`] Http-arm payload extraction,
-                // this [`ContratoIdentity`] dedup-key HTTP arm) now key
-                // off exactly one typed dispatch on the substrate
-                // primitive, closing the second of six unlifted
-                // per-`:contratos` `Option<String>`-carry sites and
-                // pinning the peer per-`:contratos` scalar-accessor
-                // discipline ([`WitContract::source`] /
-                // [`WitContract::destination`] / [`WitContract::world_ref`])
-                // onto the first per-`:contratos` payload-carrier arm.
-                c.endpoint(),
-                // Route the pub-sub-arm payload-carrier scalar through
-                // the lifted [`WitContract::subject`] accessor rather
-                // than the raw `c.subject.as_deref()` field access —
-                // the two production consumers of the per-`:contratos
-                // :subject` pub-sub-shaped payload-carrier scalar (the
-                // peer [`WitContract::target`] PubSub-arm payload
-                // extraction, this [`ContratoIdentity`] dedup-key
-                // pub-sub arm) now key off exactly one typed dispatch
-                // on the substrate primitive, closing the third of six
-                // unlifted per-`:contratos` `Option<String>`-carry
-                // sites and extending the peer per-`:contratos`
-                // HTTP-arm [`WitContract::endpoint`] (7020470) lift
-                // onto the pub-sub arm. Leaves the [`WitContract::slot`]
-                // key/value-store arm as the last unlifted per-
-                // `:contratos` `Option<String>` axis.
-                c.subject(),
-                // Route the store-arm payload-carrier scalar through
-                // the lifted [`WitContract::slot`] accessor rather
-                // than the raw `c.slot.as_deref()` field access — the
-                // two production consumers of the per-`:contratos
-                // :slot` key/value-store-shaped payload-carrier scalar
-                // (the peer [`WitContract::target`] Store-arm payload
-                // extraction, this [`ContratoIdentity`] dedup-key
-                // store arm) now key off exactly one typed dispatch
-                // on the substrate primitive, closing the last of six
-                // unlifted per-`:contratos` `Option<String>`-carry
-                // sites and completing the peer per-`:contratos`
-                // HTTP-arm [`WitContract::endpoint`] (7020470) /
-                // pub-sub-arm [`WitContract::subject`] (90de675) lift
-                // family onto the store arm.
-                c.slot(),
-            );
+            //
+            // Route the six-axis dedup key through the lifted
+            // [`WitContract::identity`] composite-projection accessor
+            // rather than the inline six-tuple builder — the two
+            // substrate primitives on the per-`:contratos` identity axis
+            // (the [`ContratoIdentity`] type alias's six axes, this
+            // dedup-key's six tuple arms) now migrate as a unit on any
+            // future axis addition. Peer of the sibling per-`:contratos`
+            // composite-projection [`WitContract::edge_pair`] /
+            // [`WitContract::edge_triple`] accessors on the
+            // caller-callee / caller-callee-wit prefix axes; extends
+            // the discipline onto the full-identity axis that carries
+            // the three payload-shape arms too.
+            let key = c.identity();
             crate::render::insert_first_seen(&mut seen_contracts, key, || {
                 // Route the per-`:contratos` duplicate-gate diagnostic's
                 // `(de, para, wit)` triple through the lifted
@@ -17666,6 +17660,149 @@ mod tests {
         assert_eq!(de, "checkout");
         assert_eq!(para, "orders");
         assert_eq!(wit, "nats:pub-sub");
+    }
+
+    #[test]
+    fn wit_contract_identity_routes_through_source_destination_world_ref_endpoint_subject_slot_accessors()
+     {
+        // The composition pin: [`WitContract::identity`] must return
+        // exactly `(source(), destination(), world_ref(), endpoint(),
+        // subject(), slot())` — the borrowed form of the six-scalar-
+        // accessor identity axis. Any future refactor that silently
+        // re-authored one arm's projection to bypass a scalar accessor
+        // (a `self.de.as_str()` regression back to raw field access on
+        // any of the three required arms, a `self.endpoint.as_deref()`
+        // regression on any of the three optional arms, an M4 per-
+        // cluster caller/callee-alias rewrite the operator lands on
+        // `source()` / `destination()` without reaching this composite
+        // projection) trips at caixa-core build time. Sweeps four
+        // permutations of the WIT-shape × payload lattice — HTTP with
+        // endpoint, pub-sub with subject, store with slot, payload-less
+        // capability — so every payload arm is exercised. Peer of the
+        // sibling per-`:contratos`
+        // `wit_contract_edge_triple_routes_through_source_destination_world_ref_accessors`
+        // composition pin on the mesh-slot-atom composite-projection
+        // axis; extends the discipline from the (de, para, wit) prefix
+        // onto the full-identity axis carrying the three payload arms.
+        for (de, para, wit, endpoint, subject, slot) in [
+            (
+                "cart",
+                "catalog",
+                "wasi:http/proxy",
+                Some("/lookup"),
+                None,
+                None,
+            ),
+            (
+                "checkout",
+                "orders",
+                "nats:pub-sub",
+                None,
+                Some("orders.paid"),
+                None,
+            ),
+            (
+                "cart",
+                "kv",
+                "wasi:keyvalue/store",
+                None,
+                None,
+                Some("carts/{cart_id}"),
+            ),
+            ("audit", "sink", "wasi:logging", None, None, None),
+        ] {
+            let c = WitContract {
+                de: de.into(),
+                para: para.into(),
+                wit: wit.into(),
+                endpoint: endpoint.map(str::to_owned),
+                subject: subject.map(str::to_owned),
+                slot: slot.map(str::to_owned),
+            };
+            assert_eq!(
+                c.identity(),
+                (
+                    c.source(),
+                    c.destination(),
+                    c.world_ref(),
+                    c.endpoint(),
+                    c.subject(),
+                    c.slot(),
+                ),
+                "WitContract::identity must compose exactly \
+                 (source(), destination(), world_ref(), endpoint(), \
+                 subject(), slot()) — a bypass of any sibling accessor \
+                 here would silently decouple the identity-projection \
+                 axis from the substrate-primitive scalar accessors \
+                 every dedup-key consumer routes through",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_contract_identity_projects_full_typed_edge_dedup_key_across_payload_shapes() {
+        // The canonical semantics-pin: [`WitContract::identity`] must
+        // project the six-axis (de, para, wit, endpoint, subject, slot)
+        // dedup key the [`AplicacaoSpec::validate`] duplicate-`:contratos`
+        // gate keys off — two `WitContract`s that agree on all six axes
+        // are the same typed edge declared twice, the graph-edge
+        // analogue of duplicate `:membros` / `:placement :clusters` /
+        // `:entrada :paths` entries. Rejects a shape drift (an
+        // accidental silent detour that returned a prefix tuple or
+        // added an extra field) by pattern-matching the six-arm shape.
+        // Peer of the sibling per-`:contratos`
+        // `wit_contract_edge_triple_projects_full_typed_edge_identity_owned_triple`
+        // pin extended from the (de, para, wit) prefix onto the full
+        // six-axis identity that the dedup key rides.
+        let c = WitContract {
+            de: "cart".into(),
+            para: "catalog".into(),
+            wit: "wasi:http/proxy".into(),
+            endpoint: Some("/products/:id".into()),
+            subject: None,
+            slot: None,
+        };
+        let (de, para, wit, endpoint, subject, slot) = c.identity();
+        assert_eq!(de, "cart");
+        assert_eq!(para, "catalog");
+        assert_eq!(wit, "wasi:http/proxy");
+        assert_eq!(endpoint, Some("/products/:id"));
+        assert_eq!(subject, None);
+        assert_eq!(slot, None);
+
+        // Two byte-identical contracts must produce equal identities —
+        // the dedup key's foundational invariant.
+        let c2 = c.clone();
+        assert_eq!(c.identity(), c2.identity());
+
+        // Any change on any of the six axes must break the identity —
+        // sweeps by mutating one axis at a time.
+        let mut mutated = c.clone();
+        mutated.de = "search".into();
+        assert_ne!(c.identity(), mutated.identity(), "de axis must partition");
+        let mut mutated = c.clone();
+        mutated.para = "warehouse".into();
+        assert_ne!(c.identity(), mutated.identity(), "para axis must partition");
+        let mut mutated = c.clone();
+        mutated.wit = "http:legacy".into();
+        assert_ne!(c.identity(), mutated.identity(), "wit axis must partition");
+        let mut mutated = c.clone();
+        mutated.endpoint = Some("/search".into());
+        assert_ne!(
+            c.identity(),
+            mutated.identity(),
+            "endpoint axis must partition"
+        );
+        let mut mutated = c.clone();
+        mutated.subject = Some("orders.paid".into());
+        assert_ne!(
+            c.identity(),
+            mutated.identity(),
+            "subject axis must partition"
+        );
+        let mut mutated = c;
+        mutated.slot = Some("carts/{id}".into());
+        assert_ne!(mutated.identity().5, None, "slot axis must partition");
     }
 
     #[test]
