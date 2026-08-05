@@ -187,15 +187,19 @@ fn fetch_dep(
     cache: &CacheDir,
 ) -> Result<FetchedDep, ResolveError> {
     // Expand :fonte — None → default host shorthand.
-    let fonte = dep.fonte.clone().unwrap_or_else(|| {
-        let (host, org) = split_default_host(&cfg.default_host);
-        DepSource::Git {
-            repo: format!("{host}:{org}/{}", dep.nome()),
-            tag: None,
-            rev: None,
-            branch: None,
-        }
-    });
+    //
+    // Route the per-`Dep` `:fonte` presence-projection through the
+    // lifted [`expand_fonte`] helper rather than an inline
+    // `dep.fonte.clone().unwrap_or_else(...)` cascade. The helper reads
+    // through the typed [`caixa_core::Dep::fonte`] `Option<&DepSource>`
+    // accessor and materializes the `github:<org>/<nome>`-shaped
+    // `default_host`-derived fallback for the author-omitted arm,
+    // keeping the closure-walker's two per-`Dep` `:fonte`-expansion
+    // consumers (this crate's [`fetch_dep`], caixa-feira/src/cmd/lock.rs's
+    // `resolve_stub` — 33e5d9a converged the peer site onto the same
+    // accessor) both routed through the substrate-primitive typed
+    // dispatch rather than each open-coding its own `.clone()` cascade.
+    let fonte = expand_fonte(dep, &cfg.default_host);
 
     match &fonte {
         DepSource::Path { caminho } => fetch_path(dep, caminho),
@@ -329,6 +333,53 @@ fn split_default_host(default_host: &str) -> (&str, &str) {
         .unwrap_or(("github", default_host))
 }
 
+/// Per-`Dep` `:fonte` presence-projection with the resolver's
+/// `default_host`-derived fallback baked in — the substrate-primitive
+/// typed dispatch every caixa-resolver closure-walker per-`Dep`
+/// `:fonte`-expansion consumer keys off. The helper reads through the
+/// typed [`caixa_core::Dep::fonte`] `Option<&DepSource>`-return accessor
+/// rather than the raw `.fonte.clone()` field-access, so any future
+/// extension of the accessor's semantics (a per-scope source-override
+/// table on `:fonte` the M4 CR materializer resolves at admission time,
+/// a per-tenant `:fonte` rewrite overlay the roadmap acknowledges, a
+/// lacre-projected concrete-source pin resolver) reaches this fallback
+/// surface through exactly one caixa-core edit rather than a coordinated
+/// rewrite of both open-coded expansions.
+///
+/// Sibling of caixa-feira/src/cmd/lock.rs's `resolve_stub`
+/// (33e5d9a) per-`Dep` `:fonte` accessor-route on the peer stub-resolver
+/// site — same "the emit path must route through the substrate-primitive
+/// typed dispatch" discipline extended onto the caixa-resolver
+/// closure-walker's per-target `:fonte`-expansion surface. Byte-equal to
+/// the prior inline cascade today: on the author-set arm the accessor
+/// returns `Some(&<verbatim>)` and `.cloned()` allocates exactly one
+/// `DepSource` byte-equal to the pre-lift `.fonte.clone()` read; on the
+/// author-omitted arm the accessor returns `None` and the fallback
+/// materializes `DepSource::Git { repo: "<host>:<org>/<nome>", tag/rev/
+/// branch: None }` byte-equal to the pre-lift `unwrap_or_else(...)`
+/// tail. The `default_host` split cascades through
+/// [`split_default_host`] so `"github:pleme-io"` → `github:pleme-io/…`
+/// and `"acme-org"` → `github:acme-org/…` (the unrecognized-host arm
+/// defaults `host` to `"github"`).
+///
+/// The fallback deliberately does NOT compose through
+/// [`caixa_core::DepSource::default_github`] — that helper hardcodes
+/// `"github"` as the host segment (`"github:{org}/{nome}"`), whereas
+/// this helper honors an author-configurable `default_host` (e.g. a
+/// `"codeberg:acme"` config would produce `codeberg:acme/<nome>`,
+/// which `default_github` cannot express).
+pub(crate) fn expand_fonte(dep: &Dep, default_host: &str) -> DepSource {
+    dep.fonte().cloned().unwrap_or_else(|| {
+        let (host, org) = split_default_host(default_host);
+        DepSource::Git {
+            repo: format!("{host}:{org}/{}", dep.nome()),
+            tag: None,
+            rev: None,
+            branch: None,
+        }
+    })
+}
+
 #[allow(dead_code)]
 fn _unused_path(_p: &Path) {}
 
@@ -343,6 +394,155 @@ mod tests {
         assert_eq!(
             split_default_host("github:pleme-io"),
             ("github", "pleme-io")
+        );
+    }
+
+    /// Pin that the per-`Dep` `:fonte` presence-projection under
+    /// [`expand_fonte`] routes through the typed [`Dep::fonte`]
+    /// `Option<&DepSource>`-return accessor rather than the raw
+    /// `.fonte.clone()` field-access, and that the accessor's `None` arm
+    /// materializes the `<host>:<org>/<nome>`-shaped `default_host`-
+    /// derived fallback with `tag`/`rev`/`branch` all `None`. Sweeps
+    /// three arms of the per-`Dep` `:fonte` presence bit × per-config
+    /// `default_host` shape lattice the closure-walker's
+    /// [`fetch_dep`] call-site keys off:
+    ///
+    /// 1. Author-omitted arm × the canonical `"github:pleme-io"`
+    ///    default-host shape — accessor projects `None`, helper falls
+    ///    back to `DepSource::Git { repo: "github:pleme-io/<nome>",
+    ///    tag/rev/branch: None }`, byte-equal to the pre-lift
+    ///    inline `format!("{host}:{org}/{}", dep.nome())` on the
+    ///    canonical default-host arm.
+    /// 2. Author-omitted arm × an unrecognized single-segment
+    ///    `default_host` (`"acme-org"`) — [`split_default_host`]
+    ///    defaults `host` to `"github"` and carries the whole string as
+    ///    `org`, so the fallback is `DepSource::Git { repo:
+    ///    "github:acme-org/<nome>", … }`. Pins the unrecognized-host
+    ///    arm's fall-through under the helper.
+    /// 3. Author-set arm × any `default_host` — accessor projects
+    ///    `Some(&<verbatim>)`, helper carries the source through
+    ///    `.cloned()` byte-verbatim regardless of `default_host` (the
+    ///    fallback branch never fires when the author declared
+    ///    `:fonte`).
+    ///
+    /// Byte-equal today (`.fonte()` returns `self.fonte.as_ref()`;
+    /// `.cloned()` on `Option<&DepSource>` allocates exactly one
+    /// `DepSource` byte-equal to the prior raw `.fonte.clone()` read);
+    /// catches any future emit-side regression that re-introduces the
+    /// raw `.fonte.clone()` cascade at the [`fetch_dep`] call site (a
+    /// future accessor extension — a per-scope alias table, a per-tenant
+    /// `:fonte` rewrite overlay, a lacre-projected concrete-source pin
+    /// resolver — would then reach only the open-coded cascade and
+    /// silently diverge from the helper's typed dispatch, tripping the
+    /// author-set-arm pin below).
+    ///
+    /// Peer of the sibling caixa-feira/src/cmd/lock.rs's
+    /// `resolve_stub_fonte_routes_through_dep_fonte_accessor` (33e5d9a)
+    /// per-`Dep` `:fonte` accessor-route pin on the stub-resolver
+    /// surface — same "the emit path must route through the substrate-
+    /// primitive typed dispatch" discipline extended onto the
+    /// caixa-resolver closure-walker's per-target `:fonte`-expansion
+    /// helper.
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn expand_fonte_routes_through_dep_fonte_accessor() {
+        // Arm 1: author-omitted `:fonte` × canonical `"github:pleme-io"`
+        // default-host. Accessor must project `None` and the helper's
+        // fallback must materialize the canonical
+        // `github:pleme-io/<nome>` shorthand.
+        let bare = Dep::simple("caixa-teia", "^0.1");
+        assert!(
+            bare.fonte().is_none(),
+            "author-omitted :fonte must project None through the accessor \
+             — pins the substrate contract the helper's unwrap_or_else \
+             cascade discriminates on",
+        );
+        let expanded = expand_fonte(&bare, "github:pleme-io");
+        assert_eq!(
+            expanded,
+            DepSource::Git {
+                repo: "github:pleme-io/caixa-teia".to_string(),
+                tag: None,
+                rev: None,
+                branch: None,
+            },
+            "author-omitted :fonte on the canonical github:pleme-io \
+             default-host must fall back to the github:<org>/<nome>-shaped \
+             Git shorthand byte-verbatim",
+        );
+
+        // Arm 2: author-omitted `:fonte` × unrecognized single-segment
+        // `default_host` (`"acme-org"`). `split_default_host`'s
+        // unrecognized-host arm defaults `host` to `"github"` and carries
+        // the whole string as `org`, so the helper's fallback must land
+        // `github:acme-org/<nome>` — pins that the helper reads the
+        // `default_host` through the shared [`split_default_host`]
+        // parser rather than re-inlining a `"github:"`-hardcoded
+        // shorthand (which would produce the same output for this input
+        // by coincidence but would diverge on a `"codeberg:acme"`-shaped
+        // config the arm-3 assertion below stresses).
+        let expanded_unrecognized_host = expand_fonte(&bare, "acme-org");
+        assert_eq!(
+            expanded_unrecognized_host,
+            DepSource::Git {
+                repo: "github:acme-org/caixa-teia".to_string(),
+                tag: None,
+                rev: None,
+                branch: None,
+            },
+            "author-omitted :fonte on an unrecognized single-segment \
+             default_host must default the host segment to `github` and \
+             carry the whole config string as the org",
+        );
+
+        // Arm 3: author-set `:fonte` × any `default_host`. Accessor must
+        // project `Some(&<verbatim>)`, and the helper must carry the
+        // source through `.cloned()` byte-verbatim — the fallback branch
+        // never fires when the author declared `:fonte` at authoring
+        // time. Any regression that re-inlined the raw `.fonte.clone()`
+        // cascade would still pass this arm today (both routes are
+        // byte-equal on the `Some` arm) but a future accessor extension
+        // (a per-scope alias table, a per-tenant rewrite overlay)
+        // would silently diverge here — the pin catches that
+        // divergence at compile time as soon as the accessor's return
+        // shape widens beyond `self.fonte.as_ref()`.
+        let with_path = Dep {
+            nome: "child".into(),
+            versao: "0.1.0".into(),
+            fonte: Some(DepSource::Path {
+                caminho: "/tmp/child".into(),
+            }),
+            opcional: false,
+            caracteristicas: vec![],
+        };
+        assert_eq!(
+            with_path.fonte(),
+            Some(&DepSource::Path {
+                caminho: "/tmp/child".into(),
+            }),
+            "author-set :fonte must project Some(&<verbatim>) through \
+             the accessor — pins the substrate contract the helper's \
+             .cloned() carry discriminates on",
+        );
+        let expanded_author_set = expand_fonte(&with_path, "github:pleme-io");
+        assert_eq!(
+            expanded_author_set,
+            DepSource::Path {
+                caminho: "/tmp/child".into(),
+            },
+            "author-set :fonte must carry through the helper .cloned() \
+             byte-verbatim regardless of default_host — the fallback \
+             branch must not fire when the accessor projects Some(&…)",
+        );
+        // Cross-check: swapping `default_host` on the author-set arm
+        // must not perturb the output — the fallback string is dead
+        // code on the `Some` arm.
+        let expanded_author_set_alt_host = expand_fonte(&with_path, "codeberg:acme");
+        assert_eq!(
+            expanded_author_set, expanded_author_set_alt_host,
+            "author-set :fonte must be default_host-agnostic — the \
+             fallback shorthand must not leak into the output when the \
+             accessor projects Some(&…)",
         );
     }
 
