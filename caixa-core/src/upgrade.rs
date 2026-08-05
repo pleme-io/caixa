@@ -1004,10 +1004,54 @@ impl UpgradeFromEntry {
     fn validate_load_singularity(&self) -> Result<(), UpgradeError> {
         let mut seen: Vec<&str> = Vec::new();
         for instr in self.instructions() {
-            let module = match instr {
-                UpgradeInstruction::LoadModule { module } => module.as_str(),
-                _ => continue,
-            };
+            // Route the per-instruction load-family arm-discriminator
+            // through the `gen_platform::IsVariant`-derive-generated
+            // [`UpgradeInstruction::is_load_module`] predicate rather
+            // than the raw single-arm `match instr {
+            // UpgradeInstruction::LoadModule { module } =>
+            // module.as_str(), _ => continue }` open-coded pattern-
+            // match — closes the last unlifted `matches!`-shaped
+            // per-arm-hand-rolled scalar-value + arm-discriminator
+            // pair inside `impl UpgradeFromEntry`, sibling of the
+            // peer [`Self::validate_cleanup_singularity`] (0bc469f)
+            // routing already lifted onto the two-arm cleanup-family
+            // axis's per-arm arm-discriminator + `:module` projection
+            // dispatch. The load-target `:module` scalar is projected
+            // through the sibling [`UpgradeInstruction::declared_module`]
+            // accessor rather than the per-arm-hand-rolled scalar-
+            // value binding, with the
+            // `is_load_module`-implies-`declared_module`-is-`Some`
+            // composition pin at
+            // [`tests::upgrade_instruction_is_load_module_implies_declared_module_is_some`]
+            // making the `.expect(…)` structurally infallible at
+            // build time. Every arm-family partition the three
+            // within-entry per-instruction-class singularity gates
+            // key off — load-family
+            // ([`UpgradeInstruction::LoadModule`]), cleanup-family
+            // ([`UpgradeInstruction::SoftPurge`] |
+            // [`UpgradeInstruction::Purge`]), migration-family
+            // ([`UpgradeInstruction::StateChange`]) — now consults
+            // exactly one typed dispatch on the substrate primitive
+            // (`is_load_module()` here, `is_cleanup()` at
+            // [`Self::validate_cleanup_singularity`],
+            // `declared_path()` at
+            // [`Self::validate_state_change_singularity`]), so a
+            // future sixth arm added to [`UpgradeInstruction`] (an
+            // `AwaitReadiness` gate, a `Downgrade` reverse-axis
+            // variant OTP's `relup` acknowledges, a `CanaryTraffic`
+            // split-traffic variant the M4 CR materializer could
+            // resolve per-CR — INSPIRATIONS §II.4) migrates as a
+            // single enum-declaration edit through the derive rather
+            // than a scattered per-consumer rewrite. Byte-identity of
+            // this dispatch against the pre-lift match-pattern is
+            // pinned by
+            // [`tests::validate_load_singularity_projects_modules_through_is_load_module_and_declared_module_accessors`].
+            if !instr.is_load_module() {
+                continue;
+            }
+            let module = instr
+                .declared_module()
+                .expect("is_load_module() implies declared_module() is Some");
             if seen.contains(&module) {
                 return Err(UpgradeError::DuplicateLoadModule {
                     from: self.prior_versao().to_string(),
@@ -2936,6 +2980,166 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn upgrade_instruction_is_load_module_implies_declared_module_is_some() {
+        // Composition-pin the load-bearing invariant
+        // [`UpgradeFromEntry::validate_load_singularity`] relies on
+        // when routing the per-instruction load-family arm-discriminator
+        // through the sibling
+        // [`UpgradeInstruction::is_load_module`] +
+        // [`UpgradeInstruction::declared_module`] accessor pair: any
+        // [`UpgradeInstruction`] value whose `.is_load_module()`
+        // returns `true` must have a `Some(_)` `.declared_module()`.
+        // This makes the gate's `.expect("is_load_module() implies
+        // declared_module() is Some")` structurally infallible at
+        // build time — a future refactor that added a load-shaped
+        // variant carrying no `:module` would trip here rather than
+        // panic at [`UpgradeFromEntry::validate_load_singularity`]
+        // at runtime on the offending author's caixa.lisp. Sibling
+        // of the peer
+        // [`upgrade_instruction_is_cleanup_implies_declared_module_is_some`]
+        // composition pin on the two-arm cleanup-family axis — same
+        // "predicate implies accessor" discipline extended onto the
+        // single-arm load-family axis, closes the load-vs-cleanup
+        // pair on the substrate primitive's typed dispatch discipline.
+        let cases: Vec<UpgradeInstruction> = vec![
+            UpgradeInstruction::LoadModule { module: "a".into() },
+            UpgradeInstruction::SoftPurge { module: "b".into() },
+            UpgradeInstruction::Purge { module: "c".into() },
+            UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            },
+            UpgradeInstruction::Restart,
+        ];
+        for instr in &cases {
+            if instr.is_load_module() {
+                assert!(
+                    instr.declared_module().is_some(),
+                    "UpgradeInstruction::{instr:?}: is_load_module() \
+                     must imply declared_module().is_some() — the \
+                     within-entry load-singularity gate relies on this \
+                     invariant to route the load-target :module scalar \
+                     through the sibling declared_module accessor \
+                     without a pattern-bound `module` binding"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn validate_load_singularity_projects_modules_through_is_load_module_and_declared_module_accessors()
+     {
+        // Byte-identity pin on the
+        // [`UpgradeFromEntry::validate_load_singularity`] load-family
+        // dispatch against the pre-lift
+        // `match instr { UpgradeInstruction::LoadModule { module } =>
+        // module.as_str(), _ => continue }` open-coded pattern-match
+        // the site previously carried. Asserts the two projections
+        // agree byte-for-byte on every arm of the enum — the
+        // arm-discriminator via `is_load_module()` and the `:module`
+        // scalar via `declared_module()` — so a future derive
+        // regression that flipped the predicate's arm-set (a hole
+        // returning `false` for [`UpgradeInstruction::LoadModule`], a
+        // byte-collision flipping a second variant to `true`) or an
+        // accessor extension that promoted an additional variant onto
+        // the `String`-carrying axis would trip here at caixa-core
+        // test time rather than laundering the arm at the gate's
+        // per-entry load-singularity scan far from the derive site.
+        // Peer of the sibling
+        // [`validate_purge_ordering_routes_through_is_load_module_predicate`]
+        // byte-identity pin on the paired ordering-side load-family
+        // sticky-latch dispatch (both consumers now agree on one
+        // typed dispatch for the load-family axis) and the peer
+        // [`validate_state_change_singularity_projects_scripts_through_declared_path_accessor`]
+        // pin on the migration-family script-projection axis — the
+        // three within-entry per-instruction-class singularity gates
+        // now share one byte-identity pin apiece against their
+        // respective substrate-primitive typed dispatches.
+        //
+        // Three-arm projective coverage:
+        //   (a) `LoadModule` modules project through
+        //       `declared_module()` byte-equal to the raw
+        //       `module.as_str()` field access;
+        //   (b) a duplicate-`LoadModule` input trips the gate on the
+        //       second occurrence with `DuplicateLoadModule` carrying
+        //       the offending module verbatim;
+        //   (c) a non-`LoadModule`-only input (`SoftPurge` / `Purge` /
+        //       `StateChange` / `Restart`) leaves the gate vacuous
+        //       with `Ok(())` — the `!instr.is_load_module()`
+        //       `continue` fall-through pins.
+        //
+        // Fail-before-pass-after verified locally: swapping the
+        // production `if !instr.is_load_module() { continue; } let
+        // module = instr.declared_module().expect(…);` back to `let
+        // module = match instr { UpgradeInstruction::LoadModule
+        // { module } => module.as_str(), _ => continue, };` keeps
+        // arms (a)-(c) passing but silently detaches the gate from
+        // the accessor's typed dispatch — any future
+        // `is_load_module` / `declared_module` extension (a hole in
+        // either predicate, a promotion of an additional variant
+        // onto the `String`-carrying axis, an operator-side
+        // pre-parsed caixa-name cache the accessor materializes)
+        // would then silently disagree between this gate's raw
+        // pattern-match and the peer per-`UpgradeInstruction`
+        // consumers that route through the accessor pair.
+
+        // (a) LoadModule projection byte-equal via
+        //     is_load_module() + declared_module().
+        let lm = UpgradeInstruction::LoadModule {
+            module: "hello-rio".into(),
+        };
+        assert!(
+            lm.is_load_module(),
+            "LoadModule must satisfy is_load_module() — the gate's \
+             load-family arm-discriminator relies on this partition"
+        );
+        assert_eq!(
+            lm.declared_module(),
+            Some("hello-rio"),
+            "declared_module() must project the LoadModule :module \
+             byte-equal to the raw field access — accessor divergence \
+             would silently detach the gate from the projection every \
+             peer per-`UpgradeInstruction` consumer routes through"
+        );
+
+        // (b) Duplicate-LoadModule input trips the gate.
+        let dup = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::LoadModule { module: "x".into() },
+            ],
+        );
+        assert_eq!(
+            dup.validate_load_singularity(),
+            Err(UpgradeError::DuplicateLoadModule {
+                from: "0.1.0".into(),
+                module: "x".into(),
+            }),
+            "duplicate LoadModule modules within one entry must fire \
+             DuplicateLoadModule byte-identical to the pre-lift \
+             pattern-match shape"
+        );
+
+        // (c) Non-LoadModule-only input leaves the gate vacuous.
+        let no_load = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+                UpgradeInstruction::Restart,
+            ],
+        );
+        assert_eq!(
+            no_load.validate_load_singularity(),
+            Ok(()),
+            "non-LoadModule-only entries must leave the load-\
+             singularity gate vacuous — the `!is_load_module()` \
+             continue fall-through pins"
+        );
     }
 
     #[test]
