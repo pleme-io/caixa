@@ -307,6 +307,38 @@ impl Default for RestartPolicy {
 }
 
 impl RestartPolicy {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed three-arm [`RestartPolicy`] discriminator set (the future
+    /// M4 `mesh.pleme.io/v1alpha1/Supervisor` CR materializer's
+    /// per-child admission-webhook rejection body naming the accepted-
+    /// `:restart` list, a future `feira supervisor --restart …` CLI
+    /// arg-parse's "did you mean" hint via a [`Self::from_wire`]-scan
+    /// over the slice, the future `feira app graph` per-child restart
+    /// column, any future round-trip fuzz harness that sweeps every
+    /// arm). A future arm addition (an OTP-`intrinsic` fourth arm the
+    /// theory
+    /// [`ABSORPTION-ROADMAP`](https://github.com/pleme-io/theory/blob/main/ABSORPTION-ROADMAP.md)
+    /// might reach for once the three canonical OTP restart policies
+    /// stop covering the substrate's discovered load-shape) extends
+    /// this slice as one edit and every consumer picks up the new entry
+    /// by construction; the compiler-checked exhaustiveness on the
+    /// sibling method `match` arms ([`Self::as_str`] / [`Self::from_wire`])
+    /// is the build-time guarantee that no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`RestartStrategy::ALL`] (4eec29c) /
+    /// [`crate::CaixaKind::ALL`] (6b1f4fb) /
+    /// [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+    /// surfaces — the sixth (and the third and final M2 OTP-shape)
+    /// closed-set typed enum on the caixa surface to converge onto the
+    /// same one-canonical-arm-list-per-enum discipline. Sibling axis to
+    /// the peer [`RestartStrategy::ALL`] on the per-supervisor
+    /// sibling-restart-strategy axis; this closes the per-child
+    /// restart-decision-policy axis on the same M2 `:supervisor` slot.
+    pub const ALL: &'static [Self] = &[Self::Permanent, Self::Temporary, Self::Transient];
+
     /// Canonical PascalCase discriminator scalar this variant serializes
     /// as under [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`]. The three
     /// arms return the paired
@@ -336,6 +368,82 @@ impl RestartPolicy {
             Self::Permanent => crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
             Self::Temporary => crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
             Self::Transient => crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+        }
+    }
+
+    /// Substrate-canonical reverse projection on the `:children :restart`
+    /// closed-set axis — parses the `PascalCase` discriminator scalar
+    /// back to the typed variant, or `None` when `s` is outside the
+    /// closed-set arm-string set [`Self::as_str`] emits. Dispatches on
+    /// the same lifted
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT`] /
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY`] /
+    /// [`crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT`] constants
+    /// the [`Self::as_str`] emitter walks, so the parse and emit halves
+    /// of the round-trip migrate through one caixa-core edit on any
+    /// future arm addition.
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection on the OTP per-child restart-policy
+    /// axis (the [`Self::as_str`] emitter, the [`std::fmt::Display`]
+    /// impl routed through it, the `Serialize` derive that emits the
+    /// same byte-string under [`crate::render::SUPERVISOR_CHILD_KEY_RESTART`])
+    /// plus the kebab-case dispatcher-catalog identity via
+    /// [`Self::discriminant`] — every non-serde consumer that wanted to
+    /// parse a wire-form `PascalCase` policy scalar had to re-inline a
+    /// three-arm `match s { "Permanent" => …, "Temporary" => …,
+    /// "Transient" => …, _ => … }` cascade that expressed no
+    /// compile-time link back to the typed variant's canonical lifted
+    /// constant. A future variant rename or per-arm serde-attribute
+    /// drift would silently split the wire byte-string one non-serde
+    /// consumer parsed from the one the emitter wrote, with the failure
+    /// surfacing at the operator's reconcile posture (a `:temporary`
+    /// `oneShot` child being restarted on clean exit, treating the
+    /// successful-completion signal as failure and re-running the
+    /// completion-terminal one-shot indefinitely; a `:transient` child
+    /// that clean-exited being restarted, masking the clean-completion
+    /// contract) far from the rebrand commit and with no field naming
+    /// the drift.
+    ///
+    /// Distinct axis from the [`std::str::FromStr`] impl the
+    /// [`gen_platform::FromStrKind`] derive already installs on this
+    /// enum by design, not by drift: `FromStr` parses the *kebab-case*
+    /// dispatcher-catalog identity (`"permanent"` / `"temporary"` /
+    /// `"transient"` — the inverse of [`Self::discriminant`]), while
+    /// this method inverts the `PascalCase` wire byte-string
+    /// [`Self::as_str`] emits. The two-axis split lets the dispatcher-
+    /// catalog identity live in kebab-case (where every peer catalog
+    /// identifier already lives) without forcing a wire-format rename
+    /// on the tatara-lisp author surface (`:restart Permanent`,
+    /// `PascalCase`) — the same two-axis distinction the sibling
+    /// [`RestartStrategy::from_wire`] (4eec29c) /
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342)
+    /// carry on their peer closed-set typed-enum wire round-trips.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`RestartStrategy::from_wire`] (4eec29c) /
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::from_suffix`] typed enums
+    /// carry on the peer wire-side `str → Self` axes — extended onto
+    /// the M2 OTP-shape per-child restart-policy closed-set axis, the
+    /// sixth substrate-side closed-set typed enum (and the third and
+    /// final OTP-shape closed-enum discriminator axis) to converge on
+    /// the two-way `str ↔ Self` round-trip. Method-named `from_wire`
+    /// (not `from_str`) to match the peer [`RestartStrategy::from_wire`]
+    /// shape verbatim and side-step the [`std::str::FromStr`] impl the
+    /// derive already installs on the sibling kebab-case axis. Returns
+    /// `Option<Self>` (rather than `Result<Self, _>`) to match the peer
+    /// shapes: the caller picks the diagnostic form appropriate for
+    /// its use site.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT => Some(Self::Permanent),
+            crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY => Some(Self::Temporary),
+            crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT => Some(Self::Transient),
+            _ => None,
         }
     }
 }
@@ -5132,6 +5240,269 @@ mod tests {
                  Serialize derive's wire byte-string (three-path convergence: \
                  Display + as_str + Serialize all resolve to the same \
                  SUPERVISOR_CHILD_RESTART_* const)"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_all_enumerates_every_variant_exactly_once() {
+        // Fail-before-pass-after pin on the [`RestartPolicy::ALL`]
+        // exhaustive-iteration surface: every variant appears exactly
+        // once, and the slice length matches the arm count of the
+        // closed set. Every consumer that walks the accepted-policy
+        // set (a future `feira supervisor --restart …` CLI-side
+        // arg-parse's "did you mean" hint, a future M4 admission-
+        // webhook's per-child rejection body naming the accepted-
+        // `:restart` list, the [`RestartPolicy::from_wire`] reverse-
+        // projection consumers that iterate the accept-set for
+        // diagnostic rendering) reads through this slice, so a future
+        // arm addition that grows the enum but forgets to grow
+        // [`Self::ALL`] silently truncates every downstream consumer's
+        // accept-set at the same pre-addition boundary — this pin
+        // fails at caixa-core build time on the pairwise-distinct +
+        // arm-count invariants.
+        //
+        // Peer of the sibling [`RestartStrategy::ALL`] (4eec29c) /
+        // [`crate::CaixaKind::ALL`] (6b1f4fb) /
+        // [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+        // [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+        // [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+        // pins on the peer closed-set typed-enum axes.
+        let all: &[RestartPolicy] = RestartPolicy::ALL;
+        assert_eq!(
+            all.len(),
+            3,
+            "RestartPolicy::ALL must enumerate every variant of the \
+             three-arm closed set (Permanent, Temporary, Transient); \
+             got {all:?}"
+        );
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "RestartPolicy::ALL must carry every variant exactly \
+                         once — got duplicate {a:?} at indices {i} and {j}"
+                    );
+                }
+            }
+        }
+        for variant in [
+            RestartPolicy::Permanent,
+            RestartPolicy::Temporary,
+            RestartPolicy::Transient,
+        ] {
+            assert!(
+                all.contains(&variant),
+                "RestartPolicy::ALL must contain {variant:?} — a future arm \
+                 addition that grows the enum but forgets to grow the ALL slice \
+                 silently truncates every downstream consumer's accept-set at \
+                 the pre-addition boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_wire_accepts_every_lifted_constant() {
+        // Fail-before-pass-after pin on the forward accept-set of the
+        // [`RestartPolicy::from_wire`] reverse projection: every
+        // canonical [`crate::render::SUPERVISOR_CHILD_RESTART_*`]
+        // constant the [`RestartPolicy::as_str`] emitter walks parses
+        // back to its paired variant. Any future arm addition that
+        // grows the emitter's `as_str` match but forgets to grow the
+        // parser's `from_wire` match silently splits the two halves of
+        // the round-trip — the wire byte-string one non-serde consumer
+        // parses from the one the emitter wrote — with the failure
+        // surfacing at the operator's reconcile posture (a `:temporary`
+        // `oneShot` child restarted on clean exit, a `:transient` child
+        // restarted after clean completion) far from the rebrand
+        // commit. Pinning the three-arm accept-set here catches the
+        // drift at caixa-core build time.
+        //
+        // Peer of the sibling [`RestartStrategy::from_wire`] (4eec29c)
+        // + [`crate::CaixaKind::from_wire`] (2aa6d23)
+        // + [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342)
+        // accept-set pins on the peer closed-set typed-enum `str → Self`
+        // axes.
+        for (wire, expected) in [
+            (
+                crate::render::SUPERVISOR_CHILD_RESTART_PERMANENT,
+                RestartPolicy::Permanent,
+            ),
+            (
+                crate::render::SUPERVISOR_CHILD_RESTART_TEMPORARY,
+                RestartPolicy::Temporary,
+            ),
+            (
+                crate::render::SUPERVISOR_CHILD_RESTART_TRANSIENT,
+                RestartPolicy::Transient,
+            ),
+        ] {
+            let parsed = RestartPolicy::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "RestartPolicy::from_wire({wire:?}) must accept every \
+                     SUPERVISOR_CHILD_RESTART_* constant — got None for the \
+                     lifted canonical byte-string that RestartPolicy::{expected:?} \
+                     serializes as under SUPERVISOR_CHILD_KEY_RESTART"
+                )
+            });
+            assert_eq!(
+                parsed, expected,
+                "RestartPolicy::from_wire({wire:?}) must return \
+                 RestartPolicy::{expected:?}; got RestartPolicy::{parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_wire_round_trips_through_as_str() {
+        // Fail-before-pass-after pin on the closed round-trip between
+        // the forward [`RestartPolicy::as_str`] emitter and the
+        // reverse [`RestartPolicy::from_wire`] parser: for every
+        // variant in [`RestartPolicy::ALL`], parsing the emitter's
+        // output must return exactly the same variant. Any per-arm
+        // divergence — a future arm added to `as_str` but not
+        // `from_wire`, an accidental copy-paste flip in one but not
+        // the other — silently splits the emit and parse halves and
+        // the failure surfaces at consumer parse time far from the
+        // drift site. The `ALL`-iterating shape means a future arm
+        // addition picks up the coverage by construction.
+        //
+        // Peer of the sibling
+        // [`restart_strategy_from_wire_round_trips_through_as_str`]
+        // (4eec29c) round-trip pin on
+        // [`RestartStrategy::from_wire`] and the M3
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_round_trips_through_as_str`]
+        // (18c7342) round-trip pin on
+        // [`crate::aplicacao::PlacementStrategy::from_wire`].
+        for &variant in RestartPolicy::ALL {
+            let wire = variant.as_str();
+            let parsed = RestartPolicy::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "RestartPolicy::from_wire(RestartPolicy::{variant:?}.as_str()) \
+                     must be Some({variant:?}) — the two halves of the round-trip \
+                     dispatch on the same lifted SUPERVISOR_CHILD_RESTART_* consts; \
+                     got None on wire byte-string {wire:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "RestartPolicy::from_wire(RestartPolicy::{variant:?}.as_str()) \
+                 must round-trip to the same variant; got {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_wire_rejects_unknown_byte_strings() {
+        // Fail-before-pass-after pin on the closed-set refusal
+        // discipline of [`RestartPolicy::from_wire`]: every
+        // byte-string outside the three-arm accept-set returns `None`
+        // rather than silently collapsing onto the [`Default`]
+        // (`Permanent`) arm or an arbitrary neighbor. The refusal set
+        // exercised here sweeps the load-bearing drift shapes: the
+        // empty string (a stripped serde-attribute drift), all-
+        // whitespace strings (the canonical text-editor accidental
+        // padding shape), the kebab-case dispatcher-catalog identities
+        // (`"permanent"` / `"temporary"` / `"transient"` — the
+        // [`gen_platform::FromStrKind`]-derived [`std::str::FromStr`]
+        // accept-set, which parses the *other* axis of this enum's
+        // two-axis split and must not leak into the `from_wire`
+        // PascalCase-wire accept-set — a lowercase leak here would
+        // silently accept the operator's kebab-case
+        // dispatcher-catalog probe under the wire-axis parser and mis-
+        // route a `:permanent` intent), the padded canonical scalar
+        // (`" Permanent "`), the trailing-newline shapes
+        // (`"Permanent\n"`), the uppercase-single-word forms
+        // (`"PERMANENT"`), and neighboring-but-unknown arms
+        // (`"Restart"` — the canonical typo direction toward the
+        // sibling [`RestartStrategy`] enum's own wire-arm namespace).
+        //
+        // Peer of the sibling
+        // [`restart_strategy_from_wire_rejects_unknown_byte_strings`]
+        // (4eec29c) +
+        // [`crate::kind::tests::caixa_kind_from_wire_rejects_unknown_byte_strings`]
+        // (2aa6d23) +
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_rejects_unknown_byte_strings`]
+        // (18c7342) refusal pins on the peer closed-set typed-enum
+        // axes.
+        for bad in [
+            "",
+            " ",
+            "\n",
+            "\t",
+            "permanent",
+            "temporary",
+            "transient",
+            "PERMANENT",
+            "TEMPORARY",
+            "TRANSIENT",
+            "Permanents",
+            "Permanent ",
+            " Permanent",
+            " Transient ",
+            "Permanent\n",
+            "perma",
+            "Trans",
+            "OneForOne",
+            "Restart",
+            "?",
+        ] {
+            assert!(
+                RestartPolicy::from_wire(bad).is_none(),
+                "RestartPolicy::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the three RestartPolicy::as_str \
+                 outputs (Permanent, Temporary, Transient), and this \
+                 byte-string is outside that closed set"
+            );
+        }
+    }
+
+    #[test]
+    fn restart_policy_from_wire_matches_serialize_derive_wire_byte_string() {
+        // Fail-before-pass-after pin on the fourth path of the four-path
+        // convergence: `from_wire` (the reverse projection) inverts the
+        // `Serialize` derive's wire byte-string on every variant.
+        // Together with the pre-existing three-path convergence
+        // (`Display` + `as_str` + `Serialize` all resolve to the same
+        // lifted [`crate::render::SUPERVISOR_CHILD_RESTART_*`] const,
+        // pinned by
+        // [`restart_policy_display_matches_serialized_wire_byte_string`])
+        // this closes the round-trip: the wire byte-string the
+        // `Serialize` derive emits parses back to the same variant
+        // through `from_wire`, so any future serde-attribute or variant-
+        // rename drift on the emit half now surfaces as a matched drift
+        // on the parse half at caixa-core build time — the two halves
+        // migrate as a unit through the lifted consts on any future
+        // rename, and the round-trip cannot silently split.
+        //
+        // Peer of the sibling
+        // [`restart_strategy_from_wire_matches_serialize_derive_wire_byte_string`]
+        // (4eec29c) wire-format pin on
+        // [`RestartStrategy::from_wire`] and the M3
+        // [`crate::aplicacao::tests::placement_strategy_from_wire_matches_serialize_derive_wire_byte_string`]
+        // (18c7342) wire-format pin on
+        // [`crate::aplicacao::PlacementStrategy::from_wire`].
+        for &variant in RestartPolicy::ALL {
+            let wire = serde_json::to_string(&variant).unwrap();
+            let unquoted = wire
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized RestartPolicy is a JSON string");
+            let parsed = RestartPolicy::from_wire(unquoted).unwrap_or_else(|| {
+                panic!(
+                    "RestartPolicy::from_wire({unquoted:?}) must accept the \
+                     Serialize derive's wire byte-string for \
+                     RestartPolicy::{variant:?} — the four-path convergence \
+                     (Display + as_str + Serialize + from_wire) resolves through \
+                     the same lifted SUPERVISOR_CHILD_RESTART_* const; got None"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "RestartPolicy::from_wire of the Serialize derive's wire \
+                 byte-string for RestartPolicy::{variant:?} must round-trip \
+                 to the same variant; got {parsed:?}"
             );
         }
     }
