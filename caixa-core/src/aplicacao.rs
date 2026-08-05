@@ -2654,6 +2654,49 @@ impl RateLimitUnit {
         }
         Self::ALL.iter().copied().find(|u| u.window() == window)
     }
+
+    /// Canonical rate-limit `Duration` for a unit suffix, or `None` when
+    /// `suffix` is outside the closed-set arm-string set [`Self::as_suffix`]
+    /// emits. Composes [`Self::from_suffix`] with [`Self::window`] — the
+    /// single `&str → Duration` projection [`rate_limit_codec::parse`]
+    /// consumes.
+    ///
+    /// The peer `Duration → &'static str` axis folded onto the substrate
+    /// primitive [`RateLimit::canonical_unit`] typed accessor once both
+    /// production consumers ([`rate_limit_codec::render`] and
+    /// [`AplicacaoSpec::validate_politicas`]'s canonical-window gate)
+    /// migrated (61421a6): the free helper's `Duration → &str` projection
+    /// is now the two-step composition
+    /// `rl.canonical_unit().map(RateLimitUnit::as_suffix)` every consumer
+    /// reads through the typed accessor. This lift closes the peer
+    /// `&str → Duration` axis by folding the vestigial module-private
+    /// `rate_limit_window_from_unit` delegate onto this associated method
+    /// — the codec's parse arm and every future wire-side consumer of the
+    /// `&str → Duration` projection (a future admission-webhook that
+    /// reads a `:rate-limit` shape off a CR spec's `raw string` value
+    /// before it's promoted to a validated typed slot, a future
+    /// `feira lint` shape-probe that reads the author-surface bytes
+    /// verbatim) now reach for exactly one typed dispatch on the
+    /// substrate primitive.
+    ///
+    /// Same "closed-set typed-enum discriminator with canonical
+    /// projections per axis" discipline the sibling [`Self::as_suffix`]
+    /// / [`Self::window`] / [`Self::from_suffix`] / [`Self::from_window`]
+    /// methods carry — this associated method closes the fifth (and last
+    /// unlifted) projection axis on the arm-table, so the closed-set enum
+    /// now owns every `str ↔ Duration ↔ Self` typed dispatch every
+    /// consumer of the `:politicas :rate-limit :window` axis reaches
+    /// through. A future rate-limit-unit addition (a `"d"` day suffix
+    /// once Envoy's `rate_limit_action` grows daily-bucket support, a
+    /// `"ms"` sub-second window once high-throughput per-edge policies
+    /// come into scope per MESH-COMPOSITION §III.2 #3) is one new
+    /// variant plus one arm per method — the compiler enforces
+    /// exhaustiveness on every consumer's `match self` arms and picks
+    /// the new unit up by construction across all five projections.
+    #[must_use]
+    pub fn window_from_suffix(suffix: &str) -> Option<Duration> {
+        Self::from_suffix(suffix).map(Self::window)
+    }
 }
 
 /// Route [`std::fmt::Display`] through [`RateLimitUnit::as_suffix`], so
@@ -2670,30 +2713,6 @@ impl std::fmt::Display for RateLimitUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_suffix())
     }
-}
-
-/// Canonical rate-limit `Duration` for a unit suffix, or `None` when
-/// the suffix isn't a [`RateLimitUnit`] arm's `as_suffix` output. Thin
-/// delegate over [`RateLimitUnit::from_suffix`] composed with
-/// [`RateLimitUnit::window`] — the sole consumer on the
-/// `&'static str → Duration` axis ([`rate_limit_codec::parse`]) reads
-/// this projection.
-///
-/// The peer `Duration → &'static str` axis (previously carried by the
-/// module-private `rate_limit_window_unit` delegate) folded onto the
-/// substrate primitive [`RateLimit::canonical_unit`] typed accessor once
-/// both production consumers ([`rate_limit_codec::render`] and
-/// [`AplicacaoSpec::validate_politicas`]'s canonical-window gate)
-/// migrated: the free helper's `Duration → &str` projection is now the
-/// two-step composition `rl.canonical_unit().map(RateLimitUnit::as_suffix)`
-/// every consumer reads through the typed accessor. The
-/// [`&str → Duration`] axis here has no such accessor peer (the codec's
-/// parse arm reads `&str` from the wire, not from a validated typed
-/// slot), so this delegate stays as the single lifted projection every
-/// wire-side consumer routes through.
-#[must_use]
-fn rate_limit_window_from_unit(unit: &str) -> Option<Duration> {
-    RateLimitUnit::from_suffix(unit).map(RateLimitUnit::window)
 }
 
 /// Upper-bound ceiling on the `:politicas :timeout` axis — every
@@ -3773,10 +3792,13 @@ fn validate_entrada_path(path: &str) -> Result<(), AplicacaoError> {
 
 mod rate_limit_codec {
     // `Duration` is no longer named here — the codec routes through
-    // the module-scope [`super::rate_limit_window_from_unit`] /
-    // [`super::rate_limit_window_unit`] projections that carry the
-    // canonical typed `Duration` unit-table axis on their signatures.
-    use super::RateLimit;
+    // the substrate primitive [`super::RateLimitUnit::window_from_suffix`]
+    // (parse arm, `&str → Duration`) and [`super::RateLimit::canonical_unit`]
+    // (render arm, `Duration → RateLimitUnit`) typed dispatches that carry
+    // the canonical `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection on the
+    // closed-set enum's arm-table rather than through vestigial free-helper
+    // delegates.
+    use super::{RateLimit, RateLimitUnit};
     use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S: Serializer>(v: &Option<RateLimit>, s: S) -> Result<S::Ok, S::Error> {
@@ -4006,16 +4028,35 @@ mod rate_limit_codec {
         let rate: u32 = rate_trim.parse::<u32>().map_err(|_| {
             format!("rate-limit rate {rate_trim:?} (digit-only magnitude overflows u32)")
         })?;
-        // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives at
-        // module scope as the lifted [`super::RATE_LIMIT_UNIT_TABLE`]
-        // const; this parse arm now consumes only the `unit → Duration`
-        // projection [`super::rate_limit_window_from_unit`], so a future
-        // rate-limit-unit addition (a `"d"` day suffix once Envoy's
-        // `rate_limit_action` grows daily-bucket support) is one row
-        // appended to the table — parse, render, and
-        // `is_canonical_rate_limit_window` all pick it up by construction.
+        // The `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection lives on
+        // the closed-set typed enum [`super::RateLimitUnit`]; this parse
+        // arm reads the `&str → Duration` projection through the
+        // substrate primitive [`super::RateLimitUnit::window_from_suffix`]
+        // (a two-step typed dispatch composing [`super::RateLimitUnit::from_suffix`]
+        // with [`super::RateLimitUnit::window`]) rather than the vestigial
+        // module-private `rate_limit_window_from_unit` free helper the
+        // predecessor 61421a6 left as the last unlifted delegate on this
+        // axis. One typed dispatch on the substrate primitive instead of
+        // one runtime call through the free-helper delegate; the sole
+        // production consumer of the `&str → Duration` axis (this parse
+        // arm) now reaches for exactly one typed method on the closed-set
+        // enum, sibling to the codec's render arm's
+        // [`super::RateLimit::canonical_unit`] dispatch on the paired
+        // `Duration → RateLimitUnit` axis and to the validate gate's
+        // [`super::RateLimit::canonical_unit`] shape-probe on the
+        // canonical-window axis. A future rate-limit-unit addition (a
+        // `"d"` day suffix once Envoy's `rate_limit_action` grows
+        // daily-bucket support, a `"ms"` sub-second window once
+        // high-throughput per-edge policies come into scope per
+        // MESH-COMPOSITION §III.2 #3) is one variant + one arm per method
+        // on the closed-set enum, and the compiler enforces exhaustiveness
+        // on every consumer's `match self` arms — this parse arm's
+        // accepted-suffix set, the render arm's emitted-suffix set, the
+        // validate gate's canonical-window set, and every future
+        // per-`:contratos`-edge rate-limit-override overlay all pick it up
+        // by construction.
         let unit = unit.trim();
-        let window = super::rate_limit_window_from_unit(unit)
+        let window = RateLimitUnit::window_from_suffix(unit)
             .ok_or_else(|| format!("unknown rate-limit window unit {unit:?}"))?;
         Ok(RateLimit { rate, window })
     }
@@ -13881,11 +13922,14 @@ mod tests {
         // `{"s" ↔ 1s, "m" ↔ 60s, "h" ↔ 3600s}` bijection every consumer
         // of the rate-limit unit surface reads from). The two
         // projection directions [`RateLimitUnit::from_suffix`] /
-        // [`RateLimitUnit::window`] (str → Duration) and
-        // [`RateLimitUnit::from_window`] / [`RateLimitUnit::as_suffix`]
-        // (Duration → str) are the substrate primitives the codec's
-        // parse arm ([`rate_limit_codec::parse`] via
-        // [`rate_limit_window_from_unit`]), the codec's render arm
+        // [`RateLimitUnit::window`] (str → Duration, exposed as one
+        // typed dispatch through [`RateLimitUnit::window_from_suffix`])
+        // and [`RateLimitUnit::from_window`] / [`RateLimitUnit::as_suffix`]
+        // (Duration → str, exposed as one typed dispatch through
+        // [`RateLimit::canonical_unit`] composed with
+        // [`RateLimitUnit::as_suffix`]) are the substrate primitives the
+        // codec's parse arm ([`rate_limit_codec::parse`] via
+        // [`RateLimitUnit::window_from_suffix`]), the codec's render arm
         // ([`rate_limit_codec::render`] via [`RateLimit::canonical_unit`]),
         // and the validate gate ([`AplicacaoSpec::validate_politicas`]
         // via [`RateLimit::canonical_unit`]) all key off. A future
@@ -13902,13 +13946,12 @@ mod tests {
         // `rate_limit_window_from_unit` on the `Duration → &str` and
         // `&str → Duration` axes; the former was deleted after its
         // sole production consumer ([`rate_limit_codec::render`])
-        // migrated onto [`RateLimit::canonical_unit`], so the
-        // `Duration → &str` half now composes [`RateLimit::canonical_unit`]
-        // with [`RateLimitUnit::as_suffix`] directly. The `&str → Duration`
-        // axis stays on the surviving [`rate_limit_window_from_unit`]
-        // delegate the codec's parse arm still reads through.
+        // migrated onto [`RateLimit::canonical_unit`] (61421a6), and
+        // the latter is folded here into the substrate primitive
+        // [`RateLimitUnit::window_from_suffix`] so both projection
+        // directions live on the closed-set enum's arm-table.
         for (unit, secs) in [("s", 1u64), ("m", 60), ("h", 3600)] {
-            let window = super::rate_limit_window_from_unit(unit)
+            let window = super::RateLimitUnit::window_from_suffix(unit)
                 .unwrap_or_else(|| panic!("canonical unit {unit:?} must resolve to a Duration"));
             assert_eq!(
                 window,
@@ -13929,9 +13972,9 @@ mod tests {
         // projection — a future `"d"` addition to the table would
         // flip this arm; today it pins the current three-row table's
         // rejection semantics.
-        assert!(super::rate_limit_window_from_unit("d").is_none());
-        assert!(super::rate_limit_window_from_unit("ms").is_none());
-        assert!(super::rate_limit_window_from_unit("").is_none());
+        assert!(super::RateLimitUnit::window_from_suffix("d").is_none());
+        assert!(super::RateLimitUnit::window_from_suffix("ms").is_none());
+        assert!(super::RateLimitUnit::window_from_suffix("").is_none());
         // Non-table Durations yield None on the `Duration → unit`
         // projection — pins that the two projections agree on the
         // "not in the table" semantic too, so a drift where the
@@ -13946,6 +13989,92 @@ mod tests {
         assert!(projected_suffix(Duration::from_secs(2)).is_none());
         assert!(projected_suffix(Duration::from_secs(86_400)).is_none());
         assert!(projected_suffix(Duration::from_millis(1500)).is_none());
+    }
+
+    #[test]
+    fn rate_limit_unit_window_from_suffix_composes_from_suffix_and_window() {
+        // Byte-parity pin on the [`RateLimitUnit::window_from_suffix`]
+        // substrate-primitive `&str → Duration` associated method the
+        // codec's parse arm ([`rate_limit_codec::parse`]) now routes
+        // through. Every canonical arm (`"s"`, `"m"`, `"h"`) must resolve
+        // to the same [`Duration`] the two-step composition
+        // [`RateLimitUnit::from_suffix`] with [`RateLimitUnit::window`]
+        // returns; every non-arm suffix (`"d"`, `"ms"`, `""`, `"seconds"`,
+        // `"MIN"`) must project to [`None`] on both paths. A future
+        // implementation of `window_from_suffix` that took a shortcut
+        // through a per-suffix `match` table (bypassing the arm-table's
+        // `Self::from_suffix` scan and the arm-table's `Self::window`
+        // dispatch) would silently split the accept-set — the parse
+        // arm would accept a suffix the enum's arm-table doesn't know,
+        // or reject a suffix the enum's arm-table does; this pin
+        // surfaces that drift at caixa-core build time rather than at a
+        // downstream serde round-trip audit on a live `MeshPolicy`.
+        //
+        // Same byte-parity discipline the sibling
+        // [`canonical_rate_limit_window_set_tracks_codec_via_canonical_unit`]
+        // pin carries on the peer `Duration → RateLimitUnit` axis via
+        // [`RateLimit::canonical_unit`], and the peer
+        // [`rate_limit_unit_table_projections_are_mutual_inverses`] pin
+        // carries on the bidirectional arm-table axis — extended here
+        // onto the fifth (and last unlifted) projection axis on the
+        // closed-set enum's arm-table.
+        let composition = |suffix: &str| -> Option<Duration> {
+            super::RateLimitUnit::from_suffix(suffix).map(super::RateLimitUnit::window)
+        };
+        for suffix in ["s", "m", "h"] {
+            let via_method = super::RateLimitUnit::window_from_suffix(suffix);
+            let via_composition = composition(suffix);
+            assert_eq!(
+                via_method, via_composition,
+                "RateLimitUnit::window_from_suffix({suffix:?}) must byte-equal \
+                 from_suffix({suffix:?}).map(window) — the substrate-primitive \
+                 method must delegate to the arm-table's two typed dispatches, \
+                 not shortcut through a per-suffix match table"
+            );
+            assert!(
+                via_method.is_some(),
+                "canonical suffix {suffix:?} must resolve to Some(Duration) via \
+                 RateLimitUnit::window_from_suffix"
+            );
+        }
+        for suffix in ["d", "ms", "", "seconds", "MIN", "S", "H", "/"] {
+            let via_method = super::RateLimitUnit::window_from_suffix(suffix);
+            let via_composition = composition(suffix);
+            assert_eq!(
+                via_method, via_composition,
+                "RateLimitUnit::window_from_suffix({suffix:?}) must byte-equal \
+                 from_suffix({suffix:?}).map(window) on the non-arm rejection \
+                 axis too"
+            );
+            assert!(
+                via_method.is_none(),
+                "non-arm suffix {suffix:?} must project to None via \
+                 RateLimitUnit::window_from_suffix — a future extension that \
+                 accepted this suffix without a corresponding arm on the enum \
+                 would split the codec's parse-accepted set from the enum's \
+                 arm-table"
+            );
+        }
+        // And the codec's parse arm now reads through this method: a
+        // canonical `"100/<u>"` MeshPolicy JSON payload round-trips to
+        // the same `Duration` the method returns for its unit, closing
+        // the two-consumer drift surface (the codec's parse arm and the
+        // enum's arm-table) with one typed dispatch on the substrate
+        // primitive.
+        for suffix in ["s", "m", "h"] {
+            let wire = format!(r#"{{"rateLimit":"100/{suffix}"}}"#);
+            let mp: MeshPolicy = serde_json::from_str(&wire)
+                .unwrap_or_else(|e| panic!("wire {wire:?} must parse: {e}"));
+            let parsed = mp.rate_limit().expect("rate_limit payload present");
+            let via_method = super::RateLimitUnit::window_from_suffix(suffix)
+                .unwrap_or_else(|| panic!("suffix {suffix:?} must resolve via window_from_suffix"));
+            assert_eq!(
+                parsed.window(),
+                via_method,
+                "codec parse arm on {wire:?} must resolve the window through \
+                 RateLimitUnit::window_from_suffix, not a divergent path"
+            );
+        }
     }
 
     #[test]
@@ -14324,7 +14453,7 @@ mod tests {
                 "RateLimit::canonical_unit().is_some() must agree with the \
                  codec-accepted canonical-window set on {secs}s"
             );
-            let suffix_from_axis = super::rate_limit_window_from_unit(match secs {
+            let suffix_from_axis = super::RateLimitUnit::window_from_suffix(match secs {
                 1 => "s",
                 60 => "m",
                 3600 => "h",
