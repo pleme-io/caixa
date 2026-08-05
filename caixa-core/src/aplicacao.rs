@@ -4131,6 +4131,23 @@ impl Default for PlacementStrategy {
 }
 
 impl PlacementStrategy {
+    /// Exhaustive iteration surface for every consumer that reads the
+    /// full closed-set (the future M4 admission-webhook's accepted-
+    /// strategy listing in its rejection body, a future `feira app
+    /// placement --list` CLI-side surfacing of the accepted arm-set,
+    /// any future round-trip fuzz harness). A future variant addition
+    /// (an `Anycast` mesh-anycast arm the MESH-COMPOSITION §II.5 hint
+    /// names as a trajectory item) extends this slice as a single edit
+    /// and every consumer picks up the new entry by construction — the
+    /// compiler-checked exhaustiveness on the sibling method `match`
+    /// arms is the build-time guarantee that no arm forgets to grow.
+    /// Same shape as the sibling closed-set typed enums'
+    /// [`RateLimitUnit::ALL`] (6bce03d) and
+    /// [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+    /// surfaces — the third closed-set typed enum on the caixa surface
+    /// to converge onto the same discipline.
+    pub const ALL: &'static [Self] = &[Self::SingleNode, Self::Replicated, Self::Sharded];
+
     /// Canonical camelCase-schema discriminator scalar this variant
     /// serializes as under [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`]. The
     /// three arms return the paired [`crate::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`]
@@ -4148,6 +4165,66 @@ impl PlacementStrategy {
             Self::SingleNode => crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
             Self::Replicated => crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
             Self::Sharded => crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+        }
+    }
+
+    /// Substrate-canonical reverse projection on the `:placement
+    /// :estrategia` closed-set axis — parses the camelCase-schema
+    /// discriminator scalar back to the typed variant, or `None` when
+    /// `s` is outside the closed-set arm-string set [`Self::as_str`]
+    /// emits. Dispatches on the same lifted
+    /// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE`] /
+    /// [`crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED`] /
+    /// [`crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED`] constants the
+    /// [`Self::as_str`] emitter walks, so the parse and emit halves of
+    /// the round-trip migrate through one caixa-core edit on any future
+    /// arm addition (an `Anycast` mesh-anycast arm the MESH-COMPOSITION
+    /// §II.5 hint names as a trajectory item lands one variant + one
+    /// arm per method and the compiler enforces exhaustiveness on every
+    /// consumer's `match self` arms).
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection (the [`Self::as_str`] emitter, the
+    /// [`std::fmt::Display`] impl routed through it, the `Serialize`
+    /// derive that emits the same byte-string under
+    /// [`crate::M3_PLACEMENT_KEY_ESTRATEGIA`]) — every non-serde
+    /// consumer that wanted to parse a wire-form strategy scalar had to
+    /// re-inline a three-arm `match s { "SingleNode" => …, "Replicated"
+    /// => …, "Sharded" => …, _ => … }` cascade that expressed no
+    /// compile-time link back to the typed variant's canonical lifted
+    /// constant. A future variant rename or a per-arm serde-attribute
+    /// drift would silently split the wire byte-string one non-serde
+    /// consumer parsed from the one the emitter wrote, with the
+    /// failure surfacing at parse time far from the rebrand commit.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) and
+    /// [`RateLimitUnit::from_suffix`] typed enums carry on the peer
+    /// wire-side `str → Self` axes — extended onto the M3 mesh-primitive-
+    /// defining `:placement :estrategia` closed-set axis, the third
+    /// substrate-side closed-set typed enum to converge on the two-way
+    /// `str ↔ Self` round-trip. Method-named `from_wire` (not `from_str`)
+    /// to match the peer [`crate::CaixaKind::from_wire`] shape verbatim
+    /// and side-step the [`std::str::FromStr`]-collision clippy
+    /// (`clippy::should_implement_trait`) the plain `from_str` name
+    /// carries; a future explicit [`std::str::FromStr`] impl can layer
+    /// on top by delegating to this canonical arm-dispatch method.
+    ///
+    /// Returns `Option<Self>` (rather than `Result<Self, _>`) to match
+    /// the sibling [`crate::CaixaKind::from_wire`] shape: the caller
+    /// picks the diagnostic form appropriate for its use site — a
+    /// future `feira app placement --set` CLI-side arg-parse that wants
+    /// an `"unknown strategy: {s} (accepted: SingleNode, Replicated,
+    /// Sharded)"` diagnostic builds one on top by iterating
+    /// [`Self::ALL`], while the future M4 admission-webhook's rejection
+    /// path folds `None` onto its per-CR structured refusal body.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE => Some(Self::SingleNode),
+            crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED => Some(Self::Replicated),
+            crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED => Some(Self::Sharded),
+            _ => None,
         }
     }
 }
@@ -13141,6 +13218,254 @@ mod tests {
                 msg.starts_with(&format!(":placement {expected_scalar} carries")),
                 "ShardKeyOnNonSharded diagnostic for {variant:?} must open with \
                  the lifted `{expected_scalar}` scalar via Display; got {msg:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_all_enumerates_every_variant_once() {
+        // Fail-before-pass-after pin on the [`PlacementStrategy::ALL`]
+        // exhaustive-iteration surface: every variant appears exactly
+        // once, and the slice length matches the arm count of the
+        // closed set. Every consumer that walks the accepted-strategy
+        // set (a future `feira app placement --list` CLI-side surfacing,
+        // a future M4 admission-webhook's rejection body naming the
+        // accepted-strategy list, the [`PlacementStrategy::from_wire`]
+        // reverse-projection consumers that iterate the accept-set for
+        // a "did you mean" hint) reads through this slice, so a future
+        // variant addition (an `Anycast` mesh-anycast arm the
+        // MESH-COMPOSITION §II.5 hint names as a trajectory item) that
+        // grows the enum but forgets to grow [`Self::ALL`] silently
+        // truncates every downstream consumer's accept-set at the same
+        // pre-addition boundary — this pin fails at caixa-core build
+        // time on the pairwise-distinct + arm-count invariants.
+        //
+        // Peer of the sibling [`RateLimitUnit::ALL`] (6bce03d) /
+        // [`crate::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+        // pins on the peer closed-set typed-enum axes.
+        let all: &[PlacementStrategy] = PlacementStrategy::ALL;
+        assert_eq!(
+            all.len(),
+            3,
+            "PlacementStrategy::ALL must enumerate every variant of the \
+             three-arm closed set (SingleNode, Replicated, Sharded); got {all:?}"
+        );
+        for (i, a) in all.iter().enumerate() {
+            for (j, b) in all.iter().enumerate() {
+                if i != j {
+                    assert_ne!(
+                        a, b,
+                        "PlacementStrategy::ALL must carry every variant exactly \
+                         once — got duplicate {a:?} at indices {i} and {j}"
+                    );
+                }
+            }
+        }
+        for variant in [
+            PlacementStrategy::SingleNode,
+            PlacementStrategy::Replicated,
+            PlacementStrategy::Sharded,
+        ] {
+            assert!(
+                all.contains(&variant),
+                "PlacementStrategy::ALL must contain {variant:?} — a future variant \
+                 addition that grows the enum but forgets to grow the ALL slice \
+                 silently truncates every downstream consumer's accept-set at the \
+                 pre-addition boundary"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_wire_accepts_every_lifted_constant() {
+        // Fail-before-pass-after pin on the forward accept-set of the
+        // [`PlacementStrategy::from_wire`] reverse projection: every
+        // canonical [`crate::render::M3_PLACEMENT_ESTRATEGIA_*`]
+        // constant the [`PlacementStrategy::as_str`] emitter walks
+        // parses back to its paired variant. Any future arm addition
+        // that grows the emitter's `as_str` match but forgets to grow
+        // the parser's `from_str` match silently splits the two halves
+        // of the round-trip — the wire byte-string one non-serde
+        // consumer parses from the one the emitter wrote — with the
+        // failure surfacing at parse time far from the rebrand commit.
+        // Pinning the three-arm accept-set here catches the drift at
+        // caixa-core build time.
+        //
+        // Peer of the sibling [`crate::CaixaKind::from_wire`] (2aa6d23)
+        // + [`RateLimitUnit::from_suffix`] accept-set pins on the peer
+        // closed-set typed-enum `str → Self` axes.
+        for (wire, expected) in [
+            (
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SINGLE_NODE,
+                PlacementStrategy::SingleNode,
+            ),
+            (
+                crate::render::M3_PLACEMENT_ESTRATEGIA_REPLICATED,
+                PlacementStrategy::Replicated,
+            ),
+            (
+                crate::render::M3_PLACEMENT_ESTRATEGIA_SHARDED,
+                PlacementStrategy::Sharded,
+            ),
+        ] {
+            let parsed = PlacementStrategy::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "PlacementStrategy::from_wire({wire:?}) must accept every \
+                     M3_PLACEMENT_ESTRATEGIA_* constant — got None for the \
+                     lifted canonical byte-string that PlacementStrategy::{expected:?} \
+                     serializes as under M3_PLACEMENT_KEY_ESTRATEGIA"
+                )
+            });
+            assert_eq!(
+                parsed, expected,
+                "PlacementStrategy::from_wire({wire:?}) must return \
+                 PlacementStrategy::{expected:?}; got PlacementStrategy::{parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_wire_round_trips_through_as_str() {
+        // Fail-before-pass-after pin on the closed round-trip between
+        // the forward [`PlacementStrategy::as_str`] emitter and the
+        // reverse [`PlacementStrategy::from_wire`] parser: for every
+        // variant in [`PlacementStrategy::ALL`], parsing the emitter's
+        // output must return exactly the same variant. Any per-arm
+        // divergence — a future arm added to `as_str` but not
+        // `from_str`, an accidental copy-paste flip in one but not the
+        // other — silently splits the emit and parse halves and the
+        // failure surfaces at consumer parse time far from the drift
+        // site. The `ALL`-iterating shape means a future variant
+        // addition picks up the coverage by construction.
+        //
+        // Peer of the sibling [`crate::kind::tests`] round-trip pin on
+        // [`crate::CaixaKind::from_wire`] and the
+        // [`super::tests::rate_limit_unit_from_suffix_round_trips_through_as_suffix`]
+        // sibling round-trip pin on [`RateLimitUnit`].
+        for &variant in PlacementStrategy::ALL {
+            let wire = variant.as_str();
+            let parsed = PlacementStrategy::from_wire(wire).unwrap_or_else(|| {
+                panic!(
+                    "PlacementStrategy::from_wire(PlacementStrategy::{variant:?}.as_str()) \
+                     must be Some({variant:?}) — the two halves of the round-trip \
+                     dispatch on the same lifted M3_PLACEMENT_ESTRATEGIA_* consts; \
+                     got None on wire byte-string {wire:?}"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "PlacementStrategy::from_wire(PlacementStrategy::{variant:?}.as_str()) \
+                 must round-trip to the same variant; got {parsed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_wire_rejects_unknown_byte_strings() {
+        // Fail-before-pass-after pin on the closed-set refusal
+        // discipline of [`PlacementStrategy::from_wire`]: every
+        // byte-string outside the three-arm accept-set returns `None`
+        // rather than silently collapsing onto the [`Default`]
+        // (`Replicated`) arm or an arbitrary neighbor. The refusal set
+        // exercised here sweeps the load-bearing drift shapes: the
+        // empty string (a stripped serde-attribute drift), an all-
+        // whitespace string (the canonical text-editor accidental
+        // padding shape), the lowercased kebab-case forms a future
+        // `#[serde(rename_all = "kebab-case")]` attribute would emit
+        // (`"single-node"`, `"replicated"`, `"sharded"` — the last two
+        // coincidentally match the accepted canonical scalars, so only
+        // `"single-node"` fires as a refusal, but pinning the case-
+        // sensitivity of the accepted arms via the peer [`SingleNode`]
+        // assertion in the round-trip pin makes the discipline
+        // structurally clear), the lowercased single-word forms
+        // (`"singlenode"`), the padded canonical scalar
+        // (`" Sharded "`), the trailing-comma / trailing-newline shapes
+        // (`"Sharded\n"`), and a pointer-different `&'static str` that
+        // happens to alias a canonical byte-string by content but not
+        // by identity (validated implicitly by the emitter's routing
+        // through `crate::render::M3_PLACEMENT_ESTRATEGIA_*`, whose
+        // identity a paired [`crate::assert_str_reexport_identity`] pin
+        // in caixa-core's per-const declaration surface would catch).
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_from_wire_rejects_unknown_byte_strings`]
+        // (2aa6d23) refusal pin on [`crate::CaixaKind::from_wire`].
+        for bad in [
+            "",
+            " ",
+            "\n",
+            "\t",
+            "single-node",
+            "singlenode",
+            "SingleNodes",
+            "single_node",
+            "single node",
+            "SINGLENODE",
+            "SingleNode ",
+            " SingleNode",
+            " Sharded ",
+            "Sharded\n",
+            "replicated ",
+            "sharded",
+            "REPLICATED",
+            "Anycast",
+            "Global",
+            "?",
+        ] {
+            assert!(
+                PlacementStrategy::from_wire(bad).is_none(),
+                "PlacementStrategy::from_wire({bad:?}) must return None — the \
+                 parser's accept-set is exactly the three PlacementStrategy::as_str \
+                 outputs (SingleNode, Replicated, Sharded), and this byte-string \
+                 is outside that closed set"
+            );
+        }
+    }
+
+    #[test]
+    fn placement_strategy_from_wire_matches_serialize_derive_wire_byte_string() {
+        // Fail-before-pass-after pin on the third path of the four-path
+        // convergence: `from_str` (the reverse projection) inverts the
+        // `Serialize` derive's wire byte-string on every variant.
+        // Together with the pre-existing three-path convergence
+        // (`Display` + `as_str` + `Serialize` all resolve to the same
+        // lifted [`crate::M3_PLACEMENT_ESTRATEGIA_*`] const, pinned by
+        // the peer
+        // [`placement_strategy_display_matches_serialized_wire_byte_string`])
+        // this closes the round-trip: the wire byte-string the
+        // `Serialize` derive emits parses back to the same variant
+        // through `from_str`, so any future serde-attribute or variant-
+        // rename drift on the emit half now surfaces as a matched drift
+        // on the parse half at caixa-core build time — the two halves
+        // migrate as a unit through the lifted consts on any future
+        // rename, and the round-trip cannot silently split.
+        //
+        // Peer of the sibling
+        // [`placement_strategy_display_matches_serialized_wire_byte_string`]
+        // wire-format pin — extends the three-path convergence
+        // (`Display` + `as_str` + `Serialize`) onto the fourth path
+        // (`from_str`), closing the `str ↔ Self` round-trip on the
+        // M3 `:placement :estrategia` closed-set axis.
+        for &variant in PlacementStrategy::ALL {
+            let wire = serde_json::to_string(&variant).unwrap();
+            let unquoted = wire
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .expect("serialized PlacementStrategy is a JSON string");
+            let parsed = PlacementStrategy::from_wire(unquoted).unwrap_or_else(|| {
+                panic!(
+                    "PlacementStrategy::from_wire({unquoted:?}) must accept the \
+                     Serialize derive's wire byte-string for \
+                     PlacementStrategy::{variant:?} — the four-path convergence \
+                     (Display + as_str + Serialize + from_str) resolves through \
+                     the same lifted M3_PLACEMENT_ESTRATEGIA_* const; got None"
+                )
+            });
+            assert_eq!(
+                parsed, variant,
+                "PlacementStrategy::from_wire of the Serialize derive's wire \
+                 byte-string for PlacementStrategy::{variant:?} must round-trip \
+                 to the same variant; got {parsed:?}"
             );
         }
     }
