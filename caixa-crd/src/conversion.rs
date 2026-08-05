@@ -299,10 +299,126 @@ mod tests {
             },
         );
         let back = caixa_from_cr(&cr);
-        assert_eq!(back.nome, c.nome);
-        assert_eq!(back.versao, c.versao);
-        assert_eq!(back.kind, c.kind);
-        assert_eq!(back.deps.len(), c.deps.len());
+        // Route both sides of the round-trip equality through the typed
+        // [`Caixa::nome`] / [`Caixa::versao`] / [`Caixa::kind`] /
+        // [`Caixa::deps`] accessors rather than the raw `.nome` / `.versao`
+        // / `.kind` / `.deps.len()` field-accesses. Byte-equal today
+        // (`Caixa::nome` returns `&self.nome`, `Caixa::versao` returns
+        // `&self.versao`, `Caixa::kind` returns `self.kind`, and
+        // `Caixa::deps` returns `self.deps.as_slice()`); any future
+        // accessor extension whose semantics diverge from raw field reads
+        // (a SemVer-2 build-metadata canonicalization on `Caixa::versao`,
+        // the M4 per-CR kind-alias rewrite on `Caixa::kind`, a per-scope
+        // dep-alias table on `Caixa::deps`) would silently pass a raw-
+        // field round-trip assertion while every downstream renderer that
+        // routes through the accessor read a different value; the
+        // converge lifts both sides onto one typed dispatch so the pin
+        // continues to name what every renderer actually consumes. Peer
+        // of the sibling caixa-mesh test-side converges (9e8630e /
+        // 064b4db) on the M3 mesh-slot accessor family — closes the last
+        // caixa-crd test-side raw `Caixa` field-access sites on the
+        // shared per-`Caixa` universal-axis accessor family.
+        assert_eq!(back.nome(), c.nome());
+        assert_eq!(back.versao(), c.versao());
+        assert_eq!(back.kind(), c.kind());
+        assert_eq!(back.deps().len(), c.deps().len());
+    }
+
+    /// Drift-detection pin on the round-trip accessor-convergence lift:
+    /// every projection of the four per-`Caixa` universal-axis
+    /// accessors — [`Caixa::nome`] / [`Caixa::versao`] / [`Caixa::kind`] /
+    /// [`Caixa::deps`] — must byte-equal the raw field read on both
+    /// halves of the `caixa_into_cr → caixa_from_cr` round trip on the
+    /// `round_trip_preserves_core_fields` fixture. Guards the substrate-
+    /// primitive byte-parity contract [`Caixa::nome`] / [`Caixa::versao`]
+    /// / [`Caixa::kind`] / [`Caixa::deps`] each carry (accessor return =
+    /// raw field read at every call site today) against silent
+    /// divergence — a future accessor extension that changed one axis's
+    /// projection without a lockstep edit on the raw field access
+    /// (a SemVer-2 build-metadata canonicalization on `:versao`, an M4
+    /// per-CR kind-alias rewrite on `:kind`, a per-scope dep-alias
+    /// table on `:deps`, a namespace-qualified rewrite on `:nome`) —
+    /// or vice versa — surfaces at caixa-crd build time rather than
+    /// silently splitting the `round_trip_preserves_core_fields` pin
+    /// from what every downstream renderer actually consumes. Sweeps
+    /// both `c` (the source fixture) and `back` (the round-trip
+    /// projection) so any per-side accessor drift trips independently
+    /// of the round-trip's own byte-equality contract. Peer of the
+    /// substrate-side byte-parity pins
+    /// [`caixa_core::manifest::tests::nome_returns_nome_byte_string_verbatim_across_permutations`]
+    /// / `versao_returns_versao_byte_string_verbatim_across_permutations`
+    /// / `kind_returns_kind_variant_verbatim_across_permutations` on
+    /// the substrate primitive — this pin lands the sibling drift-
+    /// detection gate at the caixa-crd boundary so the convergence
+    /// discipline the round-trip test now carries stays load-bearing
+    /// against future field-access reintroduction.
+    #[test]
+    fn caixa_from_cr_round_trip_accessors_byte_equal_to_raw_field_access() {
+        let c = Caixa {
+            nome: "demo".into(),
+            versao: "0.1.0".into(),
+            kind: CaixaKind::Biblioteca,
+            edicao: None,
+            descricao: None,
+            repositorio: None,
+            licenca: None,
+            autores: vec![],
+            etiquetas: vec![],
+            deps: vec![Dep {
+                nome: "x".into(),
+                versao: "^0.1".into(),
+                fonte: Some(DepSource::Git {
+                    repo: "github:o/x".into(),
+                    tag: Some("v1".into()),
+                    rev: None,
+                    branch: None,
+                }),
+                opcional: false,
+                caracteristicas: vec![],
+            }],
+            deps_dev: vec![],
+            exe: vec![],
+            bibliotecas: vec![],
+            servicos: vec![],
+            limits: None,
+            behavior: None,
+            upgrade_from: vec![],
+            estrategia: None,
+            max_restarts: None,
+            restart_window: None,
+            children: vec![],
+            membros: vec![],
+            contratos: vec![],
+            politicas: None,
+            placement: None,
+            entrada: None,
+            ci: None,
+        };
+        let cr = caixa_into_cr(
+            &c,
+            CaixaSource {
+                repo: "github:pleme-io/demo".into(),
+                git_ref: "v0.1.0".into(),
+            },
+        );
+        let back = caixa_from_cr(&cr);
+        // Source-side per-axis byte-parity: accessor return == raw field
+        // read on the `c` fixture. A future accessor extension whose
+        // semantics diverge from the raw field read on any of the four
+        // axes trips at caixa-crd build time before the round-trip pin
+        // above can silently pass on a drifted `back`.
+        assert_eq!(c.nome(), c.nome.as_str());
+        assert_eq!(c.versao(), c.versao.as_str());
+        assert_eq!(c.kind(), c.kind);
+        assert_eq!(c.deps(), c.deps.as_slice());
+        // Round-trip-side per-axis byte-parity: same contract on the
+        // `caixa_from_cr`-projected `back` — a future silent divergence
+        // between the accessor and the raw field on either half is a
+        // build-time failure, not a downstream renderer-drift symptom.
+        assert_eq!(back.nome(), back.nome.as_str());
+        assert_eq!(back.versao(), back.versao.as_str());
+        assert_eq!(back.kind(), back.kind);
+        assert_eq!(back.deps(), back.deps.as_slice());
     }
 
     /// Pin that both projections of the outer-`Caixa` `:nome` axis in
