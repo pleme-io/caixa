@@ -1294,6 +1294,39 @@ impl<'a> WitTarget<'a> {
     /// discriminator axis already carries.
     pub const CAPABILITY_EXPECTED: &'static str = "none";
 
+    /// Canonical `feira app graph` per-`:contratos`-edge payload-column
+    /// byte-string the payload-less [`WitTarget::Capability`] arm renders
+    /// as under [`Self::graph_label`] — the sibling
+    /// [`WitTarget::CAPABILITY_LABEL`] scalar on the peer graph-verb
+    /// payload-column axis (the graph verb spells payload-less as
+    /// `(capability-only)`, distinct from the duplicate-`:contratos`
+    /// diagnostic's `(capability — no payload)` on the human-readable
+    /// [`Self::label`] axis). Peer of [`Self::CAPABILITY_LABEL`] /
+    /// [`Self::CAPABILITY_EXPECTED`] on the payload-less-arm scalar-const
+    /// family — extends the "one canonical declaration per arm, next to
+    /// the variant, so a future rename lands in one place" discipline
+    /// onto the third payload-less-arm consumer axis (`feira app graph`
+    /// payload column, joining the [`Self::label`] duplicate-`:contratos`
+    /// diagnostic axis and the [`Self::target`] wrong-target diagnostic
+    /// axis).
+    ///
+    /// Until this lift landed the byte-string sat inline in
+    /// [`caixa-feira`]'s `cmd::app::GraphArgs::run` per-`:contratos` payload-
+    /// column match at `caixa-feira/src/cmd/app.rs:111` as a raw
+    /// `"(capability-only)".to_string()` literal, with no compile-time link
+    /// back to the [`WitTarget::Capability`] variant declaration nor to
+    /// the sibling [`Self::CAPABILITY_LABEL`] / [`Self::CAPABILITY_EXPECTED`]
+    /// peer consts already carrying the "one canonical declaration per
+    /// payload-less-arm consumer axis" discipline. A rebrand on either
+    /// side (the graph verb's operator-facing vocabulary tightening from
+    /// `"(capability-only)"` to `"capability"` / `"(capability edge)"` as
+    /// the WIT registry vocabulary sharpens, an M4 split of
+    /// [`Self::Capability`] into per-shape peers) would silently
+    /// desynchronize the graph-verb byte-string from the paired
+    /// per-arm-adjacent const and land two spellings of the same axis in
+    /// two spots.
+    pub const CAPABILITY_GRAPH_LABEL: &'static str = "(capability-only)";
+
     /// The `(author-facing field name, payload)` pair this typed target
     /// arm carries — `Some((HTTP_FIELD_NAME, endpoint))` for
     /// [`Self::Http`], `Some((PUBSUB_FIELD_NAME, subject))` for
@@ -1387,6 +1420,56 @@ impl<'a> WitTarget<'a> {
         match self.payload_pair() {
             Some((field, payload)) => format!(":{field} {payload:?}"),
             None => Self::CAPABILITY_LABEL.to_string(),
+        }
+    }
+
+    /// Render this typed target as the `feira app graph` per-`:contratos`
+    /// payload-column byte-string (`endpoint=/charge`, `subject=events.x`,
+    /// `slot=checkout/$order`, or [`Self::CAPABILITY_GRAPH_LABEL`] on the
+    /// payload-less arm).
+    ///
+    /// Routes through the single 4-arm [`Self::payload_pair`] dispatch
+    /// on the payload-carrying arms (`Some((field, payload)) →
+    /// format!("{field}={payload}")`) and through the lifted
+    /// [`Self::CAPABILITY_GRAPH_LABEL`] const on the payload-less
+    /// [`Self::Capability`] arm — so a future variant addition
+    /// (the M4-and-later per-edge WIT registry may split [`Self::Http`]
+    /// into `Rest` / `Grpc`, or extend [`Self::Store`] with a
+    /// `Queue`-shaped peer) becomes one match-arm edit at
+    /// [`Self::payload_pair`], propagating through this graph-verb
+    /// projection at zero call-site cost, sibling to the peer
+    /// [`Self::label`] duplicate-`:contratos` diagnostic emission on the
+    /// same 4-arm dispatch.
+    ///
+    /// Until this lift landed the [`caixa-feira`]
+    /// `cmd::app::GraphArgs::run` per-`:contratos` payload column
+    /// (`caixa-feira/src/cmd/app.rs:101-112`) hand-rolled the same 4-arm
+    /// dispatch inline, re-projecting `HTTP_FIELD_NAME` /
+    /// `PUBSUB_FIELD_NAME` / `STORE_FIELD_NAME` under a per-arm
+    /// `format!("{}={endpoint}", ...)` template and hard-coding
+    /// `"(capability-only)"` as a fifth payload-less scalar with no link
+    /// back to the paired [`WitTarget::Capability`] variant declaration.
+    /// A future variant addition would have had to be threaded through
+    /// both [`Self::label`] (via [`Self::payload_pair`]) *and* the graph
+    /// verb's inline match in lockstep or the two projections would
+    /// silently disagree on the arm-set the graph verb prints — the
+    /// duplicate-`:contratos` diagnostic reading one shape while the
+    /// graph verb's payload column silently dropped the new arm to
+    /// `(capability-only)`. Lifting the graph-verb projection onto the
+    /// same substrate-primitive [`Self::payload_pair`] dispatch closes
+    /// the axis: both projections migrate as a unit.
+    ///
+    /// The `field=payload` (no colon prefix, `=` separator, no `Debug`
+    /// quoting) shape is graph-verb-canonical — distinct from the
+    /// sibling [`Self::label`] `":{field} {payload:?}"` shape the
+    /// duplicate-`:contratos` diagnostic seeds (see
+    /// [`Self::CAPABILITY_LABEL`] vs. [`Self::CAPABILITY_GRAPH_LABEL`]
+    /// on the payload-less axis for the paired distinction).
+    #[must_use]
+    pub fn graph_label(&self) -> String {
+        match self.payload_pair() {
+            Some((field, payload)) => format!("{field}={payload}"),
+            None => Self::CAPABILITY_GRAPH_LABEL.to_string(),
         }
     }
 }
@@ -11461,6 +11544,98 @@ mod tests {
         assert_ne!(WitTarget::HTTP_FIELD_NAME, WitTarget::PUBSUB_FIELD_NAME);
         assert_ne!(WitTarget::HTTP_FIELD_NAME, WitTarget::STORE_FIELD_NAME);
         assert_ne!(WitTarget::PUBSUB_FIELD_NAME, WitTarget::STORE_FIELD_NAME);
+    }
+
+    #[test]
+    fn wit_target_graph_label_routes_through_payload_pair_on_payload_arms() {
+        // Fail-before-pass-after pin: the graph-verb payload column's
+        // per-arm `{field}={payload}` byte-string is derived through the
+        // single [`WitTarget::payload_pair`] 4-arm dispatch on the three
+        // payload-carrying arms, not through a hand-rolled per-arm match
+        // that re-projects [`WitTarget::HTTP_FIELD_NAME`] /
+        // [`WitTarget::PUBSUB_FIELD_NAME`] / [`WitTarget::STORE_FIELD_NAME`]
+        // inline. A future variant addition — the M4-and-later per-edge
+        // WIT registry may split [`WitTarget::Http`] into `Rest` / `Grpc`
+        // peers, or extend [`WitTarget::Store`] with a `Queue`-shaped
+        // peer — becomes one match-arm edit at [`WitTarget::payload_pair`],
+        // and both [`WitTarget::label`] (duplicate-`:contratos`
+        // diagnostic) and [`WitTarget::graph_label`] (`feira app graph`
+        // payload column) pick up the new arm from the same dispatch.
+        // Prior to this lift the graph verb open-coded the 4-arm match
+        // in caixa-feira, so a variant addition would have to be threaded
+        // through both projections in lockstep or the graph verb would
+        // silently drop the new arm to `(capability-only)`.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+        ] {
+            let (field, payload) = variant
+                .payload_pair()
+                .expect("payload arm must expose (field, payload)");
+            assert_eq!(
+                variant.graph_label(),
+                format!("{field}={payload}"),
+                "WitTarget::{variant:?} graph_label must route the \
+                 `{{field}}={{payload}}` template through payload_pair — \
+                 a regression to a hand-rolled per-arm match at the graph \
+                 verb would silently disagree with a future variant \
+                 addition landed only at payload_pair"
+            );
+        }
+    }
+
+    #[test]
+    fn wit_target_graph_label_returns_capability_graph_label_const_on_capability_arm() {
+        // Fail-before-pass-after pin on the payload-less arm: the graph
+        // verb's `(capability-only)` byte-string routes through the
+        // lifted [`WitTarget::CAPABILITY_GRAPH_LABEL`] const on the
+        // [`WitTarget::Capability`] arm, not through an inline
+        // `.to_string()` literal at the caixa-feira `cmd::app::GraphArgs::run`
+        // per-`:contratos` payload column. Peer of the sibling
+        // [`wit_target_label_pins_per_variant_format`] Capability-arm
+        // assertion on the [`WitTarget::CAPABILITY_LABEL`] const —
+        // extended here onto the third payload-less-arm consumer axis
+        // (graph verb, sibling to the duplicate-`:contratos` diagnostic
+        // axis and the wrong-target diagnostic axis).
+        assert_eq!(
+            WitTarget::Capability.graph_label(),
+            WitTarget::CAPABILITY_GRAPH_LABEL,
+        );
+        assert_eq!(WitTarget::CAPABILITY_GRAPH_LABEL, "(capability-only)");
+    }
+
+    #[test]
+    fn wit_target_capability_graph_label_distinct_from_capability_label() {
+        // Cross-consumer-axis distinctness pin: the graph-verb
+        // payload-column const [`WitTarget::CAPABILITY_GRAPH_LABEL`]
+        // (`(capability-only)`) and the duplicate-`:contratos` diagnostic
+        // label const [`WitTarget::CAPABILITY_LABEL`] (`(capability — no
+        // payload)`) surface the payload-less arm on two distinct
+        // consumer axes; a collapse (an accidental rebrand that lands
+        // one spelling on both consts, a copy-paste that unifies them
+        // "for consistency") would silently merge the two byte-strings
+        // and lose the vocabulary distinction the graph verb's
+        // compact-column form and the diagnostic's descriptive-clause
+        // form each carry on purpose. Peer of the sibling 4-way
+        // [`wit_target_expected_scalars_are_pairwise_distinct_across_all_four_arms`]
+        // pin on the `ContratoWrongTarget::expected` scalar-value axis —
+        // extended here onto the cross-consumer-axis distinctness of the
+        // two payload-less-arm consts.
+        assert_ne!(
+            WitTarget::CAPABILITY_GRAPH_LABEL,
+            WitTarget::CAPABILITY_LABEL,
+            "WitTarget::CAPABILITY_GRAPH_LABEL (graph-verb payload column) \
+             and WitTarget::CAPABILITY_LABEL (duplicate-`:contratos` \
+             diagnostic) must remain distinct — a collapse would silently \
+             merge two consumer axes onto one spelling"
+        );
     }
 
     #[test]
