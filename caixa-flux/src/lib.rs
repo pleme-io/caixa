@@ -3648,7 +3648,25 @@ spec:
                  defaults to reconciling the GitRepository root or \
                  refuses to reconcile at all",
             );
-        let expected = flux_kustomization_source_subtree(&opts.cluster, &sample_caixa().nome);
+        // Route the per-caixa `:nome` axis-projection through the
+        // substrate-canonical [`Caixa::nome`] `&str`-return accessor
+        // rather than the raw `&sample_caixa().nome` `&String`-borrow
+        // of the underlying field, so a future rebrand of the
+        // top-level [`Caixa`] `:nome` universal-axis storage (a
+        // pre-parsed `CaixaName`-newtype cache the accessor could
+        // materialize behind the same `&str` return contract, a
+        // per-cluster `:placement`-scoped nome overlay the caixa-
+        // operator reconciles ahead of dispatch) reaches this
+        // fixture-navigation site through the one accessor edit at
+        // the canonical `caixa-core` declaration rather than a
+        // coordinated rewrite that includes this file too. Peer to
+        // the sibling
+        // [`cluster_bundle_kustomization_spec_path_uses_lifted_composer`]
+        // pin below on the paired composer-equivalence test-fixture
+        // navigation site — both halves of the `sample_caixa()`
+        // per-`:nome` fixture-navigation axis now route through the
+        // one typed dispatch on the substrate primitive.
+        let expected = flux_kustomization_source_subtree(&opts.cluster, sample_caixa().nome());
         assert_eq!(
             path, expected,
             "spec.path must carry the substrate's canonical per-cluster \
@@ -3769,13 +3787,69 @@ spec:
             .and_then(|v| v.as_str())
             .expect("spec.path string scalar present")
             .to_owned();
-        let composed = flux_kustomization_source_subtree(&opts.cluster, &sample_caixa().nome);
+        // Route the per-caixa `:nome` axis-projection through the
+        // substrate-canonical [`Caixa::nome`] `&str`-return accessor
+        // rather than the raw `&sample_caixa().nome` `&String`-borrow
+        // of the underlying field — sibling to the peer
+        // [`cluster_bundle_kustomization_path_pins_lifted_sub_tree`]
+        // pin's own accessor route at the paired output-shape
+        // assertion site. Closes the last pair of unlifted raw
+        // `sample_caixa().nome` field-access sites in the caixa-flux
+        // test suite; the twin `(cluster, nome)`-argument-pair
+        // `flux_kustomization_source_subtree` fixture-navigation half
+        // of the per-caixa `:nome` axis now uniformly routes through
+        // the substrate primitive.
+        let composed = flux_kustomization_source_subtree(&opts.cluster, sample_caixa().nome());
         assert_eq!(
             emitted, composed,
             "spec.path emit must byte-equal the lifted \
              flux_kustomization_source_subtree composer's output — drift \
              at either half silently splits the per-cluster / per-caixa \
              sub-tree seed axis at emit time from the canonical composer"
+        );
+    }
+
+    #[test]
+    fn sample_caixa_nome_accessor_byte_equals_raw_field() {
+        // Byte-parity pin: [`Caixa::nome`]'s `&str`-return accessor
+        // must project the same bytes as the raw `sample_caixa().nome`
+        // `String`-field access on the shared per-test [`sample_caixa`]
+        // fixture the caixa-flux test-suite's per-`cluster_bundle`
+        // `spec.path` composer-equivalence pins
+        // ([`cluster_bundle_kustomization_path_pins_lifted_sub_tree`],
+        // [`cluster_bundle_kustomization_spec_path_uses_lifted_composer`])
+        // navigate through. Guards the paired-site convergence that
+        // just routed both fixture-navigation halves through the
+        // accessor rather than the raw field: a future implementation
+        // of [`Caixa::nome`] that returned a differently-bytewidth
+        // projection (a cached `CaixaName` newtype's `Display` value,
+        // an operator-side normalized ASCII-lowered projection) would
+        // silently split the composer's fixture-navigation input from
+        // the storage-side field the [`crate::cluster_bundle`]
+        // production emit path still reads from at the peer
+        // `format!(…, name = &caixa.nome, …)` production site (which
+        // itself already reaches through [`Caixa::nome`]'s accessor
+        // — see caixa-flux/src/lib.rs:2135) — this pin surfaces the
+        // drift at build-time rather than at a downstream
+        // `kubectl get kustomization` audit on the fleet.
+        //
+        // Same byte-parity-pin discipline the sibling caixa-crd
+        // `round_trip_preserves_core_fields` test-side accessor
+        // convergence (1a160cd) added to lock its own per-`Caixa`
+        // scalar-accessor family against the raw field-access at the
+        // paired serde round-trip fixture — extended here onto the
+        // caixa-flux `sample_caixa()` fixture's per-`:nome`
+        // scalar-accessor axis.
+        let fixture = sample_caixa();
+        assert_eq!(
+            fixture.nome(),
+            fixture.nome.as_str(),
+            "Caixa::nome() must borrow the same bytes as the raw \
+             `nome: String` field storage; any implementation drift \
+             here silently splits every caixa-flux composer-fixture \
+             navigation site that routes through the accessor from \
+             the storage-side field the peer production emit path \
+             still reads verbatim"
         );
     }
 
