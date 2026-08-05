@@ -3210,6 +3210,108 @@ pub fn validate_no_self_dep(
     Ok(())
 }
 
+/// Closed-set typed enum for the two dep-list author-surface axes every
+/// top-level [`crate::Caixa`] carries — the runtime-closure `:deps` slot
+/// (`Prod`) and the dev-only-closure `:deps-dev` slot (`Dev`). Every
+/// substrate consumer that dispatches on "which of the two dep-lists"
+/// (the `feira add` mutation head, the future per-cluster dev-closure-
+/// audit overlay the M4 CR materializer resolves per-CR, the future
+/// `caixa app graph` per-list dep summary, every future
+/// `Caixa::push_dep` / `Caixa::deps_by_list` typed-method dispatch a
+/// caller reaches for) reads through this enum rather than through a
+/// bare `&'static str` — the closed-set is expressed at the type layer,
+/// so a future third dep-list axis (a `:deps-build` build-only closure
+/// once the substrate grows cross-artifact heterogeneous dep-graphs,
+/// per CAIXA-SDLC §I) is one variant plus one arm per method and the
+/// compiler enforces exhaustiveness on every consumer's `match` arms.
+///
+/// The wire byte-string [`Self::as_str`] returns is the same author-
+/// surface tag the sibling [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] constants carry — the
+/// [`DepError::DuplicateNome`] / [`DepError::DepIsSelf`] `list:
+/// &'static str` payload family the substrate already emits routes
+/// through the same source of truth (an author reading a
+/// [`DepError::DuplicateNome`] refusal can grep their `caixa.lisp`
+/// for the offending `:deps` / `:deps-dev` block in one edit whether
+/// the diagnostic came from a `Caixa::validate_deps` walk or a
+/// `Caixa::push_dep` mutation).
+///
+/// Same "closed-set typed-enum discriminator with canonical
+/// projections per axis" discipline the sibling closed-set typed enums
+/// on the caixa typed surface carry
+/// ([`crate::aplicacao::PlacementStrategy`] cc8f749,
+/// [`crate::aplicacao::RateLimitUnit`] 6bce03d,
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`],
+/// [`crate::upgrade::UpgradeInstruction`], [`crate::CaixaKind`])
+/// — extended onto the outer-`Caixa` two-list dep-graph axis, the
+/// substrate's last unlifted closed-set-shaped `&'static str`-carrying
+/// axis on the top-level manifest surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant)]
+pub enum DepList {
+    /// Runtime-closure `:deps` axis — the load-bearing dep-list the
+    /// lacre closure resolves at every build. Wire-format
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS`].
+    Prod,
+    /// Dev-only-closure `:deps-dev` axis — Cargo's `[dev-dependencies]`
+    /// table's dev-time-only visibility contract per CAIXA-SDLC §I.
+    /// Wire-format [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`].
+    Dev,
+}
+
+impl DepList {
+    /// Exhaustive iteration surface for every consumer that reads the
+    /// full closed-set (the future M4 admission webhook's per-list
+    /// summary rejection body, any future round-trip pin harness). A
+    /// future variant addition extends this slice as a single edit and
+    /// every consumer picks up the new entry by construction — the
+    /// compiler-checked exhaustiveness on the sibling method `match`
+    /// arms is the build-time guarantee that no arm forgets to grow.
+    pub const ALL: &'static [Self] = &[Self::Prod, Self::Dev];
+
+    /// Canonical author-surface tag every substrate consumer that
+    /// names the offending dep-list in a diagnostic reaches for —
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS`] for [`Self::Prod`] and
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] for [`Self::Dev`],
+    /// the same `&'static str` payload the sibling
+    /// [`DepError::DuplicateNome`] and [`DepError::DepIsSelf`] variants
+    /// already carry. Routing every dep-list diagnostic through the
+    /// closed-set enum's `as_str` closes the last `&'static str`-shape
+    /// literal-carry axis on the two-list dep-graph surface — a
+    /// future kebab-case rebrand (`":deps"` → `":packages"`) or a
+    /// wire-format promotion (a distinct diagnostic form for the
+    /// `Dev` arm) reaches every consumer through one edit on the
+    /// canonical constant, not a coordinated rewrite across the
+    /// substrate's dep-graph consumers.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Prod => crate::render::DEP_AUTHOR_KEY_DEPS,
+            Self::Dev => crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
+        }
+    }
+}
+
+/// Route [`std::fmt::Display`] through [`DepList::as_str`], so every
+/// consumer that formats the axis as user-facing text (a future
+/// `feira app graph` per-list summary, a future M4 admission-webhook
+/// rejection body naming the offending list, this crate's own
+/// [`DepError`] `#[error(...)]` templates when they widen to carry a
+/// typed [`DepList`]) lands on the same author-surface tag the
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+/// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] constants carry. Same
+/// as-str-through-Display convergence discipline the sibling
+/// [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`],
+/// [`crate::supervisor::RestartStrategy`],
+/// [`crate::supervisor::RestartPolicy`], and [`crate::CaixaKind`]
+/// closed-set typed enums carry.
+impl std::fmt::Display for DepList {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Errors raised by [`Dep::validate`].
 ///
 /// Mirrors the per-axis error families the other `:versao`-carrying
