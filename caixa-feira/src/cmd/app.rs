@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use caixa_core::{Caixa, CaixaKind, DEFAULT_GIT_REMOTE, WitTarget};
+use caixa_core::{Caixa, CaixaKind, DEFAULT_GIT_REMOTE};
 use clap::{Args, Subcommand};
 
 use super::load::{caixa_root, load_caixa, validate_cluster_arg};
@@ -91,25 +91,23 @@ impl GraphArgs {
             println!("  contratos ({}):", spec.contratos().len());
             for c in spec.contratos() {
                 // Typed view: each WIT shape has exactly one payload
-                // field (validated upstream). The label tells the
-                // reader *what* field they're looking at, not just
-                // its value. The per-arm field-name prefix routes
-                // through the peer `WitTarget::{HTTP,PUBSUB,STORE}_
-                // FIELD_NAME` consts so a rename of the author-
-                // surface field (`:endpoint` → `:path`, say) reaches
-                // this printer by construction, not by manual sync.
-                let label = match c.target().expect("validated by typed_view") {
-                    WitTarget::Http { endpoint } => {
-                        format!("{}={endpoint}", WitTarget::HTTP_FIELD_NAME)
-                    }
-                    WitTarget::PubSub { subject } => {
-                        format!("{}={subject}", WitTarget::PUBSUB_FIELD_NAME)
-                    }
-                    WitTarget::Store { slot } => {
-                        format!("{}={slot}", WitTarget::STORE_FIELD_NAME)
-                    }
-                    WitTarget::Capability => "(capability-only)".to_string(),
-                };
+                // field (validated upstream). The per-arm
+                // `{field}={payload}` byte-string projects through the
+                // lifted [`caixa_core::WitTarget::graph_label`] helper —
+                // the single 4-arm dispatch on [`WitTarget::payload_pair`]
+                // both the graph verb's payload column and the sibling
+                // duplicate-`:contratos` diagnostic's
+                // [`WitTarget::label`] emit route through — so a rename
+                // of the author-surface field (`:endpoint` → `:path`,
+                // say) or a future variant addition (M4 `Rest` / `Grpc`
+                // split of `Http`, `Queue`-shaped peer of `Store`)
+                // reaches this printer by construction at the substrate
+                // primitive, not by re-inlining the 4-arm match here.
+                // The payload-less `Capability` arm routes through the
+                // peer [`WitTarget::CAPABILITY_GRAPH_LABEL`] const so
+                // its byte-string is single-sourced next to the variant
+                // declaration.
+                let label = c.target().expect("validated by typed_view").graph_label();
                 println!(
                     "    - {} → {}  via {}  [{}]",
                     c.source(),
