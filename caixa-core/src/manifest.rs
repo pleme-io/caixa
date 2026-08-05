@@ -237,22 +237,36 @@ pub enum LeituraError {
     /// the confusing error was also the common one.
     ///
     /// Carrying the dialect means a consumer can branch on "not mine" without
-    /// re-parsing, and a census can count it.
+    /// re-parsing, and a census can count it. Every user-facing byte-string
+    /// (canonical keyword, one-line description, consuming crate) is a
+    /// projection of [`crate::dialeto::CaixaDialeto`] — the variant stores the
+    /// typed dialect and the `#[error]` template calls
+    /// [`CaixaDialeto::palavra_canonica`] /
+    /// [`CaixaDialeto::descricao`] / [`CaixaDialeto::consumidor`] on it, so
+    /// the three axes cannot silently diverge from the classification. Prior
+    /// to this closure the variant carried each accessor's return value as a
+    /// stored `&'static str` snapshot alongside `dialeto`, and the sole
+    /// constructor at [`Caixa::from_lisp`] filled all four fields — a caller
+    /// could construct `DialetoEstrangeiro { dialeto: Molde,
+    /// palavra_canonica: "defcaixa", … }` and every downstream consumer
+    /// (Display, ad-hoc audit, future JSON serialization) would silently
+    /// disagree with `dialeto.palavra_canonica() == "defmolde"`. The typed
+    /// enum owns the projections; the variant only carries the axis.
     #[error(
-        "this is a `{palavra_canonica}` declaration ({descricao}), read by \
-         {consumidor} — not a caixa-core package manifest. `defcaixa` is the \
+        "this is a `{palavra}` declaration ({desc}), read by \
+         {cons} — not a caixa-core package manifest. `defcaixa` is the \
          tatara-lisp package manifest (`:nome :versao :kind :deps …`); the two \
-         are different declarations that shared one keyword until 2026-07-31"
+         are different declarations that shared one keyword until 2026-07-31",
+        palavra = dialeto.palavra_canonica(),
+        desc = dialeto.descricao(),
+        cons = dialeto.consumidor()
     )]
     DialetoEstrangeiro {
-        /// Which declaration this actually is.
+        /// Which declaration this actually is. Sole authoritative axis;
+        /// every user-facing projection routes through
+        /// [`crate::dialeto::CaixaDialeto`]'s typed accessors so the four
+        /// axes cannot silently disagree.
         dialeto: crate::dialeto::CaixaDialeto,
-        /// The keyword it should be written with.
-        palavra_canonica: &'static str,
-        /// Who reads it.
-        consumidor: &'static str,
-        /// One-line schema description.
-        descricao: &'static str,
     },
 
     /// Not a manifest declaration at all.
@@ -287,12 +301,14 @@ impl Caixa {
             // anything this classifier could say.
             crate::dialeto::CaixaDialeto::Desconhecido => {}
             foreign => {
-                return Err(LeituraError::DialetoEstrangeiro {
-                    dialeto: foreign,
-                    palavra_canonica: foreign.palavra_canonica(),
-                    consumidor: foreign.consumidor(),
-                    descricao: foreign.descricao(),
-                });
+                // Only the typed dialect flows into the error — the three
+                // user-facing projections (canonical keyword, description,
+                // consumer) are read at Display time through
+                // [`crate::dialeto::CaixaDialeto`]'s own accessors, so the
+                // variant cannot carry a snapshot that drifts from
+                // [`crate::dialeto::CaixaDialeto::palavra_canonica`] /
+                // `descricao` / `consumidor`.
+                return Err(LeituraError::DialetoEstrangeiro { dialeto: foreign });
             }
         }
 
@@ -5296,6 +5312,110 @@ mod tests {
         let emitted = c1.to_lisp();
         let c2 = Caixa::from_lisp(&emitted).expect("emitted lisp parses back");
         assert_eq!(c1, c2);
+    }
+
+    // ── DialetoEstrangeiro carries a single typed axis ────────────────────
+    //
+    // The compounding pin: the variant stores only the typed
+    // [`crate::dialeto::CaixaDialeto`], and every user-facing byte-string
+    // (canonical keyword, description, consumer) routes through the enum's
+    // own accessors at Display time. Prior to that closure the variant
+    // carried each accessor's return value as a stored `&'static str`
+    // snapshot alongside `dialeto`; a caller could construct the variant
+    // with a snapshot that drifted from what `dialeto`'s accessors would
+    // return, and every downstream user-facing projection would silently
+    // disagree with the classification. Storing only the axis makes the
+    // drift structurally impossible.
+
+    #[test]
+    fn dialeto_estrangeiro_variant_carries_only_the_typed_dialeto_axis() {
+        // Single-field construction is the whole compounding shape — a
+        // future re-introduction of a snapshot field (a `palavra_canonica:
+        // &'static str`, a stored `descricao:`, a stored `consumidor:`)
+        // would re-open the drift surface and this construction would fail
+        // to compile with "missing field" until every snapshot was seeded
+        // at the call site again. The compile-time guarantee is the
+        // invariant; the assertion below only witnesses that the
+        // construction is well-formed after the closure.
+        let err = LeituraError::DialetoEstrangeiro {
+            dialeto: crate::dialeto::CaixaDialeto::Molde,
+        };
+        assert!(matches!(
+            err,
+            LeituraError::DialetoEstrangeiro {
+                dialeto: crate::dialeto::CaixaDialeto::Molde,
+            }
+        ));
+    }
+
+    #[test]
+    fn dialeto_estrangeiro_display_routes_through_typed_dialeto_accessors() {
+        // For every foreign-dialect classification the variant surfaces —
+        // [`crate::dialeto::CaixaDialeto::Molde`] and
+        // [`crate::dialeto::CaixaDialeto::MoldePosicional`], the two
+        // variants [`Caixa::from_lisp`] raises this error for — the
+        // rendered [`std::fmt::Display`] byte-string must interpolate each
+        // typed accessor's return verbatim. A future re-introduction of a
+        // stored `&'static str` snapshot alongside `dialeto` that Display
+        // read instead of the accessor would fail this pin as soon as the
+        // two disagreed; a future accessor rebrand (a per-dialect
+        // consumer rename, a canonical-keyword shift once the substrate
+        // migration named in [`crate::dialeto`] completes) reaches every
+        // consumer through one typed dispatch and this pin verifies the
+        // display path is one of them.
+        for d in [
+            crate::dialeto::CaixaDialeto::Molde,
+            crate::dialeto::CaixaDialeto::MoldePosicional,
+        ] {
+            let rendered = LeituraError::DialetoEstrangeiro { dialeto: d }.to_string();
+            assert!(
+                rendered.contains(d.palavra_canonica()),
+                "Display must interpolate `dialeto.palavra_canonica()` \
+                 verbatim — a stored snapshot would silently drift from \
+                 the typed accessor. dialect: {d}, rendered: {rendered:?}"
+            );
+            assert!(
+                rendered.contains(d.descricao()),
+                "Display must interpolate `dialeto.descricao()` verbatim. \
+                 dialect: {d}, rendered: {rendered:?}"
+            );
+            assert!(
+                rendered.contains(d.consumidor()),
+                "Display must interpolate `dialeto.consumidor()` verbatim. \
+                 dialect: {d}, rendered: {rendered:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_lisp_rejects_molde_dialect_via_typed_variant() {
+        // The end-to-end pin the compounding closure defends: a
+        // Molde-dialect source lands as [`LeituraError::DialetoEstrangeiro`]
+        // carrying [`crate::dialeto::CaixaDialeto::Molde`], and the
+        // rendered Display byte-string names the Molde accessors'
+        // returns verbatim. Any future path that constructed the variant
+        // with a mismatched snapshot (a stored `palavra_canonica:
+        // "defcaixa"` on a `Molde` classification) would land Display
+        // pointing at `defcaixa` while the typed axis said `Molde` — the
+        // exact drift the closure removes.
+        let src = r#"
+          (defcaixa
+            :name "x"
+            :kind :Biblioteca
+            :ecosystem :rust-single-crate
+            :package {:name "x" :version "0.1.0"})
+        "#;
+        let err = Caixa::from_lisp(src).expect_err("Molde dialect must not parse as Pacote");
+        match err {
+            LeituraError::DialetoEstrangeiro { dialeto } => {
+                assert_eq!(dialeto, crate::dialeto::CaixaDialeto::Molde);
+                let rendered = LeituraError::DialetoEstrangeiro { dialeto }.to_string();
+                assert!(rendered.contains(dialeto.palavra_canonica()));
+                assert!(rendered.contains(dialeto.consumidor()));
+                assert!(rendered.contains(dialeto.descricao()));
+            }
+            other => panic!("expected DialetoEstrangeiro, got {other:?}"),
+        }
     }
 
     // ── M2 typed-substrate slot tests (limits, behavior, upgrade-from, supervisor) ──
