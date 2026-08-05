@@ -3290,6 +3290,80 @@ impl DepList {
             Self::Dev => crate::render::DEP_AUTHOR_KEY_DEPS_DEV,
         }
     }
+
+    /// Substrate-canonical reverse projection on the two-list dep-graph
+    /// axis — parses the author-surface wire tag back to the typed
+    /// variant, or `None` when `s` is outside the closed-set arm-string
+    /// set [`Self::as_str`] emits. Dispatches on the same lifted
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] constants the
+    /// [`Self::as_str`] emitter walks, so the parse and emit halves of
+    /// the round-trip migrate through one caixa-core edit on any future
+    /// list-axis addition.
+    ///
+    /// Prior to this lift the substrate carried only the forward
+    /// `Self → &str` projection on the two-list dep-graph axis (the
+    /// [`Self::as_str`] emitter, the [`std::fmt::Display`] impl routed
+    /// through it, the two [`DepError::DuplicateNome`] /
+    /// [`DepError::DepIsSelf`] variants that carry the wire tag verbatim
+    /// as a `&'static str` `list:` field). Every future consumer that
+    /// wanted to promote the wire tag back to the typed enum (a future
+    /// `feira dep --list <deps|deps-dev>` CLI arg-parse that binds the
+    /// wire form into the typed enum before dispatching to
+    /// [`crate::Caixa::deps_of`] / [`crate::Caixa::push_dep`], the M4
+    /// `mesh.pleme.io/v1alpha1/Caixa` CR materializer's admission-time
+    /// wire re-parse of the per-list diagnostic body, a future
+    /// [`DepError`] widening that promotes the two `list: &'static str`
+    /// fields to a typed `list: DepList` carry so downstream consumers
+    /// dispatch on the enum rather than string-comparing the wire
+    /// scalar) would have had to re-inline a two-arm `match s { ":deps"
+    /// => …, ":deps-dev" => …, _ => … }` cascade that expressed no
+    /// compile-time link back to the typed [`DepList`] enum. A future
+    /// variant addition (a `:build-dep` or `:test-dep` third list once
+    /// the substrate grows Cargo-style split-graphs, a `:tool-dep` for
+    /// build-time-only tooling per the peer Cargo `[build-dependencies]`
+    /// / `[target.<cfg>.dev-dependencies]` future admission surface)
+    /// would silently split the wire byte-string the emitter walks from
+    /// the parser's arm-set — the round-trip would carry the new list
+    /// through the forward projection but land on the fallback silently
+    /// at every non-updated reverse parser, far from the arm-addition
+    /// commit that caused the drift. Lifting the resolver to a typed
+    /// method on the substrate primitive closes the drift footgun by
+    /// construction: the parser's accept-set is the same set the
+    /// [`Self::as_str`] emitter walks (routed through the same lifted
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS`] /
+    /// [`crate::render::DEP_AUTHOR_KEY_DEPS_DEV`] consts), so both halves
+    /// of the round-trip migrate through one caixa-core edit on any
+    /// future list-axis addition.
+    ///
+    /// Same closed-set-reverse-projection discipline the sibling
+    /// [`crate::CaixaKind::from_wire`] (2aa6d23) /
+    /// [`crate::supervisor::RestartStrategy::from_wire`] (4eec29c) /
+    /// [`crate::supervisor::RestartPolicy::from_wire`] (dd32ccf) /
+    /// [`crate::aplicacao::PlacementStrategy::from_wire`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::from_suffix`] typed enums
+    /// carry on the peer wire-side `str → Self` axes — extended onto
+    /// the two-list dep-graph closed-set axis, the sixth substrate-side
+    /// closed-set typed enum on the caixa surface to converge on the
+    /// two-way `str ↔ Self` round-trip. Method-named `from_wire` (not
+    /// `from_str`) to match the peer shapes verbatim and side-step the
+    /// derived [`std::str::FromStr`] impls the sibling
+    /// [`gen_platform::FromStrKind`]-carrying axes install on their
+    /// kebab-case dispatcher-catalog identity. Returns `Option<Self>`
+    /// (rather than `Result<Self, _>`) to match the peer shapes: the
+    /// caller picks the diagnostic form appropriate for its use site —
+    /// a future `feira dep --list …` arg-parse that surfaces
+    /// `unknown list: <arg>` at the CLI builds one on top by iterating
+    /// [`Self::ALL`], while the future M4 admission-webhook's rejection
+    /// path folds `None` onto its per-CR structured refusal body.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            crate::render::DEP_AUTHOR_KEY_DEPS => Some(Self::Prod),
+            crate::render::DEP_AUTHOR_KEY_DEPS_DEV => Some(Self::Dev),
+            _ => None,
+        }
+    }
 }
 
 /// Route [`std::fmt::Display`] through [`DepList::as_str`], so every

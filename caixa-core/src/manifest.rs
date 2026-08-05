@@ -16643,6 +16643,92 @@ mod tests {
     }
 
     #[test]
+    fn dep_list_from_wire_returns_prod_on_deps_wire_scalar() {
+        // Reverse projection on the two-list dep-graph axis: the
+        // author-surface wire tag the sibling `as_str` emitter walks
+        // for `Prod` (`:deps` via `DEP_AUTHOR_KEY_DEPS`) parses back to
+        // `Some(DepList::Prod)`. A regression that hand-rolled the
+        // per-arm match without routing through the lifted
+        // `DEP_AUTHOR_KEY_DEPS` const would silently disagree on any
+        // future wire-tag rebrand and this pin flags it at build time.
+        assert_eq!(
+            crate::dep::DepList::from_wire(crate::render::DEP_AUTHOR_KEY_DEPS),
+            Some(crate::dep::DepList::Prod)
+        );
+    }
+
+    #[test]
+    fn dep_list_from_wire_returns_dev_on_deps_dev_wire_scalar() {
+        // Peer of the `Prod`-arm pin on the dev-only axis: the
+        // author-surface wire tag the sibling `as_str` emitter walks
+        // for `Dev` (`:deps-dev` via `DEP_AUTHOR_KEY_DEPS_DEV`) parses
+        // back to `Some(DepList::Dev)`. Same drift-detection posture
+        // as the peer arm — the sibling method `match` arms are
+        // compiler-checked exhaustive so a future variant addition
+        // trips at build time.
+        assert_eq!(
+            crate::dep::DepList::from_wire(crate::render::DEP_AUTHOR_KEY_DEPS_DEV),
+            Some(crate::dep::DepList::Dev)
+        );
+    }
+
+    #[test]
+    fn dep_list_from_wire_returns_none_on_unknown_wire_scalar() {
+        // Every input outside the closed-set arm-string set the
+        // sibling `as_str` emitter walks lands on the terminal `None`
+        // fallback — no silent-accept surface. Sweeps a set of
+        // plausibly-adjacent scalars (unprefixed wire form, PascalCase
+        // rebrand candidates, foreign wire tags, empty string) so a
+        // future variant addition that widened one wire form without
+        // extending the emitter's arm-set would trip the sibling
+        // round-trip pin below rather than silently accepting the new
+        // form here.
+        for candidate in [
+            "",
+            "deps",
+            "deps-dev",
+            ":deps ",
+            ":Deps",
+            ":DEPS",
+            ":build-dep",
+            ":tool-dep",
+            "prod",
+            "dev",
+        ] {
+            assert_eq!(
+                crate::dep::DepList::from_wire(candidate),
+                None,
+                "from_wire({candidate:?}) must return None; every input outside \
+                 the {{DEP_AUTHOR_KEY_DEPS, DEP_AUTHOR_KEY_DEPS_DEV}} accept-set \
+                 the sibling as_str emitter walks lands on the terminal fallback",
+            );
+        }
+    }
+
+    #[test]
+    fn dep_list_round_trips_through_as_str_and_from_wire() {
+        // Load-bearing round-trip pin: every arm the `ALL` iteration
+        // exposes survives the `as_str` → `from_wire` composition
+        // byte-for-byte. Same discipline the sibling closed-set enums
+        // carry — `CaixaKind` /
+        // `RestartStrategy` / `RestartPolicy` /
+        // `PlacementStrategy` — extended onto the two-list dep-graph
+        // axis. A future variant addition that extends `ALL` +
+        // `as_str` without extending `from_wire` (or vice versa)
+        // trips at build time on this iteration because the compiler
+        // enforces exhaustiveness on the sibling `match self` arms.
+        for &list in crate::dep::DepList::ALL {
+            assert_eq!(
+                crate::dep::DepList::from_wire(list.as_str()),
+                Some(list),
+                "DepList::from_wire(as_str({list:?})) must round-trip to Some({list:?}) — \
+                 a silent split between the forward emitter and the reverse parser \
+                 would drift the two halves of the two-list dep-graph axis's typed dispatch",
+            );
+        }
+    }
+
+    #[test]
     fn push_dep_routes_to_deps_slot_on_prod_arm() {
         // The `Prod` arm dispatches to the runtime-closure `:deps`
         // slot every downstream lacre-pipeline consumer resolves at
