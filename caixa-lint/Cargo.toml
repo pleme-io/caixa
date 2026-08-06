@@ -11,6 +11,7 @@ authors.workspace = true
 [dependencies]
 caixa-ast = { workspace = true }
 caixa-theme = { workspace = true }
+gen-platform = { workspace = true }
 tatara-lisp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

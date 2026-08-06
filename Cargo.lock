@@ -547,6 +547,7 @@ version = "0.1.31"
 dependencies = [
  "caixa-ast",
  "caixa-theme",
+ "gen-platform 0.1.26",
  "pretty_assertions",
  "serde",
  "serde_json",
