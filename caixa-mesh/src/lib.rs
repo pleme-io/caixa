@@ -37,7 +37,7 @@ use caixa_core::{
     Caixa, CaixaKind, FLEET_PROGRAMS_KEY_APLICACAO, FLEET_PROGRAMS_KEY_NAME,
     FLEET_PROGRAMS_KEY_VERSAO, GATEWAY_API_DEFAULT_HTTP_LISTENER_NAME,
     GATEWAY_API_DEFAULT_HTTP_LISTENER_PORT, GATEWAY_API_KEY_NAME, LABEL_APLICACAO, LABEL_CONTRATO,
-    M3_KEY_PLACEMENT, MappingExt, SequenceExt, WitContract, WitTarget, aplicacao::AplicacaoSpec,
+    M3_KEY_PLACEMENT, MappingExt, SequenceExt, WitContract, aplicacao::AplicacaoSpec,
     kube_resource_skeleton, label_selector, pleme_program_in_aplicacao_selector,
     pleme_program_selector, single_field_overlay,
 };
@@ -2756,7 +2756,28 @@ pub fn cilium_network_policies(caixa: &Caixa) -> Result<Vec<serde_yaml::Value>, 
             // makes the "wit world ↔ payload field" link impossible to
             // get wrong silently. PubSub / Store / Capability edges stay
             // L4-only — Cilium can't introspect those protocols.
-            if let WitTarget::Http { endpoint } = c.target().expect("validated by typed_view") {
+            //
+            // Route the per-arm HTTP-endpoint read through the lifted
+            // substrate-primitive [`caixa_core::WitTarget::http_endpoint`]
+            // typed accessor rather than the raw `if let
+            // WitTarget::Http { endpoint } = …` pattern-match — the
+            // per-`(:de, :para)` CNP L7 introspection branch's sole
+            // production consumer of the projected-target HTTP endpoint
+            // now dispatches on the substrate primitive's canonical
+            // post-projection HTTP-endpoint accessor, sibling to the
+            // WitContract pre-projection [`caixa_core::WitContract::endpoint`]
+            // (7020470) `Option<&str>` accessor on the peer raw-field
+            // axis. A future [`WitTarget`] variant addition (a
+            // `Rest`/`Grpc` split of [`WitTarget::Http`] once the WIT
+            // registry stabilizes gRPC-shaped worlds per the enum's own
+            // docstring) reaches this L7 emit site through one
+            // caixa-core edit at the accessor's match arms — either
+            // coalescing the two peers under a shared `path:` emit, or
+            // splitting the emit path per-arm — rather than a
+            // coordinated rewrite of every renderer's raw `if let`
+            // pattern-match on the [`WitTarget::Http`] arm's payload
+            // field.
+            if let Some(endpoint) = c.target().expect("validated by typed_view").http_endpoint() {
                 let mut http_rule = serde_yaml::Mapping::new();
                 http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string());
                 let mut rules = serde_yaml::Mapping::new();
