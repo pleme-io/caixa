@@ -1,10 +1,10 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "2e026581df36ae275c6ead672366c7717e67e3e927f404e7ff78f603ee170810",
+  "cargo_lock_sha256": "5d80549429137ec233d249b22b09417298ba26ad1b03b30064633057f2549b47",
   "manifest_sha256": {
     "Cargo.toml": "4c96b6feb1c03e2d80d1be4bafb76371edf77973d559b1375cd649d665cb3efc",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
-    "caixa-arch/Cargo.toml": "6268a032d02f0482c0b14ff523c4dcff20d83da9c981a24e259fb1c10ffe78e7",
+    "caixa-arch/Cargo.toml": "9f1136e23aa778f0af4aeb4510887e1a88fa6e2b55999887af963704aa93e936",
     "caixa-ast/Cargo.toml": "8eb5263eee0a89f3d0211df7f9d70b6277047734bd28eac5bad4aa44a6d3e607",
     "caixa-core/Cargo.toml": "bda1e69f1e6fa0c6147c5d5b64bac7c35ffd85288f05fcf5ac41409a4894f86d",
     "caixa-crd/Cargo.toml": "1950ca4be895c2bdfb64859f541ea2054b3a0127bc9630db32f8532f3d401777",
@@ -969,6 +969,16 @@
           {
             "name": "caixa_teia",
             "package_key": "caixa-teia-0.1.30",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "gen_platform",
+            "package_key": "gen-platform-0.1.26",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
