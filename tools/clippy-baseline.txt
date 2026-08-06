@@ -113,7 +113,6 @@
 2	clippy::string_extend_chars	caixa-lint/src/rules.rs
 2	clippy::uninlined_format_args	caixa-lint/src/rules.rs
 1	clippy::unnested_or_patterns	caixa-lint/src/rules.rs
-1	clippy::single_match	caixa-lint/src/runner.rs
 1	clippy::collapsible_if	caixa-lsp/src/main.rs
 4	clippy::manual_let_else	caixa-lsp/src/main.rs
 1	clippy::collapsible_if	caixa-mesh/src/lib.rs

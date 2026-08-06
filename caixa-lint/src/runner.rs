@@ -58,12 +58,25 @@ pub fn apply_fixes(src: &str, diags: &[Diagnostic], max_safety: FixSafety) -> Fi
     let mut skipped = 0usize;
     for d in diags {
         let Some(fix) = &d.fix else { continue };
-        match (max_safety, fix.safety) {
-            (FixSafety::Safe, FixSafety::Unsafe) => {
-                skipped += 1;
-                continue;
-            }
-            _ => {}
+        // Skip when the fix is `Unsafe` and the caller's cap is `Safe` —
+        // the same "fix's safety exceeds the max" gate the pre-lift
+        // `(FixSafety::Safe, FixSafety::Unsafe)` tuple-match encoded,
+        // now routed through the `gen_platform::IsVariant`-derived
+        // per-arm predicate family so the two-arm closed-set
+        // discriminator lives in exactly one place (the enum
+        // declaration + its `IsVariant` derive) rather than an
+        // open-coded per-arm literal pair. Matches the sibling
+        // `caixa_arch::run::check_manifest` + `ArchReport::safety_count`
+        // converge onto `InvariantKind::is_safety/is_compliance/is_hint`
+        // (5226ad5) and the peer `caixa_core::supervisor::…`
+        // `RestartStrategy::is_simple_one_for_one` /
+        // `RestartPolicy::is_permanent/is_temporary/is_transient` /
+        // `caixa_core::upgrade::UpgradeInstruction::is_load_module`
+        // arm-discriminator disciplines already on the substrate
+        // surface.
+        if max_safety.is_safe() && fix.safety.is_unsafe() {
+            skipped += 1;
+            continue;
         }
         for edit in &fix.edits {
             edits.push((
