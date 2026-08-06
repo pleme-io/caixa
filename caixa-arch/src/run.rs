@@ -2,7 +2,7 @@
 
 use caixa_teia::TeiaManifest;
 
-use crate::invariants::{Invariant, InvariantKind, builtin_invariants};
+use crate::invariants::{Invariant, builtin_invariants};
 use crate::report::{ArchReport, ArchVerdict};
 
 /// Run every built-in invariant + any extras; return a verdict.
@@ -14,10 +14,20 @@ pub fn check_manifest(manifest: &TeiaManifest, extras: &[Invariant]) -> ArchRepo
     for inv in &all {
         violations.extend((inv.check)(manifest));
     }
-    let safety_count = violations
-        .iter()
-        .filter(|v| matches!(v.kind, InvariantKind::Safety))
-        .count();
+    // The three per-arm severity counts route through the
+    // [`gen_platform::IsVariant`]-derive-generated per-arm predicates
+    // ([`InvariantKind::is_safety`] / [`InvariantKind::is_compliance`] /
+    // [`InvariantKind::is_hint`]) rather than open-coded
+    // `matches!(v.kind, InvariantKind::…)` sites, so a future arm
+    // rebrand or arm addition flows through one derive-generated body
+    // per predicate rather than a coordinated rewrite across every
+    // filter site. Peer of the sibling closed-set-enum-arm-discrimination
+    // discipline every caixa-core closed-set enum
+    // ([`caixa_core::UpgradeInstruction::is_load_module`] via
+    // `gen_platform::IsVariant`,
+    // [`caixa_core::supervisor::RestartStrategy::is_simple_one_for_one`],
+    // [`caixa_core::WitContract::is_pubsub`]) already carries.
+    let safety_count = violations.iter().filter(|v| v.kind.is_safety()).count();
     let verdict = if safety_count > 0 {
         ArchVerdict::Rejected
     } else {
@@ -28,14 +38,8 @@ pub fn check_manifest(manifest: &TeiaManifest, extras: &[Invariant]) -> ArchRepo
         manifest.instances.len(),
         violations.len(),
         safety_count,
-        violations
-            .iter()
-            .filter(|v| matches!(v.kind, InvariantKind::Compliance))
-            .count(),
-        violations
-            .iter()
-            .filter(|v| matches!(v.kind, InvariantKind::Hint))
-            .count(),
+        violations.iter().filter(|v| v.kind.is_compliance()).count(),
+        violations.iter().filter(|v| v.kind.is_hint()).count(),
     );
     ArchReport {
         verdict,
