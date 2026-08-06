@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "ba6a63f6bf48876840e695b5894e0261a150712f4d41863a677e3d286920da64",
+  "cargo_lock_sha256": "8546343b84895e7d9c472b4a8581dede1e9211c8ef7b89aa62e18e7887cdcb76",
   "manifest_sha256": {
     "Cargo.toml": "fb84f4ac31225d1e4c288a7e32f8c8ba1b8dfced5183fc9bfbd3577ecdcf4051",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
@@ -19,7 +19,7 @@
     "caixa-mesh/Cargo.toml": "b50b0a9bc5649ffb45f8f577b0e714db45e3656e7f5af3efb0313db910dd0530",
     "caixa-operator/Cargo.toml": "31abfb6ad97c21b503e1c70443a0db6c0088bf11e5490abb5fef47bc3a88435c",
     "caixa-pangea/Cargo.toml": "5a7d2748059b0c05a823801b218f03991afdf26fe9ce8788aef26b892bcae237",
-    "caixa-provedor/Cargo.toml": "5e5c6cb86563222eace8bfcaf6fdc3b24dc195d2231824de935644543e4f8387",
+    "caixa-provedor/Cargo.toml": "574a93ecd01cf3edbcae3d1a9bf362ed1972fa4d238e896ca1dd62054c6acd7e",
     "caixa-resolver/Cargo.toml": "db78b42256838b94aea1e7ce762d1849ae034017890b9d101a0f0a09709cb00b",
     "caixa-tatara/Cargo.toml": "c5b802cd750a26316761a1c40a33431f073bb48cde71d4958313d48d8780bc9d",
     "caixa-teia-forge/Cargo.toml": "dc34dab5bc0dcd686b439c80e8540a99689eb15ba51ff88def7b348dac1f3e9d",
@@ -2443,6 +2443,16 @@
       },
       "caixa-provedor-0.1.35": {
         "runtime_dependencies": [
+          {
+            "name": "gen_platform",
+            "package_key": "gen-platform-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
           {
             "name": "iac_forge",
             "package_key": "iac-forge-0.1.5",
