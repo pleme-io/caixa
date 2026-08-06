@@ -291,25 +291,43 @@ impl Caixa {
         let forms = tatara_lisp::read(src).map_err(LeituraError::Leitura)?;
         let first = forms.first().ok_or(crate::dialeto::DialetoError::Vazio)?;
 
-        match crate::dialeto::classify_form(first)? {
-            crate::dialeto::CaixaDialeto::Pacote => {}
-            // `Desconhecido` deliberately falls through to the derive rather
-            // than short-circuiting: a `(defcaixa …)` matching neither schema
-            // is most likely a genuine package manifest with a typo in
-            // `:nome`, and the derive's diagnostic — which names the offending
-            // keyword and suggests the nearest slot — is far better than
-            // anything this classifier could say.
-            crate::dialeto::CaixaDialeto::Desconhecido => {}
-            foreign => {
-                // Only the typed dialect flows into the error — the three
-                // user-facing projections (canonical keyword, description,
-                // consumer) are read at Display time through
-                // [`crate::dialeto::CaixaDialeto`]'s own accessors, so the
-                // variant cannot carry a snapshot that drifts from
-                // [`crate::dialeto::CaixaDialeto::palavra_canonica`] /
-                // `descricao` / `consumidor`.
-                return Err(LeituraError::DialetoEstrangeiro { dialeto: foreign });
-            }
+        // Route the foreign-dialect rejection gate through the lifted
+        // [`crate::dialeto::CaixaDialeto::is_molde_family`] (e9d2315)
+        // typed predicate rather than the pre-lift hand-rolled three-arm
+        // `match { Pacote => {}, Desconhecido => {}, foreign => Err(…) }`
+        // literal — the `defmolde` declaration-family partition (the two-
+        // arity closure of [`crate::dialeto::CaixaDialeto::Molde`] and
+        // [`crate::dialeto::CaixaDialeto::MoldePosicional`], the two arms
+        // whose sibling [`crate::dialeto::CaixaDialeto::palavra_canonica`]
+        // projection already collapses onto `"defmolde"` and whose sibling
+        // [`crate::dialeto::CaixaDialeto::consumidor`] projection already
+        // collapses onto `"pleme-doc-gen"`) resolves through one dispatch
+        // on the substrate primitive. `Pacote` (the tatara-lisp package
+        // manifest this derive can parse) and `Desconhecido` (deliberately
+        // falls through to the derive rather than short-circuiting: a
+        // `(defcaixa …)` matching neither schema is most likely a genuine
+        // package manifest with a typo in `:nome`, and the derive's
+        // diagnostic — which names the offending keyword and suggests the
+        // nearest slot — is far better than anything this classifier
+        // could say) both return `false` from `is_molde_family()` and fall
+        // through to the derive. Only the typed dialect flows into the
+        // error — the three user-facing projections (canonical keyword,
+        // description, consumer) are read at Display time through
+        // [`crate::dialeto::CaixaDialeto`]'s own accessors, so the
+        // variant cannot carry a snapshot that drifts from
+        // [`crate::dialeto::CaixaDialeto::palavra_canonica`] /
+        // `descricao` / `consumidor`. A future fifth dialect the
+        // [`crate::dialeto`] module doc's "third dialect" hazard
+        // actualises that belongs to the `defmolde` family lands one
+        // match arm at [`crate::dialeto::CaixaDialeto::is_molde_family`]
+        // and this gate picks up the new arm by construction — the pre-
+        // lift wildcard `foreign =>` was compile-time-anonymous and would
+        // silently absorb any hypothetical fifth `defcaixa`-family arm as
+        // foreign; routing the partition through the typed predicate
+        // closes both drift surfaces.
+        let dialeto = crate::dialeto::classify_form(first)?;
+        if dialeto.is_molde_family() {
+            return Err(LeituraError::DialetoEstrangeiro { dialeto });
         }
 
         Self::compile_from_sexp(first).map_err(LeituraError::Leitura)
@@ -5538,6 +5556,226 @@ mod tests {
                 assert!(rendered.contains(dialeto.descricao()));
             }
             other => panic!("expected DialetoEstrangeiro, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_lisp_rejects_molde_posicional_dialect_via_typed_variant() {
+        // Coverage pin for the [`crate::dialeto::CaixaDialeto::MoldePosicional`]
+        // arm of the [`Caixa::from_lisp`] foreign-dialect gate — the
+        // positional-arity `defmolde` form written under a `(defcaixa …)`
+        // head (`(defcaixa todoku-go :kind :Biblioteca :ecosystem :go
+        // …)`). Pre-lift this arm rode the same `foreign =>` wildcard
+        // the [`crate::dialeto::CaixaDialeto::Molde`] sibling arm rode,
+        // so no test exercised the positional-arity path through
+        // `Caixa::from_lisp` specifically; the sibling
+        // [`from_lisp_rejects_molde_dialect_via_typed_variant`] only
+        // covered [`crate::dialeto::CaixaDialeto::Molde`]. Post-lift the
+        // two arms route through the lifted
+        // [`crate::dialeto::CaixaDialeto::is_molde_family`] (e9d2315)
+        // typed predicate — the same predicate the pre-lift `foreign =>`
+        // wildcard resolved to today — and this pin makes the
+        // positional-arity arm's byte-shape at the gate explicit rather
+        // than implied by wildcard-absorption. A future regression that
+        // silently reordered [`crate::dialeto::CaixaDialeto::is_molde_family`]'s
+        // arm-set (dropped [`crate::dialeto::CaixaDialeto::MoldePosicional`]
+        // from the two-arity closure) would fail this pin at caixa-core
+        // test time rather than surfacing far from the change as a
+        // `caixa.lisp` carrying a `(defcaixa todoku-go :ecosystem :go
+        // …)` silently parsing past the derive.
+        let src = r#"
+          (defcaixa todoku-go
+            :kind :Biblioteca
+            :ecosystem :go
+            :package {:name "todoku-go" :version "0.3.0"})
+        "#;
+        let err =
+            Caixa::from_lisp(src).expect_err("MoldePosicional dialect must not parse as Pacote");
+        match err {
+            LeituraError::DialetoEstrangeiro { dialeto } => {
+                assert_eq!(
+                    dialeto,
+                    crate::dialeto::CaixaDialeto::MoldePosicional,
+                    "DialetoEstrangeiro must carry the MoldePosicional \
+                     variant verbatim — the positional-arity `defmolde` \
+                     form under a `(defcaixa …)` head is the \
+                     `MoldePosicional` arm's canonical byte-shape"
+                );
+                let rendered = LeituraError::DialetoEstrangeiro { dialeto }.to_string();
+                assert!(
+                    rendered.contains(dialeto.palavra_canonica()),
+                    "Display must interpolate `dialeto.palavra_canonica()` \
+                     verbatim on the MoldePosicional arm; rendered: \
+                     {rendered:?}"
+                );
+                assert!(
+                    rendered.contains(dialeto.consumidor()),
+                    "Display must interpolate `dialeto.consumidor()` \
+                     verbatim on the MoldePosicional arm; rendered: \
+                     {rendered:?}"
+                );
+                assert!(
+                    rendered.contains(dialeto.descricao()),
+                    "Display must interpolate `dialeto.descricao()` \
+                     verbatim on the MoldePosicional arm; rendered: \
+                     {rendered:?}"
+                );
+            }
+            other => panic!("expected DialetoEstrangeiro, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn from_lisp_dialect_gate_dispatches_through_caixa_dialeto_is_molde_family_predicate() {
+        // Load-bearing byte-parity pin: for every arm in
+        // [`crate::dialeto::CaixaDialeto::ALL`], the
+        // [`Caixa::from_lisp`] foreign-dialect gate's DialetoEstrangeiro
+        // partition must agree with the lifted
+        // [`crate::dialeto::CaixaDialeto::is_molde_family`] (e9d2315)
+        // typed predicate — i.e. from_lisp raises
+        // [`LeituraError::DialetoEstrangeiro`] carrying `d` iff
+        // `d.is_molde_family()` returns `true`, and does NOT raise
+        // [`LeituraError::DialetoEstrangeiro`] on any arm where the
+        // predicate returns `false` (the arm's source falls through to
+        // the derive — parses cleanly on
+        // [`crate::dialeto::CaixaDialeto::Pacote`], surfaces a
+        // [`LeituraError::Leitura`] on
+        // [`crate::dialeto::CaixaDialeto::Desconhecido`]).
+        //
+        // Pre-lift the gate hand-rolled a three-arm match
+        // (`Pacote => {}`, `Desconhecido => {}`, `foreign => Err(…)`)
+        // whose `foreign =>` wildcard expressed no compile-time link
+        // back to the substrate primitive's arm-family; a future fifth
+        // dialect the [`crate::dialeto`] module doc's "third dialect"
+        // hazard actualises would fall silently onto the wildcard
+        // regardless of whether it belonged to the `defmolde` family or
+        // to a distinct `defcaixa`-family. Post-lift the partition
+        // resolves through
+        // [`crate::dialeto::CaixaDialeto::is_molde_family`]'s single
+        // typed dispatch, and this pin refuses any future regression
+        // that silently split the from_lisp partition from the typed
+        // predicate — the two paths now migrate as one on any future
+        // arm addition.
+        //
+        // Sibling in shape to the peer
+        // [`crate::dialeto::tests::caixa_dialeto_is_molde_family_agrees_with_palavra_canonica_defmolde_projection`]
+        // (e9d2315) that pins the same byte-parity between
+        // [`crate::dialeto::CaixaDialeto::is_molde_family`] and the
+        // sibling [`crate::dialeto::CaixaDialeto::palavra_canonica`]
+        // `== "defmolde"` classifier — extends the discipline from the
+        // two paths within the [`crate::dialeto`] primitive onto the
+        // third external consumer of the `defmolde`-family partition
+        // (the [`Caixa::from_lisp`] gate that raises
+        // [`LeituraError::DialetoEstrangeiro`]).
+        let fixtures: &[(crate::dialeto::CaixaDialeto, &str)] = &[
+            (
+                crate::dialeto::CaixaDialeto::Pacote,
+                r#"
+                  (defcaixa
+                    :nome   "checkout"
+                    :versao "0.1.0"
+                    :kind   Biblioteca
+                    :edicao "2026"
+                    :descricao "canonical Pacote source"
+                    :autores ()
+                    :etiquetas ()
+                    :deps ()
+                    :deps-dev ()
+                    :bibliotecas ("lib/checkout.lisp"))
+                "#,
+            ),
+            (
+                crate::dialeto::CaixaDialeto::Molde,
+                r#"
+                  (defcaixa
+                    :name "base64"
+                    :kind :Biblioteca
+                    :ecosystem :rust-single-crate
+                    :package {:name "base64" :version "0.22.1"}
+                    :workflows [:auto-release])
+                "#,
+            ),
+            (
+                crate::dialeto::CaixaDialeto::MoldePosicional,
+                r#"
+                  (defcaixa todoku-go
+                    :kind :Biblioteca
+                    :ecosystem :go
+                    :package {:name "todoku-go" :version "0.3.0"})
+                "#,
+            ),
+            (
+                crate::dialeto::CaixaDialeto::Desconhecido,
+                r#"(defcaixa :licenca "MIT")"#,
+            ),
+        ];
+
+        // Coverage: every arm in [`crate::dialeto::CaixaDialeto::ALL`]
+        // must appear in the fixture table so the pin's arm-set stays
+        // synchronised with the enum's arm-set. Fails at test time if a
+        // future fifth arm added to [`crate::dialeto::CaixaDialeto`]
+        // (with a corresponding `is_molde_family` return) forgot to
+        // extend this fixture table with a canonical source for the new
+        // arm — the pin cannot cover an arm it has no source for.
+        for &expected in crate::dialeto::CaixaDialeto::ALL {
+            assert!(
+                fixtures.iter().any(|(d, _)| *d == expected),
+                "fixture table must carry a canonical source for every \
+                 CaixaDialeto arm; missing: {expected:?}"
+            );
+        }
+
+        for &(expected_dialect, src) in fixtures {
+            let classified = crate::dialeto::classify(src.trim()).unwrap_or_else(|err| {
+                panic!(
+                    "fixture source for {expected_dialect:?} must classify \
+                     cleanly, got err: {err:?}"
+                )
+            });
+            assert_eq!(
+                classified, expected_dialect,
+                "fixture source for {expected_dialect:?} must classify as \
+                 {expected_dialect:?} (drift here defeats the byte-parity \
+                 pin below — a source labelled for one arm but classifying \
+                 as another would silently satisfy or violate the pin for \
+                 the wrong reason)"
+            );
+
+            let outcome = Caixa::from_lisp(src);
+            match (expected_dialect.is_molde_family(), &outcome) {
+                (true, Err(LeituraError::DialetoEstrangeiro { dialeto })) => {
+                    assert_eq!(
+                        *dialeto, expected_dialect,
+                        "DialetoEstrangeiro must carry the same typed arm \
+                         the classifier returned — a drift here would let \
+                         from_lisp raise the error while pointing at the \
+                         wrong dialect (e.g. rejecting a \
+                         MoldePosicional source as Molde). arm: \
+                         {expected_dialect:?}"
+                    );
+                }
+                (true, other) => panic!(
+                    "arm {expected_dialect:?} has is_molde_family() = true \
+                     so from_lisp must raise DialetoEstrangeiro carrying \
+                     {expected_dialect:?}; got: {other:?}"
+                ),
+                (false, Err(LeituraError::DialetoEstrangeiro { dialeto })) => panic!(
+                    "arm {expected_dialect:?} has is_molde_family() = false \
+                     so from_lisp must NOT raise DialetoEstrangeiro; got \
+                     one carrying: {dialeto:?}. This means the typed \
+                     predicate and the from_lisp partition disagree on \
+                     this arm — exactly the drift this pin refuses."
+                ),
+                (false, _) => {
+                    // A non-molde arm's source falls through to the
+                    // derive: Pacote sources parse to Ok(_); Desconhecido
+                    // sources surface as LeituraError::Leitura from the
+                    // derive's own unknown-keyword rejection. Either
+                    // shape is acceptable here — the pin's promise is
+                    // narrower: "no DialetoEstrangeiro on
+                    // is_molde_family() == false".
+                }
+            }
         }
     }
 
