@@ -496,6 +496,7 @@ name = "caixa-flux"
 version = "0.1.39"
 dependencies = [
  "caixa-core",
+ "gen-platform 0.1.26",
  "pretty_assertions",
  "serde",
  "serde_json",
