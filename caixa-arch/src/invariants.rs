@@ -7,7 +7,9 @@
 use caixa_teia::{TeiaInstance, TeiaManifest, TeiaValue};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, gen_platform::IsVariant,
+)]
 pub enum InvariantKind {
     /// A hard safety property — refuse to emit HCL when violated.
     Safety,
@@ -15,6 +17,41 @@ pub enum InvariantKind {
     Compliance,
     /// A best-practice hint — never blocks.
     Hint,
+}
+
+impl InvariantKind {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed three-arm [`InvariantKind`] discriminator set — the
+    /// `caixa-arch` [`crate::run::check_manifest`] verdict-summary
+    /// per-arm-count aggregator (which reads every arm's population
+    /// out of one `.violations` sweep), a future
+    /// `feira arch --list-severities` CLI enumeration, a future
+    /// admission-webhook rejection body naming the accepted-severity
+    /// set. A future variant addition (a fourth severity axis the
+    /// `iac-forge` policy-engine grows — a `Warning` tier between
+    /// [`Self::Compliance`] and [`Self::Hint`], a `Fatal` tier above
+    /// [`Self::Safety`]) extends this slice as one edit and every
+    /// consumer picks up the new entry by construction; the compiler-
+    /// checked exhaustiveness on the sibling [`gen_platform::IsVariant`]-
+    /// derive-generated `is_*` predicates is the build-time guarantee
+    /// that no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set typed enums'
+    /// [`caixa_core::CaixaKind::ALL`] (6b1f4fb) /
+    /// [`caixa_core::CaixaDialeto::ALL`] (dd4f541) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`caixa_core::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`caixa_core::supervisor::RestartStrategy::ALL`] (4eec29c) /
+    /// [`caixa_core::supervisor::RestartPolicy::ALL`] (dd32ccf) /
+    /// [`caixa_core::dep::DepList::ALL`] (45ee563) exhaustive-iteration
+    /// surfaces — the eighth closed-set fieldless typed enum on the
+    /// caixa surface (and the first outside `caixa-core`) to converge
+    /// onto the same one-canonical-arm-list-per-enum discipline. Order
+    /// matches variant declaration order verbatim
+    /// (`Safety` → `Compliance` → `Hint`) so the slice is the
+    /// canonical severity ordering every listing / rendering consumer
+    /// defers to.
+    pub const ALL: &'static [Self] = &[Self::Safety, Self::Compliance, Self::Hint];
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -249,5 +286,92 @@ fn collect_strings(v: &TeiaValue, out: &mut Vec<String>) {
         TeiaValue::List(items) => items.iter().for_each(|i| collect_strings(i, out)),
         TeiaValue::Object(m) => m.values().for_each(|i| collect_strings(i, out)),
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invariant_kind_all_lists_every_variant_in_declaration_order() {
+        // The fail-before-pass-after pin on the closed three-arm
+        // [`InvariantKind`] discriminator set: any future variant
+        // addition (a `Warning` tier between [`InvariantKind::Compliance`]
+        // and [`InvariantKind::Hint`], a `Fatal` tier above
+        // [`InvariantKind::Safety`] the `iac-forge` policy-engine grows)
+        // that lands the new variant on the enum without extending
+        // [`InvariantKind::ALL`] trips this test — the compiler-checked
+        // exhaustiveness on the sibling
+        // [`gen_platform::IsVariant`]-derived per-arm predicates
+        // ([`InvariantKind::is_safety`] / [`InvariantKind::is_compliance`]
+        // / [`InvariantKind::is_hint`]) covers the projection axis; this
+        // pin covers the exhaustive-iteration axis so both halves of the
+        // closed-set discipline migrate as one edit.
+        assert_eq!(
+            InvariantKind::ALL,
+            &[
+                InvariantKind::Safety,
+                InvariantKind::Compliance,
+                InvariantKind::Hint,
+            ],
+        );
+        // Every arm satisfies exactly the paired per-arm predicate — the
+        // byte-parity pin between the [`InvariantKind::ALL`] iteration
+        // axis and the per-arm [`gen_platform::IsVariant`]-derived
+        // predicate axis: for every arm, the paired predicate returns
+        // `true` and every other predicate returns `false`. Same
+        // discipline the sibling [`caixa_core::CaixaKind::ALL`] +
+        // per-arm `requires_*` peer pins carry.
+        for arm in InvariantKind::ALL {
+            let (safety, compliance, hint) = (arm.is_safety(), arm.is_compliance(), arm.is_hint());
+            assert_eq!(
+                usize::from(safety) + usize::from(compliance) + usize::from(hint),
+                1,
+                "InvariantKind::{arm:?} must satisfy exactly one of \
+                 is_safety / is_compliance / is_hint",
+            );
+        }
+    }
+
+    #[test]
+    fn invariant_kind_predicates_are_byte_equal_to_matches_family() {
+        // The fail-before-pass-after pin on the two-axis convergence
+        // of the four pre-lift `matches!(v.kind, InvariantKind::…)`
+        // sites at [`crate::run::check_manifest`] (3 sites — safety /
+        // compliance / hint) + [`crate::report::ArchReport::safety_count`]
+        // (1 site — safety) onto the
+        // [`gen_platform::IsVariant`]-derive-generated per-arm
+        // predicate family: for every arm, each predicate agrees
+        // byte-for-byte with the pre-lift `matches!` shape.
+        //
+        // A future rebrand touching either endpoint (a
+        // `#[is_variant(name = "…")]` attribute drift on the derive,
+        // an arm rename, an accidental peer predicate that shadows the
+        // derive-generated one) would silently split the two paths and
+        // trip this pin. Peer of the sibling
+        // [`caixa_core::supervisor::tests::restart_strategy_is_simple_one_for_one_matches_typed_dispatch`]
+        // and [`caixa_core::supervisor::tests::restart_policy_predicates_are_byte_equal_to_matches`]
+        // pins on the peer closed-set-enum IsVariant convergence axes.
+        for arm in InvariantKind::ALL {
+            assert_eq!(
+                arm.is_safety(),
+                matches!(arm, InvariantKind::Safety),
+                "InvariantKind::{arm:?}.is_safety() must agree with \
+                 matches!(_, InvariantKind::Safety) byte-for-byte",
+            );
+            assert_eq!(
+                arm.is_compliance(),
+                matches!(arm, InvariantKind::Compliance),
+                "InvariantKind::{arm:?}.is_compliance() must agree with \
+                 matches!(_, InvariantKind::Compliance) byte-for-byte",
+            );
+            assert_eq!(
+                arm.is_hint(),
+                matches!(arm, InvariantKind::Hint),
+                "InvariantKind::{arm:?}.is_hint() must agree with \
+                 matches!(_, InvariantKind::Hint) byte-for-byte",
+            );
+        }
     }
 }

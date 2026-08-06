@@ -392,6 +392,7 @@ version = "0.1.30"
 dependencies = [
  "caixa-pangea",
  "caixa-teia",
+ "gen-platform 0.1.26",
  "iac-forge",
  "pretty_assertions",
  "serde",
