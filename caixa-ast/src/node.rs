@@ -71,6 +71,65 @@ pub enum NodeKind {
     UnquoteSplice(Box<Node>),
 }
 
+impl NodeKind {
+    /// Substrate-canonical projection onto the [`Self::Keyword`] arm's
+    /// borrowed scalar payload — returns `Some(&str)` byte-borrowed from
+    /// the arm's own [`String`] storage, and [`None`] on every other arm
+    /// of the closed fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Six production consumers today across two caixa-monorepo crates
+    /// — the [`Node::kwarg`] pair-loop `:key value` alternator, and the
+    /// caixa-lint rule surface's [`caixa_lint::rules`]::`check_keyword_kebab`
+    /// walker, `check_enum_pascal` kwarg-loop filter, `keyword_present`
+    /// walker, `matches_kwarg` kwarg-loop filter, and `items_has_key`
+    /// kwarg-loop filter — which previously reached the underlying
+    /// keyword-name scalar through six raw `if let NodeKind::Keyword(k)
+    /// = &n.kind` (or `matches!(&n.kind, NodeKind::Keyword(k) if k ==
+    /// key)`) open-coded per-arm pattern-matches that expressed no
+    /// compile-time link back to the substrate primitive's typed
+    /// scalar-arm projection. A future `NodeKind` arm addition (a
+    /// `TaggedKeyword(String, KeywordTag)` shape once the tatara-lisp
+    /// reader grows a per-keyword scope tag, a `NamespacedKeyword(String,
+    /// String)` shape once the sexp→JSON bridge stabilizes the
+    /// `::ns/key` sugar theory/TATARA-LISP-CONSOLIDATION.md D6 sketches)
+    /// reaches every downstream per-`Keyword`-arm consumer through this
+    /// one dispatch by construction — no coordinated six-way rewrite
+    /// across every per-rule projection site.
+    ///
+    /// Zero-copy — the returned `&str` borrows from the arm's own
+    /// [`String`] storage (pinned by the
+    /// `as_keyword_is_by_borrow_pointer_identity` test), the same
+    /// discipline as the sibling [`caixa_teia::TeiaValue::as_str`]
+    /// (7304ffe) / [`caixa_teia::TeiaValue::as_object`] (7304ffe)
+    /// outer-`TeiaValue` sum-type per-arm projections and the sibling
+    /// [`caixa_teia::TeiaRefRepr::tipo`] (a856d67) /
+    /// [`caixa_teia::TeiaRefRepr::nome`] (15bcdef) /
+    /// [`caixa_teia::TeiaRefRepr::atributo`] outer-`TeiaRefRepr` scalar
+    /// accessors on the substrate's IaC-side per-`(ref …)` reference
+    /// carrier — one axis level up on the sibling AST-side per-`NodeKind`
+    /// sum-type projection surface.
+    ///
+    /// First `Option<&<payload>>` projection accessor on the outer
+    /// [`NodeKind`] sum-type — opens the `as_<variant>` typed projection
+    /// family the future per-arm [`Self::as_symbol`] / [`Self::as_str`]
+    /// projections fold on the same shape at their first cross-crate
+    /// consumer (the sibling caixa-lint `check_enum_pascal` /
+    /// `check_nome_kebab` / `check_no_fixme` per-`NodeKind::Str`-arm
+    /// scalar-projection sites and `check_git_pin` /
+    /// `check_aplicacao_timeout` / `check_consistent_quote` per-
+    /// `NodeKind::Symbol`-arm scalar-projection sites), extending the
+    /// discipline onto the caixa-ast per-AST-node-family arm-set every
+    /// downstream authoring consumer (`caixa-fmt`, `caixa-lint`,
+    /// `caixa-lsp`) partitions on.
+    #[must_use]
+    pub fn as_keyword(&self) -> Option<&str> {
+        match self {
+            Self::Keyword(k) => Some(k.as_str()),
+            _ => None,
+        }
+    }
+}
+
 impl Node {
     #[must_use]
     pub fn new(kind: NodeKind, span: Span) -> Self {
@@ -145,7 +204,20 @@ impl Node {
         };
         let mut i = start;
         while i + 1 < items.len() {
-            if let NodeKind::Keyword(k) = &items[i].kind {
+            // Route the per-`:key value` pair-loop's per-item keyword-
+            // name scalar projection through the lifted
+            // [`NodeKind::as_keyword`] `Option<&str>` accessor rather
+            // than the raw `if let NodeKind::Keyword(k) = &items[i]
+            // .kind` open-coded per-arm pattern-match — the per-
+            // `Keyword`-arm scalar projection now keys off the
+            // substrate-canonical sum-type per-arm accessor every
+            // downstream caixa-ast/caixa-lint per-`Keyword`-arm consumer
+            // (`caixa_lint::rules::check_keyword_kebab`,
+            // `check_enum_pascal`, `keyword_present`, `matches_kwarg`,
+            // `items_has_key`) routes through, so any future
+            // `NodeKind::Keyword`-adjacent arm extension picks up this
+            // dispatch through exactly one edit on the substrate primitive.
+            if let Some(k) = items[i].kind.as_keyword() {
                 if k == key {
                     return Some(&items[i + 1]);
                 }
@@ -270,6 +342,111 @@ mod is_variant_tests {
                  matches!(_, NodeKind::Keyword(_)) — otherwise the \
                  converged call sites in caixa-fmt/caixa-lint would \
                  silently disagree with their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's `Keyword`
+    // scalar-arm accessor: exactly the `Keyword` arm returns
+    // `Some(&str)` byte-borrowed from the arm's own [`String`] storage;
+    // every other arm returns `None`. Pins the "one canonical
+    // projection dispatch per typed arm on the substrate primitive"
+    // discipline the six per-`Keyword`-arm consumer sites (caixa-ast
+    // [`Node::kwarg`] pair-loop; caixa-lint `check_keyword_kebab`,
+    // `check_enum_pascal`, `keyword_present`, `matches_kwarg`,
+    // `items_has_key`) route through via
+    // `.as_keyword()`/`.and_then(NodeKind::as_keyword)`. A regression
+    // that admitted a non-`Keyword` arm through this projection would
+    // silently classify a bare symbol or string literal as a keyword
+    // at the six per-consumer sites — `kwarg` would return the wrong
+    // pair value, `keyword_present` would find phantom `:timeout`s in
+    // string literals, `matches_kwarg`/`items_has_key` would treat
+    // positional args as keyword pairs. This test guards that surface
+    // across every arm of the closed fourteen-arm partition.
+    #[test]
+    fn as_keyword_projects_only_keyword_arm() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_keyword();
+            if matches!(variant, NodeKind::Keyword(_)) {
+                let NodeKind::Keyword(k) = variant else {
+                    unreachable!("guarded by matches! above");
+                };
+                assert_eq!(
+                    projected,
+                    Some(k.as_str()),
+                    "NodeKind::{name} is the Keyword arm — as_keyword() \
+                     must project onto its own String payload"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not the Keyword arm — \
+                     as_keyword() must return None"
+                );
+            }
+        }
+        // Empty keyword — the accessor is a projection, not a gate; an
+        // empty-`:` keyword (author-declared or parser-produced) round-
+        // trips as `Some("")`, not `None`.
+        assert_eq!(NodeKind::Keyword(String::new()).as_keyword(), Some(""));
+    }
+
+    // Zero-copy pin — `k.as_keyword()` must borrow from the `Keyword`
+    // arm's own [`String`] storage, not clone into a fresh buffer.
+    // Fails at build time if a future rewrite regresses to
+    // `Some(k.clone().leak())` or any other detour that silently
+    // allocates on every call (the same shape as the sibling
+    // [`caixa_teia::TeiaValue::as_str_is_by_borrow_pointer_identity`]
+    // pin on the outer-`TeiaValue` scalar accessor).
+    #[test]
+    fn as_keyword_is_by_borrow_pointer_identity() {
+        let k = NodeKind::Keyword("timeout".into());
+        let via_accessor: &str = k.as_keyword().unwrap();
+        let NodeKind::Keyword(ref inner) = k else {
+            unreachable!("constructed above as NodeKind::Keyword");
+        };
+        assert_eq!(
+            via_accessor.as_ptr(),
+            inner.as_ptr(),
+            "NodeKind::as_keyword must borrow from the Keyword arm's \
+             String backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            inner.len(),
+            "NodeKind::as_keyword and inner.as_str() must byte-equal \
+             in length (same slice)",
+        );
+    }
+
+    // Byte-parity pin on the pre-lift `if let NodeKind::Keyword(k) =
+    // &n.kind { … if k == key … }` shape the six caixa-ast/caixa-lint
+    // consumer sites route through today via
+    // `n.kind.as_keyword() == Some(key)` (or `if let Some(k) =
+    // n.kind.as_keyword() { if k == key … }`). Refuses a future
+    // accidental split between the accessor's return contract and its
+    // pre-lift `matches!`/`if let` shape (a hand-rolled shadow
+    // `impl` that overrides one path, an accidental rebrand of one
+    // converged call site back to the raw `NodeKind::Keyword(k)`
+    // form) on the load-bearing keyword-name-projection axis every
+    // downstream caixa-lint rule's `:key value` pair-loop / walker
+    // partitions on.
+    #[test]
+    fn as_keyword_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&str> = match &variant {
+                NodeKind::Keyword(k) => Some(k.as_str()),
+                _ => None,
+            };
+            let via_accessor = variant.as_keyword();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_keyword() must byte-equal \
+                 `match &_ {{ NodeKind::Keyword(k) => Some(k.as_str()), \
+                 _ => None }}` — otherwise the six converged caixa-ast/ \
+                 caixa-lint call sites would silently disagree with \
+                 their pre-lift shape"
             );
         }
     }

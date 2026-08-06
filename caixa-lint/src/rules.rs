@@ -88,7 +88,14 @@ pub fn all_rules() -> Vec<Rule> {
 
 fn check_keyword_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
     walk(node, &mut |n| {
-        if let NodeKind::Keyword(k) = &n.kind {
+        // Route the per-`Keyword`-arm scalar projection through the
+        // lifted [`caixa_ast::NodeKind::as_keyword`] `Option<&str>`
+        // accessor rather than the raw `if let NodeKind::Keyword(k) =
+        // &n.kind` open-coded per-arm pattern-match — sibling in shape
+        // to the peer `check_enum_pascal` / `keyword_present` /
+        // `matches_kwarg` / `items_has_key` sites (all converged in
+        // this run) and to the [`caixa_ast::Node::kwarg`] pair-loop.
+        if let Some(k) = n.kind.as_keyword() {
             if !is_kebab(k) {
                 let kebabed = to_kebab(k);
                 // Only attach an autofix if the canonicalized form is
@@ -96,7 +103,7 @@ fn check_keyword_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
                 // inputs like `__type` whose mechanical to_kebab gives
                 // `--type` (invalid: starts with dash). Those need
                 // human-chosen names.
-                let fixable = kebabed != *k && is_kebab(&kebabed);
+                let fixable = kebabed != k && is_kebab(&kebabed);
                 let hint = if fixable {
                     format!("rename to :{kebabed}")
                 } else {
@@ -133,8 +140,15 @@ fn check_enum_pascal(node: &Node, diags: &mut Vec<Diagnostic>) {
     ));
     let mut i = start;
     while i + 1 < items.len() {
-        if let NodeKind::Keyword(k) = &items[i].kind {
-            if ENUM_KEYS.contains(&k.as_str()) {
+        // Route the per-item keyword-name projection through the lifted
+        // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor
+        // rather than the raw `if let NodeKind::Keyword(k) = &items[i]
+        // .kind` open-coded per-arm pattern-match — sibling to the peer
+        // `check_keyword_kebab` / `keyword_present` / `matches_kwarg` /
+        // `items_has_key` sites (all converged in this run) and to the
+        // [`caixa_ast::Node::kwarg`] pair-loop.
+        if let Some(k) = items[i].kind.as_keyword() {
+            if ENUM_KEYS.contains(&k) {
                 let v = &items[i + 1];
                 match &v.kind {
                     NodeKind::Str(s) => {
@@ -452,7 +466,14 @@ fn walk<F: FnMut(&Node)>(node: &Node, f: &mut F) {
 fn keyword_present(node: &Node, key: &str) -> bool {
     let mut found = false;
     walk(node, &mut |n| {
-        if matches!(&n.kind, NodeKind::Keyword(k) if k == key) {
+        // Route the per-`Keyword`-arm scalar projection through the
+        // lifted [`caixa_ast::NodeKind::as_keyword`] `Option<&str>`
+        // accessor rather than the raw `matches!(&n.kind, NodeKind::
+        // Keyword(k) if k == key)` open-coded per-arm pattern-guard —
+        // sibling to the peer `check_keyword_kebab` / `check_enum_pascal`
+        // / `matches_kwarg` / `items_has_key` sites (all converged in
+        // this run) and to the [`caixa_ast::Node::kwarg`] pair-loop.
+        if n.kind.as_keyword() == Some(key) {
             found = true;
         }
     });
@@ -462,7 +483,14 @@ fn keyword_present(node: &Node, key: &str) -> bool {
 fn matches_kwarg<P: Fn(&Node) -> bool>(items: &[Node], key: &str, pred: P) -> bool {
     let mut i = 0;
     while i + 1 < items.len() {
-        if let NodeKind::Keyword(k) = &items[i].kind {
+        // Route the per-item keyword-name projection through the lifted
+        // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor
+        // rather than the raw `if let NodeKind::Keyword(k) = &items[i]
+        // .kind` open-coded per-arm pattern-match — sibling to the peer
+        // `check_keyword_kebab` / `check_enum_pascal` / `keyword_present`
+        // / `items_has_key` sites (all converged in this run) and to
+        // the [`caixa_ast::Node::kwarg`] pair-loop.
+        if let Some(k) = items[i].kind.as_keyword() {
             if k == key && pred(&items[i + 1]) {
                 return true;
             }
@@ -475,7 +503,12 @@ fn matches_kwarg<P: Fn(&Node) -> bool>(items: &[Node], key: &str, pred: P) -> bo
 fn items_has_key(items: &[Node], key: &str) -> bool {
     let mut i = 0;
     while i + 1 < items.len() {
-        if let NodeKind::Keyword(k) = &items[i].kind {
+        // Sibling per-item keyword-name projection to `matches_kwarg`
+        // above — routes through the lifted
+        // [`caixa_ast::NodeKind::as_keyword`] `Option<&str>` accessor
+        // for the same reason and closes the caixa-lint per-`Keyword`-
+        // arm consumer-set on the substrate accessor.
+        if let Some(k) = items[i].kind.as_keyword() {
             if k == key {
                 return true;
             }
