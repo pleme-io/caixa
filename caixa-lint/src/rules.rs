@@ -671,7 +671,7 @@ mod tests {
         let d = lint(src);
         assert!(
             d.iter()
-                .any(|d| d.rule_id == "aplicacao-completeness" && d.severity == Severity::Error),
+                .any(|d| d.rule_id == "aplicacao-completeness" && d.severity.is_error()),
             "diags: {d:?}"
         );
     }
@@ -735,7 +735,7 @@ mod tests {
   :deps ((:nome "caixa-teia" :versao "^0.1"
           :fonte (:tipo git :repo "github:pleme-io/caixa-teia" :tag "v0.1.0"))))"#;
         let d = lint(src);
-        let errors: Vec<_> = d.iter().filter(|d| d.severity == Severity::Error).collect();
+        let errors: Vec<_> = d.iter().filter(|d| d.severity.is_error()).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
     }
 }

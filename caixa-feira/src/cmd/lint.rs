@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use caixa_core::LAYOUT_DIR_LIB;
 use caixa_fmt::{FmtConfig, format_source};
-use caixa_lint::{FixSafety, Severity, apply_fixes, lint_source};
+use caixa_lint::{FixSafety, apply_fixes, lint_source};
 use caixa_theme::Theme;
 use clap::Args;
 
@@ -105,10 +105,26 @@ impl Lint {
             let mut diags =
                 lint_source(&src).with_context(|| format!("linting {}", path.display()))?;
             if self.errors_only {
-                diags.retain(|d| d.severity == Severity::Error);
+                // Route the errors-only retain through the substrate-side
+                // [`caixa_lint::Severity::is_error`] predicate the
+                // [`gen_platform::IsVariant`] derive on
+                // [`caixa_lint::Severity`] emits, so the two-arm
+                // error-family gate in this verb (this
+                // retain + the paired per-diagnostic error-count bump
+                // below) shares one convention with every peer downstream
+                // severity-family gate — the same closed-set arm-
+                // discriminator discipline the sibling
+                // `caixa_arch::ArchReport::passed` /
+                // `caixa_feira::cmd::tofu::render` converge onto
+                // `ArchVerdict::is_proven` / `is_rejected` (94dafa6) and
+                // the peer `caixa_arch::run::check_manifest` +
+                // `ArchReport::safety_count` converge onto
+                // `InvariantKind::is_safety` / `is_compliance` /
+                // `is_hint` (5226ad5) already carry.
+                diags.retain(|d| d.severity.is_error());
             }
             for d in &diags {
-                if d.severity == Severity::Error {
+                if d.severity.is_error() {
                     error_count += 1;
                 }
                 let rendered = if self.no_color {
