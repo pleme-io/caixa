@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+gen-platform = { workspace = true }
 serde = { workspace = true }
 
 [lints]
