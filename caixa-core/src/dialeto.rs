@@ -249,6 +249,21 @@ impl CaixaDialeto {
     /// explicitly-typed per-arm-set predicate on the axis, matching the
     /// discipline the sibling M2 [`crate::CaixaKind`] closed-set
     /// discriminator already carries with `requires_lib`.
+    ///
+    /// Three consumers now route through this one typed dispatch: the
+    /// [`caixa-feira`](../../caixa_feira/cmd/dialeto/index.html) verb's
+    /// `--strict-palavra` gate (refusing a repo-surface declaration
+    /// still written as `(defcaixa …)`), the same verb's wrong-
+    /// declaration-under-`caixa.lisp` gate (refusing a repo-surface
+    /// declaration under the filename `feira` loads as a package
+    /// manifest), and [`crate::Caixa::from_lisp`]'s foreign-dialect
+    /// gate (raising [`crate::ManifestError::DialetoEstrangeiro`] before
+    /// the derive's `parse_kwargs_strict` walk on any `defmolde`-family
+    /// classification — the pre-lift hand-rolled three-arm
+    /// `match { Pacote => {}, Desconhecido => {}, foreign => Err(…) }`
+    /// literal whose `foreign =>` wildcard silently absorbed anything
+    /// non-Pacote-non-Desconhecido, now the third external consumer of
+    /// the `defmolde`-family partition).
     #[must_use]
     pub const fn is_molde_family(self) -> bool {
         matches!(self, Self::Molde | Self::MoldePosicional)
