@@ -498,17 +498,52 @@ impl UpgradeFromEntry {
     /// alone, so no Restart-bearing entry reaches this gate carrying a
     /// `StateChange`).
     fn validate_state_change_ordering(&self) -> Result<(), UpgradeError> {
+        // Route the per-instruction load-family arm-discriminator through
+        // the `gen_platform::IsVariant`-derive-generated
+        // [`UpgradeInstruction::is_load_module`] predicate and the
+        // per-instruction migration-family `:script` scalar projection
+        // through the sibling lifted [`UpgradeInstruction::declared_path`]
+        // `Option<&PathBuf>` accessor rather than the raw two-arm
+        // `match instr { UpgradeInstruction::LoadModule { .. } =>
+        // loaded = true, UpgradeInstruction::StateChange { script } if
+        // !loaded => …, _ => {} }` open-coded pattern-match — closes the
+        // last unlifted `match`-shaped per-arm-hand-rolled load-family
+        // arm-discriminator + migration-family script-projection pair
+        // inside `impl UpgradeFromEntry`. Sibling of the peer
+        // [`Self::validate_purge_ordering`] (580d0f1) routing already
+        // lifted onto [`UpgradeInstruction::is_load_module`] on the paired
+        // load → cleanup ordering axis, the peer
+        // [`Self::validate_load_singularity`] (c9ce91d) routing lifted
+        // onto the [`UpgradeInstruction::is_load_module`] +
+        // [`UpgradeInstruction::declared_module`] pair on the singularity
+        // axis, and the peer [`Self::validate_state_change_singularity`]
+        // routing already lifted onto the sibling
+        // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+        // accessor on the migration-family script-projection axis — both
+        // ordering-gate load-family sticky-latch dispatches now key off
+        // exactly one typed dispatch on the substrate primitive for
+        // their load-family arm-discriminator, and both migration-family
+        // projection sites (this ordering gate + the peer singularity
+        // gate) now key off exactly one typed dispatch on the substrate
+        // primitive for the `:script`-carrying axis. A future sixth arm
+        // on [`UpgradeInstruction`] (an `AwaitReadiness` gate, a
+        // `Downgrade` reverse-axis variant OTP's `relup` acknowledges, a
+        // `CanaryTraffic` split-traffic variant the M4 CR materializer
+        // could resolve per-CR — INSPIRATIONS §II.4) migrates as one
+        // enum-declaration edit through the derive rather than a
+        // coordinated rewrite of every ordering / singularity gate's
+        // per-arm hand-rolled pattern-match. Byte-identity of this
+        // dispatch against the pre-lift `match` shape is pinned by
+        // [`tests::validate_state_change_ordering_projects_scripts_through_is_load_module_and_declared_path_accessors`].
         let mut loaded = false;
         for instr in self.instructions() {
-            match instr {
-                UpgradeInstruction::LoadModule { .. } => loaded = true,
-                UpgradeInstruction::StateChange { script } if !loaded => {
-                    return Err(UpgradeError::StateChangeWithoutPriorLoad {
-                        from: self.prior_versao().to_string(),
-                        script: script.clone(),
-                    });
-                }
-                _ => {}
+            if instr.is_load_module() {
+                loaded = true;
+            } else if !loaded && let Some(script) = instr.declared_path() {
+                return Err(UpgradeError::StateChangeWithoutPriorLoad {
+                    from: self.prior_versao().to_string(),
+                    script: script.clone(),
+                });
             }
         }
         Ok(())
@@ -3972,6 +4007,176 @@ mod tests {
             ],
         );
         e.validate().unwrap();
+    }
+
+    #[test]
+    fn validate_state_change_ordering_projects_scripts_through_is_load_module_and_declared_path_accessors()
+     {
+        // Byte-identity pin on the
+        // [`UpgradeFromEntry::validate_state_change_ordering`] load →
+        // migrate ordering dispatch against the pre-lift
+        // `match instr { UpgradeInstruction::LoadModule { .. } =>
+        // loaded = true, UpgradeInstruction::StateChange { script } if
+        // !loaded => …, _ => {} }` open-coded pattern-match the site
+        // previously carried. Asserts the two projections agree
+        // byte-for-byte on every arm of the enum — the load-family
+        // arm-discriminator via `is_load_module()` and the migration-
+        // family `:script` scalar via `declared_path()` — so a future
+        // derive regression that flipped the predicate's arm-set (a
+        // hole returning `false` for [`UpgradeInstruction::LoadModule`],
+        // a byte-collision flipping a second variant to `true`) or an
+        // accessor extension that promoted an additional variant onto
+        // the `PathBuf`-carrying axis would trip here at caixa-core
+        // test time rather than laundering the arm at the gate's
+        // per-entry ordering scan far from the derive site.
+        //
+        // Peer of the sibling
+        // [`validate_load_singularity_projects_modules_through_is_load_module_and_declared_module_accessors`]
+        // (c9ce91d) pin on the peer within-entry per-instruction-class
+        // singularity gate's load-family + `String`-carrying dispatch,
+        // the [`validate_purge_ordering_routes_through_is_load_module_predicate`]
+        // (580d0f1) pin on the paired load → cleanup ordering gate's
+        // load-family sticky-latch dispatch, and the
+        // [`validate_state_change_singularity_projects_scripts_through_declared_path_accessor`]
+        // pin on the peer within-entry per-instruction-class singularity
+        // gate's migration-family script-projection dispatch — closes
+        // the last unlifted `match`-shaped per-arm-hand-rolled load-
+        // family arm-discriminator + migration-family script-projection
+        // pair inside `impl UpgradeFromEntry`. The four within-entry
+        // ordering / singularity gates now share one byte-identity pin
+        // apiece against their respective substrate-primitive typed
+        // dispatches on the OTP-appup closed-set enum.
+        //
+        // Three-arm projective coverage:
+        //   (a) `LoadModule` satisfies `is_load_module()`, so the
+        //       sticky-latch advances byte-equal to the pre-lift
+        //       `UpgradeInstruction::LoadModule { .. }` arm; every
+        //       other variant leaves the latch untouched;
+        //   (b) a `((:state-change …))`-only entry (no preceding load)
+        //       trips the gate on the first `StateChange` with
+        //       `StateChangeWithoutPriorLoad` carrying the offending
+        //       script verbatim — the migration-family script surfaces
+        //       through `declared_path()` byte-equal to the raw
+        //       `StateChange { script }` pattern-bound field;
+        //   (c) a `((:load-module …) (:state-change …))` entry leaves
+        //       the gate vacuous with `Ok(())` — the `loaded = true`
+        //       latch on the first arm satisfies the `!loaded` guard
+        //       negation on the second, so the `declared_path()`
+        //       `Some(script)` fall-through does not fire — and a
+        //       non-`StateChange`-non-`LoadModule` sequence
+        //       (`SoftPurge` / `Purge` / `Restart` alone) also leaves
+        //       the gate vacuous because `declared_path()` is `None`
+        //       on all three of those arms.
+        //
+        // Fail-before-pass-after verified locally: swapping the
+        // production `if instr.is_load_module() { loaded = true; }
+        // else if !loaded && let Some(script) = instr.declared_path()
+        // { … }` back to `match instr { UpgradeInstruction::LoadModule
+        // { .. } => loaded = true, UpgradeInstruction::StateChange
+        // { script } if !loaded => …, _ => {} }` keeps arms (a)-(c)
+        // passing but silently detaches the gate from the accessor's
+        // typed dispatch — any future `is_load_module` / `declared_path`
+        // extension (a hole in either predicate, a promotion of an
+        // additional variant onto either axis, an operator-side
+        // pre-resolved-path cache the accessor materializes) would
+        // then silently disagree between this gate's raw pattern-match
+        // and the peer per-`UpgradeInstruction` consumers that route
+        // through the accessor pair.
+
+        // (a) is_load_module() partitions the arm-set byte-equal to
+        //     the pre-lift `matches!(_, UpgradeInstruction::LoadModule
+        //     { .. })` and declared_path() surfaces the StateChange
+        //     `:script` byte-equal to the raw field access.
+        let lm = UpgradeInstruction::LoadModule {
+            module: "hello-rio".into(),
+        };
+        assert!(
+            lm.is_load_module(),
+            "LoadModule must satisfy is_load_module() — the gate's \
+             load-family sticky-latch relies on this partition"
+        );
+        assert!(
+            lm.declared_path().is_none(),
+            "LoadModule must not carry a declared_path — the gate's \
+             else-if migration-family arm must not fire on load arms"
+        );
+        let sc = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/m.lisp"),
+        };
+        assert!(
+            !sc.is_load_module(),
+            "StateChange must not satisfy is_load_module() — the gate's \
+             sticky-latch must not advance on migration arms"
+        );
+        assert_eq!(
+            sc.declared_path().map(std::path::PathBuf::as_path),
+            Some(PathBuf::from("lib/m.lisp").as_path()),
+            "declared_path() must project the StateChange :script \
+             byte-equal to the raw field access — accessor divergence \
+             would silently detach the gate from the projection every \
+             peer per-`UpgradeInstruction` consumer routes through"
+        );
+
+        // (b) A `((:state-change …))`-only entry trips
+        //     StateChangeWithoutPriorLoad byte-identical to the
+        //     pre-lift match-pattern shape.
+        let no_prior_load = entry(
+            "0.1.0",
+            vec![UpgradeInstruction::StateChange {
+                script: PathBuf::from("lib/m.lisp"),
+            }],
+        );
+        assert_eq!(
+            no_prior_load.validate_state_change_ordering(),
+            Err(UpgradeError::StateChangeWithoutPriorLoad {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+            }),
+            "a `:state-change` with no preceding `:load-module` must fire \
+             StateChangeWithoutPriorLoad carrying the offending script \
+             verbatim through the declared_path() accessor"
+        );
+
+        // (c) `((:load-module …) (:state-change …))` leaves the gate
+        //     vacuous; so does a non-StateChange-non-LoadModule
+        //     sequence (SoftPurge / Purge / Restart alone).
+        let load_before_migrate = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule {
+                    module: "hello-rio".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        assert_eq!(
+            load_before_migrate.validate_state_change_ordering(),
+            Ok(()),
+            "load-before-migrate entries must leave the ordering gate \
+             vacuous — the `loaded = true` sticky-latch on the first arm \
+             satisfies the `!loaded` guard negation on the else-if arm"
+        );
+        for instr in [
+            UpgradeInstruction::SoftPurge {
+                module: "x-old".into(),
+            },
+            UpgradeInstruction::Purge {
+                module: "x-old".into(),
+            },
+            UpgradeInstruction::Restart,
+        ] {
+            let e = entry("0.1.0", vec![instr.clone()]);
+            assert_eq!(
+                e.validate_state_change_ordering(),
+                Ok(()),
+                "non-StateChange-non-LoadModule sequence ({instr:?}) must \
+                 leave the ordering gate vacuous — declared_path() is None \
+                 on every non-StateChange arm, so the else-if migration-\
+                 family arm never fires"
+            );
+        }
     }
 
     #[test]
