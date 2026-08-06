@@ -29,7 +29,29 @@ use thiserror::Error;
 
 use crate::span::Span;
 
-#[derive(Debug, Clone, PartialEq)]
+/// The typed variant discriminator on the caixa-ast lexer surface — every
+/// [`Token`]'s carrying-shape (delimiter, reader-macro, atom, trivia)
+/// projects through this closed twenty-one-arm partition.
+///
+/// The [`gen_platform::IsVariant`] derive emits per-arm arm-discriminator
+/// predicates — [`Self::is_l_paren`], [`Self::is_r_paren`],
+/// [`Self::is_l_brace`], [`Self::is_r_brace`], [`Self::is_l_bracket`],
+/// [`Self::is_r_bracket`], [`Self::is_quote`], [`Self::is_quasiquote`],
+/// [`Self::is_unquote`], [`Self::is_unquote_splice`], [`Self::is_str`],
+/// [`Self::is_int`], [`Self::is_float`], [`Self::is_bool`], [`Self::is_nil`],
+/// [`Self::is_symbol`], [`Self::is_keyword`], [`Self::is_shebang`],
+/// [`Self::is_line_comment`], [`Self::is_newlines`], [`Self::is_whitespace`]
+/// — so every downstream consumer that only needs the arm-discriminator
+/// projection (not the borrowed field value) reaches for one typed dispatch
+/// on the substrate primitive rather than a hand-rolled `matches!(k,
+/// TokenKind::X | TokenKind::Y(_))` literal. Peer of the sibling
+/// [`crate::NodeKind`] / [`crate::trivia::TriviaKind`] `IsVariant` lifts
+/// already on the caixa-ast surface (7f6aa98 / 44873ae) — extends the same
+/// discipline onto the token-family axis every downstream lexer / parser /
+/// authoring consumer partitions on (the internal `tokenize` test-harness
+/// trivia filter today, a future `caixa-lint` no-tab-indentation or
+/// no-map-in-defcaixa-slot rule that walks tokens before parsing).
+#[derive(Debug, Clone, PartialEq, gen_platform::IsVariant)]
 pub enum TokenKind {
     /// A verbatim `#!…` first line. See [`crate::trivia::TriviaKind::Shebang`].
     Shebang(String),
@@ -359,11 +381,16 @@ mod tests {
     use super::*;
 
     fn kinds(src: &str) -> Vec<TokenKind> {
+        // Route the trivia-filter through the `gen_platform::IsVariant`-
+        // derived per-arm predicates on `TokenKind` — one typed dispatch
+        // on the substrate primitive per axis rather than a hand-rolled
+        // arm-set `matches!` literal. Byte-parity witness lives at
+        // `token_kind_is_whitespace_and_is_newlines_byte_equal_pre_lift_matches_shape`.
         tokenize(src)
             .unwrap()
             .into_iter()
             .map(|t| t.kind)
-            .filter(|k| !matches!(k, TokenKind::Whitespace | TokenKind::Newlines(_)))
+            .filter(|k| !k.is_whitespace() && !k.is_newlines())
             .collect()
     }
 
@@ -470,5 +497,124 @@ mod tests {
             kinds("#t#f"),
             vec![TokenKind::Bool(true), TokenKind::Bool(false)]
         );
+    }
+}
+
+#[cfg(test)]
+mod is_variant_tests {
+    use super::*;
+
+    fn all_variants() -> Vec<(TokenKind, &'static str)> {
+        vec![
+            (TokenKind::Shebang("#!/env t".into()), "Shebang"),
+            (TokenKind::LParen, "LParen"),
+            (TokenKind::RParen, "RParen"),
+            (TokenKind::LBrace, "LBrace"),
+            (TokenKind::RBrace, "RBrace"),
+            (TokenKind::LBracket, "LBracket"),
+            (TokenKind::RBracket, "RBracket"),
+            (TokenKind::Quote, "Quote"),
+            (TokenKind::Quasiquote, "Quasiquote"),
+            (TokenKind::Unquote, "Unquote"),
+            (TokenKind::UnquoteSplice, "UnquoteSplice"),
+            (TokenKind::Str("s".into()), "Str"),
+            (TokenKind::Int(0), "Int"),
+            (TokenKind::Float(0.0), "Float"),
+            (TokenKind::Bool(false), "Bool"),
+            (TokenKind::Nil, "Nil"),
+            (TokenKind::Symbol("x".into()), "Symbol"),
+            (TokenKind::Keyword("k".into()), "Keyword"),
+            (TokenKind::LineComment(" c".into()), "LineComment"),
+            (TokenKind::Newlines(1), "Newlines"),
+            (TokenKind::Whitespace, "Whitespace"),
+        ]
+    }
+
+    fn predicate_row(k: &TokenKind) -> [bool; 21] {
+        [
+            k.is_shebang(),
+            k.is_l_paren(),
+            k.is_r_paren(),
+            k.is_l_brace(),
+            k.is_r_brace(),
+            k.is_l_bracket(),
+            k.is_r_bracket(),
+            k.is_quote(),
+            k.is_quasiquote(),
+            k.is_unquote(),
+            k.is_unquote_splice(),
+            k.is_str(),
+            k.is_int(),
+            k.is_float(),
+            k.is_bool(),
+            k.is_nil(),
+            k.is_symbol(),
+            k.is_keyword(),
+            k.is_line_comment(),
+            k.is_newlines(),
+            k.is_whitespace(),
+        ]
+    }
+
+    // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+    // derive-generated per-arm predicate partition — for every variant
+    // in `all_variants()`, the observed 21-slot predicate row must
+    // equal a one-hot row with the `true` at exactly the same index as
+    // the variant's declaration order. Expected rows are generated
+    // live from the enumeration rather than transcribed by hand, so a
+    // copy-paste flip that reroutes one arm through the wrong
+    // predicate lane trips at the identity-diagonal assertion the way
+    // every peer sibling [`crate::NodeKind`] /
+    // [`crate::trivia::TriviaKind`] / `CaixaKind` / `CaixaDialeto` /
+    // `PathShapeViolation` / `RestartStrategy` / `DepSource`
+    // partition pin already does.
+    #[test]
+    fn token_kind_is_variant_predicates_partition_the_arm_set() {
+        let variants = all_variants();
+        for (idx, (variant, name)) in variants.iter().enumerate() {
+            let observed = predicate_row(variant);
+            let mut expected = [false; 21];
+            expected[idx] = true;
+            assert_eq!(
+                observed, expected,
+                "TokenKind::{name} at declaration-order slot {idx} must \
+                 satisfy exactly one is_* predicate (its own); observed \
+                 row must equal the one-hot expected row"
+            );
+        }
+    }
+
+    // Byte-parity pin on the two field-agnostic `matches!` shapes this
+    // lift replaces at the production trivia-filter call site
+    // (`kinds` test-harness helper, `caixa-ast/src/lexer.rs`
+    // `!matches!(k, TokenKind::Whitespace | TokenKind::Newlines(_))`).
+    // Refuses a future accidental split between the derived predicate
+    // and its pre-lift `matches!` shape (a hand-rolled shadow `impl`
+    // that overrides one path, an accidental rebrand of one converged
+    // call site back to the `matches!` form) on either load-bearing
+    // trivia-arm-discriminator axis every downstream lexer / parser /
+    // authoring consumer of the caixa-ast token surface keys off.
+    #[test]
+    fn token_kind_is_whitespace_and_is_newlines_byte_equal_pre_lift_matches_shape() {
+        for (variant, name) in all_variants() {
+            let via_matches_ws = matches!(variant, TokenKind::Whitespace);
+            let via_predicate_ws = variant.is_whitespace();
+            assert_eq!(
+                via_predicate_ws, via_matches_ws,
+                "TokenKind::{name}.is_whitespace() must byte-equal \
+                 matches!(_, TokenKind::Whitespace) — otherwise the \
+                 converged trivia-filter in `kinds` would silently \
+                 disagree with its pre-lift shape"
+            );
+            let via_matches_nl = matches!(variant, TokenKind::Newlines(_));
+            let via_predicate_nl = variant.is_newlines();
+            assert_eq!(
+                via_predicate_nl, via_matches_nl,
+                "TokenKind::{name}.is_newlines() must byte-equal \
+                 matches!(_, TokenKind::Newlines(_)) — otherwise the \
+                 converged trivia-filter in `kinds` would silently \
+                 disagree with its pre-lift shape"
+            );
+        }
     }
 }
