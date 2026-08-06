@@ -71,8 +71,21 @@ impl LintConfigLisp {
         Self::compile_from_sexp(first)
     }
 
-    pub fn register() {
-        tatara_lisp::domain::register::<Self>();
+    /// Register `LintConfigLisp` with the global tatara-lisp domain
+    /// registry so `deflint-config` is dispatchable from any tatara-lisp
+    /// binary that seeds the registry.
+    ///
+    /// # Errors
+    ///
+    /// [`tatara_lisp::KeywordCollision`] when a peer type has already
+    /// claimed the `deflint-config` keyword in this process. Peer of
+    /// [`caixa_core::Caixa::register`] and the other per-crate entry
+    /// points documented at
+    /// `caixa-core/src/manifest.rs::Caixa::register` — every substrate
+    /// crate that owns a tatara-lisp keyword now propagates the same
+    /// typed error verbatim.
+    pub fn register() -> Result<(), tatara_lisp::KeywordCollision> {
+        tatara_lisp::domain::register::<Self>()
     }
 }
 
@@ -98,7 +111,7 @@ mod tests {
 
     #[test]
     fn register_populates_registry() {
-        LintConfigLisp::register();
+        LintConfigLisp::register().expect("first register call in this test process must succeed");
         assert!(tatara_lisp::domain::registered_keywords().contains(&"deflint-config"));
     }
 }

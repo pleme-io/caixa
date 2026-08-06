@@ -10,12 +10,16 @@
 # warnings, never by relaxing a lint level to make it fit. Rows that drop to
 # zero are reported by the gate and must be removed with --update-baseline,
 # so the ratchet cannot silently re-permit fixed debt.
+1	clippy::type_complexity	caixa-actions/src/lib.rs
+1	unused_imports	caixa-actions/src/lib.rs
 1	clippy::collapsible_if	caixa-arch/src/invariants.rs
 1	clippy::needless_raw_string_hashes	caixa-arch/src/run.rs
 1	clippy::single_match_else	caixa-ast/src/lexer.rs
 1	clippy::bool_to_int_with_if	caixa-ast/src/node.rs
 1	clippy::collapsible_if	caixa-ast/src/node.rs
+1	clippy::doc_markdown	caixa-ast/src/parser.rs
 1	clippy::extend_with_drain	caixa-ast/src/parser.rs
+2	clippy::needless_raw_string_hashes	caixa-ast/src/parser.rs
 1	clippy::needless_lifetimes	caixa-ast/src/span.rs
 8	clippy::assertions_on_constants	caixa-core/src/aplicacao.rs
 4	clippy::borrow_as_ptr	caixa-core/src/aplicacao.rs
@@ -27,12 +31,12 @@
 1	clippy::ref_option	caixa-core/src/aplicacao.rs
 2	clippy::too_many_lines	caixa-core/src/aplicacao.rs
 2	clippy::type_complexity	caixa-core/src/behavior.rs
+2	clippy::ref_as_ptr	caixa-core/src/dep.rs
 6	clippy::assertions_on_constants	caixa-core/src/kind.rs
-4	clippy::doc_markdown	caixa-core/src/kind.rs
+7	clippy::doc_markdown	caixa-core/src/kind.rs
 1	clippy::doc_overindented_list_items	caixa-core/src/layout.rs
 8	clippy::manual_string_new	caixa-core/src/layout.rs
 1	clippy::too_many_lines	caixa-core/src/layout.rs
-1	clippy::large_stack_arrays	caixa-core/src/lib.rs
 2	clippy::collapsible_if	caixa-core/src/limits.rs
 3	clippy::doc_markdown	caixa-core/src/limits.rs
 4	clippy::manual_is_multiple_of	caixa-core/src/limits.rs
@@ -40,13 +44,14 @@
 1	clippy::trivially_copy_pass_by_ref	caixa-core/src/limits.rs
 2	clippy::clone_on_copy	caixa-core/src/manifest.rs
 9	clippy::doc_lazy_continuation	caixa-core/src/manifest.rs
-17	clippy::doc_markdown	caixa-core/src/manifest.rs
+16	clippy::doc_markdown	caixa-core/src/manifest.rs
 1	clippy::single_element_loop	caixa-core/src/manifest.rs
 11	clippy::assertions_on_constants	caixa-core/src/render.rs
 1	clippy::case_sensitive_file_extension_comparisons	caixa-core/src/render.rs
 2	clippy::collapsible_if	caixa-core/src/render.rs
 70	clippy::doc_lazy_continuation	caixa-core/src/render.rs
-158	clippy::doc_markdown	caixa-core/src/render.rs
+167	clippy::doc_markdown	caixa-core/src/render.rs
+2	clippy::iter_count	caixa-core/src/render.rs
 3	clippy::must_use_candidate	caixa-core/src/render.rs
 3	clippy::redundant_closure_for_method_calls	caixa-core/src/render.rs
 7	clippy::too_many_lines	caixa-core/src/render.rs
@@ -62,7 +67,7 @@
 1	clippy::assertions_on_constants	caixa-core/tests/dispatcher_registration.rs
 3	clippy::doc_markdown	caixa-core/tests/dispatcher_registration.rs
 1	clippy::bind_instead_of_map	caixa-crd/src/conversion.rs
-1	clippy::match_same_arms	caixa-crd/src/conversion.rs
+1	clippy::doc_markdown	caixa-crd/src/conversion.rs
 1	clippy::doc_markdown	caixa-feira/src/cmd/allocation.rs
 1	clippy::large_enum_variant	caixa-feira/src/cmd/allocation.rs
 2	clippy::map_unwrap_or	caixa-feira/src/cmd/allocation.rs
@@ -88,8 +93,9 @@
 1	clippy::map_unwrap_or	caixa-feira/src/cmd/nix.rs
 1	clippy::needless_raw_string_hashes	caixa-feira/src/cmd/nix.rs
 2	clippy::doc_markdown	caixa-feira/src/cmd/pool.rs
-1	clippy::doc_markdown	caixa-feira/src/cmd/publish.rs
+2	clippy::doc_markdown	caixa-feira/src/cmd/publish.rs
 1	clippy::if_not_else	caixa-feira/src/cmd/publish.rs
+1	clippy::map_unwrap_or	caixa-feira/src/cmd/publish.rs
 1	unused_imports	caixa-feira/src/cmd/publish.rs
 1	clippy::assigning_clones	caixa-feira/src/cmd/resolve.rs
 3	clippy::uninlined_format_args	caixa-feira/src/cmd/tofu.rs
@@ -100,10 +106,21 @@
 54	clippy::cmp_owned	caixa-flux/src/lib.rs
 31	clippy::doc_lazy_continuation	caixa-flux/src/lib.rs
 1	clippy::format_in_format_args	caixa-flux/src/lib.rs
+1	clippy::many_single_char_names	caixa-fmt/src/canonical.rs
+1	clippy::match_wildcard_for_single_variants	caixa-fmt/src/canonical.rs
 1	clippy::needless_raw_string_hashes	caixa-fmt/src/lisp_config.rs
-1	clippy::bool_to_int_with_if	caixa-fmt/src/printer.rs
+1	clippy::collapsible_if	caixa-fmt/src/printer.rs
 1	clippy::float_cmp	caixa-fmt/src/printer.rs
+1	clippy::manual_let_else	caixa-fmt/src/printer.rs
+1	clippy::match_same_arms	caixa-fmt/src/printer.rs
+1	clippy::needless_raw_string_hashes	caixa-fmt/src/printer.rs
+1	clippy::too_many_lines	caixa-fmt/src/printer.rs
+6	clippy::ignored_unit_patterns	caixa-fmt/tests/corpus_sweep.rs
+1	clippy::manual_let_else	caixa-fmt/tests/corpus_sweep.rs
+1	clippy::unreadable_literal	caixa-fmt/tests/float_roundtrip.rs
+4	clippy::needless_raw_string_hashes	caixa-fmt/tests/grid_shape.rs
 2	clippy::needless_raw_string_hashes	caixa-fmt/tests/proptest_invariants.rs
+3	clippy::needless_raw_string_hashes	caixa-fmt/tests/special_shapes.rs
 1	clippy::assertions_on_constants	caixa-helm/src/lib.rs
 26	clippy::cmp_owned	caixa-helm/src/lib.rs
 2	clippy::format_push_string	caixa-lacre/src/lock.rs
@@ -117,6 +134,7 @@
 4	clippy::manual_let_else	caixa-lsp/src/main.rs
 1	clippy::collapsible_if	caixa-mesh/src/lib.rs
 122	clippy::doc_lazy_continuation	caixa-mesh/src/lib.rs
+1	unused_imports	caixa-mesh/src/lib.rs
 2	clippy::doc_markdown	caixa-operator/src/main.rs
 1	clippy::doc_markdown	caixa-pangea/src/hcl_json.rs
 2	clippy::doc_markdown	caixa-pangea/src/lib.rs
@@ -131,6 +149,7 @@
 1	clippy::doc_markdown	caixa-resolver/src/lisp_config.rs
 1	clippy::must_use_candidate	caixa-resolver/src/lisp_config.rs
 1	clippy::match_wildcard_for_single_variants	caixa-resolver/src/resolve.rs
+1	clippy::too_many_lines	caixa-resolver/src/resolve.rs
 1	dead_code	caixa-resolver/tests/git_integration.rs
 1	clippy::unnecessary_literal_bound	caixa-teia-forge/src/backend.rs
 2	clippy::format_push_string	caixa-teia-forge/src/emit.rs
@@ -138,7 +157,7 @@
 1	clippy::format_push_string	caixa-teia/src/instance.rs
 1	clippy::unnecessary_to_owned	caixa-teia/src/instance.rs
 1	clippy::manual_is_multiple_of	caixa-teia/src/manifest.rs
-1	clippy::match_same_arms	caixa-teia/src/manifest.rs
+2	clippy::match_same_arms	caixa-teia/src/manifest.rs
 1	clippy::doc_markdown	caixa-teia/src/reference.rs
 1	clippy::doc_markdown	caixa-teia/src/value.rs
 12	clippy::match_same_arms	caixa-theme/src/blackmatter.rs

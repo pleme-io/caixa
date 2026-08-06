@@ -337,15 +337,25 @@ impl Caixa {
     /// `defcaixa` is dispatchable from any tatara-lisp binary that seeds
     /// the registry (e.g. `tatara-check`).
     ///
-    /// `pending-fallible-register`: upstream `tatara_lisp::domain::register`
-    /// became `-> Result<(), KeywordCollision>` on 2026-07-31, so a second type
-    /// claiming `defcaixa` in one process is refused and named instead of
-    /// silently displacing this one. This workspace pins
-    /// `tatara-lisp = "0.3.3"`, which predates that, so the result cannot be
-    /// checked here yet. Propagate it — `pub fn register() -> Result<(),
-    /// tatara_lisp::KeywordCollision>` — in the same commit that bumps the pin.
-    pub fn register() {
-        tatara_lisp::domain::register::<Self>();
+    /// Returns the typed [`tatara_lisp::KeywordCollision`] on the second
+    /// (and every subsequent) call in the same process — one keyword,
+    /// one type, per process is a hard invariant of the upstream
+    /// registry, and a caller that hits it must fix its crate graph
+    /// rather than swallowing the error. Peer of the sibling per-crate
+    /// `register()` entry points at `caixa-flake/src/flake.rs`,
+    /// `caixa-fmt/src/lisp_config.rs`, `caixa-lacre/src/lock.rs`,
+    /// `caixa-lint/src/lisp_config.rs`, `caixa-resolver/src/lisp_config.rs`
+    /// — every substrate crate that owns a tatara-lisp keyword now
+    /// propagates the same typed error verbatim, so a downstream binary
+    /// that seeds the registry (`tatara-check`, the future LSP) reaches
+    /// for one shape at every call site.
+    ///
+    /// # Errors
+    ///
+    /// [`tatara_lisp::KeywordCollision`] when a peer type has already
+    /// claimed the `defcaixa` keyword in this process.
+    pub fn register() -> Result<(), tatara_lisp::KeywordCollision> {
+        tatara_lisp::domain::register::<Self>()
     }
 
     /// Substrate-canonical per-`Caixa` `:licenca` SPDX-expression scalar
@@ -5441,7 +5451,7 @@ mod tests {
 
     #[test]
     fn register_populates_registry() {
-        Caixa::register();
+        Caixa::register().expect("first register call in this test process must succeed");
         let kws = tatara_lisp::domain::registered_keywords();
         assert!(kws.contains(&"defcaixa"));
     }
