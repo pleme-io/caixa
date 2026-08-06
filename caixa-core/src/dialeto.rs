@@ -50,7 +50,27 @@
 use tatara_lisp::{Atom, Sexp};
 
 /// Which `(defcaixa …)` declaration a source speaks.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// The [`gen_platform::IsVariant`] derive emits per-arm arm-discriminator
+/// predicates (`is_pacote` / `is_molde` / `is_molde_posicional` /
+/// `is_desconhecido`) as substrate-side typed dispatches on the closed
+/// four-arm dialect-classification discriminator. Peer of the sibling
+/// closed-set fieldless typed enums' [`crate::CaixaKind`] /
+/// [`crate::supervisor::RestartStrategy`] /
+/// [`crate::supervisor::RestartPolicy`] /
+/// [`crate::aplicacao::PlacementStrategy`] /
+/// [`crate::aplicacao::RateLimitUnit`] /
+/// [`crate::dep::DepList`] `IsVariant` derives on the sibling
+/// closed-set typed-enum discriminator axes.
+///
+/// The pre-lift `is_molde_family` predicate hand-rolled its own
+/// `matches!(self, Self::Molde | Self::MoldePosicional)` two-arm literal
+/// with no compile-time link back to the closed set — post-lift it routes
+/// through `self.is_molde() || self.is_molde_posicional()` so a future
+/// arm rename (e.g. `Molde → MoldeKW` under an M4 vocabulary shift) trips
+/// exhaustively at every derive-generated predicate site rather than
+/// leaving the hand-rolled `matches!` silently drifting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant)]
 pub enum CaixaDialeto {
     /// This crate's [`crate::Caixa`] — a tatara-lisp package manifest.
     /// Keyword-argument form headed by `:nome`.
@@ -266,7 +286,19 @@ impl CaixaDialeto {
     /// the `defmolde`-family partition).
     #[must_use]
     pub const fn is_molde_family(self) -> bool {
-        matches!(self, Self::Molde | Self::MoldePosicional)
+        // Routed through the derive-generated per-arm predicates
+        // [`Self::is_molde`] + [`Self::is_molde_posicional`] so the
+        // two-arm collapse links compile-time back to the closed-set
+        // typed dispatch every peer arm-set predicate on the caixa
+        // surface (e.g. [`crate::CaixaKind::requires_lib`] on the
+        // sibling `:kind` axis) now carries. Byte-equivalent to the
+        // pre-lift `matches!(self, Self::Molde | Self::MoldePosicional)`
+        // form (the derived `is_*` predicates each expand to the same
+        // `matches!(self, Self::X)` shape by construction), but a
+        // future arm rename or IsVariant `#[is_variant(name = "…")]`
+        // override lands at exactly one dispatch on the substrate
+        // primitive rather than a hand-rolled two-arm literal.
+        self.is_molde() || self.is_molde_posicional()
     }
 }
 
@@ -883,5 +915,113 @@ mod tests {
         assert_eq!(MOLDE, "Molde");
         assert_eq!(MOLDE_POSICIONAL, "MoldePosicional");
         assert_eq!(DESCONHECIDO, "Desconhecido");
+    }
+
+    #[test]
+    fn caixa_dialeto_is_variant_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+        // derive: for each of the four variants at [`CaixaDialeto::ALL`]`[idx]`
+        // the observed four-slot predicate row must equal a one-hot row
+        // with the `true` at exactly `idx`. Pre-derive the closed four-arm
+        // dialect-classification partition lived only inside the paired
+        // per-arm projections' four-arm match resolvers ([`Self::as_str`] /
+        // [`Self::palavra_canonica`] / [`Self::consumidor`] /
+        // [`Self::descricao`]) plus the two-arm [`Self::is_molde_family`]
+        // hand-rolled `matches!` (now routed through the derived
+        // predicates); a future rebrand (an accidental
+        // `#[is_variant(name = "…")]` drift, a manual hand-rolled `impl`
+        // that shadows the derive-generated method, an arm rename that
+        // reroutes one arm through the wrong predicate lane) trips this
+        // pin at caixa-core build time rather than surfacing far from the
+        // derive declaration as a downstream [`Self::is_molde_family`]
+        // consumer accepting the wrong arm-set. The expected row is
+        // generated live from the [`Self::ALL`] declaration order rather
+        // than transcribed by hand so a copy-paste flip reroutes at the
+        // identity-diagonal assertion.
+        //
+        // Peer of the sibling
+        // [`crate::kind::tests::caixa_kind_is_variant_predicates_partition_the_arm_set`]
+        // / [`crate::supervisor::tests::restart_strategy_is_variant_predicates_partition_the_arm_set`]
+        // / [`crate::aplicacao::tests::placement_strategy_is_variant_predicates_partition_the_arm_set`]
+        // / [`crate::upgrade::tests::upgrade_instruction_is_variant_predicates_partition_the_arm_set`]
+        // pins on the sibling closed-set typed-enum discriminator axes.
+        for (idx, &variant) in CaixaDialeto::ALL.iter().enumerate() {
+            let observed = [
+                variant.is_pacote(),
+                variant.is_molde(),
+                variant.is_molde_posicional(),
+                variant.is_desconhecido(),
+            ];
+            let mut expected = [false; 4];
+            expected[idx] = true;
+            assert_eq!(
+                observed, expected,
+                "CaixaDialeto::{variant:?} at ALL[{idx}] is_* predicates \
+                 must fire only on their own arm lane (identity diagonal); \
+                 got {observed:?}",
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_is_variant_predicates_are_const_fn() {
+        // The [`gen_platform::IsVariant`] derive emits `const fn`
+        // predicates on the peer [`crate::CaixaKind`] +
+        // [`crate::upgrade::UpgradeInstruction`] +
+        // [`crate::supervisor::RestartStrategy`] +
+        // [`crate::supervisor::RestartPolicy`] +
+        // [`crate::aplicacao::PlacementStrategy`] +
+        // [`crate::aplicacao::RateLimitUnit`] +
+        // [`crate::dep::DepList`] closed-set typed enums — pin the same
+        // posture on [`CaixaDialeto`] so a future accidental downgrade
+        // to non-`const` (an added runtime helper reachable only from a
+        // non-`const` context, a manual hand-rolled `impl` that shadows
+        // the derive-generated method) trips at caixa-core build time
+        // rather than surfacing as a downstream `const`-context
+        // regression far from the derive declaration.
+        // Use `const { assert!(…) }` (peer of the sibling
+        // [`crate::render::PathShapeViolation`] +
+        // [`crate::aplicacao::RateLimitUnit`] +
+        // [`caixa_theme::style::Semantic`] const-fn pins) so the
+        // const-context evaluation trips at const-fold time without
+        // opening a per-`const bool` `assertions_on_constants` clippy
+        // debt row this crate does not carry today for `dialeto.rs`.
+        const { assert!(CaixaDialeto::Pacote.is_pacote()) };
+        const { assert!(CaixaDialeto::Molde.is_molde()) };
+        const { assert!(CaixaDialeto::MoldePosicional.is_molde_posicional()) };
+        const { assert!(CaixaDialeto::Desconhecido.is_desconhecido()) };
+    }
+
+    #[test]
+    fn caixa_dialeto_is_molde_family_routes_through_is_variant_derived_predicates() {
+        // Byte-parity pin on the post-lift [`CaixaDialeto::is_molde_family`]
+        // convergence: for every arm in [`CaixaDialeto::ALL`], the typed
+        // predicate must byte-equal the direct
+        // `self.is_molde() || self.is_molde_posicional()` composition of
+        // the two derived per-arm predicates. Pre-lift the predicate
+        // hand-rolled `matches!(self, Self::Molde | Self::MoldePosicional)`
+        // with no compile-time link back to the closed-set typed dispatch;
+        // post-lift it routes through the derived predicates so a future
+        // arm rename or `#[is_variant(name = "…")]` override lands at
+        // exactly one dispatch on the substrate primitive. Pinning the
+        // byte-equality here refuses a future accidental split between
+        // the composed predicate and the paired derived predicates
+        // (a hand-rolled shadow `impl` that overrides one path but not
+        // the other, an accidental rebrand of `is_molde_family`'s body
+        // back to the pre-lift `matches!` form) at caixa-core build time.
+        for &d in CaixaDialeto::ALL {
+            let via_derived = d.is_molde() || d.is_molde_posicional();
+            let via_is_molde_family = d.is_molde_family();
+            assert_eq!(
+                via_is_molde_family, via_derived,
+                "CaixaDialeto::{d:?}.is_molde_family() ({via_is_molde_family}) \
+                 must byte-equal the composed derived predicates \
+                 is_molde() || is_molde_posicional() ({via_derived}) — a \
+                 split between the composed predicate and its derived \
+                 building blocks would let a future arm rename land at one \
+                 path and drift at the other, which is exactly the drift \
+                 the IsVariant lift refuses"
+            );
+        }
     }
 }
