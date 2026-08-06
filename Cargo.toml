@@ -26,7 +26,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.35"
+version = "0.1.36"
 edition = "2024"
 rust-version = "1.89.0"
 license = "MIT"
@@ -39,24 +39,24 @@ keywords = ["caixa", "tatara-lisp", "pleme-io", "helm", "packaging"]
 
 [workspace.dependencies]
 # Workspace-internal crates (path deps).
-caixa-core = { path = "caixa-core", version = "0.1.35" }
-caixa-lacre = { path = "caixa-lacre", version = "0.1.35" }
-caixa-ast = { path = "caixa-ast", version = "0.1.35" }
-caixa-theme = { path = "caixa-theme", version = "0.1.35" }
-caixa-fmt = { path = "caixa-fmt", version = "0.1.35" }
-caixa-lint = { path = "caixa-lint", version = "0.1.35" }
-caixa-resolver = { path = "caixa-resolver", version = "0.1.35" }
-caixa-teia = { path = "caixa-teia", version = "0.1.35" }
-caixa-teia-forge = { path = "caixa-teia-forge", version = "0.1.35" }
-caixa-provedor = { path = "caixa-provedor", version = "0.1.35" }
-caixa-flake = { path = "caixa-flake", version = "0.1.35" }
-caixa-crd = { path = "caixa-crd", version = "0.1.35" }
-caixa-pangea = { path = "caixa-pangea", version = "0.1.35" }
-caixa-arch = { path = "caixa-arch", version = "0.1.35" }
-caixa-helm = { path = "caixa-helm", version = "0.1.35" }
-caixa-flux = { path = "caixa-flux", version = "0.1.35" }
-caixa-mesh = { path = "caixa-mesh", version = "0.1.35" }
-caixa-actions = { path = "caixa-actions", version = "0.1.35" }
+caixa-core = { path = "caixa-core", version = "0.1.36" }
+caixa-lacre = { path = "caixa-lacre", version = "0.1.36" }
+caixa-ast = { path = "caixa-ast", version = "0.1.36" }
+caixa-theme = { path = "caixa-theme", version = "0.1.36" }
+caixa-fmt = { path = "caixa-fmt", version = "0.1.36" }
+caixa-lint = { path = "caixa-lint", version = "0.1.36" }
+caixa-resolver = { path = "caixa-resolver", version = "0.1.36" }
+caixa-teia = { path = "caixa-teia", version = "0.1.36" }
+caixa-teia-forge = { path = "caixa-teia-forge", version = "0.1.36" }
+caixa-provedor = { path = "caixa-provedor", version = "0.1.36" }
+caixa-flake = { path = "caixa-flake", version = "0.1.36" }
+caixa-crd = { path = "caixa-crd", version = "0.1.36" }
+caixa-pangea = { path = "caixa-pangea", version = "0.1.36" }
+caixa-arch = { path = "caixa-arch", version = "0.1.36" }
+caixa-helm = { path = "caixa-helm", version = "0.1.36" }
+caixa-flux = { path = "caixa-flux", version = "0.1.36" }
+caixa-mesh = { path = "caixa-mesh", version = "0.1.36" }
+caixa-actions = { path = "caixa-actions", version = "0.1.36" }
 
 # Third-party.
 serde = { version = "1", features = ["derive"] }
@@ -93,7 +93,7 @@ tatara-lisp = "0.3.26"
 # encoded as a manifest that cannot parse, which is what an earlier attempt at
 # `optional = true` did (cargo rejects `optional` on a workspace dependency).
 tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a", version = "0.2" }
-caixa-tatara = { path = "caixa-tatara", version = "0.1.35" }
+caixa-tatara = { path = "caixa-tatara", version = "0.1.36" }
 # Registry, at last. This was a git dep only because `iac-forge` had never
 # reached crates.io — its release reported SUCCESS while publishing nothing,
 # on the substrate's green `dep-missing` defer (fixed at
