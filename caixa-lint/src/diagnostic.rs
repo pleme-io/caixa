@@ -2,7 +2,35 @@ use caixa_ast::Span;
 use caixa_theme::{Semantic, Theme};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+/// The four-arm diagnostic-severity discriminator every rule attaches
+/// to its emitted [`Diagnostic`] via [`Diagnostic::severity`] — the
+/// closed-set typed enum every consumer of the linter's severity axis
+/// keys off (the render-side per-arm Nord palette dispatch through
+/// [`Self::as_semantic`], the errors-only filter at
+/// `caixa-feira/src/cmd/lint.rs`, the per-rule severity annotation at
+/// `caixa-lint/src/rules.rs`, the LSP-side per-severity
+/// `DiagnosticSeverity` mapping at `caixa-lsp/src/main.rs`).
+///
+/// The [`gen_platform::IsVariant`] derive emits per-arm
+/// [`Severity::is_error`] / [`Severity::is_warning`] / [`Severity::is_info`]
+/// / [`Severity::is_hint`] predicates the runner-side error-count gate
+/// (`caixa-feira lint`'s `--errors-only` retain, the same verb's
+/// per-diagnostic `error_count` bump) and every peer downstream
+/// severity-family gate route through — the same closed-set
+/// arm-discriminator discipline the sibling `caixa_core::CaixaKind` /
+/// `caixa_core::CaixaDialeto` / `caixa_core::PlacementStrategy` /
+/// `caixa_core::RestartStrategy` / `caixa_core::RestartPolicy` /
+/// `caixa_core::DepList` / `caixa_core::RateLimitUnit` /
+/// `caixa_core::render::PathShapeViolation` /
+/// `caixa_arch::InvariantKind` / `caixa_lint::FixSafety` /
+/// `caixa_arch::ArchVerdict` closed-set fieldless typed enums already
+/// carry. `Hash` (already on the derive set) keeps the enum usable in
+/// arm-keyed sets (a future `feira lint --severity-policy=<tier>` verb
+/// keying arm-specific counters, a future admission-webhook rejection
+/// body enumerating the accepted severity tiers).
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, gen_platform::IsVariant,
+)]
 pub enum Severity {
     Error,
     Warning,
@@ -11,6 +39,47 @@ pub enum Severity {
 }
 
 impl Severity {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed four-arm [`Severity`] discriminator set (the byte-parity
+    /// witness against the paired [`gen_platform::IsVariant`]-derived
+    /// [`Self::is_error`] / [`Self::is_warning`] / [`Self::is_info`] /
+    /// [`Self::is_hint`] predicate family, a future
+    /// `feira lint --list-severities` CLI enumeration of the accepted
+    /// severity tags, a future admission-webhook rejection body naming
+    /// the accepted severity set, any future round-trip fuzz harness
+    /// that sweeps every arm).
+    ///
+    /// A future variant addition (a `Debug` tier below [`Self::Hint`]
+    /// once verbose per-node lint traces enter scope, a `Critical` tier
+    /// above [`Self::Error`] the M3-and-later LSP surfaces for
+    /// build-halting failures the rulebook grows) extends this slice as
+    /// a single edit and every consumer picks up the new entry by
+    /// construction; the compiler-checked exhaustiveness on the paired
+    /// [`gen_platform::IsVariant`]-derived per-arm predicates covers
+    /// the projection axis so both halves of the closed-set discipline
+    /// migrate as one edit.
+    ///
+    /// Peer of the sibling closed-set fieldless typed enums'
+    /// [`caixa_core::CaixaKind::ALL`] (6b1f4fb) /
+    /// [`caixa_core::CaixaDialeto::ALL`] (dd4f541) /
+    /// [`caixa_core::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`caixa_core::supervisor::RestartStrategy::ALL`] (4eec29c) /
+    /// [`caixa_core::supervisor::RestartPolicy::ALL`] (dd32ccf) /
+    /// [`caixa_core::dep::DepList::ALL`] (45ee563) /
+    /// [`caixa_core::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`caixa_core::render::PathShapeViolation::ALL`] (efc0326) /
+    /// [`caixa_arch::invariants::InvariantKind::ALL`] (5226ad5) /
+    /// [`crate::FixSafety::ALL`] (732a791) /
+    /// [`caixa_arch::report::ArchVerdict::ALL`] (94dafa6)
+    /// exhaustive-iteration surfaces — the twelfth closed-set typed
+    /// enum on the caixa surface (and the second inside `caixa-lint`,
+    /// after [`crate::FixSafety`] at 732a791) to converge onto the
+    /// same one-canonical-arm-list-per-enum discipline. Order matches
+    /// variant declaration order verbatim (`Error` → `Warning` →
+    /// `Info` → `Hint`) so the slice is the canonical severity
+    /// ordering every listing / rendering consumer defers to.
+    pub const ALL: &'static [Self] = &[Self::Error, Self::Warning, Self::Info, Self::Hint];
+
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -291,6 +360,153 @@ mod tests {
                      post-lift={post_lift}, pre-lift={pre_lift}",
                 );
             }
+        }
+    }
+
+    #[test]
+    fn severity_all_enumerates_every_variant_once() {
+        // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+        // derive's per-arm-list-per-enum discipline for [`Severity`]:
+        // any future variant addition (a `Debug` tier below
+        // [`Severity::Hint`] for verbose per-node lint traces, a
+        // `Critical` tier above [`Severity::Error`] for build-halting
+        // failures the rulebook grows) that lands the new variant on
+        // the enum without extending [`Severity::ALL`] trips this test
+        // — the compiler-checked exhaustiveness on the paired
+        // [`gen_platform::IsVariant`]-derived per-arm predicates
+        // ([`Severity::is_error`] / [`Severity::is_warning`] /
+        // [`Severity::is_info`] / [`Severity::is_hint`]) covers the
+        // projection axis; this pin covers the exhaustive-iteration
+        // axis so both halves of the closed-set discipline migrate as
+        // one edit.
+        //
+        // Peer of the sibling
+        // [`fix_safety_all_lists_every_variant_in_declaration_order`]
+        // pin on the peer closed-set-enum `ALL` axis (732a791) and the
+        // workspace `caixa_arch::report::tests::arch_verdict_all_enumerates_every_variant_once`
+        // sibling pin (94dafa6).
+        assert_eq!(
+            Severity::ALL,
+            &[
+                Severity::Error,
+                Severity::Warning,
+                Severity::Info,
+                Severity::Hint,
+            ],
+        );
+        // Every arm satisfies exactly one of the paired per-arm
+        // predicates — the byte-parity pin between the
+        // [`Severity::ALL`] iteration axis and the per-arm
+        // [`gen_platform::IsVariant`]-derived predicate axis: for
+        // every arm, exactly one of `is_error` / `is_warning` /
+        // `is_info` / `is_hint` returns `true`.
+        for arm in Severity::ALL {
+            let (err, warn, info, hint) = (
+                arm.is_error(),
+                arm.is_warning(),
+                arm.is_info(),
+                arm.is_hint(),
+            );
+            assert_eq!(
+                usize::from(err) + usize::from(warn) + usize::from(info) + usize::from(hint),
+                1,
+                "Severity::{arm:?} must satisfy exactly one of \
+                 is_error / is_warning / is_info / is_hint",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_predicates_are_byte_equal_to_matches_family() {
+        // Fail-before-pass-after pin on the two-axis convergence of
+        // the four pre-lift `d.severity == Severity::Error` sites at
+        // `caixa-lint/src/rules.rs` (the `aplicacao-completeness`
+        // rule-firing assertion + the `clean_manifest_only_info_level`
+        // error-filter) and `caixa-feira/src/cmd/lint.rs` (the
+        // `--errors-only` retain + the per-diagnostic `error_count`
+        // bump) onto the [`gen_platform::IsVariant`]-derive-generated
+        // per-arm predicate family: for every arm, each predicate
+        // agrees byte-for-byte with the pre-lift `matches!(_,
+        // Severity::…)` shape.
+        //
+        // A future rebrand touching either endpoint (a
+        // `#[is_variant(name = "…")]` attribute drift on the derive,
+        // an arm rename, an accidental peer predicate that shadows
+        // the derive-generated one) would silently split the two
+        // paths and trip this pin. Peer of the sibling
+        // [`fix_safety_predicates_are_byte_equal_to_matches_family`]
+        // pin on the peer `caixa-lint` closed-set-enum `IsVariant`
+        // convergence axis (732a791) and the workspace
+        // `caixa_arch::report::tests::arch_verdict_predicates_are_byte_equal_to_matches_family`
+        // sibling pin (94dafa6).
+        for arm in Severity::ALL {
+            assert_eq!(
+                arm.is_error(),
+                matches!(arm, Severity::Error),
+                "Severity::{arm:?}.is_error() must agree with \
+                 matches!(_, Severity::Error) byte-for-byte",
+            );
+            assert_eq!(
+                arm.is_warning(),
+                matches!(arm, Severity::Warning),
+                "Severity::{arm:?}.is_warning() must agree with \
+                 matches!(_, Severity::Warning) byte-for-byte",
+            );
+            assert_eq!(
+                arm.is_info(),
+                matches!(arm, Severity::Info),
+                "Severity::{arm:?}.is_info() must agree with \
+                 matches!(_, Severity::Info) byte-for-byte",
+            );
+            assert_eq!(
+                arm.is_hint(),
+                matches!(arm, Severity::Hint),
+                "Severity::{arm:?}.is_hint() must agree with \
+                 matches!(_, Severity::Hint) byte-for-byte",
+            );
+        }
+    }
+
+    #[test]
+    fn severity_error_family_dispatches_through_is_error_across_full_arm_set() {
+        // Byte-parity pin on the four converged `d.severity.is_error()`
+        // sites (`caixa-lint/src/rules.rs` :674 + :738,
+        // `caixa-feira/src/cmd/lint.rs` :108 + :111): for every arm in
+        // [`Severity::ALL`], a [`Diagnostic`] carrying that severity
+        // reports `is_error()` iff the arm is `Error`. Guards against a
+        // future silent split between the four call sites and the
+        // derived predicate (a hand-rolled `== Severity::Error`
+        // reintroduction, an arm rename that touches one site but not
+        // the others, an accidental peer predicate that shadows
+        // `is_error`) by asserting the two paths return the same
+        // `bool` on every arm.
+        //
+        // The paired dummy [`Diagnostic`] materializes the "runner-
+        // facing" projection the four production sites actually
+        // dispatch on (each is `d.severity == Severity::Error` on a
+        // borrowed [`Diagnostic`]), not just the free-standing
+        // arm-discriminator the peer
+        // [`severity_predicates_are_byte_equal_to_matches_family`] pin
+        // covers — so a hypothetical future accessor-shim that widens
+        // the runner-side severity view (a per-cluster override, an
+        // operator-derived severity remap) that failed to route
+        // through [`Severity::is_error`] would surface here rather
+        // than at apply time far from the shim commit.
+        for &severity in Severity::ALL {
+            let d = Diagnostic {
+                rule_id: "test-rule",
+                severity,
+                message: String::new(),
+                span: Span::default(),
+                hint: None,
+                fix: None,
+            };
+            assert_eq!(
+                d.severity.is_error(),
+                matches!(severity, Severity::Error),
+                "Diagnostic::severity.is_error() must dispatch through \
+                 Severity::is_error() byte-for-byte on {severity:?}",
+            );
         }
     }
 }
