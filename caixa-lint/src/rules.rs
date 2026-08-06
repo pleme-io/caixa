@@ -234,12 +234,17 @@ fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
         // `(make-thing :red value)` only when the second post-head
         // is also a keyword (kwargs cluster). Otherwise it's a
         // positional call with a keyword literal.
-        let first_is_kw = items
-            .get(start)
-            .is_some_and(|n| matches!(n.kind, NodeKind::Keyword(_)));
-        let second_is_kw = items
-            .get(start + 2)
-            .is_some_and(|n| matches!(n.kind, NodeKind::Keyword(_)));
+        // Route both slot-checks through the `gen_platform::IsVariant`-
+        // derived [`caixa_ast::NodeKind::is_keyword`] predicate rather
+        // than the hand-rolled `matches!(n.kind, NodeKind::Keyword(_))`
+        // literal. Byte-equivalent to the pre-lift form; the two-site
+        // converge links both halves of the paired-kwargs gate
+        // compile-time back to the closed thirteen-arm partition on the
+        // caixa-ast substrate primitive, so a future arm rename or
+        // `#[is_variant(name = "…")]` override lands at one dispatch
+        // rather than a hand-rolled two-arm literal in this rule.
+        let first_is_kw = items.get(start).is_some_and(|n| n.kind.is_keyword());
+        let second_is_kw = items.get(start + 2).is_some_and(|n| n.kind.is_keyword());
 
         let looks_kwargs = first_is_kw && (rest >= 4) && second_is_kw;
         if looks_kwargs && rest % 2 != 0 {

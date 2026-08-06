@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+gen-platform = { workspace = true }
 logos = "0.14"
 serde = { workspace = true }
 thiserror = { workspace = true }
