@@ -280,6 +280,100 @@ impl TeiaRefRepr {
 }
 
 impl TeiaValue {
+    /// Substrate-canonical projection onto the [`Self::Str`] arm's
+    /// borrowed scalar payload — returns `Some(&str)` byte-borrowed
+    /// from the arm's own [`String`] storage, and [`None`] on every
+    /// other arm of the closed 8-arm [`TeiaValue`] variant set.
+    ///
+    /// One production consumer today across the substrate — the
+    /// `caixa-arch::invariants` `cidr-block-looks-valid` per-
+    /// [`TeiaInstance`]-attribute `:cidr-block` string-arm projection
+    /// at [`caixa_arch::invariants`]::`cidr_block_format_hint`
+    /// (`invariants.rs`:249) — which previously reached the
+    /// underlying scalar through a raw
+    /// `if let Some(TeiaValue::Str(s)) = inst.atributos.get(...)`
+    /// open-coded per-arm pattern-match that expressed no compile-
+    /// time link back to the substrate primitive's typed scalar-arm
+    /// projection. A future `TeiaValue` variant addition (the
+    /// per-provider tagged-scalar shape the substrate's IaC-side
+    /// scalar-projection axis may grow once `iac-forge` lifts a
+    /// per-provider scoped scalar tier, an `Enum(String)` variant
+    /// the per-provider option-list shape converges onto once the
+    /// M4 typed-registry lands) reaches every downstream per-
+    /// [`Self::Str`]-arm consumer through this one dispatch by
+    /// construction — no coordinated N-way rewrite across every
+    /// per-consumer projection site.
+    ///
+    /// Zero-copy — the returned `&str` borrows from the arm's own
+    /// [`String`] storage (pinned by the `as_str_is_by_borrow_pointer_
+    /// identity` test), the same discipline as the sibling
+    /// [`TeiaRefRepr::tipo`] (a856d67) / [`TeiaRefRepr::nome`]
+    /// (15bcdef) / [`TeiaRefRepr::atributo`] outer-carrier scalar
+    /// accessors on the substrate's IaC-side per-`(ref …)` reference
+    /// carrier — one axis level up from those sibling
+    /// outer-`TeiaRefRepr` scalar accessors, extended onto the
+    /// outer-`TeiaValue` sum-type projection surface.
+    ///
+    /// First `Option<&<payload>>` projection accessor on the outer
+    /// [`TeiaValue`] sum-type — opens the `as_<variant>` typed
+    /// projection family the sibling [`Self::as_object`] paired lift
+    /// closes on the two `caixa-arch::invariants` consumer sites, and
+    /// the future per-arm [`Self::as_list`] / [`Self::as_int`] /
+    /// [`Self::as_float`] / [`Self::as_bool`] / [`Self::as_ref`]
+    /// projections fold on the same shape at their first cross-crate
+    /// consumer.
+    #[must_use]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Str(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Substrate-canonical projection onto the [`Self::Object`] arm's
+    /// borrowed [`BTreeMap`] payload — returns `Some(&BTreeMap<…>)`
+    /// borrowed from the arm's own map storage, and [`None`] on every
+    /// other arm of the closed 8-arm [`TeiaValue`] variant set.
+    ///
+    /// One production consumer today across the substrate — the
+    /// `caixa-arch::invariants` `no-public-ingress-without-tags`
+    /// per-[`TeiaInstance`]-attribute `:tags` object-arm projection at
+    /// [`caixa_arch::invariants`]::`no_public_ingress_without_tags`
+    /// (`invariants.rs`:222–225) — which previously reached the
+    /// underlying map through a raw
+    /// `.and_then(|v| match v { TeiaValue::Object(m) => Some(m),
+    /// _ => None })` inline `.and_then` closure that expressed no
+    /// compile-time link back to the substrate primitive's typed
+    /// object-arm projection. Sibling in shape to [`Self::as_str`]:
+    /// the same "one canonical projection dispatch per typed variant
+    /// arm on the substrate primitive, thin `.and_then(TeiaValue::as_*)`
+    /// per-consumer call" discipline the sibling scalar projection
+    /// [`Self::as_str`] opens.
+    ///
+    /// Zero-copy — the returned reference borrows the arm's own
+    /// [`BTreeMap`] storage (pinned by the
+    /// `as_object_is_by_borrow_pointer_identity` test), no clone.
+    ///
+    /// Paired closer with [`Self::as_str`] on the two `caixa-arch::
+    /// invariants` per-`TeiaValue`-arm consumer projection sites —
+    /// every open-coded outer-`TeiaValue` sum-type per-arm projection
+    /// across the substrate now routes through exactly one
+    /// per-variant `as_*` accessor, so a future arm addition reaches
+    /// every downstream consumer through construction rather than a
+    /// coordinated per-site rewrite. Same discipline extension the
+    /// sibling [`caixa_core::WitTarget::payload`] (5d6dc92) /
+    /// [`caixa_core::WitTarget::http_endpoint`] (dd83cf1) per-arm
+    /// projection accessors carried onto the M3 `:contratos` sum-type
+    /// dispatch surface, extended here onto the substrate's IaC-side
+    /// per-`(defteia …)` attribute value sum-type.
+    #[must_use]
+    pub fn as_object(&self) -> Option<&BTreeMap<String, TeiaValue>> {
+        match self {
+            Self::Object(map) => Some(map),
+            _ => None,
+        }
+    }
+
     #[must_use]
     pub fn to_hcl_string(&self) -> String {
         match self {
@@ -553,6 +647,137 @@ mod tests {
             "${aws_vpc.main.cidr-block}",
             "to_hcl_string must carry <attr> through the \
              TeiaRefRepr::atributo() accessor verbatim (no sanitizer)",
+        );
+    }
+
+    #[test]
+    fn as_str_projects_only_str_arm() {
+        // Projection contract on the outer-`TeiaValue` sum-type's
+        // `:Str` scalar-arm accessor: exactly the `Str` arm returns
+        // `Some(&str)` byte-borrowed from the arm's own [`String`]
+        // storage; every other arm returns `None`. Pins the "one
+        // canonical projection dispatch per typed arm on the
+        // substrate primitive" discipline the two `caixa-arch::
+        // invariants` per-`TeiaValue`-arm consumer sites route
+        // through via `.and_then(TeiaValue::as_str)`.
+        //
+        // The `caixa-arch::invariants` `cidr-block-looks-valid`
+        // per-`:cidr-block` string-arm projection at
+        // `cidr_block_format_hint` is the sole production consumer
+        // today; a regression that admitted an `Object` / `List` /
+        // `Int` / `Bool` / `Float` / `Null` / `Ref` arm through the
+        // scalar-arm projection would silently classify the non-
+        // string attribute as a string at the invariant gate and
+        // trip a spurious hint. This test guards that surface.
+        assert_eq!(
+            TeiaValue::Str("10.0.0.0/16".into()).as_str(),
+            Some("10.0.0.0/16")
+        );
+        assert_eq!(TeiaValue::Str(String::new()).as_str(), Some(""));
+        assert_eq!(TeiaValue::Int(42).as_str(), None);
+        assert_eq!(TeiaValue::Float(2.5).as_str(), None);
+        assert_eq!(TeiaValue::Bool(true).as_str(), None);
+        assert_eq!(TeiaValue::Null.as_str(), None);
+        assert_eq!(TeiaValue::List(vec![TeiaValue::Int(1)]).as_str(), None);
+        let mut m = BTreeMap::new();
+        m.insert("k".into(), TeiaValue::Str("v".into()));
+        assert_eq!(TeiaValue::Object(m).as_str(), None);
+        assert_eq!(
+            TeiaValue::Ref(TeiaRefRepr {
+                tipo: "aws/vpc".into(),
+                nome: "main".into(),
+                atributo: "id".into(),
+            })
+            .as_str(),
+            None,
+        );
+    }
+
+    #[test]
+    fn as_str_is_by_borrow_pointer_identity() {
+        // Zero-copy pin — `v.as_str()` must borrow from the `Str`
+        // arm's own [`String`] storage, not clone into a fresh
+        // buffer. Fails at build time if a future rewrite regresses
+        // to `Some(s.clone().leak())` or any other detour that
+        // silently allocates on every call (the same shape as the
+        // sibling [`TeiaRefRepr::tipo_is_by_borrow_pointer_identity`]
+        // pin on the outer-`TeiaRefRepr` scalar accessor).
+        let v = TeiaValue::Str("primary-01".into());
+        let via_accessor: &str = v.as_str().unwrap();
+        let TeiaValue::Str(ref inner) = v else {
+            unreachable!("constructed above as TeiaValue::Str");
+        };
+        assert_eq!(
+            via_accessor.as_ptr(),
+            inner.as_ptr(),
+            "TeiaValue::as_str must borrow from the Str arm's String \
+             backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            inner.len(),
+            "TeiaValue::as_str and inner.as_str() must byte-equal in \
+             length (same slice)",
+        );
+    }
+
+    #[test]
+    fn as_object_projects_only_object_arm() {
+        // Sibling projection contract to
+        // `as_str_projects_only_str_arm`: exactly the `Object` arm
+        // returns `Some(&BTreeMap<…>)` borrowed from the arm's own
+        // map storage; every other arm returns `None`. Pins the
+        // per-`Object`-arm projection the `caixa-arch::invariants`
+        // `no-public-ingress-without-tags` per-`:tags` consumer at
+        // `no_public_ingress_without_tags` routes through via
+        // `.and_then(TeiaValue::as_object)`; a regression that
+        // admitted a non-`Object` arm through this projection would
+        // silently treat any per-attribute scalar or list as a tag
+        // map and lose the "public ingress needs :owner/:team"
+        // enforcement.
+        let mut m = BTreeMap::new();
+        m.insert("owner".into(), TeiaValue::Str("team-a".into()));
+        let obj = TeiaValue::Object(m.clone());
+        assert_eq!(obj.as_object(), Some(&m));
+        assert_eq!(
+            TeiaValue::Object(BTreeMap::new()).as_object(),
+            Some(&BTreeMap::new())
+        );
+        assert_eq!(TeiaValue::Str("main".into()).as_object(), None);
+        assert_eq!(TeiaValue::Int(0).as_object(), None);
+        assert_eq!(TeiaValue::Float(0.0).as_object(), None);
+        assert_eq!(TeiaValue::Bool(false).as_object(), None);
+        assert_eq!(TeiaValue::Null.as_object(), None);
+        assert_eq!(TeiaValue::List(Vec::new()).as_object(), None);
+        assert_eq!(
+            TeiaValue::Ref(TeiaRefRepr {
+                tipo: "aws/vpc".into(),
+                nome: "main".into(),
+                atributo: "id".into(),
+            })
+            .as_object(),
+            None,
+        );
+    }
+
+    #[test]
+    fn as_object_is_by_borrow_pointer_identity() {
+        // Zero-copy pin — `v.as_object()` must borrow from the
+        // `Object` arm's own [`BTreeMap`] storage, not clone into a
+        // fresh map. Fails at build time if a future rewrite regresses
+        // to `Some(map.clone())` (which would type-check with an owned
+        // `BTreeMap` return but silently allocate per call).
+        let mut m = BTreeMap::new();
+        m.insert("dono".into(), TeiaValue::Str("infra".into()));
+        let v = TeiaValue::Object(m);
+        let via_accessor = v.as_object().unwrap();
+        let TeiaValue::Object(ref inner) = v else {
+            unreachable!("constructed above as TeiaValue::Object");
+        };
+        assert!(
+            std::ptr::eq(via_accessor, inner),
+            "TeiaValue::as_object must borrow from the Object arm's \
+             BTreeMap backing storage (zero-copy projection)",
         );
     }
 
