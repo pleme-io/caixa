@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "a5772558e07771ae492ea3f50450896fb4e743feca44cb8c2f9823b67746d9da",
+  "cargo_lock_sha256": "de69e11684bb6dfc18d043beeef359501d109ebeb99cf117026627b6588bff59",
   "manifest_sha256": {
     "Cargo.toml": "ffc885a652ce1e4d4e63806300b844757cd2c2ec81f469f04a4b0664ce6539d7",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
@@ -24,7 +24,7 @@
     "caixa-tatara/Cargo.toml": "c5b802cd750a26316761a1c40a33431f073bb48cde71d4958313d48d8780bc9d",
     "caixa-teia-forge/Cargo.toml": "dc34dab5bc0dcd686b439c80e8540a99689eb15ba51ff88def7b348dac1f3e9d",
     "caixa-teia/Cargo.toml": "592a05a04b8f9322d9b83f35878bf396b7cb6c3bbf3035bd2eee564f9bac912a",
-    "caixa-theme/Cargo.toml": "519f7bbaab0a731603a1da956559dd2bd08d89febdba82f75d1ca8aa8063d758"
+    "caixa-theme/Cargo.toml": "2ef762cfdbccb9fcd64f5b6fa4c777a287b74581f1f49683b76ec9f4084d4db4"
   },
   "target_resolves": {
     "base": {
@@ -2825,6 +2825,16 @@
       },
       "caixa-theme-0.1.36": {
         "runtime_dependencies": [
+          {
+            "name": "gen_platform",
+            "package_key": "gen-platform-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
           {
             "name": "serde",
             "package_key": "serde-1.0.228",
