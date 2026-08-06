@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
-use caixa_arch::{ArchVerdict, check_manifest};
+use caixa_arch::check_manifest;
 use caixa_core::LAYOUT_DIR_LIB;
 use caixa_pangea::{ProviderBlock, RequiredProvider, TofuConfig, emit_tf_json};
 use caixa_teia::{TeiaManifest, parse_teia_source};
@@ -131,7 +131,7 @@ fn render(opts: &RenderOpts) -> Result<(PathBuf, TeiaManifest)> {
     );
 
     let strict_blocks = opts.strict && !report.violations.is_empty();
-    if report.verdict == ArchVerdict::Rejected || strict_blocks {
+    if report.verdict.is_rejected() || strict_blocks {
         bail!(
             "arch verdict: Rejected ({} safety violation(s))",
             report.safety_count()
