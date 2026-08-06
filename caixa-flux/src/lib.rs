@@ -1951,7 +1951,7 @@ pub struct ClusterBundleOpts {
     pub git_ref: GitRefSpec,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, gen_platform::IsVariant)]
 #[serde(rename_all = "camelCase")]
 pub enum GitRefSpec {
     Tag(String),
@@ -7241,6 +7241,116 @@ spec:
             GitRefSpec::Commit("deadbeef".into()).ref_value(),
             "deadbeef",
         );
+    }
+
+    #[test]
+    fn gitrefspec_is_variant_predicates_partition_the_arm_set() {
+        // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+        // derive: for each of the three [`GitRefSpec`] arms exactly one
+        // of the generated `is_tag` / `is_branch` / `is_commit`
+        // predicates returns `true` and the other two return `false`.
+        // Prior to this derive there were no per-arm arm-discriminator
+        // predicates on this crate's closed-set FluxCD-source-controller
+        // `spec.ref` discriminated-union — every future consumer that
+        // wanted to test "is this a tag ref (drives the substrate's
+        // canonical publish-tag axis every `feira publish` verb writes)
+        // vs. a branch/commit ref (the two escape hatches for
+        // pre-release / bisect / breakglass reconcile flows)" had to
+        // reach for a hand-rolled `matches!(git_ref, GitRefSpec::Tag(_))`
+        // that expressed no compile-time link back to the sibling
+        // [`Self::ref_field_name`] / [`Self::ref_value`] arm-dispatch
+        // methods on the substrate primitive. A future arm addition
+        // (FluxCD's source-controller `spec.ref` schema exposes further
+        // `semver` / `name` sub-selectors this V0 shape stops short of,
+        // per the sibling [`GitRefSpec::ref_field_name`] docstring's
+        // trajectory bullet) that grew the enum but forgot to grow one
+        // of the paired arm-discriminator sites would silently
+        // desynchronize the peers' arm-set from the enum's true arm-set
+        // — a bug the compile-time-exhaustive `match` arms on the paired
+        // methods catch, but a hand-rolled `matches!` at a downstream
+        // consumer would not.
+        //
+        // Peer of the sibling [`caixa_core::CaixaKind`] (7f6aa98) /
+        // [`caixa_core::CaixaDialeto`] (fc65b96) /
+        // [`caixa_core::supervisor::RestartStrategy`] /
+        // [`caixa_core::supervisor::RestartPolicy`] /
+        // [`caixa_core::upgrade::UpgradeInstruction`] /
+        // [`caixa_core::render::PathShapeViolation`] (efc0326) /
+        // [`caixa_lint::Severity`] (650a1e9) /
+        // [`caixa_arch::report::InvariantKind`] (5226ad5) /
+        // [`caixa_arch::ArchVerdict`] (94dafa6) /
+        // [`caixa_provedor::ferrite::FerriteRuntime`] (e9829fd) /
+        // [`caixa_theme::Semantic`] (b55fa6b) /
+        // [`caixa_ast::NodeKind`] (7f6aa98) /
+        // [`caixa_core::aplicacao::PlacementStrategy`] /
+        // [`caixa_core::aplicacao::RateLimitUnit`] /
+        // [`caixa_core::aplicacao::WitTarget`] /
+        // [`caixa_core::dep::DepList`] /
+        // [`caixa_lint::FixSafety`] (732a791) `IsVariant` derives on the
+        // peer closed-set typed-enum discriminator axes — first
+        // cross-crate closed-set typed-enum outside caixa-core to
+        // converge onto the same one-typed-dispatch-per-variant
+        // discipline, and the first `String`-carrying-variant closed-
+        // set discriminator on the FluxCD source-controller axis to
+        // reach it.
+        let rows: [(GitRefSpec, [bool; 3]); 3] = [
+            (GitRefSpec::Tag("v0.1.0".into()), [true, false, false]),
+            (GitRefSpec::Branch("main".into()), [false, true, false]),
+            (GitRefSpec::Commit("deadbeef".into()), [false, false, true]),
+        ];
+        for (variant, expected) in rows {
+            let observed = [variant.is_tag(), variant.is_branch(), variant.is_commit()];
+            assert_eq!(
+                observed, expected,
+                "GitRefSpec::{variant:?} is_* predicates must partition \
+                 the arm set (tag, branch, commit); got {observed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn gitrefspec_is_variant_predicates_agree_with_matches() {
+        // Byte-equal pin on the [`gen_platform::IsVariant`]-derive-
+        // generated per-arm predicates: for every [`GitRefSpec`] variant
+        // the derived `is_tag()` / `is_branch()` / `is_commit()` method
+        // returns exactly what a hand-rolled
+        // `matches!(git_ref, GitRefSpec::Tag(_) | Branch(_) | Commit(_))`
+        // returns. Pins the derive-emitted method-body shape against
+        // the `matches!` macro shape so a future accidental derive-macro
+        // update (or a hand-rolled `impl` that shadows one of the
+        // derive-generated methods) that silently inverted the predicate
+        // (`self.is_tag()` returning `true` on `GitRefSpec::Branch(_)`
+        // and vice versa) surfaces at caixa-flux build time rather than
+        // as a downstream consumer's silent misclassification of the
+        // per-CR git-source shape at reconcile time. Peer to the
+        // sibling [`caixa_core::render::path_shape_violation_is_variant_predicates_agree_with_matches`]
+        // (efc0326) predicate-vs-matches byte-parity pin on the closed-
+        // set typed-enum discriminator axis.
+        let variants = [
+            GitRefSpec::Tag("v0.1.0".into()),
+            GitRefSpec::Branch("main".into()),
+            GitRefSpec::Commit("deadbeef".into()),
+        ];
+        for variant in variants {
+            assert_eq!(
+                variant.is_tag(),
+                matches!(variant, GitRefSpec::Tag(_)),
+                "GitRefSpec::{variant:?}.is_tag() must agree with \
+                 matches!(_, GitRefSpec::Tag(_))",
+            );
+            assert_eq!(
+                variant.is_branch(),
+                matches!(variant, GitRefSpec::Branch(_)),
+                "GitRefSpec::{variant:?}.is_branch() must agree with \
+                 matches!(_, GitRefSpec::Branch(_))",
+            );
+            assert_eq!(
+                variant.is_commit(),
+                matches!(variant, GitRefSpec::Commit(_)),
+                "GitRefSpec::{variant:?}.is_commit() must agree with \
+                 matches!(_, GitRefSpec::Commit(_))",
+            );
+        }
     }
 
     #[test]
