@@ -62,10 +62,14 @@ pub fn format_nodes(nodes: &[Node], cfg: &FmtConfig) -> String {
 
 /// Drop any prefix of [`TriviaKind::BlankLine`] entries.
 fn trim_leading_blanks(trivia: &[Trivia]) -> &[Trivia] {
-    let drop = trivia
-        .iter()
-        .take_while(|t| matches!(t.kind, TriviaKind::BlankLine))
-        .count();
+    // Route the leading-BlankLine take-while through the
+    // `gen_platform::IsVariant`-derived per-arm predicate on
+    // [`caixa_ast::TriviaKind`]. Byte-equivalent to the pre-lift
+    // `matches!(t.kind, TriviaKind::BlankLine)` shape; the converge
+    // links this site compile-time back to the closed three-arm
+    // partition on the substrate primitive (paired byte-parity pin
+    // at caixa-ast/src/trivia.rs).
+    let drop = trivia.iter().take_while(|t| t.kind.is_blank_line()).count();
     &trivia[drop..]
 }
 
@@ -917,9 +921,13 @@ fn contains_comment(n: &Node) -> bool {
 }
 
 fn contains_comment_trivia(trivia: &[Trivia]) -> bool {
-    trivia
-        .iter()
-        .any(|t| matches!(t.kind, TriviaKind::LineComment(_)))
+    // Route the LineComment any through the `gen_platform::IsVariant`-
+    // derived per-arm predicate on [`caixa_ast::TriviaKind`]. Byte-
+    // equivalent to the pre-lift `matches!(t.kind, TriviaKind::
+    // LineComment(_))` shape; the converge links this site compile-
+    // time back to the closed three-arm partition on the substrate
+    // primitive (paired byte-parity pin at caixa-ast/src/trivia.rs).
+    trivia.iter().any(|t| t.kind.is_line_comment())
 }
 
 /// If this list follows the `(head… :k v :k v …)` convention, how many
