@@ -216,13 +216,24 @@ fn no_public_ingress_without_tags(m: &TeiaManifest) -> Vec<Violation> {
         let has_public_cidr = flatten_strings(&inst.atributos)
             .iter()
             .any(|s| s.contains("0.0.0.0/0"));
+        // Route the per-`:tags` `TeiaValue::Object` arm projection
+        // through the lifted [`caixa_teia::TeiaValue::as_object`]
+        // typed `Option<&BTreeMap<…>>` accessor rather than the raw
+        // `.and_then(|v| match v { TeiaValue::Object(m) => Some(m),
+        //  _ => None })` inline closure — the per-`Object`-arm map
+        // projection now keys off the substrate-canonical sum-type
+        // per-arm accessor every downstream `TeiaValue`-facing
+        // consumer that needs the map payload (without walking the
+        // whole value tree) routes through, sibling to the peer
+        // per-`Str`-arm projection at [`cidr_block_format_hint`]'s
+        // `TeiaValue::as_str` route. Any future arm-set extension
+        // (an `Enum(String)` variant, a per-provider tagged shape)
+        // picks up this dispatch through exactly one edit on the
+        // substrate primitive.
         let has_owner_tag = inst
             .atributos
             .get("tags")
-            .and_then(|v| match v {
-                TeiaValue::Object(m) => Some(m),
-                _ => None,
-            })
+            .and_then(TeiaValue::as_object)
             .is_some_and(|m| {
                 m.keys().any(|k| {
                     k.eq_ignore_ascii_case("owner")
@@ -246,7 +257,18 @@ fn no_public_ingress_without_tags(m: &TeiaManifest) -> Vec<Violation> {
 fn cidr_block_format_hint(m: &TeiaManifest) -> Vec<Violation> {
     let mut out = Vec::new();
     for inst in &m.instances {
-        if let Some(TeiaValue::Str(s)) = inst.atributos.get("cidr-block") {
+        // Route the per-`:cidr-block` `TeiaValue::Str` arm projection
+        // through the lifted [`caixa_teia::TeiaValue::as_str`] typed
+        // `Option<&str>` accessor rather than the raw
+        // `if let Some(TeiaValue::Str(s)) = inst.atributos.get(...)`
+        // open-coded per-arm pattern-match — the per-`Str`-arm scalar
+        // projection now keys off the substrate-canonical sum-type
+        // per-arm accessor every downstream `TeiaValue`-facing consumer
+        // that needs a plain string scalar (without walking the whole
+        // value tree) routes through, sibling to the peer per-`Object`-
+        // arm projection at [`no_public_ingress_without_tags`]'s
+        // `TeiaValue::as_object` route.
+        if let Some(s) = inst.atributos.get("cidr-block").and_then(TeiaValue::as_str) {
             if !looks_like_cidr(s) {
                 out.push(Violation {
                     invariant_id: "cidr-block-looks-valid".into(),
