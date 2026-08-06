@@ -55,7 +55,27 @@ pub struct Dep {
 /// is just a Git repo. Omitting `:fonte` means *"use the default resolver
 /// convention"*, which is `github:<default-org>/<nome>`; the resolver fills
 /// that in when computing the lacre.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+///
+/// The [`gen_platform::IsVariant`] derive emits per-arm arm-discriminator
+/// predicates — [`Self::is_git`], [`Self::is_path`] — so every downstream
+/// consumer that only needs the arm-discriminator projection (not the
+/// borrowed field value) reaches for one typed dispatch on the substrate
+/// primitive rather than a hand-rolled `matches!(s, DepSource::X { .. })`
+/// literal. Extends the closed-set-typed-enum discipline the sibling
+/// caixa-core enums ([`crate::CaixaKind`], [`crate::CaixaDialeto`],
+/// [`crate::supervisor::RestartStrategy`], [`crate::supervisor::RestartPolicy`],
+/// [`crate::upgrade::UpgradeInstruction`], [`crate::aplicacao::PlacementStrategy`],
+/// [`crate::aplicacao::RateLimitUnit`], [`crate::aplicacao::WitTarget`],
+/// [`crate::render::PathShapeViolation`], [`DepList`]) and the sibling
+/// out-of-crate enums (caixa-arch's `InvariantKind` + `ArchVerdict`,
+/// caixa-lint's `Severity` + `FixSafety`, caixa-provedor's
+/// `FerriteRuntime`, caixa-theme's `Semantic`, caixa-flux's `GitRefSpec`,
+/// caixa-ast's `NodeKind` + `TriviaKind`) already carry onto the
+/// two-arm `:fonte` dep-source axis — the 17th closed-set typed enum
+/// on the caixa surface, and the first on the outer-`Dep` `:fonte`-slot
+/// axis every git-fetching consumer runs after the outer `:fonte` slot
+/// resolves to a shape.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, gen_platform::IsVariant)]
 #[serde(tag = "tipo", rename_all = "lowercase")]
 pub enum DepSource {
     /// Clone from Git. One of `:tag`, `:rev`, or `:branch` may be set.
@@ -15740,5 +15760,155 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod dep_source_is_variant_tests {
+    use super::*;
+
+    fn all_variants() -> Vec<(DepSource, &'static str)> {
+        vec![
+            (
+                DepSource::Git {
+                    repo: "github:pleme-io/caixa-teia".into(),
+                    tag: Some("v0.1.0".into()),
+                    rev: None,
+                    branch: None,
+                },
+                "Git",
+            ),
+            (
+                DepSource::Path {
+                    caminho: "../caixa-teia".into(),
+                },
+                "Path",
+            ),
+        ]
+    }
+
+    fn predicate_row(s: &DepSource) -> [bool; 2] {
+        [s.is_git(), s.is_path()]
+    }
+
+    // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
+    // derive-generated per-arm predicate partition — for every variant
+    // in `all_variants()`, the observed 2-slot predicate row must equal
+    // a one-hot row with the `true` at exactly the same index as the
+    // variant's declaration order. Expected rows are generated live
+    // from the enumeration rather than transcribed by hand, so a
+    // copy-paste flip that reroutes one arm through the wrong predicate
+    // lane trips at the identity-diagonal assertion the way every peer
+    // sibling [`DepList`] / [`crate::CaixaKind`] / [`crate::CaixaDialeto`]
+    // / [`crate::supervisor::RestartStrategy`] / [`crate::supervisor::RestartPolicy`]
+    // / [`crate::upgrade::UpgradeInstruction`] /
+    // [`crate::aplicacao::PlacementStrategy`] /
+    // [`crate::aplicacao::RateLimitUnit`] /
+    // [`crate::aplicacao::WitTarget`] /
+    // [`crate::render::PathShapeViolation`] partition pin already does.
+    #[test]
+    fn dep_source_is_variant_predicates_partition_the_arm_set() {
+        let variants = all_variants();
+        for (idx, (variant, name)) in variants.iter().enumerate() {
+            let observed = predicate_row(variant);
+            let mut expected = [false; 2];
+            expected[idx] = true;
+            assert_eq!(
+                observed, expected,
+                "DepSource::{name} at declaration-order slot {idx} must \
+                 satisfy exactly one is_* predicate (its own); observed \
+                 row must equal the one-hot expected row — a drift \
+                 would silently reroute one `:fonte`-arm consumer \
+                 through the wrong predicate lane"
+            );
+        }
+    }
+
+    // Byte-parity pin on the two field-agnostic `matches!` shapes the
+    // per-arm arm-discriminator predicates replace at any future
+    // consumer site (a `:fonte`-shape-only lint rule that flags path
+    // deps outside dev-caixas via `dep.fonte().is_some_and(DepSource::is_path)`,
+    // a future admission-webhook that rejects `:fonte` shapes outside
+    // the `is_git()` accept-set, a caixa-lacre indexing pass that
+    // dispatches on `s.is_git()` without extracting `repo` / `caminho`).
+    // Refuses a future accidental split between the derived predicate
+    // and its `matches!` shape — a hand-rolled shadow impl that
+    // overrides one path, an accidental rebrand that leaves one
+    // consumer on the raw `matches!` form — on the two load-bearing
+    // `:fonte`-arm-discriminator axes every downstream substrate
+    // consumer of the dep-source axis keys off.
+    #[test]
+    fn dep_source_is_git_and_is_path_byte_equal_matches_shape() {
+        for (variant, name) in all_variants() {
+            let via_matches_git = matches!(variant, DepSource::Git { .. });
+            let via_predicate_git = variant.is_git();
+            assert_eq!(
+                via_predicate_git, via_matches_git,
+                "DepSource::{name}.is_git() must byte-equal \
+                 matches!(_, DepSource::Git {{ .. }}) — otherwise a \
+                 future converged consumer site would silently \
+                 disagree with its pre-lift shape"
+            );
+            let via_matches_path = matches!(variant, DepSource::Path { .. });
+            let via_predicate_path = variant.is_path();
+            assert_eq!(
+                via_predicate_path, via_matches_path,
+                "DepSource::{name}.is_path() must byte-equal \
+                 matches!(_, DepSource::Path {{ .. }}) — otherwise a \
+                 future converged consumer site would silently \
+                 disagree with its pre-lift shape"
+            );
+        }
+    }
+
+    // Cross-pin against every constructor path that materializes a
+    // [`DepSource`] shape today (the [`DepSource::default_github`]
+    // resolver-side fallback that materializes an unpinned
+    // `github:<org>/<nome>` git shorthand, the [`Dep::git`] author-
+    // surface constructor that materializes a pinned `:tag`-carrying
+    // `DepSource::Git`, a hand-rolled `DepSource::Path` the dev-mode
+    // fixture family builds inline). Every constructor's return must
+    // satisfy the arm-discriminator predicate the constructor's
+    // variant name matches — a future constructor addition (an
+    // in-tree registry-fetch pin, a `DepSource::Feira` variant the
+    // enclosing docstring already names as a trajectory item) surfaces
+    // as a build-time failure that names the offending drift when its
+    // return arm doesn't route through the paired predicate.
+    #[test]
+    fn dep_source_constructors_route_through_paired_is_variant_predicate() {
+        let via_default_github = DepSource::default_github("pleme-io", "caixa-teia");
+        assert!(
+            via_default_github.is_git(),
+            "DepSource::default_github must materialize a Git-arm shape — \
+             a future constructor that routed through a non-Git arm \
+             (a registry-fetch pin, a `DepSource::Feira` promotion) \
+             would silently split the resolver's unpinned-shorthand \
+             materializer from the sole_pin() precedence cascade"
+        );
+        assert!(
+            !via_default_github.is_path(),
+            "DepSource::default_github must NOT materialize a Path-arm \
+             shape — the paired negation pin"
+        );
+
+        let via_dep_git = Dep::git("caixa-teia", "^0.1", "github:pleme-io/caixa-teia", "v0.1.0")
+            .fonte
+            .expect("Dep::git materializes a Some(fonte)");
+        assert!(
+            via_dep_git.is_git(),
+            "Dep::git's `:fonte` materialization must land on the Git \
+             arm — the author-surface pinned-git constructor's return \
+             must route through the paired predicate"
+        );
+        assert!(!via_dep_git.is_path(), "paired negation pin");
+
+        let via_path = DepSource::Path {
+            caminho: "../caixa-teia".into(),
+        };
+        assert!(
+            via_path.is_path(),
+            "the dev-mode Path-arm materialization must satisfy is_path()"
+        );
+        assert!(!via_path.is_git(), "paired negation pin");
     }
 }
