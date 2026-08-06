@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+gen-platform = { workspace = true }
 iac-forge = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

@@ -2,7 +2,7 @@ use iac_forge::IacForgeError;
 use iac_forge::backend::{ArtifactKind, Backend, GeneratedArtifact, NamingConvention};
 use iac_forge::ir::{HasAttributes, IacDataSource, IacProvider, IacResource};
 
-use crate::ferrite::{FerriteRuntime, ferrite_rt_import, ferrite_runtime_variant};
+use crate::ferrite::FerriteRuntime;
 use crate::imports::stdlib_block;
 
 /// Canonical `kebab-case` → `snake_case` ident projection.
@@ -146,9 +146,9 @@ fn emit_go_resource(
     // Terraform resource type name (e.g. "aws_vpc") — burned into a header
     // comment so downstream tooling + humans can grep it.
     let _ = &tf_name;
-    let variant = ferrite_runtime_variant(runtime);
+    let variant = runtime.variant_slug();
 
-    let imports = stdlib_block(&[ferrite_rt_import(runtime)]);
+    let imports = stdlib_block(&[runtime.rt_import()]);
 
     let mut attrs_schema = String::new();
     let mut state_fields = String::new();

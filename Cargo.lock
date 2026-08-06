@@ -627,6 +627,7 @@ dependencies = [
 name = "caixa-provedor"
 version = "0.1.35"
 dependencies = [
+ "gen-platform 0.1.26",
  "iac-forge",
  "pretty_assertions",
  "serde",
