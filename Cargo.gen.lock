@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "f8085d2db5a8e9e1d50d84e2630981a3d977550cda4523e52e75b101ae6eda55",
+  "cargo_lock_sha256": "6b7f0e3276092e9a14ca1c85bab87e2129e5a89ce1a43875c1abcdad4ce63409",
   "manifest_sha256": {
     "Cargo.toml": "08c543be83dbd5b67f4174d0d0ce4b23bd5139b951c6c433ff9af0a420523784",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
@@ -10,7 +10,7 @@
     "caixa-crd/Cargo.toml": "1950ca4be895c2bdfb64859f541ea2054b3a0127bc9630db32f8532f3d401777",
     "caixa-feira/Cargo.toml": "64f57adb02337dbda54cda3ae5fc5409a90b25d2eace58b84ae6762249a275f0",
     "caixa-flake/Cargo.toml": "3a71535d8f9de90f4646e0cfdbc13b00171206e0bb350c7e2e338af24b16b2b5",
-    "caixa-flux/Cargo.toml": "862b84114ec99d7ea920f08e5c037df0dff087edadfe4047d51aa6622628c10b",
+    "caixa-flux/Cargo.toml": "1b0dc71e6e86a85e42830f86096dc16c159cca78120ea241e7de027b70c0f43e",
     "caixa-fmt/Cargo.toml": "d00d14fd33c073624bb03fab7fe7dec912021194c46c5645ff3917433e0ae100",
     "caixa-helm/Cargo.toml": "1fa38a3db427192edf0df37dd7af3f396143e57a14977d7848c40132d2d85138",
     "caixa-lacre/Cargo.toml": "6e0888a1e12f198925eb80e19a121c0ddb854c39608346104e19a3447dd2916c",
@@ -1654,6 +1654,16 @@
           {
             "name": "caixa_core",
             "package_key": "caixa-core-0.1.39",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
+          {
+            "name": "gen_platform",
+            "package_key": "gen-platform-0.1.26",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
