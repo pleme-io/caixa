@@ -1428,6 +1428,92 @@ impl<'a> WitTarget<'a> {
         }
     }
 
+    /// Substrate-canonical per-arm HTTP-endpoint scalar accessor every
+    /// consumer that fans on the L7-HTTP-shaped payload keys off —
+    /// returns the [`Self::Http`]-arm's author-declared request path
+    /// verbatim as an `Option<&'a str>`, `Some(endpoint)` when the
+    /// projected target is [`Self::Http { endpoint }`], `None` on the
+    /// three sibling arms ([`Self::PubSub`] / [`Self::Store`] /
+    /// [`Self::Capability`], each of which carries no HTTP endpoint by
+    /// definition).
+    ///
+    /// The [`Self::Http`] arm carries the Cilium L7 `HTTPNetworkPolicy`
+    /// `path:` rule payload every substrate-side L7-introspecting
+    /// per-`(:de, :para)` `CiliumNetworkPolicy` emitter reads (today: the
+    /// [`caixa_mesh::cilium_network_policies`] per-edge `toPorts[].rules
+    /// .http[0].path` scalar the HTTP-shape-only L7 rule builder emits
+    /// on the L7 introspection branch; every peer WIT shape stays
+    /// L4-only because Cilium can't introspect NATS / key-value / plain
+    /// capability edges), and every future L7-introspecting consumer
+    /// of the projected target's HTTP endpoint (the future M4
+    /// per-`(:de, :para)` `mesh.pleme.io/v1alpha1/Aplicacao` CR
+    /// materializer's per-edge L7 admission-webhook overlay, the
+    /// future Envoy-side `local_rate_limit.descriptor_entries` per-HTTP-
+    /// path bucket-key resolver, the future per-`:contratos`-edge
+    /// mTLS-required overlay's HTTP-shape scope filter, the future
+    /// `feira app graph --l7` per-Aplicacao HTTP-path column) reaches
+    /// through the same typed dispatch.
+    ///
+    /// Prior to this lift the sole production consumer of the projected-
+    /// target HTTP endpoint — the [`caixa_mesh::cilium_network_policies`]
+    /// per-edge L7 introspection branch at `caixa-mesh/src/lib.rs:2759`
+    /// (`if let WitTarget::Http { endpoint } = c.target().expect(…) {
+    /// http_rule.insert_string(CILIUM_KEY_PATH, endpoint.to_string()); …
+    /// }`) — reached the payload through a raw per-arm `if let` pattern-
+    /// match that expressed no compile-time link back to the substrate
+    /// primitive's typed dispatch, sibling to the [`WitContract`] pre-
+    /// projection [`WitContract::endpoint`] (7020470) `Option<&str>`
+    /// scalar accessor on the peer per-`:contratos` raw-field axis but
+    /// with no post-projection peer on the typed-view surface. A future
+    /// [`WitTarget`] variant addition that splits [`Self::Http`] into
+    /// peers (a `Rest`/`Grpc` split once the WIT registry stabilizes
+    /// gRPC-shaped worlds per this enum's own docstring at
+    /// aplicacao.rs:1341-1343 — with a `Rest`-arm `endpoint: &'a str`
+    /// payload alongside a `Grpc`-arm `service_method: &'a str` payload)
+    /// would have had to be threaded through the caixa-mesh L7 emit
+    /// branch's raw `if let` in lockstep — either coalescing the two
+    /// L7-HTTP-family arms under a shared `path:` emit, or splitting the
+    /// emit path per-arm — with no substrate-primitive dispatch making
+    /// the "which arms count as L7-HTTP-shaped for path-emission
+    /// purposes" question the substrate's answer to give. Lifting the
+    /// resolution to a typed method on the substrate primitive means
+    /// every downstream L7-HTTP-facing consumer of the Aplicacao's
+    /// projected-target HTTP endpoint reaches for exactly one typed
+    /// dispatch — the resolver's accept-set migrates as a unit on any
+    /// future arm-family widening, and the caixa-mesh L7 emit branch
+    /// reads through the same substrate primitive.
+    ///
+    /// Peer of the sibling pre-projection [`WitContract::endpoint`]
+    /// (7020470) `Option<&str>` scalar accessor on the raw
+    /// `:contratos :endpoint` field-access axis — same "one typed
+    /// dispatch on the substrate primitive, thin projections at each
+    /// consumer" discipline extended onto the peer post-projection typed-
+    /// view surface (the [`WitContract::endpoint`] pre-projection
+    /// accessor returns `Some` for any author-declared `:endpoint`
+    /// value regardless of the paired `:wit` world's HTTP-shape
+    /// classification — the raw slot before validation crosses it —
+    /// while this post-projection [`Self::http_endpoint`] accessor
+    /// returns `Some` iff the target has been projected onto the
+    /// [`Self::Http`] arm, i.e. only after the [`WitContract::target`]
+    /// gate has admitted the `(:wit, :endpoint/:subject/:slot)` shape
+    /// coherence; the two accessors close the pre-projection /
+    /// post-projection pair on the HTTP-endpoint axis). Sibling of the
+    /// unified pan-arm [`Self::payload`] (`Option<&'a str>` for any of
+    /// the three payload-carrying arms) — extends the per-arm
+    /// projection family onto the [`Self::Http`] specialization axis
+    /// that the pan-arm accessor's shape blends into a single arm-
+    /// agnostic view; leaves the [`Self::pubsub_subject`] /
+    /// [`Self::store_slot`] peer per-arm projections as the two future
+    /// per-arm axes future compounding runs fold on once a per-arm
+    /// pub-sub / store-shape consumer lands.
+    #[must_use]
+    pub const fn http_endpoint(&self) -> Option<&'a str> {
+        match *self {
+            WitTarget::Http { endpoint } => Some(endpoint),
+            WitTarget::PubSub { .. } | WitTarget::Store { .. } | WitTarget::Capability => None,
+        }
+    }
+
     /// Render this typed target as a stable human-readable label
     /// (`:endpoint "/charge"`, `:subject "events.x"`,
     /// `:slot "checkout/$order"`, or `(capability — no payload)` when
@@ -11652,6 +11738,161 @@ mod tests {
                  their shared match would silently desynchronize the \
                  payload accessor from the paired dispatch every \
                  diagnostic / graph consumer reads through",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_target_http_endpoint_pins_per_variant() {
+        // Pin the per-arm HTTP-endpoint scalar single-sourced onto the
+        // [`WitTarget::http_endpoint`] 2-arm dispatch — the
+        // substrate-primitive per-arm post-projection accessor every
+        // L7-HTTP-facing consumer routes through, sibling to the peer
+        // WitContract pre-projection [`WitContract::endpoint`] (7020470)
+        // scalar accessor on the raw-field axis. The [`WitTarget::Http`]
+        // arm round-trips its author-declared endpoint verbatim as
+        // `Some("/charge")`; the three sibling arms
+        // ([`WitTarget::PubSub`] / [`WitTarget::Store`] /
+        // [`WitTarget::Capability`]) each return `None` because they
+        // carry no HTTP endpoint by definition. Same fail-before-pass-
+        // after per-variant discipline as the sibling
+        // `wit_target_payload_pins_per_variant` (5d6dc92) /
+        // `wit_target_field_name_pins_per_variant` (c6ec2af) /
+        // `wit_target_payload_pair_pins_per_variant` (6788ed6) pins on
+        // the peer pan-arm / per-half projection axes — extended onto
+        // the per-arm HTTP-shape post-projection axis so a future
+        // [`WitTarget`] variant addition (a `Rest`/`Grpc` split of
+        // [`WitTarget::Http`], a `Queue`-shaped peer of
+        // [`WitTarget::Store`]) trips a compile-time exhaustiveness
+        // error on the sibling [`WitTarget::http_endpoint`] match arms
+        // whose payload the L7-HTTP-shape accept-set is meant to bound.
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge",
+            }
+            .http_endpoint(),
+            Some("/charge"),
+        );
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            }
+            .http_endpoint(),
+            None,
+        );
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .http_endpoint(),
+            None,
+        );
+        assert_eq!(WitTarget::Capability.http_endpoint(), None);
+    }
+
+    #[test]
+    fn wit_target_http_endpoint_matches_payload_on_http_arm_and_is_none_elsewhere() {
+        // Per-variant coherence pin: for every arm of [`WitTarget`],
+        // `.http_endpoint()` equals `.payload()` on the [`WitTarget::Http`]
+        // arm (both project the same author-declared request-path
+        // scalar), and returns `None` on every sibling arm regardless of
+        // whether [`WitTarget::payload`] itself returns `Some` (PubSub /
+        // Store carry their own payload the pan-arm accessor surfaces,
+        // but that payload is not an HTTP endpoint — the per-arm
+        // accessor must not leak it through the HTTP-shape channel).
+        // Guards the drift surface where a future refactor that
+        // conflated the per-arm HTTP projection with the pan-arm
+        // [`WitTarget::payload`] projection — a well-meaning "one
+        // accessor for the L7 branch, one for the graph" collapse that
+        // routes both through the same 4-arm dispatch — would silently
+        // widen the L7-HTTP-shape accept-set onto pub-sub / store
+        // payloads at the caixa-mesh L7 emit branch, admitting a
+        // `nats:pub-sub` edge's `:subject` as a Cilium L7 HTTP `path:`
+        // rule with the operator-side apply-time symptom (Cilium's
+        // eBPF data-plane rejects every ingress edge whose L7 filter
+        // doesn't match the wire-format HTTP request line) far from
+        // the source refactor. Sibling to the peer
+        // `wit_target_payload_matches_payload_pair_second_component_
+        // per_variant` (5d6dc92) coherence pin on the pan-arm axis —
+        // extended onto the per-arm HTTP specialization axis so both
+        // the pan-arm and the per-arm projections carry their own
+        // byte-shape coherence witness against the substrate's typed
+        // arm-family accept-set.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            let per_arm = variant.http_endpoint();
+            let pan_arm = variant.payload();
+            if variant.is_http() {
+                assert_eq!(
+                    per_arm, pan_arm,
+                    "WitTarget::{variant:?} http_endpoint() must equal \
+                     payload() on the Http arm — a per-arm-vs-pan-arm \
+                     split would silently drift the L7 emit branch's \
+                     path-scalar source from the graph verb's payload \
+                     scalar source",
+                );
+            } else {
+                assert_eq!(
+                    per_arm, None,
+                    "WitTarget::{variant:?} http_endpoint() must return \
+                     None on non-Http arms — a leak that surfaced a \
+                     pub-sub :subject or a key/value :slot through the \
+                     HTTP-endpoint accessor would silently widen the \
+                     Cilium L7 HTTP `path:` rule accept-set onto \
+                     protocol shapes Cilium's eBPF data-plane can't \
+                     introspect",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wit_target_http_endpoint_agrees_with_is_http_predicate_per_variant() {
+        // Per-variant coherence pin: for every arm of [`WitTarget`],
+        // `.http_endpoint().is_some()` iff `.is_http()`. Guards the
+        // drift surface where a future extension of the
+        // [`WitTarget::http_endpoint`] accessor's accept-set (e.g. a
+        // `Rest`/`Grpc` split of [`WitTarget::Http`] that widened the
+        // accessor to cover both peers) landed without a paired
+        // extension of the [`gen_platform::IsVariant`]-derived
+        // `is_http()` predicate's accept-set, or vice versa — a
+        // regression that split the "which arms count as HTTP-shaped
+        // for L7-path emission?" answer between two dispatch surfaces
+        // the substrate ships. Sibling to the peer
+        // `wit_target_field_name_pins_per_variant` (c6ec2af) discipline
+        // on the paired dispatch axis — extended onto the per-arm
+        // predicate-vs-accessor coherence axis so the gen-platform
+        // IsVariant predicate and the substrate-lifted per-arm
+        // accessor carry one shared answer to "is this the HTTP arm?".
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            assert_eq!(
+                variant.http_endpoint().is_some(),
+                variant.is_http(),
+                "WitTarget::{variant:?} http_endpoint().is_some() must \
+                 equal is_http() — a drift would split the L7 emit \
+                 branch's arm-set gate from the substrate-derived \
+                 shape-discrimination predicate on the same axis",
             );
         }
     }
