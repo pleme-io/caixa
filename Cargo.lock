@@ -698,6 +698,7 @@ dependencies = [
 name = "caixa-theme"
 version = "0.1.36"
 dependencies = [
+ "gen-platform 0.1.26",
  "serde",
 ]
 
