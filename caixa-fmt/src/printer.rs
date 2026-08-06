@@ -837,7 +837,18 @@ fn is_atom(n: &Node) -> bool {
 /// line up and an outlier is visible at a glance; everything else
 /// left-aligns, which is how the eye reads text.
 fn is_numeric(n: &Node) -> bool {
-    matches!(n.kind, NodeKind::Int(_) | NodeKind::Float(_))
+    // Route through the `gen_platform::IsVariant`-derived per-arm
+    // predicates on [`caixa_ast::NodeKind`] rather than the hand-rolled
+    // two-arm `matches!` literal. Byte-equivalent shape (each derived
+    // predicate expands to the same `matches!(self, Self::X(..))` by
+    // construction); the disjunction now links compile-time back to the
+    // closed thirteen-arm partition, so a future numeric arm addition
+    // (a `NodeKind::Rational` when the reader grows a rational literal)
+    // trips at the byte-parity pin
+    // [`caixa_ast::node::is_variant_tests::node_kind_is_int_or_is_float_byte_equal_pre_lift_numeric_matches_shape`]
+    // rather than being silently miscategorised on the grid-column
+    // right-align axis.
+    n.kind.is_int() || n.kind.is_float()
 }
 
 /// The rows of a grid, if `items` forms one.
@@ -921,17 +932,20 @@ fn contains_comment_trivia(trivia: &[Trivia]) -> bool {
 /// generic branch and got exploded one atom per line, splitting `:kind` from
 /// its value.
 fn kwargs_head_len(items: &[Node]) -> Option<usize> {
-    let head = items
-        .iter()
-        .take_while(|n| matches!(n.kind, NodeKind::Symbol(_)))
-        .count();
+    // Route the head-symbol take-while + per-slot keyword gate through
+    // the `gen_platform::IsVariant`-derived per-arm predicates on
+    // [`caixa_ast::NodeKind`]. Byte-equivalent to the pre-lift form;
+    // the two-site converge now links both halves of the plist-detection
+    // gate compile-time back to the closed thirteen-arm partition on the
+    // substrate primitive.
+    let head = items.iter().take_while(|n| n.kind.is_symbol()).count();
     let rest = items.len().saturating_sub(head);
     if rest == 0 || rest % 2 != 0 {
         return None;
     }
     let mut i = head;
     while i + 1 < items.len() {
-        if !matches!(items[i].kind, NodeKind::Keyword(_)) {
+        if !items[i].kind.is_keyword() {
             return None;
         }
         i += 2;
@@ -1324,7 +1338,7 @@ fn inline_slot_count(items: &[Node]) -> usize {
     let mut slots = 0usize;
     let mut i = 0usize;
     while i < items.len() {
-        let is_pair = matches!(items[i].kind, NodeKind::Keyword(_)) && i + 1 < items.len();
+        let is_pair = items[i].kind.is_keyword() && i + 1 < items.len();
         i += if is_pair { 2 } else { 1 };
         slots += 1;
     }

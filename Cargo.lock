@@ -404,6 +404,7 @@ dependencies = [
 name = "caixa-ast"
 version = "0.1.38"
 dependencies = [
+ "gen-platform 0.1.26",
  "logos",
  "pretty_assertions",
  "serde",
