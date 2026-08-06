@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "981e0a8adb390fbaee94f87737562f577c35786ab92cfef8b02c39a960e1e34e",
+  "cargo_lock_sha256": "69dc4d8f58ec4a741e7ef6905b119c8bc086ab7e51942cad2ca3dadf8c4be6a8",
   "manifest_sha256": {
     "Cargo.toml": "f4d747315e51d85166c82ded6cfe575f7fb6f279e4602f53b3fceff0a8bee509",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
     "caixa-arch/Cargo.toml": "9f1136e23aa778f0af4aeb4510887e1a88fa6e2b55999887af963704aa93e936",
-    "caixa-ast/Cargo.toml": "8eb5263eee0a89f3d0211df7f9d70b6277047734bd28eac5bad4aa44a6d3e607",
+    "caixa-ast/Cargo.toml": "7a5bd0d7559e3a11b034af3d9c2d137014691aee9ebe590cf8406e6ca1858bd4",
     "caixa-core/Cargo.toml": "bda1e69f1e6fa0c6147c5d5b64bac7c35ffd85288f05fcf5ac41409a4894f86d",
     "caixa-crd/Cargo.toml": "1950ca4be895c2bdfb64859f541ea2054b3a0127bc9630db32f8532f3d401777",
     "caixa-feira/Cargo.toml": "64f57adb02337dbda54cda3ae5fc5409a90b25d2eace58b84ae6762249a275f0",
@@ -1034,6 +1034,16 @@
       },
       "caixa-ast-0.1.38": {
         "runtime_dependencies": [
+          {
+            "name": "gen_platform",
+            "package_key": "gen-platform-0.1.26",
+            "kind": "normal",
+            "features": [],
+            "uses_default_features": true,
+            "optional": false,
+            "target": null,
+            "tree": "target"
+          },
           {
             "name": "logos",
             "package_key": "logos-0.14.4",
