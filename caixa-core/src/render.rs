@@ -6474,7 +6474,7 @@ pub fn is_chart_keyword_shape(s: &str) -> Result<(), String> {
 /// / `ParentEscapeScript` in `UpgradeError`), so collapsing them to a
 /// single `*PathInvalid { reason }` variant would *regress* the
 /// diagnostic shape rather than preserve it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, gen_platform::IsVariant)]
 pub enum PathShapeViolation {
     /// The path string is empty — `PathBuf::new()` or the
     /// canonical "I declared the slot but left the value blank"
@@ -6498,6 +6498,48 @@ pub enum PathShapeViolation {
     /// mid-path, trailing) so a future relaxation that only checks
     /// one position surfaces at this one predicate.
     ParentEscape,
+}
+
+impl PathShapeViolation {
+    /// Exhaustive iteration surface for every consumer that walks the
+    /// closed three-arm [`PathShapeViolation`] discriminator set — the
+    /// paired byte-parity pin on the [`gen_platform::IsVariant`]-derived
+    /// per-arm `is_*` predicate family, a future `feira lint
+    /// --explain-path-shape=<axis>` per-arm listing of the accepted
+    /// violation kinds, a future `mesh.pleme.io/v1alpha1/Caixa` CR
+    /// materializer's per-path admission-webhook rejection body naming
+    /// the accepted-violation-tag set, any future property-test harness
+    /// that sweeps every arm to compute per-arm diagnostic coverage.
+    /// A future variant addition (a `Symlink` arm the future
+    /// symlink-escape gate would carry once `Path::is_symlink` becomes
+    /// part of the sandbox contract, a `TrailingSpace` arm a future
+    /// authoring-side whitespace-hygiene gate would raise for
+    /// `"lib/init.lisp "` shapes) extends this slice as one edit and
+    /// every consumer picks up the new entry by construction; the
+    /// compiler-checked exhaustiveness on the sibling `match` arms in
+    /// [`is_sandboxed_relative_path`] and [`require_sandboxed_lisp_path`]
+    /// is the build-time guarantee that no arm forgets to grow.
+    ///
+    /// Peer of the sibling closed-set fieldless typed enums'
+    /// [`crate::CaixaKind::ALL`] (6b1f4fb) /
+    /// [`crate::CaixaDialeto::ALL`] (dd4f541) /
+    /// [`crate::aplicacao::PlacementStrategy::ALL`] (18c7342) /
+    /// [`crate::aplicacao::RateLimitUnit::ALL`] (6bce03d) /
+    /// [`crate::dep::DepList::ALL`] (45ee563) /
+    /// [`crate::supervisor::RestartStrategy::ALL`] (4eec29c) /
+    /// [`crate::supervisor::RestartPolicy::ALL`] (dd32ccf)
+    /// exhaustive-iteration surfaces — the tenth closed-set typed
+    /// enum on the caixa surface to converge onto the same
+    /// one-canonical-arm-list-per-enum discipline, and the first
+    /// render-side path-shape-diagnostic axis (as distinct from an
+    /// OTP-shape M2 slot or an M3 mesh slot) to reach it. Order matches
+    /// variant declaration order verbatim (`Empty` → `Absolute` →
+    /// `ParentEscape`) so the slice is the canonical ordering every
+    /// exhaustive dispatch site (the `Empty → Absolute → ParentEscape`
+    /// arm-ordering [`is_sandboxed_relative_path`] and every per-axis
+    /// caller in [`crate::manifest::ManifestError`] preserve for
+    /// diagnostic-precedence continuity) defers to.
+    pub const ALL: &'static [Self] = &[Self::Empty, Self::Absolute, Self::ParentEscape];
 }
 
 /// Predicate: assert that `path` is a *sandboxed-relative* path —
@@ -31588,6 +31630,116 @@ mod tests {
                 is_sandboxed_relative_path(Path::new(reject)).unwrap_err(),
                 *expected,
                 "pre-lift reject {reject:?} must classify as {expected:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_all_lists_every_variant_in_declaration_order() {
+        // Fail-before-pass-after pin on the paired
+        // [`PathShapeViolation::ALL`] exhaustive-iteration surface.
+        // Two axes in one assertion, both must hold:
+        //
+        //   (1) The slice enumerates every arm in the closed
+        //       three-arm discriminator set exactly once, in
+        //       declaration order (`Empty` → `Absolute` →
+        //       `ParentEscape`) — the arm-ordering the
+        //       [`is_sandboxed_relative_path`] gate + every per-axis
+        //       caller in [`crate::manifest::ManifestError`] preserve
+        //       for diagnostic-precedence continuity. A future variant
+        //       addition (a `Symlink` arm the future symlink-escape
+        //       gate would raise, a `TrailingSpace` arm a future
+        //       whitespace-hygiene gate would surface) that lands on
+        //       the enum without extending `ALL` trips this test at
+        //       build time rather than surfacing as a silent
+        //       under-coverage across every downstream sweep.
+        //
+        //   (2) For every arm in the slice, exactly one of the
+        //       [`gen_platform::IsVariant`]-derive-generated `is_*`
+        //       predicates returns `true` and the other two return
+        //       `false` — the partition property every peer closed-set
+        //       enum's `IsVariant` derive carries
+        //       ([`crate::CaixaKind`] at kind.rs,
+        //       [`crate::supervisor::RestartStrategy`] +
+        //       [`crate::supervisor::RestartPolicy`] at supervisor.rs,
+        //       [`crate::upgrade::UpgradeInstruction`] at upgrade.rs,
+        //       [`crate::aplicacao::PlacementStrategy`] +
+        //       [`crate::aplicacao::RateLimitUnit`] at aplicacao.rs,
+        //       [`crate::dep::DepList`] at dep.rs). A future variant
+        //       addition that lands on the enum without threading a
+        //       new column into the per-arm-partition assertion table
+        //       trips here at build time.
+        assert_eq!(
+            PathShapeViolation::ALL,
+            &[
+                PathShapeViolation::Empty,
+                PathShapeViolation::Absolute,
+                PathShapeViolation::ParentEscape,
+            ],
+            "PathShapeViolation::ALL must list every arm in \
+             declaration order (Empty → Absolute → ParentEscape) — \
+             the arm-ordering is_sandboxed_relative_path and every \
+             per-axis ManifestError caller preserve for \
+             diagnostic-precedence continuity"
+        );
+        let rows: [(PathShapeViolation, [bool; 3]); 3] = [
+            (PathShapeViolation::Empty, [true, false, false]),
+            (PathShapeViolation::Absolute, [false, true, false]),
+            (PathShapeViolation::ParentEscape, [false, false, true]),
+        ];
+        for (variant, expected) in rows {
+            let observed = [
+                variant.is_empty(),
+                variant.is_absolute(),
+                variant.is_parent_escape(),
+            ];
+            assert_eq!(
+                observed, expected,
+                "PathShapeViolation::{variant:?} is_* predicates must \
+                 partition the arm set (empty, absolute, parent_escape); \
+                 got {observed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn path_shape_violation_predicates_are_byte_equal_to_matches_family() {
+        // Byte-equal pin on the [`gen_platform::IsVariant`]-derive-
+        // generated per-arm predicate family. For every arm on the
+        // closed three-arm [`PathShapeViolation`] discriminator, each
+        // per-arm `is_*` predicate must agree byte-for-byte with the
+        // hand-rolled `matches!(_, PathShapeViolation::…)` shape a
+        // future consumer (a `feira lint --explain-path-shape=<axis>`
+        // per-arm listing, a future symlink-escape / whitespace-hygiene
+        // gate that keys off "is this a sandbox-escape arm" boolean, a
+        // future single-arm `matches!` in a downstream renderer that
+        // treats `Empty` distinctly from the other two) would
+        // otherwise open-code at each caller. A future rebrand (a
+        // `#[is_variant(name = "…")]` attribute drift on the derive,
+        // an accidental peer predicate that shadows the derive-generated
+        // one, a hand-rolled `impl PathShapeViolation` block that
+        // shadows one of the derive-generated methods) trips this test
+        // the moment the two paths' bytes diverge. Peer of the sibling
+        // `caixa_kind_is_variant_predicates_partition_the_arm_set`
+        // (kind.rs) and every peer closed-set-enum byte-equal pin.
+        for &variant in PathShapeViolation::ALL {
+            assert_eq!(
+                variant.is_empty(),
+                matches!(variant, PathShapeViolation::Empty),
+                "PathShapeViolation::{variant:?}.is_empty() must agree \
+                 with matches!(_, PathShapeViolation::Empty)"
+            );
+            assert_eq!(
+                variant.is_absolute(),
+                matches!(variant, PathShapeViolation::Absolute),
+                "PathShapeViolation::{variant:?}.is_absolute() must agree \
+                 with matches!(_, PathShapeViolation::Absolute)"
+            );
+            assert_eq!(
+                variant.is_parent_escape(),
+                matches!(variant, PathShapeViolation::ParentEscape),
+                "PathShapeViolation::{variant:?}.is_parent_escape() must agree \
+                 with matches!(_, PathShapeViolation::ParentEscape)"
             );
         }
     }
