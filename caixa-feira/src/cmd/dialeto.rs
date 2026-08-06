@@ -127,9 +127,7 @@ impl Dialeto {
             }
 
             if let Ok(d) = &l.verdict {
-                if l.palavra_legada
-                    && matches!(d, CaixaDialeto::Molde | CaixaDialeto::MoldePosicional)
-                {
+                if l.palavra_legada && d.is_molde_family() {
                     legado += 1;
                     if self.strict_palavra {
                         falhas.push(format!(
@@ -142,10 +140,7 @@ impl Dialeto {
                 // The collision actually biting: `feira` loads `caixa.lisp` by
                 // that exact name, so a plain `caixa.lisp` holding the other
                 // declaration is a file `feira` will try to read and cannot.
-                if l.manifesto_de_pacote
-                    && matches!(d, CaixaDialeto::Molde | CaixaDialeto::MoldePosicional)
-                    && !l.palavra_legada
-                {
+                if l.manifesto_de_pacote && d.is_molde_family() && !l.palavra_legada {
                     falhas.push(format!(
                         "{shown}: a `defmolde` declaration under the filename \
                          `{NOME_SIMPLES}`, which `feira` loads as a package \

@@ -185,6 +185,74 @@ impl CaixaDialeto {
             Self::Desconhecido => "unrecognised — matches no known defcaixa schema",
         }
     }
+
+    /// True when this arm belongs to the `defmolde` declaration family —
+    /// the two-arity closure of [`Self::Molde`] and [`Self::MoldePosicional`]
+    /// under the shared `defmolde` head keyword the sibling
+    /// [`Self::palavra_canonica`] projection already collapses onto
+    /// `"defmolde"` for both arms (and the sibling [`Self::consumidor`]
+    /// projection collapses onto `"pleme-doc-gen"` for the same two arms).
+    /// False on [`Self::Pacote`] (the sibling `defcaixa` tatara-lisp
+    /// package manifest, [`Self::palavra_canonica`] `→ "defcaixa"`) and
+    /// on [`Self::Desconhecido`] (the residue that names no known
+    /// declaration, [`Self::palavra_canonica`] `→ "?"`).
+    ///
+    /// The [`Self::Molde`] / [`Self::MoldePosicional`] split is one
+    /// declaration written two ways ([`Self::MoldePosicional`]'s
+    /// variant-declaration docstring at [`Self::MoldePosicional`] frames
+    /// it exactly: "the same declaration as [`Self::Molde`], written with
+    /// the package name as a bare positional symbol … this is one arity
+    /// of one declaration, not a third schema"). Every downstream gate
+    /// that keys off "does this dialect belong to the `defmolde` family"
+    /// (as distinct from the four-arm-per-arm census-counter axis the
+    /// sibling `feira dialeto` verb already fans on separately at
+    /// `caixa-feira/src/cmd/dialeto.rs:110-127`) previously hand-rolled
+    /// the two-arm collapse inline as `matches!(d, CaixaDialeto::Molde |
+    /// CaixaDialeto::MoldePosicional)` — a compile-time-anonymous
+    /// two-arm literal set with no link back to the [`CaixaDialeto`]
+    /// variant declaration nor to the sibling
+    /// [`Self::palavra_canonica`] / [`Self::consumidor`] projections
+    /// that already carry the same two-arm collapse under the shared
+    /// `defmolde` / `pleme-doc-gen` axis. The `feira dialeto` verb's
+    /// [`caixa-feira/src/cmd/dialeto.rs`] carried the same
+    /// `matches!` twice — once in the `--strict-palavra` gate that
+    /// refuses a repo-surface declaration still written as
+    /// `(defcaixa …)`, once in the wrong-declaration-under-`caixa.lisp`
+    /// gate that refuses a repo-surface declaration under the filename
+    /// `feira` loads as a package manifest — with no compile-time link
+    /// between the two hand-rolled arm sets. A future arm addition (the
+    /// module doc's "third dialect" hazard actualises as a fifth arm
+    /// [`CaixaDialeto`] that belongs to the `defmolde` declaration
+    /// family — a third arity variant, an alias-declaration family
+    /// pleme-doc-gen sharpens as its schema evolves) would silently
+    /// split the two hand-rolled `matches!` arm-sets from each other
+    /// and from the paired [`Self::palavra_canonica`] projection: one
+    /// call site picks up the new arm, one does not, and the disagreement
+    /// surfaces far from the arm-addition commit as a `feira dialeto`
+    /// consumer reporting a repo-surface declaration under one gate but
+    /// not the other. Routing every "belongs to the `defmolde` family"
+    /// predicate through this one substrate primitive closes the axis:
+    /// a future arm addition lands one match arm here (a compile-time
+    /// exhaustiveness error otherwise), not a coordinated per-`matches!`
+    /// rewrite across every caller.
+    ///
+    /// Peer of the sibling [`crate::CaixaKind::requires_lib`] (0421c22)
+    /// per-arm-set predicate on the [`crate::CaixaKind`] closed-set
+    /// discriminator's "kind requires a `lib/` surface" axis — extends
+    /// the same "one canonical typed predicate per per-arm-set gate,
+    /// one dispatch on the substrate primitive" discipline onto the
+    /// [`CaixaDialeto`] closed-set discriminator's "belongs to the
+    /// `defmolde` declaration family" axis. The dialect-classification
+    /// axis's second per-arm-set predicate (first being the implicit
+    /// palavra_canonica-through-consumidor-through-descricao arm-set
+    /// collapse already carried on the sibling projections) — the first
+    /// explicitly-typed per-arm-set predicate on the axis, matching the
+    /// discipline the sibling M2 [`crate::CaixaKind`] closed-set
+    /// discriminator already carries with `requires_lib`.
+    #[must_use]
+    pub const fn is_molde_family(self) -> bool {
+        matches!(self, Self::Molde | Self::MoldePosicional)
+    }
 }
 
 /// [`std::fmt::Display`] routed through [`CaixaDialeto::as_str`], so the
@@ -626,6 +694,153 @@ mod tests {
                  lifted per-arm `PascalCase` variant-name byte-string)"
             );
         }
+    }
+
+    #[test]
+    fn caixa_dialeto_is_molde_family_returns_true_on_molde_and_positional_arms() {
+        // Fail-before-pass-after per-arm shape pin on the two `defmolde`
+        // declaration-family arms: [`CaixaDialeto::is_molde_family`] must
+        // return `true` for [`CaixaDialeto::Molde`] and
+        // [`CaixaDialeto::MoldePosicional`] — the two-arity closure of
+        // one declaration ([`CaixaDialeto::MoldePosicional`]'s docstring:
+        // "same declaration as [`Self::Molde`], written with the package
+        // name as a bare positional symbol … one arity of one
+        // declaration, not a third schema"). A future accidental flip that
+        // reversed a per-arm arm's return without touching the paired
+        // false-arm pin would silently open the substrate primitive to
+        // false-positive on either arm — the `feira dialeto` verb's
+        // `--strict-palavra` gate would then silently accept
+        // repo-surface declarations under `(defcaixa …)` on one arm and
+        // reject them on the other. Pinning the two true arms explicitly
+        // here refuses that split at caixa-core build time.
+        assert!(
+            CaixaDialeto::Molde.is_molde_family(),
+            "CaixaDialeto::Molde.is_molde_family() must return true — \
+             Molde is the primary `defmolde` arm"
+        );
+        assert!(
+            CaixaDialeto::MoldePosicional.is_molde_family(),
+            "CaixaDialeto::MoldePosicional.is_molde_family() must return \
+             true — MoldePosicional is the positional-arity form of the \
+             same `defmolde` declaration Molde carries"
+        );
+    }
+
+    #[test]
+    fn caixa_dialeto_is_molde_family_returns_false_on_pacote_and_desconhecido_arms() {
+        // Fail-before-pass-after per-arm shape pin on the two non-`defmolde`
+        // arms: [`CaixaDialeto::is_molde_family`] must return `false` for
+        // [`CaixaDialeto::Pacote`] (the sibling `defcaixa` tatara-lisp
+        // package manifest, `palavra_canonica → "defcaixa"`) and for
+        // [`CaixaDialeto::Desconhecido`] (the residue that names no
+        // known declaration, `palavra_canonica → "?"`). Pinning the two
+        // false arms explicitly here refuses a future accidental flip
+        // that let the predicate widen to include either arm — the
+        // `feira dialeto` verb's `--strict-palavra` gate would then
+        // spuriously refuse every `(defcaixa …)` package manifest as if
+        // it were a repo-surface declaration.
+        assert!(
+            !CaixaDialeto::Pacote.is_molde_family(),
+            "CaixaDialeto::Pacote.is_molde_family() must return false — \
+             Pacote is the `defcaixa` tatara-lisp package manifest, not \
+             the `defmolde` repo-surface declaration"
+        );
+        assert!(
+            !CaixaDialeto::Desconhecido.is_molde_family(),
+            "CaixaDialeto::Desconhecido.is_molde_family() must return \
+             false — the residue arm names no known declaration; it is \
+             not silently promoted into the `defmolde` family"
+        );
+    }
+
+    #[test]
+    fn caixa_dialeto_is_molde_family_agrees_with_palavra_canonica_defmolde_projection() {
+        // Load-bearing pin: for every arm in [`CaixaDialeto::ALL`], the
+        // typed [`CaixaDialeto::is_molde_family`] predicate must agree
+        // byte-for-byte with the paired [`CaixaDialeto::palavra_canonica`]
+        // projection's `== "defmolde"` classifier — i.e. the two paths
+        // partition the four-arm discriminator set into the same
+        // `{Molde, MoldePosicional}` and `{Pacote, Desconhecido}` halves.
+        // Pre-lift the sibling [`CaixaDialeto::palavra_canonica`] projection
+        // (which returns `"defmolde"` for `Molde | MoldePosicional`,
+        // `"defcaixa"` for `Pacote`, `"?"` for `Desconhecido`) was the
+        // only substrate-side surface carrying the two-arm collapse; the
+        // hand-rolled `matches!(d, CaixaDialeto::Molde |
+        // CaixaDialeto::MoldePosicional)` sites in the `feira dialeto`
+        // verb expressed no compile-time link back to it. A future arm
+        // addition — the module doc's "third dialect" hazard actualises
+        // as a fifth arm belonging to the `defmolde` family — would land
+        // one match arm at [`Self::palavra_canonica`]'s `defmolde` return
+        // (extending the sibling projection) but silently split the
+        // hand-rolled two-arm `matches!` predicate sites if the new arm's
+        // `is_molde_family` return were forgotten. Pinning byte-equality
+        // between the two paths here makes any such split a caixa-core
+        // build-time failure at this test rather than surfacing far from
+        // the arm-addition commit as a downstream `--strict-palavra` /
+        // `caixa.lisp`-holds-wrong-declaration gate silently ignoring the
+        // new arm.
+        for &d in CaixaDialeto::ALL {
+            let via_palavra_canonica = d.palavra_canonica() == "defmolde";
+            let via_is_molde_family = d.is_molde_family();
+            assert_eq!(
+                via_is_molde_family, via_palavra_canonica,
+                "CaixaDialeto::{d:?}.is_molde_family() ({via_is_molde_family}) \
+                 must agree with CaixaDialeto::{d:?}.palavra_canonica() == \
+                 \"defmolde\" ({via_palavra_canonica}) — a split between the \
+                 typed predicate and the sibling keyword projection would let \
+                 a future arm addition land at one path and drift at the other, \
+                 which is exactly the drift this pin refuses"
+            );
+        }
+    }
+
+    #[test]
+    fn caixa_dialeto_is_molde_family_is_const_fn() {
+        // Const-context pin: [`CaixaDialeto::is_molde_family`] must remain
+        // `const fn` (its match is a fieldless-arm literal-pattern
+        // discriminator, so no non-const operation exists on the resolution
+        // path). Downstream consumers reaching for the predicate from a
+        // `const` context (a future substrate-wide const-fold-driven audit
+        // table that materializes per-arm gate-membership at build time,
+        // a per-arm CR-admission-webhook gate registration in a `const`
+        // context) rely on the const-ness. A future accidental downgrade
+        // to non-`const` (an added runtime helper reachable only from a
+        // non-`const` context) trips at caixa-core build time rather than
+        // surfacing as a downstream `const`-context regression far from
+        // the predicate declaration. Peer of the sibling
+        // [`caixa_dialeto_as_str_is_const_fn`] pin on the paired
+        // [`CaixaDialeto::as_str`] byte-string axis.
+        const ARMS: [(CaixaDialeto, bool); 4] = [
+            (CaixaDialeto::Pacote, CaixaDialeto::Pacote.is_molde_family()),
+            (CaixaDialeto::Molde, CaixaDialeto::Molde.is_molde_family()),
+            (
+                CaixaDialeto::MoldePosicional,
+                CaixaDialeto::MoldePosicional.is_molde_family(),
+            ),
+            (
+                CaixaDialeto::Desconhecido,
+                CaixaDialeto::Desconhecido.is_molde_family(),
+            ),
+        ];
+        // Materialize the const-fold-evaluated table into a runtime slice
+        // assertion — carries the same `bool = const fn call` shape a raw
+        // `assert!(const_bool)` would, without tripping the
+        // `assertions_on_constants` clippy lint that a per-arm
+        // `assert!(CONST)` on a `const bool` triggers when the arm-count
+        // is enumerated flat rather than compared as a whole-table shape.
+        assert_eq!(
+            ARMS,
+            [
+                (CaixaDialeto::Pacote, false),
+                (CaixaDialeto::Molde, true),
+                (CaixaDialeto::MoldePosicional, true),
+                (CaixaDialeto::Desconhecido, false),
+            ],
+            "CaixaDialeto::is_molde_family() must evaluate in const context \
+             for every arm and land on the {{false, true, true, false}} \
+             partition — a future accidental downgrade to non-`const` \
+             would trip the const-context array-initializer here"
+        );
     }
 
     #[test]
