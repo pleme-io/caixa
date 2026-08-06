@@ -1387,6 +1387,47 @@ impl<'a> WitTarget<'a> {
         }
     }
 
+    /// The underlying scalar the payload-carrying arm carries — the
+    /// per-arm request path ([`Self::Http`] `:endpoint`), event-stream
+    /// subject ([`Self::PubSub`] `:subject`), or slot template
+    /// ([`Self::Store`] `:slot`), borrowed from the typed slot's own
+    /// `&'a str` storage — or `None` on the payload-less
+    /// [`Self::Capability`] arm.
+    ///
+    /// Thin projection onto the single 4-arm [`Self::payload_pair`]
+    /// dispatch (`self.payload_pair().map(|(_, p)| p)` in `const fn`
+    /// form) — peer of [`Self::field_name`] (`.payload_pair().0`) on
+    /// the paired sub-selector axis. Both per-half accessors read from
+    /// one authoritative match, so a future [`WitTarget`] variant
+    /// addition (`Rest`/`Grpc` split of [`Self::Http`], `Queue`-shaped
+    /// peer of [`Self::Store`]) lands at exactly one caixa-core edit
+    /// on [`Self::payload_pair`] and both per-half projections + every
+    /// downstream consumer picks the new arm up by construction — no
+    /// coordinated N-way rewrite across the paired accessor dispatches,
+    /// the [`Self::label`] / [`Self::graph_label`] format templates,
+    /// and every future WIT-registry-shaped consumer.
+    ///
+    /// Peer of the sibling [`caixa-flux`][caixa-flux-crate]
+    /// `GitRefSpec::ref_value` projection on the `FluxCD` source-
+    /// controller `spec.ref.<field>` axis — same "one paired dispatch,
+    /// both per-half projections as thin readers, every downstream
+    /// consumer through the same match" discipline extended onto the
+    /// M3 `:contratos` payload-arm axis. Closes the discipline-parity
+    /// gap between the two paired-dispatch surfaces: the peer
+    /// [`Self::payload_pair`] + [`Self::field_name`] pair carried only
+    /// the first-component projection until this lift; the second-
+    /// component sibling now sits alongside so both halves reach every
+    /// future consumer through the same substrate-primitive dispatch.
+    ///
+    /// [caixa-flux-crate]: https://docs.rs/caixa-flux/latest/caixa_flux/enum.GitRefSpec.html#method.ref_value
+    #[must_use]
+    pub const fn payload(&self) -> Option<&'a str> {
+        match self.payload_pair() {
+            Some((_, p)) => Some(p),
+            None => None,
+        }
+    }
+
     /// Render this typed target as a stable human-readable label
     /// (`:endpoint "/charge"`, `:subject "events.x"`,
     /// `:slot "checkout/$order"`, or `(capability — no payload)` when
@@ -11528,6 +11569,91 @@ mod tests {
         assert_eq!(WitTarget::HTTP_FIELD_NAME, "endpoint");
         assert_eq!(WitTarget::PUBSUB_FIELD_NAME, "subject");
         assert_eq!(WitTarget::STORE_FIELD_NAME, "slot");
+    }
+
+    #[test]
+    fn wit_target_payload_pins_per_variant() {
+        // Pin the per-arm payload scalar single-sourced onto the
+        // [`WitTarget::payload_pair`] 4-arm dispatch and surfaced through
+        // [`WitTarget::payload`] — the peer per-half projection to
+        // [`WitTarget::field_name`] on the paired sub-selector axis. The
+        // three payload-carrying arms round-trip their author-declared
+        // scalar verbatim (`Http` → `Some("/charge")`, `PubSub` →
+        // `Some("events.x")`, `Store` → `Some("checkout/$order")`) and
+        // the payload-less [`WitTarget::Capability`] arm returns `None`.
+        // Same shape as the sibling `wit_target_field_name_pins_per_variant`
+        // (c6ec2af) pin on the Component-0 projection axis, extended
+        // onto the Component-1 projection axis so both per-half readers
+        // on the paired dispatch carry their own byte-shape pin.
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge",
+            }
+            .payload(),
+            Some("/charge"),
+        );
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.x",
+            }
+            .payload(),
+            Some("events.x"),
+        );
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .payload(),
+            Some("checkout/$order"),
+        );
+        assert_eq!(WitTarget::Capability.payload(), None);
+    }
+
+    #[test]
+    fn wit_target_payload_matches_payload_pair_second_component_per_variant() {
+        // Per-variant equivalence pin: for every arm of [`WitTarget`],
+        // `.payload()` equals `.payload_pair().map(|(_, p)| p)`
+        // byte-for-byte. Guards the drift surface where a future refactor
+        // that split one accessor off the shared match onto its own
+        // dispatch — a well-meaning "inline the pair back into per-half
+        // fields for one crate-internal caller who only wanted one half"
+        // or a scratch `impl` shadowing the derived projection — would
+        // silently desynchronize [`WitTarget::payload`] from the
+        // authoritative [`WitTarget::payload_pair`] dispatch, and every
+        // downstream consumer that thinks "the payload half of the pair"
+        // would drift from the diagnostic / graph consumers reading the
+        // same match through [`WitTarget::label`] / [`WitTarget::graph_label`].
+        // Sibling to the peer [`caixa_flux::GitRefSpec`] `ref_value`
+        // per-half projection pin (`gitrefspec_ref_pair_projects_
+        // ref_field_name_and_ref_value_per_variant`, 655a1c0) on the
+        // FluxCD source-controller `spec.ref.<field>` axis — same "one
+        // paired dispatch, both per-half projections agree byte-for-
+        // byte" discipline extended onto the M3 `:contratos` payload-
+        // arm surface.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            let via_projection = variant.payload();
+            let via_pair = variant.payload_pair().map(|(_, p)| p);
+            assert_eq!(
+                via_projection, via_pair,
+                "WitTarget::{variant:?} payload() must equal \
+                 payload_pair().map(|(_, p)| p) byte-for-byte — a \
+                 regression that splits the two per-half projections off \
+                 their shared match would silently desynchronize the \
+                 payload accessor from the paired dispatch every \
+                 diagnostic / graph consumer reads through",
+            );
+        }
     }
 
     #[test]
