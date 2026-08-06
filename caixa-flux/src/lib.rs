@@ -1960,52 +1960,96 @@ pub enum GitRefSpec {
 }
 
 impl GitRefSpec {
+    /// The `(sub-selector-key, sub-selector-value)` pair this variant
+    /// renders as under `GitRepository.spec.ref.<field>: <value>` — the
+    /// single canonical 3-arm dispatch every consumer that composes both
+    /// halves of the FluxCD source-controller per-CR git-ref sub-block
+    /// routes through, replacing the paired-`ref_field_name()` +
+    /// `ref_value()` two-call shape at every emit site with a single
+    /// tuple-return dispatch.
+    ///
+    /// Both production consumer sites in [`cluster_bundle`] — the
+    /// `gitref_field` YAML emit-side composer (formats
+    /// `"    {field}: {value:?}"` under the `spec.ref` sub-block) and
+    /// the sibling `tag_human` narrator-prose composer (formats
+    /// `"{field} {value}"` for the leading `# Source — pinned to …`
+    /// comment) — previously issued two paired `.ref_field_name()` +
+    /// `.ref_value()` calls to build the same `(&'static str, &str)`
+    /// pair; both now route through this single dispatch, and the
+    /// sibling per-half accessors [`Self::ref_field_name`] /
+    /// [`Self::ref_value`] are themselves thin projections onto this
+    /// pair (`.ref_pair().0` / `.ref_pair().1`). Any future variant
+    /// addition (FluxCD's source-controller `spec.ref` schema exposes
+    /// further `semver` / `name` sub-selectors this V0 shape stops
+    /// short of, per the sibling [`Self::ref_field_name`] docstring's
+    /// trajectory bullet) becomes exactly one new match-arm here (a
+    /// compile-time exhaustiveness error otherwise), and the two
+    /// sibling accessors + every downstream consumer that pairs the
+    /// two halves picks up the new arm by construction — no
+    /// coordinated N-way rewrite across the paired accessor dispatches,
+    /// both format-string templates, and every future per-target
+    /// FluxCD-source-controller-shaped consumer the substrate adds.
+    ///
+    /// Peer of the sibling [`caixa_core::WitTarget::payload_pair`]
+    /// (6788ed6) on the M3 `:contratos` payload-arm dispatch surface
+    /// — same "one canonical `(field, value)` dispatch per typed axis,
+    /// thin projections at each consumer" discipline extended onto
+    /// the FluxCD source-controller `spec.ref.<field>` axis. Same
+    /// convergence trajectory the peer per-variant tuple-return
+    /// dispatches [`caixa_core::WitTarget::payload_pair`] +
+    /// [`caixa_core::WitContract::edge_pair`] +
+    /// [`caixa_core::WitContract::edge_triple`] already carry on the
+    /// sibling M3 mesh-slot surface.
+    #[must_use]
+    pub fn ref_pair(&self) -> (&'static str, &str) {
+        match self {
+            GitRefSpec::Tag(v) => (FLUX_GITREPOSITORY_REF_KEY_TAG, v.as_str()),
+            GitRefSpec::Branch(v) => (FLUX_GITREPOSITORY_REF_KEY_BRANCH, v.as_str()),
+            GitRefSpec::Commit(v) => (FLUX_GITREPOSITORY_REF_KEY_COMMIT, v.as_str()),
+        }
+    }
+
     /// The FluxCD source-controller `GitRepository.spec.ref.<field>`
     /// sub-selector scalar-axis key this variant renders under — the
-    /// per-arm dispatch onto the canonical lifted
+    /// per-arm projection onto the canonical lifted
     /// [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
     /// [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
     /// [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] byte-string trio the
     /// caixa-core substrate owns.
     ///
-    /// Both consumer sites in [`cluster_bundle`] (the `gitref_field`
-    /// YAML emit-side composer and the sibling `tag_human`
-    /// human-readable narrator prose) now route through this dispatch,
-    /// closing the 2-site duplication of the prior inline
-    /// `format!("    {arm}: {v:?}")` + `format!("{arm} {v}")` match
-    /// blocks that each open-coded the three-way arm-shape mapping
-    /// side-by-side. Same "one canonical dispatch per typed axis"
-    /// discipline the peer [`caixa_core::WitTarget::payload_pair`]
-    /// (6788ed6) established on the sibling `:contratos` payload-arm
-    /// dispatch surface — a future `GitRefSpec` variant addition
-    /// (FluxCD's source-controller `spec.ref` schema exposes further
-    /// `semver` / `name` sub-selectors this V0 shape stops short of)
-    /// becomes exactly one new match-arm here (a compile-time
-    /// exhaustiveness error otherwise), not a coordinated three-way
-    /// rewrite of both format-string templates + every downstream
-    /// consumer that reaches for the per-arm sub-selector key.
+    /// Thin projection onto the single 3-arm [`Self::ref_pair`]
+    /// dispatch — `self.ref_pair().0` — so the sub-selector-key axis
+    /// and the paired sub-selector-value axis (via [`Self::ref_value`])
+    /// share one authoritative match and any future variant addition
+    /// or per-arm rebrand lands at exactly one caixa-flux edit rather
+    /// than a coordinated rewrite across three per-accessor dispatches.
+    /// Same "exhaustive-match at one canonical dispatch, thin
+    /// projections at each consumer" discipline the peer
+    /// [`caixa_core::WitTarget::field_name`] routes through
+    /// [`caixa_core::WitTarget::payload_pair`] on the sibling M3
+    /// `:contratos` payload-arm axis.
     #[must_use]
-    pub const fn ref_field_name(&self) -> &'static str {
-        match self {
-            GitRefSpec::Tag(_) => FLUX_GITREPOSITORY_REF_KEY_TAG,
-            GitRefSpec::Branch(_) => FLUX_GITREPOSITORY_REF_KEY_BRANCH,
-            GitRefSpec::Commit(_) => FLUX_GITREPOSITORY_REF_KEY_COMMIT,
-        }
+    pub fn ref_field_name(&self) -> &'static str {
+        self.ref_pair().0
     }
 
     /// The underlying scalar the variant carries — the tag / branch /
     /// commit value the FluxCD source-controller feeds into its
-    /// per-CR git-source clone refspec. Peer of [`Self::ref_field_name`]
-    /// on the same per-variant dispatch: both consumer sites in
-    /// [`cluster_bundle`] pair the sub-selector key with the paired
-    /// scalar to compose the rendered `spec.ref.<field>: <value>`
-    /// YAML sub-block + the sibling `<field> <value>` narrator prose,
-    /// so the pair moves together on any future variant addition.
+    /// per-CR git-source clone refspec.
+    ///
+    /// Thin projection onto the single 3-arm [`Self::ref_pair`]
+    /// dispatch — `self.ref_pair().1` — peer of [`Self::ref_field_name`]
+    /// on the same underlying match, so the sub-selector-value axis
+    /// and the paired sub-selector-key axis share one authoritative
+    /// match and any future variant addition or per-arm scalar-shape
+    /// rebrand lands at exactly one caixa-flux edit. Same "exhaustive-
+    /// match at one canonical dispatch, thin projections at each
+    /// consumer" discipline the peer [`caixa_core::WitTarget::field_name`]
+    /// routes through [`caixa_core::WitTarget::payload_pair`] on the
+    /// sibling M3 `:contratos` payload-arm axis.
     #[must_use]
     pub fn ref_value(&self) -> &str {
-        match self {
-            GitRefSpec::Tag(t) | GitRefSpec::Branch(t) | GitRefSpec::Commit(t) => t.as_str(),
-        }
+        self.ref_pair().1
     }
 }
 
@@ -2137,20 +2181,33 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
 
     // The per-variant sub-selector key (`tag` / `branch` / `commit`)
     // + its paired scalar (the tag / branch / commit value) now route
-    // through the canonical [`GitRefSpec::ref_field_name`] +
-    // [`GitRefSpec::ref_value`] dispatch, closing the 2-site
-    // duplication the prior inline per-variant `format!("    <arm>:
-    // {v:?}")` match block open-coded side-by-side with the sibling
-    // `tag_human` narrator prose block. Byte-identical output to the
-    // prior 3-arm inline `format!`s: `{value:?}` on `&str` renders
-    // the same shape as `{v:?}` on `String` (both call the same
-    // `Debug` impl at the identical stack position).
+    // through the single canonical [`GitRefSpec::ref_pair`] tuple-
+    // return dispatch, closing the paired-`ref_field_name()` +
+    // `ref_value()` two-call shape both this per-CR emit site and its
+    // sibling `tag_human` narrator-prose site previously issued to
+    // build the same `(&'static str, &str)` pair. Same tuple-return
+    // convergence as the peer [`caixa_core::WitTarget::payload_pair`]
+    // (6788ed6) on the M3 `:contratos` payload-arm dispatch surface —
+    // the sibling per-half accessors [`GitRefSpec::ref_field_name`] +
+    // [`GitRefSpec::ref_value`] are now thin projections onto the same
+    // 3-arm match by construction (both return `.ref_pair().0` /
+    // `.ref_pair().1`), so a future variant addition (FluxCD's
+    // source-controller `spec.ref` schema exposes further `semver` /
+    // `name` sub-selectors this V0 shape stops short of) lands at one
+    // [`GitRefSpec::ref_pair`] arm without a coordinated rewrite of
+    // the emit-side + narrator-prose + per-half-accessor sites.
+    // Byte-identical output to the prior 3-arm inline `format!`s:
+    // `{value:?}` on `&str` renders the same shape as `{v:?}` on
+    // `String` (both call the same `Debug` impl at the identical
+    // stack position).
+    let (gitref_field_key, gitref_field_value) = opts.git_ref.ref_pair();
     let gitref_field = format!(
         "    {field}: {value:?}",
-        field = opts.git_ref.ref_field_name(),
-        value = opts.git_ref.ref_value(),
+        field = gitref_field_key,
+        value = gitref_field_value,
     );
 
+    let (tag_human_field, tag_human_value) = opts.git_ref.ref_pair();
     let gitrepo = format!(
         "---\n\
          # Source — pinned to {tag_human}, rendered by caixa-flux.\n\
@@ -2174,8 +2231,8 @@ pub fn cluster_bundle(caixa: &Caixa, opts: &ClusterBundleOpts) -> Result<Vec<Bun
         spec_key = KUBE_KEY_SPEC,
         tag_human = format!(
             "{field} {value}",
-            field = opts.git_ref.ref_field_name(),
-            value = opts.git_ref.ref_value(),
+            field = tag_human_field,
+            value = tag_human_value,
         ),
         name = name,
         namespace = opts.namespace,
@@ -7244,6 +7301,85 @@ spec:
     }
 
     #[test]
+    fn gitrefspec_ref_pair_projects_ref_field_name_and_ref_value_per_variant() {
+        // Fail-before-pass-after per-variant equivalence pin: for every
+        // arm of [`GitRefSpec`], the lifted [`GitRefSpec::ref_pair`]
+        // tuple-return dispatch equals `(ref_field_name(), ref_value())`
+        // byte-for-byte. Both sibling per-half accessors project onto
+        // this dispatch (`ref_field_name → .ref_pair().0`,
+        // `ref_value → .ref_pair().1`), so this pin closes the drift
+        // surface where a future refactor that split one accessor off
+        // the shared match onto its own dispatch — a well-meaning
+        // "inline the pair back into per-half fields for one crate-
+        // internal caller who only wanted one half" or a scratch
+        // `impl` shadowing the derived projection — would silently
+        // desynchronize the pair from either accessor. Peer of the
+        // sibling [`caixa_core::WitTarget::payload_pair`] per-arm
+        // equivalence discipline the M3 `:contratos` payload-arm
+        // pins already establish on the peer typed-arm tuple-return
+        // dispatch surface.
+        let cases = [
+            GitRefSpec::Tag("v0.1.0".into()),
+            GitRefSpec::Branch("main".into()),
+            GitRefSpec::Commit("deadbeef".into()),
+        ];
+        for git_ref in &cases {
+            assert_eq!(
+                git_ref.ref_pair(),
+                (git_ref.ref_field_name(), git_ref.ref_value()),
+                "GitRefSpec::{git_ref:?} ref_pair() must equal \
+                 (ref_field_name(), ref_value()) — the two sibling per-\
+                 half accessors project onto the same 3-arm dispatch",
+            );
+        }
+    }
+
+    #[test]
+    fn gitrefspec_ref_pair_key_arm_matches_lifted_flux_ref_key_const_per_variant() {
+        // Fail-before-pass-after per-variant sub-selector-key pin: for
+        // every arm of [`GitRefSpec`], the first component of
+        // [`GitRefSpec::ref_pair`] equals the paired canonical
+        // [`FLUX_GITREPOSITORY_REF_KEY_TAG`] /
+        // [`FLUX_GITREPOSITORY_REF_KEY_BRANCH`] /
+        // [`FLUX_GITREPOSITORY_REF_KEY_COMMIT`] caixa-core-owned
+        // sub-selector-key const the FluxCD source-controller reads
+        // each variant's `spec.ref.<field>` sub-block under. Closes
+        // the drift surface where a future refactor that swaps two
+        // arms' const references silently at the [`GitRefSpec::ref_pair`]
+        // match head fires as a build-time test failure, not as a
+        // `spec.ref.<wrong-key>` reroute at cluster-apply time —
+        // matching the shape the sibling
+        // `gitrefspec_ref_field_name_dispatches_per_variant_onto_lifted_consts`
+        // pin already pins on the sibling per-half accessor axis,
+        // extended onto the paired-dispatch axis so a future rebrand
+        // reaches both axes through one caixa-flux edit.
+        let cases: [(GitRefSpec, &str); 3] = [
+            (
+                GitRefSpec::Tag("v0.1.0".into()),
+                FLUX_GITREPOSITORY_REF_KEY_TAG,
+            ),
+            (
+                GitRefSpec::Branch("main".into()),
+                FLUX_GITREPOSITORY_REF_KEY_BRANCH,
+            ),
+            (
+                GitRefSpec::Commit("deadbeef".into()),
+                FLUX_GITREPOSITORY_REF_KEY_COMMIT,
+            ),
+        ];
+        for (git_ref, expected_key) in &cases {
+            let (field, _) = git_ref.ref_pair();
+            assert_eq!(
+                field, *expected_key,
+                "GitRefSpec::{git_ref:?} ref_pair().0 must dispatch to \
+                 the paired canonical FLUX_GITREPOSITORY_REF_KEY_* const \
+                 the FluxCD source-controller reads its spec.ref.<field> \
+                 sub-block under",
+            );
+        }
+    }
+
+    #[test]
     fn gitrefspec_is_variant_predicates_partition_the_arm_set() {
         // Fail-before-pass-after pin on the [`gen_platform::IsVariant`]
         // derive: for each of the three [`GitRefSpec`] arms exactly one
@@ -7384,11 +7520,15 @@ spec:
             ),
         ];
         for (git_ref, expected) in cases {
-            let composed = format!(
-                "    {field}: {value:?}",
-                field = git_ref.ref_field_name(),
-                value = git_ref.ref_value(),
-            );
+            // Route the paired sub-selector-key + sub-selector-value
+            // extraction through the lifted [`GitRefSpec::ref_pair`]
+            // tuple-return dispatch — the byte-parity pin's composition
+            // equation now keys off exactly one 3-arm match on the
+            // substrate primitive, matching the shape the peer
+            // production emit site at [`cluster_bundle`] threads
+            // through after the paired-accessor-to-`ref_pair` lift.
+            let (field, value) = git_ref.ref_pair();
+            let composed = format!("    {field}: {value:?}");
             assert_eq!(
                 composed, expected,
                 "GitRefSpec::{git_ref:?} must compose to the prior \
@@ -7414,11 +7554,15 @@ spec:
             (GitRefSpec::Commit("deadbeef".into()), "commit deadbeef"),
         ];
         for (git_ref, expected) in cases {
-            let composed = format!(
-                "{field} {value}",
-                field = git_ref.ref_field_name(),
-                value = git_ref.ref_value(),
-            );
+            // Peer of the sibling `cluster_bundle_gitref_field_…` YAML
+            // emit-side pin above — routes the narrator-prose byte-
+            // parity pin's composition equation through the lifted
+            // [`GitRefSpec::ref_pair`] tuple-return dispatch so both
+            // per-arm consumer sites (emit-side + narrator-side) key
+            // off the same single dispatch every downstream FluxCD-
+            // source-controller-shaped consumer reaches for.
+            let (field, value) = git_ref.ref_pair();
+            let composed = format!("{field} {value}");
             assert_eq!(
                 composed, expected,
                 "GitRefSpec::{git_ref:?} narrator prose must compose \
