@@ -803,9 +803,43 @@ impl UpgradeFromEntry {
                         .expect("is_cleanup() implies declared_module() is Some"),
                     instr.lisp_form(),
                 ));
-            } else if let UpgradeInstruction::StateChange { script } = instr
+            } else if let Some(script) = instr.declared_path()
                 && let Some((prior_module, prior_kind)) = prior_cleanup
             {
+                // Route the per-instruction `StateChange`-arm script-path
+                // projection through the sibling lifted
+                // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+                // accessor rather than the raw
+                // `if let UpgradeInstruction::StateChange { script } = instr`
+                // open-coded pattern-match — the last unlifted per-
+                // `UpgradeInstruction` `PathBuf`-carrying-axis consumer
+                // inside `impl UpgradeFromEntry`, sibling to the four peer
+                // per-`UpgradeInstruction` consumers already routed through
+                // the accessor: [`UpgradeInstruction::validate`]'s per-
+                // `StateChange` sandbox-path fan-out, the layout-side per-
+                // `StateChange` script-existence fan-out at
+                // [`crate::layout::StandardLayout::verify`]
+                // (caixa-core/src/layout.rs:1058), the within-entry
+                // [`UpgradeFromEntry::validate_state_change_singularity`]
+                // per-`StateChange` script-projection fan-out, and the
+                // cross-slot
+                // [`validate_upgrade_from_against_behavior`]
+                // per-`StateChange` detection loop. Byte-equal today
+                // (`declared_path` returns `Some(script)` iff the
+                // instruction is [`UpgradeInstruction::StateChange`], per
+                // the sibling `declared_path_only_for_state_change` pin),
+                // so a state-change-after-cleanup surfaces
+                // `StateChangeAfterCleanup` byte-identical to the pattern-
+                // match shape. Any future accessor extension that promotes
+                // an additional variant onto the `PathBuf`-carrying axis
+                // reaches this gate through one caixa-core edit rather
+                // than a coordinated rewrite of five call sites — the
+                // migrate→cleanup ordering discipline extends to the
+                // promoted variant by construction. Same "one typed
+                // dispatch on the substrate primitive, thin projections at
+                // each consumer" trajectory the sibling
+                // [`UpgradeInstruction::declared_module`] `String`-axis
+                // per-variant unifier already established.
                 return Err(UpgradeError::StateChangeAfterCleanup {
                     from: self.prior_versao().to_string(),
                     script: script.clone(),
@@ -5985,6 +6019,154 @@ mod tests {
             "validate_upgrade_from must thread the state-change-before-cleanup error, \
              got {err:?}"
         );
+    }
+
+    #[test]
+    fn validate_state_change_before_cleanup_projects_scripts_through_declared_path_accessor() {
+        // Composition pin: [`UpgradeFromEntry::validate_state_change_before_cleanup`]'s
+        // per-instruction `StateChange`-arm script-path projection must
+        // route through the sibling lifted
+        // [`UpgradeInstruction::declared_path`] `Option<&PathBuf>`
+        // accessor, not the raw
+        // `if let UpgradeInstruction::StateChange { script } = instr`
+        // open-coded pattern-match the gate previously carried inside
+        // `impl UpgradeFromEntry` at caixa-core/src/upgrade.rs:806.
+        //
+        // Structurally: the gate's projection accept-set is the union
+        // of every [`UpgradeInstruction`] variant for which
+        // `declared_path().is_some()` — today exactly
+        // [`UpgradeInstruction::StateChange`] per the sibling
+        // `declared_path_only_for_state_change` pin, so a
+        // state-change-after-cleanup input trips
+        // `StateChangeAfterCleanup` and a non-`StateChange` input
+        // (module-bearing / terminal) leaves the sticky-once latch
+        // sweep quiet byte-identical to the pattern-match shape.
+        //
+        // Byte-equal today (`declared_path` returns `Some(script)` iff
+        // `StateChange`, byte-for-byte from the variant's own storage);
+        // the pin catches any future accessor extension that promotes
+        // an additional variant onto the `PathBuf`-carrying axis — the
+        // gate then fires on migrate-after-cleanup for that variant too,
+        // and the migrate→cleanup ordering discipline the peer
+        // [`validate_state_change_singularity`] /
+        // [`validate_upgrade_from_against_behavior`] gates share on the
+        // same axis extends to the promoted variant by construction.
+        //
+        // Peer of the sibling four per-`UpgradeInstruction` consumers
+        // ([`UpgradeInstruction::validate`]'s per-`StateChange`
+        // sandbox-path fan-out, the layout-side per-`StateChange`
+        // script-existence fan-out at
+        // `caixa-core/src/layout.rs:1058`, the within-entry
+        // [`UpgradeFromEntry::validate_state_change_singularity`]
+        // per-`StateChange` script-projection fan-out, the cross-slot
+        // [`validate_upgrade_from_against_behavior`] per-`StateChange`
+        // detection loop) — the fifth (and last unlifted inside
+        // `impl UpgradeFromEntry`) per-`UpgradeInstruction`-consumer of
+        // the `PathBuf`-carrying axis to now route through the accessor.
+        // Same shape as the sibling
+        // `validate_state_change_singularity_projects_scripts_through_declared_path_accessor`
+        // and `validate_upgrade_from_against_behavior_projects_scripts_through_declared_path_accessor`
+        // pins extended onto the within-entry migrate→cleanup ordering
+        // gate.
+        //
+        // Three-arm projective coverage:
+        //   (a) `StateChange` scripts project through `declared_path()`
+        //       byte-equal to the raw `script.clone()` field access
+        //       the diagnostic previously carried;
+        //   (b) a `:state-change`-after-cleanup input trips the gate
+        //       with `StateChangeAfterCleanup` carrying the offending
+        //       script + the prior cleanup's kind/module verbatim;
+        //   (c) a non-`StateChange`-only input (`LoadModule` /
+        //       `SoftPurge` / `Purge` / `Restart`) leaves the gate
+        //       vacuous with `Ok(())` — the `declared_path().is_none()`
+        //       arm's fall-through pins.
+        //
+        // Fail-before-pass-after verified structurally: swapping the
+        // production
+        //   `else if let Some(script) = instr.declared_path() && … { … }`
+        // back to
+        //   `else if let UpgradeInstruction::StateChange { script } = instr && … { … }`
+        // keeps arms (a)-(c) passing but silently detaches this within-
+        // entry ordering gate from the accessor's typed dispatch — any
+        // future `declared_path` extension (promotion of an additional
+        // variant onto the axis, an operator-side pre-resolved-path
+        // cache the accessor materializes) would then silently disagree
+        // between this gate's raw pattern-match and the peer four
+        // sibling consumers that route through the accessor.
+
+        // (a) StateChange projection byte-equal via declared_path.
+        let sc = UpgradeInstruction::StateChange {
+            script: PathBuf::from("lib/m.lisp"),
+        };
+        assert_eq!(
+            sc.declared_path().cloned(),
+            Some(PathBuf::from("lib/m.lisp")),
+            "declared_path() must project the StateChange :script byte-equal to the raw \
+             field access — accessor divergence would silently detach this within-entry \
+             migrate→cleanup ordering gate from the projection every peer per-`UpgradeInstruction` \
+             consumer routes through"
+        );
+
+        // (b) StateChange-after-cleanup trips the gate through the accessor.
+        let after = entry(
+            "0.1.0",
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+                UpgradeInstruction::StateChange {
+                    script: PathBuf::from("lib/m.lisp"),
+                },
+            ],
+        );
+        assert_eq!(
+            after.validate(),
+            Err(UpgradeError::StateChangeAfterCleanup {
+                from: "0.1.0".into(),
+                script: PathBuf::from("lib/m.lisp"),
+                prior_cleanup_kind: crate::render::M2_UPGRADE_INSTRUCTION_KIND_SOFT_PURGE,
+                prior_cleanup_module: "x-old".into(),
+            }),
+            "a :state-change following a cleanup must trip the gate through the declared_path \
+             accessor's Some(script) arm — carrying the offending script + the prior cleanup's \
+             kind/module verbatim byte-identical to the pattern-match shape"
+        );
+
+        // (c) Non-StateChange-only inputs leave the gate vacuous.
+        for instrs in [
+            vec![UpgradeInstruction::LoadModule { module: "x".into() }],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::SoftPurge {
+                    module: "x-old".into(),
+                },
+            ],
+            vec![
+                UpgradeInstruction::LoadModule { module: "x".into() },
+                UpgradeInstruction::Purge {
+                    module: "x-old".into(),
+                },
+            ],
+            vec![UpgradeInstruction::Restart],
+        ] {
+            for instr in &instrs {
+                assert!(
+                    instr.declared_path().is_none(),
+                    "non-StateChange variants must project None through declared_path — \
+                     accessor divergence would let this within-entry ordering gate silently \
+                     fire on a cleanup-only sequence far from any :state-change site"
+                );
+            }
+            let e = entry("0.1.0", instrs);
+            assert_eq!(
+                e.validate(),
+                Ok(()),
+                "the state-change-before-cleanup gate must return Ok(()) on an entry whose \
+                 instructions all project None through declared_path — the accessor's \
+                 None arm the pattern-match's implicit fall-through previously carried"
+            );
+        }
     }
 
     #[test]
