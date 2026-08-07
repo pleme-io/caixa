@@ -392,7 +392,7 @@ version = "0.1.45"
 dependencies = [
  "caixa-pangea",
  "caixa-teia",
- "gen-platform 0.1.26",
+ "gen-platform",
  "iac-forge",
  "pretty_assertions",
  "serde",
@@ -404,11 +404,11 @@ dependencies = [
 name = "caixa-ast"
 version = "0.1.45"
 dependencies = [
- "gen-platform 0.1.26",
+ "gen-platform",
  "logos",
  "pretty_assertions",
  "serde",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -417,14 +417,14 @@ name = "caixa-core"
 version = "0.1.45"
 dependencies = [
  "canteiro-types",
- "gen-platform 0.1.26",
- "gen-types 0.1.26",
+ "gen-platform",
+ "gen-types",
  "pretty_assertions",
  "semver",
  "serde",
  "serde_json",
  "serde_yaml",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -472,7 +472,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "tatara-process",
  "tempfile",
  "thiserror 2.0.18",
@@ -487,7 +487,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -496,7 +496,7 @@ name = "caixa-flux"
 version = "0.1.45"
 dependencies = [
  "caixa-core",
- "gen-platform 0.1.26",
+ "gen-platform",
  "pretty_assertions",
  "serde",
  "serde_json",
@@ -512,7 +512,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "serde",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -539,7 +539,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -549,11 +549,11 @@ version = "0.1.45"
 dependencies = [
  "caixa-ast",
  "caixa-theme",
- "gen-platform 0.1.26",
+ "gen-platform",
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -570,7 +570,7 @@ dependencies = [
  "ropey",
  "serde",
  "serde_json",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "tokio",
  "tower-lsp",
 ]
@@ -629,7 +629,7 @@ dependencies = [
 name = "caixa-provedor"
 version = "0.1.45"
 dependencies = [
- "gen-platform 0.1.26",
+ "gen-platform",
  "iac-forge",
  "pretty_assertions",
  "serde",
@@ -651,7 +651,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_yaml",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -679,7 +679,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_json",
- "tatara-lisp 0.3.27",
+ "tatara-lisp",
  "thiserror 2.0.18",
 ]
 
@@ -700,7 +700,7 @@ dependencies = [
 name = "caixa-theme"
 version = "0.1.45"
 dependencies = [
- "gen-platform 0.1.26",
+ "gen-platform",
  "serde",
 ]
 
@@ -1147,6 +1147,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fsevent-sys"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "76ee7a02da4d231650c7cea31349b889be2f45ddb3ef3032d2ec8185f6313fd2"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1242,16 +1251,6 @@ dependencies = [
 
 [[package]]
 name = "gen-macros"
-version = "0.1.9"
-source = "git+https://github.com/pleme-io/gen#6d82c9d3885c781e923ec46330d05d7eca469a3b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "gen-macros"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df4f90adfe20ca2d9ad6a54c7cf69806d9e29de9b91ad44876ba4b3d1c0a3fee"
@@ -1263,39 +1262,12 @@ dependencies = [
 
 [[package]]
 name = "gen-platform"
-version = "0.1.9"
-source = "git+https://github.com/pleme-io/gen#6d82c9d3885c781e923ec46330d05d7eca469a3b"
-dependencies = [
- "gen-macros 0.1.9",
- "gen-types 0.1.9",
- "inventory",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "gen-platform"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7df52eeea52b35bc15466b0b23c691760f0c44a90787e6b93197f9d1d0e28fe"
 dependencies = [
- "gen-macros 0.1.26",
- "gen-types 0.1.26",
- "inventory",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "gen-types"
-version = "0.1.9"
-source = "git+https://github.com/pleme-io/gen#6d82c9d3885c781e923ec46330d05d7eca469a3b"
-dependencies = [
- "blake3",
- "chrono",
- "indexmap",
+ "gen-macros",
+ "gen-types",
  "inventory",
  "serde",
  "serde_json",
@@ -2160,6 +2132,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d3d07927151ff8575b7087f245456e549fea62edf0ec4e565a5ee50c8402bc3"
 dependencies = [
  "bitflags 2.11.1",
+ "fsevent-sys",
  "inotify",
  "kqueue",
  "libc",
@@ -3216,8 +3189,8 @@ dependencies = [
  "async-trait",
  "blake3",
  "chrono",
- "gen-platform 0.1.26",
- "gen-types 0.1.26",
+ "gen-platform",
+ "gen-types",
  "hex",
  "schemars 0.8.22",
  "serde",
@@ -3227,14 +3200,15 @@ dependencies = [
 
 [[package]]
 name = "shikumi"
-version = "0.1.2"
-source = "git+https://github.com/pleme-io/shikumi?branch=main#61e5f97ad2f61205599b8679a4ff7b2075506003"
+version = "0.1.496"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de145934a9ccb306460220a3cd6068240dea61c139a34846b030bdb3d7b6af41"
 dependencies = [
  "arc-swap",
  "async-trait",
  "figment",
- "gen-platform 0.1.9",
- "gen-types 0.1.9",
+ "gen-platform",
+ "gen-types",
  "notify",
  "serde",
  "serde_json",
@@ -3378,8 +3352,9 @@ dependencies = [
 
 [[package]]
 name = "tatara-core"
-version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
+version = "0.2.202"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "548c9f02281e1b8dfe62a33ba8b14525b034621c366d1ab3fd72f904e2115ad6"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3400,18 +3375,6 @@ dependencies = [
 
 [[package]]
 name = "tatara-lisp"
-version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
-dependencies = [
- "blake3",
- "serde",
- "serde_json",
- "tatara-lisp-derive 0.2.4",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "tatara-lisp"
 version = "0.3.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d4818fc60a03547e3722cc197aaec740130f433e4d022613ba36e36a406ee9"
@@ -3420,18 +3383,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tatara-closed-set",
- "tatara-lisp-derive 0.3.27",
+ "tatara-lisp-derive",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "tatara-lisp-derive"
-version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -3447,8 +3400,9 @@ dependencies = [
 
 [[package]]
 name = "tatara-process"
-version = "0.2.4"
-source = "git+https://github.com/pleme-io/tatara?rev=fb6dfcc1bad6880c06b774164882ad845522e84a#fb6dfcc1bad6880c06b774164882ad845522e84a"
+version = "0.2.202"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "138d17dba3cf65817b4790f116455e9224e4786027993569a71cd973ca1209f9"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3461,9 +3415,9 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tatara-closed-set",
  "tatara-core",
- "tatara-lisp 0.2.4",
- "tatara-lisp-derive 0.2.4",
+ "tatara-lisp",
  "thiserror 2.0.18",
  "tracing",
 ]
