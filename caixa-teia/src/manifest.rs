@@ -65,11 +65,14 @@ fn instance_from_node(n: &Node) -> Result<TeiaInstance, TeiaError> {
 }
 
 fn kwarg_symbol(n: &Node, key: &str) -> Option<String> {
-    let v = n.kwarg(key)?;
-    match &v.kind {
-        NodeKind::Symbol(s) | NodeKind::Str(s) | NodeKind::Keyword(s) => Some(s.clone()),
-        _ => None,
-    }
+    // Route the `:tipo`/`:nome` value-shape projection through the
+    // lifted [`caixa_ast::NodeKind::as_atom_string`] `Option<&str>`
+    // accessor rather than the raw three-arm `NodeKind::Symbol(s) |
+    // NodeKind::Str(s) | NodeKind::Keyword(s) => Some(s.clone())`
+    // open-coded per-arm disjunctive pattern-match — sibling in shape
+    // to the `build_ref` `:atributo` slot converge on the same
+    // atom-string-carrying disjunctive axis (this run).
+    n.kwarg(key)?.kind.as_atom_string().map(str::to_owned)
 }
 
 fn node_to_value(n: &Node) -> Result<TeiaValue, TeiaError> {
@@ -153,15 +156,21 @@ fn build_ref(items: &[Node]) -> Result<TeiaValue, TeiaError> {
             ));
         }
     };
-    let atributo = match &items[3].kind {
-        NodeKind::Symbol(s) | NodeKind::Str(s) | NodeKind::Keyword(s) => s.clone(),
-        _ => {
-            return Err(TeiaError::BadForm(
-                items[3].span.start,
-                "ref atributo must be a symbol/keyword/string",
-            ));
-        }
-    };
+    // Route the `:atributo`-slot projection through the lifted
+    // [`caixa_ast::NodeKind::as_atom_string`] `Option<&str>` accessor
+    // rather than the raw three-arm `NodeKind::Symbol(s) |
+    // NodeKind::Str(s) | NodeKind::Keyword(s) => s.clone()` open-coded
+    // per-arm disjunctive pattern-match — sibling in shape to the
+    // `kwarg_symbol` `:tipo`/`:nome` value-shape gate converge on the
+    // same atom-string-carrying disjunctive axis (this run).
+    let atributo = items[3]
+        .kind
+        .as_atom_string()
+        .map(str::to_owned)
+        .ok_or(TeiaError::BadForm(
+            items[3].span.start,
+            "ref atributo must be a symbol/keyword/string",
+        ))?;
     Ok(TeiaValue::Ref(TeiaRefRepr {
         tipo,
         nome,
