@@ -111,16 +111,11 @@ impl NodeKind {
     ///
     /// First `Option<&<payload>>` projection accessor on the outer
     /// [`NodeKind`] sum-type — opens the `as_<variant>` typed projection
-    /// family the future per-arm [`Self::as_symbol`] / [`Self::as_str`]
-    /// projections fold on the same shape at their first cross-crate
-    /// consumer (the sibling caixa-lint `check_enum_pascal` /
-    /// `check_nome_kebab` / `check_no_fixme` per-`NodeKind::Str`-arm
-    /// scalar-projection sites and `check_git_pin` /
-    /// `check_aplicacao_timeout` / `check_consistent_quote` per-
-    /// `NodeKind::Symbol`-arm scalar-projection sites), extending the
-    /// discipline onto the caixa-ast per-AST-node-family arm-set every
-    /// downstream authoring consumer (`caixa-fmt`, `caixa-lint`,
-    /// `caixa-lsp`) partitions on.
+    /// family the sibling per-arm [`Self::as_symbol`] (e96eea1) and
+    /// [`Self::as_str`] projections fold on the same shape at their
+    /// consumer surfaces, extending the discipline onto the caixa-ast
+    /// per-AST-node-family arm-set every downstream authoring consumer
+    /// (`caixa-fmt`, `caixa-lint`, `caixa-lsp`) partitions on.
     #[must_use]
     pub fn as_keyword(&self) -> Option<&str> {
         match self {
@@ -168,6 +163,45 @@ impl NodeKind {
     pub fn as_symbol(&self) -> Option<&str> {
         match self {
             Self::Symbol(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Substrate-canonical projection onto the [`Self::Str`] arm's
+    /// borrowed scalar payload — returns `Some(&str)` byte-borrowed from
+    /// the arm's own [`String`] storage, and [`None`] on every other arm
+    /// of the closed fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Three production consumers today across two caixa-monorepo crates
+    /// — the caixa-lint rule surface's [`caixa_lint::rules`]::
+    /// `check_nome_kebab` `:nome`-value kebab-case gate,
+    /// `check_no_fixme` `:descricao`-value FIXME-placeholder gate, and
+    /// the caixa-fmt printer's `is_flag_token` `-flag`/`--flag`
+    /// string-literal command-argument-group detector — which previously
+    /// reached the underlying string-literal scalar through three raw
+    /// `if let NodeKind::Str(s) = &n.kind` / `matches!(&n.kind,
+    /// NodeKind::Str(s) if …)` open-coded per-arm pattern-matches that
+    /// expressed no compile-time link back to the substrate primitive's
+    /// typed scalar-arm projection.
+    ///
+    /// Zero-copy — the returned `&str` borrows from the arm's own
+    /// [`String`] storage (pinned by the
+    /// `as_str_is_by_borrow_pointer_identity` test), the same discipline
+    /// as the sibling [`Self::as_keyword`] (6804427) / [`Self::as_symbol`]
+    /// (e96eea1) outer-`NodeKind` sum-type per-arm projections and the
+    /// peer [`caixa_teia::TeiaValue::as_str`] (7304ffe) outer-`TeiaValue`
+    /// sum-type per-arm projection. Third `Option<&<payload>>` projection
+    /// accessor on the outer [`NodeKind`] sum-type — closes the
+    /// `as_<variant>` typed projection family the sibling [`Self::as_keyword`]
+    /// and [`Self::as_symbol`] opened onto the third and final load-
+    /// bearing scalar-arm axis (string-literal payloads — every
+    /// `:nome` / `:descricao` value gate, every `-flag` token detector,
+    /// every quoted-string `:kind` mis-authoring diagnostic) across the
+    /// caixa-lint/caixa-fmt consumer surface.
+    #[must_use]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::Str(s) => Some(s.as_str()),
             _ => None,
         }
     }
@@ -607,6 +641,109 @@ mod is_variant_tests {
                  _ => None }}` — otherwise the eight converged caixa-ast/ \
                  caixa-fmt/caixa-lint/caixa-teia call sites would silently \
                  disagree with their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's `Str`
+    // scalar-arm accessor: exactly the `Str` arm returns `Some(&str)`
+    // byte-borrowed from the arm's own [`String`] storage; every other
+    // arm returns `None`. Pins the "one canonical projection dispatch
+    // per typed arm on the substrate primitive" discipline the three
+    // per-`Str`-arm consumer sites (caixa-lint `check_nome_kebab`,
+    // `check_no_fixme`; caixa-fmt `is_flag_token`) route through via
+    // `.as_str()` / `.as_str().is_some_and(…)`. A regression that
+    // admitted a non-`Str` arm through this projection would silently
+    // classify a bare symbol or keyword literal as a string at the three
+    // per-consumer sites — `check_nome_kebab` would flag `:nome` bare-
+    // symbol values as non-kebab, `check_no_fixme` would scan symbol
+    // names for FIXME, `is_flag_token` would layout-align symbols as
+    // `-flag` tokens. This test guards that surface across every arm of
+    // the closed fourteen-arm partition.
+    #[test]
+    fn as_str_projects_only_str_arm() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_str();
+            if matches!(variant, NodeKind::Str(_)) {
+                let NodeKind::Str(s) = variant else {
+                    unreachable!("guarded by matches! above");
+                };
+                assert_eq!(
+                    projected,
+                    Some(s.as_str()),
+                    "NodeKind::{name} is the Str arm — as_str() \
+                     must project onto its own String payload"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not the Str arm — \
+                     as_str() must return None"
+                );
+            }
+        }
+        // Empty string — the accessor is a projection, not a gate; an
+        // empty-`""` string literal (author-declared or parser-produced)
+        // round-trips as `Some("")`, not `None`.
+        assert_eq!(NodeKind::Str(String::new()).as_str(), Some(""));
+    }
+
+    // Zero-copy pin — `k.as_str()` must borrow from the `Str` arm's own
+    // [`String`] storage, not clone into a fresh buffer. Fails at build
+    // time if a future rewrite regresses to `Some(s.clone().leak())` or
+    // any other detour that silently allocates on every call (the same
+    // shape as the sibling [`as_keyword_is_by_borrow_pointer_identity`]
+    // / [`as_symbol_is_by_borrow_pointer_identity`] pins on the peer
+    // outer-`NodeKind` `Keyword`- / `Symbol`-arm scalar accessors and
+    // the [`caixa_teia::TeiaValue::as_str_is_by_borrow_pointer_identity`]
+    // pin on the outer-`TeiaValue` `Str`-arm scalar accessor).
+    #[test]
+    fn as_str_is_by_borrow_pointer_identity() {
+        let k = NodeKind::Str("demo".into());
+        let via_accessor: &str = k.as_str().unwrap();
+        let NodeKind::Str(ref inner) = k else {
+            unreachable!("constructed above as NodeKind::Str");
+        };
+        assert_eq!(
+            via_accessor.as_ptr(),
+            inner.as_ptr(),
+            "NodeKind::as_str must borrow from the Str arm's \
+             String backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            inner.len(),
+            "NodeKind::as_str and inner.as_str() must byte-equal \
+             in length (same slice)",
+        );
+    }
+
+    // Byte-parity pin on the pre-lift `if let NodeKind::Str(s) = &n.kind
+    // { … }` / `matches!(&n.kind, NodeKind::Str(s) if …)` shape the
+    // three caixa-lint/caixa-fmt consumer sites route through today via
+    // `.as_str()` / `.as_str().is_some_and(…)`. Refuses a future
+    // accidental split between the accessor's return contract and its
+    // pre-lift shape (a hand-rolled shadow `impl` that overrides one
+    // path, an accidental rebrand of one converged call site back to
+    // the raw `NodeKind::Str(s)` form) on the load-bearing string-
+    // literal-projection axis every downstream `:nome`/`:descricao`
+    // value-shape / flag-token layout partition keys off.
+    #[test]
+    fn as_str_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&str> = match &variant {
+                NodeKind::Str(s) => Some(s.as_str()),
+                _ => None,
+            };
+            let via_accessor = variant.as_str();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_str() must byte-equal \
+                 `match &_ {{ NodeKind::Str(s) => Some(s.as_str()), \
+                 _ => None }}` — otherwise the three converged \
+                 caixa-lint/caixa-fmt call sites would silently disagree \
+                 with their pre-lift shape"
             );
         }
     }

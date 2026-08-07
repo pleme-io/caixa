@@ -815,7 +815,17 @@ fn head_symbol_is_command(items: &[Node]) -> bool {
 /// would make it non-deterministic — the same source could format two ways
 /// depending on what the variable happened to hold.
 fn is_flag_token(n: &Node) -> bool {
-    matches!(&n.kind, NodeKind::Str(s) if s.starts_with('-') && s.len() > 1)
+    // Route the string-literal payload projection through the lifted
+    // [`caixa_ast::NodeKind::as_str`] `Option<&str>` accessor rather than
+    // the raw `matches!(&n.kind, NodeKind::Str(s) if …)` guarded per-arm
+    // pattern-match — sibling in shape to the peer `head_symbol_is_command`
+    // site above that routes the `Symbol`-arm scalar projection through
+    // the sibling [`caixa_ast::NodeKind::as_symbol`] accessor, and to
+    // the peer caixa-lint `check_nome_kebab` / `check_no_fixme` `Str`-
+    // arm sites converged in this run onto the same substrate accessor.
+    n.kind
+        .as_str()
+        .is_some_and(|s| s.starts_with('-') && s.len() > 1)
 }
 
 /// Split a command's arguments into layout GROUPS: a `-flag` followed by a

@@ -183,7 +183,16 @@ fn check_enum_pascal(node: &Node, diags: &mut Vec<Diagnostic>) {
 
 fn check_nome_kebab(node: &Node, diags: &mut Vec<Diagnostic>) {
     let Some(v) = node.kwarg("nome") else { return };
-    if let NodeKind::Str(s) = &v.kind {
+    // Route the `:nome`-value string-literal projection through the
+    // lifted [`caixa_ast::NodeKind::as_str`] `Option<&str>` accessor
+    // rather than the raw `if let NodeKind::Str(s) = &v.kind` open-coded
+    // per-arm pattern-match — sibling in shape to the peer
+    // `check_no_fixme` `:descricao`-value FIXME-placeholder gate and to
+    // the caixa-fmt `is_flag_token` `-flag`/`--flag` command-argument
+    // detector (both converged in this run) that partition on the
+    // outer-`NodeKind` `Str` arm through the same substrate-canonical
+    // accessor.
+    if let Some(s) = v.kind.as_str() {
         if !is_kebab(s) {
             diags.push(
                 Diagnostic::new(
@@ -308,7 +317,14 @@ fn check_no_fixme(node: &Node, diags: &mut Vec<Diagnostic>) {
     let Some(d) = node.kwarg("descricao") else {
         return;
     };
-    if let NodeKind::Str(s) = &d.kind {
+    // Route the `:descricao`-value string-literal projection through the
+    // lifted [`caixa_ast::NodeKind::as_str`] `Option<&str>` accessor
+    // rather than the raw `if let NodeKind::Str(s) = &d.kind` open-coded
+    // per-arm pattern-match — sibling to the peer `check_nome_kebab`
+    // `:nome`-value site and the caixa-fmt `is_flag_token` command-
+    // argument detector, all converged in this run onto the same
+    // outer-`NodeKind` `Str`-arm substrate accessor.
+    if let Some(s) = d.kind.as_str() {
         if s.contains("FIXME") {
             diags.push(Diagnostic::new(
                 "no-fixme-descricao",
