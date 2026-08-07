@@ -80,19 +80,14 @@ ropey = "1"
 # / `DeriveKeywordSexp`, so naming `tatara-lisp-derive` here would let the
 # lib↔derive pair drift apart (the split-brain the 0.3.x consolidation sealed).
 tatara-lisp = "0.3.26"
-# tatara-process is the ONE remaining git dep, and its rev pin is load-bearing
-# rather than cautious: the registry's tatara-process is 0.2.157 while this
-# workspace resolves the pinned 0.2.4, and the two generate DIFFERENT derive
-# output — moving to the registry loses `UnknownConditionKind`,
-# `UnknownCalmClassification` and ~10 more from caixa's own modules. That is a
-# real version upgrade to sequence on its own, not a dep swap, so it is left
-# pinned deliberately. Measured 2026-08-04.
-#
-# The `version` beside `git` is what a future release emits, so caixa's own
-# publish stays blocked until this one moves — stated openly rather than
-# encoded as a manifest that cannot parse, which is what an earlier attempt at
-# `optional = true` did (cargo rejects `optional` on a workspace dependency).
-tatara-process = { git = "https://github.com/pleme-io/tatara", rev = "fb6dfcc1bad6880c06b774164882ad845522e84a", version = "0.2" }
+# tatara-process, from the registry — the last git dep, now gone. The rev pin
+# it replaces held this workspace at 0.2.4 while the registry had moved on, and
+# a git source is one cargo cannot unify with a registry source even at an
+# identical version, so it doubled the crate downstream AND blocked caixa's own
+# publish outright. The version jump is real (the pinned rev and the registry
+# generate different derive output), which is why it is taken deliberately here
+# rather than deferred again.
+tatara-process = "0.2"
 caixa-tatara = { path = "caixa-tatara", version = "0.1.45" }
 # Registry, at last. This was a git dep only because `iac-forge` had never
 # reached crates.io — its release reported SUCCESS while publishing nothing,
