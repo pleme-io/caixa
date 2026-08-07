@@ -777,19 +777,35 @@ fn command_slot_count(items: &[Node]) -> usize {
 
 /// How many leading operands belong to this form's header, if its head is
 /// in [`SPECIAL_HEADS`].
+///
+/// Routes the head-slot symbol-name projection through the lifted
+/// [`NodeKind::as_symbol`] `Option<&str>` accessor rather than the raw
+/// `let NodeKind::Symbol(head) = &items[0].kind else …` open-coded
+/// per-arm pattern-match — sibling in shape to the peer
+/// [`head_symbol_is_command`] site below and to the caixa-ast
+/// [`caixa_ast::Node::head_symbol`] list-head projection (all converged
+/// in this run) that partition on the outer-`NodeKind` `Symbol` arm
+/// through the same substrate-canonical accessor.
 fn special_head_arity(items: &[Node]) -> Option<usize> {
-    let NodeKind::Symbol(head) = &items[0].kind else {
-        return None;
-    };
+    let head = items[0].kind.as_symbol()?;
     SPECIAL_HEADS
         .iter()
-        .find(|(name, _)| *name == head.as_str())
+        .find(|(name, _)| *name == head)
         .map(|(_, n)| *n)
 }
 
 /// Is this form's head symbol one of the [`COMMAND_HEADS`]?
+///
+/// Routes the head-slot symbol-name projection through the lifted
+/// [`NodeKind::as_symbol`] `Option<&str>` accessor rather than the raw
+/// `matches!(&items[0].kind, NodeKind::Symbol(s) if COMMAND_HEADS
+/// .contains(&s.as_str()))` guarded per-arm pattern-match — sibling in
+/// shape to the peer [`special_head_arity`] site above.
 fn head_symbol_is_command(items: &[Node]) -> bool {
-    matches!(&items[0].kind, NodeKind::Symbol(s) if COMMAND_HEADS.contains(&s.as_str()))
+    items[0]
+        .kind
+        .as_symbol()
+        .is_some_and(|s| COMMAND_HEADS.contains(&s))
 }
 
 /// Does this node render as a `-flag` / `--flag` token?

@@ -121,9 +121,17 @@ fn node_to_value(n: &Node) -> Result<TeiaValue, TeiaError> {
 }
 
 /// `(ref aws/vpc main id)` pattern detector.
+///
+/// Routes the head-slot symbol-name projection through the lifted
+/// [`caixa_ast::NodeKind::as_symbol`] `Option<&str>` accessor rather
+/// than the raw `matches!(items.first().map(|n| &n.kind), Some(NodeKind::
+/// Symbol(s)) if s == "ref")` guarded per-arm pattern-match — sibling
+/// in shape to the caixa-lint `check_consistent_quote` `(quote …)`-
+/// form detector on the same list-head symbol-name axis (converged in
+/// this run) and to the caixa-ast [`caixa_ast::Node::head_symbol`]
+/// list-head projection.
 fn is_ref_form(items: &[Node]) -> bool {
-    matches!(items.first().map(|n| &n.kind), Some(NodeKind::Symbol(s)) if s == "ref")
-        && items.len() == 4
+    items.first().and_then(|n| n.kind.as_symbol()) == Some("ref") && items.len() == 4
 }
 
 fn build_ref(items: &[Node]) -> Result<TeiaValue, TeiaError> {
