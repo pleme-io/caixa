@@ -236,8 +236,18 @@ fn check_paired_kwargs(node: &Node, diags: &mut Vec<Diagnostic>) {
         // `(enum :a :b :c)` etc — keywords here are tag values, not
         // (key, value) pairs. Without this the rule mis-fires on
         // every odd-length enum / case / cond.
-        if let Some(NodeKind::Symbol(name)) = items.first().map(|n| &n.kind) {
-            if POSITIONAL_KW_HEADS.contains(&name.as_str()) {
+        //
+        // Route the head-slot symbol-name projection through the
+        // lifted [`caixa_ast::NodeKind::as_symbol`] `Option<&str>`
+        // accessor rather than the raw `if let Some(NodeKind::Symbol
+        // (name)) = items.first().map(|n| &n.kind)` open-coded per-arm
+        // pattern-match — sibling in shape to the peer
+        // `check_aplicacao_timeout` / `check_git_pin` /
+        // `check_consistent_quote` sites (all converged in this run)
+        // and to the caixa-ast [`caixa_ast::Node::head_symbol`] list-
+        // head projection.
+        if let Some(name) = items.first().and_then(|n| n.kind.as_symbol()) {
+            if POSITIONAL_KW_HEADS.contains(&name) {
                 return;
             }
         }
@@ -333,10 +343,15 @@ fn check_aplicacao_timeout(node: &Node, diags: &mut Vec<Diagnostic>) {
     // §V "no infinite blocking" invariant has no meaning on the other
     // four kinds. `:kind` is a bare PascalCase symbol (enforced by the
     // `enum-variant-pascal-case` rule), so match on the Symbol arm.
-    let is_aplicacao = matches!(
-        node.kwarg("kind").map(|n| &n.kind),
-        Some(NodeKind::Symbol(s)) if s == "Aplicacao"
-    );
+    //
+    // Route the `:kind` slot's symbol-name projection through the
+    // lifted [`caixa_ast::NodeKind::as_symbol`] `Option<&str>`
+    // accessor rather than the raw `matches!(_, Some(NodeKind::Symbol
+    // (s)) if s == "Aplicacao")` open-coded per-arm pattern-match —
+    // sibling in shape to the peer `check_paired_kwargs` /
+    // `check_git_pin` / `check_consistent_quote` sites (all converged
+    // in this run).
+    let is_aplicacao = node.kwarg("kind").and_then(|n| n.kind.as_symbol()) == Some("Aplicacao");
     if !is_aplicacao {
         return;
     }
@@ -369,11 +384,14 @@ fn check_git_pin(node: &Node, diags: &mut Vec<Diagnostic>) {
             return;
         };
         // A :fonte value list looks like (:tipo git :repo "…" :tag "…" …).
-        let has_tipo_git = matches_kwarg(
-            items,
-            "tipo",
-            |v| matches!(&v.kind, NodeKind::Symbol(s) if s == "git"),
-        );
+        // Route the `:tipo git` gate's symbol-name projection through
+        // the lifted [`caixa_ast::NodeKind::as_symbol`] `Option<&str>`
+        // accessor rather than the raw `matches!(&v.kind, NodeKind::
+        // Symbol(s) if s == "git")` guarded per-arm pattern-match —
+        // sibling in shape to the peer `check_paired_kwargs` /
+        // `check_aplicacao_timeout` / `check_consistent_quote` sites
+        // (all converged in this run).
+        let has_tipo_git = matches_kwarg(items, "tipo", |v| v.kind.as_symbol() == Some("git"));
         if !has_tipo_git {
             return;
         }
@@ -414,9 +432,19 @@ fn check_consistent_quote(node: &Node, diags: &mut Vec<Diagnostic>) {
     let mut saw_reader_quote = false;
     let mut saw_quote_form = false;
     let mut first_offender_span = None;
+    // Route the `(quote …)`-form head-slot symbol-name projection
+    // through the lifted [`caixa_ast::NodeKind::as_symbol`]
+    // `Option<&str>` accessor rather than the raw `matches!(items
+    // .first().map(|n| &n.kind), Some(NodeKind::Symbol(s)) if s ==
+    // "quote")` guarded per-arm pattern-match — sibling in shape to
+    // the peer `check_paired_kwargs` / `check_aplicacao_timeout` /
+    // `check_git_pin` sites (all converged in this run) and to the
+    // caixa-teia `is_ref_form` `(ref …)`-form detector on the same
+    // list-head symbol-name axis.
     walk(node, &mut |n| match &n.kind {
         NodeKind::Quote(_) => saw_reader_quote = true,
-        NodeKind::List(items) if matches!(items.first().map(|n| &n.kind), Some(NodeKind::Symbol(s)) if s == "quote") =>
+        NodeKind::List(items)
+            if items.first().and_then(|it| it.kind.as_symbol()) == Some("quote") =>
         {
             saw_quote_form = true;
             if first_offender_span.is_none() {

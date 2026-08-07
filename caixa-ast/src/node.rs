@@ -128,6 +128,49 @@ impl NodeKind {
             _ => None,
         }
     }
+
+    /// Substrate-canonical projection onto the [`Self::Symbol`] arm's
+    /// borrowed scalar payload — returns `Some(&str)` byte-borrowed from
+    /// the arm's own [`String`] storage, and [`None`] on every other arm
+    /// of the closed fourteen-arm [`NodeKind`] variant set.
+    ///
+    /// Eight production consumers today across four caixa-monorepo crates
+    /// — the caixa-ast [`Node::head_symbol`] list-head projection, the
+    /// caixa-fmt printer's `special_head_arity` head-lookup and
+    /// `head_symbol_is_command` command-head gate, the caixa-lint rule
+    /// surface's `check_paired_kwargs` positional-KW-head skip,
+    /// `check_aplicacao_timeout` `:kind Aplicacao` match,
+    /// `check_git_pin` `:tipo git` `matches_kwarg`-predicate closure,
+    /// and `check_consistent_quote` `(quote …)`-form detector, and the
+    /// caixa-teia `is_ref_form` `(ref …)`-form detector — which
+    /// previously reached the underlying symbol-name scalar through
+    /// eight raw `if let NodeKind::Symbol(s) = &n.kind` /
+    /// `matches!(&n.kind, NodeKind::Symbol(s) if s == "…")` /
+    /// `matches!(items.first().map(|n| &n.kind), Some(NodeKind::Symbol(s))
+    /// if s == "…")` open-coded per-arm pattern-matches that expressed
+    /// no compile-time link back to the substrate primitive's typed
+    /// scalar-arm projection.
+    ///
+    /// Zero-copy — the returned `&str` borrows from the arm's own
+    /// [`String`] storage (pinned by the
+    /// `as_symbol_is_by_borrow_pointer_identity` test), the same
+    /// discipline as the sibling [`Self::as_keyword`] (6804427) /
+    /// [`caixa_teia::TeiaValue::as_str`] (7304ffe) /
+    /// [`caixa_teia::TeiaValue::as_object`] (7304ffe) outer-sum-type
+    /// per-arm projections. Second `Option<&<payload>>` projection
+    /// accessor on the outer [`NodeKind`] sum-type — extends the
+    /// `as_<variant>` typed projection family the sibling
+    /// [`Self::as_keyword`] opened onto the second load-bearing scalar-
+    /// arm axis (symbol names — every head symbol lookup, every enum
+    /// variant match, every form-head-tag detector) across the
+    /// caixa-ast/caixa-fmt/caixa-lint/caixa-teia consumer surface.
+    #[must_use]
+    pub fn as_symbol(&self) -> Option<&str> {
+        match self {
+            Self::Symbol(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
 }
 
 impl Node {
@@ -179,15 +222,23 @@ impl Node {
 
     /// Head symbol for a list node like `(defX ...)`. Returns None unless this
     /// is a `List` whose first element is a `Symbol`.
+    ///
+    /// Routes the head-slot symbol-name projection through the lifted
+    /// [`NodeKind::as_symbol`] `Option<&str>` accessor rather than the
+    /// raw `let NodeKind::Symbol(s) = &items.first()?.kind else …`
+    /// open-coded per-arm pattern-match — sibling in shape to the
+    /// caixa-fmt `special_head_arity` / `head_symbol_is_command`,
+    /// caixa-lint `check_paired_kwargs` / `check_aplicacao_timeout` /
+    /// `check_git_pin` / `check_consistent_quote`, and caixa-teia
+    /// `is_ref_form` sites (all converged in this run) that partition
+    /// on the outer-`NodeKind` `Symbol` arm through the same substrate-
+    /// canonical accessor.
     #[must_use]
     pub fn head_symbol(&self) -> Option<&str> {
         let NodeKind::List(items) = &self.kind else {
             return None;
         };
-        let NodeKind::Symbol(s) = &items.first()?.kind else {
-            return None;
-        };
-        Some(s)
+        items.first()?.kind.as_symbol()
     }
 
     /// For a list formatted as alternating `:key value :key value`, returns
@@ -447,6 +498,115 @@ mod is_variant_tests {
                  _ => None }}` — otherwise the six converged caixa-ast/ \
                  caixa-lint call sites would silently disagree with \
                  their pre-lift shape"
+            );
+        }
+    }
+
+    // Projection contract on the outer-`NodeKind` sum-type's `Symbol`
+    // scalar-arm accessor: exactly the `Symbol` arm returns
+    // `Some(&str)` byte-borrowed from the arm's own [`String`] storage;
+    // every other arm returns `None`. Pins the "one canonical
+    // projection dispatch per typed arm on the substrate primitive"
+    // discipline the eight per-`Symbol`-arm consumer sites (caixa-ast
+    // [`Node::head_symbol`]; caixa-fmt `special_head_arity`,
+    // `head_symbol_is_command`; caixa-lint `check_paired_kwargs`,
+    // `check_aplicacao_timeout`, `check_git_pin`,
+    // `check_consistent_quote`; caixa-teia `is_ref_form`) route
+    // through via `.as_symbol()` / `.as_symbol() == Some("…")` /
+    // `.and_then(|n| n.kind.as_symbol())`. A regression that admitted
+    // a non-`Symbol` arm through this projection would silently
+    // classify a keyword or string literal as a symbol at the eight
+    // per-consumer sites — `head_symbol` would return names of quoted
+    // keyword forms, `head_symbol_is_command` would fire on `:tag`
+    // literals, `check_git_pin`'s `:tipo git` gate would accept
+    // `"git"` strings, `is_ref_form` would classify `("ref" …)` as a
+    // ref. This test guards that surface across every arm of the
+    // closed fourteen-arm partition.
+    #[test]
+    fn as_symbol_projects_only_symbol_arm() {
+        let variants = all_variants();
+        for (variant, name) in &variants {
+            let projected = variant.as_symbol();
+            if matches!(variant, NodeKind::Symbol(_)) {
+                let NodeKind::Symbol(s) = variant else {
+                    unreachable!("guarded by matches! above");
+                };
+                assert_eq!(
+                    projected,
+                    Some(s.as_str()),
+                    "NodeKind::{name} is the Symbol arm — as_symbol() \
+                     must project onto its own String payload"
+                );
+            } else {
+                assert_eq!(
+                    projected, None,
+                    "NodeKind::{name} is not the Symbol arm — \
+                     as_symbol() must return None"
+                );
+            }
+        }
+        // Empty symbol — the accessor is a projection, not a gate; an
+        // empty-name symbol (parser-produced from a stray reader edge
+        // case) round-trips as `Some("")`, not `None`.
+        assert_eq!(NodeKind::Symbol(String::new()).as_symbol(), Some(""));
+    }
+
+    // Zero-copy pin — `k.as_symbol()` must borrow from the `Symbol`
+    // arm's own [`String`] storage, not clone into a fresh buffer.
+    // Fails at build time if a future rewrite regresses to
+    // `Some(s.clone().leak())` or any other detour that silently
+    // allocates on every call (the same shape as the sibling
+    // [`as_keyword_is_by_borrow_pointer_identity`] pin on the peer
+    // outer-`NodeKind` `Keyword`-arm scalar accessor and the
+    // [`caixa_teia::TeiaValue::as_str_is_by_borrow_pointer_identity`]
+    // pin on the outer-`TeiaValue` `Str`-arm scalar accessor).
+    #[test]
+    fn as_symbol_is_by_borrow_pointer_identity() {
+        let k = NodeKind::Symbol("defcaixa".into());
+        let via_accessor: &str = k.as_symbol().unwrap();
+        let NodeKind::Symbol(ref inner) = k else {
+            unreachable!("constructed above as NodeKind::Symbol");
+        };
+        assert_eq!(
+            via_accessor.as_ptr(),
+            inner.as_ptr(),
+            "NodeKind::as_symbol must borrow from the Symbol arm's \
+             String backing storage (zero-copy projection)",
+        );
+        assert_eq!(
+            via_accessor.len(),
+            inner.len(),
+            "NodeKind::as_symbol and inner.as_str() must byte-equal \
+             in length (same slice)",
+        );
+    }
+
+    // Byte-parity pin on the pre-lift `let NodeKind::Symbol(s) = &n.kind
+    // else …` / `matches!(&n.kind, NodeKind::Symbol(s) if s == "…")`
+    // shape the eight caixa-ast/caixa-fmt/caixa-lint/caixa-teia
+    // consumer sites route through today via `.as_symbol()` /
+    // `.as_symbol() == Some("…")`. Refuses a future accidental split
+    // between the accessor's return contract and its pre-lift shape
+    // (a hand-rolled shadow `impl` that overrides one path, an
+    // accidental rebrand of one converged call site back to the raw
+    // `NodeKind::Symbol(s)` form) on the load-bearing symbol-name-
+    // projection axis every downstream head-symbol / form-tag /
+    // enum-variant partition keys off.
+    #[test]
+    fn as_symbol_byte_equal_pre_lift_pattern_match_shape() {
+        for (variant, name) in all_variants() {
+            let via_pattern: Option<&str> = match &variant {
+                NodeKind::Symbol(s) => Some(s.as_str()),
+                _ => None,
+            };
+            let via_accessor = variant.as_symbol();
+            assert_eq!(
+                via_accessor, via_pattern,
+                "NodeKind::{name}.as_symbol() must byte-equal \
+                 `match &_ {{ NodeKind::Symbol(s) => Some(s.as_str()), \
+                 _ => None }}` — otherwise the eight converged caixa-ast/ \
+                 caixa-fmt/caixa-lint/caixa-teia call sites would silently \
+                 disagree with their pre-lift shape"
             );
         }
     }
