@@ -936,12 +936,17 @@ fn contains_comment(n: &Node) -> bool {
     if contains_comment_trivia(&n.leading) || contains_comment_trivia(&n.trailing) {
         return true;
     }
+    // Route the reader-macro-arm-set recursion through the lifted
+    // [`caixa_ast::NodeKind::as_reader_macro_inner`] `Option<&Node>`
+    // accessor rather than the raw four-arm `NodeKind::Quote(inner) |
+    // …` open-coded per-arm disjunctive pattern-match — sibling to the
+    // peer `caixa-ast::visit::walk`, `caixa-teia::node_to_value`, and
+    // `caixa-lint::walk` reader-macro sites converged in this run.
+    if let Some(inner) = n.kind.as_reader_macro_inner() {
+        return contains_comment(inner);
+    }
     match &n.kind {
         NodeKind::List(items) => items.iter().any(contains_comment),
-        NodeKind::Quote(inner)
-        | NodeKind::Quasiquote(inner)
-        | NodeKind::Unquote(inner)
-        | NodeKind::UnquoteSplice(inner) => contains_comment(inner),
         _ => false,
     }
 }

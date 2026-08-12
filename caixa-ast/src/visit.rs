@@ -10,6 +10,20 @@ pub trait Visitor {
 }
 
 pub fn walk<V: Visitor + ?Sized>(v: &mut V, node: &Node) {
+    // Route the reader-macro-arm-set recursion through the lifted
+    // [`NodeKind::as_reader_macro_inner`] `Option<&Node>` accessor
+    // rather than the raw four-arm `NodeKind::Quote(inner) |
+    // NodeKind::Quasiquote(inner) | NodeKind::Unquote(inner) |
+    // NodeKind::UnquoteSplice(inner) => v.visit_node(inner)` open-coded
+    // per-arm disjunctive pattern-match — sibling in shape to the peer
+    // `caixa-fmt::contains_comment`, `caixa-teia::node_to_value`, and
+    // `caixa-lint::walk` reader-macro sites (all converged in this run)
+    // that all key off the four-arm reader-macro-carrying arm-set on
+    // the outer-`NodeKind` sum-type.
+    if let Some(inner) = node.kind.as_reader_macro_inner() {
+        v.visit_node(inner);
+        return;
+    }
     match &node.kind {
         // Map and Vector are compound and MUST recurse. The `_` arm
         // below is a silent trap for new compound variants: it makes a
@@ -20,12 +34,6 @@ pub fn walk<V: Visitor + ?Sized>(v: &mut V, node: &Node) {
             for item in items {
                 v.visit_node(item);
             }
-        }
-        NodeKind::Quote(inner)
-        | NodeKind::Quasiquote(inner)
-        | NodeKind::Unquote(inner)
-        | NodeKind::UnquoteSplice(inner) => {
-            v.visit_node(inner);
         }
         _ => {}
     }
