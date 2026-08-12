@@ -19900,6 +19900,244 @@ pub fn find_by_namespace<'a>(
     docs.iter().find(|d| kube_namespace_is(d, namespace))
 }
 
+/// Read the `metadata.labels` sub-mapping of a K8s custom resource YAML
+/// document as `Option<&serde_yaml::Mapping>` — the first non-scalar
+/// sub-`metadata:` accessor peer to the scalar-arity parametric
+/// [`kube_metadata_str_field`] on the same two-hop `metadata.<field>`
+/// navigation depth. Where [`kube_metadata_str_field`] reads
+/// `metadata.<field>` **string-scalar** sub-fields (the pinned
+/// [`kube_name`] / [`kube_namespace`] accessors on the identity +
+/// namespace-scoping halves of the canonical `metadata.{name, namespace}`
+/// coordinate pair both compose on that scalar-arity primitive), this
+/// closes the peer sub-**mapping** readback on the load-bearing
+/// `metadata.labels` sub-block — the third canonical `metadata.*`
+/// sub-axis every K8s CR document the emit-side [`kube_resource_skeleton`]
+/// renders carries, alongside the two scalar-axis sub-fields the sibling
+/// accessors already pin.
+///
+/// Returns `None` when either the enclosing `metadata:` block is absent
+/// (a defensively-tolerated missing sub-mapping — the caller's own
+/// test-side `expect(...)` / production-side `unwrap_or_default(...)`
+/// names the axis), the sub-`labels:` sub-block is absent (a legally-
+/// omitted label surface on a CR that carries no per-CR label metadata
+/// — the emit-side [`kube_resource_skeleton`]'s `labels.is_empty()`
+/// short-circuit skips the block entirely, and this readback preserves
+/// the same short-circuit on the reverse), or the sub-`labels:` sub-
+/// block is present but carries a non-Mapping YAML type (a schema-
+/// invalid CR shape per the apiserver's `OpenAPI` schema but tolerated
+/// here as `None` so the readback stays a total function). The returned
+/// `&serde_yaml::Mapping` borrows into the input `Value` — the caller
+/// decides whether to enumerate (`.iter()`), probe a specific key
+/// (`.get(<LABEL>)`), or delegate through the composed sibling
+/// [`kube_metadata_label`] scalar-arity peer. The three-hop navigation
+/// happens in one method call the caller reads as intent
+/// (`kube_metadata_labels(<value>)` — "read this K8s CR's
+/// `metadata.labels` sub-mapping") rather than three hand-spelled
+/// positional artifacts (the `get(KUBE_KEY_METADATA)` outer hop, the
+/// `and_then(|m| m.get(KUBE_KEY_LABELS))` middle hop, the
+/// `and_then(|l| l.as_mapping())` shape gate).
+///
+/// The [`KUBE_KEY_LABELS`] axis is pinned inside the helper (unlike
+/// the parametric `field` axis of the underlying
+/// [`kube_metadata_str_field`]) because the K8s API-machinery pins
+/// `metadata.labels` as the load-bearing per-CR label-surface axis on
+/// every `CustomResource` across every group/version — the same load-
+/// bearing status the sibling scalar-axis coordinates
+/// (`metadata.name`, `metadata.namespace`) carry on the two identity /
+/// namespace-scoping halves that already lifted pinned accessor peers
+/// under the same discipline. Every readback consumer downstream
+/// (`.get(<LABEL>)` per-label probe, `.iter()` enumeration for prefix
+/// filtering, `.as_str()` shape-gate on a probed value) drives off
+/// the same pinned return; a hypothetical future K8s API-machinery
+/// rebrand on the `metadata.labels` axis (a schema-migration to a
+/// wrapped `metadata.labelsV2:` sub-block under a versioned CRD
+/// evolution axis, a per-tenant migration to a nested
+/// `metadata.labels.tenant.*` scoped sub-namespace under Server-Side-
+/// Apply's per-field ownership annotations) reaches every caller
+/// through one lift, not a coordinated rewrite across every per-CR
+/// label-readback site.
+///
+/// The canonical shape 3 emit-side test-harness readback sites in
+/// [`caixa-mesh`][mesh] (the per-CNP contrato-values-collect, the
+/// per-CNP [`LABEL_APLICACAO`] readback, the per-CNP labels sub-mapping
+/// enumeration) previously carried inline as either the three-token
+/// composition
+///
+/// ```ignore
+/// value
+///     .get(KUBE_KEY_METADATA)
+///     .and_then(|m| m.get(KUBE_KEY_LABELS))
+///     .and_then(|l| l.as_mapping())
+/// ```
+///
+/// (the per-CNP labels sub-mapping enumeration site) or the four-token
+/// composition
+///
+/// ```ignore
+/// value
+///     .get(KUBE_KEY_METADATA)
+///     .and_then(|m| m.get(KUBE_KEY_LABELS))
+///     .and_then(|l| l.get(<LABEL>))
+///     .and_then(|v| v.as_str())
+/// ```
+///
+/// (the per-CNP contrato-values-collect + [`LABEL_APLICACAO`] readback
+/// sites — closed by the composed sibling [`kube_metadata_label`]
+/// scalar-arity peer that composes on top of this sub-mapping
+/// accessor). A two-shape open-coded readback surface where a future
+/// rebrand on either shape (a schema-migration on the
+/// [`KUBE_KEY_LABELS`] const the parametric shape reads through, an
+/// intermediate `metadata: &Mapping` extraction the raw walks route
+/// through) would silently split the readers into disagreement on
+/// which per-CR label surface a given emitted CR resolves to. Lifting
+/// the resolution to one accessor pinned on the substrate primitive
+/// means every downstream consumer of the per-CR label-surface reaches
+/// for exactly one typed dispatch — the resolver's accept-set
+/// migrates as a unit on any future axis addition.
+///
+/// Structural peer to sibling [`kube_metadata_str_field`] on the same
+/// sub-`metadata.*` navigation depth: [`kube_metadata_str_field`]
+/// reads the scalar-arity sub-fields (parametric on the `<field>`
+/// axis-key); [`kube_metadata_labels`] reads the sub-mapping-arity
+/// sub-block (pinned on the [`KUBE_KEY_LABELS`] axis-key). Same two-
+/// hop `metadata.<sub-block>` readback shape, different return
+/// (`Option<&str>` scalar-arity vs. `Option<&serde_yaml::Mapping>`
+/// sub-mapping-arity) — together they bracket the two canonical
+/// per-`metadata` readback shapes every K8s CR document carries.
+///
+/// The composed sibling scalar-arity peer [`kube_metadata_label`]
+/// lands on top of this accessor as the parametric label-value
+/// accessor on the `metadata.labels.<label>` axis — the "read one
+/// specific label value" question folds onto this accessor's
+/// enumeration through one `.get(<LABEL>).and_then(as_str)` chain,
+/// composition-symmetric to the way the sibling identity /
+/// namespace-scoping accessors compose on [`kube_metadata_str_field`].
+///
+/// Every future per-CR `metadata.labels` readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-CR
+/// label surface, MESH-COMPOSITION §III.2 #3; the `app-operator`'s
+/// per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR label-based
+/// selector join, §III.2 #5; the future `caixa-otel` per-Servico
+/// OpenTelemetry-Collector CR's per-Servico label surface; the M4
+/// per-tenant fan-out's per-tenant label-prefix filter) reaches the
+/// same pinned accessor by construction, with no axis-key argument
+/// drift and no re-inlined three-hop chain.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+#[must_use]
+pub fn kube_metadata_labels(value: &serde_yaml::Value) -> Option<&serde_yaml::Mapping> {
+    value
+        .get(KUBE_KEY_METADATA)
+        .and_then(|m| m.get(KUBE_KEY_LABELS))
+        .and_then(|l| l.as_mapping())
+}
+
+/// Read a single string-scalar label value at
+/// `metadata.labels.<label>` on a K8s custom resource YAML document as
+/// `Option<&str>` — the parametric scalar-arity accessor peer that
+/// composes on top of the lifted sub-mapping-arity
+/// [`kube_metadata_labels`] accessor to close the four-hop per-label
+/// readback the two caixa-mesh test-side per-CNP label-value probes
+/// (contrato-values-collect, [`LABEL_APLICACAO`] readback) previously
+/// walked inline. Composition-symmetric to the way the sibling scalar-
+/// arity [`kube_name`] / [`kube_namespace`] accessors compose on the
+/// parametric scalar-arity [`kube_metadata_str_field`] primitive: the
+/// scalar-arity sub-mapping-value accessor stands on the sub-mapping-
+/// arity sub-block accessor, folding the "read one specific label
+/// value" question onto one `.get(<LABEL>).and_then(as_str)` chain.
+///
+/// Returns `None` when either the enclosing `metadata.labels` sub-
+/// mapping is absent (the same three-way vacuous-`None` short-circuit
+/// the parent [`kube_metadata_labels`] closes — missing `metadata:`
+/// block, missing `labels:` sub-block, non-Mapping `labels:` value),
+/// the requested `<label>` scalar-key is absent under the labels sub-
+/// block (a legally-omitted per-label surface on a CR that carries
+/// other labels but not this one), or the `<label>` value is present
+/// but carries a non-string YAML type (a schema-invalid label shape
+/// per the K8s labels contract that pins values as string scalars,
+/// but tolerated here as `None` so the readback stays a total
+/// function). The returned `&str` borrows into the input `Value` —
+/// the caller decides whether to compare (`==`), clone
+/// (`.to_string()`), or unwrap-then-panic. The four-hop navigation
+/// happens in one method call the caller reads as intent
+/// (`kube_metadata_label(<value>, <LABEL>)` — "read this K8s CR's
+/// `metadata.labels.<LABEL>` string-scalar") rather than four hand-
+/// spelled positional artifacts (the outer `get(KUBE_KEY_METADATA)`
+/// hop, the inner `and_then(|m| m.get(KUBE_KEY_LABELS))` hop, the
+/// per-label `and_then(|l| l.get(<LABEL>))` sub-hop, the trailing
+/// `and_then(|v| v.as_str())` shape gate).
+///
+/// The `label` axis stays parametric (rather than pinned to a specific
+/// label-key like [`LABEL_APLICACAO`] or [`LABEL_CONTRATO`] as
+/// separate helpers) so the same lift closes every string-scalar
+/// label a caixa-mesh emitter writes today ([`LABEL_APLICACAO`],
+/// [`LABEL_CONTRATO`], [`LABEL_PROGRAM`]) and every string-scalar
+/// label a future renderer surfaces (per-tenant label-prefix filters,
+/// per-Servico OTel-collector labels, per-Aplicacao CR
+/// materializer's selector labels) — each new label reaches for the
+/// same helper with a new [`crate::LABEL_*`] const argument, not a
+/// fresh per-label helper. Peer of the composed scalar-arity
+/// [`kube_name`] / [`kube_namespace`] accessors on the sub-`metadata:`
+/// scalar-axis pair: those pin the [`KUBE_KEY_NAME`] /
+/// [`KUBE_KEY_NAMESPACE`] axis-keys inside the helper because the K8s
+/// API-machinery pins those two specific coordinates as the load-
+/// bearing per-CR discriminators; this stays parametric on the
+/// label-key argument because the K8s labels contract deliberately
+/// admits an open-ended per-CR label surface, and pinning a specific
+/// label would foreclose reuse across the label set.
+///
+/// The canonical shape 2 emit-side test-harness readback sites in
+/// [`caixa-mesh`][mesh] previously carried inline as the four-token
+/// composition
+///
+/// ```ignore
+/// value
+///     .get(KUBE_KEY_METADATA)
+///     .and_then(|m| m.get(KUBE_KEY_LABELS))
+///     .and_then(|l| l.get(<LABEL>))
+///     .and_then(|v| v.as_str())
+/// ```
+///
+/// around a one-token semantic payload (the `<LABEL>` axis-key —
+/// [`LABEL_CONTRATO`] on the per-CNP contrato-values-collect site,
+/// [`LABEL_APLICACAO`] on the per-CNP parent-Aplicacao readback
+/// site). The lift collapses the four-token composition — the outer
+/// two hops (folded onto the sibling [`kube_metadata_labels`] sub-
+/// mapping accessor), the per-label sub-hop, the trailing shape gate
+/// — onto one accessor the caller reads as intent
+/// (`kube_metadata_label(<value>, <LABEL>)`) rather than a four-hop
+/// hand-walked chain.
+///
+/// Sites lifted:
+///
+///   * caixa-mesh's `cilium_network_policies_emit_per_de_para_edges`
+///     — the per-CNP [`LABEL_CONTRATO`] values collect
+///     ([`LABEL_CONTRATO`] readback + `.map(String::from)` clone across
+///     every emitted policy);
+///   * caixa-mesh's `cilium_network_policies_label_aplicacao_routes_
+///     through_caixa_nome_accessor` — the per-CNP [`LABEL_APLICACAO`]
+///     readback + string-equality against
+///     [`crate::Caixa::nome`][caixa-nome].
+///
+/// Every future per-CR label-value readback (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-
+/// policy `LABEL_POLITICA` readback, MESH-COMPOSITION §III.2 #3; the
+/// `app-operator`'s per-Aplicacao label-based `spec.selector`
+/// materialization, §III.2 #5; the future `caixa-otel` per-Servico
+/// OpenTelemetry-Collector label-based routing filter; the M4 per-
+/// tenant fan-out's per-tenant label-prefix probe) reaches the same
+/// pinned accessor by construction, with no axis-key argument drift
+/// and no re-inlined four-hop chain.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [caixa-nome]: https://docs.rs/caixa-core
+#[must_use]
+pub fn kube_metadata_label<'a>(value: &'a serde_yaml::Value, label: &str) -> Option<&'a str> {
+    kube_metadata_labels(value)
+        .and_then(|labels| labels.get(label))
+        .and_then(|v| v.as_str())
+}
+
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
 /// entries by matching on `new_entry`'s `<name_key>` scalar — the
 /// idempotent "replace-in-place if present, else append" contract
@@ -39723,6 +39961,434 @@ spec:
              per-tenant coordinate, matching the peer navigator's \
              first-match contract on the identity axis",
         );
+    }
+
+    // ── kube_metadata_labels + kube_metadata_label lifts ────────────────
+
+    #[test]
+    fn kube_metadata_labels_reads_metadata_labels_sub_mapping() {
+        // The lift's load-bearing contract: given a Value carrying a
+        // top-level `metadata: { labels: { <label>: <str>, ... } }`
+        // block (every K8s CR the emit-side [`kube_resource_skeleton`]
+        // renders with a non-empty labels overlay), the helper returns
+        // Some(&Mapping) borrowing into the input Value. Pinned because
+        // the caixa-mesh per-CNP labels enumeration site
+        // (`cilium_policy_metadata_labels_carry_only_pleme_prefixed_
+        // canonical_label_set`) reaches through this exact sub-mapping
+        // readback, and a drift on the borrowed-mapping contract would
+        // silently regress the enumeration's `for (k, _) in labels` walk.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("cart-to-catalog".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels.clone()));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_metadata_labels(&value),
+            Some(&labels),
+            "kube_metadata_labels must read the metadata.labels sub-\
+             mapping — the caixa-mesh per-CNP labels enumeration site \
+             reaches through this axis for per-key iteration"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_labels_returns_none_when_metadata_block_absent() {
+        // The three-way vacuous-None short-circuit's first arm: an
+        // outer Value that legally omits the `metadata:` block short-
+        // circuits at the first hop through the underlying
+        // `.get(KUBE_KEY_METADATA)`. The K8s CR readback surface
+        // accepts arbitrary Value inputs, including external YAML
+        // documents that legally omit the `metadata:` block; pin the
+        // None-arm so a future refactor that reaches for
+        // `.get(...).unwrap()` (which would panic on the missing
+        // block) is a test-visible break. Peer of the sibling
+        // `kube_metadata_str_field_returns_none_when_metadata_block_absent`
+        // pin on the scalar-arity peer.
+        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_metadata_labels(&value),
+            None,
+            "kube_metadata_labels must short-circuit to None when the \
+             top-level `metadata:` block is absent — the prior inline \
+             three-hop chain's first `.get(KUBE_KEY_METADATA)` hop \
+             returned None here"
+        );
+
+        // Also verify the shape on non-Mapping outer Value shapes.
+        for shape in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::String("scalar".into()),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Number(0.into()),
+            serde_yaml::Value::Bool(false),
+        ] {
+            assert_eq!(
+                kube_metadata_labels(&shape),
+                None,
+                "kube_metadata_labels({shape:?}) must return None on \
+                 non-Mapping outer shapes — the prior inline chain's \
+                 `.get(KUBE_KEY_METADATA)` hop yields None on every \
+                 non-Mapping Value, and the lift must preserve that \
+                 contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_labels_returns_none_when_labels_sub_block_absent() {
+        // The three-way vacuous-None short-circuit's second arm: a
+        // well-formed CR carrying a `metadata:` block but no
+        // `labels:` sub-block short-circuits at the middle hop through
+        // the underlying `.and_then(|m| m.get(KUBE_KEY_LABELS))`. The
+        // emit-side [`kube_resource_skeleton`]'s
+        // `labels.is_empty()` short-circuit legally omits the `labels:`
+        // sub-block for CRs like Gateway that need no per-Aplicacao
+        // label grouping at the K8s-resource axis today; pin the
+        // middle-hop None-arm so this readback preserves the emit-
+        // side's short-circuit semantic on the reverse.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-gateway".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_metadata_labels(&value),
+            None,
+            "kube_metadata_labels must return None when the enclosing \
+             `metadata:` block is present but omits the `labels:` sub-\
+             block — the prior inline three-hop chain's middle \
+             `.and_then(|m| m.get(KUBE_KEY_LABELS))` hop short-\
+             circuited here, mirroring the emit-side's `labels.is_\
+             empty()` skip"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_labels_returns_none_when_labels_carries_non_mapping_type() {
+        // The three-way vacuous-None short-circuit's third arm: a
+        // present-but-non-Mapping `labels:` value (a schema-invalid
+        // shape per the K8s API-machinery's labels contract, which
+        // pins the block as `map[string]string`, but tolerated here
+        // as None so the readback stays a total function). Pin the
+        // trailing shape gate so a future refactor that reaches for
+        // `.as_mapping().unwrap()` (which would panic on a numeric
+        // labels-value) is a test-visible break, not a runtime
+        // regression at the first schema-invalid CR the reader sees.
+        for non_mapping in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::String("labels-as-string".into()),
+        ] {
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_LABELS, non_mapping.clone());
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_metadata_labels(&value),
+                None,
+                "kube_metadata_labels must return None when \
+                 metadata.labels carries a non-Mapping YAML type \
+                 ({non_mapping:?}) — the trailing \
+                 `.and_then(|l| l.as_mapping())` shape gate short-\
+                 circuited here on the prior inline chain, and every \
+                 routed caller depends on that None-arm to keep the \
+                 readback total"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_labels_matches_prior_inline_chain() {
+        // Cross-check the helper's output byte-for-byte against the
+        // prior inline three-hop chain the routed caller previously
+        // carried. A drift between the helper's return and the inline
+        // chain would silently regress the caixa-mesh per-CNP labels
+        // enumeration's `for (k, _) in labels` walk — pin the byte-
+        // equivalence so the helper remains a drop-in replacement for
+        // the routed site's prior three-line block. Peer of the
+        // sibling `kube_metadata_str_field_matches_prior_inline_chain`
+        // pin on the scalar-arity peer.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("payment-to-cart".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        let via_helper = kube_metadata_labels(&value);
+        let via_inline = value
+            .get(KUBE_KEY_METADATA)
+            .and_then(|m| m.get(KUBE_KEY_LABELS))
+            .and_then(|l| l.as_mapping());
+        assert_eq!(
+            via_helper, via_inline,
+            "kube_metadata_labels must yield the same Option<&Mapping> \
+             as the prior inline three-hop chain — otherwise the \
+             routed caixa-mesh per-CNP labels enumeration site drifts \
+             silently at test time"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_reads_per_label_string_scalar() {
+        // The composed lift's load-bearing contract: given a Value
+        // carrying a top-level `metadata.labels.<label>: <str>` scalar,
+        // the helper returns Some(<str>) borrowing into the input
+        // Value. Pinned because the two caixa-mesh test-side per-CNP
+        // label-value probes (contrato-values-collect, LABEL_APLICACAO
+        // readback) reach through this exact string-scalar readback,
+        // and a drift on the borrowed-string contract would silently
+        // regress both routed sites' equality comparison.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("cart-to-catalog".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_metadata_label(&value, LABEL_APLICACAO),
+            Some("checkout"),
+            "kube_metadata_label must read the metadata.labels.\
+             LABEL_APLICACAO string-scalar — the caixa-mesh per-CNP \
+             parent-Aplicacao readback site reaches through this axis \
+             for label-value equality"
+        );
+        assert_eq!(
+            kube_metadata_label(&value, LABEL_CONTRATO),
+            Some("cart-to-catalog"),
+            "kube_metadata_label must read the metadata.labels.\
+             LABEL_CONTRATO string-scalar — the caixa-mesh per-CNP \
+             contrato-values-collect site reaches through this axis \
+             for the per-edge label collect"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_returns_none_when_labels_block_absent() {
+        // The four-way vacuous-None short-circuit's first-three arms:
+        // any short-circuit the composed [`kube_metadata_labels`] sub-
+        // mapping accessor closes on (missing metadata block, missing
+        // labels sub-block, non-Mapping labels value) folds through
+        // this composed accessor. Pin the composition-shape here so
+        // the two routed caixa-mesh label-value probes preserve the
+        // None-arm semantics that keep their `.expect(...)` /
+        // `.map(String::from)` follow-ups sound.
+        let value = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_metadata_label(&value, LABEL_APLICACAO),
+            None,
+            "kube_metadata_label must short-circuit to None when the \
+             top-level `metadata:` block is absent — folds through the \
+             composed [`kube_metadata_labels`] sub-mapping accessor's \
+             first-hop None"
+        );
+
+        // Present metadata but absent labels sub-block — the
+        // composed sub-mapping accessor's middle-hop None-arm.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-gateway".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_metadata_label(&value, LABEL_APLICACAO),
+            None,
+            "kube_metadata_label must short-circuit to None when the \
+             `labels:` sub-block is absent — folds through the \
+             composed [`kube_metadata_labels`] sub-mapping accessor's \
+             middle-hop None"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_returns_none_when_requested_label_absent() {
+        // The four-way vacuous-None short-circuit's third arm: a
+        // labels sub-mapping present but missing the requested label
+        // key — a legally-omitted per-label surface on a CR that
+        // carries other labels but not this one (a Gateway that
+        // carries LABEL_PROGRAM but not LABEL_CONTRATO, a per-tenant
+        // slice CR that carries LABEL_APLICACAO but not per-`(:de,
+        // :para)` LABEL_CONTRATO). Pin the middle-hop None-arm so
+        // future consumers can distinguish "no such label" from
+        // "wrong shape" in their `.unwrap_or_default(...)` /
+        // `.expect(...)` follow-ups.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+        assert_eq!(
+            kube_metadata_label(&value, LABEL_CONTRATO),
+            None,
+            "kube_metadata_label must return None when the requested \
+             `metadata.labels.<label>` axis-key is absent — the prior \
+             inline four-hop chain's per-label `.and_then(|l| l.get(\
+             <LABEL>))` sub-hop short-circuited here"
+        );
+    }
+
+    #[test]
+    fn kube_metadata_label_returns_none_when_label_carries_non_string_type() {
+        // The four-way vacuous-None short-circuit's fourth arm: a
+        // label-value present but carrying a non-string YAML type — a
+        // schema-invalid label per the K8s labels contract that pins
+        // values as string scalars, but tolerated here as None so the
+        // readback stays a total function. Pin the trailing shape gate
+        // so a future refactor that reaches for `.as_str().unwrap()`
+        // (which would panic on a numeric label-value) is a test-
+        // visible break.
+        for non_string in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut labels = serde_yaml::Mapping::new();
+            labels.insert_str_key(LABEL_APLICACAO, non_string.clone());
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_metadata_label(&value, LABEL_APLICACAO),
+                None,
+                "kube_metadata_label must return None when \
+                 metadata.labels.LABEL_APLICACAO carries a non-string \
+                 YAML type ({non_string:?}) — the trailing `.and_then(\
+                 |v| v.as_str())` shape gate short-circuited here"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_label_composes_on_lifted_kube_metadata_labels_accessor() {
+        // Composition pin: the scalar-arity label-value accessor
+        // folds onto the sub-mapping-arity sub-block accessor as
+        // `kube_metadata_labels(value).and_then(|labels| labels.get(
+        // label)).and_then(|v| v.as_str())`. Pin the composition-shape
+        // across every combination of the two canonical caixa-mesh
+        // per-CNP label surface's routed keys (LABEL_APLICACAO,
+        // LABEL_CONTRATO) so a future accidental rewire of the
+        // helper's internals to a private four-hop chain (bypassing
+        // the sub-mapping accessor) is a test-visible break, matching
+        // the sibling `kube_name_is_composes_on_lifted_kube_name_
+        // accessor` pin's discipline on the identity-axis composition.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("cart-to-payment".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for label in [LABEL_APLICACAO, LABEL_CONTRATO] {
+            let via_helper = kube_metadata_label(&value, label);
+            let via_composed = kube_metadata_labels(&value)
+                .and_then(|labels| labels.get(label))
+                .and_then(|v| v.as_str());
+            assert_eq!(
+                via_helper, via_composed,
+                "kube_metadata_label(_, {label:?}) must compose on \
+                 kube_metadata_labels(_).and_then(get(label)).and_\
+                 then(as_str) — otherwise the routed caixa-mesh label-\
+                 value sites drift silently from the sub-mapping \
+                 accessor's contract"
+            );
+        }
+    }
+
+    #[test]
+    fn kube_metadata_label_matches_prior_inline_chain() {
+        // Cross-check the helper's output byte-for-byte against the
+        // prior inline four-hop chain both routed callers previously
+        // carried. A drift between the helper's return and the inline
+        // chain would silently regress the caixa-mesh per-CNP LABEL_
+        // CONTRATO values collect + the per-CNP LABEL_APLICACAO
+        // readback — pin the byte-equivalence so the helper remains a
+        // drop-in replacement for both routed sites' prior four-line
+        // block. Peer of the sibling `kube_metadata_str_field_matches_
+        // prior_inline_chain` pin on the scalar-arity peer at the
+        // shallower `metadata.<field>` navigation depth.
+        let mut labels = serde_yaml::Mapping::new();
+        labels.insert_str_key(
+            LABEL_APLICACAO,
+            serde_yaml::Value::String("checkout".into()),
+        );
+        labels.insert_str_key(
+            LABEL_CONTRATO,
+            serde_yaml::Value::String("cart-to-catalog".into()),
+        );
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_LABELS, serde_yaml::Value::Mapping(labels));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for label in [LABEL_APLICACAO, LABEL_CONTRATO] {
+            let via_helper = kube_metadata_label(&value, label);
+            let via_inline = value
+                .get(KUBE_KEY_METADATA)
+                .and_then(|m| m.get(KUBE_KEY_LABELS))
+                .and_then(|l| l.get(label))
+                .and_then(|v| v.as_str());
+            assert_eq!(
+                via_helper, via_inline,
+                "kube_metadata_label(_, {label:?}) must yield the same \
+                 Option<&str> as the prior inline four-hop chain — \
+                 otherwise the two routed caixa-mesh test-side per-CNP \
+                 label-value sites drift silently"
+            );
+        }
     }
 
     // ── contrato-edge-label + cilium-network-policy-name lifts ──────────

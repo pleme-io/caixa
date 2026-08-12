@@ -3274,7 +3274,8 @@ mod tests {
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
         PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
-        kube_kind_is, kube_name, kube_name_is, kube_namespace,
+        kube_kind_is, kube_metadata_label, kube_metadata_labels, kube_name, kube_name_is,
+        kube_namespace,
     };
     use std::time::Duration;
 
@@ -3515,13 +3516,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let contrato_values: Vec<String> = policies
             .iter()
-            .filter_map(|p| {
-                p.get(KUBE_KEY_METADATA)
-                    .and_then(|m| m.get(KUBE_KEY_LABELS))
-                    .and_then(|l| l.get(LABEL_CONTRATO))
-                    .and_then(|v| v.as_str())
-                    .map(String::from)
-            })
+            .filter_map(|p| kube_metadata_label(p, LABEL_CONTRATO).map(String::from))
             .collect();
         assert!(
             contrato_values.contains(&contrato_edge_label("cart", "catalog")),
@@ -6593,11 +6588,7 @@ mod tests {
         let policies = cilium_network_policies(&c).unwrap();
         assert!(!policies.is_empty());
         for policy in &policies {
-            let emitted = policy
-                .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.get(KUBE_KEY_LABELS))
-                .and_then(|l| l.get(LABEL_APLICACAO))
-                .and_then(|v| v.as_str())
+            let emitted = kube_metadata_label(policy, LABEL_APLICACAO)
                 .expect("CNP metadata.labels carries LABEL_APLICACAO as a string");
             assert_eq!(
                 emitted,
@@ -7847,21 +7838,12 @@ mod tests {
         // through to the policy metadata.
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
-            let labels = p
-                .get(KUBE_KEY_METADATA)
-                .and_then(|m| m.get(KUBE_KEY_LABELS))
-                .and_then(|l| l.as_mapping())
-                .expect("policy metadata.labels mapping");
-            assert_eq!(
-                labels.get(LABEL_APLICACAO).and_then(|v| v.as_str()),
-                Some("checkout")
-            );
+            let labels = kube_metadata_labels(p).expect("policy metadata.labels mapping");
+            assert_eq!(kube_metadata_label(p, LABEL_APLICACAO), Some("checkout"));
             // The contrato label is `<de>-to-<para>`; both fixture
             // edges have :de = "cart".
-            let contrato_val = labels
-                .get(LABEL_CONTRATO)
-                .and_then(|v| v.as_str())
-                .expect("contrato label present");
+            let contrato_val =
+                kube_metadata_label(p, LABEL_CONTRATO).expect("contrato label present");
             assert!(
                 contrato_val.starts_with("cart-to-"),
                 "contrato label {contrato_val:?} must follow `<de>-to-<para>` shape"
