@@ -217,13 +217,21 @@ impl Printer<'_> {
     /// A commented subtree also falls back, since `render_inline` has
     /// nowhere to put a `; …` and would swallow it.
     fn emit_header_operand(&mut self, n: &Node, indent: usize) {
-        let inlineable = match &n.kind {
-            NodeKind::List(items) | NodeKind::Vector(items) | NodeKind::Map(items) => {
-                !(self.cfg.preserve_comments
-                    && (contains_comment(n) || items.iter().any(contains_comment)))
-            }
-            _ => false,
-        };
+        // Route the D4-dialect compound-body inlineable gate through
+        // the lifted [`caixa_ast::NodeKind::as_seq_body`] `Option<&[Node]>`
+        // accessor rather than the raw three-arm `NodeKind::List(items) |
+        // NodeKind::Vector(items) | NodeKind::Map(items) => …` open-coded
+        // per-arm disjunctive pattern-match — sibling in shape to the
+        // peer caixa-ast [`caixa_ast::visit::walk`] and caixa-fmt
+        // [`is_atom`] compound-body sites that all key off the
+        // three-arm D4-dialect compound-body arm-set through the same
+        // substrate-canonical accessor. `None` (an atom or reader-
+        // macro-carrying arm) is a non-inlineable header operand by
+        // construction — the pre-lift `_ => false` arm.
+        let inlineable = n.kind.as_seq_body().is_some_and(|items| {
+            !(self.cfg.preserve_comments
+                && (contains_comment(n) || items.iter().any(contains_comment)))
+        });
         if inlineable {
             let (items, delims) = match &n.kind {
                 NodeKind::List(i) => (i, Delims::PAREN),
@@ -856,11 +864,19 @@ fn command_arg_groups(args: &[Node]) -> Vec<(usize, usize)> {
 ///
 /// Only atoms can be grid CELLS. A nested compound carries its own shape
 /// and width rules, so padding it into a column would fight its layout.
+///
+/// Routes the D4-dialect compound-body classifier through the lifted
+/// [`caixa_ast::NodeKind::as_seq_body`] `Option<&[Node]>` accessor
+/// rather than the raw three-arm negated `matches!(_.kind,
+/// NodeKind::List(_) | NodeKind::Vector(_) | NodeKind::Map(_))`
+/// disjunctive pattern-match — sibling in shape to the peer caixa-ast
+/// [`caixa_ast::visit::walk`] and caixa-fmt [`emit_header_operand`]
+/// compound-body sites that all key off the same substrate-canonical
+/// accessor. `None` (an atom or reader-macro-carrying arm) is an atom
+/// by construction; `Some(_)` (any D4-dialect compound arm — List,
+/// Map, Vector) is a compound, refusing to fold into a grid cell.
 fn is_atom(n: &Node) -> bool {
-    !matches!(
-        n.kind,
-        NodeKind::List(_) | NodeKind::Vector(_) | NodeKind::Map(_)
-    )
+    n.kind.as_seq_body().is_none()
 }
 
 /// Does this cell hold a number? Numeric columns right-align, so the digits
