@@ -3273,8 +3273,8 @@ mod tests {
         Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
-        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_kind_is,
-        kube_metadata_str_field, kube_name_is, kube_root_str_field,
+        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_kind_is, kube_name,
+        kube_name_is, kube_root_str_field,
     };
     use std::time::Duration;
 
@@ -3479,11 +3479,7 @@ mod tests {
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         let names: Vec<String> = policies
             .iter()
-            .map(|p| {
-                kube_metadata_str_field(p, KUBE_KEY_NAME)
-                    .expect("policy metadata.name")
-                    .to_string()
-            })
+            .map(|p| kube_name(p).expect("policy metadata.name").to_string())
             .collect();
         assert!(
             names.contains(&cilium_network_policy_name("checkout", "cart", "catalog")),
@@ -3585,7 +3581,7 @@ mod tests {
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
         assert_eq!(
-            kube_metadata_str_field(route, KUBE_KEY_NAME),
+            kube_name(route),
             Some(gateway_api_http_route_name("checkout", "cart").as_str()),
             "HTTPRoute metadata.name must match lifted composer output",
         );
@@ -6685,8 +6681,7 @@ mod tests {
         let policies = cilium_network_policies(&c).unwrap();
         assert!(!policies.is_empty());
         for policy in &policies {
-            let emitted = kube_metadata_str_field(policy, KUBE_KEY_NAME)
-                .expect("CNP metadata.name scalar present");
+            let emitted = kube_name(policy).expect("CNP metadata.name scalar present");
             // Extract the (de, para) pair back out of
             // `<aplicacao>-<de>-to-<para>` by stripping the accessor-
             // canonical `<aplicacao>-` prefix and splitting on the
@@ -6793,8 +6788,7 @@ mod tests {
         let docs = gateway_routes(&c).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY)
             .expect("Gateway present under a `:entrada`-carrying fixture Aplicacao");
-        let emitted = kube_metadata_str_field(gateway, KUBE_KEY_NAME)
-            .expect("Gateway metadata.name scalar present");
+        let emitted = kube_name(gateway).expect("Gateway metadata.name scalar present");
         assert_eq!(
             emitted,
             c.nome(),
@@ -6835,8 +6829,7 @@ mod tests {
         let docs = gateway_routes(&c).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
             .expect("HTTPRoute present under a `:entrada`-carrying fixture Aplicacao");
-        let emitted = kube_metadata_str_field(route, KUBE_KEY_NAME)
-            .expect("HTTPRoute metadata.name scalar present");
+        let emitted = kube_name(route).expect("HTTPRoute metadata.name scalar present");
         let entrada = c
             .entrada()
             .expect("aplicacao_caixa carries a typed `:entrada` block");
@@ -7733,11 +7726,7 @@ mod tests {
         assert_eq!(policies.len(), 2);
         let names: Vec<_> = policies
             .iter()
-            .map(|p| {
-                kube_metadata_str_field(p, KUBE_KEY_NAME)
-                    .unwrap()
-                    .to_string()
-            })
+            .map(|p| kube_name(p).unwrap().to_string())
             .collect();
         assert!(names.contains(&"checkout-cart-to-catalog".to_string()));
         assert!(names.contains(&"checkout-cart-to-payment".to_string()));
@@ -8546,8 +8535,7 @@ mod tests {
             let docs = gateway_routes(&caixa).unwrap();
             let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE)
                 .expect("HTTPRoute present under every :entrada :para permutation");
-            let emitted = kube_metadata_str_field(route, KUBE_KEY_NAME)
-                .expect("HTTPRoute metadata.name scalar present");
+            let emitted = kube_name(route).expect("HTTPRoute metadata.name scalar present");
             assert_eq!(
                 emitted, expected_composed_name,
                 "HTTPRoute `metadata.name` must equal \
@@ -8644,7 +8632,7 @@ mod tests {
         let caixa = aplicacao_caixa();
         let docs = gateway_routes(&caixa).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        let route_name = kube_metadata_str_field(route, KUBE_KEY_NAME)
+        let route_name = kube_name(route)
             .expect("HTTPRoute metadata.name scalar present")
             .to_string();
         let backend_name = route
@@ -8814,7 +8802,7 @@ mod tests {
         // `spec.port_for_destination(<destination>)`.
         let policies = cilium_network_policies(&caixa).unwrap();
         for policy in &policies {
-            let cnp_name = kube_metadata_str_field(policy, KUBE_KEY_NAME)
+            let cnp_name = kube_name(policy)
                 .expect("every CNP has a metadata.name")
                 .to_string();
             let Some(destination) = cnp_name.split("-to-").nth(1) else {

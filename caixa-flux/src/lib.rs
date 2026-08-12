@@ -2420,7 +2420,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_root_str_field,
+        kube_name, kube_root_str_field,
     };
 
     fn sample_caixa() -> Caixa {
@@ -7991,7 +7991,7 @@ spec:
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
-        let emitted = kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(
+        let emitted = kube_name(&parsed).expect(
             "gitrepository.yaml `metadata.name` scalar present — drift here \
              silently orphans the source-controller-side per-Servico \
              GitRepository CR from every peer `spec.sourceRef.name` binding",
@@ -8035,7 +8035,7 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        let emitted = kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(
+        let emitted = kube_name(&parsed).expect(
             "helmrelease.yaml `metadata.name` scalar present — drift here \
              silently orphans the helm-controller-side per-Servico \
              HelmRelease CR from every peer Kustomization \
@@ -8078,7 +8078,7 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&k.contents).expect("kustomization.yaml parses as YAML");
-        let emitted = kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(
+        let emitted = kube_name(&parsed).expect(
             "kustomization.yaml `metadata.name` scalar present — drift here \
              silently splits the kustomize-controller-side per-Servico \
              Kustomization CR's prune / reconcile decisions from every peer \
