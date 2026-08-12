@@ -19108,7 +19108,101 @@ pub fn find_by_kind<'a>(
 /// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
 #[must_use]
 pub fn kube_name_is(value: &serde_yaml::Value, name: &str) -> bool {
-    kube_metadata_str_field(value, KUBE_KEY_NAME) == Some(name)
+    kube_name(value) == Some(name)
+}
+
+/// Read the `metadata.name` string-scalar identity axis of a K8s
+/// custom resource YAML document as `Option<&str>` — the pinned peer
+/// on the identity axis to the parametric [`kube_metadata_str_field`]
+/// on the two-hop `metadata.<field>` sub-axis surface. Returns `None`
+/// when either the enclosing `metadata:` block is absent, the sub-
+/// `name:` scalar is absent, or the sub-`name:` scalar carries a
+/// non-string YAML type — the same three-way vacuous-`None` short-
+/// circuit the parent [`kube_metadata_str_field`] closes on the
+/// underlying two-hop navigation.
+///
+/// The [`KUBE_KEY_NAME`] axis is pinned inside the helper (unlike
+/// the parametric `field` axis of the underlying
+/// [`kube_metadata_str_field`]) because the K8s API-machinery pins
+/// `metadata.name` as the load-bearing per-CR identity axis on every
+/// `CustomResource` across every group/version. Every readback
+/// consumer downstream (`.unwrap()`, `.expect(...)`, `== Some(...)`
+/// equality wraps, `.to_string()` clone, `.strip_prefix(...)` /
+/// `.split_once(...)` decompose chains) drives off the same pinned
+/// return; a hypothetical future K8s API-machinery rename on the
+/// `metadata.name` axis (a Server-Side-Apply-driven identity
+/// migration under per-field ownership annotations, an alias table
+/// bridging a new `metadata.identity` sub-axis) reaches every
+/// caller through one lift, not a coordinated rewrite across every
+/// per-CR readback site.
+///
+/// The canonical shape 12 emit-side test-harness readback sites
+/// across [`caixa-mesh`][mesh] (9) + [`caixa-flux`][flux] (3)
+/// previously carried inline as the two-token composition
+///
+/// ```ignore
+/// kube_metadata_str_field(<value>, KUBE_KEY_NAME)
+/// ```
+///
+/// around a one-token semantic payload (the readback intent — "what
+/// name did the emitter write into this CR?"). The lift collapses
+/// the two-token composition — the parametric readback helper, the
+/// pinned identity-axis scalar-key argument — onto one accessor the
+/// caller reads as intent (`kube_name(<value>)` — "what is this K8s
+/// CR document's `metadata.name`?") rather than a
+/// `readback → axis-pin` two-arg call.
+///
+/// Structural peer to sibling [`kube_kind_is`] (predicate arity) /
+/// [`find_by_kind`] (navigator arity) / [`kube_name_is`] (predicate
+/// arity) / [`find_by_name`] (navigator arity) on the same canonical
+/// K8s CR discriminator+identity axis pair: this closes the accessor
+/// arity on the identity axis — the "what is this document's name?"
+/// question the peer predicate answers as equality and the peer
+/// navigator answers as filter-then-first-hit. Same axis, three
+/// arities — the accessor (`kube_name`) reads, the predicate
+/// (`kube_name_is`) tests, the navigator (`find_by_name`) locates —
+/// each pinned to [`KUBE_KEY_NAME`] inside the helper so the axis-
+/// key drift class is closed across every consumer surface.
+///
+/// Sites lifted:
+///
+///   * caixa-mesh's per-CNP `metadata.name` readback loop in the
+///     five test bodies `cilium_network_policy_metadata_name_uses_lifted_composer`,
+///     `cilium_network_policy_metadata_name_derives_from_caixa_nome_accessor`,
+///     `cilium_emits_one_policy_per_de_para_pair`, and
+///     `cilium_network_policy_l4_port_matches_dest_servico_port` —
+///     each `p → kube_metadata_str_field(p, KUBE_KEY_NAME).expect|unwrap`
+///     readback inside the fan-in `.iter().map(...)` or per-policy
+///     `for` loop over the multi-doc CNP emission;
+///   * caixa-mesh's per-Gateway / per-HTTPRoute `metadata.name`
+///     readback across the four test bodies
+///     `gateway_routes_httproute_metadata_name_uses_lifted_composer`,
+///     `gateway_routes_gateway_metadata_name_routes_through_caixa_nome_accessor`,
+///     `gateway_routes_httproute_metadata_name_routes_through_caixa_nome_accessor`,
+///     and the per-`:entrada :para` parametric permutation harness —
+///     each `find_by_kind(&docs, <KIND>) → kube_metadata_str_field(..,
+///     KUBE_KEY_NAME).expect(...)` chain over the paired-Gateway/HTTPRoute
+///     emission;
+///   * caixa-flux's three
+///     `cluster_bundle_{gitrepository,helmrelease,kustomization}_metadata_name_routes_through_caixa_nome_accessor`
+///     tests — each per-emitted-file
+///     `parsed → kube_metadata_str_field(&parsed, KUBE_KEY_NAME).expect(...)`
+///     site on the per-Flux-CR bundle-path emission.
+///
+/// Every future per-CR `metadata.name` readback (the M4 cross-cluster
+/// fan-out's per-cluster `HelmRelease` name-router, the `app-
+/// operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR
+/// status-name join, MESH-COMPOSITION §III.2 #5; the future per-
+/// `:contratos` `CiliumClusterwideEnvoyConfig`-name introspection
+/// filter) reaches the same pinned accessor by construction, with no
+/// axis-key argument drift and no re-inlined
+/// `kube_metadata_str_field(_, KUBE_KEY_NAME)` two-token composition.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_name(value: &serde_yaml::Value) -> Option<&str> {
+    kube_metadata_str_field(value, KUBE_KEY_NAME)
 }
 
 /// Locate the first K8s CR YAML document in `docs` whose
@@ -37710,6 +37804,164 @@ spec:
             kube_metadata_str_field(first, KUBE_KEY_NAME),
             Some("primary"),
         );
+    }
+
+    #[test]
+    fn kube_name_matches_lifted_kube_metadata_str_field_readback_shape() {
+        // Byte-equivalence pin: the lifted accessor reproduces the
+        // two-token composition (`kube_metadata_str_field(v,
+        // KUBE_KEY_NAME)`) the 12 caixa-mesh (9) + caixa-flux (3)
+        // test-side per-CR readback sites previously carried inline
+        // around the readback intent "what name did the emitter write
+        // into this CR?". Closes the "did the lift accidentally
+        // rename the pinned scalar-key axis to KUBE_KEY_NAMESPACE
+        // (silently pulling the peer identity coordinate instead of
+        // the primary), drop the axis-key argument, or widen the
+        // return type" drift class every future re-lift on the peer-
+        // axis surface (a hypothetical `kube_namespace` peer on the
+        // per-CR namespace-scoping coordinate, a `kube_uid` peer for
+        // ownerReference bookkeeping) would otherwise reopen. Peer of
+        // the sibling `kube_name_is_matches_lifted_kube_metadata_str_field_equality_shape`
+        // pin on the predicate-arity half of the same axis: the
+        // accessor pin asserts the readback intent, the predicate pin
+        // asserts the equality-wrap intent, together bracketing the
+        // two-arity closure the identity axis carries at V0.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(kube_name(&value), Some("checkout-cart-to-catalog"));
+        assert_eq!(
+            kube_name(&value),
+            kube_metadata_str_field(&value, KUBE_KEY_NAME),
+            "kube_name must byte-agree with the parametric \
+             `kube_metadata_str_field(v, KUBE_KEY_NAME)` composition \
+             it replaces at every consumer site — drift on either \
+             half silently opens a per-CR identity readback that no \
+             longer routes through the pinned KUBE_KEY_NAME axis-key",
+        );
+    }
+
+    #[test]
+    fn kube_name_none_when_metadata_block_absent_or_name_absent() {
+        // Complement-side pin: the accessor returns `None` when
+        // either the enclosing `metadata:` block is absent (root-
+        // level CR with no metadata mapping at all — the vacuous
+        // shape the operator-side "not-yet-materialized" CR readback
+        // might momentarily observe under a partial apply) or the
+        // sub-`name:` scalar is absent inside a present `metadata:`
+        // block (a partially-authored CR the K8s API-server would
+        // reject at admission but that this readback tolerates as
+        // `None` so the accessor stays a total function). Consumer
+        // sites (`.expect(...)`, `.unwrap()`, `Some(...) == expected`
+        // equality wraps) rely on the None-on-absence short-circuit
+        // to distinguish "no such name on this doc" from "wrong
+        // shape" in the follow-up. Peer of the sibling
+        // `kube_name_is_false_on_mismatched_name_and_missing_name`
+        // pin on the predicate-arity half — the accessor short-
+        // circuits to `None`, the predicate short-circuits through it
+        // to `false` — same underlying vacuous-`None` gate.
+        let cr_no_metadata = serde_yaml::Mapping::new();
+        assert_eq!(
+            kube_name(&serde_yaml::Value::Mapping(cr_no_metadata)),
+            None,
+            "kube_name must return None when the enclosing metadata: \
+             block is absent",
+        );
+
+        let empty_meta = serde_yaml::Mapping::new();
+        let mut cr_no_name = serde_yaml::Mapping::new();
+        cr_no_name.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        assert_eq!(
+            kube_name(&serde_yaml::Value::Mapping(cr_no_name)),
+            None,
+            "kube_name must return None when the sub-name: scalar is \
+             absent inside a present metadata: block",
+        );
+    }
+
+    #[test]
+    fn kube_name_none_when_metadata_name_carries_non_string_type() {
+        // Type-gate pin: the accessor returns `None` when the sub-
+        // `metadata.name:` scalar is present but carries a non-string
+        // YAML type (a numeric, boolean, or nested mapping — invalid
+        // K8s CR shape per the K8s API-machinery OpenAPI schema, but
+        // tolerated here as `None` so the readback stays a total
+        // function and defers the diagnostic to the caller's own
+        // `.expect(...)` / `.unwrap()` follow-up which names the
+        // caller's schema axis). Pins the type-gate half of the
+        // accessor's contract — the axis-key pin is asserted by the
+        // sibling byte-agreement test — so a hypothetical future
+        // widening (accepting numeric `metadata.name: 42` as the
+        // stringified `"42"`, an aliased YAML integer under a fresh
+        // `Value::from` conversion) is caught before it lands.
+        let mut metadata_int = serde_yaml::Mapping::new();
+        metadata_int.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::from(42u64));
+        let mut cr_int = serde_yaml::Mapping::new();
+        cr_int.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_int));
+        assert_eq!(
+            kube_name(&serde_yaml::Value::Mapping(cr_int)),
+            None,
+            "kube_name must return None when metadata.name carries a \
+             non-string YAML type (numeric here)",
+        );
+
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key("nested", serde_yaml::Value::String("value".into()));
+        let mut metadata_map = serde_yaml::Mapping::new();
+        metadata_map.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::Mapping(inner));
+        let mut cr_map = serde_yaml::Mapping::new();
+        cr_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_map));
+        assert_eq!(
+            kube_name(&serde_yaml::Value::Mapping(cr_map)),
+            None,
+            "kube_name must return None when metadata.name carries a \
+             nested mapping (invalid CR shape per K8s API-machinery)",
+        );
+    }
+
+    #[test]
+    fn kube_name_is_composes_on_lifted_kube_name_accessor() {
+        // Composition pin: after the accessor lift, the peer
+        // predicate `kube_name_is(v, n)` must resolve exactly as
+        // `kube_name(v) == Some(n)` — i.e. the predicate no longer
+        // carries an inline `kube_metadata_str_field(v,
+        // KUBE_KEY_NAME) == Some(n)` composition but composes on the
+        // sibling accessor. Pins the structural link between the
+        // three-arity closure (accessor / predicate / navigator) on
+        // the identity axis: a future re-implementation of `kube_name`
+        // (e.g. a caching short-circuit for repeated readback on the
+        // same document, a hypothetical alias-table dispatch on a
+        // `metadata.identity` sub-axis) reaches the predicate through
+        // one lift, not a second co-ordinated inline rewrite. Peer of
+        // the sibling `find_by_name_matches_inline_iter_find_kube_name_is_shape`
+        // pin on the navigator arity — the navigator composes on the
+        // predicate, the predicate composes on the accessor.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-payment".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_name_is(&value, "checkout-cart-to-payment"),
+            kube_name(&value) == Some("checkout-cart-to-payment"),
+            "kube_name_is must byte-agree with the peer \
+             `kube_name(v) == Some(n)` composition it now delegates \
+             to — the predicate carries no more inline navigation, \
+             only the equality-wrap semantic distinct from the \
+             sibling accessor arity",
+        );
+        assert!(kube_name_is(&value, "checkout-cart-to-payment"));
+        assert!(!kube_name_is(&value, "checkout-cart-to-catalog"));
     }
 
     #[test]
