@@ -102,19 +102,17 @@ struct Delims {
     close: char,
 }
 
-impl Delims {
-    const PAREN: Self = Self {
-        open: '(',
-        close: ')',
-    };
-    const BRACE: Self = Self {
-        open: '{',
-        close: '}',
-    };
-    const BRACKET: Self = Self {
-        open: '[',
-        close: ']',
-    };
+/// Adapter from the substrate-canonical delimiter-pair projection on the
+/// outer-[`NodeKind`] sum-type ([`caixa_ast::NodeKind::seq_delims`]) into
+/// this crate's local `Delims` shape. Every writer-side compound-emit site
+/// dispatches through the substrate accessor and constructs its `Delims`
+/// via this `From` — the three D4-dialect compound arms (`List` / `Map`
+/// / `Vector`) each read back through one canonical projection rather
+/// than a three-way per-arm pattern-match repeated at every writer site.
+impl From<(char, char)> for Delims {
+    fn from((open, close): (char, char)) -> Self {
+        Self { open, close }
+    }
 }
 
 impl Printer<'_> {
@@ -171,9 +169,26 @@ impl Printer<'_> {
                 self.out.push_str(",@");
                 self.emit(inner, indent);
             }
-            NodeKind::List(items) => self.emit_seq(items, &n.trailing, indent, Delims::PAREN),
-            NodeKind::Map(items) => self.emit_seq(items, &n.trailing, indent, Delims::BRACE),
-            NodeKind::Vector(items) => self.emit_seq(items, &n.trailing, indent, Delims::BRACKET),
+            // Route the three D4-dialect compound arms' compound-emit
+            // dispatch through the lifted substrate accessor pair
+            // [`caixa_ast::NodeKind::as_seq_body`] +
+            // [`caixa_ast::NodeKind::seq_delims`] rather than the raw
+            // three-arm `NodeKind::List(items) => Delims::PAREN | Map(items)
+            // => BRACE | Vector(items) => BRACKET` open-coded per-arm
+            // pattern-match. The two accessors partition the same three-
+            // arm compound-body-carrying arm-set (pinned live by
+            // `seq_delims_partitions_the_same_arm_set_as_as_seq_body`),
+            // so the writer half's `.expect(…)` on the delims after
+            // gating through the body half is a build-time-verified
+            // invariant rather than an at-runtime accident.
+            NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => {
+                let delims = Delims::from(
+                    n.kind
+                        .seq_delims()
+                        .expect("compound arm implies seq_delims"),
+                );
+                self.emit_seq(items, &n.trailing, indent, delims);
+            }
         }
     }
 
@@ -219,31 +234,33 @@ impl Printer<'_> {
     fn emit_header_operand(&mut self, n: &Node, indent: usize) {
         // Route the D4-dialect compound-body inlineable gate through
         // the lifted [`caixa_ast::NodeKind::as_seq_body`] `Option<&[Node]>`
-        // accessor rather than the raw three-arm `NodeKind::List(items) |
-        // NodeKind::Vector(items) | NodeKind::Map(items) => …` open-coded
-        // per-arm disjunctive pattern-match — sibling in shape to the
-        // peer caixa-ast [`caixa_ast::visit::walk`] and caixa-fmt
-        // [`is_atom`] compound-body sites that all key off the
-        // three-arm D4-dialect compound-body arm-set through the same
-        // substrate-canonical accessor. `None` (an atom or reader-
+        // + [`caixa_ast::NodeKind::seq_delims`] `Option<(char, char)>`
+        // paired projections rather than the raw three-arm
+        // `NodeKind::List(items) | Vector(items) | Map(items) => …`
+        // open-coded per-arm disjunctive pattern-match followed by a
+        // second `NodeKind::List(_) => Delims::PAREN | …` re-match with
+        // a `_ => unreachable!()` invariant assertion. The two accessors
+        // partition the same three-arm D4-dialect compound-carrying
+        // arm-set (pinned live by
+        // `seq_delims_partitions_the_same_arm_set_as_as_seq_body`), so
+        // the `.expect(…)` on the delims half after gating through the
+        // body half is a build-time-verified invariant rather than a
+        // runtime `unreachable!()` trap. `None` (an atom or reader-
         // macro-carrying arm) is a non-inlineable header operand by
         // construction — the pre-lift `_ => false` arm.
-        let inlineable = n.kind.as_seq_body().is_some_and(|items| {
-            !(self.cfg.preserve_comments
-                && (contains_comment(n) || items.iter().any(contains_comment)))
-        });
-        if inlineable {
-            let (items, delims) = match &n.kind {
-                NodeKind::List(i) => (i, Delims::PAREN),
-                NodeKind::Vector(i) => (i, Delims::BRACKET),
-                NodeKind::Map(i) => (i, Delims::BRACE),
-                _ => unreachable!("guarded by `inlineable` above"),
-            };
-            if !items.is_empty() {
+        if let Some(items) = n.kind.as_seq_body() {
+            let comment_break = self.cfg.preserve_comments
+                && (contains_comment(n) || items.iter().any(contains_comment));
+            if !comment_break && !items.is_empty() {
                 let flat = render_inline(items);
                 if current_column(&self.out) + flat.len() + 2 + self.pending_close
                     <= self.cfg.line_width
                 {
+                    let delims = Delims::from(
+                        n.kind
+                            .seq_delims()
+                            .expect("as_seq_body Some => seq_delims Some (partition equivalence)"),
+                    );
                     self.out.push(delims.open);
                     self.out.push_str(&flat);
                     self.out.push(delims.close);
@@ -1049,9 +1066,22 @@ fn render_node_inline(n: &Node, out: &mut String) {
             out.push_str(",@");
             render_node_inline(inner, out);
         }
-        NodeKind::List(items) => render_seq_inline(items, Delims::PAREN, out),
-        NodeKind::Map(items) => render_seq_inline(items, Delims::BRACE, out),
-        NodeKind::Vector(items) => render_seq_inline(items, Delims::BRACKET, out),
+        // Sibling to the peer `Printer::emit` main compound-arm dispatch
+        // — routes the three D4-dialect compound-carrying arms'
+        // inline-render dispatch through the lifted substrate accessor
+        // pair [`caixa_ast::NodeKind::as_seq_body`] +
+        // [`caixa_ast::NodeKind::seq_delims`] rather than the raw
+        // three-arm `NodeKind::List(items) => Delims::PAREN | Map(items)
+        // => BRACE | Vector(items) => BRACKET` open-coded per-arm
+        // pattern-match.
+        NodeKind::List(items) | NodeKind::Map(items) | NodeKind::Vector(items) => {
+            let delims = Delims::from(
+                n.kind
+                    .seq_delims()
+                    .expect("compound arm implies seq_delims"),
+            );
+            render_seq_inline(items, delims, out);
+        }
     }
 }
 
@@ -1299,12 +1329,25 @@ mod tests {
     fn classify_is_total_and_names_the_expected_shape() {
         let shape_of = |src: &str| {
             let nodes = parse(src).unwrap();
-            let (items, delims) = match &nodes[0].kind {
-                NodeKind::List(i) => (i, Delims::PAREN),
-                NodeKind::Map(i) => (i, Delims::BRACE),
-                NodeKind::Vector(i) => (i, Delims::BRACKET),
-                other => panic!("expected a compound form, got {other:?}"),
-            };
+            // Sibling to the peer `Printer::emit` and `render_node_inline`
+            // production compound-arm dispatches — routes through the
+            // lifted substrate accessor pair
+            // [`caixa_ast::NodeKind::as_seq_body`] +
+            // [`caixa_ast::NodeKind::seq_delims`] rather than the raw
+            // three-arm re-match. Refuses a future accidental split
+            // between the test helper's per-arm shape and the
+            // production converge — the same partition equivalence is
+            // asserted at both sites.
+            let items = nodes[0]
+                .kind
+                .as_seq_body()
+                .unwrap_or_else(|| panic!("expected a compound form, got {:?}", nodes[0].kind));
+            let delims = Delims::from(
+                nodes[0]
+                    .kind
+                    .seq_delims()
+                    .expect("as_seq_body Some => seq_delims Some (partition equivalence)"),
+            );
             classify(items, delims, true)
         };
 
@@ -1339,12 +1382,20 @@ mod tests {
         let Some(items) = nodes[0].kind.as_list() else {
             panic!("list")
         };
-        assert_eq!(classify(items, Delims::PAREN, true), FormShape::Positional);
-        // ...and with comments off it is a plist again
-        assert_eq!(
-            classify(items, Delims::PAREN, false),
-            FormShape::Plist { head: 2 }
+        // Sibling to the peer production converge — routes the test
+        // fixture's paren delimiter pair through the substrate accessor
+        // rather than a per-consumer `Delims::PAREN` constant, so the
+        // constant no longer needs to survive as a caixa-fmt-side
+        // duplicate of the substrate-owned pair.
+        let paren = Delims::from(
+            nodes[0]
+                .kind
+                .seq_delims()
+                .expect("as_list Some => seq_delims Some (List arm)"),
         );
+        assert_eq!(classify(items, paren, true), FormShape::Positional);
+        // ...and with comments off it is a plist again
+        assert_eq!(classify(items, paren, false), FormShape::Plist { head: 2 });
     }
 
     #[test]
