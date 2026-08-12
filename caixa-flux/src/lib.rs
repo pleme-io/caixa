@@ -46,7 +46,7 @@
 
 #![allow(clippy::module_name_repetitions)]
 
-use caixa_core::{Caixa, MappingExt, kube_metadata_str_field, lareira_chart_name};
+use caixa_core::{Caixa, MappingExt, kube_namespace, lareira_chart_name};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -1812,7 +1812,22 @@ pub fn programs_yaml_entry(
         .get(KUBE_KEY_SPEC)
         .ok_or(Error::MissingField(KUBE_KEY_SPEC))?;
 
-    let namespace = kube_metadata_str_field(computeunit_yaml, KUBE_KEY_NAMESPACE)
+    // Route the per-ComputeUnit `metadata.namespace` readback through
+    // the substrate-primitive [`kube_namespace`] pinned accessor rather
+    // than the parametric `kube_metadata_str_field(_, KUBE_KEY_NAMESPACE)`
+    // composition — the load-bearing per-programs-entry namespace-
+    // scoping resolver on the emitted `programs.yaml` entry now reads
+    // through exactly one typed dispatch on the substrate primitive
+    // (peer to the sibling caixa-flux `cluster_bundle` test-side
+    // kustomization.yaml readback + the caixa-mesh
+    // `cilium_policy_carries_canonical_kube_skeleton` / `gateway_
+    // carries_canonical_kube_skeleton_without_labels` test-side per-CR
+    // namespace-scoping pins that fold onto the same accessor). The
+    // `.unwrap_or(DEFAULT_NAMESPACE)` fallback preserves the "author-
+    // omitted `metadata.namespace` ⇒ substrate default" partition the
+    // prior open-coded composition carried — the accessor's `None`-arm
+    // return propagates through the fallback unchanged.
+    let namespace = kube_namespace(computeunit_yaml)
         .unwrap_or(DEFAULT_NAMESPACE)
         .to_string();
 
@@ -5131,8 +5146,15 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kust.contents).expect("kustomization.yaml parses as YAML");
+        // Route the per-`kustomization.yaml` `metadata.namespace`
+        // readback through the substrate-primitive [`kube_namespace`]
+        // pinned accessor rather than the parametric
+        // `kube_metadata_str_field(_, KUBE_KEY_NAMESPACE)` composition
+        // — sibling convergence to the caixa-flux `programs_yaml_entry`
+        // production readback + the caixa-mesh per-CR skeleton pins
+        // that fold onto the same substrate accessor.
         assert_eq!(
-            kube_metadata_str_field(&parsed, KUBE_KEY_NAMESPACE),
+            kube_namespace(&parsed),
             Some(DEFAULT_FLUX_SYSTEM_NAMESPACE),
             "kustomization.yaml metadata.namespace must spell the lifted \
              DEFAULT_FLUX_SYSTEM_NAMESPACE ({DEFAULT_FLUX_SYSTEM_NAMESPACE:?}); \

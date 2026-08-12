@@ -19205,6 +19205,115 @@ pub fn kube_name(value: &serde_yaml::Value) -> Option<&str> {
     kube_metadata_str_field(value, KUBE_KEY_NAME)
 }
 
+/// Read the `metadata.namespace` string-scalar per-CR-namespace-scoping
+/// axis of a K8s custom resource YAML document as `Option<&str>` — the
+/// pinned peer on the namespace-scoping axis to the parametric
+/// [`kube_metadata_str_field`] on the two-hop `metadata.<field>` sub-axis
+/// surface, and the sibling on the identity-axis pair to the just-landed
+/// [`kube_name`] (c9cdecb) accessor on the `metadata.name` per-CR
+/// identity axis. Returns `None` when either the enclosing `metadata:`
+/// block is absent, the sub-`namespace:` scalar is absent, or the sub-
+/// `namespace:` scalar carries a non-string YAML type — the same three-
+/// way vacuous-`None` short-circuit the parent [`kube_metadata_str_field`]
+/// closes on the underlying two-hop navigation.
+///
+/// The [`KUBE_KEY_NAMESPACE`] axis is pinned inside the helper (unlike
+/// the parametric `field` axis of the underlying
+/// [`kube_metadata_str_field`]) because the K8s API-machinery pins
+/// `metadata.namespace` as the load-bearing per-CR namespace-scoping
+/// axis on every namespaced `CustomResource` across every group/version
+/// (paired with `metadata.name` for cluster-scoped-vs-namespaced
+/// disambiguation — the [`kube_name`] sibling closes the identity half
+/// of the pair; this one closes the namespace-scoping half). Every
+/// readback consumer downstream (`.unwrap()`, `.expect(...)`,
+/// `== Some(...)` equality wraps, `.unwrap_or(DEFAULT_NAMESPACE)` fallback,
+/// `.to_string()` clone) drives off the same pinned return; a hypothetical
+/// future K8s API-machinery rename on the `metadata.namespace` axis (a
+/// tenancy-driven migration to a wrapped `metadata.tenant:` sub-axis
+/// under a per-tenant namespace-slice model, a Server-Side-Apply-driven
+/// per-field-ownership migration under a versioned `metadata.namespaceV2:`
+/// axis) reaches every caller through one lift, not a coordinated
+/// rewrite across every per-CR namespace-scoping readback site.
+///
+/// The canonical shape 4 emit-side sites across [`caixa-flux`][flux] (1
+/// production + 1 test) + [`caixa-mesh`][mesh] (2 test) previously
+/// carried inline as either the two-token parametric composition
+///
+/// ```ignore
+/// kube_metadata_str_field(<value>, KUBE_KEY_NAMESPACE)
+/// ```
+///
+/// (the caixa-flux [`programs_yaml_entry`] production readback with
+/// [`DEFAULT_NAMESPACE`] fallback + the sibling `cluster_bundle`
+/// kustomization.yaml pin) or the three-token raw two-hop navigation
+///
+/// ```ignore
+/// metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str())
+/// ```
+///
+/// on an already-extracted `metadata: &Mapping` sub-view (the two
+/// caixa-mesh CNP + Gateway skeleton pins on the emitted CR fixture's
+/// `metadata:` sub-mapping) — a two-shape open-coded readback surface
+/// where a future rebrand on either shape (a schema-migration on the
+/// [`KUBE_KEY_NAMESPACE`] const the parametric shape reads through, an
+/// intermediate `metadata: &Mapping` extraction the raw two-hop shape
+/// walks) would silently split the two-shape readers into disagreement
+/// on which per-CR namespace-scoping scalar a given emitted CR resolves
+/// to. Lifting the resolution to one accessor pinned on the substrate
+/// primitive means every downstream consumer of the per-CR namespace-
+/// scoping surface reaches for exactly one typed dispatch — the
+/// resolver's accept-set migrates as a unit on any future axis addition.
+///
+/// Structural peer to sibling [`kube_name`] (c9cdecb) on the identity-
+/// axis half of the canonical `metadata.{name, namespace}` per-CR
+/// disambiguation pair the K8s API-machinery pins as the two load-
+/// bearing per-CR coordinates every `CustomResource` carries: [`kube_name`]
+/// answers "what is this document's identity coordinate?"; [`kube_namespace`]
+/// answers "what is this document's namespace-scoping coordinate?". Same
+/// two-hop `metadata.<field>` readback shape, different pinned scalar-
+/// key — together they bracket the two canonical per-CR coordinates
+/// every namespaced-CR readback site reaches for.
+///
+/// Sites lifted:
+///
+///   * caixa-flux's `programs_yaml_entry` — the production
+///     `computeunit_yaml.metadata.namespace` readback with
+///     [`DEFAULT_NAMESPACE`] `.unwrap_or(...)` fallback (the load-
+///     bearing per-programs-entry namespace-scoping resolver the
+///     `lareira-fleet-programs` aggregator + wasm-operator per-
+///     `ComputeUnit` dispatch both key off);
+///   * caixa-flux's `cluster_bundle_kustomization_metadata_namespace_
+///     pins_flux_system_default` test-side pin — the emitted
+///     `kustomization.yaml`'s `metadata.namespace` readback against
+///     [`DEFAULT_FLUX_SYSTEM_NAMESPACE`];
+///   * caixa-mesh's `cilium_policy_carries_canonical_kube_skeleton`
+///     test-side pin — the per-CNP `metadata.namespace` readback
+///     against [`DEFAULT_NAMESPACE`] across every emitted CNP;
+///   * caixa-mesh's `gateway_carries_canonical_kube_skeleton_without_labels`
+///     test-side pin — the per-Gateway `metadata.namespace` readback
+///     against [`DEFAULT_NAMESPACE`] on the single emitted Gateway CR.
+///
+/// Every future per-CR `metadata.namespace` readback (the future M4
+/// per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's
+/// per-CR namespace-scoping join, MESH-COMPOSITION §III.2 #5; the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` emitter's per-CR
+/// namespace-scoping pin, §III.2 #3; the future `caixa-otel`
+/// per-Servico OpenTelemetry-Collector CR's namespace-scoping pin; the
+/// future M4 cross-cluster fan-out's per-cluster `HelmRelease.metadata.
+/// namespace` readback) reaches the same pinned accessor by
+/// construction, with no axis-key argument drift and no re-inlined
+/// `kube_metadata_str_field(_, KUBE_KEY_NAMESPACE)` two-token composition
+/// or `metadata.get(KUBE_KEY_NAMESPACE).and_then(|v| v.as_str())` three-
+/// token raw two-hop navigation.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+/// [`programs_yaml_entry`]: https://docs.rs/caixa-flux
+#[must_use]
+pub fn kube_namespace(value: &serde_yaml::Value) -> Option<&str> {
+    kube_metadata_str_field(value, KUBE_KEY_NAMESPACE)
+}
+
 /// Locate the first K8s CR YAML document in `docs` whose
 /// `metadata.name` identity axis equals `name`.
 ///
@@ -37923,6 +38032,232 @@ spec:
             "kube_name must return None when metadata.name carries a \
              nested mapping (invalid CR shape per K8s API-machinery)",
         );
+    }
+
+    #[test]
+    fn kube_namespace_matches_lifted_kube_metadata_str_field_readback_shape() {
+        // Byte-equivalence pin: the lifted accessor reproduces the
+        // two-token composition (`kube_metadata_str_field(v,
+        // KUBE_KEY_NAMESPACE)`) the 4 caixa-flux (1 production + 1
+        // test) + caixa-mesh (2 test) per-CR namespace-scoping readback
+        // sites previously carried inline around the readback intent
+        // "what namespace did the emitter write into this CR?". Closes
+        // the "did the lift accidentally rename the pinned scalar-key
+        // axis to KUBE_KEY_NAME (silently pulling the peer identity
+        // coordinate instead of the namespace-scoping one), drop the
+        // axis-key argument, or widen the return type" drift class
+        // every future re-lift on the peer-axis surface (a hypothetical
+        // `kube_uid` peer for ownerReference bookkeeping, a
+        // `kube_resource_version` peer for optimistic-concurrency
+        // readback) would otherwise reopen. Peer of the sibling
+        // `kube_name_matches_lifted_kube_metadata_str_field_readback_shape`
+        // pin on the identity-axis half of the same
+        // `metadata.{name, namespace}` per-CR coordinate pair: the
+        // accessor pins the readback intent on both halves of the
+        // canonical K8s API-machinery per-CR disambiguation pair
+        // together, bracketing the two coordinates the emit-side
+        // `kube_resource_skeleton` writes into every rendered CR.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(kube_namespace(&value), Some(DEFAULT_NAMESPACE));
+        assert_eq!(
+            kube_namespace(&value),
+            kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE),
+            "kube_namespace must byte-agree with the parametric \
+             `kube_metadata_str_field(v, KUBE_KEY_NAMESPACE)` \
+             composition it replaces at every consumer site — drift on \
+             either half silently opens a per-CR namespace-scoping \
+             readback that no longer routes through the pinned \
+             KUBE_KEY_NAMESPACE axis-key",
+        );
+    }
+
+    #[test]
+    fn kube_namespace_none_when_metadata_block_absent_or_namespace_absent() {
+        // Complement-side pin: the accessor returns `None` when either
+        // the enclosing `metadata:` block is absent (root-level CR with
+        // no metadata mapping at all — the vacuous shape the operator-
+        // side "not-yet-materialized" CR readback might momentarily
+        // observe under a partial apply) or the sub-`namespace:` scalar
+        // is absent inside a present `metadata:` block (a
+        // cluster-scoped CR that legally omits the namespace-scoping
+        // coordinate, a partially-authored CR the K8s API-server would
+        // materialize with a `default` namespace at admission but that
+        // this readback tolerates as `None` so the accessor stays a
+        // total function). Consumer sites (`.expect(...)`,
+        // `.unwrap_or(DEFAULT_NAMESPACE)` fallback, `Some(...) ==
+        // expected` equality wraps) rely on the None-on-absence short-
+        // circuit — the caixa-flux `programs_yaml_entry` production
+        // fallback path in particular depends on the None-arm to
+        // substitute [`DEFAULT_NAMESPACE`] when the source
+        // ComputeUnit YAML omits `metadata.namespace`. Peer of the
+        // sibling `kube_name_none_when_metadata_block_absent_or_name_absent`
+        // pin on the identity-axis half.
+        let cr_no_metadata = serde_yaml::Mapping::new();
+        assert_eq!(
+            kube_namespace(&serde_yaml::Value::Mapping(cr_no_metadata)),
+            None,
+            "kube_namespace must return None when the enclosing \
+             metadata: block is absent — the caixa-flux \
+             programs_yaml_entry production fallback relies on this \
+             None-arm to substitute DEFAULT_NAMESPACE",
+        );
+
+        let empty_meta = serde_yaml::Mapping::new();
+        let mut cr_no_namespace = serde_yaml::Mapping::new();
+        cr_no_namespace.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        assert_eq!(
+            kube_namespace(&serde_yaml::Value::Mapping(cr_no_namespace)),
+            None,
+            "kube_namespace must return None when the \
+             sub-namespace: scalar is absent inside a present \
+             metadata: block (the cluster-scoped-CR / \
+             partially-authored-CR arm)",
+        );
+    }
+
+    #[test]
+    fn kube_namespace_none_when_metadata_namespace_carries_non_string_type() {
+        // Type-gate pin: the accessor returns `None` when the sub-
+        // `metadata.namespace:` scalar is present but carries a non-
+        // string YAML type (a numeric, boolean, or nested mapping —
+        // invalid K8s CR shape per the K8s API-machinery OpenAPI
+        // schema, but tolerated here as `None` so the readback stays a
+        // total function and defers the diagnostic to the caller's own
+        // `.unwrap_or(...)` fallback / `.expect(...)` follow-up which
+        // names the caller's schema axis). Pins the type-gate half of
+        // the accessor's contract — the axis-key pin is asserted by
+        // the sibling byte-agreement test — so a hypothetical future
+        // widening (accepting numeric `metadata.namespace: 42` as the
+        // stringified `"42"`, an aliased YAML integer under a fresh
+        // `Value::from` conversion) is caught before it lands. Peer
+        // of the sibling
+        // `kube_name_none_when_metadata_name_carries_non_string_type`
+        // pin on the identity-axis half.
+        let mut metadata_int = serde_yaml::Mapping::new();
+        metadata_int.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::from(42u64));
+        let mut cr_int = serde_yaml::Mapping::new();
+        cr_int.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_int));
+        assert_eq!(
+            kube_namespace(&serde_yaml::Value::Mapping(cr_int)),
+            None,
+            "kube_namespace must return None when metadata.namespace \
+             carries a non-string YAML type (numeric here)",
+        );
+
+        let mut inner = serde_yaml::Mapping::new();
+        inner.insert_str_key("nested", serde_yaml::Value::String("value".into()));
+        let mut metadata_map = serde_yaml::Mapping::new();
+        metadata_map.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::Mapping(inner));
+        let mut cr_map = serde_yaml::Mapping::new();
+        cr_map.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata_map));
+        assert_eq!(
+            kube_namespace(&serde_yaml::Value::Mapping(cr_map)),
+            None,
+            "kube_namespace must return None when metadata.namespace \
+             carries a nested mapping (invalid CR shape per K8s \
+             API-machinery)",
+        );
+    }
+
+    #[test]
+    fn kube_namespace_agrees_with_kube_metadata_str_field_across_permutations() {
+        // Load-bearing cross-check pin: the accessor and the parametric
+        // helper it delegates to must byte-agree on every closed
+        // permutation of the (metadata-present, sub-namespace-present,
+        // scalar-shape) product — the same cross-product the sibling
+        // parent `kube_metadata_str_field_matches_prior_inline_chain`
+        // pin bracket-tests on the parametric helper for both
+        // KUBE_KEY_NAME and KUBE_KEY_NAMESPACE arg permutations, here
+        // extended one layer up onto the pinned accessor's own axis-
+        // key pinning. Closes the "did the pinned accessor
+        // silently rewire itself off the parametric helper (open-coding
+        // a fresh two-hop walk instead of composing on the substrate
+        // primitive)" drift class every future accessor-family
+        // extension (a peer `kube_uid` on the ownerReference axis, a
+        // future `kube_labels` composite-return accessor) would
+        // otherwise reopen. Peer of the sibling
+        // `kube_name_is_composes_on_lifted_kube_name_accessor` pin on
+        // the predicate-arity's underlying accessor delegation.
+        let namespaces = [
+            "tatara-system",
+            DEFAULT_NAMESPACE,
+            "default",
+            "kube-system",
+            "flux-system",
+        ];
+        for ns in namespaces {
+            let mut metadata = serde_yaml::Mapping::new();
+            metadata.insert_str_key(
+                KUBE_KEY_NAMESPACE,
+                serde_yaml::Value::String(ns.to_string()),
+            );
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+            let value = serde_yaml::Value::Mapping(cr);
+            assert_eq!(
+                kube_namespace(&value),
+                kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE),
+                "kube_namespace must byte-agree with \
+                 kube_metadata_str_field(_, KUBE_KEY_NAMESPACE) across \
+                 every canonical namespace-scoping value (ns={ns:?}) — \
+                 drift here silently splits the two readback paths",
+            );
+            assert_eq!(
+                kube_namespace(&value),
+                Some(ns),
+                "kube_namespace must return the authored namespace-\
+                 scoping value verbatim (ns={ns:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn kube_namespace_borrows_from_input_value_storage() {
+        // Borrow-not-copy pin: the accessor returns a `&str` that
+        // borrows into the input `Value`'s own storage — pointer-equal
+        // to the underlying `String::as_str()` on the sub-
+        // `metadata.namespace:` scalar. Rules out a hypothetical
+        // future rewrite that returned a fresh `String` (via `.clone()`
+        // / `.to_string()`) or an owning `Cow` conversion, either of
+        // which would silently double-allocate at every per-CR readback
+        // consumer's fast path (the caixa-flux `programs_yaml_entry`
+        // production readback fans onto every `programs.yaml` entry
+        // emit at V0, so a per-entry allocation would compound across
+        // the whole fleet-programs render). Peer of the sibling
+        // per-storage-borrow pin discipline the sibling accessor family
+        // ([`Placement::shard_key`], [`Placement::affinity`],
+        // [`Membro::nome`], [`Entrada::destination`],
+        // [`Entrada::hostname`]) carries on their respective per-slot
+        // `&str`-return accessors.
+        let ns = "tatara-system".to_string();
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(KUBE_KEY_NAMESPACE, serde_yaml::Value::String(ns.clone()));
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        // Accessor must return the same byte-string as the underlying
+        // parametric helper's readback — the composition contract.
+        let via_accessor = kube_namespace(&value).expect("namespace present");
+        let via_helper = kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE)
+            .expect("namespace present via helper");
+        assert_eq!(
+            via_accessor.as_ptr(),
+            via_helper.as_ptr(),
+            "kube_namespace must return the same borrowed slice as \
+             kube_metadata_str_field(_, KUBE_KEY_NAMESPACE) — a \
+             pointer-drift signals a hidden clone / owning conversion \
+             layer between the accessor and its delegate",
+        );
+        assert_eq!(via_accessor.len(), via_helper.len());
     }
 
     #[test]
