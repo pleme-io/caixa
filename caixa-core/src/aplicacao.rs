@@ -1502,15 +1502,143 @@ impl<'a> WitTarget<'a> {
     /// the three payload-carrying arms) — extends the per-arm
     /// projection family onto the [`Self::Http`] specialization axis
     /// that the pan-arm accessor's shape blends into a single arm-
-    /// agnostic view; leaves the [`Self::pubsub_subject`] /
-    /// [`Self::store_slot`] peer per-arm projections as the two future
-    /// per-arm axes future compounding runs fold on once a per-arm
-    /// pub-sub / store-shape consumer lands.
+    /// agnostic view; paired with [`Self::pubsub_subject`] /
+    /// [`Self::store_slot`] on the sibling per-arm axes so every
+    /// per-payload-arm shape carries a named post-projection accessor
+    /// on the same shape as `http_endpoint`, closing the per-arm-shape
+    /// accept-set the substrate primitive owns.
     #[must_use]
     pub const fn http_endpoint(&self) -> Option<&'a str> {
         match *self {
             WitTarget::Http { endpoint } => Some(endpoint),
             WitTarget::PubSub { .. } | WitTarget::Store { .. } | WitTarget::Capability => None,
+        }
+    }
+
+    /// Substrate-canonical per-arm pub-sub-subject scalar accessor every
+    /// consumer that fans on the pub-sub-shaped payload keys off —
+    /// returns the [`Self::PubSub`]-arm's author-declared event-stream
+    /// subject verbatim as an `Option<&'a str>`, `Some(subject)` when
+    /// the projected target is [`Self::PubSub { subject }`], `None` on
+    /// the three sibling arms ([`Self::Http`] / [`Self::Store`] /
+    /// [`Self::Capability`], each of which carries no NATS-shaped
+    /// subject by definition).
+    ///
+    /// The [`Self::PubSub`] arm carries the NATS-server-accepted subject
+    /// the future substrate-side pub-sub-introspecting per-`(:de, :para)`
+    /// consumer keys off (the M4 per-Aplicacao NATS `Stream` / `Consumer`
+    /// CR materializer's `spec.subjects[]` projection, the future
+    /// Envoy-side per-subject `local_rate_limit.descriptor_entries`
+    /// bucket-key resolver, the future `feira app graph --pubsub`
+    /// per-Aplicacao subject column, any future substrate-lifted
+    /// pub-sub-shape emitter that reads a projected `WitTarget` in the
+    /// same shape [`caixa_mesh::cilium_network_policies`] reads the
+    /// HTTP-shape one at `caixa-mesh/src/lib.rs:2780` today). Every
+    /// future pub-sub-shape consumer reaches for the same typed
+    /// dispatch this accessor exposes so the "which arm carries the
+    /// subject scalar?" answer lives at one caixa-core edit rather
+    /// than open-coded across per-consumer `if let WitTarget::PubSub
+    /// { subject } = c.target()…` pattern-matches.
+    ///
+    /// Peer of the sibling [`Self::http_endpoint`] (5d6dc92 trajectory)
+    /// per-arm HTTP-endpoint accessor on the peer per-arm axis and of
+    /// the pre-projection [`WitContract::subject`] scalar accessor on
+    /// the raw `:contratos :subject` field-access axis — same "one
+    /// typed dispatch on the substrate primitive, thin projections at
+    /// each consumer" discipline extended onto the per-arm pub-sub
+    /// post-projection axis. The pre-projection accessor returns
+    /// `Some` for any author-declared `:subject` value regardless of
+    /// the paired `:wit` world's pub-sub-shape classification (the raw
+    /// slot before validation crosses it); this post-projection
+    /// accessor returns `Some` iff the target has been projected onto
+    /// the [`Self::PubSub`] arm, i.e. only after the
+    /// [`WitContract::target`] gate has admitted the
+    /// `(:wit, :endpoint/:subject/:slot)` shape coherence — closing
+    /// the pre-/post-projection pair on the pub-sub-subject axis to
+    /// match the pair the [`WitContract::endpoint`] +
+    /// [`Self::http_endpoint`] surfaces already close on the peer
+    /// HTTP-endpoint axis.
+    ///
+    /// Sibling of the unified pan-arm [`Self::payload`]
+    /// (`Option<&'a str>` for any of the three payload-carrying arms) —
+    /// extends the per-arm projection family onto the [`Self::PubSub`]
+    /// specialization axis that the pan-arm accessor's shape blends
+    /// into a single arm-agnostic view; the pair
+    /// (`pubsub_subject`, `store_slot`) closes the trio
+    /// (`http_endpoint`, `pubsub_subject`, `store_slot`) so every
+    /// payload arm now carries its own per-arm-shape post-projection
+    /// accessor.
+    #[must_use]
+    pub const fn pubsub_subject(&self) -> Option<&'a str> {
+        match *self {
+            WitTarget::PubSub { subject } => Some(subject),
+            WitTarget::Http { .. } | WitTarget::Store { .. } | WitTarget::Capability => None,
+        }
+    }
+
+    /// Substrate-canonical per-arm key/value-store-slot scalar accessor
+    /// every consumer that fans on the store-shaped payload keys off —
+    /// returns the [`Self::Store`]-arm's author-declared slot template
+    /// verbatim as an `Option<&'a str>`, `Some(slot)` when the
+    /// projected target is [`Self::Store { slot }`], `None` on the
+    /// three sibling arms ([`Self::Http`] / [`Self::PubSub`] /
+    /// [`Self::Capability`], each of which carries no
+    /// key/value-store slot by definition).
+    ///
+    /// The [`Self::Store`] arm carries the WASI-key/value-accepted slot
+    /// template (validated by [`crate::render::is_wasi_keyvalue_slot`])
+    /// every future substrate-side store-introspecting per-`(:de,
+    /// :para)` consumer keys off (the M4 per-Aplicacao WASI-key/value
+    /// namespace / prefix reconciler's per-slot projection, the future
+    /// per-store-backend routing overlay's slot-shape gate, the future
+    /// `feira app graph --store` per-Aplicacao slot column, any future
+    /// substrate-lifted store-shape emitter that reads a projected
+    /// `WitTarget` in the same shape [`caixa_mesh::cilium_network_policies`]
+    /// reads the HTTP-shape one at `caixa-mesh/src/lib.rs:2780` today).
+    /// Every future store-shape consumer reaches for the same typed
+    /// dispatch this accessor exposes so the "which arm carries the
+    /// slot scalar?" answer lives at one caixa-core edit rather than
+    /// open-coded across per-consumer
+    /// `if let WitTarget::Store { slot } = c.target()…`
+    /// pattern-matches.
+    ///
+    /// Peer of the sibling [`Self::http_endpoint`] +
+    /// [`Self::pubsub_subject`] per-arm accessors on the peer per-arm
+    /// axes and of the pre-projection [`WitContract::slot`] scalar
+    /// accessor on the raw `:contratos :slot` field-access axis — same
+    /// "one typed dispatch on the substrate primitive, thin projections
+    /// at each consumer" discipline extended onto the per-arm store
+    /// post-projection axis. Closes the pre-/post-projection pair on
+    /// the store-slot axis to match the pairs the
+    /// [`WitContract::endpoint`] + [`Self::http_endpoint`] and
+    /// [`WitContract::subject`] + [`Self::pubsub_subject`] surfaces
+    /// already close on the peer HTTP-endpoint and pub-sub-subject
+    /// axes; the substrate-side pre-/post-projection accessor family
+    /// now spans all three payload arms as a matched trio, so any
+    /// future arm-shape widening (a `Rest`/`Grpc` split of
+    /// [`Self::Http`], a `Queue`-shaped peer of [`Self::Store`]) that
+    /// lands one accessor without threading through the sibling
+    /// pre-projection or the peer per-arm post-projection surfaces a
+    /// compile-time exhaustiveness error at the substrate primitive,
+    /// not a silent per-consumer split at renderer emit time.
+    ///
+    /// Sibling of the unified pan-arm [`Self::payload`]
+    /// (`Option<&'a str>` for any of the three payload-carrying arms) —
+    /// closes the per-arm projection family onto the [`Self::Store`]
+    /// specialization axis that the pan-arm accessor's shape blends
+    /// into a single arm-agnostic view. The trio
+    /// (`http_endpoint`, `pubsub_subject`, `store_slot`) partitions the
+    /// pan-arm accept-set on every payload-carrying arm: exactly one
+    /// per-arm accessor returns `Some(payload)` and the two peers
+    /// return `None`, and every payload-less [`Self::Capability`]
+    /// input returns `None` on all three — the partition the sibling
+    /// `wit_target_per_arm_post_projection_accessors_partition_the_payload_arm_set`
+    /// pin locks in load-bearing.
+    #[must_use]
+    pub const fn store_slot(&self) -> Option<&'a str> {
+        match *self {
+            WitTarget::Store { slot } => Some(slot),
+            WitTarget::Http { .. } | WitTarget::PubSub { .. } | WitTarget::Capability => None,
         }
     }
 
@@ -11895,6 +12023,367 @@ mod tests {
                  shape-discrimination predicate on the same axis",
             );
         }
+    }
+
+    #[test]
+    fn wit_target_pubsub_subject_pins_per_variant() {
+        // Fail-before-pass-after pin: the substrate-canonical per-arm
+        // pub-sub-subject scalar accessor [`WitTarget::pubsub_subject`]
+        // is the single dispatch every future pub-sub-facing consumer
+        // routes through, sibling to the peer [`WitContract::subject`]
+        // (63e18a0) pre-projection scalar accessor on the raw-field
+        // axis and to the peer [`WitTarget::http_endpoint`] (5d6dc92)
+        // post-projection per-arm accessor on the sibling HTTP-shape
+        // axis. The [`WitTarget::PubSub`] arm round-trips its
+        // author-declared subject verbatim as
+        // `Some("events.checkout.paid")`; the three sibling arms each
+        // return `None` because they carry no NATS-shaped subject by
+        // definition. Same fail-before-pass-after per-variant discipline
+        // as the sibling `wit_target_http_endpoint_pins_per_variant`
+        // pin on the peer per-arm axis — extended onto the per-arm
+        // pub-sub-shape post-projection axis so a future [`WitTarget`]
+        // variant addition (a `Rest`/`Grpc` split of [`WitTarget::Http`],
+        // a `Queue`-shaped peer of [`WitTarget::Store`]) trips a
+        // compile-time exhaustiveness error on the sibling
+        // [`WitTarget::pubsub_subject`] match arms whose payload the
+        // pub-sub-shape accept-set is meant to bound.
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            }
+            .pubsub_subject(),
+            Some("events.checkout.paid"),
+        );
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge",
+            }
+            .pubsub_subject(),
+            None,
+        );
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .pubsub_subject(),
+            None,
+        );
+        assert_eq!(WitTarget::Capability.pubsub_subject(), None);
+    }
+
+    #[test]
+    fn wit_target_pubsub_subject_matches_payload_on_pubsub_arm_and_is_none_elsewhere() {
+        // Per-variant coherence pin: for every arm of [`WitTarget`],
+        // `.pubsub_subject()` equals `.payload()` on the
+        // [`WitTarget::PubSub`] arm (both project the same
+        // author-declared subject scalar), and returns `None` on every
+        // sibling arm regardless of whether [`WitTarget::payload`]
+        // itself returns `Some` (Http / Store carry their own payload
+        // the pan-arm accessor surfaces, but that payload is not a
+        // pub-sub subject — the per-arm accessor must not leak it
+        // through the pub-sub-shape channel). Sibling to the peer
+        // `wit_target_http_endpoint_matches_payload_on_http_arm_and_is_none_elsewhere`
+        // coherence pin on the per-arm HTTP-shape axis — extended onto
+        // the per-arm pub-sub specialization axis so both per-arm
+        // projections carry their own byte-shape coherence witness
+        // against the substrate's typed arm-family accept-set.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            let per_arm = variant.pubsub_subject();
+            let pan_arm = variant.payload();
+            if variant.is_pubsub() {
+                assert_eq!(
+                    per_arm, pan_arm,
+                    "WitTarget::{variant:?} pubsub_subject() must equal \
+                     payload() on the PubSub arm — a per-arm-vs-pan-arm \
+                     split would silently drift the pub-sub-shape emit \
+                     branch's subject-scalar source from the graph verb's \
+                     payload scalar source",
+                );
+            } else {
+                assert_eq!(
+                    per_arm, None,
+                    "WitTarget::{variant:?} pubsub_subject() must return \
+                     None on non-PubSub arms — a leak that surfaced an \
+                     HTTP :endpoint or a key/value :slot through the \
+                     pub-sub-subject accessor would silently widen the \
+                     downstream NATS-shape accept-set onto protocol \
+                     shapes NATS servers can't route",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wit_target_pubsub_subject_agrees_with_is_pubsub_predicate_per_variant() {
+        // Per-variant coherence pin: for every arm of [`WitTarget`],
+        // `.pubsub_subject().is_some()` iff `.is_pubsub()`. Guards the
+        // drift surface where a future extension of the
+        // [`WitTarget::pubsub_subject`] accessor's accept-set landed
+        // without a paired extension of the [`gen_platform::IsVariant`]-
+        // derived `is_pubsub()` predicate's accept-set, or vice versa
+        // — a regression that split the "which arms count as pub-sub-
+        // shaped for subject emission?" answer between two dispatch
+        // surfaces the substrate ships. Sibling to the peer
+        // `wit_target_http_endpoint_agrees_with_is_http_predicate_per_variant`
+        // pin on the per-arm HTTP-shape axis — extended onto the
+        // per-arm pub-sub predicate-vs-accessor coherence axis so the
+        // gen-platform IsVariant predicate and the substrate-lifted
+        // per-arm accessor carry one shared answer to "is this the
+        // PubSub arm?".
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            assert_eq!(
+                variant.pubsub_subject().is_some(),
+                variant.is_pubsub(),
+                "WitTarget::{variant:?} pubsub_subject().is_some() must \
+                 equal is_pubsub() — a drift would split the pub-sub \
+                 emit branch's arm-set gate from the substrate-derived \
+                 shape-discrimination predicate on the same axis",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_target_store_slot_pins_per_variant() {
+        // Fail-before-pass-after pin: the substrate-canonical per-arm
+        // key/value-store-slot scalar accessor [`WitTarget::store_slot`]
+        // is the single dispatch every future store-facing consumer
+        // routes through, sibling to the peer [`WitContract::slot`]
+        // pre-projection scalar accessor on the raw-field axis and to
+        // the peer [`WitTarget::http_endpoint`] (5d6dc92) +
+        // [`WitTarget::pubsub_subject`] post-projection per-arm
+        // accessors on the sibling per-payload-arm axes. The
+        // [`WitTarget::Store`] arm round-trips its author-declared
+        // slot verbatim as `Some("checkout/$order")`; the three
+        // sibling arms each return `None` because they carry no
+        // WASI-key/value slot by definition. Same fail-before-pass-
+        // after per-variant discipline as the sibling
+        // `wit_target_http_endpoint_pins_per_variant` +
+        // `wit_target_pubsub_subject_pins_per_variant` pins on the
+        // peer per-arm axes — extended onto the per-arm store-shape
+        // post-projection axis so a future [`WitTarget`] variant
+        // addition trips a compile-time exhaustiveness error on the
+        // sibling [`WitTarget::store_slot`] match arms whose payload
+        // the store-shape accept-set is meant to bound.
+        assert_eq!(
+            WitTarget::Store {
+                slot: "checkout/$order",
+            }
+            .store_slot(),
+            Some("checkout/$order"),
+        );
+        assert_eq!(
+            WitTarget::Http {
+                endpoint: "/charge",
+            }
+            .store_slot(),
+            None,
+        );
+        assert_eq!(
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            }
+            .store_slot(),
+            None,
+        );
+        assert_eq!(WitTarget::Capability.store_slot(), None);
+    }
+
+    #[test]
+    fn wit_target_store_slot_matches_payload_on_store_arm_and_is_none_elsewhere() {
+        // Per-variant coherence pin: for every arm of [`WitTarget`],
+        // `.store_slot()` equals `.payload()` on the
+        // [`WitTarget::Store`] arm (both project the same
+        // author-declared slot scalar), and returns `None` on every
+        // sibling arm regardless of whether [`WitTarget::payload`]
+        // itself returns `Some`. Sibling to the peer
+        // `wit_target_http_endpoint_matches_payload_on_http_arm_and_is_none_elsewhere`
+        // and `wit_target_pubsub_subject_matches_payload_on_pubsub_arm_and_is_none_elsewhere`
+        // pins on the per-arm HTTP and PubSub axes — closes the
+        // per-arm-vs-pan-arm byte-shape coherence trio across all
+        // three payload arms.
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            let per_arm = variant.store_slot();
+            let pan_arm = variant.payload();
+            if variant.is_store() {
+                assert_eq!(
+                    per_arm, pan_arm,
+                    "WitTarget::{variant:?} store_slot() must equal \
+                     payload() on the Store arm — a per-arm-vs-pan-arm \
+                     split would silently drift the store-shape emit \
+                     branch's slot-scalar source from the graph verb's \
+                     payload scalar source",
+                );
+            } else {
+                assert_eq!(
+                    per_arm, None,
+                    "WitTarget::{variant:?} store_slot() must return \
+                     None on non-Store arms — a leak that surfaced an \
+                     HTTP :endpoint or a NATS :subject through the \
+                     key/value-slot accessor would silently widen the \
+                     downstream WASI-key/value slot accept-set onto \
+                     protocol shapes the kv backends can't route",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wit_target_store_slot_agrees_with_is_store_predicate_per_variant() {
+        // Per-variant coherence pin: for every arm of [`WitTarget`],
+        // `.store_slot().is_some()` iff `.is_store()`. Guards the
+        // drift surface where a future extension of the
+        // [`WitTarget::store_slot`] accessor's accept-set landed
+        // without a paired extension of the [`gen_platform::IsVariant`]-
+        // derived `is_store()` predicate's accept-set. Sibling to the
+        // peer `wit_target_http_endpoint_agrees_with_is_http_predicate_per_variant`
+        // and `wit_target_pubsub_subject_agrees_with_is_pubsub_predicate_per_variant`
+        // pins — closes the per-arm predicate-vs-accessor coherence
+        // trio across all three payload arms so the gen-platform
+        // IsVariant predicate and the substrate-lifted per-arm
+        // accessor carry one shared answer to "is this the Store arm?".
+        for variant in [
+            WitTarget::Http {
+                endpoint: "/charge",
+            },
+            WitTarget::PubSub {
+                subject: "events.checkout.paid",
+            },
+            WitTarget::Store {
+                slot: "checkout/$order",
+            },
+            WitTarget::Capability,
+        ] {
+            assert_eq!(
+                variant.store_slot().is_some(),
+                variant.is_store(),
+                "WitTarget::{variant:?} store_slot().is_some() must \
+                 equal is_store() — a drift would split the store-shape \
+                 emit branch's arm-set gate from the substrate-derived \
+                 shape-discrimination predicate on the same axis",
+            );
+        }
+    }
+
+    #[test]
+    fn wit_target_per_arm_post_projection_accessors_partition_the_payload_arm_set() {
+        // Fail-before-pass-after cross-axis pin on the trio
+        // (`http_endpoint`, `pubsub_subject`, `store_slot`): on every
+        // payload-carrying arm of [`WitTarget`], exactly one per-arm
+        // accessor returns `Some(payload)` and the two peers return
+        // `None`; and on the payload-less [`WitTarget::Capability`]
+        // arm, all three return `None`. Guards the drift surface where
+        // a future extension of one per-arm accessor's accept-set (e.g.
+        // a hypothetical `Rest`/`Grpc` split of [`WitTarget::Http`]
+        // that widened `http_endpoint` to cover both peers without
+        // narrowing the peer `pubsub_subject` / `store_slot` accept-
+        // sets to keep the partition mutually exclusive) landed without
+        // threading through the peer per-arm accessors — the resulting
+        // silent overlap would land the same edge's payload on two
+        // downstream per-shape emit branches at once, or leak a
+        // pub-sub subject through the store-slot channel, at renderer
+        // emit time far from the substrate primitive's arm-widening
+        // commit. Peer of the sibling `wit_target_field_names_are_pairwise_distinct`
+        // 3-way pin on the payload-field-name axis — extended onto the
+        // per-arm-accessor payload-projection axis so the substrate-
+        // owned partition invariant is load-bearing at every per-arm
+        // consumer's read site.
+        let payload_variants = [
+            (
+                WitTarget::Http {
+                    endpoint: "/charge",
+                },
+                "http",
+            ),
+            (
+                WitTarget::PubSub {
+                    subject: "events.checkout.paid",
+                },
+                "pubsub",
+            ),
+            (
+                WitTarget::Store {
+                    slot: "checkout/$order",
+                },
+                "store",
+            ),
+        ];
+        for (variant, own_arm_label) in payload_variants {
+            let own_arm_hit = match own_arm_label {
+                "http" => variant.is_http(),
+                "pubsub" => variant.is_pubsub(),
+                "store" => variant.is_store(),
+                other => panic!("unknown own-arm label {other:?}"),
+            };
+            let per_arm_results = [
+                ("http_endpoint", variant.http_endpoint()),
+                ("pubsub_subject", variant.pubsub_subject()),
+                ("store_slot", variant.store_slot()),
+            ];
+            let some_count = per_arm_results.iter().filter(|(_, v)| v.is_some()).count();
+            assert_eq!(
+                some_count, 1,
+                "WitTarget::{variant:?} must land exactly one per-arm \
+                 post-projection accessor's Some result — the trio \
+                 (http_endpoint, pubsub_subject, store_slot) must \
+                 partition the payload arm-set; got {per_arm_results:?}",
+            );
+            assert!(
+                own_arm_hit,
+                "WitTarget::{variant:?} own-arm gen-platform predicate \
+                 must return true on its own arm — a partition failure \
+                 upstream of this pin",
+            );
+            assert!(
+                variant.payload().is_some(),
+                "WitTarget::{variant:?} pan-arm payload() must return \
+                 Some on every payload-carrying arm the trio partitions",
+            );
+        }
+        // The payload-less Capability arm must return None on every
+        // per-arm accessor — the partition's terminal-fallback shape.
+        let cap = WitTarget::Capability;
+        assert_eq!(cap.http_endpoint(), None);
+        assert_eq!(cap.pubsub_subject(), None);
+        assert_eq!(cap.store_slot(), None);
+        assert_eq!(
+            cap.payload(),
+            None,
+            "WitTarget::Capability pan-arm payload() must return None — \
+             the trio's payload-less-arm coherence witness",
+        );
     }
 
     #[test]
