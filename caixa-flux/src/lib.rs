@@ -2435,7 +2435,7 @@ mod tests {
     use caixa_core::{
         Caixa, CaixaKind, M2_BEHAVIOR_KEY_ON_INIT, M2_KEY_BEHAVIOR, M2_KEY_LIMITS,
         M2_KEY_UPGRADE_FROM, M2_LIMITS_KEY_CPU, M2_LIMITS_KEY_MEMORY, M2_UPGRADE_FROM_KEY_FROM,
-        kube_api_version, kube_kind, kube_name,
+        kube_api_version_is, kube_kind, kube_name,
     };
 
     fn sample_caixa() -> Caixa {
@@ -5235,9 +5235,8 @@ spec:
             .expect("helmrelease.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&hr.contents).expect("helmrelease.yaml parses as YAML");
-        assert_eq!(
-            kube_api_version(&parsed),
-            Some(FLUX_HELMRELEASE_API_VERSION),
+        assert!(
+            kube_api_version_is(&parsed, FLUX_HELMRELEASE_API_VERSION),
             "helmrelease.yaml apiVersion must spell the lifted \
              FLUX_HELMRELEASE_API_VERSION ({FLUX_HELMRELEASE_API_VERSION:?}); \
              a drifted literal here routes the HelmRelease outside the Flux v2 \
@@ -5278,9 +5277,8 @@ spec:
              HelmRelease's health by construction",
         );
         for (i, entry) in health_checks.iter().enumerate() {
-            assert_eq!(
-                kube_api_version(entry),
-                Some(FLUX_HELMRELEASE_API_VERSION),
+            assert!(
+                kube_api_version_is(entry, FLUX_HELMRELEASE_API_VERSION),
                 "kustomization.yaml spec.healthChecks[{i}].apiVersion must \
                  spell the lifted FLUX_HELMRELEASE_API_VERSION \
                  ({FLUX_HELMRELEASE_API_VERSION:?}); a drifted literal here \
@@ -5531,9 +5529,8 @@ spec:
             .expect("gitrepository.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&gr.contents).expect("gitrepository.yaml parses as YAML");
-        assert_eq!(
-            kube_api_version(&parsed),
-            Some(FLUX_GITREPOSITORY_API_VERSION),
+        assert!(
+            kube_api_version_is(&parsed, FLUX_GITREPOSITORY_API_VERSION),
             "gitrepository.yaml apiVersion must spell the lifted \
              FLUX_GITREPOSITORY_API_VERSION ({FLUX_GITREPOSITORY_API_VERSION:?}); \
              a drifted literal here routes the GitRepository outside the Flux v2 \
@@ -5626,9 +5623,8 @@ spec:
             .expect("kustomization.yaml present");
         let parsed: serde_yaml::Value =
             serde_yaml::from_str(&kz.contents).expect("kustomization.yaml parses as YAML");
-        assert_eq!(
-            kube_api_version(&parsed),
-            Some(FLUX_KUSTOMIZATION_API_VERSION),
+        assert!(
+            kube_api_version_is(&parsed, FLUX_KUSTOMIZATION_API_VERSION),
             "kustomization.yaml apiVersion must spell the lifted \
              FLUX_KUSTOMIZATION_API_VERSION ({FLUX_KUSTOMIZATION_API_VERSION:?}); \
              a drifted literal here routes the Kustomization outside the Flux v2 \

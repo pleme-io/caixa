@@ -3273,7 +3273,7 @@ mod tests {
         Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
-        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version, kube_kind,
+        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_api_version_is, kube_kind,
         kube_kind_is, kube_name, kube_name_is, kube_namespace,
     };
     use std::time::Duration;
@@ -6282,9 +6282,8 @@ mod tests {
              — drift here masks the lifted-uses assertion below"
         );
         for p in &policies {
-            assert_eq!(
-                kube_api_version(p),
-                Some(CILIUM_API_VERSION),
+            assert!(
+                kube_api_version_is(p, CILIUM_API_VERSION),
                 "every rendered CiliumNetworkPolicy must declare the lifted \
                  [`CILIUM_API_VERSION`] constant on its top-level apiVersion \
                  axis — drift here means the per-policy skeleton call no \
@@ -8882,13 +8881,14 @@ mod tests {
         // accidentally drop apiVersion or shift the metadata block.
         let policies = cilium_network_policies(&aplicacao_caixa()).unwrap();
         for p in &policies {
-            // Per-CNP CRD-group/version readback through the
-            // substrate-primitive [`kube_api_version`] pinned accessor —
-            // structural peer to the sibling [`kube_kind`] readback below
-            // on the top-level `(apiVersion, kind)` canonical
-            // discriminator-pair the K8s API-machinery threads through
-            // every controller / API-server admission decision.
-            assert_eq!(kube_api_version(p), Some("cilium.io/v2"));
+            // Per-CNP CRD-group/version equality-wrap through the
+            // substrate-primitive [`kube_api_version_is`] pinned
+            // predicate — structural peer to the sibling
+            // [`kube_kind_is`] equality-wrap below on the top-level
+            // `(apiVersion, kind)` canonical discriminator-pair the K8s
+            // API-machinery threads through every controller /
+            // API-server admission decision.
+            assert!(kube_api_version_is(p, "cilium.io/v2"));
             // Per-CNP discriminator readback through the
             // substrate-primitive [`kube_kind`] pinned accessor.
             assert_eq!(kube_kind(p), Some(CILIUM_KIND_NETWORK_POLICY));
@@ -8931,10 +8931,7 @@ mod tests {
         // per-Aplicacao label grouping at the K8s-resource axis today).
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        assert_eq!(
-            kube_api_version(gateway),
-            Some("gateway.networking.k8s.io/v1")
-        );
+        assert!(kube_api_version_is(gateway, "gateway.networking.k8s.io/v1",));
         let metadata = gateway
             .get(KUBE_KEY_METADATA)
             .and_then(|m| m.as_mapping())
@@ -8982,10 +8979,7 @@ mod tests {
         // "aplicacao-prefixed sub-identity" discipline.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        assert_eq!(
-            kube_api_version(route),
-            Some("gateway.networking.k8s.io/v1")
-        );
+        assert!(kube_api_version_is(route, "gateway.networking.k8s.io/v1",));
         let metadata = route
             .get(KUBE_KEY_METADATA)
             .and_then(|m| m.as_mapping())
@@ -9022,9 +9016,8 @@ mod tests {
         // on the sibling Flux v2 controller-triplet lift trajectory.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
-        assert_eq!(
-            kube_api_version(gateway),
-            Some(caixa_core::GATEWAY_API_API_VERSION),
+        assert!(
+            kube_api_version_is(gateway, caixa_core::GATEWAY_API_API_VERSION),
             "Gateway's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
              is the canonical footgun this lift closes"
@@ -9134,9 +9127,8 @@ mod tests {
         // movement-as-a-unit invariant at the renderer's exit.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
-        assert_eq!(
-            kube_api_version(route),
-            Some(caixa_core::GATEWAY_API_API_VERSION),
+        assert!(
+            kube_api_version_is(route, caixa_core::GATEWAY_API_API_VERSION),
             "HTTPRoute's top-level apiVersion must equal the lifted \
              caixa_core::GATEWAY_API_API_VERSION by value — drift here \
              is the canonical footgun this lift closes"
