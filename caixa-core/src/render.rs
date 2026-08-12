@@ -18975,8 +18975,18 @@ pub fn kube_root_str_field<'a>(value: &'a serde_yaml::Value, field: &str) -> Opt
 /// per-cluster `HelmRelease` vs `Kustomization` split by kind) reaches
 /// the same helper by construction, with no `== Some(...)` inline
 /// composition and no drift surface on the `kind` scalar-key axis.
+///
+/// Body now delegates through the sibling accessor peer [`kube_kind`]
+/// as `kube_kind(value) == Some(kind)`, matching the sibling-axis
+/// predicate shapes ([`kube_name_is`] `= kube_name(value) == Some(name)`,
+/// [`kube_namespace_is`] `= kube_namespace(value) == Some(namespace)`) —
+/// a future rebrand on the accessor's readback surface (a schema-migration
+/// on the underlying `kind:` axis, a defensive short-circuit for
+/// pre-materialization CR observations) reaches this predicate through
+/// one composition-link, not a re-inlined `kube_root_str_field(_,
+/// KUBE_KEY_KIND) == Some(...)` two-token composition.
 pub fn kube_kind_is(value: &serde_yaml::Value, kind: &str) -> bool {
-    kube_root_str_field(value, KUBE_KEY_KIND) == Some(kind)
+    kube_kind(value) == Some(kind)
 }
 
 /// Locate the first K8s CR YAML document in `docs` whose top-level
@@ -19032,6 +19042,116 @@ pub fn find_by_kind<'a>(
     kind: &str,
 ) -> Option<&'a serde_yaml::Value> {
     docs.iter().find(|d| kube_kind_is(d, kind))
+}
+
+/// Read the top-level `kind:` string-scalar CRD-discriminator axis of a
+/// K8s custom resource YAML document as `Option<&str>` — the pinned peer
+/// on the CRD-discriminator axis to the parametric [`kube_root_str_field`]
+/// on the top-level `<field>` sub-axis surface, and the accessor-arity
+/// peer that closes the three-arity `(accessor / predicate / navigator)`
+/// closure on the `kind:` discriminator axis: [`kube_kind`] reads,
+/// [`kube_kind_is`] tests, [`find_by_kind`] locates — the structural
+/// mirror of the same closure the sibling `metadata.name` identity axis
+/// (accessor [`kube_name`] c9cdecb, predicate [`kube_name_is`] 092965d,
+/// navigator [`find_by_name`] 092965d) and the sibling
+/// `metadata.namespace` namespace-scoping axis (accessor
+/// [`kube_namespace`] e18297b, predicate [`kube_namespace_is`] 9f4a600,
+/// navigator [`find_by_namespace`] 9f4a600) already close on the two
+/// sub-`metadata.*` coordinates.
+///
+/// Returns `None` when either the top-level `kind:` scalar is absent or
+/// the `kind:` scalar carries a non-string YAML type — the same two-way
+/// vacuous-`None` short-circuit the parent [`kube_root_str_field`] closes
+/// on the underlying one-hop navigation.
+///
+/// The [`KUBE_KEY_KIND`] axis is pinned inside the helper (unlike the
+/// parametric `field` axis of the underlying [`kube_root_str_field`])
+/// because the K8s CRD schema pins `kind` as the load-bearing per-CR
+/// discriminator on every `CustomResource` across every group/version
+/// (paired with `apiVersion` for CRD-registration disambiguation) — the
+/// same load-bearing status the sibling `metadata.name` +
+/// `metadata.namespace` coordinates carry on the sub-`metadata:` axis
+/// pair that already lifted an accessor peer under the same discipline.
+/// Every readback consumer downstream (`.unwrap()`, `.expect(...)`,
+/// `== Some(...)` equality wraps, `.to_string()` clone) drives off the
+/// same pinned return; a hypothetical future K8s API-machinery rebrand on
+/// the `kind:` axis (a schema-migration to a wrapped `kindV2:` scalar
+/// under a per-group versioning axis, a Server-Side-Apply-driven
+/// per-field-ownership migration under an aliased `resource:` scalar)
+/// reaches every caller through one lift, not a coordinated rewrite
+/// across every per-CR discriminator readback site.
+///
+/// The canonical shape 7 emit-side test-harness readback sites across
+/// [`caixa-flux`][flux] (3) + [`caixa-mesh`][mesh] (4) previously
+/// carried inline as the two-token composition
+///
+/// ```ignore
+/// kube_root_str_field(<value>, KUBE_KEY_KIND)
+/// ```
+///
+/// around a one-token semantic payload (the readback intent — "what
+/// kind did the emitter write into this CR?"). The lift collapses the
+/// two-token composition — the parametric readback helper, the pinned
+/// discriminator-axis scalar-key argument — onto one accessor the
+/// caller reads as intent (`kube_kind(<value>)` — "what is this K8s CR
+/// document's top-level `kind:`?") rather than a `readback → axis-pin`
+/// two-arg call. Peer predicates for other top-level discriminators
+/// (a hypothetical `kube_api_version` accessor on a multi-version
+/// migration harness, a `kube_group` accessor for CRD-group filtering)
+/// land as sibling helpers with their own pinned axis, not as
+/// re-parameterizations of this one.
+///
+/// Structural peer to sibling [`kube_name`] (c9cdecb) / [`kube_namespace`]
+/// (e18297b) on the two sub-`metadata.*` coordinates: [`kube_name`]
+/// closes the accessor arity on the identity axis; [`kube_namespace`]
+/// closes it on the namespace-scoping axis; [`kube_kind`] closes it on
+/// the top-level CRD-discriminator axis. Same accessor-arity shape,
+/// different pinned scalar-key on a different navigation depth (root
+/// vs sub-`metadata:`) — together the three accessors bracket the
+/// K8s-CR YAML readback surface every renderer + every test-side
+/// per-CR readback path reaches through, closing the three-arity
+/// `(accessor / predicate / navigator)` structural closure on each of
+/// the three canonical per-CR coordinates the K8s API-machinery pins
+/// as load-bearing per-CR axes.
+///
+/// Sites lifted:
+///
+///   * caixa-flux's three
+///     `cluster_bundle_{gitrepository,helmrelease,kustomization}_uses_lifted_flux_kind_<crd>`
+///     tests — each per-emitted-file
+///     `kube_root_str_field(&parsed, KUBE_KEY_KIND) == Some(FLUX_KIND_<CRD>)`
+///     lifted-uses pin on the per-Flux-CR bundle-path emission
+///     (`gitrepository.yaml`, `helmrelease.yaml`, `kustomization.yaml`
+///     — the three Flux v2 controller-triplet CRD kinds);
+///   * caixa-mesh's per-CNP top-level `kind:` readback loop in the
+///     two test bodies `cilium_network_policies_use_lifted_cilium_kind_network_policy`
+///     and `cilium_policy_carries_canonical_kube_skeleton` — each
+///     `for p in &policies { assert_eq!(kube_root_str_field(p,
+///     KUBE_KEY_KIND), Some(CILIUM_KIND_NETWORK_POLICY)); }` loop
+///     over the multi-doc CNP emission;
+///   * caixa-mesh's per-Gateway / per-HTTPRoute top-level `kind:`
+///     readback across the two test bodies
+///     `gateway_routes_gateway_uses_lifted_gateway_api_kind_gateway`
+///     and `gateway_routes_httproute_uses_lifted_gateway_api_kind_http_route` —
+///     each `find_by_kind(&docs, <KIND>) → kube_root_str_field(_,
+///     KUBE_KEY_KIND) == Some(caixa_core::GATEWAY_API_KIND_<CRD>)`
+///     chain over the paired-Gateway/HTTPRoute emission.
+///
+/// Every future per-CR `kind:` readback (the future per-`:politicas`
+/// `CiliumClusterwideEnvoyConfig` emitter's per-CR discriminator pin,
+/// MESH-COMPOSITION §III.2 #3; the future `app-operator`'s
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR materializer's per-status
+/// discriminator readback, §III.2 #5; the future M4 cross-cluster
+/// fan-out's per-cluster `HelmRelease` vs `Kustomization` split by
+/// `kind:`) reaches the same pinned accessor by construction, with no
+/// axis-key argument drift and no re-inlined
+/// `kube_root_str_field(_, KUBE_KEY_KIND)` two-token composition.
+///
+/// [mesh]: https://github.com/pleme-io/caixa/tree/main/caixa-mesh
+/// [flux]: https://github.com/pleme-io/caixa/tree/main/caixa-flux
+#[must_use]
+pub fn kube_kind(value: &serde_yaml::Value) -> Option<&str> {
+    kube_root_str_field(value, KUBE_KEY_KIND)
 }
 
 /// Predicate: does the K8s custom resource YAML document at `value`
@@ -38024,6 +38144,189 @@ spec:
             kube_metadata_str_field(first, KUBE_KEY_NAME),
             Some("primary"),
         );
+    }
+
+    #[test]
+    fn kube_kind_matches_lifted_kube_root_str_field_readback_shape() {
+        // Byte-equivalence pin: the lifted accessor reproduces the
+        // two-token composition (`kube_root_str_field(v,
+        // KUBE_KEY_KIND)`) the 7 caixa-flux (3) + caixa-mesh (4)
+        // test-side per-CR discriminator readback sites previously
+        // carried inline around the readback intent "what kind did the
+        // emitter write into this CR?". Closes the "did the lift
+        // accidentally rename the pinned scalar-key axis to
+        // KUBE_KEY_API_VERSION (silently pulling the peer discriminator
+        // coordinate instead of the primary), drop the axis-key
+        // argument, or widen the return type" drift class every future
+        // re-lift on the peer top-level axis surface (a hypothetical
+        // `kube_api_version` accessor on a multi-version migration
+        // harness, a `kube_group` accessor for CRD-group filtering)
+        // would otherwise reopen. Peer of the sibling
+        // `kube_name_matches_lifted_kube_metadata_str_field_readback_shape`
+        // + `kube_namespace_matches_lifted_kube_metadata_str_field_readback_shape`
+        // pins on the sub-`metadata:` axis half of the same
+        // three-accessor closure — this pin brackets the top-level
+        // `kind:` discriminator axis, the two sibling pins bracket the
+        // sub-`metadata.{name, namespace}` coordinate pair, together
+        // closing the accessor-arity witness on every canonical per-CR
+        // axis the substrate emits + reads back.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(CILIUM_KIND_NETWORK_POLICY.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(kube_kind(&value), Some(CILIUM_KIND_NETWORK_POLICY));
+        assert_eq!(
+            kube_kind(&value),
+            kube_root_str_field(&value, KUBE_KEY_KIND),
+            "kube_kind must byte-agree with the parametric \
+             `kube_root_str_field(v, KUBE_KEY_KIND)` composition it \
+             replaces at every consumer site — drift on either half \
+             silently opens a per-CR discriminator readback that no \
+             longer routes through the pinned KUBE_KEY_KIND axis-key",
+        );
+    }
+
+    #[test]
+    fn kube_kind_none_when_kind_absent_or_non_string() {
+        // Complement-side pin: the accessor returns `None` when either
+        // the top-level `kind:` scalar is absent (a partially-authored
+        // CR the K8s API-server would reject at admission but that this
+        // readback tolerates as `None` so the accessor stays a total
+        // function) or the `kind:` scalar is present but carries a
+        // non-string YAML type (a numeric, boolean, or nested mapping —
+        // invalid CR shape per the K8s API-machinery OpenAPI schema).
+        // Peer of the sibling
+        // `kube_root_str_field_returns_none_when_field_absent` +
+        // `kube_root_str_field_returns_none_when_field_carries_non_string_type`
+        // pins on the parametric readback surface — this pin verifies
+        // the pinned-axis variant preserves the same total-function
+        // contract every consumer site's `.unwrap_or(...)` /
+        // `Some(...) ==` follow-up depends on.
+        let empty = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        assert_eq!(
+            kube_kind(&empty),
+            None,
+            "kube_kind must return None when the top-level kind: scalar \
+             is absent",
+        );
+
+        for non_string in [
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Number(42.into()),
+            serde_yaml::Value::Bool(true),
+            serde_yaml::Value::Sequence(vec![]),
+            serde_yaml::Value::Mapping(serde_yaml::Mapping::new()),
+        ] {
+            let mut cr = serde_yaml::Mapping::new();
+            cr.insert_str_key(KUBE_KEY_KIND, non_string.clone());
+            assert_eq!(
+                kube_kind(&serde_yaml::Value::Mapping(cr)),
+                None,
+                "kube_kind must return None when top-level kind: carries \
+                 a non-string YAML type ({non_string:?})",
+            );
+        }
+    }
+
+    #[test]
+    fn kube_kind_is_composes_on_lifted_kube_kind_accessor() {
+        // Composition pin: the predicate `kube_kind_is` now delegates
+        // through the lifted [`kube_kind`] accessor rather than the
+        // parametric [`kube_root_str_field`] two-hop navigation. Lock
+        // the delegation shape (`kube_kind_is(v, k) == (kube_kind(v)
+        // == Some(k))`) so a future refactor that reintroduces the
+        // direct `kube_root_str_field(v, KUBE_KEY_KIND) == Some(k)`
+        // composition surfaces here as a test-visible break — the
+        // composition-symmetry with the sibling
+        // [`kube_name_is`] / [`kube_namespace_is`] predicates (both of
+        // which delegate through their respective sibling accessors)
+        // stays enforced. Peer of the sibling
+        // `kube_name_is_composes_on_lifted_kube_name_accessor` +
+        // `kube_namespace_is_composes_on_lifted_kube_namespace_accessor`
+        // pins on the two `metadata.*` sub-axis predicates.
+        let mut cr_gw = serde_yaml::Mapping::new();
+        cr_gw.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr_gw);
+
+        for candidate in [
+            GATEWAY_API_KIND_GATEWAY,
+            GATEWAY_API_KIND_HTTP_ROUTE,
+            CILIUM_KIND_NETWORK_POLICY,
+        ] {
+            assert_eq!(
+                kube_kind_is(&value, candidate),
+                kube_kind(&value) == Some(candidate),
+                "kube_kind_is(v, {candidate:?}) must reduce to \
+                 `kube_kind(v) == Some({candidate:?})` byte-for-byte — \
+                 the composition-symmetry with the sibling \
+                 kube_name_is / kube_namespace_is predicates is the \
+                 load-bearing shape every future accessor-side \
+                 refactor rides on",
+            );
+        }
+    }
+
+    #[test]
+    fn kube_kind_closes_three_arity_closure_over_kube_kind_is_and_find_by_kind() {
+        // Closure-witness pin: the three-arity `(accessor / predicate /
+        // navigator)` closure on the top-level `kind:` discriminator
+        // axis is now closed by the same delegation chain the sibling
+        // `metadata.name` / `metadata.namespace` closures already carry
+        // — `kube_kind` reads (accessor), `kube_kind_is` composes on
+        // top of it as equality (predicate), `find_by_kind` composes
+        // on top of `kube_kind_is` as first-match (navigator). Assert
+        // the three arities reconcile on the same document: the
+        // accessor's readback drives the predicate's equality, and the
+        // predicate's equality drives the navigator's first-hit — a
+        // future refactor that decouples any of the three from the
+        // shared underlying [`KUBE_KEY_KIND`] axis-key surfaces here
+        // as a three-way disagreement, not a silent drift at the first
+        // routed caller. Peer of the sibling identity-axis + namespace-
+        // scoping-axis closure-witness pins on the two sub-`metadata:`
+        // coordinates — together the three witnesses bracket every
+        // canonical per-CR axis the substrate emits.
+        let mut cr_gw = serde_yaml::Mapping::new();
+        cr_gw.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_GATEWAY.into()),
+        );
+        let mut cr_route = serde_yaml::Mapping::new();
+        cr_route.insert_str_key(
+            KUBE_KEY_KIND,
+            serde_yaml::Value::String(GATEWAY_API_KIND_HTTP_ROUTE.into()),
+        );
+        let docs = vec![
+            serde_yaml::Value::Mapping(cr_gw),
+            serde_yaml::Value::Mapping(cr_route),
+        ];
+
+        for kind in [
+            GATEWAY_API_KIND_GATEWAY,
+            GATEWAY_API_KIND_HTTP_ROUTE,
+            CILIUM_KIND_NETWORK_POLICY,
+        ] {
+            let via_navigator = find_by_kind(&docs, kind);
+            let via_predicate = docs.iter().find(|d| kube_kind_is(d, kind));
+            let via_accessor = docs.iter().find(|d| kube_kind(d) == Some(kind));
+            assert_eq!(
+                via_navigator, via_predicate,
+                "find_by_kind must reduce to `docs.iter().find(|d| \
+                 kube_kind_is(d, {kind:?}))` — the navigator/predicate \
+                 arity link on the kind axis must stay closed",
+            );
+            assert_eq!(
+                via_predicate, via_accessor,
+                "kube_kind_is must reduce to `kube_kind(d) == \
+                 Some({kind:?})` — the predicate/accessor arity link \
+                 on the kind axis must stay closed",
+            );
+        }
     }
 
     #[test]

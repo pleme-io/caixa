@@ -3273,8 +3273,8 @@ mod tests {
         Caixa, CaixaKind, DEFAULT_SERVICO_PORT, Entrada, GATEWAY_API_DEFAULT_HTTP_ROUTE_PATH,
         LABEL_PROGRAM, M3_PLACEMENT_KEY_AFFINITY, M3_PLACEMENT_KEY_CLUSTERS,
         M3_PLACEMENT_KEY_ESTRATEGIA, M3_PLACEMENT_KEY_SHARD_KEY, Membro, MeshPolicy, Placement,
-        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_kind_is, kube_name,
-        kube_name_is, kube_namespace, kube_root_str_field,
+        PlacementStrategy, WitContract, find_by_kind, find_by_name, kube_kind, kube_kind_is,
+        kube_name, kube_name_is, kube_namespace, kube_root_str_field,
     };
     use std::time::Duration;
 
@@ -6240,8 +6240,14 @@ mod tests {
              — drift here masks the lifted-uses assertion below"
         );
         for p in &policies {
+            // Readback through the substrate-primitive [`kube_kind`]
+            // pinned accessor — the top-level `kind:` scalar-key axis
+            // is pinned at the substrate level so this per-CNP
+            // discriminator readback stays aligned with the sibling
+            // per-CR `metadata.name` / `metadata.namespace` accessor
+            // trio the peer test bodies reach through.
             assert_eq!(
-                kube_root_str_field(p, KUBE_KEY_KIND),
+                kube_kind(p),
                 Some(CILIUM_KIND_NETWORK_POLICY),
                 "every rendered CiliumNetworkPolicy must declare the lifted \
                  [`CILIUM_KIND_NETWORK_POLICY`] constant on its top-level kind \
@@ -8880,10 +8886,9 @@ mod tests {
                 kube_root_str_field(p, KUBE_KEY_API_VERSION),
                 Some("cilium.io/v2")
             );
-            assert_eq!(
-                kube_root_str_field(p, KUBE_KEY_KIND),
-                Some(CILIUM_KIND_NETWORK_POLICY)
-            );
+            // Per-CNP discriminator readback through the
+            // substrate-primitive [`kube_kind`] pinned accessor.
+            assert_eq!(kube_kind(p), Some(CILIUM_KIND_NETWORK_POLICY));
             let metadata = p
                 .get(KUBE_KEY_METADATA)
                 .and_then(|m| m.as_mapping())
@@ -9051,8 +9056,12 @@ mod tests {
         // on the sibling Cilium-CRD-kind-axis lift trajectory.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let gateway = find_by_kind(&docs, GATEWAY_API_KIND_GATEWAY).expect("Gateway present");
+        // Readback through the substrate-primitive [`kube_kind`] pinned
+        // accessor — same three-arity closure the sibling
+        // [`find_by_kind`] navigator + [`kube_kind_is`] predicate reach
+        // through on the top-level `kind:` discriminator axis.
         assert_eq!(
-            kube_root_str_field(gateway, KUBE_KEY_KIND),
+            kube_kind(gateway),
             Some(caixa_core::GATEWAY_API_KIND_GATEWAY),
             "Gateway's top-level kind must equal the lifted \
              caixa_core::GATEWAY_API_KIND_GATEWAY by value — drift here \
@@ -9091,8 +9100,12 @@ mod tests {
         // emits together.
         let docs = gateway_routes(&aplicacao_caixa()).unwrap();
         let route = find_by_kind(&docs, GATEWAY_API_KIND_HTTP_ROUTE).expect("HTTPRoute present");
+        // Readback through the substrate-primitive [`kube_kind`] pinned
+        // accessor — the sibling per-Gateway pin
+        // (`gateway_routes_gateway_uses_lifted_gateway_api_kind_gateway`)
+        // reaches through the same accessor on the paired-CR axis.
         assert_eq!(
-            kube_root_str_field(route, KUBE_KEY_KIND),
+            kube_kind(route),
             Some(caixa_core::GATEWAY_API_KIND_HTTP_ROUTE),
             "HTTPRoute's top-level kind must equal the lifted \
              caixa_core::GATEWAY_API_KIND_HTTP_ROUTE by value — drift here \
