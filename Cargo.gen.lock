@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "cargo_lock_sha256": "41f7cbba73127f0685ea6f53e4331238bccd9b1208eceddc3b7f3139d3653906",
+  "cargo_lock_sha256": "64f3d1e2314d53d11ff1d0839269404dd1a7929b601fd80b411e304a52e05c61",
   "manifest_sha256": {
-    "Cargo.toml": "0dbc5027cda2425196a8aa403113b8bec106f5eeef7ba8bbf0534089ac714fa8",
+    "Cargo.toml": "61d73c72f83ce1e8ecfe985ef6211eeed513c6bd8d3613a5d2954b42322133bc",
     "caixa-actions/Cargo.toml": "9020572d42b76e24e04a35627bfed1bc58cb7e543561e048202aba939e0c41ed",
     "caixa-arch/Cargo.toml": "9f1136e23aa778f0af4aeb4510887e1a88fa6e2b55999887af963704aa93e936",
     "caixa-ast/Cargo.toml": "7a5bd0d7559e3a11b034af3d9c2d137014691aee9ebe590cf8406e6ca1858bd4",
@@ -896,11 +896,11 @@
           "std"
         ]
       },
-      "caixa-actions-0.1.50": {
+      "caixa-actions-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -954,11 +954,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-arch-0.1.50": {
+      "caixa-arch-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_pangea",
-            "package_key": "caixa-pangea-0.1.50",
+            "package_key": "caixa-pangea-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -968,7 +968,7 @@
           },
           {
             "name": "caixa_teia",
-            "package_key": "caixa-teia-0.1.50",
+            "package_key": "caixa-teia-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1032,7 +1032,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-ast-0.1.50": {
+      "caixa-ast-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "gen_platform",
@@ -1090,7 +1090,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-core-0.1.50": {
+      "caixa-core-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "canteiro_types",
@@ -1190,11 +1190,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-crd-0.1.50": {
+      "caixa-crd-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1204,7 +1204,7 @@
           },
           {
             "name": "caixa_lacre",
-            "package_key": "caixa-lacre-0.1.50",
+            "package_key": "caixa-lacre-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1308,7 +1308,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-feira-0.1.50": {
+      "caixa-feira-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "anyhow",
@@ -1322,7 +1322,7 @@
           },
           {
             "name": "caixa_arch",
-            "package_key": "caixa-arch-0.1.50",
+            "package_key": "caixa-arch-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1332,7 +1332,7 @@
           },
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1342,7 +1342,7 @@
           },
           {
             "name": "caixa_flux",
-            "package_key": "caixa-flux-0.1.50",
+            "package_key": "caixa-flux-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1352,7 +1352,7 @@
           },
           {
             "name": "caixa_fmt",
-            "package_key": "caixa-fmt-0.1.50",
+            "package_key": "caixa-fmt-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1362,7 +1362,7 @@
           },
           {
             "name": "caixa_helm",
-            "package_key": "caixa-helm-0.1.50",
+            "package_key": "caixa-helm-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1372,7 +1372,7 @@
           },
           {
             "name": "caixa_lacre",
-            "package_key": "caixa-lacre-0.1.50",
+            "package_key": "caixa-lacre-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1382,7 +1382,7 @@
           },
           {
             "name": "caixa_lint",
-            "package_key": "caixa-lint-0.1.50",
+            "package_key": "caixa-lint-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1392,7 +1392,7 @@
           },
           {
             "name": "caixa_mesh",
-            "package_key": "caixa-mesh-0.1.50",
+            "package_key": "caixa-mesh-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1402,7 +1402,7 @@
           },
           {
             "name": "caixa_pangea",
-            "package_key": "caixa-pangea-0.1.50",
+            "package_key": "caixa-pangea-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1412,7 +1412,7 @@
           },
           {
             "name": "caixa_resolver",
-            "package_key": "caixa-resolver-0.1.50",
+            "package_key": "caixa-resolver-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1422,7 +1422,7 @@
           },
           {
             "name": "caixa_teia",
-            "package_key": "caixa-teia-0.1.50",
+            "package_key": "caixa-teia-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1432,7 +1432,7 @@
           },
           {
             "name": "caixa_theme",
-            "package_key": "caixa-theme-0.1.50",
+            "package_key": "caixa-theme-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1591,11 +1591,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-flake-0.1.50": {
+      "caixa-flake-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1649,11 +1649,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-flux-0.1.50": {
+      "caixa-flux-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1717,11 +1717,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-fmt-0.1.50": {
+      "caixa-fmt-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_ast",
-            "package_key": "caixa-ast-0.1.50",
+            "package_key": "caixa-ast-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1765,11 +1765,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-helm-0.1.50": {
+      "caixa-helm-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1823,7 +1823,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-lacre-0.1.50": {
+      "caixa-lacre-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "blake3",
@@ -1837,7 +1837,7 @@
           },
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1901,11 +1901,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-lint-0.1.50": {
+      "caixa-lint-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_ast",
-            "package_key": "caixa-ast-0.1.50",
+            "package_key": "caixa-ast-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1915,7 +1915,7 @@
           },
           {
             "name": "caixa_theme",
-            "package_key": "caixa-theme-0.1.50",
+            "package_key": "caixa-theme-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -1979,7 +1979,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-lsp-0.1.50": {
+      "caixa-lsp-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "anyhow",
@@ -1993,7 +1993,7 @@
           },
           {
             "name": "caixa_ast",
-            "package_key": "caixa-ast-0.1.50",
+            "package_key": "caixa-ast-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2003,7 +2003,7 @@
           },
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2013,7 +2013,7 @@
           },
           {
             "name": "caixa_fmt",
-            "package_key": "caixa-fmt-0.1.50",
+            "package_key": "caixa-fmt-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2023,7 +2023,7 @@
           },
           {
             "name": "caixa_lint",
-            "package_key": "caixa-lint-0.1.50",
+            "package_key": "caixa-lint-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2114,11 +2114,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-mesh-0.1.50": {
+      "caixa-mesh-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2172,7 +2172,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-operator-0.1.50": {
+      "caixa-operator-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "anyhow",
@@ -2196,7 +2196,7 @@
           },
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2206,7 +2206,7 @@
           },
           {
             "name": "caixa_crd",
-            "package_key": "caixa-crd-0.1.50",
+            "package_key": "caixa-crd-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2216,7 +2216,7 @@
           },
           {
             "name": "caixa_lacre",
-            "package_key": "caixa-lacre-0.1.50",
+            "package_key": "caixa-lacre-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2226,7 +2226,7 @@
           },
           {
             "name": "caixa_resolver",
-            "package_key": "caixa-resolver-0.1.50",
+            "package_key": "caixa-resolver-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2393,11 +2393,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-pangea-0.1.50": {
+      "caixa-pangea-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2407,7 +2407,7 @@
           },
           {
             "name": "caixa_teia",
-            "package_key": "caixa-teia-0.1.50",
+            "package_key": "caixa-teia-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2461,7 +2461,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-provedor-0.1.50": {
+      "caixa-provedor-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "gen_platform",
@@ -2509,7 +2509,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-resolver-0.1.50": {
+      "caixa-resolver-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "anyhow",
@@ -2533,7 +2533,7 @@
           },
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2543,7 +2543,7 @@
           },
           {
             "name": "caixa_lacre",
-            "package_key": "caixa-lacre-0.1.50",
+            "package_key": "caixa-lacre-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2629,11 +2629,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-tatara-0.1.50": {
+      "caixa-tatara-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2697,11 +2697,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-teia-0.1.50": {
+      "caixa-teia-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_ast",
-            "package_key": "caixa-ast-0.1.50",
+            "package_key": "caixa-ast-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2711,7 +2711,7 @@
           },
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2775,11 +2775,11 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-teia-forge-0.1.50": {
+      "caixa-teia-forge-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "caixa_core",
-            "package_key": "caixa-core-0.1.50",
+            "package_key": "caixa-core-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2789,7 +2789,7 @@
           },
           {
             "name": "caixa_teia",
-            "package_key": "caixa-teia-0.1.50",
+            "package_key": "caixa-teia-0.1.51",
             "kind": "normal",
             "features": [],
             "uses_default_features": true,
@@ -2843,7 +2843,7 @@
         "build_dependencies": [],
         "features": []
       },
-      "caixa-theme-0.1.50": {
+      "caixa-theme-0.1.51": {
         "runtime_dependencies": [
           {
             "name": "gen_platform",
@@ -16966,35 +16966,35 @@
     "bytes-1.11.1": {
       "edition": "2021"
     },
-    "caixa-actions-0.1.50": {
+    "caixa-actions-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_actions",
         "path": "src/lib.rs"
       }
     },
-    "caixa-arch-0.1.50": {
+    "caixa-arch-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_arch",
         "path": "src/lib.rs"
       }
     },
-    "caixa-ast-0.1.50": {
+    "caixa-ast-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_ast",
         "path": "src/lib.rs"
       }
     },
-    "caixa-core-0.1.50": {
+    "caixa-core-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_core",
         "path": "src/lib.rs"
       }
     },
-    "caixa-crd-0.1.50": {
+    "caixa-crd-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_crd",
@@ -17007,7 +17007,7 @@
         }
       ]
     },
-    "caixa-feira-0.1.50": {
+    "caixa-feira-0.1.51": {
       "edition": "2024",
       "binaries": [
         {
@@ -17016,49 +17016,49 @@
         }
       ]
     },
-    "caixa-flake-0.1.50": {
+    "caixa-flake-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_flake",
         "path": "src/lib.rs"
       }
     },
-    "caixa-flux-0.1.50": {
+    "caixa-flux-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_flux",
         "path": "src/lib.rs"
       }
     },
-    "caixa-fmt-0.1.50": {
+    "caixa-fmt-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_fmt",
         "path": "src/lib.rs"
       }
     },
-    "caixa-helm-0.1.50": {
+    "caixa-helm-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_helm",
         "path": "src/lib.rs"
       }
     },
-    "caixa-lacre-0.1.50": {
+    "caixa-lacre-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_lacre",
         "path": "src/lib.rs"
       }
     },
-    "caixa-lint-0.1.50": {
+    "caixa-lint-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_lint",
         "path": "src/lib.rs"
       }
     },
-    "caixa-lsp-0.1.50": {
+    "caixa-lsp-0.1.51": {
       "edition": "2024",
       "binaries": [
         {
@@ -17067,14 +17067,14 @@
         }
       ]
     },
-    "caixa-mesh-0.1.50": {
+    "caixa-mesh-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_mesh",
         "path": "src/lib.rs"
       }
     },
-    "caixa-operator-0.1.50": {
+    "caixa-operator-0.1.51": {
       "edition": "2024",
       "binaries": [
         {
@@ -17083,49 +17083,49 @@
         }
       ]
     },
-    "caixa-pangea-0.1.50": {
+    "caixa-pangea-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_pangea",
         "path": "src/lib.rs"
       }
     },
-    "caixa-provedor-0.1.50": {
+    "caixa-provedor-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_provedor",
         "path": "src/lib.rs"
       }
     },
-    "caixa-resolver-0.1.50": {
+    "caixa-resolver-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_resolver",
         "path": "src/lib.rs"
       }
     },
-    "caixa-tatara-0.1.50": {
+    "caixa-tatara-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_tatara",
         "path": "src/lib.rs"
       }
     },
-    "caixa-teia-0.1.50": {
+    "caixa-teia-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_teia",
         "path": "src/lib.rs"
       }
     },
-    "caixa-teia-forge-0.1.50": {
+    "caixa-teia-forge-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_teia_forge",
         "path": "src/lib.rs"
       }
     },
-    "caixa-theme-0.1.50": {
+    "caixa-theme-0.1.51": {
       "edition": "2024",
       "lib_target": {
         "name": "caixa_theme",
