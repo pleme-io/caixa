@@ -19314,6 +19314,61 @@ pub fn kube_namespace(value: &serde_yaml::Value) -> Option<&str> {
     kube_metadata_str_field(value, KUBE_KEY_NAMESPACE)
 }
 
+/// Test whether a K8s custom resource YAML document's `metadata.namespace`
+/// per-CR namespace-scoping axis equals `namespace` — the pinned predicate
+/// peer of the [`kube_namespace`] (e18297b) accessor on the namespace-
+/// scoping half of the canonical `metadata.{name, namespace}` per-CR
+/// coordinate pair, and the structural mirror on the namespace-scoping
+/// axis of the [`kube_name_is`] (092965d) predicate on the identity axis.
+/// Composes as `kube_namespace(value) == Some(namespace)` — same one-hop
+/// readback + equality-wrap shape the sibling predicate carries on the
+/// identity axis, differing only in which of the two canonical per-CR
+/// coordinates it pins.
+///
+/// The [`KUBE_KEY_NAMESPACE`] axis is pinned inside the helper (unlike
+/// the parametric `field` axis of the underlying
+/// [`kube_metadata_str_field`]) because the "is this CR document scoped
+/// to namespace X" question is a semantically-distinct namespace-scoping
+/// predicate, not a generic scalar-readback: the K8s API-machinery pins
+/// `metadata.namespace` as the load-bearing per-CR namespace-scoping
+/// axis on every namespaced `CustomResource` across every group/version
+/// (paired with `metadata.name` for cluster-scoped-vs-namespaced
+/// disambiguation), so this predicate lives one abstraction step above
+/// the generic readback. Peer predicates for other `metadata.*` sub-
+/// axes (a hypothetical `kube_uid_is` for ownerReference bookkeeping, a
+/// future `kube_resource_version_is` for optimistic-concurrency
+/// bookkeeping) land as sibling helpers with their own pinned axis, not
+/// as re-parameterizations of this one.
+///
+/// Structural peer to [`kube_name_is`] (092965d) on the sibling
+/// `metadata.name` identity axis: [`kube_name_is`] answers "does this
+/// document match name X" (the identity coordinate); [`kube_namespace_is`]
+/// answers "does this document match namespace X" (the namespace-
+/// scoping coordinate). Same one-hop readback + equality-wrap shape,
+/// different pinned scalar-key — together they bracket the two
+/// canonical per-CR coordinates every namespaced-CR filter reaches
+/// for. Same three-arity closure discipline the sibling identity axis
+/// carries — the accessor ([`kube_namespace`]) reads, the predicate
+/// ([`kube_namespace_is`]) tests, the navigator ([`find_by_namespace`])
+/// locates — each pinned to [`KUBE_KEY_NAMESPACE`] inside the helper
+/// so the axis-key drift class is closed across every consumer surface.
+///
+/// Every future per-CR namespace-filter site (the future M4 cross-
+/// cluster fan-out's per-tenant `HelmRelease` router split by
+/// `metadata.namespace`, MESH-COMPOSITION §III.2 #3; the future per-
+/// `:politicas` `CiliumClusterwideEnvoyConfig` per-namespace
+/// introspection filter; the future `app-operator`'s per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR namespace-scoping equality
+/// join, §III.2 #5; the future per-tenant CNP audit surface that
+/// filters emitted CNPs by their per-tenant namespace-scoping
+/// coordinate) reaches this same predicate by construction, with no
+/// inline `kube_namespace(v) == Some(...)` equality wrap and no
+/// re-parameterization on the pinned [`KUBE_KEY_NAMESPACE`] axis-key.
+#[must_use]
+pub fn kube_namespace_is(value: &serde_yaml::Value, namespace: &str) -> bool {
+    kube_namespace(value) == Some(namespace)
+}
+
 /// Locate the first K8s CR YAML document in `docs` whose
 /// `metadata.name` identity axis equals `name`.
 ///
@@ -19372,6 +19427,62 @@ pub fn find_by_name<'a>(
     name: &str,
 ) -> Option<&'a serde_yaml::Value> {
     docs.iter().find(|d| kube_name_is(d, name))
+}
+
+/// Locate the first K8s CR YAML document in `docs` whose
+/// `metadata.namespace` per-CR namespace-scoping axis equals `namespace`.
+///
+/// Composes on top of [`kube_namespace_is`] — same one-hop
+/// `.get(KUBE_KEY_METADATA).and_then(get(KUBE_KEY_NAMESPACE))
+/// .and_then(as_str) == Some(namespace)` predicate — and closes the
+/// "find the first document scoped to a given namespace inside a multi-
+/// doc mesh emission" navigator axis every future per-tenant / per-
+/// cluster-namespace fan-out slicer reaches for to split the emitted
+/// sequence by per-CR namespace-scoping before probing a per-CR body-
+/// axis.
+///
+/// Composition-symmetric to [`kube_namespace_is`]: the lifted predicate
+/// answers "does *this* one document match namespace `<NS>`?", the
+/// lifted navigator answers "find the first document of namespace
+/// `<NS>` in *this list*?". Same axis, different arity — the two call
+/// shapes emit-side / operator-side harnesses reach for when splitting
+/// multi-doc CR emissions by per-CR namespace-scoping. Peer of
+/// [`find_by_name`] (092965d) on the sibling `metadata.name` identity
+/// axis: [`find_by_name`] navigates by CR identity coordinate (there
+/// is exactly one CR per unique `metadata.name` inside a scope);
+/// [`find_by_namespace`] navigates by CR namespace-scoping coordinate
+/// (there may be many CRs sharing a `metadata.namespace` — the "first
+/// match" contract deliberately returns the first-emitted, matching
+/// the sibling navigator's first-match contract on the identity axis).
+///
+/// This closes the three-arity closure on the `metadata.namespace`
+/// per-CR namespace-scoping axis — accessor [`kube_namespace`]
+/// (e18297b), predicate [`kube_namespace_is`], navigator
+/// [`find_by_namespace`] — bringing it to structural parity with the
+/// three-arity closure on the sibling identity axis: accessor
+/// [`kube_name`] (c9cdecb), predicate [`kube_name_is`] (092965d),
+/// navigator [`find_by_name`] (092965d). Together the two closures
+/// bracket every accessor arity on the canonical
+/// `metadata.{name, namespace}` per-CR coordinate pair the K8s
+/// API-machinery pins as the two load-bearing coordinates every
+/// namespaced `CustomResource` carries.
+///
+/// Every future per-CR-namespace multi-doc-navigator site (the M4
+/// cross-cluster fan-out's per-tenant `HelmRelease` split by
+/// `metadata.namespace`, MESH-COMPOSITION §III.2 #3; the future
+/// `app-operator`'s per-Aplicacao `mesh.pleme.io/v1alpha1/Aplicacao`
+/// CR namespace-scoping join over emitted status docs, §III.2 #5; the
+/// future per-tenant CNP audit surface that locates the first emitted
+/// CNP inside a given tenant's namespace-scoping slice) reaches this
+/// same helper by construction, with no inline `.iter().find(closure)`
+/// combinator chain and no drift surface on the receiver-widen or
+/// combinator axes.
+#[must_use]
+pub fn find_by_namespace<'a>(
+    docs: &'a [serde_yaml::Value],
+    namespace: &str,
+) -> Option<&'a serde_yaml::Value> {
+    docs.iter().find(|d| kube_namespace_is(d, namespace))
 }
 
 /// Upsert `new_entry` into a typed sequence of programs.yaml-shaped
@@ -38471,6 +38582,234 @@ spec:
         assert_eq!(
             kube_metadata_str_field(first, KUBE_KEY_NAMESPACE),
             Some("cluster-a"),
+        );
+    }
+
+    #[test]
+    fn kube_namespace_is_composes_on_lifted_kube_namespace_accessor() {
+        // Composition pin: the peer predicate `kube_namespace_is(v, n)`
+        // must resolve exactly as `kube_namespace(v) == Some(n)` — no
+        // inline `kube_metadata_str_field(v, KUBE_KEY_NAMESPACE) ==
+        // Some(n)` composition, only the accessor + equality-wrap two-
+        // token shape. Pins the structural link between the three-arity
+        // closure (accessor / predicate / navigator) on the namespace-
+        // scoping axis: a future re-implementation of `kube_namespace`
+        // (a caching short-circuit for repeated readback on the same
+        // document, a hypothetical alias-table dispatch on a
+        // `metadata.tenant` sub-axis) reaches the predicate through one
+        // lift, not a second co-ordinated inline rewrite. Peer of the
+        // sibling `kube_name_is_composes_on_lifted_kube_name_accessor`
+        // pin on the identity axis.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("tatara-system".into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert_eq!(
+            kube_namespace_is(&value, "tatara-system"),
+            kube_namespace(&value) == Some("tatara-system"),
+            "kube_namespace_is must byte-agree with the peer \
+             `kube_namespace(v) == Some(n)` composition it delegates to \
+             — the predicate carries no more inline navigation, only \
+             the equality-wrap semantic distinct from the sibling \
+             accessor arity",
+        );
+        assert!(kube_namespace_is(&value, "tatara-system"));
+        assert!(!kube_namespace_is(&value, "flux-system"));
+    }
+
+    #[test]
+    fn kube_namespace_is_matches_lifted_kube_metadata_str_field_equality_shape() {
+        // Byte-equivalence pin: the lifted predicate reproduces the
+        // three-token composition (`kube_metadata_str_field(v,
+        // KUBE_KEY_NAMESPACE) == Some(<NS>)`) every future per-tenant
+        // `.find`/`.filter` site would otherwise carry inline. Closes
+        // the "did the lift accidentally rename the pinned scalar-key
+        // axis to KUBE_KEY_NAME (silently pulling the peer identity
+        // coordinate instead of the namespace-scoping one), drop the
+        // `Some(...)` wrap, or invert the comparator direction" drift
+        // class every future re-lift on the peer-axis surface (a
+        // hypothetical `kube_uid_is` for ownerReference bookkeeping,
+        // a `kube_resource_version_is` for optimistic-concurrency
+        // bookkeeping) would otherwise reopen. Peer of the sibling
+        // `kube_name_is_matches_lifted_kube_metadata_str_field_equality_shape`
+        // pin on the identity axis.
+        let mut metadata = serde_yaml::Mapping::new();
+        metadata.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String(DEFAULT_NAMESPACE.into()),
+        );
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(metadata));
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert!(kube_namespace_is(&value, DEFAULT_NAMESPACE));
+        assert_eq!(
+            kube_namespace_is(&value, DEFAULT_NAMESPACE),
+            kube_metadata_str_field(&value, KUBE_KEY_NAMESPACE) == Some(DEFAULT_NAMESPACE),
+            "kube_namespace_is must byte-agree with the parametric \
+             `kube_metadata_str_field(v, KUBE_KEY_NAMESPACE) == \
+             Some(<NS>)` three-token composition — drift here silently \
+             splits the per-tenant router harness's namespace-scoping \
+             filter from the sibling accessor's readback",
+        );
+    }
+
+    #[test]
+    fn kube_namespace_is_false_on_mismatched_namespace_and_missing_namespace() {
+        // Complement-side pin: the predicate returns `false` when
+        // either the namespace-scoping axis carries a different
+        // coordinate or the sub-`metadata.namespace:` scalar (or the
+        // enclosing `metadata:` block) is absent altogether (the same
+        // vacuous-`None` short-circuit the parent
+        // `kube_metadata_str_field` closes on the underlying two-hop
+        // navigation). Consumer sites (`docs.iter().find(|d|
+        // kube_namespace_is(d, <NS>))`) rely on the false-on-mismatch
+        // shape to skip the wrong-namespace CRs across the multi-doc
+        // fleet emission and land on the intended per-tenant slice.
+        // Peer of the sibling
+        // `kube_name_is_false_on_mismatched_name_and_missing_name` pin
+        // on the identity axis.
+        let mut wrong_meta = serde_yaml::Mapping::new();
+        wrong_meta.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("flux-system".into()),
+        );
+        let mut cr_wrong_ns = serde_yaml::Mapping::new();
+        cr_wrong_ns.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(wrong_meta));
+        assert!(!kube_namespace_is(
+            &serde_yaml::Value::Mapping(cr_wrong_ns),
+            DEFAULT_NAMESPACE,
+        ));
+
+        let cr_no_metadata = serde_yaml::Mapping::new();
+        assert!(!kube_namespace_is(
+            &serde_yaml::Value::Mapping(cr_no_metadata),
+            DEFAULT_NAMESPACE,
+        ));
+
+        let empty_meta = serde_yaml::Mapping::new();
+        let mut cr_no_ns = serde_yaml::Mapping::new();
+        cr_no_ns.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(empty_meta));
+        assert!(!kube_namespace_is(
+            &serde_yaml::Value::Mapping(cr_no_ns),
+            DEFAULT_NAMESPACE,
+        ));
+    }
+
+    #[test]
+    fn find_by_namespace_matches_inline_iter_find_kube_namespace_is_shape() {
+        // Byte-equivalence pin: the lifted navigator reproduces the
+        // three-token combinator chain (`docs.iter().find(|d|
+        // kube_namespace_is(d, <NS>))`) every future per-tenant fleet-
+        // slice site would otherwise carry inline. Closes the "did the
+        // lift accidentally widen the receiver, drop the closure, or
+        // swap `find` for `filter`" drift class every future re-lift on
+        // the sibling multi-doc-navigator axis (a hypothetical
+        // `filter_by_namespace` peer that returns an iterator across
+        // every matching per-tenant CR rather than the first hit) would
+        // otherwise reopen. Peer of the sibling
+        // `find_by_name_matches_inline_iter_find_kube_name_is_shape`
+        // pin on the identity axis.
+        let mut meta_a = serde_yaml::Mapping::new();
+        meta_a.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("tatara-system".into()),
+        );
+        let mut policy_a = serde_yaml::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
+        let mut meta_b = serde_yaml::Mapping::new();
+        meta_b.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("flux-system".into()),
+        );
+        let mut policy_b = serde_yaml::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let docs = vec![
+            serde_yaml::Value::Mapping(policy_a),
+            serde_yaml::Value::Mapping(policy_b),
+        ];
+
+        assert_eq!(
+            find_by_namespace(&docs, "tatara-system"),
+            docs.iter().find(|d| kube_namespace_is(d, "tatara-system")),
+        );
+        assert_eq!(
+            find_by_namespace(&docs, "flux-system"),
+            docs.iter().find(|d| kube_namespace_is(d, "flux-system")),
+        );
+
+        // Miss path: absent namespace-scoping coordinate → None,
+        // matching the inline `.find` short-circuit that consumer
+        // sites rely on to distinguish "no such per-tenant slice in
+        // this emission" from "wrong shape" in their `.unwrap()` /
+        // `.expect(...)` follow-ups. Picked a namespace-scoping value
+        // outside the two-fixture set so the miss-path answer is
+        // structurally None rather than coincidentally so — a fixture
+        // whose per-tenant coordinate happened to match one of the
+        // emitted CRs would silently short-circuit as `Some(...)` and
+        // never exercise the None-arm.
+        assert_eq!(find_by_namespace(&docs, "kube-system"), None);
+        let empty: Vec<serde_yaml::Value> = Vec::new();
+        assert_eq!(find_by_namespace(&empty, "tatara-system"), None);
+    }
+
+    #[test]
+    fn find_by_namespace_returns_first_match_on_duplicate_namespace() {
+        // Order-preservation pin: the lifted navigator returns the
+        // first document of the matching namespace-scoping coordinate
+        // (the same short-circuit `Iterator::find` exposes). Every
+        // per-tenant CR emission legally carries many CRs sharing a
+        // single `metadata.namespace` (a per-tenant namespace slices
+        // many `HelmRelease` + many `CiliumNetworkPolicy` +
+        // `Gateway` / `HTTPRoute` under one namespace-scoping
+        // coordinate), unlike the peer identity axis where each
+        // `metadata.name` is unique per namespace-scope. Pin the
+        // first-match contract keeps the M4 caller-side "the first hit
+        // is the primary per-tenant CR" convention aligned with the
+        // helper's combinator half. Peer of the sibling
+        // `find_by_name_returns_first_match_on_duplicate_name` pin on
+        // the identity axis.
+        let mut meta_a = serde_yaml::Mapping::new();
+        meta_a.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-cart-to-catalog".into()),
+        );
+        meta_a.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("tatara-system".into()),
+        );
+        let mut policy_a = serde_yaml::Mapping::new();
+        policy_a.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
+        let mut meta_b = serde_yaml::Mapping::new();
+        meta_b.insert_str_key(
+            KUBE_KEY_NAME,
+            serde_yaml::Value::String("checkout-payment-to-cart".into()),
+        );
+        meta_b.insert_str_key(
+            KUBE_KEY_NAMESPACE,
+            serde_yaml::Value::String("tatara-system".into()),
+        );
+        let mut policy_b = serde_yaml::Mapping::new();
+        policy_b.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let docs = vec![
+            serde_yaml::Value::Mapping(policy_a),
+            serde_yaml::Value::Mapping(policy_b),
+        ];
+
+        let first = find_by_namespace(&docs, "tatara-system").unwrap();
+        assert_eq!(
+            kube_name(first),
+            Some("checkout-cart-to-catalog"),
+            "find_by_namespace must return the first per-namespace \
+             CR in emission order — the M4 cross-cluster fan-out's \
+             per-tenant slicer treats the first-hit CR as the primary \
+             per-tenant coordinate, matching the peer navigator's \
+             first-match contract on the identity axis",
         );
     }
 
