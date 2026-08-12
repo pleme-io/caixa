@@ -139,12 +139,17 @@ impl LanguageServer for CaixaLsp {
                 #[allow(deprecated)]
                 let sym = DocumentSymbol {
                     name: head.to_string(),
-                    detail: n.kwarg("nome").and_then(|v| match &v.kind {
-                        caixa_ast::NodeKind::Str(s) | caixa_ast::NodeKind::Symbol(s) => {
-                            Some(s.clone())
-                        }
-                        _ => None,
-                    }),
+                    // Route the `:nome`-detail projection through the
+                    // lifted [`caixa_ast::NodeKind::as_symbol_or_str`]
+                    // `Option<&str>` accessor rather than the raw two-
+                    // arm `NodeKind::Str(s) | NodeKind::Symbol(s) =>
+                    // Some(s.clone())` open-coded per-arm disjunctive
+                    // pattern-match — sibling in shape to the caixa-teia
+                    // `build_ref` `:nome` slot converge on the same
+                    // atom-name-carrying disjunctive axis (this run).
+                    detail: n
+                        .kwarg("nome")
+                        .and_then(|v| v.kind.as_symbol_or_str().map(str::to_owned)),
                     kind: kind_for(head),
                     tags: None,
                     deprecated: None,
