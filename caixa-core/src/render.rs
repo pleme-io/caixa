@@ -19287,6 +19287,169 @@ pub fn kube_api_version(value: &serde_yaml::Value) -> Option<&str> {
 }
 
 /// Predicate: does the K8s custom resource YAML document at `value`
+/// declare its top-level `apiVersion:` CRD-group/version axis as
+/// exactly `api_version`? The pinned predicate peer of the
+/// [`kube_api_version`] (cf97d0a) accessor on the CRD-group/version
+/// half of the canonical top-level `(apiVersion, kind)` per-CR-
+/// registration coordinate pair, and the structural mirror on the
+/// CRD-group/version axis of the [`kube_kind_is`] (2902d9d) predicate
+/// on the peer CRD-kind half. Composes as `kube_api_version(value) ==
+/// Some(api_version)` — same one-hop readback + equality-wrap shape
+/// the sibling predicate carries on the `kind:` half, differing only
+/// in which of the two canonical top-level CRD-registration
+/// coordinates it pins.
+///
+/// The [`KUBE_KEY_API_VERSION`] axis is pinned inside the helper
+/// (unlike the parametric `field` axis of the underlying
+/// [`kube_root_str_field`]) because the "does this CR document
+/// declare CRD-group/version X" question is a semantically-distinct
+/// CRD-group/version predicate, not a generic scalar-readback: the
+/// K8s API-machinery pins `apiVersion` as the load-bearing per-CR
+/// CRD-group/version discriminator on every `CustomResource` across
+/// every group (paired with `kind` for CRD-registration
+/// disambiguation), so this predicate lives one abstraction step
+/// above the generic readback. Peer predicates for other top-level
+/// discriminators (a hypothetical `kube_group_is` on the pre-`/`-
+/// slash CRD-group prefix of the same `apiVersion:` scalar, a
+/// `kube_version_is` on the post-`/`-slash version suffix on a
+/// multi-version migration harness) land as sibling helpers with
+/// their own pinned axis, not as re-parameterizations of this one.
+///
+/// Structural peer to [`kube_kind_is`] (2902d9d) on the sibling
+/// top-level `kind:` half of the same canonical `(apiVersion, kind)`
+/// coordinate pair: [`kube_kind_is`] answers "does this document
+/// match CRD-kind X" (the CR shape coordinate);
+/// [`kube_api_version_is`] answers "does this document match
+/// CRD-group/version X" (the CR registration coordinate). Same
+/// one-hop readback + equality-wrap shape, different pinned scalar-
+/// key on the same navigation depth (root) — together they bracket
+/// the two canonical top-level CRD-registration coordinates every
+/// K8s CR readback at controller / API-server admission time keys
+/// off. Same three-arity closure discipline the sibling
+/// sub-`metadata.{name, namespace}` per-CR coordinate pair already
+/// carries — the accessor ([`kube_api_version`]) reads, the
+/// predicate ([`kube_api_version_is`]) tests, the navigator
+/// ([`find_by_api_version`]) locates — each pinned to
+/// [`KUBE_KEY_API_VERSION`] inside the helper so the axis-key drift
+/// class is closed across every consumer surface.
+///
+/// Sites lifted:
+///
+///   * caixa-flux's four per-emitted-file top-level `apiVersion:`
+///     lifted-uses pins across the `cluster_bundle` multi-file
+///     sequence — `cluster_bundle_helmrelease_uses_lifted_flux_api_version`
+///     (`helmrelease.yaml`),
+///     `cluster_bundle_kustomization_health_check_uses_lifted_flux_api_version`
+///     (per-entry `kustomization.yaml` `spec.healthChecks[].apiVersion`
+///     loop),
+///     `cluster_bundle_gitrepository_uses_lifted_flux_api_version`
+///     (`gitrepository.yaml`),
+///     `cluster_bundle_kustomization_uses_lifted_flux_api_version`
+///     (`kustomization.yaml`) — each per-file `assert_eq!(
+///     kube_api_version(&parsed), Some(FLUX_<CRD>_API_VERSION))`
+///     equality-wrap on the Flux v2 controller-triplet CRD-group/
+///     version axis;
+///   * caixa-mesh's per-CNP + per-Gateway + per-HTTPRoute top-level
+///     `apiVersion:` equality-wraps across the six test bodies
+///     `cilium_network_policies_use_lifted_cilium_api_version` (per-
+///     CNP loop),
+///     `cilium_policy_carries_canonical_kube_skeleton` (per-CNP
+///     loop),
+///     `gateway_carries_canonical_kube_skeleton_without_labels`
+///     (`Gateway`),
+///     `httproute_carries_canonical_kube_skeleton_without_labels`
+///     (`HTTPRoute`),
+///     `gateway_routes_gateway_uses_lifted_gateway_api_api_version`
+///     (`Gateway`),
+///     `gateway_routes_httproute_uses_lifted_gateway_api_api_version`
+///     (`HTTPRoute`) — each `assert_eq!(kube_api_version(v),
+///     Some(<AXIS>))` equality-wrap over the paired-Gateway/HTTPRoute
+///     + fan-in CNP emission.
+///
+/// Every future per-CR CRD-group/version-filter site (the future
+/// per-`:politicas` `CiliumClusterwideEnvoyConfig` per-CR CRD-group/
+/// version equality gate, MESH-COMPOSITION §III.2 #3; the future
+/// `app-operator`'s per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR CRD-group/version
+/// equality join over emitted status docs, §III.2 #5; the future
+/// M4 cross-cluster fan-out's per-cluster Flux-triplet CRD-group/
+/// version equality gate across the `.toolkit.fluxcd.io` root)
+/// reaches this same predicate by construction, with no inline
+/// `kube_api_version(v) == Some(...)` equality wrap and no
+/// re-parameterization on the pinned [`KUBE_KEY_API_VERSION`]
+/// axis-key.
+#[must_use]
+pub fn kube_api_version_is(value: &serde_yaml::Value, api_version: &str) -> bool {
+    kube_api_version(value) == Some(api_version)
+}
+
+/// Locate the first K8s CR YAML document in `docs` whose top-level
+/// `apiVersion:` CRD-group/version axis equals `api_version`.
+///
+/// Composes on top of [`kube_api_version_is`] — same one-hop
+/// `.get(KUBE_KEY_API_VERSION).and_then(as_str) == Some(api_version)`
+/// predicate — and closes the "find the first document of a given
+/// CRD-group/version inside a multi-doc mesh emission" navigator
+/// axis every future per-CRD-group / per-CRD-version fan-out slicer
+/// reaches for to split the emitted sequence by per-CR CRD-group/
+/// version-registration before probing a per-CR body-axis.
+///
+/// Composition-symmetric to [`kube_api_version_is`]: the lifted
+/// predicate answers "does *this* one document match CRD-group/
+/// version `<GV>`?", the lifted navigator answers "find the first
+/// document of CRD-group/version `<GV>` in *this list*?". Same
+/// axis, different arity — the two call shapes emit-side /
+/// operator-side harnesses reach for when splitting multi-doc CR
+/// emissions by per-CR CRD-group/version-registration. Peer of
+/// [`find_by_kind`] (b73a13e) on the sibling `kind:` half of the
+/// same canonical `(apiVersion, kind)` coordinate pair:
+/// [`find_by_kind`] navigates by CR shape coordinate (there is
+/// exactly one document per unique `kind:` inside a per-Aplicacao
+/// mesh emission at V0); [`find_by_api_version`] navigates by CR
+/// CRD-group/version-registration coordinate (there may be many
+/// CRs sharing an `apiVersion:` — the "first match" contract
+/// deliberately returns the first-emitted, matching the sibling
+/// navigator's first-match contract on the identity + namespace-
+/// scoping axes [`find_by_name`] / [`find_by_namespace`]).
+///
+/// This closes the three-arity closure on the top-level
+/// `apiVersion:` per-CR CRD-group/version axis — accessor
+/// [`kube_api_version`] (cf97d0a), predicate
+/// [`kube_api_version_is`], navigator [`find_by_api_version`] —
+/// bringing it to structural parity with the three-arity closure on
+/// the sibling top-level `kind:` half (accessor [`kube_kind`]
+/// 89a49a4, predicate [`kube_kind_is`] 2902d9d, navigator
+/// [`find_by_kind`] b73a13e) + the two sub-`metadata.*` coordinates
+/// (accessor [`kube_name`] c9cdecb, predicate [`kube_name_is`]
+/// 092965d, navigator [`find_by_name`] 092965d; accessor
+/// [`kube_namespace`] e18297b, predicate [`kube_namespace_is`]
+/// 9f4a600, navigator [`find_by_namespace`] 9f4a600). Together the
+/// four three-arity closures bracket every accessor arity on the
+/// canonical per-CR-registration + per-CR-identity/scoping
+/// coordinates the K8s API-machinery pins as the four load-bearing
+/// axes every namespaced `CustomResource` carries.
+///
+/// Every future per-CRD-group/version multi-doc-navigator site (the
+/// future `app-operator`'s per-Aplicacao
+/// `mesh.pleme.io/v1alpha1/Aplicacao` CR CRD-group/version join
+/// over emitted status docs, MESH-COMPOSITION §III.2 #5; the M4
+/// cross-cluster fan-out's per-cluster Flux-triplet split by
+/// `apiVersion:` across the `.toolkit.fluxcd.io` root, §III.2 #3;
+/// the future per-`:politicas` `CiliumClusterwideEnvoyConfig`
+/// per-CRD-group/version audit surface that locates the first
+/// emitted L7 policy inside a given CRD-group/version slice)
+/// reaches this same helper by construction, with no inline
+/// `.iter().find(closure)` combinator chain and no drift surface on
+/// the receiver-widen or combinator axes.
+#[must_use]
+pub fn find_by_api_version<'a>(
+    docs: &'a [serde_yaml::Value],
+    api_version: &str,
+) -> Option<&'a serde_yaml::Value> {
+    docs.iter().find(|d| kube_api_version_is(d, api_version))
+}
+
+/// Predicate: does the K8s custom resource YAML document at `value`
 /// declare its `metadata.name` identity axis as exactly `name`?
 ///
 /// Composes on top of [`kube_metadata_str_field`] (6809867) — same
@@ -38455,6 +38618,226 @@ spec:
                  ({non_string:?})",
             );
         }
+    }
+
+    #[test]
+    fn kube_api_version_is_matches_lifted_kube_api_version_equality_shape() {
+        // Byte-equivalence pin: the lifted predicate reproduces the
+        // three-token composition (`kube_api_version(v) ==
+        // Some(<AXIS>)`) the 10 caixa-flux (4) + caixa-mesh (6) test-
+        // side per-CR CRD-group/version equality-wrap sites previously
+        // carried inline around the readback intent "does this
+        // rendered CR declare CRD-group/version X?". Closes the "did
+        // the lift accidentally rename the pinned scalar-key axis to
+        // KUBE_KEY_KIND (silently pulling the peer discriminator
+        // coordinate instead of the primary), drop the `Some(...)`
+        // wrap, or widen the return type" drift class every future
+        // re-lift on the peer top-level axis surface (a hypothetical
+        // `kube_group_is` on the pre-`/`-slash CRD-group prefix, a
+        // `kube_version_is` on the post-`/`-slash version suffix on a
+        // multi-version migration harness) would otherwise reopen.
+        // Peer of the sibling
+        // `kube_kind_is_matches_lifted_kube_root_str_field_equality_shape`
+        // pin on the sibling top-level `kind:` half of the same
+        // canonical `(apiVersion, kind)` discriminator-pair closure —
+        // together the two pins bracket the top-level per-CR
+        // CRD-registration coordinate pair at predicate arity,
+        // matching the sibling sub-`metadata.{name, namespace}`
+        // predicate-arity closure the peer `kube_name_is` /
+        // `kube_namespace_is` byte-equivalence pins carry on the
+        // sub-`metadata:` axis half of the same predicate-arity
+        // peer-set.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        assert!(kube_api_version_is(&value, CILIUM_API_VERSION));
+        assert_eq!(
+            kube_api_version_is(&value, CILIUM_API_VERSION),
+            kube_api_version(&value) == Some(CILIUM_API_VERSION),
+            "kube_api_version_is must byte-agree with the composition \
+             `kube_api_version(v) == Some(api_version)` it replaces at \
+             every consumer site — drift on either half silently opens \
+             a per-CR CRD-group/version equality-wrap that no longer \
+             routes through the pinned KUBE_KEY_API_VERSION axis-key",
+        );
+    }
+
+    #[test]
+    fn kube_api_version_is_false_on_mismatched_api_version_and_missing_api_version() {
+        // Complement-side pin: the predicate returns `false` when
+        // either the top-level `apiVersion:` scalar declares a
+        // different CRD-group/version coordinate or the top-level
+        // `apiVersion:` scalar is absent altogether (a partially-
+        // authored CR the K8s API-server would reject at admission but
+        // that this predicate tolerates as `false` so the predicate
+        // stays a total function). Consumer sites
+        // (`assert!(kube_api_version_is(p, <AXIS>))` +
+        // `docs.iter().find(|d| kube_api_version_is(d, <AXIS>))`)
+        // rely on the false-on-mismatch shape to skip the wrong
+        // CRD-group/version-registration CRs across the multi-doc
+        // mesh emission and land on the intended CR. Peer of the
+        // sibling `kube_kind_is_false_on_mismatched_kind_and_missing_kind`
+        // pin on the sibling top-level `kind:` half of the same
+        // canonical `(apiVersion, kind)` discriminator-pair closure.
+        let mut cr_wrong_api_version = serde_yaml::Mapping::new();
+        cr_wrong_api_version.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+        );
+        assert!(!kube_api_version_is(
+            &serde_yaml::Value::Mapping(cr_wrong_api_version),
+            CILIUM_API_VERSION,
+        ));
+
+        let cr_no_api_version = serde_yaml::Mapping::new();
+        assert!(!kube_api_version_is(
+            &serde_yaml::Value::Mapping(cr_no_api_version),
+            CILIUM_API_VERSION,
+        ));
+    }
+
+    #[test]
+    fn kube_api_version_is_composes_on_lifted_kube_api_version_accessor() {
+        // Composition pin: the predicate `kube_api_version_is`
+        // delegates through the lifted [`kube_api_version`] accessor
+        // rather than the parametric [`kube_root_str_field`] two-token
+        // navigation. Lock the delegation shape (`kube_api_version_is(v,
+        // g) == (kube_api_version(v) == Some(g))`) so a future refactor
+        // that reintroduces the direct `kube_root_str_field(v,
+        // KUBE_KEY_API_VERSION) == Some(g)` composition surfaces here
+        // as a test-visible break — the composition-symmetry with the
+        // sibling [`kube_kind_is`] / [`kube_name_is`] /
+        // [`kube_namespace_is`] predicates (each of which delegates
+        // through their respective sibling accessors) stays enforced.
+        // Peer of the sibling
+        // `kube_kind_is_composes_on_lifted_kube_kind_accessor` +
+        // `kube_name_is_composes_on_lifted_kube_name_accessor` +
+        // `kube_namespace_is_composes_on_lifted_kube_namespace_accessor`
+        // pins on the three sibling accessor-composition axes.
+        let mut cr = serde_yaml::Mapping::new();
+        cr.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+        );
+        let value = serde_yaml::Value::Mapping(cr);
+
+        for candidate in [
+            CILIUM_API_VERSION,
+            FLUX_HELMRELEASE_API_VERSION,
+            FLUX_GITREPOSITORY_API_VERSION,
+            FLUX_KUSTOMIZATION_API_VERSION,
+        ] {
+            assert_eq!(
+                kube_api_version_is(&value, candidate),
+                kube_api_version(&value) == Some(candidate),
+                "kube_api_version_is(v, {candidate:?}) must reduce to \
+                 `kube_api_version(v) == Some({candidate:?})` byte-for-byte — \
+                 the composition-symmetry with the sibling kube_kind_is / \
+                 kube_name_is / kube_namespace_is predicates is the load-\
+                 bearing shape every future accessor-side refactor rides on",
+            );
+        }
+    }
+
+    #[test]
+    fn find_by_api_version_matches_inline_iter_find_kube_api_version_is_shape() {
+        // Byte-equivalence pin: the lifted navigator reproduces the
+        // three-token combinator chain (`docs.iter().find(|d|
+        // kube_api_version_is(d, <AXIS>))`) every future per-CRD-
+        // group/version multi-doc-navigator site (M4 cross-cluster
+        // Flux-triplet split, per-Aplicacao CR CRD-group/version join)
+        // would otherwise re-inline. Closes the "did the lift
+        // accidentally widen the receiver, drop the closure, or swap
+        // `find` for `filter`" drift class the sibling
+        // `find_by_kind_matches_inline_iter_find_kube_kind_is_shape` +
+        // `find_by_name_matches_inline_iter_find_kube_name_is_shape` +
+        // `find_by_namespace_matches_inline_iter_find_kube_namespace_is_shape`
+        // pins already close on the three sibling axes — this pin
+        // extends the same combinator-shape guarantee onto the top-
+        // level CRD-group/version half of the canonical
+        // `(apiVersion, kind)` coordinate pair.
+        let mut cilium = serde_yaml::Mapping::new();
+        cilium.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(CILIUM_API_VERSION.into()),
+        );
+        let mut helm_release = serde_yaml::Mapping::new();
+        helm_release.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+        );
+        let docs = vec![
+            serde_yaml::Value::Mapping(cilium),
+            serde_yaml::Value::Mapping(helm_release),
+        ];
+
+        assert_eq!(
+            find_by_api_version(&docs, CILIUM_API_VERSION),
+            docs.iter()
+                .find(|d| kube_api_version_is(d, CILIUM_API_VERSION)),
+        );
+        assert_eq!(
+            find_by_api_version(&docs, FLUX_HELMRELEASE_API_VERSION),
+            docs.iter()
+                .find(|d| kube_api_version_is(d, FLUX_HELMRELEASE_API_VERSION)),
+        );
+
+        // Miss path: unknown CRD-group/version → None, matching the
+        // inline `.find` short-circuit consumer sites rely on to
+        // distinguish "no such CR in this emission" from "wrong shape"
+        // in their `.unwrap()` / `.expect(...)` follow-ups.
+        assert_eq!(
+            find_by_api_version(&docs, FLUX_GITREPOSITORY_API_VERSION),
+            None,
+        );
+        let empty: Vec<serde_yaml::Value> = Vec::new();
+        assert_eq!(find_by_api_version(&empty, CILIUM_API_VERSION), None);
+    }
+
+    #[test]
+    fn find_by_api_version_returns_first_match_on_duplicate_api_version() {
+        // Order-preservation pin: the lifted navigator returns the
+        // first document of the matching CRD-group/version (the same
+        // short-circuit `Iterator::find` exposes). The Flux v2
+        // controller-triplet emission shares the `.toolkit.fluxcd.io`
+        // root but distinct sub-groups today (`helm.` / `source.` /
+        // `kustomize.`), and the M4 cross-cluster fan-out will emit
+        // one `HelmRelease` per cluster all under the same
+        // `helm.toolkit.fluxcd.io/v2` CRD-group/version. Pinning the
+        // first-match contract keeps the M4 caller-side "the first hit
+        // is the primary" convention aligned with the helper's
+        // combinator half — peer of the sibling
+        // `find_by_kind_returns_first_match_on_duplicate_kind` +
+        // `find_by_name_returns_first_match_on_duplicate_name` +
+        // `find_by_namespace_returns_first_match_on_duplicate_namespace`
+        // pins on the three sibling navigator axes.
+        let mut primary = serde_yaml::Mapping::new();
+        primary.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+        );
+        let mut meta_a = serde_yaml::Mapping::new();
+        meta_a.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("primary".into()));
+        primary.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_a));
+        let mut secondary = serde_yaml::Mapping::new();
+        secondary.insert_str_key(
+            KUBE_KEY_API_VERSION,
+            serde_yaml::Value::String(FLUX_HELMRELEASE_API_VERSION.into()),
+        );
+        let mut meta_b = serde_yaml::Mapping::new();
+        meta_b.insert_str_key(KUBE_KEY_NAME, serde_yaml::Value::String("secondary".into()));
+        secondary.insert_str_key(KUBE_KEY_METADATA, serde_yaml::Value::Mapping(meta_b));
+        let docs = vec![
+            serde_yaml::Value::Mapping(primary),
+            serde_yaml::Value::Mapping(secondary),
+        ];
+
+        let first = find_by_api_version(&docs, FLUX_HELMRELEASE_API_VERSION).unwrap();
+        assert_eq!(kube_name(first), Some("primary"));
     }
 
     #[test]
